@@ -1,2 +1,6 @@
 .agents
 .worktrees
+.superpowers
+node_modules
+
+docs/superpowers/
