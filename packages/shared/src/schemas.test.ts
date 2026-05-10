@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { projectSchema, sessionSchema } from './schemas.js';
+import { projectSchema, sessionSchema, sessionStatusSchema, acpEventSchema } from './schemas.js';
 
 describe('Shared Schemas', () => {
   describe('projectSchema', () => {
@@ -11,12 +11,29 @@ describe('Shared Schemas', () => {
       expect(projectSchema.parse(validProject)).toEqual(validProject);
     });
 
-    it('should fail validation for invalid project data', () => {
+    it('should fail validation for empty name', () => {
       const invalidProject = {
-        name: '', // Too short
+        name: '',
         path: '/path/to/project',
       };
       expect(() => projectSchema.parse(invalidProject)).toThrow();
+    });
+
+    it('should fail validation for empty path', () => {
+      const invalidProject = {
+        name: 'Test Project',
+        path: '',
+      };
+      expect(() => projectSchema.parse(invalidProject)).toThrow();
+    });
+
+    it('should validate extremely long strings', () => {
+      const longString = 'a'.repeat(10000);
+      const validProject = {
+        name: longString,
+        path: longString,
+      };
+      expect(projectSchema.parse(validProject)).toEqual(validProject);
     });
   });
 
@@ -46,6 +63,49 @@ describe('Shared Schemas', () => {
         agent: 'claude-code',
       };
       expect(() => sessionSchema.parse(invalidSession)).toThrow();
+    });
+  });
+
+  describe('sessionStatusSchema', () => {
+    it('should validate valid statuses', () => {
+      expect(sessionStatusSchema.parse('running')).toBe('running');
+      expect(sessionStatusSchema.parse('idle')).toBe('idle');
+    });
+
+    it('should fail for invalid status', () => {
+      expect(() => sessionStatusSchema.parse('invalid')).toThrow();
+    });
+  });
+
+  describe('acpEventSchema', () => {
+    it('should validate valid event', () => {
+      const event = {
+        type: 'text',
+        data: { content: 'hello' },
+        createdAt: new Date(),
+      };
+      expect(acpEventSchema.parse(event)).toEqual(event);
+    });
+
+    it('should coerce string date to Date object', () => {
+      const now = new Date();
+      const event = {
+        type: 'status',
+        data: 'online',
+        createdAt: now.toISOString(),
+      };
+      const result = acpEventSchema.parse(event);
+      expect(result.createdAt).toBeInstanceOf(Date);
+      expect(result.createdAt.getTime()).toBe(now.getTime());
+    });
+
+    it('should fail for invalid type', () => {
+      const event = {
+        type: 'invalid',
+        data: {},
+        createdAt: new Date(),
+      };
+      expect(() => acpEventSchema.parse(event)).toThrow();
     });
   });
 });
