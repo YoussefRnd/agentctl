@@ -2,5 +2,9 @@
 .worktrees
 .superpowers
 node_modules
-
-docs/superpowers/
+dist
+.turbo
+*.db
+*.db-wal
+*.db-shm
+.env

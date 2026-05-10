@@ -1,17 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db } from './index.js';
+import { describe, it, expect } from 'vitest';
+import { createDatabase } from './index.js';
 import { projects, sessions, acpEvents } from './schema.js';
 import { eq } from 'drizzle-orm';
-import { rmSync, existsSync } from 'node:fs';
 
 describe('Database Core', () => {
-  const dbPath = 'agentctl.db';
-
-  beforeAll(() => {
-    if (existsSync(dbPath)) {
-      rmSync(dbPath);
-    }
-  });
+  // Use in-memory database for tests to avoid side-effects
+  const db = createDatabase(':memory:');
 
   it('should initialize the database and allow inserting/querying', async () => {
     const projectId = 'test-project';
@@ -35,18 +29,18 @@ describe('Database Core', () => {
       projectId: projectId,
       branch: 'main',
       worktreePath: '/tmp/worktree',
-      agent: 'test-agent',
+      agent: 'claude-code', // Valid agent from SessionStatus/Enum
       createdAt: new Date(),
     });
 
     const sessionResult = await db.select().from(sessions).where(eq(sessions.id, sessionId));
     expect(sessionResult).toHaveLength(1);
-    expect(sessionResult[0].agent).toBe('test-agent');
+    expect(sessionResult[0].agent).toBe('claude-code');
 
     // Insert an event
     await db.insert(acpEvents).values({
       sessionId: sessionId,
-      type: 'test-event',
+      type: 'text', // Valid type from ACPEvent
       data: JSON.stringify({ key: 'value' }),
       createdAt: new Date(),
     });
@@ -72,7 +66,7 @@ describe('Database Core', () => {
       projectId: projectId,
       branch: 'main',
       worktreePath: '/tmp/cascade-worktree',
-      agent: 'test-agent',
+      agent: 'claude-code',
       createdAt: new Date(),
     });
 

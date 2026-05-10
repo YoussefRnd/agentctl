@@ -5,17 +5,24 @@ export class GitMutex {
 
   async run<T>(projectId: string, task: Task<T>): Promise<T> {
     const currentQueue = this.queues.get(projectId) || Promise.resolve();
-    
-    const nextTask = currentQueue.then(async () => {
-      try {
-        return await task();
-      } catch (e) {
-        console.error(`Git Mutex Task failed for ${projectId}:`, e);
-        throw e;
-      }
-    });
+
+    const nextTask = currentQueue
+      .catch(() => {})
+      .then(async () => {
+        try {
+          return await task();
+        } finally {
+          if (this.queues.get(projectId) === nextTask) {
+            this.queues.delete(projectId);
+          }
+        }
+      });
 
     this.queues.set(projectId, nextTask);
-    return nextTask as Promise<T>;
+    return nextTask;
+  }
+
+  isPending(projectId: string): boolean {
+    return this.queues.has(projectId);
   }
 }

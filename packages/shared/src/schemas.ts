@@ -6,7 +6,7 @@ export const projectSchema = z.object({
 });
 
 export const sessionSchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: z.uuid(),
   branch: z.string().min(1),
   agent: z.enum(['claude-code', 'gemini-cli', 'opencode', 'codex-acp']),
 });
