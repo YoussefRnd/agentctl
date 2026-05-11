@@ -24,7 +24,7 @@ export default [
 			},
 		},
 		rules: {
-			'no-console': 'warn',
+			'no-console': 'error',
 			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
 			'@typescript-eslint/consistent-type-imports': 'error'
 		},

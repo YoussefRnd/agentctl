@@ -135,6 +135,7 @@ export class WorktreeManager {
 
   /**
    * Removes a worktree and its associated branch without mutex.
+   * @internal
    */
   public async removeWorktree(
     repoPath: string,
@@ -211,6 +212,13 @@ export class WorktreeManager {
     await this.gitMutex.run(repoPath, async () => {
       if (action === 'merge') {
         const git = simpleGit(repoPath);
+        
+        // Ensure the main repository is clean before proceeding
+        const status = await git.status();
+        if (!status.isClean()) {
+          throw new Error('Working tree is not clean. Cannot merge.');
+        }
+
         await git.checkout(baseBranch);
 
         try {

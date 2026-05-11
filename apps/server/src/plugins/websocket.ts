@@ -3,7 +3,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import { db, acpEvents } from '@agentctl/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { EventBus } from '../utils/event-bus.js';
-import { wsSubscribeMessageSchema } from '../types.js';
+import { wsMessageSchema } from '../types.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -31,30 +31,32 @@ export default fp(async (fastify) => {
                 ? Buffer.from(rawMessage).toString()
                 : String(rawMessage);
 
-          const message = wsSubscribeMessageSchema.parse(JSON.parse(messageText));
+          const message = wsMessageSchema.parse(JSON.parse(messageText));
 
-          if (unsubscribe) unsubscribe();
+          if (message.action === 'subscribe') {
+            if (unsubscribe) unsubscribe();
 
-          if (message.lastEventId !== undefined) {
-            const missedEvents = await db
-              .select()
-              .from(acpEvents)
-              .where(
-                and(
-                  eq(acpEvents.sessionId, message.sessionId),
-                  gt(acpEvents.id, message.lastEventId)
+            if (message.lastEventId !== undefined) {
+              const missedEvents = await db
+                .select()
+                .from(acpEvents)
+                .where(
+                  and(
+                    eq(acpEvents.sessionId, message.sessionId),
+                    gt(acpEvents.id, message.lastEventId)
+                  )
                 )
-              )
-              .orderBy(asc(acpEvents.id));
+                .orderBy(asc(acpEvents.id));
 
-            for (const event of missedEvents) {
-              socket.send(JSON.stringify({ type: 'acp_event', payload: event }));
+              for (const event of missedEvents) {
+                socket.send(JSON.stringify({ type: 'acp_event', payload: event }));
+              }
             }
-          }
 
-          unsubscribe = eventBus.subscribe(message.sessionId, (event) => {
-            socket.send(JSON.stringify({ type: 'acp_event', payload: event }));
-          });
+            unsubscribe = eventBus.subscribe(message.sessionId, (event) => {
+              socket.send(JSON.stringify({ type: 'acp_event', payload: event }));
+            });
+          }
         } catch (error) {
           req.log.error(error, 'WebSocket message error');
           socket.send(JSON.stringify({ error: 'Invalid message' }));
@@ -69,3 +71,4 @@ export default fp(async (fastify) => {
     });
   });
 });
+

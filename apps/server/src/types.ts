@@ -8,13 +8,30 @@ export interface ACPEventRow extends Omit<ACPEvent, 'createdAt'> {
   createdAt: Date;
 }
 
-export const wsSubscribeMessageSchema = z.object({
-  action: z.literal('subscribe'),
-  sessionId: z.uuid(),
-  lastEventId: z.number().optional(),
-});
+export const wsMessageSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('subscribe'),
+    sessionId: z.uuid(),
+    lastEventId: z.number().optional(),
+  }),
+  z.object({
+    action: z.literal('approve'),
+    sessionId: z.uuid(),
+    eventId: z.number(),
+  }),
+  z.object({
+    action: z.literal('deny'),
+    sessionId: z.uuid(),
+    eventId: z.number(),
+  }),
+  z.object({
+    action: z.literal('session.input'),
+    sessionId: z.uuid(),
+    input: z.string(),
+  }),
+]);
 
-export type WSSubscribeMessage = z.infer<typeof wsSubscribeMessageSchema>;
+export type WSClientMessage = z.infer<typeof wsMessageSchema>;
 
 export interface WSOutgoingMessage {
   type: 'acp_event';

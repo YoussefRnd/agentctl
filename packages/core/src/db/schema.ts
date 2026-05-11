@@ -23,6 +23,7 @@ export const sessions = sqliteTable('sessions', {
   totalTokens: integer('total_tokens').notNull().default(0),
   contextLimit: integer('context_limit').notNull().default(128000),
   estimatedCost: real('estimated_cost').notNull().default(0.0),
+  lastHeartbeat: integer('last_heartbeat', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   closedAt: integer('closed_at', { mode: 'timestamp' }),
 });
