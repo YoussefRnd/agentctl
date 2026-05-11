@@ -37,12 +37,13 @@ describe('WorktreeManager', () => {
   it('should create a worktree successfully', async () => {
     const sessionId = 'session-123';
     const taskSlug = 'my-task';
+    const headSha = (await git.revparse(['HEAD'])).trim();
     
     const result = await worktreeManager.create(repoPath, sessionId, taskSlug);
 
     expect(result.path).toContain(sessionId);
     expect(result.branch).toBe(`agentctl/${sessionId}/${taskSlug}`);
-    expect(result.baseCommit).toBeDefined();
+    expect(result.baseCommit).toBe(headSha); // Verify it matches the base SHA
 
     // Verify worktree exists
     const stats = await fs.stat(result.path);
@@ -53,14 +54,24 @@ describe('WorktreeManager', () => {
     expect(branches.all).toContain(result.branch);
   });
 
+  it('should sanitize paths and branch names', async () => {
+    const sessionId = 'session/../danger';
+    const taskSlug = 'task with spaces and !@#';
+    
+    const result = await worktreeManager.create(repoPath, sessionId, taskSlug);
+
+    // Should be sanitized to session-danger
+    expect(result.path).toContain('session-danger');
+    expect(result.branch).toContain('task-with-spaces-and-');
+    
+    const stats = await fs.stat(result.path);
+    expect(stats.isDirectory()).toBe(true);
+  });
+
   it('should serialize parallel create calls using GitMutex', async () => {
     const sessionId1 = 'session-1';
     const sessionId2 = 'session-2';
     const taskSlug = 'task';
-
-    // We can spy on gitMutex.run or just verify both succeed without race conditions
-    // More effectively, we can check if they are actually running sequentially if we had a way to delay.
-    // For now, let's just ensure they both work.
     
     const [res1, res2] = await Promise.all([
       worktreeManager.create(repoPath, sessionId1, taskSlug),
@@ -101,16 +112,67 @@ describe('WorktreeManager', () => {
     expect(stats.isDirectory()).toBe(true);
   });
 
-  it('should throw error if storage path already exists', async () => {
-    const sessionId = 'session-dir-exists';
+  it('should identify orphan worktrees', async () => {
+    // 1. Create a "valid" worktree
+    const activeSessionId = 'active-session';
+    await worktreeManager.create(repoPath, activeSessionId, 'task-1');
+
+    // 2. Create an "orphan" worktree
+    const orphanSessionId = 'orphan-session';
+    const orphanResult = await worktreeManager.create(repoPath, orphanSessionId, 'task-2');
+
+    // 3. List orphans providing only the active session ID
+    // Note: session IDs in branch names are sanitized.
+    const orphans = await worktreeManager.listOrphans(repoPath, [activeSessionId]);
+
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0].path).toBe(orphanResult.path);
+    expect(orphans[0].branch).toBe(orphanResult.branch);
+  });
+
+  it('should cleanup worktree and branch', async () => {
+    const sessionId = 'cleanup-session';
     const taskSlug = 'task';
-    const projectName = path.basename(repoPath);
-    const storagePath = path.join(os.homedir(), '.agentctl', 'worktrees', projectName, sessionId);
+    const result = await worktreeManager.create(repoPath, sessionId, taskSlug);
 
-    await fs.mkdir(storagePath, { recursive: true });
-    await fs.writeFile(path.join(storagePath, 'somefile'), 'data');
+    await worktreeManager.cleanup(repoPath, result.path, result.branch);
 
-    await expect(worktreeManager.create(repoPath, sessionId, taskSlug))
-      .rejects.toThrow();
+    // Verify worktree is gone from disk
+    await expect(fs.stat(result.path)).rejects.toThrow();
+
+    // Verify branch is gone from git
+    const branches = await git.branch();
+    expect(branches.all).not.toContain(result.branch);
+
+    // Verify worktree is gone from git list
+    const worktrees = await git.raw(['worktree', 'list']);
+    expect(worktrees).not.toContain(result.path);
+  });
+
+  it('should sync and remove multiple orphans', async () => {
+    // 1. Create two orphans
+    const res1 = await worktreeManager.create(repoPath, 'orphan-1', 'task');
+    const res2 = await worktreeManager.create(repoPath, 'orphan-2', 'task');
+
+    // 2. Create one active
+    const activeId = 'active';
+    const resActive = await worktreeManager.create(repoPath, activeId, 'task');
+
+    // 3. Sync with only 'active' as active
+    await worktreeManager.sync(repoPath, [activeId]);
+
+    // Verify orphans are gone from disk
+    await expect(fs.stat(res1.path)).rejects.toThrow();
+    await expect(fs.stat(res2.path)).rejects.toThrow();
+
+    // Verify active is still there
+    const stats = await fs.stat(resActive.path);
+    expect(stats.isDirectory()).toBe(true);
+
+    // Verify branches
+    const branches = await git.branch();
+    expect(branches.all).not.toContain(res1.branch);
+    expect(branches.all).not.toContain(res2.branch);
+    expect(branches.all).toContain(resActive.branch);
   });
 });
