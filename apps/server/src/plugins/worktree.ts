@@ -36,7 +36,7 @@ export default fp((fastify) => {
               )
             );
 
-          const activeIds = activeSessions.map((s) => s.id);
+          const activeIds = activeSessions.map((s: { id: string }) => s.id);
           await manager.sync(project.path, activeIds);
         }
 

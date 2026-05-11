@@ -4,7 +4,8 @@ import { GitMutex } from '../utils/git-mutex.js';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
-import { simpleGit, SimpleGit } from 'simple-git';
+import { simpleGit } from 'simple-git';
+import type { SimpleGit } from 'simple-git';
 
 describe.sequential('WorktreeManager', () => {
   let worktreeManager: WorktreeManager;

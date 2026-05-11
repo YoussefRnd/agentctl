@@ -1,5 +1,5 @@
 import { simpleGit } from 'simple-git';
-import { GitMutex } from '../utils/git-mutex.js';
+import type { GitMutex } from '../utils/git-mutex.js';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
@@ -216,7 +216,7 @@ export class WorktreeManager {
         try {
           await git.merge(['--squash', branchName]);
           try {
-            await git.commit(commitMessage || taskSlug);
+            await git.commit(commitMessage ?? taskSlug);
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
             if (

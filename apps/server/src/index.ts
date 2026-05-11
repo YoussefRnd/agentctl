@@ -1,12 +1,20 @@
 import Fastify from 'fastify';
 import worktreePlugin from './plugins/worktree.js';
+import websocketPlugin from './plugins/websocket.js';
+import { eventsRoutes } from './routes/events.js';
+import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
 
 const fastify = Fastify({
   logger: true,
 });
 
+fastify.setValidatorCompiler(validatorCompiler);
+fastify.setSerializerCompiler(serializerCompiler);
+
 // Register the Worktree Manager plugin
 await fastify.register(worktreePlugin);
+await fastify.register(websocketPlugin);
+await fastify.register(eventsRoutes);
 
 // Basic route to verify server is up
 fastify.get('/health', () => {
