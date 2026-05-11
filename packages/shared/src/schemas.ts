@@ -9,9 +9,18 @@ export const sessionSchema = z.object({
   projectId: z.uuid(),
   branch: z.string().min(1),
   agent: z.enum(['claude-code', 'gemini-cli', 'opencode', 'codex-acp']),
+  taskSlug: z.string().min(1),
+  baseCommit: z.string().min(1),
 });
 
-export const sessionStatusSchema = z.enum(['running', 'needs_attention', 'idle', 'error']);
+export const sessionStatusSchema = z.enum([
+  'running',
+  'needs_attention',
+  'idle',
+  'error',
+  'merged',
+  'discarded',
+]);
 
 export const acpEventSchema = z.object({
   type: z.enum(['tool_call', 'text', 'diff', 'status', 'compact']),

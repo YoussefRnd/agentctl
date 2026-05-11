@@ -43,8 +43,30 @@ describe('Shared Schemas', () => {
         projectId: '550e8400-e29b-41d4-a716-446655440000',
         branch: 'main',
         agent: 'claude-code',
+        taskSlug: 'my-feature-task',
+        baseCommit: 'abc1234567890',
       };
       expect(sessionSchema.parse(validSession)).toEqual(validSession);
+    });
+
+    it('should fail validation if taskSlug is missing', () => {
+      const invalidSession = {
+        projectId: '550e8400-e29b-41d4-a716-446655440000',
+        branch: 'main',
+        agent: 'claude-code',
+        baseCommit: 'abc1234567890',
+      };
+      expect(() => sessionSchema.parse(invalidSession)).toThrow();
+    });
+
+    it('should fail validation if baseCommit is missing', () => {
+      const invalidSession = {
+        projectId: '550e8400-e29b-41d4-a716-446655440000',
+        branch: 'main',
+        agent: 'claude-code',
+        taskSlug: 'my-feature-task',
+      };
+      expect(() => sessionSchema.parse(invalidSession)).toThrow();
     });
 
     it('should fail validation for invalid agent', () => {
