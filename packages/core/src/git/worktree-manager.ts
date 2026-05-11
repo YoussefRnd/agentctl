@@ -124,34 +124,45 @@ export class WorktreeManager {
     branchName: string
   ): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
-      const git = simpleGit(repoPath);
-
-      // 1. Remove worktree
-      try {
-        await git.raw(['worktree', 'remove', '--force', worktreePath]);
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        // Ignore if already gone
-        if (
-          !message.includes('not a working tree') &&
-          !message.includes('does not exist') &&
-          !message.includes('is not a worktree')
-        ) {
-          throw error;
-        }
-      }
-
-      // 2. Remove branch
-      try {
-        await git.raw(['branch', '-D', branchName]);
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        // Ignore if already gone
-        if (!message.includes('not found')) {
-          throw error;
-        }
-      }
+      await this._cleanup(repoPath, worktreePath, branchName);
     });
+  }
+
+  /**
+   * Internal cleanup logic without mutex.
+   */
+  private async _cleanup(
+    repoPath: string,
+    worktreePath: string,
+    branchName: string
+  ): Promise<void> {
+    const git = simpleGit(repoPath);
+
+    // 1. Remove worktree
+    try {
+      await git.raw(['worktree', 'remove', '--force', worktreePath]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Ignore if already gone
+      if (
+        !message.includes('not a working tree') &&
+        !message.includes('does not exist') &&
+        !message.includes('is not a worktree')
+      ) {
+        throw error;
+      }
+    }
+
+    // 2. Remove branch
+    try {
+      await git.raw(['branch', '-D', branchName]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Ignore if already gone
+      if (!message.includes('not found')) {
+        throw error;
+      }
+    }
   }
 
   /**
@@ -164,5 +175,53 @@ export class WorktreeManager {
     for (const orphan of orphans) {
       await this.cleanup(repoPath, orphan.path, orphan.branch);
     }
+  }
+
+  /**
+   * Returns the unified diff between baseCommit and HEAD in the worktree.
+   * Note: This only shows COMMITTED changes on the branch.
+   */
+  async getDiff(
+    repoPath: string,
+    worktreePath: string,
+    baseCommit: string
+  ): Promise<string> {
+    return await this.gitMutex.run(repoPath, async () => {
+      const git = simpleGit(worktreePath);
+      return await git.diff([`${baseCommit}...HEAD`]);
+    });
+  }
+
+  /**
+   * Finalizes a worktree session by either merging or discarding changes.
+   * @param repoPath Absolute path to the main repository
+   * @param worktreePath Path to the worktree to clean up
+   * @param branchName Name of the branch to clean up
+   * @param baseBranch Branch to merge into if merging (e.g. main)
+   * @param action 'merge' or 'discard'
+   * @param commitMessage Message for the squash merge commit
+   */
+  async finalize(
+    repoPath: string,
+    worktreePath: string,
+    branchName: string,
+    baseBranch: string,
+    action: 'merge' | 'discard',
+    commitMessage?: string
+  ): Promise<void> {
+    return await this.gitMutex.run(repoPath, async () => {
+      if (action === 'merge') {
+        const git = simpleGit(repoPath);
+        // Ensure we are on the base branch
+        await git.checkout(baseBranch);
+        // Squash merge the worktree branch
+        await git.merge(['--squash', branchName]);
+        // Commit the squashed changes
+        await git.commit(commitMessage || `Merge ${branchName}`);
+      }
+
+      // Always cleanup
+      await this._cleanup(repoPath, worktreePath, branchName);
+    });
   }
 }

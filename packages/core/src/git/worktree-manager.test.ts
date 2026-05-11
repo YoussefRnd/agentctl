@@ -175,4 +175,86 @@ describe('WorktreeManager', () => {
     expect(branches.all).not.toContain(res2.branch);
     expect(branches.all).toContain(resActive.branch);
   });
+
+  it('should get a diff from a worktree', async () => {
+    const sessionId = 'diff-session';
+    const taskSlug = 'task';
+    const result = await worktreeManager.create(repoPath, sessionId, taskSlug);
+
+    // Make a change in the worktree
+    const filePath = path.join(result.path, 'new-file.md');
+    await fs.writeFile(filePath, 'New content');
+
+    // Must commit for ...HEAD to show changes
+    const wtGit = simpleGit(result.path);
+    await wtGit.add('.');
+    await wtGit.commit('Work in progress');
+
+    const diff = await worktreeManager.getDiff(repoPath, result.path, result.baseCommit);
+
+    expect(diff).toContain('new-file.md');
+    expect(diff).toContain('+New content');
+  });
+
+  it('should finalize a worktree with a squash merge', async () => {
+    const sessionId = 'merge-session';
+    const taskSlug = 'feat-cool-thing';
+    const result = await worktreeManager.create(repoPath, sessionId, taskSlug);
+
+    // Make a change in the worktree
+    const filePath = path.join(result.path, 'cool-file.md');
+    await fs.writeFile(filePath, 'Cool content');
+    const wtGit = simpleGit(result.path);
+    await wtGit.add('.');
+    await wtGit.commit('Agent work');
+
+    // Finalize with merge
+    await worktreeManager.finalize(
+      repoPath,
+      result.path,
+      result.branch,
+      'main',
+      'merge',
+      taskSlug
+    );
+
+    // Verify worktree and branch are gone
+    await expect(fs.stat(result.path)).rejects.toThrow();
+    const branches = await git.branch();
+    expect(branches.all).not.toContain(result.branch);
+
+    // Verify changes are in main
+    await git.checkout('main');
+    const log = await git.log();
+    expect(log.latest?.message).toBe(taskSlug); // Should be committed with task slug
+    const content = await fs.readFile(path.join(repoPath, 'cool-file.md'), 'utf8');
+    expect(content).toBe('Cool content');
+  });
+
+  it('should finalize a worktree with discard', async () => {
+    const sessionId = 'discard-session';
+    const taskSlug = 'discard-task';
+    const result = await worktreeManager.create(repoPath, sessionId, taskSlug);
+
+    // Make a change
+    await fs.writeFile(path.join(result.path, 'trash.md'), 'Trash');
+
+    // Finalize with discard
+    await worktreeManager.finalize(
+      repoPath,
+      result.path,
+      result.branch,
+      'main',
+      'discard'
+    );
+
+    // Verify worktree and branch are gone
+    await expect(fs.stat(result.path)).rejects.toThrow();
+    const branches = await git.branch();
+    expect(branches.all).not.toContain(result.branch);
+
+    // Verify main is clean
+    await git.checkout('main');
+    await expect(fs.stat(path.join(repoPath, 'trash.md'))).rejects.toThrow();
+  });
 });
