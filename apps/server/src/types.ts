@@ -10,7 +10,7 @@ export interface ACPEventRow extends Omit<ACPEvent, 'createdAt'> {
 
 export const wsSubscribeMessageSchema = z.object({
   action: z.literal('subscribe'),
-  sessionId: z.string().uuid(),
+  sessionId: z.uuid(),
   lastEventId: z.number().optional(),
 });
 
