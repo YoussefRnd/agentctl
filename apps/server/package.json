@@ -7,5 +7,11 @@
     "lint": "eslint .",
     "format": "prettier --write ."
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@agentctl/core": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.8.5",
+    "fastify-plugin": "^5.1.0"
+  }
 }
