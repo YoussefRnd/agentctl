@@ -15,6 +15,8 @@ export const sessions = sqliteTable('sessions', {
     .references(() => projects.id, { onDelete: 'cascade' }),
   branch: text('branch').notNull(),
   worktreePath: text('worktree_path').notNull(),
+  taskSlug: text('task_slug').notNull(),
+  baseCommit: text('base_commit').notNull(),
   agent: text('agent').notNull(),
   agentSessionId: text('agent_session_id'),
   status: text('status').$type<SessionStatus>().notNull().default('idle'),
