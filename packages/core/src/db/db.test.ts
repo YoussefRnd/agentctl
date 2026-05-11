@@ -29,6 +29,8 @@ describe('Database Core', () => {
       projectId: projectId,
       branch: 'main',
       worktreePath: '/tmp/worktree',
+      taskSlug: 'test-task',
+      baseCommit: 'abcdef123',
       agent: 'claude-code', // Valid agent from SessionStatus/Enum
       createdAt: new Date(),
     });
@@ -36,6 +38,8 @@ describe('Database Core', () => {
     const sessionResult = await db.select().from(sessions).where(eq(sessions.id, sessionId));
     expect(sessionResult).toHaveLength(1);
     expect(sessionResult[0].agent).toBe('claude-code');
+    expect(sessionResult[0].taskSlug).toBe('test-task');
+    expect(sessionResult[0].baseCommit).toBe('abcdef123');
 
     // Insert an event
     await db.insert(acpEvents).values({
@@ -66,6 +70,8 @@ describe('Database Core', () => {
       projectId: projectId,
       branch: 'main',
       worktreePath: '/tmp/cascade-worktree',
+      taskSlug: 'cascade-task',
+      baseCommit: 'cascade123',
       agent: 'claude-code',
       createdAt: new Date(),
     });
