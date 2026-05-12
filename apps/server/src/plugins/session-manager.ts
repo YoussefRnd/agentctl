@@ -31,6 +31,8 @@ export class SessionManagerService {
       runner.approve(msg.eventId);
     } else if (msg.action === 'deny') {
       runner.deny(msg.eventId);
+    } else if (msg.action === 'session.input') {
+      runner.input(msg.input);
     }
   }
 }

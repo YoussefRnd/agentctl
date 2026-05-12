@@ -67,12 +67,35 @@ export class SessionRunner {
     }
   }
 
-  approve(_eventId: number) {
-    // Logic to resolve pending approval and send response via client.send()
+  input(text: string) {
+    this.client.send({
+      type: 'input',
+      data: { text }
+    });
   }
 
-  deny(_eventId: number) {
-    // Logic to reject pending approval
+  approve(eventId: number) {
+    this.client.send({
+      type: 'approve',
+      data: { eventId }
+    });
+    
+    // Resume session status and bump updated_at
+    void this.db.update(sessions)
+      .set({ status: 'running', updatedAt: new Date() })
+      .where(eq(sessions.id, this.sessionId));
+  }
+
+  deny(eventId: number) {
+    this.client.send({
+      type: 'deny',
+      data: { eventId }
+    });
+    
+    // Resume session status and bump updated_at
+    void this.db.update(sessions)
+      .set({ status: 'running', updatedAt: new Date() })
+      .where(eq(sessions.id, this.sessionId));
   }
 
   kill() {
