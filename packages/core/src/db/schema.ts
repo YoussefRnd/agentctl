@@ -4,7 +4,7 @@ import type { SessionStatus, ACPEvent } from '@agentctl/shared';
 // Use this helper for all schemas
 const timestamps = {
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).$onUpdateFn(() => new Date()).notNull(),
 };
 
 export const projects = sqliteTable('projects', {
