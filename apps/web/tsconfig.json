@@ -2,9 +2,9 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
     "module": "Preserve",
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx"
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "vite-env.d.ts", "vite.config.ts"]
 }
