@@ -1,27 +1,26 @@
 {
-  "name": "@agentctl/server",
-  "version": "1.0.0",
-  "scripts": {
-    "build": "tsc -b",
-    "dev": "tsc --watch",
-    "lint": "eslint .",
-    "test": "vitest run",
-    "format": "prettier --write ."
-  },
-  "type": "module",
-  "dependencies": {
-    "@agentctl/core": "workspace:*",
-    "@agentctl/shared": "workspace:*",
-    "@fastify/type-provider-zod": "^1.0.0",
-    "@fastify/websocket": "^11.2.0",
-    "drizzle-orm": "^0.45.2",
-    "fastify": "^5.8.5",
-    "fastify-plugin": "^5.1.0",
-    "fastify-type-provider-zod": "^6.1.0",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/ws": "^8.18.1",
-    "vitest": "^4.1.5"
-  }
+	"name": "@agentctl/server",
+	"version": "1.0.0",
+	"scripts": {
+		"build": "tsc -b",
+		"dev": "tsc --watch",
+		"lint": "eslint .",
+		"test": "vitest run",
+		"format": "prettier --write ."
+	},
+	"type": "module",
+	"dependencies": {
+		"@agentctl/core": "workspace:*",
+		"@agentctl/shared": "workspace:*",
+		"@fastify/type-provider-zod": "^1.0.0",
+		"@fastify/websocket": "^11.2.0",
+		"drizzle-orm": "^0.45.2",
+		"fastify": "^5.8.5",
+		"fastify-plugin": "^5.1.0",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/ws": "^8.18.1",
+		"vitest": "^4.1.5"
+	}
 }
