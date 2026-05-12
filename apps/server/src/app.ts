@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import authPlugin from './plugins/auth.js';
 import worktreePlugin from './plugins/worktree.js';
+import sessionManagerPlugin from './plugins/session-manager.js';
 import websocketPlugin from './plugins/websocket.js';
 import { eventsRoutes } from './routes/events.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
@@ -18,6 +19,7 @@ export async function buildApp() {
 
 	// Register other plugins
 	await fastify.register(worktreePlugin);
+	await fastify.register(sessionManagerPlugin);
 	await fastify.register(websocketPlugin);
 
 	// Register routes

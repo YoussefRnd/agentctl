@@ -56,6 +56,8 @@ export default fp(async (fastify) => {
             unsubscribe = eventBus.subscribe(message.sessionId, (event) => {
               socket.send(JSON.stringify({ type: 'acp_event', payload: event }));
             });
+          } else {
+            req.server.sessionManager.handleClientMessage(message);
           }
         } catch (error) {
           req.log.error(error, 'WebSocket message error');
