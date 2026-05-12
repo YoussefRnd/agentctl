@@ -2,13 +2,10 @@ import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow } from '@agentctl/server/src/types.js';
 
+import { apiClient } from '../lib/api-client';
+
 const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
-  const token = 'your-secret-here'; // For prototype
-  const res = await fetch(`/api/sessions/${sessionId}/events`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) throw new Error('Network response was not ok');
-  return res.json() as Promise<ACPEventRow[]>;
+  return apiClient.fetch<ACPEventRow[]>(`/api/sessions/${sessionId}/events`);
 };
 
 export function useSessionEvents(sessionId: string | null) {

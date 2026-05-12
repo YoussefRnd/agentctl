@@ -9,6 +9,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@agentctl/shared": "workspace:*",
     "@agentctl/server": "workspace:*",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-virtual": "^3.13.24",
