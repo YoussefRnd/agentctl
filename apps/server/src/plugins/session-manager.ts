@@ -23,16 +23,16 @@ export class SessionManagerService {
     return runner;
   }
 
-  handleClientMessage(msg: WSClientMessage) {
+  async handleClientMessage(msg: WSClientMessage) {
     const runner = this.runners.get(msg.sessionId);
     if (!runner) return;
 
     if (msg.action === 'approve') {
-      runner.approve(msg.eventId);
+      await runner.approve(msg.eventId);
     } else if (msg.action === 'deny') {
-      runner.deny(msg.eventId);
+      await runner.deny(msg.eventId);
     } else if (msg.action === 'session.input') {
-      runner.input(msg.input);
+      await runner.input(msg.input);
     }
   }
 }

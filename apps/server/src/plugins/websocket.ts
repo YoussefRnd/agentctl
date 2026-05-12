@@ -57,7 +57,7 @@ export default fp(async (fastify) => {
               socket.send(JSON.stringify({ type: 'acp_event', payload: event }));
             });
           } else {
-            req.server.sessionManager.handleClientMessage(message);
+            await req.server.sessionManager.handleClientMessage(message);
           }
         } catch (error) {
           req.log.error(error, 'WebSocket message error');

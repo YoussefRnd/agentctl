@@ -67,33 +67,37 @@ export class SessionRunner {
     }
   }
 
-  input(text: string) {
+  async input(text: string) {
     this.client.send({
       type: 'input',
       data: { text }
     });
+
+    await this.db.update(sessions)
+      .set({ status: 'running', updatedAt: new Date() })
+      .where(eq(sessions.id, this.sessionId));
   }
 
-  approve(eventId: number) {
+  async approve(eventId: number) {
     this.client.send({
       type: 'approve',
       data: { eventId }
     });
     
     // Resume session status and bump updated_at
-    void this.db.update(sessions)
+    await this.db.update(sessions)
       .set({ status: 'running', updatedAt: new Date() })
       .where(eq(sessions.id, this.sessionId));
   }
 
-  deny(eventId: number) {
+  async deny(eventId: number) {
     this.client.send({
       type: 'deny',
       data: { eventId }
     });
     
     // Resume session status and bump updated_at
-    void this.db.update(sessions)
+    await this.db.update(sessions)
       .set({ status: 'running', updatedAt: new Date() })
       .where(eq(sessions.id, this.sessionId));
   }
