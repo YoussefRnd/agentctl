@@ -1,11 +1,17 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 import type { SessionStatus, ACPEvent } from '@agentctl/shared';
 
+// Use this helper for all schemas
+const timestamps = {
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+};
+
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   path: text('path').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  ...timestamps,
 });
 
 export const sessions = sqliteTable('sessions', {
@@ -24,8 +30,8 @@ export const sessions = sqliteTable('sessions', {
   contextLimit: integer('context_limit').notNull().default(128000),
   estimatedCost: real('estimated_cost').notNull().default(0.0),
   lastHeartbeat: integer('last_heartbeat', { mode: 'timestamp' }),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   closedAt: integer('closed_at', { mode: 'timestamp' }),
+  ...timestamps,
 });
 
 export const acpEvents = sqliteTable('acp_events', {
@@ -35,5 +41,5 @@ export const acpEvents = sqliteTable('acp_events', {
     .references(() => sessions.id, { onDelete: 'cascade' }),
   type: text('type').$type<ACPEvent['type']>().notNull(),
   data: text('data').notNull(), // JSON string
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  ...timestamps,
 });
