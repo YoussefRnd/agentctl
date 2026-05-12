@@ -10,9 +10,7 @@ export async function buildApp() {
     logger: true,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   fastify.setValidatorCompiler(validatorCompiler);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   fastify.setSerializerCompiler(serializerCompiler);
 
   // Register Auth Plugin first
