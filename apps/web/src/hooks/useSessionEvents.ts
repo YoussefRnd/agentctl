@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ACPEventRow } from '@agentctl/server/src/types.js';
+import type { ACPEventRow } from '@agentctl/shared';
 
 import { apiClient } from '../lib/api-client';
 

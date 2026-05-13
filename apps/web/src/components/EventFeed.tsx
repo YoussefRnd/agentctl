@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { TextCard } from './cards/TextCard.js';
 import { ToolCallCard } from './cards/ToolCallCard.js';
-import type { ACPEventRow } from '@agentctl/server/src/types.js';
+import type { ACPEventRow } from '@agentctl/shared';
 
 export function EventFeed({ events }: { events: ACPEventRow[] }) {
   const parentRef = useRef<HTMLDivElement>(null);
