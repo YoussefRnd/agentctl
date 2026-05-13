@@ -92,9 +92,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@agentctl/server':
-        specifier: workspace:*
-        version: link:../server
       '@agentctl/shared':
         specifier: workspace:*
         version: link:../../packages/shared
