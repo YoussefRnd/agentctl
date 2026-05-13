@@ -4,8 +4,18 @@ import type { ACPEvent } from '@agentctl/shared';
 
 export interface ACPClientEvents {
   event: (event: ACPEvent) => void;
+  rpcRequest: (request: { id: number | string; method: string; params: unknown }) => void;
   error: (error: Error) => void;
   exit: (code: number | null) => void;
+}
+
+interface JsonRpcMessage {
+  jsonrpc: '2.0';
+  id?: number | string;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: unknown;
 }
 
 export class ACPClient extends EventEmitter {
@@ -40,8 +50,15 @@ export class ACPClient extends EventEmitter {
     for (const line of lines) {
       if (line.trim()) {
         try {
-          const parsed = JSON.parse(line) as ACPEvent;
-          this.emit('event', parsed);
+          const parsed = JSON.parse(line) as JsonRpcMessage;
+          
+          // If it has an id, it's a request or response - emit as RPC
+          if (parsed.id !== undefined && parsed.method) {
+            this.emit('rpcRequest', { id: parsed.id, method: parsed.method, params: parsed.params });
+          } else {
+            // Otherwise treat as ACP event (notification)
+            this.emit('event', parsed as unknown as ACPEvent);
+          }
         } catch {
           this.emit('error', new Error(`Failed to parse JSON: ${line}`));
         }
@@ -53,6 +70,22 @@ export class ACPClient extends EventEmitter {
     if (this.child.stdin && !this.child.stdin.destroyed) {
       this.child.stdin.write(JSON.stringify(message) + '\n');
     }
+  }
+
+  sendResponse(id: number | string, result: unknown) {
+    this.send({
+      jsonrpc: '2.0',
+      id,
+      result,
+    });
+  }
+
+  sendError(id: number | string, error: { code: number; message: string }) {
+    this.send({
+      jsonrpc: '2.0',
+      id,
+      error,
+    });
   }
 
   kill() {
