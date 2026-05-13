@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow } from '@agentctl/shared';
 
@@ -10,11 +10,11 @@ const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
 
 export function useSessionEvents(sessionId: string | null) {
   const queryClient = useQueryClient();
-  const queryKey = ['events', sessionId];
+  const [isConnected, setIsConnected] = useState(false);
   
   // 1. Fetch historical data
   const { data: history = [], isLoading } = useQuery({
-    queryKey,
+    queryKey: ['events', sessionId],
     queryFn: () => sessionId ? fetchEvents(sessionId) : Promise.resolve([]),
     enabled: !!sessionId,
   });
@@ -38,8 +38,9 @@ export function useSessionEvents(sessionId: string | null) {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      setIsConnected(true);
       // Determine last known ID from current cache to catch up
-      const currentCache = queryClient.getQueryData<ACPEventRow[]>(queryKey) ?? [];
+      const currentCache = queryClient.getQueryData<ACPEventRow[]>(['events', sessionId]) ?? [];
       const lastEventId = currentCache.length > 0 ? currentCache[currentCache.length - 1].id : 0;
       
       ws.send(JSON.stringify({
@@ -47,6 +48,10 @@ export function useSessionEvents(sessionId: string | null) {
         sessionId,
         lastEventId
       }));
+    };
+
+    ws.onclose = () => {
+      setIsConnected(false);
     };
 
     ws.onmessage = (event) => {
@@ -60,7 +65,7 @@ export function useSessionEvents(sessionId: string | null) {
     // Throttle flush buffer to cache
     const flushInterval = setInterval(() => {
       if (bufferRef.current.length > 0) {
-        queryClient.setQueryData<ACPEventRow[]>(queryKey, (old = []) => {
+        queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
           const newEvents = [...bufferRef.current];
           bufferRef.current = [];
           
@@ -77,7 +82,7 @@ export function useSessionEvents(sessionId: string | null) {
       clearInterval(flushInterval);
       ws.close();
     };
-  }, [sessionId, queryClient, queryKey]);
+  }, [sessionId, queryClient]);
 
-  return { events: history, isLoading, sendMessage };
+  return { events: history, isLoading, sendMessage, isConnected };
 }

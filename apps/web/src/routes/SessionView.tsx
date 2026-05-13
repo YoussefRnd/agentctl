@@ -5,7 +5,7 @@ import { CommandBar } from '../components/CommandBar.js';
 
 export function SessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { events, isLoading, sendMessage } = useSessionEvents(sessionId ?? null);
+  const { events, isLoading, sendMessage, isConnected } = useSessionEvents(sessionId ?? null);
 
   if (!sessionId) return null;
   if (isLoading) return <div className="p-8 text-center text-text-muted">Loading history...</div>;
@@ -16,9 +16,11 @@ export function SessionView() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-      <EventFeed events={events} />
+      <div className="flex-1 overflow-hidden pb-32">
+        <EventFeed events={events} />
+      </div>
       <div className="absolute bottom-0 left-0 right-0">
-        <CommandBar onSend={handleSend} />
+        <CommandBar onSend={handleSend} disabled={!isConnected} />
       </div>
     </div>
   );
