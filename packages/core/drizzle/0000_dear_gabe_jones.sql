@@ -3,7 +3,7 @@ CREATE TABLE `acp_events` (
 	`session_id` text NOT NULL,
 	`type` text NOT NULL,
 	`data` text NOT NULL,
-	`created_at` integer NOT NULL,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
@@ -11,7 +11,8 @@ CREATE TABLE `projects` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`path` text NOT NULL,
-	`created_at` integer NOT NULL
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	`updated_at` integer DEFAULT (unixepoch()) NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `sessions` (
@@ -19,13 +20,17 @@ CREATE TABLE `sessions` (
 	`project_id` text NOT NULL,
 	`branch` text NOT NULL,
 	`worktree_path` text NOT NULL,
+	`task_slug` text NOT NULL,
+	`base_commit` text NOT NULL,
 	`agent` text NOT NULL,
 	`agent_session_id` text,
 	`status` text DEFAULT 'idle' NOT NULL,
 	`total_tokens` integer DEFAULT 0 NOT NULL,
 	`context_limit` integer DEFAULT 128000 NOT NULL,
 	`estimated_cost` real DEFAULT 0 NOT NULL,
-	`created_at` integer NOT NULL,
+	`last_heartbeat` integer,
 	`closed_at` integer,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	`updated_at` integer DEFAULT (unixepoch()) NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade
 );

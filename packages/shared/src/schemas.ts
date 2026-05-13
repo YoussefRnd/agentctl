@@ -40,3 +40,10 @@ export type Project = z.infer<typeof projectSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type ACPEvent = z.infer<typeof acpEventSchema>;
+
+// DB row type - includes id, sessionId, and createdAt from the database
+export interface ACPEventRow extends Omit<ACPEvent, 'createdAt'> {
+  id: number;
+  sessionId: string;
+  createdAt: Date;
+}

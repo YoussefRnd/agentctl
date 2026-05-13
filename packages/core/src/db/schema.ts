@@ -1,10 +1,23 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 import type { SessionStatus, ACPEvent } from '@agentctl/shared';
 
-// Use this helper for all schemas
+// Timestamps with DB-level defaults and auto-update on updatedAt
 const timestamps = {
-  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).$onUpdateFn(() => new Date()).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`)
+    .$onUpdateFn(() => new Date()),
+};
+
+// acp_events is append-only - only needs createdAt with DB-level default
+const eventTimestamps = {
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
 };
 
 export const projects = sqliteTable('projects', {
@@ -41,5 +54,5 @@ export const acpEvents = sqliteTable('acp_events', {
     .references(() => sessions.id, { onDelete: 'cascade' }),
   type: text('type').$type<ACPEvent['type']>().notNull(),
   data: text('data').notNull(), // JSON string
-  ...timestamps,
+  ...eventTimestamps,
 });
