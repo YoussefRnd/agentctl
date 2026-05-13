@@ -23,6 +23,12 @@ export function useSessionEvents(sessionId: string | null) {
   const bufferRef = useRef<ACPEventRow[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
+  const sendMessage = (payload: unknown) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(payload));
+    }
+  };
+
   useEffect(() => {
     if (!sessionId) return;
 
@@ -73,5 +79,5 @@ export function useSessionEvents(sessionId: string | null) {
     };
   }, [sessionId, queryClient, queryKey]);
 
-  return { events: history, isLoading };
+  return { events: history, isLoading, sendMessage };
 }
