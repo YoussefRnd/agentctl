@@ -4,11 +4,19 @@ import { db, acpEvents } from '@agentctl/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { EventBus } from '../utils/event-bus.js';
 import { wsMessageSchema } from '../types.js';
+import type { ACPEventRow } from '@agentctl/shared';
 
 declare module 'fastify' {
   interface FastifyInstance {
     eventBus: EventBus;
   }
+}
+
+function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
+  return {
+    ...row,
+    data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
+  };
 }
 
 export default fp(async (fastify) => {
@@ -49,12 +57,14 @@ export default fp(async (fastify) => {
                 .orderBy(asc(acpEvents.id));
 
               for (const event of missedEvents) {
-                socket.send(JSON.stringify({ type: 'acp_event', payload: event }));
+                socket.send(JSON.stringify({ type: 'acp_event', payload: parseEventRow(event) }));
               }
             }
 
             unsubscribe = eventBus.subscribe(message.sessionId, (event) => {
-              socket.send(JSON.stringify({ type: 'acp_event', payload: event }));
+              // Event from session-runner also has string data, parse it
+              const parsed = event as unknown as typeof acpEvents.$inferSelect;
+              socket.send(JSON.stringify({ type: 'acp_event', payload: parseEventRow(parsed) }));
             });
           } else {
             await req.server.sessionManager.handleClientMessage(message);
