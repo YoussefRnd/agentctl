@@ -4,7 +4,11 @@ import { TextCard } from './cards/TextCard.js';
 import { ToolCallCard } from './cards/ToolCallCard.js';
 import type { ACPEventRow } from '@agentctl/shared';
 
-export function EventFeed({ events }: { events: ACPEventRow[] }) {
+export function EventFeed({ 
+  events
+}: { 
+  events: ACPEventRow[];
+}) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -37,7 +41,7 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
         {virtualizer.getVirtualItems().map((item) => {
           const e = events[item.index];
           // Simple payload typing for prototype
-          const data = e.data as { content?: string; name?: string } | null;
+          const data = e.data as { content?: string; name?: string; message?: string } | null;
           return (
             <div
               key={item.key}
