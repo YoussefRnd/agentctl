@@ -24,11 +24,18 @@ export function SessionView() {
   };
 
   const lastEvent = events[events.length - 1];
-  const showApproval = lastEvent?.type === 'approval_request';
+  const showApproval = events.length > 0 && lastEvent.type === 'approval_request';
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-      <div className="flex-1 overflow-hidden pb-32">
+      <header className="h-14 border-b border-border flex items-center px-6 bg-surface/30 backdrop-blur-sm shrink-0">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <span className="text-text-muted">Session:</span>
+          <span className="font-mono">{sessionId}</span>
+          <span className="px-2 py-0.5 bg-success/20 text-success text-[10px] uppercase font-bold rounded-full tracking-wider">Live</span>
+        </div>
+      </header>
+      <div className="flex-1 overflow-hidden pb-48">
         <EventFeed events={events} />
       </div>
       <div className="absolute bottom-0 left-0 right-0">
