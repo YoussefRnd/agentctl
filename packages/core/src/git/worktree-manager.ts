@@ -19,7 +19,14 @@ export interface ReviewFile {
 export class WorktreeManager {
   private baseDir = path.join(os.homedir(), '.agentctl', 'worktrees');
 
-  constructor(private gitMutex: GitMutex) {}
+  constructor(
+    private readonly gitMutex: GitMutex,
+    baseDir?: string
+  ) {
+    if (baseDir) {
+      this.setBaseDir(baseDir);
+    }
+  }
 
   /**
    * Sets the base directory for worktrees.
