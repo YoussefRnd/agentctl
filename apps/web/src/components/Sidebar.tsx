@@ -8,6 +8,7 @@ interface Project {
   name: string;
   sessions: {
     id: string;
+    title?: string | null;
     taskSlug?: string | null;
     branch?: string | null;
   }[];
@@ -43,7 +44,7 @@ export function Sidebar() {
                   className={`flex items-center text-sm cursor-pointer rounded px-2 py-1 hover:text-white ${activeSessionId === s.id ? 'bg-background/40 text-white' : 'text-text-muted'}`}
                 >
                   <PlayCircle className={`w-3 h-3 mr-2 ${activeSessionId === s.id ? 'text-accent' : 'text-success'}`} /> 
-                  {s.taskSlug ?? s.branch}
+                  {s.title ?? s.taskSlug ?? s.branch}
                 </Link>
               ))}
             </div>
