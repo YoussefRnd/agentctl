@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { db, sessions, projects, listDriverCapabilities, resolveProviderSelection, getDriverCapability } from '@agentctl/core';
+import { sessions, projects, listDriverCapabilities, resolveProviderSelection, getDriverCapability } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
@@ -76,7 +76,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       const { projectId, agent, taskSlug } = request.body;
 
       // Verify project exists
-      const project = await db.query.projects.findFirst({
+      const project = await fastify.db.query.projects.findFirst({
         where: eq(projects.id, projectId),
       });
 
@@ -89,7 +89,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       const branch = `agent/${taskSlug}`;
 
       // Create session in DB
-      const [createdSession] = await db.insert(sessions).values({
+      const [createdSession] = await fastify.db.insert(sessions).values({
         id: sessionId,
         projectId,
         branch,
@@ -125,7 +125,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request, reply) => {
-      const session = await db.query.sessions.findFirst({
+      const session = await fastify.db.query.sessions.findFirst({
         where: eq(sessions.id, request.params.id),
       });
 
@@ -149,7 +149,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request, reply) => {
-      const session = await db.query.sessions.findFirst({
+      const session = await fastify.db.query.sessions.findFirst({
         where: eq(sessions.id, request.params.id),
       });
 
@@ -158,16 +158,16 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       }
 
       const selection = resolveProviderSelection(request.body);
-      const [updatedSession] = await db.update(sessions).set({
+      const [updatedSession] = await fastify.db.update(sessions).set({
         selectedDriver: selection.selectedDriver,
         selectedModel: selection.selectedModel,
         selectedThinkingEffort: selection.selectedThinkingEffort,
       }).where(eq(sessions.id, request.params.id)).returning();
 
-      await fastify.sessionManager.restartSession(request.params.id, (updatedSession ?? session).worktreePath, selection);
+      fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, selection);
 
       return sessionWithCapabilitiesSchema.parse({
-        session: normalizeSessionSelection(updatedSession ?? session),
+        session: normalizeSessionSelection(updatedSession),
         capabilities: listDriverCapabilities(),
       });
     }

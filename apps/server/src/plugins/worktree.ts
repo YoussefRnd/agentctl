@@ -1,20 +1,9 @@
 import fp from 'fastify-plugin';
-import { WorktreeManager, GitMutex, db, sessions, projects } from '@agentctl/core';
+import { sessions, projects } from '@agentctl/core';
 import { eq, notInArray, and } from 'drizzle-orm';
 
-declare module 'fastify' {
-  interface FastifyInstance {
-    worktreeManager: WorktreeManager;
-    gitMutex: GitMutex;
-  }
-}
-
 export default fp((fastify) => {
-  const mutex = new GitMutex();
-  fastify.decorate('gitMutex', mutex);
-
-  const manager = new WorktreeManager(mutex);
-  fastify.decorate('worktreeManager', manager);
+  const { db, worktreeManager } = fastify;
 
   // Background sync interval (every 5 minutes)
   const syncInterval = setInterval(() => {
@@ -37,7 +26,7 @@ export default fp((fastify) => {
             );
 
           const activeIds = activeSessions.map((s: { id: string }) => s.id);
-          await manager.sync(project.path, activeIds);
+          await worktreeManager.sync(project.path, activeIds);
         }
 
         fastify.log.info('Background worktree sync completed successfully.');

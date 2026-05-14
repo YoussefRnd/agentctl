@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { db, projects, sessions, resolveProviderSelection, getDriverCapability } from '@agentctl/core';
+import { projects, sessions, resolveProviderSelection, getDriverCapability } from '@agentctl/core';
 import path from 'node:path';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
@@ -25,13 +25,13 @@ export const projectsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       const sessionId = crypto.randomUUID();
       const taskSlug = 'new-session';
 
-      const [createdProject] = await db.insert(projects).values({
+      const [createdProject] = await fastify.db.insert(projects).values({
         id: projectId,
         name: projectName,
         path: projectPath,
       }).returning();
 
-      const [createdSession] = await db.insert(sessions).values({
+      const [createdSession] = await fastify.db.insert(sessions).values({
         id: sessionId,
         projectId,
         branch: `agent/${taskSlug}`,
@@ -61,8 +61,8 @@ export const projectsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
   );
 
   fastify.get('/projects', async (_request, _reply) => {
-    const allProjects = await db.select().from(projects);
-    const allSessions = await db.select().from(sessions);
+    const allProjects = await fastify.db.select().from(projects);
+    const allSessions = await fastify.db.select().from(sessions);
 
     const result = allProjects.map(p => ({
       ...p,

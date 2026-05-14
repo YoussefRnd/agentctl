@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { SessionRunner, ACPClient, db, driverCapabilities } from '@agentctl/core';
+import { SessionRunner, ACPClient, driverCapabilities } from '@agentctl/core';
 import { spawn } from 'node:child_process';
 import type { WSClientMessage } from '../types.js';
 import type { FastifyInstance } from 'fastify';
@@ -24,7 +24,7 @@ export class SessionManagerService {
   startSession(sessionId: string, worktreePath: string, command: string, args: string[]) {
     const child = spawn(command, args, { cwd: worktreePath });
     const client = new ACPClient(child);
-    const runner = new SessionRunner(sessionId, client, db, this.fastify.eventBus);
+    const runner = new SessionRunner(sessionId, client, this.fastify.db, this.fastify.eventBus);
     this.runners.set(sessionId, runner);
     return runner;
   }

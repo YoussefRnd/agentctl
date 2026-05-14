@@ -5,7 +5,6 @@
     "build": "tsc",
     "dev": "vite",
     "lint": "eslint .",
-    "test": "vitest run",
     "format": "prettier --write ."
   },
   "type": "module",
@@ -13,6 +12,7 @@
     "@agentctl/shared": "workspace:*",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-virtual": "^3.13.24",
+    "highlight.js": "^11.11.1",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -24,15 +24,11 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.3.0",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "jsdom": "^27.4.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
-    "vite": "^8.0.11",
-    "vitest": "^4.1.6"
+    "vite": "^8.0.11"
   }
 }

@@ -2,7 +2,7 @@ import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
-import { db, sessions, projects } from '@agentctl/core';
+import { sessions, projects } from '@agentctl/core';
 
 const reviewParamsSchema = z.object({
   id: z.uuid(),
@@ -18,7 +18,7 @@ export const sessionReviewRoutes: FastifyPluginCallbackZod = (fastify, _opts, do
     },
     async (request) => {
       const { id } = request.params;
-      const session = await db.query.sessions.findFirst({
+      const session = await fastify.db.query.sessions.findFirst({
         where: eq(sessions.id, id),
       });
 
@@ -26,7 +26,7 @@ export const sessionReviewRoutes: FastifyPluginCallbackZod = (fastify, _opts, do
         return { files: [] };
       }
 
-      const project = await db.query.projects.findFirst({
+      const project = await fastify.db.query.projects.findFirst({
         where: eq(projects.id, session.projectId),
       });
 

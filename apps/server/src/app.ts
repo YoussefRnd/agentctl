@@ -8,11 +8,33 @@ import { eventsRoutes } from './routes/events.js';
 import { projectsRoutes } from './routes/projects.js';
 import { sessionsRoutes } from './routes/sessions.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
+import { db as defaultDb, WorktreeManager, GitMutex } from '@agentctl/core';
 
-export async function buildApp() {
+export interface AppDependencies {
+	db?: typeof defaultDb;
+	worktreeManager?: WorktreeManager;
+}
+
+declare module 'fastify' {
+	interface FastifyInstance {
+		db: typeof defaultDb;
+		worktreeManager: WorktreeManager;
+		gitMutex: GitMutex;
+	}
+}
+
+export async function buildApp(deps: AppDependencies = {}) {
 	const fastify = Fastify({
 		logger: true,
 	});
+
+	const db = deps.db ?? defaultDb;
+	const gitMutex = new GitMutex();
+	const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
+
+	fastify.decorate('db', db);
+	fastify.decorate('gitMutex', gitMutex);
+	fastify.decorate('worktreeManager', worktreeManager);
 
 	fastify.setValidatorCompiler(validatorCompiler);
 	fastify.setSerializerCompiler(serializerCompiler);

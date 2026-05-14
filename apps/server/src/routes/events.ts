@@ -1,6 +1,6 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
-import { db, acpEvents } from '@agentctl/core';
+import { acpEvents } from '@agentctl/core';
 import { asc, eq } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { ACPEventRow } from '@agentctl/shared';
@@ -25,7 +25,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
     async (request) => {
       const { id } = request.params;
 
-      const rows = await db
+      const rows = await fastify.db
         .select()
         .from(acpEvents)
         .where(eq(acpEvents.sessionId, id))

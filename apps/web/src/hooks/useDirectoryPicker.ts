@@ -23,8 +23,8 @@ export function useDirectoryPicker() {
 
       input.addEventListener('change', () => {
         const file = input.files?.[0];
-        if (file && file.webkitRelativePath) {
-          const dirName = file.webkitRelativePath.split('/')[0];
+        const dirName = file?.webkitRelativePath.split('/')[0];
+        if (dirName) {
           resolve(dirName);
         } else {
           resolve(null);

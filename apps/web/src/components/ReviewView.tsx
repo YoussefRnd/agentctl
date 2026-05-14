@@ -11,7 +11,6 @@ export interface ReviewFile {
 export function ReviewView({ files, isLoading, error, onRetry }: { files: ReviewFile[]; isLoading: boolean; error?: Error | null; onRetry?: () => void; }) {
   const grouped = useMemo(() => {
     return files.reduce<Record<FileState, ReviewFile[]>>((acc, file) => {
-      acc[file.state] ??= [];
       acc[file.state].push(file);
       return acc;
     }, { untracked: [], staged: [], modified: [], deleted: [], committed: [] });

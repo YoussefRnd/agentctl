@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import fastifyWebsocket from '@fastify/websocket';
-import { db, acpEvents } from '@agentctl/core';
+import { acpEvents } from '@agentctl/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { EventBus } from '../utils/event-bus.js';
 import { wsMessageSchema } from '../types.js';
@@ -45,7 +45,7 @@ export default fp(async (fastify) => {
             if (unsubscribe) unsubscribe();
 
             if (message.lastEventId !== undefined) {
-              const missedEvents = await db
+              const missedEvents = await fastify.db
                 .select()
                 .from(acpEvents)
                 .where(

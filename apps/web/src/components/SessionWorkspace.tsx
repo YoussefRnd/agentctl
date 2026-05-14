@@ -73,7 +73,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
   };
 
   const lastEvent = events[events.length - 1];
-  const showApproval = events.length > 0 && lastEvent?.type === 'approval_request';
+  const showApproval = events.length > 0 && lastEvent.type === 'approval_request';
   const hasDirtyChanges = review.files.some((file) => file.state !== 'committed');
   const feedErrorMessage = eventsError ? getErrorMessage(eventsError) : null;
 

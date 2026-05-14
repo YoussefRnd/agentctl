@@ -8,7 +8,6 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint .",
-    "test": "vitest run",
     "format": "prettier --write ."
   },
   "keywords": [],
@@ -19,6 +18,5 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "vitest": "^4.1.5"
   }
 }

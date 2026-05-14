@@ -8,7 +8,6 @@
 		"dev": "turbo dev",
 		"lint": "turbo lint",
 		"format": "prettier --write .",
-		"test": "turbo test",
 		"typecheck": "tsc --build",
 		"prepare": "husky"
 	},

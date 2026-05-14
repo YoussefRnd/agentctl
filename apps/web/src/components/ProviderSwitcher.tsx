@@ -37,7 +37,12 @@ export function ProviderSwitcher({ sessionId, data }: Props) {
   const selection = data?.session;
   const capabilities = data?.capabilities ?? [];
 
-  const currentCapability = useMemo(() => capabilities.find((item) => item.driver === selection?.selectedDriver) ?? capabilities[0], [capabilities, selection?.selectedDriver]);
+  const currentCapability = useMemo(() => {
+    if (!selection) return null;
+    return capabilities.find((item) => item.driver === selection.selectedDriver) ?? null;
+  }, [capabilities, selection]);
+
+  const currentCapabilityLabel = currentCapability?.label ?? selection?.selectedDriver ?? '';
 
   const mutation = useMutation({
     mutationFn: (payload: SessionProviderSelection) => apiClient.fetch<SessionWithCapabilities>(`/api/sessions/${sessionId}/provider`, {
@@ -74,7 +79,7 @@ export function ProviderSwitcher({ sessionId, data }: Props) {
         onClick={() => { setOpen((value) => !value); }}
         className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-surface/80 px-3 py-1.5 text-text-main hover:bg-background"
       >
-        <span className="truncate font-medium">{currentCapability?.label ?? selection.selectedDriver}</span>
+        <span className="truncate font-medium">{currentCapabilityLabel}</span>
         <span className="text-text-muted">{selection.selectedModel}</span>
         <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent">{selection.selectedThinkingEffort}</span>
       </button>
