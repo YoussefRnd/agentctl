@@ -10,6 +10,12 @@ export interface WorktreeResult {
   baseCommit: string;
 }
 
+export interface ReviewFile {
+  path: string;
+  state: 'untracked' | 'staged' | 'modified' | 'deleted' | 'committed';
+  diff: string;
+}
+
 export class WorktreeManager {
   private baseDir = path.join(os.homedir(), '.agentctl', 'worktrees');
 
@@ -194,6 +200,68 @@ export class WorktreeManager {
       const currentBranch = branchSummary.current;
 
       return await git.diff([`${baseCommit}...${currentBranch}`]);
+    });
+  }
+
+  async getReviewFiles(
+    repoPath: string,
+    worktreePath: string,
+    baseCommit: string
+  ): Promise<ReviewFile[]> {
+    return await this.gitMutex.run(repoPath, async () => {
+      const worktreeGit = simpleGit(worktreePath);
+      const status = await worktreeGit.status();
+      const files = new Map<string, ReviewFile>();
+
+      for (const file of status.files) {
+        if (file.index === '?') {
+          files.set(file.path, {
+            path: file.path,
+            state: 'untracked',
+            diff: await worktreeGit.raw(['diff', '--no-index', '--', '/dev/null', file.path]).catch(() => `diff --git a/${file.path} b/${file.path}`),
+          });
+          continue;
+        }
+
+        if (file.index !== ' ' && file.index !== '?') {
+          files.set(file.path, {
+            path: file.path,
+            state: 'staged',
+            diff: await worktreeGit.diff(['--cached', '--', file.path]),
+          });
+          continue;
+        }
+
+        if (file.working_dir === 'D') {
+          files.set(file.path, {
+            path: file.path,
+            state: 'deleted',
+            diff: await worktreeGit.diff(['--', file.path]),
+          });
+          continue;
+        }
+
+        if (file.working_dir === 'M') {
+          files.set(file.path, {
+            path: file.path,
+            state: 'modified',
+            diff: await worktreeGit.diff(['--', file.path]),
+          });
+        }
+      }
+
+      const committedFiles = await worktreeGit.raw(['diff', '--name-only', `${baseCommit}...HEAD`]);
+      for (const filePath of committedFiles.split('\n').filter(Boolean)) {
+        if (files.has(filePath)) continue;
+
+        files.set(filePath, {
+          path: filePath,
+          state: 'committed',
+          diff: await worktreeGit.diff([`${baseCommit}...HEAD`, '--', filePath]),
+        });
+      }
+
+      return [...files.values()];
     });
   }
 

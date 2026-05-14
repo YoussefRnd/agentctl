@@ -20,6 +20,17 @@ vi.mock('@agentctl/core', () => ({
   },
 }));
 
+vi.mock('@agentctl/core', () => ({
+  db: {
+    select: mocks.select,
+  },
+  acpEvents: {
+    sessionId: 'session_id',
+    id: 'id',
+  },
+  sessions: {},
+}));
+
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn(),
   asc: vi.fn(),
@@ -46,7 +57,7 @@ describe('eventsRoutes', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/api/sessions/550e8400-e29b-41d4-a716-446655440000/events',
+      url: '/sessions/550e8400-e29b-41d4-a716-446655440000/events',
     });
 
     expect(response.statusCode).toBe(200);

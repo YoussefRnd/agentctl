@@ -14,7 +14,7 @@ function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
 
 export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
   fastify.withTypeProvider<ZodTypeProvider>().get(
-    '/api/sessions/:id/events',
+    '/sessions/:id/events',
     {
       schema: {
         params: z.object({

@@ -13,7 +13,7 @@ export function useSessionEvents(sessionId: string | null) {
   const [isConnected, setIsConnected] = useState(false);
   
   // 1. Fetch historical data
-  const { data: history = [], isLoading } = useQuery({
+  const { data: history = [], isLoading, error, refetch } = useQuery({
     queryKey: ['events', sessionId],
     queryFn: () => sessionId ? fetchEvents(sessionId) : Promise.resolve([]),
     enabled: !!sessionId,
@@ -84,5 +84,5 @@ export function useSessionEvents(sessionId: string | null) {
     };
   }, [sessionId, queryClient]);
 
-  return { events: history, isLoading, sendMessage, isConnected };
+  return { events: history, isLoading, error, refetch, sendMessage, isConnected };
 }

@@ -8,7 +8,7 @@ export function App() {
     <Layout>
       <Routes>
         <Route path="/" element={
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
+          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 text-center animate-in fade-in zoom-in duration-500">
             <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mb-6">
               <PlayCircle className="w-8 h-8 text-accent" />
             </div>

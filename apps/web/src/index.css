@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@plugin "tailwindcss-animate";
 
 @theme {
   --color-background: #0d1117;
@@ -7,6 +9,7 @@
   --color-text-main: #c9d1d9;
   --color-text-muted: #8b949e;
   --color-accent: #58a6ff;
+  --color-accent-hover: #79b8ff;
   --color-success: #238636;
   --color-warning: #eab308;
   --color-danger: #f85149;

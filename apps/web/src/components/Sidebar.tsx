@@ -21,7 +21,7 @@ export function Sidebar() {
   });
 
   return (
-    <aside className="w-64 bg-surface/50 backdrop-blur-md border-l border-border h-full flex flex-col p-4 overflow-y-auto">
+    <aside className="h-64 w-full shrink-0 border-t border-border bg-surface/50 backdrop-blur-md p-4 overflow-y-auto lg:h-full lg:w-64 lg:border-t-0 lg:border-l">
       <h2 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4">Explorer</h2>
       
       {isLoading ? (
@@ -40,7 +40,7 @@ export function Sidebar() {
                   key={s.id} 
                   to={`/sessions/${s.id}`}
                   aria-current={activeSessionId === s.id ? 'page' : undefined}
-                  className={`flex items-center text-sm cursor-pointer hover:text-white ${activeSessionId === s.id ? 'text-white' : 'text-text-muted'}`}
+                  className={`flex items-center text-sm cursor-pointer rounded px-2 py-1 hover:text-white ${activeSessionId === s.id ? 'bg-background/40 text-white' : 'text-text-muted'}`}
                 >
                   <PlayCircle className={`w-3 h-3 mr-2 ${activeSessionId === s.id ? 'text-accent' : 'text-success'}`} /> 
                   {s.taskSlug ?? s.branch}

@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import { simpleGit } from 'simple-git';
 import type { SimpleGit } from 'simple-git';
 
-describe.sequential('WorktreeManager - Integration', () => {
+describe('WorktreeManager - Integration', () => {
   let worktreeManager: WorktreeManager;
   let gitMutex: GitMutex;
   let repoPath: string;

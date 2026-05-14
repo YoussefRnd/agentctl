@@ -8,6 +8,16 @@ export const projectSchema = z.object({
   path: z.string().min(1),
 });
 
+export const createProjectSchema = z.object({
+  path: z.string().min(1),
+  selectedDriver: driverSchema,
+});
+
+export const projectCreatedResponseSchema = z.object({
+  project: projectSchema.extend({ id: z.uuid() }),
+  sessionId: z.uuid(),
+});
+
 export const createSessionSchema = z.object({
   projectId: z.uuid(),
   agent: driverSchema,

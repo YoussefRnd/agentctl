@@ -5,3 +5,4 @@ export * from './utils/git-mutex.js';
 export * from './git/worktree-manager.js';
 export * from './agent/acp-client.js';
 export * from './agent/session-runner.js';
+export * from './agent/capabilities.js';

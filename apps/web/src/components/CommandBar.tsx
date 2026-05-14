@@ -20,8 +20,8 @@ export function CommandBar({ onSend, disabled }: { onSend: (val: string) => void
   }, [input]);
 
   return (
-    <div className="p-4 bg-gradient-to-t from-background to-transparent pointer-events-none">
-      <div className="max-w-3xl mx-auto relative group pointer-events-auto">
+    <div className="p-2 sm:p-4 bg-gradient-to-t from-background to-transparent pointer-events-none">
+      <div className="max-w-full sm:max-w-3xl mx-auto relative group pointer-events-auto">
         <div className="absolute -inset-0.5 bg-gradient-to-r from-accent to-purple-600 rounded-xl blur opacity-20 group-focus-within:opacity-40 transition duration-500"></div>
         <div className={`relative flex items-end bg-surface/80 backdrop-blur-md border border-border rounded-xl p-2 shadow-2xl ${disabled ? 'opacity-50' : ''}`}>
           <textarea
@@ -38,7 +38,7 @@ export function CommandBar({ onSend, disabled }: { onSend: (val: string) => void
               }
             }}
             placeholder={disabled ? "Connecting..." : "Type a command..."}
-            className="flex-1 bg-transparent border-none focus:ring-0 resize-none py-2 px-3 text-sm max-h-48 scrollbar-hide"
+            className="flex-1 bg-transparent border-none focus:ring-0 resize-none py-2 px-3 text-sm max-h-48 min-w-0 scrollbar-hide"
             disabled={disabled}
           />
           <button 
