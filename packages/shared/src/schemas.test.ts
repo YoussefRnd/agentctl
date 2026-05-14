@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { projectSchema, sessionSchema, sessionStatusSchema, acpEventSchema } from './schemas.js';
+import {
+  projectSchema,
+  sessionSchema,
+  sessionStatusSchema,
+  acpEventSchema,
+  sessionRowSchema,
+  sessionProviderSelectionSchema,
+} from './schemas.js';
 
 describe('Shared Schemas', () => {
   describe('projectSchema', () => {
@@ -44,6 +51,7 @@ describe('Shared Schemas', () => {
         branch: 'main',
         agent: 'claude-code',
         taskSlug: 'my-feature-task',
+        title: 'my feature task',
         baseCommit: 'abc1234567890',
       };
       expect(sessionSchema.parse(validSession)).toEqual(validSession);
@@ -86,6 +94,73 @@ describe('Shared Schemas', () => {
       };
       expect(() => sessionSchema.parse(invalidSession)).toThrow();
     });
+  });
+
+  describe('sessionRowSchema', () => {
+    it('should validate provider selection fields on a session row', () => {
+      const session = {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        projectId: '550e8400-e29b-41d4-a716-446655440001',
+        branch: 'main',
+        worktreePath: '/tmp/worktree',
+        taskSlug: 'my-feature-task',
+        title: 'my feature task',
+        baseCommit: 'abc1234567890',
+        agent: 'claude-code',
+        agentSessionId: null,
+        status: 'idle',
+        totalTokens: 0,
+        contextLimit: 128000,
+        estimatedCost: 0,
+        lastHeartbeat: null,
+        closedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        selectedDriver: 'claude-code',
+        selectedModel: 'sonnet-4',
+        selectedThinkingEffort: 'medium',
+      };
+
+      expect(sessionRowSchema.parse(session)).toEqual(session);
+    });
+  });
+
+  describe('sessionProviderSelectionSchema', () => {
+    it('should validate provider selection updates', () => {
+      const selection = {
+        selectedDriver: 'gemini-cli',
+        selectedModel: 'gemini-2.5-pro',
+        selectedThinkingEffort: 'high',
+      };
+
+      expect(sessionProviderSelectionSchema.parse(selection)).toEqual(selection);
+    });
+  });
+
+  it('includes title in sessionRowSchema', () => {
+    const result = sessionRowSchema.parse({
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      projectId: '550e8400-e29b-41d4-a716-446655440001',
+      branch: 'main',
+      taskSlug: 'new-session',
+      baseCommit: 'abc123',
+      worktreePath: '/tmp/worktree',
+      agent: 'claude-code',
+      agentSessionId: null,
+      status: 'idle',
+      totalTokens: 0,
+      contextLimit: 128000,
+      estimatedCost: 0,
+      lastHeartbeat: null,
+      closedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      selectedDriver: 'claude-code',
+      selectedModel: 'sonnet-4',
+      selectedThinkingEffort: 'medium',
+      title: 'new session',
+    });
+    expect(result.title).toBe('new session');
   });
 
   describe('sessionStatusSchema', () => {
