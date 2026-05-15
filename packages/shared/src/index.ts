@@ -13,6 +13,9 @@ export {
   acpEventSchema,
   driverSchema,
   thinkingEffortSchema,
+  driverStatusSchema,
+  acpConfigOptionSchema,
+  driverDiscoverySchema,
 } from './schemas.js';
 export type {
   Project,
@@ -24,5 +27,8 @@ export type {
   SessionStatus,
   ACPEvent,
   ACPEventRow,
+  DriverStatus,
+  ACPConfigOption,
+  DriverDiscovery,
 } from './schemas.js';
 export * from './env.js';

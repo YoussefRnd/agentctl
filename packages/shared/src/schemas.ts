@@ -86,6 +86,29 @@ export const acpEventSchema = z.object({
   createdAt: z.coerce.date(),
 });
 
+export const driverStatusSchema = z.enum(['ready', 'not_found', 'error']);
+
+export const acpConfigOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  type: z.literal('select'),
+  currentValue: z.string(),
+  options: z.array(z.object({
+    value: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+  })),
+});
+
+export const driverDiscoverySchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: driverStatusSchema,
+  command: z.string(),
+  configOptions: z.array(acpConfigOptionSchema).optional(),
+});
+
 export type Project = z.infer<typeof projectSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
@@ -94,6 +117,9 @@ export type DriverCapability = z.infer<typeof driverCapabilitySchema>;
 export type SessionWithCapabilities = z.infer<typeof sessionWithCapabilitiesSchema>;
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type ACPEvent = z.infer<typeof acpEventSchema>;
+export type DriverStatus = z.infer<typeof driverStatusSchema>;
+export type ACPConfigOption = z.infer<typeof acpConfigOptionSchema>;
+export type DriverDiscovery = z.infer<typeof driverDiscoverySchema>;
 
 export interface ACPEventRow extends Omit<ACPEvent, 'createdAt'> {
   id: number;
