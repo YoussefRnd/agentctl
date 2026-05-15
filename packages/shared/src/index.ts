@@ -16,6 +16,12 @@ export {
   driverStatusSchema,
   acpConfigOptionSchema,
   driverDiscoverySchema,
+  registryDistributionNpxSchema,
+  registryDistributionBinaryTargetSchema,
+  registryDistributionUvxSchema,
+  registryDistributionSchema,
+  registryAgentSchema,
+  registrySchema,
 } from './schemas.js';
 export type {
   Project,
@@ -32,5 +38,11 @@ export type {
   DriverStatus,
   ACPConfigOption,
   DriverDiscovery,
+  RegistryDistributionNpx,
+  RegistryDistributionBinaryTarget,
+  RegistryDistributionUvx,
+  RegistryDistribution,
+  RegistryAgent,
+  Registry,
 } from './schemas.js';
 export * from './env.js';

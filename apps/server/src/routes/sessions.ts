@@ -7,12 +7,12 @@ import type { ThinkingEffort } from '@agentctl/shared';
 
 const createSessionSchema = z.object({
   projectId: z.uuid(),
-  agent: z.enum(['claude-code', 'gemini-cli', 'opencode', 'codex-acp']),
+  agent: z.string().min(1),
   taskSlug: z.string().min(1),
 });
 
 const updateSessionProviderSchema = z.object({
-  selectedDriver: z.enum(['claude-code', 'gemini-cli', 'opencode', 'codex-acp']),
+  selectedDriver: z.string().min(1),
   selectedModel: z.string().min(1),
   selectedThinkingEffort: z.enum(['low', 'medium', 'high']),
 });
@@ -30,26 +30,25 @@ async function resolveInitialSelection(driverRegistry: DriverRegistry, driverId:
   const thinkingOpt = options.find((o) => o.id === 'thinking' || o.id === 'thinking_effort' || o.id === 'selectedThinkingEffort');
 
   return {
-    selectedDriver: driverId as 'claude-code' | 'gemini-cli' | 'opencode' | 'codex-acp',
+    selectedDriver: driverId,
     selectedModel: modelOpt?.currentValue ?? 'default',
     selectedThinkingEffort: (thinkingOpt?.currentValue ?? 'medium') as ThinkingEffort,
   };
 }
 
-function buildArgs(driverId: string, model: string, thinkingEffort: string): string[] {
-  const args: string[] = [];
+function buildLaunchArgs(driver: NonNullable<Awaited<ReturnType<DriverRegistry['getDriver']>>>, model: string, thinkingEffort: string): { command: string; args: string[]; env: Record<string, string> } {
+  const baseArgs = driver.launchArgs;
+  const baseEnv = driver.launchEnv;
+  const extraArgs: string[] = [];
 
-  if (driverId === 'claude-code') {
-    args.push('-p'); // Always pass the ACP flag
-    if (model && model !== 'default') args.push('--model', model);
-    if (thinkingEffort) args.push('--thinking-effort', thinkingEffort);
-  } else {
-    args.push('--acp');
-    if (model && model !== 'default') args.push('--model', model);
-    if (thinkingEffort) args.push('--thinking-effort', thinkingEffort);
-  }
+  if (model && model !== 'default') extraArgs.push('--model', model);
+  if (thinkingEffort) extraArgs.push('--thinking-effort', thinkingEffort);
 
-  return args;
+  return {
+    command: driver.command,
+    args: [...baseArgs, ...extraArgs],
+    env: baseEnv,
+  };
 }
 
 export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
@@ -97,10 +96,10 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       // Start the session via SessionManager using the resolved provider command.
       const driver = await fastify.driverRegistry.getDriver(createdSession.selectedDriver);
       if (driver?.status === 'ready') {
-        const args = buildArgs(driver.id, createdSession.selectedModel, createdSession.selectedThinkingEffort);
+        const launch = buildLaunchArgs(driver, createdSession.selectedModel, createdSession.selectedThinkingEffort);
 
         try {
-          fastify.sessionManager.startSession(sessionId, createdSession.worktreePath, driver.command, args);
+          fastify.sessionManager.startSession(sessionId, createdSession.worktreePath, launch.command, launch.args, launch.env);
         } catch (err) {
           fastify.log.error(err, 'Failed to start session');
           // Session created but failed to start - still return it
@@ -161,10 +160,11 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 
       const driver = await fastify.driverRegistry.getDriver(updatedSession.selectedDriver);
       if (driver?.status === 'ready') {
-        const args = buildArgs(driver.id, updatedSession.selectedModel, updatedSession.selectedThinkingEffort);
+        const launch = buildLaunchArgs(driver, updatedSession.selectedModel, updatedSession.selectedThinkingEffort);
         fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
-          command: driver.command,
-          args
+          command: launch.command,
+          args: launch.args,
+          env: launch.env,
         });
       }
 

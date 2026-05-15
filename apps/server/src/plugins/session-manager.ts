@@ -13,6 +13,7 @@ declare module 'fastify' {
 interface RestartOptions {
   command: string;
   args: string[];
+  env?: Record<string, string>;
 }
 
 export class SessionManagerService {
@@ -20,8 +21,11 @@ export class SessionManagerService {
 
   constructor(private fastify: FastifyInstance) {}
 
-  startSession(sessionId: string, worktreePath: string, command: string, args: string[]) {
-    const child = spawn(command, args, { cwd: worktreePath });
+  startSession(sessionId: string, worktreePath: string, command: string, args: string[], env?: Record<string, string>) {
+    const child = spawn(command, args, {
+      cwd: worktreePath,
+      env: { ...process.env, ...env },
+    });
     const client = new ACPClient(child);
     const runner = new SessionRunner(sessionId, client, this.fastify.db, this.fastify.eventBus);
     this.runners.set(sessionId, runner);
@@ -35,7 +39,7 @@ export class SessionManagerService {
       this.runners.delete(sessionId);
     }
 
-    return this.startSession(sessionId, worktreePath, options.command, options.args);
+    return this.startSession(sessionId, worktreePath, options.command, options.args, options.env);
   }
 
   async handleClientMessage(msg: WSClientMessage) {
