@@ -59,13 +59,15 @@ export async function buildApp(deps: AppDependencies = {}) {
 	fastify.setSerializerCompiler(serializerCompiler);
 
 	// Register Secure Session
-	await fastify.register(secureSession, {
-		secret: config.AGENTCTL_SECRET,
+ 	await fastify.register(secureSession, {
+		secret: config.AGENTCTL_SESSION_KEY,
 		salt: config.AGENTCTL_SESSION_SALT,
+		expiry: 24 * 60 * 60,
 		cookie: {
 			path: '/',
 			httpOnly: true,
 			secure: process.env.NODE_ENV === 'production',
+			maxAge: 24 * 60 * 60,
 			sameSite: 'lax',
 		},
 	});

@@ -1,13 +1,12 @@
 import fp from 'fastify-plugin';
 
+const PUBLIC_PATHS = new Set(['/health', '/api/login', '/api/logout']);
+
 export default fp((fastify) => {
   fastify.addHook('onRequest', (request, reply) => {
-    // Exempt /health, /ws, and /api/login from auth
-    if (
-      request.url === '/health' ||
-      request.url === '/ws' ||
-      request.url === '/api/login'
-    ) {
+    const pathname = new URL(request.url, 'http://localhost').pathname;
+
+    if (PUBLIC_PATHS.has(pathname)) {
       return Promise.resolve();
     }
 

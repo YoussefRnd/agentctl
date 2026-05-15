@@ -26,6 +26,11 @@ export default fp(async (fastify) => {
   fastify.decorate('eventBus', eventBus);
 
   fastify.get('/ws', { websocket: true }, (socket, req) => {
+    if (!req.session.get('authenticated')) {
+      socket.close();
+      return;
+    }
+
     let unsubscribe: (() => void) | null = null;
 
     socket.on('message', (rawMessage) => {
@@ -83,4 +88,3 @@ export default fp(async (fastify) => {
     });
   });
 });
-

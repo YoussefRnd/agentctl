@@ -18,11 +18,17 @@ export const authRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
       const { secret } = request.body;
       if (secret === fastify.config.AGENTCTL_SECRET) {
         request.session.set('authenticated', true);
+        request.session.options({ maxAge: 24 * 60 * 60 });
         return { success: true };
       }
       return reply.code(401).send({ error: 'Invalid secret' });
     },
   );
+
+  fastify.withTypeProvider<ZodTypeProvider>().post('/logout', (request) => {
+    request.session.delete();
+    return { success: true };
+  });
 
   done();
 };
