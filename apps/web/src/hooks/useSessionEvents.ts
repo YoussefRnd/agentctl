@@ -62,8 +62,9 @@ export function useSessionEvents(sessionId: string | null) {
       }
     };
 
-    // Throttle flush buffer to cache
-    const flushInterval = setInterval(() => {
+    // Throttle flush buffer to cache using requestAnimationFrame
+    let rafId: number;
+    const flushBuffer = () => {
       if (bufferRef.current.length > 0) {
         queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
           const newEvents = [...bufferRef.current];
@@ -76,10 +77,12 @@ export function useSessionEvents(sessionId: string | null) {
           return [...old, ...uniqueNew];
         });
       }
-    }, 100);
+      rafId = requestAnimationFrame(flushBuffer);
+    };
+    rafId = requestAnimationFrame(flushBuffer);
 
     return () => {
-      clearInterval(flushInterval);
+      cancelAnimationFrame(rafId);
       ws.close();
     };
   }, [sessionId, queryClient]);

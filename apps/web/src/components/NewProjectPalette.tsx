@@ -15,7 +15,10 @@ const DRIVERS: { driver: DriverName; label: string; defaultModel: string }[] = [
 
 interface CreateProjectResponse {
   project: { id: string; name: string; path: string };
-  sessionId: string;
+}
+
+interface CreateSessionResponse {
+  id: string;
 }
 
 export function NewProjectPalette() {
@@ -26,13 +29,25 @@ export function NewProjectPalette() {
   const [step, setStep] = useState<'idle' | 'path' | 'provider'>('idle');
 
   const mutation = useMutation({
-    mutationFn: (payload: { path: string; selectedDriver: DriverName }) =>
-      apiClient.fetch<CreateProjectResponse>('/api/projects', {
+    mutationFn: async (payload: { path: string; selectedDriver: DriverName }) => {
+      // 1. Create the project record
+      const { project } = await apiClient.fetch<CreateProjectResponse>('/api/projects', {
         method: 'POST',
-        body: JSON.stringify(payload),
-      }),
+        body: JSON.stringify({ path: payload.path }),
+      });
+
+      // 2. Create and start the initial session
+      return apiClient.fetch<CreateSessionResponse>('/api/sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: project.id,
+          agent: payload.selectedDriver,
+          taskSlug: 'setup-project',
+        }),
+      });
+    },
     onSuccess: (data) => {
-      void navigate(`/sessions/${data.sessionId}`);
+      void navigate(`/sessions/${data.id}`);
     },
   });
 
@@ -86,7 +101,10 @@ export function NewProjectPalette() {
   if (step === 'path') {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-300">
-        <p className="text-sm text-text-muted mb-4">Enter the full path to your project directory</p>
+        <div className="mb-6">
+          <h2 className="text-lg font-bold mb-1">Project Path</h2>
+          <p className="text-sm text-text-muted">Enter the <strong>absolute path</strong> to your local repository.</p>
+        </div>
         <div className="flex flex-col items-center gap-3 w-full max-w-sm">
           <div className="flex w-full items-center gap-2">
             <input
@@ -114,7 +132,7 @@ export function NewProjectPalette() {
             type="button"
             disabled={!projectPath.trim()}
             onClick={handleNext}
-            className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-background font-semibold transition-colors hover:bg-accent-hover disabled:opacity-50"
+            className="mt-2 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-background font-semibold transition-colors hover:bg-accent-hover disabled:opacity-50 w-full justify-center"
           >
             Next
           </button>

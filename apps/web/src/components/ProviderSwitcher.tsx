@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client.js';
 
@@ -34,8 +34,24 @@ interface Props {
 export function ProviderSwitcher({ sessionId, data }: Props) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const selection = data?.session;
   const capabilities = data?.capabilities ?? [];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open]);
 
   const currentCapability = useMemo(() => {
     if (!selection) return null;
@@ -73,7 +89,7 @@ export function ProviderSwitcher({ sessionId, data }: Props) {
   if (!selection) return null;
 
   return (
-    <div className="flex items-center gap-2 text-xs sm:text-sm min-w-0">
+    <div ref={containerRef} className="flex items-center gap-2 text-xs sm:text-sm min-w-0 relative">
       <button
         type="button"
         onClick={() => { setOpen((value) => !value); }}

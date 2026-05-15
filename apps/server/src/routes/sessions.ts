@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { sessions, projects, listDriverCapabilities, resolveProviderSelection, getDriverCapability } from '@agentctl/core';
+import { sessions, projects, listDriverCapabilities, resolveProviderSelection, getDriverCapability, type ThinkingEffort } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
@@ -84,33 +84,37 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
         return reply.code(404).send({ error: 'Project not found' });
       }
 
-      // Generate session ID and branch name
+      // Generate session ID
       const sessionId = crypto.randomUUID();
-      const branch = `agent/${taskSlug}`;
 
-      // Create session in DB
+      // Create a real worktree
+      const worktree = await fastify.worktreeManager.create(project.path, sessionId, taskSlug);
+
+      // Create session in DB with real worktree data
+      const selection = resolveProviderSelection({ selectedDriver: agent });
       const [createdSession] = await fastify.db.insert(sessions).values({
         id: sessionId,
         projectId,
-        branch,
-        worktreePath: `${project.path}/.agentctl/worktrees/${taskSlug}`,
+        branch: worktree.branch,
+        worktreePath: worktree.path,
         agent,
         status: 'idle',
         taskSlug,
-        baseCommit: 'HEAD',
-        ...resolveProviderSelection({ selectedDriver: agent }),
+        baseCommit: worktree.baseCommit,
+        ...selection,
       }).returning();
 
       // Start the session via SessionManager using the resolved provider command.
       const capability = getDriverCapability(createdSession.selectedDriver) ?? getDriverCapability('claude-code');
-      const command = capability?.command ?? 'claude';
-      const args = [createdSession.selectedModel, createdSession.selectedThinkingEffort];
+      if (capability) {
+        const args = capability.buildArgs(createdSession.selectedModel, createdSession.selectedThinkingEffort as ThinkingEffort);
 
-      try {
-        fastify.sessionManager.startSession(sessionId, createdSession.worktreePath, command, args);
-      } catch (err) {
-        fastify.log.error(err, 'Failed to start session');
-        // Session created but failed to start - still return it
+        try {
+          fastify.sessionManager.startSession(sessionId, createdSession.worktreePath, capability.command, args);
+        } catch (err) {
+          fastify.log.error(err, 'Failed to start session');
+          // Session created but failed to start - still return it
+        }
       }
 
       return createdSession;

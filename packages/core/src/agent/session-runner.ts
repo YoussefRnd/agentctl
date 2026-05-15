@@ -48,9 +48,12 @@ export class SessionRunner {
       const params = request.params as { id?: string; toolCallId?: string };
       const toolCallId = params.toolCallId ?? params.id ?? String(request.id);
       
-      // Store the approval request with the JSON-RPC id
-      void new Promise<unknown>((resolve) => {
-        this.pendingApprovals.set(request.id, { toolCallId, resolve });
+      // Store the resolver directly. When approve/deny is called, we will send the response.
+      this.pendingApprovals.set(request.id, { 
+        toolCallId, 
+        resolve: (result) => {
+          this.client.sendResponse(request.id, result);
+        } 
       });
 
       // Update session status to needs_attention
@@ -122,16 +125,15 @@ export class SessionRunner {
   async approve(eventId: number) {
     const pending = this.pendingApprovals.get(eventId);
     if (pending) {
-      // Send proper JSON-RPC response for ACP
-      this.client.sendResponse(eventId, {
+      pending.resolve({
         outcome: { outcome: 'selected', optionId: 'allow-always' }
       });
       this.pendingApprovals.delete(eventId);
     } else {
       // Fallback: try to find by toolCallId in pending
-      for (const [id, pending] of this.pendingApprovals) {
-        if (String(id) === String(eventId) || pending.toolCallId === String(eventId)) {
-          this.client.sendResponse(id, {
+      for (const [id, p] of this.pendingApprovals) {
+        if (String(id) === String(eventId) || p.toolCallId === String(eventId)) {
+          p.resolve({
             outcome: { outcome: 'selected', optionId: 'allow-always' }
           });
           this.pendingApprovals.delete(id);
@@ -148,16 +150,15 @@ export class SessionRunner {
   async deny(eventId: number) {
     const pending = this.pendingApprovals.get(eventId);
     if (pending) {
-      // Send proper JSON-RPC response for ACP
-      this.client.sendResponse(eventId, {
+      pending.resolve({
         outcome: { outcome: 'selected', optionId: 'deny-once' }
       });
       this.pendingApprovals.delete(eventId);
     } else {
       // Fallback: try to find by toolCallId in pending
-      for (const [id, pending] of this.pendingApprovals) {
-        if (String(id) === String(eventId) || pending.toolCallId === String(eventId)) {
-          this.client.sendResponse(id, {
+      for (const [id, p] of this.pendingApprovals) {
+        if (String(id) === String(eventId) || p.toolCallId === String(eventId)) {
+          p.resolve({
             outcome: { outcome: 'selected', optionId: 'deny-once' }
           });
           this.pendingApprovals.delete(id);

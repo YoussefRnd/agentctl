@@ -7,6 +7,7 @@ export interface DriverCapability {
   command: string;
   models: string[];
   thinkingEfforts: ThinkingEffort[];
+  buildArgs: (model: string, effort: ThinkingEffort) => string[];
 };
 
 export const driverCapabilities: Record<DriverCapability['driver'], DriverCapability> = {
@@ -16,6 +17,7 @@ export const driverCapabilities: Record<DriverCapability['driver'], DriverCapabi
     command: 'claude',
     models: ['sonnet-4', 'opus-4'],
     thinkingEfforts: ['low', 'medium', 'high'],
+    buildArgs: (_model, _effort) => ['--acp'],
   },
   'gemini-cli': {
     driver: 'gemini-cli',
@@ -23,6 +25,7 @@ export const driverCapabilities: Record<DriverCapability['driver'], DriverCapabi
     command: 'gemini',
     models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
     thinkingEfforts: ['low', 'medium', 'high'],
+    buildArgs: (model, effort) => ['--acp', '--model', model, '--thinking', effort],
   },
   opencode: {
     driver: 'opencode',
@@ -30,6 +33,7 @@ export const driverCapabilities: Record<DriverCapability['driver'], DriverCapabi
     command: 'opencode',
     models: ['default'],
     thinkingEfforts: ['low', 'medium', 'high'],
+    buildArgs: (model, effort) => ['--acp', '--model', model, '--thinking', effort],
   },
   'codex-acp': {
     driver: 'codex-acp',
@@ -37,6 +41,7 @@ export const driverCapabilities: Record<DriverCapability['driver'], DriverCapabi
     command: 'codex',
     models: ['default'],
     thinkingEfforts: ['low', 'medium', 'high'],
+    buildArgs: (model, effort) => ['--acp', '--model', model, '--thinking', effort],
   },
 };
 

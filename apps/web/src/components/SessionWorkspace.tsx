@@ -9,7 +9,7 @@ import { ReviewView, type ReviewFile } from './ReviewView.js';
 import { useSessionEvents } from '../hooks/useSessionEvents.js';
 import { apiClient } from '../lib/api-client.js';
 import { ProviderSwitcher } from './ProviderSwitcher.js';
-import type { SessionWithCapabilities } from '@agentctl/shared/src/schemas.js';
+import type { SessionWithCapabilities } from '@agentctl/shared';
 
 type WorkspaceTab = 'feed' | 'review';
 
@@ -45,7 +45,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
   const { data: review = { files: [] }, isLoading: isLoadingReview, error: reviewError, refetch: refetchReview } = useQuery({
     queryKey: ['session-review', sessionId],
     queryFn: () => fetchReview(sessionId),
-    enabled: !!sessionId,
+    enabled: !!sessionId && activeTab === 'review',
   });
 
   useEffect(() => {

@@ -37,7 +37,8 @@ export class SessionManagerService {
     }
 
     const capability = driverCapabilities[selection.selectedDriver];
-    return this.startSession(sessionId, worktreePath, capability.command, [selection.selectedModel, selection.selectedThinkingEffort]);
+    const args = capability.buildArgs(selection.selectedModel, selection.selectedThinkingEffort);
+    return this.startSession(sessionId, worktreePath, capability.command, args);
   }
 
   async handleClientMessage(msg: WSClientMessage) {
