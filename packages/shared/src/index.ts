@@ -19,12 +19,14 @@ export {
 } from './schemas.js';
 export type {
   Project,
+  DriverName,
   Session,
   SessionRow,
   SessionProviderSelection,
   DriverCapability,
   SessionWithCapabilities,
   SessionStatus,
+  ThinkingEffort,
   ACPEvent,
   ACPEventRow,
   DriverStatus,

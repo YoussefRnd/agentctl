@@ -1,17 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useDirectoryPicker } from '../hooks/useDirectoryPicker.js';
 import { apiClient } from '../lib/api-client.js';
-
-type DriverName = 'claude-code' | 'gemini-cli' | 'opencode' | 'codex-acp';
-
-const DRIVERS: { driver: DriverName; label: string; defaultModel: string }[] = [
-  { driver: 'claude-code', label: 'Claude Code', defaultModel: 'sonnet-4' },
-  { driver: 'gemini-cli', label: 'Gemini CLI', defaultModel: 'gemini-2.5-pro' },
-  { driver: 'opencode', label: 'OpenCode', defaultModel: 'default' },
-  { driver: 'codex-acp', label: 'Codex ACP', defaultModel: 'default' },
-];
+import type { DriverDiscovery } from '@agentctl/shared';
 
 interface CreateProjectResponse {
   project: { id: string; name: string; path: string };
@@ -28,8 +20,13 @@ export function NewProjectPalette() {
   const [projectName, setProjectName] = useState('');
   const [step, setStep] = useState<'idle' | 'path' | 'provider'>('idle');
 
+  const { data: drivers = [], isLoading: isLoadingDrivers } = useQuery({
+    queryKey: ['drivers'],
+    queryFn: () => apiClient.fetch<DriverDiscovery[]>('/api/drivers'),
+  });
+
   const mutation = useMutation({
-    mutationFn: async (payload: { path: string; selectedDriver: DriverName }) => {
+    mutationFn: async (payload: { path: string; selectedDriver: string }) => {
       // 1. Create the project record
       const { project } = await apiClient.fetch<CreateProjectResponse>('/api/projects', {
         method: 'POST',
@@ -74,8 +71,8 @@ export function NewProjectPalette() {
     }
   }, [projectPath]);
 
-  const handleProviderSelect = useCallback((driver: DriverName) => {
-    mutation.mutate({ path: projectPath, selectedDriver: driver });
+  const handleProviderSelect = useCallback((driverId: string) => {
+    mutation.mutate({ path: projectPath, selectedDriver: driverId });
   }, [mutation, projectPath]);
 
   if (step === 'idle') {
@@ -148,19 +145,37 @@ export function NewProjectPalette() {
         <p className="text-lg font-bold">{projectName}</p>
       </div>
       <p className="text-sm text-text-muted mb-4">Choose a provider</p>
-      <div className="flex flex-col gap-2 w-64">
-        {DRIVERS.map((d) => (
-          <button
-            key={d.driver}
-            type="button"
-            disabled={mutation.isPending}
-            onClick={() => { handleProviderSelect(d.driver); }}
-            className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors hover:bg-background disabled:opacity-50"
-          >
-            <span className="font-medium">{d.label}</span>
-            <span className="text-xs text-text-muted">{d.defaultModel}</span>
-          </button>
-        ))}
+      <div className="flex flex-col gap-2 w-72">
+        {isLoadingDrivers ? (
+          <div className="py-8 flex justify-center">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+          </div>
+        ) : (
+          drivers.map((d) => {
+            const isReady = d.status === 'ready';
+            const firstModel = d.configOptions?.find(opt => opt.id === 'model')?.currentValue ?? '';
+            
+            return (
+              <button
+                key={d.id}
+                type="button"
+                disabled={mutation.isPending || !isReady}
+                onClick={() => { handleProviderSelect(d.id); }}
+                className="group flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors hover:bg-background disabled:opacity-60 disabled:hover:bg-surface"
+              >
+                <div className="flex flex-col">
+                  <span className="font-medium">{d.label}</span>
+                  {firstModel && <span className="text-xs text-text-muted">{firstModel}</span>}
+                </div>
+                {!isReady && (
+                  <span className="rounded-md bg-danger/10 px-2 py-0.5 text-[10px] font-bold text-danger uppercase">
+                    Not Found
+                  </span>
+                )}
+              </button>
+            );
+          })
+        )}
       </div>
       {mutation.isPending && (
         <p className="mt-4 text-sm text-text-muted animate-pulse">Creating project...</p>

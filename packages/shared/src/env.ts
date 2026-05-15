@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const envSchema = z.object({
   AGENTCTL_SECRET: z.string().min(1).default('dev-secret'),
+  AGENTCTL_SESSION_SALT: z.string().min(16).default('dev-session-salt-16-chars'),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().optional().default('sqlite.db'),
 });

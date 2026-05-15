@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { SessionRunner, ACPClient, driverCapabilities } from '@agentctl/core';
+import { SessionRunner, ACPClient } from '@agentctl/core';
 import { spawn } from 'node:child_process';
 import type { WSClientMessage } from '../types.js';
 import type { FastifyInstance } from 'fastify';
@@ -10,10 +10,9 @@ declare module 'fastify' {
   }
 }
 
-interface ProviderSelection {
-  selectedDriver: keyof typeof driverCapabilities;
-  selectedModel: string;
-  selectedThinkingEffort: 'low' | 'medium' | 'high';
+interface RestartOptions {
+  command: string;
+  args: string[];
 }
 
 export class SessionManagerService {
@@ -29,16 +28,14 @@ export class SessionManagerService {
     return runner;
   }
 
-  restartSession(sessionId: string, worktreePath: string, selection: ProviderSelection) {
+  restartSession(sessionId: string, worktreePath: string, options: RestartOptions) {
     const runner = this.runners.get(sessionId);
     if (runner) {
       runner.kill();
       this.runners.delete(sessionId);
     }
 
-    const capability = driverCapabilities[selection.selectedDriver];
-    const args = capability.buildArgs(selection.selectedModel, selection.selectedThinkingEffort);
-    return this.startSession(sessionId, worktreePath, capability.command, args);
+    return this.startSession(sessionId, worktreePath, options.command, options.args);
   }
 
   async handleClientMessage(msg: WSClientMessage) {

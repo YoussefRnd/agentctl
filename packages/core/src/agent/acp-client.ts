@@ -5,6 +5,7 @@ import type { ACPEvent } from '@agentctl/shared';
 export interface ACPClientEvents {
   event: (event: ACPEvent) => void;
   rpcRequest: (request: { id: number | string; method: string; params: unknown }) => void;
+  rpcResponse: (response: { id: number | string; result?: unknown; error?: unknown }) => void;
   error: (error: Error) => void;
   exit: (code: number | null) => void;
 }
@@ -15,11 +16,12 @@ interface JsonRpcMessage {
   method?: string;
   params?: unknown;
   result?: unknown;
-  error?: unknown;
+  error?: { code: number; message: string; data?: unknown };
 }
 
 export class ACPClient extends EventEmitter {
   private buffer = '';
+  private nextRequestId = 1;
 
   constructor(private child: ChildProcess) {
     super();
@@ -52,9 +54,14 @@ export class ACPClient extends EventEmitter {
         try {
           const parsed = JSON.parse(line) as JsonRpcMessage;
           
-          // If it has an id, it's a request or response - emit as RPC
-          if (parsed.id !== undefined && parsed.method) {
-            this.emit('rpcRequest', { id: parsed.id, method: parsed.method, params: parsed.params });
+          if (parsed.id !== undefined) {
+            if (parsed.method) {
+              // It's a request
+              this.emit('rpcRequest', { id: parsed.id, method: parsed.method, params: parsed.params });
+            } else {
+              // It's a response
+              this.emit('rpcResponse', { id: parsed.id, result: parsed.result, error: parsed.error });
+            }
           } else {
             // Otherwise treat as ACP event (notification)
             this.emit('event', parsed as unknown as ACPEvent);
@@ -64,6 +71,47 @@ export class ACPClient extends EventEmitter {
         }
       }
     }
+  }
+
+  async initialize(): Promise<unknown> {
+    return this.call('initialize', {
+      protocolVersion: 1,
+      clientInfo: { name: 'agentctl', version: '1.0.0' },
+    });
+  }
+
+  async call(method: string, params: unknown, timeoutMs = 5000): Promise<unknown> {
+    const id = this.nextRequestId++;
+    
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.off('rpcResponse', handler);
+        const idStr = id.toString();
+        const timeoutStr = timeoutMs.toString();
+        reject(new Error("RPC call '" + method + "' (ID: " + idStr + ") timed out after " + timeoutStr + "ms"));
+      }, timeoutMs);
+
+      const handler = (response: { id: number | string; result?: unknown; error?: unknown }) => {
+        if (response.id === id) {
+          clearTimeout(timeout);
+          this.off('rpcResponse', handler);
+          if (response.error) {
+            reject(response.error instanceof Error ? response.error : new Error(JSON.stringify(response.error)));
+          } else {
+            resolve(response.result);
+          }
+        }
+      };
+
+      this.on('rpcResponse', handler);
+      
+      this.send({
+        jsonrpc: '2.0',
+        id,
+        method,
+        params,
+      });
+    });
   }
 
   send(message: unknown) {

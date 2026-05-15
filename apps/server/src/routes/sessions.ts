@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { sessions, projects, listDriverCapabilities, resolveProviderSelection, getDriverCapability, type ThinkingEffort } from '@agentctl/core';
+import { sessions, projects, type DriverRegistry } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
+import type { ThinkingEffort } from '@agentctl/shared';
 
 const createSessionSchema = z.object({
   projectId: z.uuid(),
@@ -20,53 +21,40 @@ const sessionParamsSchema = z.object({
   id: z.uuid(),
 });
 
-const sessionRowSchema = z.object({
-  id: z.uuid(),
-  projectId: z.uuid(),
-  branch: z.string().min(1),
-  worktreePath: z.string().min(1),
-  taskSlug: z.string().min(1),
-  baseCommit: z.string().min(1),
-  agent: z.enum(['claude-code', 'gemini-cli', 'opencode', 'codex-acp']),
-  agentSessionId: z.string().nullable(),
-  status: z.enum(['running', 'needs_attention', 'idle', 'error', 'merged', 'discarded']),
-  totalTokens: z.number(),
-  contextLimit: z.number(),
-  estimatedCost: z.number(),
-  lastHeartbeat: z.coerce.date().nullable(),
-  closedAt: z.coerce.date().nullable(),
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
-  selectedDriver: z.enum(['claude-code', 'gemini-cli', 'opencode', 'codex-acp']),
-  selectedModel: z.string().min(1),
-  selectedThinkingEffort: z.enum(['low', 'medium', 'high']),
-});
+async function resolveInitialSelection(driverRegistry: DriverRegistry, driverId: string) {
+  const drivers = await driverRegistry.discover();
+  const driver = drivers.find(d => d.id === driverId);
+  const options = driver?.configOptions ?? [];
 
-const sessionWithCapabilitiesSchema = z.object({
-  session: sessionRowSchema,
-  capabilities: z.array(z.object({
-    driver: z.enum(['claude-code', 'gemini-cli', 'opencode', 'codex-acp']),
-    label: z.string().min(1),
-    command: z.string().min(1),
-    models: z.array(z.string().min(1)),
-    thinkingEfforts: z.array(z.enum(['low', 'medium', 'high'])),
-  })),
-});
+  const modelOpt = options.find((o) => o.id === 'model' || o.id === 'selectedModel');
+  const thinkingOpt = options.find((o) => o.id === 'thinking' || o.id === 'thinking_effort' || o.id === 'selectedThinkingEffort');
 
-function normalizeSessionSelection(session: typeof sessions.$inferSelect) {
   return {
-    ...session,
-    ...resolveProviderSelection({
-    selectedDriver: session.selectedDriver,
-    selectedModel: session.selectedModel,
-    selectedThinkingEffort: session.selectedThinkingEffort,
-    }),
+    selectedDriver: driverId as 'claude-code' | 'gemini-cli' | 'opencode' | 'codex-acp',
+    selectedModel: modelOpt?.currentValue ?? 'default',
+    selectedThinkingEffort: (thinkingOpt?.currentValue ?? 'medium') as ThinkingEffort,
   };
+}
+
+function buildArgs(driverId: string, model: string, thinkingEffort: string): string[] {
+  const args: string[] = [];
+
+  if (driverId === 'claude-code') {
+    args.push('-p'); // Always pass the ACP flag
+    if (model && model !== 'default') args.push('--model', model);
+    if (thinkingEffort) args.push('--thinking-effort', thinkingEffort);
+  } else {
+    args.push('--acp');
+    if (model && model !== 'default') args.push('--model', model);
+    if (thinkingEffort) args.push('--thinking-effort', thinkingEffort);
+  }
+
+  return args;
 }
 
 export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
   fastify.withTypeProvider<ZodTypeProvider>().post(
-      '/sessions',
+    '/sessions',
     {
       schema: {
         body: createSessionSchema,
@@ -90,8 +78,10 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       // Create a real worktree
       const worktree = await fastify.worktreeManager.create(project.path, sessionId, taskSlug);
 
+      // Resolve initial selection from driver registry
+      const selection = await resolveInitialSelection(fastify.driverRegistry, agent);
+
       // Create session in DB with real worktree data
-      const selection = resolveProviderSelection({ selectedDriver: agent });
       const [createdSession] = await fastify.db.insert(sessions).values({
         id: sessionId,
         projectId,
@@ -105,12 +95,12 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       }).returning();
 
       // Start the session via SessionManager using the resolved provider command.
-      const capability = getDriverCapability(createdSession.selectedDriver) ?? getDriverCapability('claude-code');
-      if (capability) {
-        const args = capability.buildArgs(createdSession.selectedModel, createdSession.selectedThinkingEffort as ThinkingEffort);
+      const driver = await fastify.driverRegistry.getDriver(createdSession.selectedDriver);
+      if (driver?.status === 'ready') {
+        const args = buildArgs(driver.id, createdSession.selectedModel, createdSession.selectedThinkingEffort);
 
         try {
-          fastify.sessionManager.startSession(sessionId, createdSession.worktreePath, capability.command, args);
+          fastify.sessionManager.startSession(sessionId, createdSession.worktreePath, driver.command, args);
         } catch (err) {
           fastify.log.error(err, 'Failed to start session');
           // Session created but failed to start - still return it
@@ -122,7 +112,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
   );
 
   fastify.withTypeProvider<ZodTypeProvider>().get(
-      '/sessions/:id',
+    '/sessions/:id',
     {
       schema: {
         params: sessionParamsSchema,
@@ -137,15 +127,17 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
         return reply.code(404).send({ error: 'Session not found' });
       }
 
-      return sessionWithCapabilitiesSchema.parse({
-        session: normalizeSessionSelection(session),
-        capabilities: listDriverCapabilities(),
-      });
+      const drivers = await fastify.driverRegistry.discover();
+
+      return {
+        session,
+        capabilities: drivers,
+      };
     }
   );
 
   fastify.withTypeProvider<ZodTypeProvider>().patch(
-      '/sessions/:id/provider',
+    '/sessions/:id/provider',
     {
       schema: {
         params: sessionParamsSchema,
@@ -161,19 +153,27 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
         return reply.code(404).send({ error: 'Session not found' });
       }
 
-      const selection = resolveProviderSelection(request.body);
       const [updatedSession] = await fastify.db.update(sessions).set({
-        selectedDriver: selection.selectedDriver,
-        selectedModel: selection.selectedModel,
-        selectedThinkingEffort: selection.selectedThinkingEffort,
+        selectedDriver: request.body.selectedDriver,
+        selectedModel: request.body.selectedModel,
+        selectedThinkingEffort: request.body.selectedThinkingEffort,
       }).where(eq(sessions.id, request.params.id)).returning();
 
-      fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, selection);
+      const driver = await fastify.driverRegistry.getDriver(updatedSession.selectedDriver);
+      if (driver?.status === 'ready') {
+        const args = buildArgs(driver.id, updatedSession.selectedModel, updatedSession.selectedThinkingEffort);
+        fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
+          command: driver.command,
+          args
+        });
+      }
 
-      return sessionWithCapabilitiesSchema.parse({
-        session: normalizeSessionSelection(updatedSession),
-        capabilities: listDriverCapabilities(),
-      });
+      const drivers = await fastify.driverRegistry.discover();
+
+      return {
+        session: updatedSession,
+        capabilities: drivers,
+      };
     }
   );
 

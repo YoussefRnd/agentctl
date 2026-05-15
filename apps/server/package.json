@@ -11,6 +11,7 @@
 	"dependencies": {
 		"@agentctl/core": "workspace:*",
 		"@agentctl/shared": "workspace:*",
+		"@fastify/secure-session": "^8.3.0",
 		"@fastify/type-provider-zod": "^1.0.0",
 		"@fastify/websocket": "^11.2.0",
 		"drizzle-orm": "^0.45.2",

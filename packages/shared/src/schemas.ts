@@ -61,31 +61,6 @@ export const sessionRowSchema = sessionSchema.extend({
   selectedThinkingEffort: thinkingEffortSchema,
 });
 
-export const sessionWithCapabilitiesSchema = z.object({
-  session: sessionRowSchema,
-  capabilities: z.array(driverCapabilitySchema),
-});
-
-export const sessionStatusSchema = z.enum([
-  'running',
-  'needs_attention',
-  'idle',
-  'error',
-  'merged',
-  'discarded',
-]);
-
-/**
- * ACP Event Schema
- * Note: 'compact' is a special event type used by agentctl to capture 
- * the native agent summarization output during handoffs between sessions.
- */
-export const acpEventSchema = z.object({
-  type: z.enum(['tool_call', 'text', 'diff', 'status', 'compact', 'approval_request']),
-  data: z.unknown(),
-  createdAt: z.coerce.date(),
-});
-
 export const driverStatusSchema = z.enum(['ready', 'not_found', 'error']);
 
 export const acpConfigOptionSchema = z.object({
@@ -109,11 +84,38 @@ export const driverDiscoverySchema = z.object({
   configOptions: z.array(acpConfigOptionSchema).optional(),
 });
 
+export const sessionWithCapabilitiesSchema = z.object({
+  session: sessionRowSchema,
+  capabilities: z.array(driverDiscoverySchema),
+});
+
+export const sessionStatusSchema = z.enum([
+  'running',
+  'needs_attention',
+  'idle',
+  'error',
+  'merged',
+  'discarded',
+]);
+
+/**
+ * ACP Event Schema
+ * Note: 'compact' is a special event type used by agentctl to capture 
+ * the native agent summarization output during handoffs between sessions.
+ */
+export const acpEventSchema = z.object({
+  type: z.enum(['tool_call', 'text', 'diff', 'status', 'compact', 'approval_request']),
+  data: z.unknown(),
+  createdAt: z.coerce.date(),
+});
+
 export type Project = z.infer<typeof projectSchema>;
+export type DriverName = z.infer<typeof driverSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
 export type SessionProviderSelection = z.infer<typeof sessionProviderSelectionSchema>;
 export type DriverCapability = z.infer<typeof driverCapabilitySchema>;
+export type ThinkingEffort = z.infer<typeof thinkingEffortSchema>;
 export type SessionWithCapabilities = z.infer<typeof sessionWithCapabilitiesSchema>;
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type ACPEvent = z.infer<typeof acpEventSchema>;
