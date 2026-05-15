@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import secureSession from '@fastify/secure-session';
 import authPlugin from './plugins/auth.js';
 import worktreePlugin from './plugins/worktree.js';
@@ -57,6 +58,11 @@ export async function buildApp(deps: AppDependencies = {}) {
 
 	fastify.setValidatorCompiler(validatorCompiler);
 	fastify.setSerializerCompiler(serializerCompiler);
+
+	await fastify.register(cors, {
+		origin: ['http://localhost:5173'],
+		credentials: true,
+	});
 
 	// Register Secure Session
  	await fastify.register(secureSession, {
