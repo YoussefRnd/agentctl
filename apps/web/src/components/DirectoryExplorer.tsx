@@ -104,10 +104,11 @@ export function DirectoryExplorer({
         ) : (
           <div className="grid grid-cols-1 gap-0.5">
             {folders.map((f) => (
-              <button
+              <div
                 key={f.path}
-                onClick={() => { void explore(f.path); }}
-                className="group flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-accent/10 transition-all text-left"
+                className="group flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-accent/10 transition-all text-left cursor-pointer"
+                onClick={() => { onSelect(f.path); }}
+                onDoubleClick={() => { void explore(f.path); }}
               >
                 <div className="flex items-center gap-3">
                   <div className={`p-1.5 rounded-lg ${f.isRepo ? 'bg-success/10 text-success' : 'bg-accent/5 text-accent/60'}`}>
@@ -126,8 +127,8 @@ export function DirectoryExplorer({
                   className="px-4 py-1.5 bg-accent/10 hover:bg-accent text-accent hover:text-background text-[11px] font-black rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-sm"
                 >
                   SELECT
-                </button>
-              </button>
+                  </button>
+                </div>
             ))}
           </div>
         )}

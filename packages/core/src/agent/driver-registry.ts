@@ -138,7 +138,7 @@ async function probeAgent(
         });
 
         const sessionResult = await connection.newSession({
-          cwd: process.cwd(),
+          cwd: os.tmpdir(),
           mcpServers: [],
         });
 
