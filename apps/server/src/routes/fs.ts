@@ -23,27 +23,50 @@ export const fsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
       try {
         const stats = await fs.stat(targetPath);
         if (!stats.isDirectory()) {
-          return { error: 'Not a directory', path: targetPath };
+          return { currentPath: targetPath, parentPath: path.dirname(targetPath), folders: [], error: 'Not a directory' };
         }
 
         const entries = await fs.readdir(targetPath, { withFileTypes: true });
         
-        const folders = entries
-          .filter(e => e.isDirectory())
-          .map(e => ({
-            name: e.name,
-            path: path.join(targetPath, e.name),
-            isRepo: false, // Future: check for .git
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
+        const folderPromises = entries
+          .filter(e => e.isDirectory() && !e.name.startsWith('.')) // Filter out hidden and files
+          .map(async (e) => {
+            const fullPath = path.join(targetPath, e.name);
+            let isRepo = false;
+            try {
+              const gitPath = path.join(fullPath, '.git');
+              const gitStats = await fs.stat(gitPath);
+              isRepo = gitStats.isDirectory();
+            } catch {
+              // Not a repo
+            }
+            return {
+              name: e.name,
+              path: fullPath,
+              isRepo,
+            };
+          });
+
+        const folders = await Promise.all(folderPromises);
+        folders.sort((a, b) => {
+          if (a.isRepo && !b.isRepo) return -1;
+          if (!a.isRepo && b.isRepo) return 1;
+          return a.name.localeCompare(b.name);
+        });
 
         return {
           currentPath: targetPath,
           parentPath: path.dirname(targetPath),
           folders,
         };
-      } catch {
-        return { error: 'Failed to read directory', path: targetPath };
+      } catch (err) {
+        fastify.log.error(err, `Failed to explore path: ${targetPath}`);
+        return { 
+          currentPath: targetPath, 
+          parentPath: path.dirname(targetPath), 
+          folders: [], 
+          error: err instanceof Error ? err.message : 'Unknown error' 
+        };
       }
     }
   );

@@ -31,6 +31,12 @@ export class ACPSession implements Client {
     private db: DbClient,
     private eventBus: IEventBus
   ) {
+    this.child.on('error', (err) => {
+      // eslint-disable-next-line no-console
+      console.error(`Child process error in session ${this.sessionId}:`, err);
+      void this.handleError(err);
+    });
+
     const stdin = this.child.stdin;
     const stdout = this.child.stdout;
     if (stdin === null || stdout === null) {

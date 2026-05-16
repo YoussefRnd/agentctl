@@ -109,10 +109,11 @@ function resolveLaunchConfig(agent: RegistryAgent): LaunchConfig | null {
   if (dist.npx) {
     const npx = getNpxRunner();
     if (npx) {
+      const packageArgs = Array.isArray(dist.npx.args) ? dist.npx.args : [];
       return {
         command: npx,
         // CRITICAL: use --yes to avoid interactive prompts
-        args: ['--yes', dist.npx.package, ...dist.npx.args],
+        args: ['--yes', dist.npx.package, ...packageArgs],
         env: dist.npx.env,
       };
     }
@@ -121,9 +122,10 @@ function resolveLaunchConfig(agent: RegistryAgent): LaunchConfig | null {
   // Try binary for current platform
   const binaryTarget = dist.binary?.[platform];
   if (binaryTarget) {
+    const binaryArgs = Array.isArray(binaryTarget.args) ? binaryTarget.args : [];
     return {
       command: binaryTarget.cmd,
-      args: binaryTarget.args,
+      args: [...binaryArgs],
       env: binaryTarget.env,
     };
   }
@@ -132,9 +134,10 @@ function resolveLaunchConfig(agent: RegistryAgent): LaunchConfig | null {
   if (dist.uvx) {
     const uvx = getUvxRunner();
     if (uvx) {
+      const uvxArgs = Array.isArray(dist.uvx.args) ? dist.uvx.args : [];
       return {
         command: uvx,
-        args: [dist.uvx.package, ...dist.uvx.args],
+        args: [dist.uvx.package, ...uvxArgs],
         env: dist.uvx.env,
       };
     }
@@ -168,6 +171,12 @@ async function probeAgent(
   const child = spawn(launch.command, allArgs, {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, ...launch.env },
+  });
+
+  // Handle immediate spawning errors (like ENOENT) to prevent server crash
+  child.on('error', (err) => {
+    // eslint-disable-next-line no-console
+    console.warn(`Spawning agent ${agent.id} failed:`, err.message);
   });
 
   const stdin = child.stdin;
@@ -216,7 +225,9 @@ async function probeAgent(
       })(),
       new Promise<DriverDiscovery>((_, reject) => {
         // Increased timeout to 30s to allow for npx initialization
-        setTimeout(() => { reject(new Error(`Probe for ${agent.id} timed out after 30s`)); }, 30_000);
+        setTimeout(() => {
+          reject(new Error(`Probe for ${agent.id} timed out after 30s`));
+        }, 30_000);
       }),
     ]);
 

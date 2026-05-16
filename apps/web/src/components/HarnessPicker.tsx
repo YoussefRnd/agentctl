@@ -117,7 +117,7 @@ export function HarnessPicker({ selectedId, onSelect, drivers, isOpen }: Harness
                     </div>
                   </div>
                   <div className={`text-[10px] font-bold text-text-muted transition-all duration-300 translate-x-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 ${isSelected ? 'hidden' : ''}`}>
-                    <span className="bg-surface-hover px-1.5 py-1 rounded-md border border-border">Ctrl+{i + 1}</span>
+                    <span className="bg-surface-hover px-1.5 py-1 rounded-md border border-border">Ctrl+{String(i + 1)}</span>
                   </div>
                   {isSelected && (
                     <div className="w-5 h-5 bg-accent rounded-full flex items-center justify-center shadow-lg animate-in zoom-in duration-300">
