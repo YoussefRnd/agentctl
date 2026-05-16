@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { DiffBlock } from './diff/DiffBlock';
+import { parseDiff } from '../utils/diff-parser';
 
 type FileState = 'untracked' | 'staged' | 'modified' | 'deleted' | 'committed';
 
@@ -45,26 +47,31 @@ export function ReviewView({ files, isLoading, error, onRetry }: { files: Review
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4">
+    <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-8">
       {(Object.keys(grouped) as FileState[]).map((state) => {
         const entries = grouped[state];
         if (entries.length === 0) return null;
 
         return (
-          <section key={state} className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted">{state}</h3>
-            <div className="space-y-3">
-              {entries.map((file) => (
-                <article key={`${state}:${file.path}`} className="rounded border border-border bg-surface/60 p-3">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="font-mono text-sm text-text-main break-all">{file.path}</div>
-                    <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-text-muted">
-                      {file.state}
-                    </span>
-                  </div>
-                  <pre className="overflow-x-auto whitespace-pre-wrap text-xs leading-5 text-text-muted">{file.diff}</pre>
-                </article>
-              ))}
+          <section key={state} className="space-y-4">
+            <div className="flex items-center gap-3">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted">{state}</h3>
+              <div className="h-px flex-1 bg-border/40" />
+              <span className="text-[10px] font-mono text-text-muted/60">{entries.length} files</span>
+            </div>
+            <div className="space-y-6">
+              {entries.map((file) => {
+                const hunks = parseDiff(file.diff);
+                return (
+                  <DiffBlock
+                    key={`${state}:${file.path}`}
+                    path={file.path}
+                    hunks={hunks}
+                    onStage={file.state === 'modified' || file.state === 'untracked' ? () => { /* TODO: Implement staging */ } : undefined}
+                    onRevert={file.state === 'modified' ? () => { /* TODO: Implement revert */ } : undefined}
+                  />
+                );
+              })}
             </div>
           </section>
         );
