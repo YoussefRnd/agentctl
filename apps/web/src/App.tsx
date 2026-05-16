@@ -9,13 +9,18 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginView />} />
       <Route
-        path="*"
+        path="/"
         element={
-          <Layout>
-            <Routes>
-              <Route path="/" element={<NewProjectPalette />} />
-              <Route path="/sessions/:sessionId" element={<SessionView />} />
-            </Routes>
+          <Layout showSidebar={true}>
+            <NewProjectPalette />
+          </Layout>
+        }
+      />
+      <Route
+        path="/sessions/:sessionId"
+        element={
+          <Layout showSidebar={false}>
+            <SessionView />
           </Layout>
         }
       />

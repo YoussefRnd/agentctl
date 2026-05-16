@@ -4,19 +4,19 @@ import { GitPullRequest, FileCheck, Search, Eye } from 'lucide-react';
 interface MagicBarProps {
   files: ReviewFile[];
   onAction: (action: string) => void;
-  activeTab: 'feed' | 'review';
-  onTabChange: (tab: 'feed' | 'review') => void;
+  isReviewOpen: boolean;
+  onOpenReview: () => void;
 }
 
-export function MagicBar({ files, onAction, activeTab, onTabChange }: MagicBarProps) {
+export function MagicBar({ files, onAction, isReviewOpen, onOpenReview }: MagicBarProps) {
   const hasChanges = files.length > 0;
   
   return (
     <div className="flex items-center gap-2 p-2 px-4 mb-2">
       <button 
-        onClick={() => { onTabChange('review'); }}
+        onClick={() => { onOpenReview(); }}
         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
-          activeTab === 'review' 
+          isReviewOpen 
             ? 'bg-accent/10 border-accent text-accent' 
             : 'border-transparent text-text-muted hover:bg-surface-hover hover:border-border'
         }`}
