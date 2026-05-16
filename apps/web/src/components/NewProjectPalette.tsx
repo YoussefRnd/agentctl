@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useDirectoryPicker } from '../hooks/useDirectoryPicker.js';
 import { apiClient } from '../lib/api-client.js';
+import { DirectoryExplorer } from './DirectoryExplorer.js';
 import type { DriverDiscovery } from '@agentctl/shared';
+import { ArrowRight, Bot, Cpu, Sparkles, Terminal } from 'lucide-react';
 
 interface CreateProjectResponse {
   project: { id: string; name: string; path: string };
@@ -15,10 +16,8 @@ interface CreateSessionResponse {
 
 export function NewProjectPalette() {
   const navigate = useNavigate();
-  const { pickDirectory } = useDirectoryPicker();
   const [projectPath, setProjectPath] = useState('');
-  const [projectName, setProjectName] = useState('');
-  const [step, setStep] = useState<'idle' | 'path' | 'provider'>('idle');
+  const [step, setStep] = useState<'idle' | 'explore' | 'provider'>('idle');
 
   const { data: drivers = [], isLoading: isLoadingDrivers } = useQuery({
     queryKey: ['drivers'],
@@ -27,13 +26,11 @@ export function NewProjectPalette() {
 
   const mutation = useMutation({
     mutationFn: async (payload: { path: string; selectedDriver: string }) => {
-      // 1. Create the project record
       const { project } = await apiClient.fetch<CreateProjectResponse>('/api/projects', {
         method: 'POST',
         body: JSON.stringify({ path: payload.path }),
       });
 
-      // 2. Create and start the initial session
       return apiClient.fetch<CreateSessionResponse>('/api/sessions', {
         method: 'POST',
         body: JSON.stringify({
@@ -48,28 +45,10 @@ export function NewProjectPalette() {
     },
   });
 
-  const deriveNameFromPath = (p: string) => {
-    const parts = p.replace(/\/$/, '').split('/');
-    return parts[parts.length - 1] || '';
-  };
-
-  const handleBrowse = useCallback(async () => {
-    const name = await pickDirectory();
-    if (name) {
-      setProjectName(name);
-    }
-  }, [pickDirectory]);
-
-  const handlePathChange = useCallback((value: string) => {
-    setProjectPath(value);
-    setProjectName(deriveNameFromPath(value));
+  const handleFolderSelect = useCallback((path: string) => {
+    setProjectPath(path);
+    setStep('provider');
   }, []);
-
-  const handleNext = useCallback(() => {
-    if (projectPath.trim()) {
-      setStep('provider');
-    }
-  }, [projectPath]);
 
   const handleProviderSelect = useCallback((driverId: string) => {
     mutation.mutate({ path: projectPath, selectedDriver: driverId });
@@ -77,112 +56,120 @@ export function NewProjectPalette() {
 
   if (step === 'idle') {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
-        <div className="mb-6">
-          <h2 className="text-xl font-bold mb-2">Welcome to Agent Workbench</h2>
-          <p className="text-text-muted max-w-md mb-8 leading-relaxed">
-            Start by creating a project.
+      <div className="flex-1 flex items-center justify-center p-8 bg-background">
+        <div className="max-w-2xl w-full text-center animate-in fade-in zoom-in-95 duration-700">
+          <div className="inline-flex p-4 rounded-3xl bg-accent/10 mb-8">
+            <Sparkles className="w-10 h-10 text-accent" />
+          </div>
+          <h1 className="text-4xl font-black mb-4 tracking-tight">Agent Workbench</h1>
+          <p className="text-text-muted text-lg mb-12 max-w-lg mx-auto leading-relaxed">
+            Collaborate with Gemini to build, refactor, and deploy code directly in your local repositories.
           </p>
+          <div className="flex items-center justify-center gap-4">
+            <button
+              type="button"
+              onClick={() => { setStep('explore'); }}
+              className="group inline-flex items-center gap-3 rounded-2xl bg-accent px-8 py-4 text-background font-bold transition-all hover:scale-105 hover:bg-accent-hover shadow-[0_8px_30px_rgb(59,130,246,0.2)]"
+            >
+              Open Project Folder
+              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => { setStep('path'); }}
-          className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-background font-semibold transition-colors hover:bg-accent-hover"
+      </div>
+    );
+  }
+
+  if (step === 'explore') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-background animate-in fade-in duration-500">
+        <div className="mb-12 text-center">
+          <h2 className="text-2xl font-bold mb-2">Select Repository</h2>
+          <p className="text-text-muted">Choose the folder where you want Gemini to work.</p>
+        </div>
+        <DirectoryExplorer onSelect={handleFolderSelect} />
+        <button 
+          onClick={() => { setStep('idle'); }}
+          className="mt-8 text-sm text-text-muted hover:text-text-main transition-colors"
         >
-          New project
+          Cancel
         </button>
       </div>
     );
   }
 
-  if (step === 'path') {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-300">
-        <div className="mb-6">
-          <h2 className="text-lg font-bold mb-1">Project Path</h2>
-          <p className="text-sm text-text-muted">Enter the <strong>absolute path</strong> to your local repository.</p>
-        </div>
-        <div className="flex flex-col items-center gap-3 w-full max-w-sm">
-          <div className="flex w-full items-center gap-2">
-            <input
-              type="text"
-              value={projectPath}
-              onChange={(e) => { handlePathChange(e.target.value); }}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleNext(); }}
-              placeholder="/home/user/myproject"
-              className="flex-1 rounded-xl border border-border bg-surface px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-            <button
-              type="button"
-              onClick={() => { void handleBrowse(); }}
-              className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text-muted hover:text-text-main transition-colors"
-            >
-              Browse
-            </button>
-          </div>
-          {projectName && (
-            <p className="text-xs text-text-muted">
-              Project name: <span className="font-medium text-text-main">{projectName}</span>
-            </p>
-          )}
-          <button
-            type="button"
-            disabled={!projectPath.trim()}
-            onClick={handleNext}
-            className="mt-2 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-background font-semibold transition-colors hover:bg-accent-hover disabled:opacity-50 w-full justify-center"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col items-center p-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="mb-4 text-center">
-        <p className="text-sm text-text-muted mb-1">Project</p>
-        <p className="text-lg font-bold">{projectName}</p>
-      </div>
-      <p className="text-sm text-text-muted mb-4">Choose a provider</p>
-      <div className="flex flex-col gap-2 w-72">
-        {isLoadingDrivers ? (
-          <div className="py-8 flex justify-center">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+    <div className="flex-1 flex items-center justify-center p-8 bg-background animate-in fade-in duration-500">
+      <div className="max-w-xl w-full">
+        <div className="mb-10 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-surface border border-border rounded-full text-xs font-mono text-text-muted mb-4">
+            <Terminal className="w-3 h-3" />
+            {projectPath}
           </div>
-        ) : (
-          drivers.map((d) => {
-            const isReady = d.status === 'ready';
-            const firstModel = d.configOptions?.find(opt => opt.id === 'model')?.currentValue ?? '';
-            
-            return (
-              <button
-                key={d.id}
-                type="button"
-                disabled={mutation.isPending || !isReady}
-                onClick={() => { handleProviderSelect(d.id); }}
-                className="group flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors hover:bg-background disabled:opacity-60 disabled:hover:bg-surface"
-              >
-                <div className="flex flex-col">
-                  <span className="font-medium">{d.label}</span>
-                  {firstModel && <span className="text-xs text-text-muted">{firstModel}</span>}
-                </div>
-                {!isReady && (
-                  <span className="rounded-md bg-danger/10 px-2 py-0.5 text-[10px] font-bold text-danger uppercase">
-                    Not Found
-                  </span>
-                )}
-              </button>
-            );
-          })
-        )}
+          <h2 className="text-3xl font-black tracking-tight mb-2">Choose Harness</h2>
+          <p className="text-text-muted">Select the AI agent specialized for this task.</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3">
+          {isLoadingDrivers ? (
+            <div className="py-20 flex flex-col items-center gap-4">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-accent border-t-transparent" />
+              <span className="text-xs font-bold text-text-muted tracking-widest uppercase">Initializing Drivers</span>
+            </div>
+          ) : (
+            drivers.map((d) => {
+              const isReady = d.status === 'ready';
+              const firstModel = d.configOptions?.find(opt => opt.id === 'model')?.currentValue ?? '';
+              
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  disabled={mutation.isPending || !isReady}
+                  onClick={() => { handleProviderSelect(d.id); }}
+                  className="group relative flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 text-left transition-all hover:border-accent/50 hover:bg-surface-hover hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
+                >
+                  <div className="shrink-0 w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center group-hover:bg-accent group-hover:text-background transition-colors">
+                    {d.id.includes('claude') ? <Bot className="w-6 h-6" /> : <Cpu className="w-6 h-6" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-bold text-lg">{d.label}</span>
+                      {isReady && <span className="w-1.5 h-1.5 bg-success rounded-full" />}
+                    </div>
+                    <p className="text-sm text-text-muted truncate">{firstModel || 'Standard ACP Harness'}</p>
+                  </div>
+                  {!isReady ? (
+                    <span className="rounded-lg bg-danger/10 px-2.5 py-1 text-[10px] font-black text-danger uppercase tracking-tighter">
+                      Inactive
+                    </span>
+                  ) : (
+                    <ArrowRight className="w-5 h-5 text-text-muted group-hover:text-accent transition-colors" />
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div className="mt-8 flex items-center justify-between">
+          <button 
+            onClick={() => { setStep('explore'); }}
+            className="text-sm font-medium text-text-muted hover:text-text-main transition-colors"
+          >
+            ← Back to Folder
+          </button>
+          {mutation.isPending && (
+            <div className="flex items-center gap-2 text-sm text-accent font-bold animate-pulse">
+              <Sparkles className="w-4 h-4" />
+              Building Workspace...
+            </div>
+          )}
+          {mutation.isError && (
+            <p className="text-sm text-danger font-medium tracking-tight italic">Creation failed. Try again.</p>
+          )}
+        </div>
       </div>
-      {mutation.isPending && (
-        <p className="mt-4 text-sm text-text-muted animate-pulse">Creating project...</p>
-      )}
-      {mutation.isError && (
-        <p className="mt-4 text-sm text-danger">Failed to create project. Please try again.</p>
-      )}
     </div>
   );
 }

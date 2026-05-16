@@ -9,7 +9,7 @@ import type {
 } from '@agentclientprotocol/sdk';
 import { acpEvents, sessions } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import type { SessionStatus, ACPEvent } from '@agentctl/shared';
+import type { ACPEvent } from '@agentctl/shared';
 import type { createDatabase } from '../db/index.js';
 import type { ChildProcess } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
@@ -33,7 +33,7 @@ export class ACPSession implements Client {
   ) {
     const stdin = this.child.stdin;
     const stdout = this.child.stdout;
-    if (!stdin || !stdout) {
+    if (stdin === null || stdout === null) {
       throw new Error('Child process missing stdin/stdout');
     }
     const stream = ndJsonStream(
@@ -90,91 +90,98 @@ export class ACPSession implements Client {
       .where(eq(sessions.id, this.sessionId));
   }
 
+  /**
+   * Internal helper to persist an event and notify the event bus.
+   */
+  private async persistEvent(type: ACPEvent['type'], data: unknown): Promise<number | undefined> {
+    const insertedArray = await this.db.insert(acpEvents).values({
+      sessionId: this.sessionId,
+      type,
+      data: JSON.stringify(data),
+    }).returning();
+
+    if (insertedArray.length > 0) {
+      this.eventBus.publish({
+        ...insertedArray[0],
+        createdAt: new Date(insertedArray[0].createdAt)
+      });
+      return insertedArray[0].id;
+    }
+    return undefined;
+  }
+
+  /**
+   * Handles protocol-level notifications (e.g., status updates, messages, tool calls).
+   * Can be called as a global handler or for a specific turn.
+   */
+  async handleNotification(notification: SessionNotification): Promise<void> {
+    const update = notification.update;
+    
+    // Map SDK notification type to our internal ACPEvent['type']
+    const typeMap: Record<string, ACPEvent['type']> = {
+      'tool_call': 'tool_call',
+      'agent_message_chunk': 'text',
+      'diff': 'diff',
+      'compact': 'compact',
+      'approval_request': 'approval_request'
+    };
+
+    const typeKey = update.sessionUpdate;
+    const eventType = typeMap[typeKey] ?? 'text';
+
+    // Special logic for status updates (SessionInfoUpdate)
+    if (typeKey === 'session_info_update') {
+      // In the future we can map more info here
+    }
+
+    // Prepare data for UI (normalization)
+    let uiData: unknown = update;
+    if (typeKey === 'agent_message_chunk') {
+      const chunk = update as Record<string, unknown>;
+      const content = chunk.content as Record<string, unknown> | undefined;
+      if (content?.type === 'text') {
+        uiData = { content: content.text }; // Normalize for TextCard
+      }
+    }
+
+    await this.persistEvent(eventType, uiData);
+  }
+
+  // Implementation of SDK Client interface
   async sessionUpdate(notification: SessionNotification): Promise<void> {
     try {
-      const update = notification.update;
-      let newStatus: SessionStatus = 'running';
-      
-      // Map SDK notification type to our internal ACPEvent['type']
-      const typeMap: Record<string, ACPEvent['type']> = {
-        'tool_call': 'tool_call',
-        'agent_message_chunk': 'text',
-        'diff': 'diff',
-        'status': 'status',
-        'compact': 'compact',
-        'approval_request': 'approval_request'
-      };
-
-      // Extract details for status mapping
-      if (update.sessionUpdate === 'session_info_update') {
-        // Handle session info update if needed
-      } else if (update.sessionUpdate === 'tool_call') {
-        // If it's a tool call, it might need attention
-        // Note: requestPermission usually handles this, but we can set it here too
-      } else if ((update.sessionUpdate as string) === 'status') {
-        // Special case for status updates
-        const statusData = update as Record<string, unknown>;
-        if (statusData.status === 'idle') {
-          newStatus = 'idle';
-        }
-      }
-
-      await this.db.update(sessions)
-        .set({ lastHeartbeat: new Date(), status: newStatus })
-        .where(eq(sessions.id, this.sessionId));
-
-      const typeKey = update.sessionUpdate;
-      const eventType = typeMap[typeKey] ?? 'text';
-
-      const insertedArray = await this.db.insert(acpEvents).values({
-        sessionId: this.sessionId,
-        type: eventType,
-        data: JSON.stringify(update),
-      }).returning();
-
-      if (insertedArray.length > 0) {
-        this.eventBus.publish({
-          ...insertedArray[0],
-          createdAt: new Date(insertedArray[0].createdAt)
-        });
-      }
+      await this.handleNotification(notification);
     } catch (error) {
       await this.handleError(error);
     }
   }
 
+  // Implementation of SDK Client interface
   async requestPermission(request: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     try {
       const permissionId = request.toolCall.toolCallId || Math.random().toString(36).substring(7);
 
-      // Update session status to needs_attention
       await this.db.update(sessions)
         .set({ status: 'needs_attention', lastHeartbeat: new Date() })
         .where(eq(sessions.id, this.sessionId));
 
-      // Insert 'approval_request' event into DB
-      const insertedArray = await this.db.insert(acpEvents).values({
-        sessionId: this.sessionId,
-        type: 'approval_request',
-        data: JSON.stringify({ 
-          name: 'request_permission', 
-          toolCallId: permissionId,
-          requiresApproval: true,
-          request 
-        }),
-      }).returning();
-
-      if (insertedArray.length > 0) {
-        this.eventBus.publish({
-          ...insertedArray[0],
-          createdAt: new Date(insertedArray[0].createdAt)
-        });
-      }
-
+      // Use a promise to wait for the DB insertion so we can capture the event ID
       return await new Promise<RequestPermissionResponse>((resolve) => {
-        const eventId = insertedArray[0]?.id;
-        // eventId is always defined for auto-increment PK in this schema
-        this.pendingApprovals.set(String(eventId), resolve);
+        void (async () => {
+          const eventId = await this.persistEvent('approval_request', { 
+            name: 'request_permission', 
+            toolCallId: permissionId,
+            requiresApproval: true,
+            request 
+          });
+
+          if (eventId !== undefined) {
+            this.pendingApprovals.set(String(eventId), resolve);
+          } else {
+            // Fallback (should not happen with returning())
+            this.pendingApprovals.set(permissionId, resolve);
+          }
+        })();
       });
     } catch (error) {
       await this.handleError(error);
@@ -193,6 +200,8 @@ export class ACPSession implements Client {
         prompt: [{ type: 'text', text }]
       };
       
+      // prompt in v0.21.1 only takes one argument.
+      // Out-of-turn notifications are handled via sessionUpdate interface method.
       await (this.connection.prompt(request) as Promise<unknown>);
     } catch (error: unknown) {
       await this.handleError(error);

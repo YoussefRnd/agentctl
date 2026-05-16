@@ -10,6 +10,7 @@ import { eventsRoutes } from './routes/events.js';
 import { projectsRoutes } from './routes/projects.js';
 import { sessionsRoutes } from './routes/sessions.js';
 import { driversRoutes } from './routes/drivers.js';
+import { fsRoutes } from './routes/fs.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
 import { db as defaultDb, WorktreeManager, GitMutex, DriverRegistry } from '@agentctl/core';
@@ -92,6 +93,7 @@ export async function buildApp(deps: AppDependencies = {}) {
 	await fastify.register(sessionsRoutes, { prefix: '/api' });
 	await fastify.register(sessionReviewRoutes, { prefix: '/api' });
 	await fastify.register(driversRoutes, { prefix: '/api' });
+	await fastify.register(fsRoutes, { prefix: '/api' });
 	await fastify.register(eventsRoutes);
 
 	// Basic route to verify server is up
