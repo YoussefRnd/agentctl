@@ -49,7 +49,10 @@ export function EventFeed({
 
   return (
     <div className="flex-1 overflow-y-auto px-4 sm:px-0 relative h-full scroll-smooth" ref={parentRef} onScroll={handleScroll}>
-      <div className="max-w-3xl mx-auto py-8">
+      <div className="max-w-3xl mx-auto py-8 relative">
+        {/* Causality Line */}
+        <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent z-0" />
+
         <div style={{ height: `${String(virtualizer.getTotalSize())}px`, width: '100%', position: 'relative' }}>
           {virtualizer.getVirtualItems().map((item) => {
             const e = events[item.index];
