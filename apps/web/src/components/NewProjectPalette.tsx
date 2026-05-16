@@ -1,20 +1,14 @@
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { apiClient } from '../lib/api-client.js';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DirectoryExplorer } from './DirectoryExplorer.js';
-import { Sparkles } from 'lucide-react';
+import { AlertCircle, Sparkles } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
-
-interface CreateProjectResponse {
-  project: { id: string; name: string; path: string };
-}
-
-interface CreateSessionResponse {
-  id: string;
-}
+import { apiClient } from '../lib/api-client.js';
+import { openProjectSession } from '../lib/project-sessions.js';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data: drivers = [] } = useQuery({
     queryKey: ['drivers'],
@@ -22,26 +16,10 @@ export function NewProjectPalette() {
   });
 
   const mutation = useMutation({
-    mutationFn: async (path: string) => {
-      const ready = drivers.find((d) => d.status === 'ready');
-      const selectedDriver = ready?.id ?? 'opencode';
-
-      const { project } = await apiClient.fetch<CreateProjectResponse>('/api/projects', {
-        method: 'POST',
-        body: JSON.stringify({ path }),
-      });
-
-      return apiClient.fetch<CreateSessionResponse>('/api/sessions', {
-        method: 'POST',
-        body: JSON.stringify({
-          projectId: project.id,
-          agent: selectedDriver,
-          taskSlug: 'setup',
-        }),
-      });
-    },
+    mutationFn: (path: string) => openProjectSession(path, drivers),
     onSuccess: (data) => {
-      void navigate(`/sessions/${data.id}`);
+      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      void navigate(`/sessions/${data.session.id}`);
     },
   });
 
@@ -55,15 +33,28 @@ export function NewProjectPalette() {
         {mutation.isPending ? (
           <div className="flex flex-col items-center gap-6">
             <Sparkles className="w-12 h-12 text-accent animate-pulse" />
-            <p className="text-2xl font-black tracking-tight text-text-main">Setting up your workspace...</p>
-            <p className="text-text-muted">Creating project and initializing session</p>
+            <p className="text-2xl font-black tracking-tight text-text-main">
+              Setting up your workspace...
+            </p>
+            <p className="text-text-muted">Opening the project and preparing a session</p>
           </div>
         ) : (
           <>
             <h1 className="text-5xl font-black mb-4 tracking-tight text-text-main">
               Welcome to Agent Workbench!
             </h1>
-            <p className="text-text-muted text-lg mb-12">Pick a project folder and start collaborating with your agents.</p>
+            <p className="text-text-muted text-lg mb-12">
+              Pick a Git project folder and start collaborating with your agents.
+            </p>
+            {mutation.error && (
+              <div className="mb-6 rounded-xl border border-danger/30 bg-danger/10 p-4 text-left text-sm text-text-main">
+                <div className="flex items-center gap-2 font-bold text-danger">
+                  <AlertCircle className="h-4 w-4" />
+                  Could not open project
+                </div>
+                <p className="mt-1 text-text-muted">{mutation.error.message}</p>
+              </div>
+            )}
             <DirectoryExplorer onSelect={handleFolderSelect} />
           </>
         )}

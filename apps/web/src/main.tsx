@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster, toast } from 'sonner';
 import { App } from './App.js';
 import { AppErrorBoundary } from './components/AppErrorBoundary.js';
 import './index.css';
@@ -12,6 +13,12 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       staleTime: Infinity,
+    },
+    mutations: {
+      onError: (error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Something went wrong';
+        toast.error(message);
+      },
     },
   },
 });
@@ -33,6 +40,19 @@ if (rootElement) {
             <App />
           </AppErrorBoundary>
         </BrowserRouter>
+        {/* Toaster lives outside the error boundary so toasts survive crashes */}
+        <Toaster
+          position="bottom-right"
+          theme="dark"
+          richColors
+          closeButton
+          toastOptions={{
+            duration: 5000,
+            classNames: {
+              toast: 'font-sans text-sm',
+            },
+          }}
+        />
       </QueryClientProvider>
     );
   }
