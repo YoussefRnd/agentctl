@@ -3,8 +3,8 @@ import rehypeHighlight from 'rehype-highlight';
 
 export function TextCard({ content }: { content: string }) {
   return (
-    <div className="p-4 border-l-2 border-accent bg-surface/30 my-2">
-      <div className="text-sm prose prose-invert max-w-none">
+    <div className="py-4 px-6 mb-2">
+      <div className="text-[14px] leading-relaxed prose prose-invert prose-p:text-text-main/90 prose-pre:bg-surface prose-pre:border prose-pre:border-border prose-pre:rounded-xl max-w-none">
         <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>
       </div>
     </div>

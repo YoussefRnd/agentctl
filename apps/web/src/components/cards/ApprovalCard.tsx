@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { ShieldCheck, X, Check } from 'lucide-react';
 
 export function ApprovalCard({ 
   eventId, 
@@ -30,40 +31,45 @@ export function ApprovalCard({
           e.preventDefault();
           onDeny(eventId);
         }
-
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
           denyButtonRef.current?.focus();
         }
-
         if (e.key === 'ArrowRight') {
           e.preventDefault();
           approveButtonRef.current?.focus();
         }
       }}
-      className="p-4 bg-surface border-t-2 border-accent shadow-lg flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 my-4 animate-in fade-in slide-in-from-bottom-4"
+      className="p-5 bg-surface border border-accent/30 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-6 animate-in fade-in zoom-in-95 duration-300"
     >
-      <div className="flex-1">
-        <div id="approval-title" className="text-sm font-bold text-accent mb-1">Approval Requested</div>
-        <div className="text-xs text-text-muted">
-          {data?.message ?? 'Agent needs permission to proceed.'}
+      <div className="flex gap-4">
+        <div className="shrink-0 w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center">
+          <ShieldCheck className="w-5 h-5 text-accent" />
+        </div>
+        <div className="flex-1">
+          <div id="approval-title" className="text-[14px] font-bold text-text-main mb-1 tracking-tight">Permission Requested</div>
+          <div className="text-[13px] text-text-muted leading-relaxed">
+            {data?.message ?? 'Gemini requires your authorization to execute this action.'}
+          </div>
         </div>
       </div>
-      <div className="flex gap-2 self-stretch sm:self-auto">
+      <div className="flex gap-2 shrink-0">
         <button 
           ref={denyButtonRef}
           type="button"
           onClick={() => { onDeny(eventId); }}
-          className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-sm transition-colors font-medium"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-surface-hover hover:bg-danger/10 text-text-muted hover:text-danger border border-border rounded-xl text-[13px] transition-all duration-200 font-semibold"
         >
+          <X className="w-4 h-4" />
           Deny
         </button>
         <button 
           ref={approveButtonRef}
           type="button"
           onClick={() => { onApprove(eventId); }}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover text-background rounded text-sm transition-colors font-medium"
+          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-accent hover:bg-accent-hover text-background rounded-xl text-[13px] transition-all duration-200 font-bold shadow-[0_4px_12px_rgba(59,130,246,0.3)]"
         >
+          <Check className="w-4 h-4" />
           Approve
         </button>
       </div>

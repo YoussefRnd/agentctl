@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Circle } from 'lucide-react';
+import { History, FileCode } from 'lucide-react';
 
 import { EventFeed } from './EventFeed.js';
 import { CommandBar } from './CommandBar.js';
@@ -20,7 +20,9 @@ interface ReviewResponse {
 type SessionResponse = SessionWithCapabilities;
 
 const tabClassName = (active: boolean) =>
-  `inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition-colors ${active ? 'bg-accent text-background' : 'text-text-muted hover:text-text-main'}`;
+  `flex items-center gap-2 px-4 py-1.5 text-[13px] font-medium transition-all relative ${
+    active ? 'text-accent' : 'text-text-muted hover:text-text-main'
+  }`;
 
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Unexpected error';
 
@@ -78,39 +80,37 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
   const feedErrorMessage = eventsError ? getErrorMessage(eventsError) : null;
 
   return (
-    <div className="flex-1 flex min-h-0 min-w-0 flex-col overflow-hidden relative">
-      <header className="border-b border-border flex flex-col gap-3 px-4 py-3 bg-surface/30 backdrop-blur-sm shrink-0 sm:h-14 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-0 sm:gap-4">
-        <div className="flex flex-wrap items-center gap-2 text-sm font-medium min-w-0">
-          <span className="text-text-muted">Session:</span>
-          <span className="font-mono break-all">{sessionId}</span>
-          <span className="px-2 py-0.5 bg-success/20 text-success text-[10px] uppercase font-bold rounded-full tracking-wider">Live</span>
+    <div className="flex-1 flex min-h-0 min-w-0 flex-col overflow-hidden relative bg-background">
+      <header className="border-b border-border flex flex-col px-6 py-2 shrink-0 sm:h-12 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center gap-2 text-[13px]">
+            <span className="font-mono text-text-muted">{sessionId.slice(0, 8)}</span>
+            <span className="flex items-center gap-1.5 px-2 py-0.5 bg-success/10 text-success text-[10px] font-bold rounded-md tracking-wider">
+              <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
+              CONNECTED
+            </span>
+          </div>
+          <div className="h-4 w-px bg-border hidden sm:block" />
+          <ProviderSwitcher sessionId={sessionId} data={sessionData} />
         </div>
-        <ProviderSwitcher sessionId={sessionId} data={sessionData} />
+
         <div
           role="tablist"
           aria-label="Workspace tabs"
-          className="inline-flex flex-wrap items-center gap-1 rounded-full border border-border bg-background/40 p-1 text-sm"
+          className="flex items-center"
           onKeyDown={(event) => {
             if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') {
               return;
             }
-
             event.preventDefault();
-            const nextTab = event.key === 'Home'
-              ? 'feed'
-              : event.key === 'End'
-                ? 'review'
-                : activeTab === 'feed'
-                  ? 'review'
-                  : 'feed';
-
+            const nextTab = event.key === 'Home' ? 'feed' : event.key === 'End' ? 'review' : activeTab === 'feed' ? 'review' : 'feed';
             setActiveTab(nextTab);
           }}
         >
-          {([
-            { key: 'feed' as const, label: 'Feed', ref: feedTabRef },
-            { key: 'review' as const, label: 'Review', ref: reviewTabRef },
-          ]).map((tab) => (
+          {[
+            { key: 'feed' as const, label: 'Activity', icon: History, ref: feedTabRef },
+            { key: 'review' as const, label: 'Changes', icon: FileCode, ref: reviewTabRef },
+          ].map((tab) => (
             <button
               key={tab.key}
               ref={tab.ref}
@@ -123,9 +123,13 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
               onClick={() => { setActiveTab(tab.key); }}
               className={tabClassName(activeTab === tab.key)}
             >
+              <tab.icon className="w-4 h-4" />
               {tab.label}
-              {tab.key === 'review' && (
-                <Circle data-testid="review-badge-dot" className={`h-2 w-2 ${hasDirtyChanges ? 'fill-danger text-danger' : 'hidden'}`} />
+              {tab.key === 'review' && hasDirtyChanges && (
+                <span className="absolute top-1 right-2 w-1.5 h-1.5 bg-danger rounded-full shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+              )}
+              {activeTab === tab.key && (
+                <div className="absolute bottom-[-9px] left-0 right-0 h-0.5 bg-accent rounded-full" />
               )}
             </button>
           ))}
@@ -139,22 +143,31 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
           aria-labelledby="workspace-tab-feed"
           className={activeTab === 'feed' ? 'flex h-full min-h-0 flex-col' : 'hidden h-full min-h-0 flex-col'}
         >
-          <div className="flex-1 min-h-0 overflow-hidden pb-36 sm:pb-48">
+          <div className="flex-1 min-h-0 overflow-hidden pb-40 sm:pb-52">
             {feedErrorMessage ? (
-              <div className="p-4 sm:p-8">
-                <div className="rounded-lg border border-danger/30 bg-danger/10 p-4 text-sm">
-                  <div className="font-medium text-danger">Failed to load session history</div>
-                  <div className="mt-1 text-text-muted">{feedErrorMessage}</div>
+              <div className="p-8 max-w-lg mx-auto text-center">
+                <div className="rounded-2xl border border-danger/20 bg-danger/5 p-6">
+                  <div className="text-sm font-semibold text-danger mb-2">Connection Interrupted</div>
+                  <div className="text-[13px] text-text-muted mb-6">{feedErrorMessage}</div>
                   <button
                     type="button"
                     onClick={() => { void refetchEvents(); }}
-                    className="mt-4 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-main transition-colors hover:bg-background"
+                    className="w-full rounded-xl bg-surface border border-border px-4 py-2.5 text-sm font-medium hover:bg-surface-hover transition-colors"
                   >
-                    Retry
+                    Reconnect Session
                   </button>
                 </div>
               </div>
-            ) : isLoadingEvents ? <div className="p-4 sm:p-8 text-center text-text-muted">Loading history...</div> : <EventFeed events={events} />}
+            ) : isLoadingEvents ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs text-text-muted font-medium">SYNCHRONIZING</span>
+                </div>
+              </div>
+            ) : (
+              <EventFeed events={events} />
+            )}
           </div>
         </div>
         <div
@@ -167,16 +180,22 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
         </div>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0">
-        {showApproval && (
-          <ApprovalCard
-            eventId={lastEvent.id}
-            data={lastEvent.data as { message?: string } | null}
-            onApprove={handleApprove}
-            onDeny={handleDeny}
-          />
-        )}
-        <CommandBar onSend={handleSend} disabled={!isConnected} />
+      <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+        <div className="max-w-3xl mx-auto px-4 pointer-events-auto">
+          {showApproval && (
+            <div className="mb-4">
+              <ApprovalCard
+                eventId={lastEvent.id}
+                data={lastEvent.data as { message?: string } | null}
+                onApprove={handleApprove}
+                onDeny={handleDeny}
+              />
+            </div>
+          )}
+        </div>
+        <div className="pointer-events-auto">
+          <CommandBar onSend={handleSend} disabled={!isConnected} />
+        </div>
       </div>
     </div>
   );
