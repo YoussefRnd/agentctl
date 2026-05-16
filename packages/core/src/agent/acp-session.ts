@@ -23,13 +23,15 @@ export type DbClient = ReturnType<typeof createDatabase>;
 export class ACPSession implements Client {
   private connection: ClientSideConnection;
   private agent!: Agent;
+  private acpSessionId: string | null = null;
   private pendingApprovals = new Map<string, (response: RequestPermissionResponse) => void>();
 
   constructor(
     public sessionId: string,
     private child: ChildProcess,
     private db: DbClient,
-    private eventBus: IEventBus
+    private eventBus: IEventBus,
+    private cwd: string
   ) {
     this.child.on('error', (err) => {
       // eslint-disable-next-line no-console
@@ -55,14 +57,27 @@ export class ACPSession implements Client {
   async initialize(): Promise<void> {
     try {
       // Connect to the agent
-      const initResult = await this.connection.initialize({
+      await this.connection.initialize({
         protocolVersion: 1,
+        clientCapabilities: {
+          terminal: true,
+          fs: {
+            readTextFile: true,
+            writeTextFile: true,
+          },
+        },
         clientInfo: { name: 'agentctl', version: '1.0.0' },
       });
 
+      const newSessionResult = await this.connection.newSession({
+        cwd: this.cwd,
+        mcpServers: [],
+      });
+      this.acpSessionId = newSessionResult.sessionId;
+
       // Update session record with agent info if needed
       await this.db.update(sessions)
-        .set({ agentSessionId: initResult.agentInfo?.name ?? 'unknown', status: 'running' })
+        .set({ agentSessionId: this.acpSessionId, status: 'running' })
         .where(eq(sessions.id, this.sessionId));
         
       this.child.on('exit', () => {
@@ -202,7 +217,7 @@ export class ACPSession implements Client {
         .where(eq(sessions.id, this.sessionId));
 
       const request: PromptRequest = {
-        sessionId: this.sessionId,
+        sessionId: this.acpSessionId ?? this.sessionId,
         prompt: [{ type: 'text', text }]
       };
       

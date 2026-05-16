@@ -26,7 +26,7 @@ export class SessionManagerService {
       cwd: worktreePath,
       env: { ...process.env, ...env },
     });
-    const session = new ACPSession(sessionId, child, this.fastify.db, this.fastify.eventBus);
+    const session = new ACPSession(sessionId, child, this.fastify.db, this.fastify.eventBus, worktreePath);
     void session.initialize();
     this.sessions.set(sessionId, session);
     return session;
@@ -48,7 +48,7 @@ export class SessionManagerService {
 
     if (msg.action === 'approve') {
       session.resolvePermission(String(msg.eventId), { 
-        outcome: { outcome: 'selected', optionId: 'allow-always' } 
+        outcome: { outcome: 'selected', optionId: 'allow-once' } 
       });
     } else if (msg.action === 'deny') {
       session.resolvePermission(String(msg.eventId), { 

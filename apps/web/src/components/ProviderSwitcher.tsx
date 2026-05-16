@@ -142,8 +142,14 @@ export function ProviderSwitcher({ sessionId, data }: Props) {
               >
                 <div className="flex flex-col">
                   <span className="font-medium">{capability.label}</span>
-                  {!isReady && <span className="text-[10px] text-danger uppercase">Not Found</span>}
                 </div>
+                <div className="flex items-center gap-2">
+                  {isReady ? (
+                    <div className="w-2 h-2 bg-success rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  ) : (
+                    <div className="w-2 h-2 bg-danger rounded-full shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                  )}
+                  </div>
                 {isReady && capability.configOptions?.find(o => o.id === 'model') && (
                   <span className="text-xs text-text-muted">
                     {capability.configOptions.find(o => o.id === 'model')?.options[0].name}

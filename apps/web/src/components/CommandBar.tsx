@@ -32,7 +32,8 @@ export function CommandBar({
     queryFn: () => apiClient.fetch<DriverDiscovery[]>('/api/drivers'),
   });
 
-  const selectedDriver = drivers.find((d) => d.id === selectedId) ?? drivers[0];
+  const selectedDriver = drivers.find((d) => d.id === selectedId);
+  const selectedDriverLabel = selectedDriver !== undefined ? selectedDriver.label : 'Select harness';
 
   const handleSubmit = () => {
     if (input.trim() && !disabled) {
@@ -106,7 +107,7 @@ export function CommandBar({
                     <Zap className={`w-4 h-4 ${selectedId ? 'text-accent fill-accent/20' : 'text-text-muted'}`} />
                   </div>
                   <span className="text-[13px] font-bold tracking-tight truncate max-w-[140px]">
-                    {isLoading ? '...' : selectedDriver.label}
+                    {isLoading ? '...' : selectedDriverLabel}
                   </span>
                   <ChevronUp className={`w-4 h-4 transition-transform duration-300 ${isPickerOpen ? 'rotate-180' : ''}`} />
                 </button>

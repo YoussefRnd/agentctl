@@ -15,10 +15,16 @@ export function HarnessPicker({ selectedId, onSelect, drivers, isOpen }: Harness
   const [selectedGroup, setSelectedGroup] = useState<'all' | 'installed' | 'favorites'>('all');
 
   const filteredDrivers = useMemo(() => {
-    return drivers.filter((d) => 
+    const base = drivers.filter((d) => 
       d.label.toLowerCase().includes(search.toLowerCase()) ||
       d.id.toLowerCase().includes(search.toLowerCase())
     );
+
+    if (selectedGroup === 'installed') {
+      return base.filter((d) => d.status === 'ready');
+    }
+
+    return base;
   }, [drivers, search]);
 
   if (!isOpen) return null;
@@ -109,7 +115,7 @@ export function HarnessPicker({ selectedId, onSelect, drivers, isOpen }: Harness
                           {d.label}
                         </div>
                         {isReady && !isSelected && <div className="w-1.5 h-1.5 bg-success rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]" />}
-                        {!isReady && <span className="text-[9px] font-black text-danger/50 uppercase tracking-tighter">Offline</span>}
+                        {!isReady && <div className="w-1.5 h-1.5 bg-danger rounded-full shadow-[0_0_8px_rgba(239,68,68,0.4)]" />}
                       </div>
                       <div className="text-[11px] text-text-muted font-medium truncate max-w-[280px]">
                         {d.description ?? 'Standard Agent Client Protocol Harness'}
