@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { projects, sessions } from '@agentctl/core';
+import { sql } from 'drizzle-orm';
 import path from 'node:path';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
@@ -18,6 +19,16 @@ export const projectsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     },
     async (request, _reply) => {
       const { path: projectPath } = request.body;
+      
+      // Check if project already exists
+      const existing = await fastify.db.select().from(projects).where(sql`path = ${projectPath}`).limit(1);
+      
+      if (existing.length > 0) {
+        return {
+          project: existing[0],
+        };
+      }
+
       const projectName = path.basename(projectPath);
       const projectId = crypto.randomUUID();
 

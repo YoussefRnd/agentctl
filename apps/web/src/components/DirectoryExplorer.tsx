@@ -106,16 +106,16 @@ export function DirectoryExplorer({
             {folders.map((f) => (
               <div
                 key={f.path}
-                className="group flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-accent/10 transition-all text-left cursor-pointer"
-                onClick={() => { onSelect(f.path); }}
-                onDoubleClick={() => { void explore(f.path); }}
+                className="group flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent/5 transition-all text-left cursor-pointer"
+                onClick={() => { void explore(f.path); }}
+                onDoubleClick={() => { onSelect(f.path); }}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`p-1.5 rounded-lg ${f.isRepo ? 'bg-success/10 text-success' : 'bg-accent/5 text-accent/60'}`}>
+                  <div className={`p-1.5 rounded-lg ${f.isRepo ? 'bg-success/10 text-success' : 'bg-surface-hover text-text-muted group-hover:text-accent'}`}>
                     {f.isRepo ? <GitBranch className="w-4 h-4" /> : <Folder className="w-4 h-4" />}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[13px] font-bold text-text-main group-hover:text-accent transition-colors">{f.name}</span>
+                    <span className="text-[13px] font-medium text-text-main group-hover:text-accent transition-colors">{f.name}</span>
                     {f.isRepo && <span className="text-[10px] text-success/60 font-medium -mt-0.5 tracking-tight uppercase">GIT REPOSITORY</span>}
                   </div>
                 </div>
@@ -124,7 +124,7 @@ export function DirectoryExplorer({
                     e.stopPropagation();
                     onSelect(f.path);
                   }}
-                  className="px-4 py-1.5 bg-accent/10 hover:bg-accent text-accent hover:text-background text-[11px] font-black rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+                  className="px-3 py-1 bg-accent/10 hover:bg-accent text-accent hover:text-background text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-all"
                 >
                   SELECT
                   </button>
