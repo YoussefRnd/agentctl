@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client.js';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { SessionStatus } from '@agentctl/shared';
 
 interface Project {
@@ -29,6 +29,21 @@ export function Sidebar() {
   const { sessionId: activeSessionId } = useParams();
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
@@ -48,6 +63,18 @@ export function Sidebar() {
     setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const totalSessions = useMemo(() => 
+    projects.reduce((acc, p) => acc + p.sessions.length, 0), 
+    [projects]
+  );
+
+  const activeAgents = useMemo(() => 
+    projects.reduce((acc, p) => 
+      acc + p.sessions.filter(s => s.status === 'running').length, 0
+    ), 
+    [projects]
+  );
+
   const statusColors: Record<SessionStatus, string> = {
     running: 'bg-success',
     needs_attention: 'bg-warning',
@@ -60,18 +87,32 @@ export function Sidebar() {
   return (
     <aside 
       aria-label="Main Sidebar"
-      className="h-full w-[260px] shrink-0 bg-surface/30 backdrop-blur-md border-r border-border flex flex-col overflow-hidden"
+      className="h-full w-[260px] shrink-0 liquid-glass border-r border-border flex flex-col overflow-hidden"
     >
+      {/* Global Status */}
+      <div className="px-4 pt-4 pb-2 flex items-center gap-4 border-b border-border/50 bg-glass-highlight">
+        <div className="flex flex-col">
+          <span className="text-[10px] text-text-muted uppercase tracking-tighter">Active Agents</span>
+          <span className="text-sm font-display font-bold text-success">{activeAgents}</span>
+        </div>
+        <div className="h-6 w-px bg-border/50" />
+        <div className="flex flex-col">
+          <span className="text-[10px] text-text-muted uppercase tracking-tighter">Sessions</span>
+          <span className="text-sm font-display font-bold text-text-main">{totalSessions}</span>
+        </div>
+      </div>
+
       {/* Brand & Search */}
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-[10px] font-bold text-text-muted uppercase tracking-[0.2em]">AgentCTL</h2>
+          <h2 className="text-[10px] font-display font-bold text-text-muted uppercase tracking-[0.2em]">AgentCTL</h2>
           <div className="w-4 h-4 rounded-full border border-border flex items-center justify-center text-[10px] text-text-muted cursor-help">?</div>
         </div>
 
         <div className="relative group">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted group-focus-within:text-accent transition-colors" />
           <input 
+            ref={searchInputRef}
             type="text" 
             placeholder="Search"
             value={searchQuery}
@@ -132,7 +173,7 @@ export function Sidebar() {
                       )}
                     </span>
                     <Folder className="w-3.5 h-3.5 mr-2 text-text-muted group-hover:text-accent transition-colors shrink-0" />
-                    <span className="truncate text-[13px] font-medium text-text-main/90">{proj.name}</span>
+                    <span className="truncate text-[13px] font-display font-medium text-text-main/90">{proj.name}</span>
                   </div>
                   <button className="opacity-0 group-hover:opacity-100 p-1 hover:text-accent transition-all">
                     <Edit2 className="w-3 h-3" />
