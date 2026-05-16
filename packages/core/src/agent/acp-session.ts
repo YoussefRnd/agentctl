@@ -11,6 +11,7 @@ import type { ACPEvent } from '@agentctl/shared';
 import type { createDatabase } from '../db/index.js';
 import type { ChildProcess } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
+import { type Logger, noopLogger } from '../logger.js';
 
 export interface IEventBus {
   publish(event: unknown): void;
@@ -28,11 +29,11 @@ export class ACPSession {
     private child: ChildProcess,
     private db: DbClient,
     private eventBus: IEventBus,
-    private cwd: string
+    private cwd: string,
+    private logger: Logger = noopLogger,
   ) {
     this.child.on('error', (err) => {
-      // eslint-disable-next-line no-console
-      console.error(`Child process error in session ${this.sessionId}:`, err);
+      this.logger.error(err, `Child process error in session ${this.sessionId}`);
       void this.handleError(err);
     });
 
@@ -87,8 +88,7 @@ export class ACPSession {
           .set({ status: 'idle', closedAt: new Date() })
           .where(eq(sessions.id, this.sessionId));
       }).catch(async (error: unknown) => {
-        // eslint-disable-next-line no-console
-        console.error('Connection closed with error:', error);
+        this.logger.error(error, 'Connection closed with error');
         await this.handleError(error);
       });
     } catch (error) {
@@ -131,8 +131,7 @@ export class ACPSession {
   }
 
   private async handleError(error: unknown): Promise<void> {
-    // eslint-disable-next-line no-console
-    console.error(`Error in ACPSession ${this.sessionId}:`, error);
+    this.logger.error(error, `Error in ACPSession ${this.sessionId}`);
     await this.db.update(sessions)
       .set({ status: 'error', updatedAt: new Date() })
       .where(eq(sessions.id, this.sessionId));

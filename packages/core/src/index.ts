@@ -7,3 +7,4 @@ export * from './git/worktree-manager.js';
 export * from './agent/acp-session.js';
 export * from './agent/driver-registry.js';
 export * from './config/index.js';
+export * from './logger.js';

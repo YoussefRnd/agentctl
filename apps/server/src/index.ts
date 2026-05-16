@@ -15,11 +15,8 @@ const start = async () => {
     const host = process.env.AGENTCTL_HOST ?? '127.0.0.1';
     
     await fastify.listen({ port, host });
-    
-    // eslint-disable-next-line no-console
-    console.log(`Server listening on ${host}:${String(port)}`);
-    // eslint-disable-next-line no-console
-    console.log(`🔑 One-time login key: ${env.AGENTCTL_SECRET}`);
+    fastify.log.info(`server listening on ${host}:${String(port)}`);
+    fastify.log.info(`one-time login key: ${env.AGENTCTL_SECRET}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

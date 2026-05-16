@@ -43,13 +43,19 @@ declare module '@fastify/secure-session' {
 
 export async function buildApp(deps: AppDependencies = {}) {
   const fastify = Fastify({
-    logger: true,
+    logger: {
+      level: process.env.LOG_LEVEL ?? 'info',
+      transport:
+        process.env.NODE_ENV !== 'production'
+          ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss' } }
+          : undefined,
+    },
   });
 
   const db = deps.db ?? defaultDb;
   const gitMutex = new GitMutex();
   const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
-  const driverRegistry = deps.driverRegistry ?? new DriverRegistry();
+  const driverRegistry = deps.driverRegistry ?? new DriverRegistry(fastify.log);
   const config = deps.env ?? parseEnv(process.env);
 
   fastify.decorate('db', db);

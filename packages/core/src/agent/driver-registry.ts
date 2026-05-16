@@ -3,6 +3,7 @@ import os from 'node:os';
 import { Readable, Writable } from 'node:stream';
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type { DriverDiscovery, ACPConfigOption, RegistryAgent } from '@agentctl/shared';
+import { type Logger, noopLogger } from '../logger.js';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
 const SUPPORTED_AGENTS = new Set(['opencode', 'claude-code', 'gemini-cli', 'codex-acp']);
@@ -69,7 +70,7 @@ function resolveLaunchConfig(agent: RegistryAgent): { command: string; args: str
   };
 }
 
-async function fetchRegistry(): Promise<RegistryAgent[]> {
+async function fetchRegistry(logger: Logger): Promise<RegistryAgent[]> {
   try {
     const response = await fetch(REGISTRY_URL);
 
@@ -80,8 +81,7 @@ async function fetchRegistry(): Promise<RegistryAgent[]> {
     const data = (await response.json()) as { agents: RegistryAgent[] };
     return data.agents;
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn('Failed to fetch remote registry:', err);
+    logger.warn(err, 'Failed to fetch remote registry');
     return [];
   }
 }
@@ -102,7 +102,8 @@ function notFoundEntry(agent: RegistryAgent): DriverDiscovery {
 
 async function probeAgent(
   agent: RegistryAgent,
-  launch: { command: string; args: string[]; env: Record<string, string> }
+  launch: { command: string; args: string[]; env: Record<string, string> },
+  logger: Logger,
 ): Promise<DriverDiscovery> {
   const child = spawn(launch.command, launch.args, {
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -110,8 +111,7 @@ async function probeAgent(
   });
 
   child.on('error', (err) => {
-    // eslint-disable-next-line no-console
-    console.warn(`Spawning agent ${agent.id} failed:`, err.message);
+    logger.warn(err, `Spawning agent ${agent.id} failed`);
   });
 
   const stdin = child.stdin;
@@ -166,8 +166,7 @@ async function probeAgent(
 
     return result;
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(`Probe failed for ${agent.id}:`, err);
+    logger.error(err, `Probe failed for ${agent.id}`);
     return notFoundEntry(agent);
   } finally {
     child.kill();
@@ -179,10 +178,12 @@ export class DriverRegistry {
   private lastFetchTime = 0;
   private static readonly CACHE_TTL = 5 * 60 * 1000;
 
+  constructor(private logger: Logger = noopLogger) {}
+
   async discover(): Promise<DriverDiscovery[]> {
     const now = Date.now();
     if (!this.cachedDrivers || now - this.lastFetchTime > DriverRegistry.CACHE_TTL) {
-      const registryAgents = await fetchRegistry();
+      const registryAgents = await fetchRegistry(this.logger);
 
       const agents = registryAgents.filter((agent) => SUPPORTED_AGENTS.has(agent.id));
 
@@ -190,7 +191,7 @@ export class DriverRegistry {
         agents.map(async (agent) => {
           const launch = resolveLaunchConfig(agent);
           if (!launch) return notFoundEntry(agent);
-          return probeAgent(agent, launch);
+          return probeAgent(agent, launch, this.logger);
         })
       );
 

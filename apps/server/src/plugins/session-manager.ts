@@ -26,7 +26,7 @@ export class SessionManagerService {
       cwd: worktreePath,
       env: { ...process.env, ...env },
     });
-    const session = new ACPSession(sessionId, child, this.fastify.db, this.fastify.eventBus, worktreePath);
+    const session = new ACPSession(sessionId, child, this.fastify.db, this.fastify.eventBus, worktreePath, this.fastify.log);
     void session.initialize();
     this.sessions.set(sessionId, session);
     return session;
