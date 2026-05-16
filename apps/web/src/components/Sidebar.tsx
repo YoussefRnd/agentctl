@@ -11,6 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../lib/api-client.js';
 import { useState } from 'react';
+import type { SessionStatus } from '@agentctl/shared';
 
 interface Project {
   id: string;
@@ -20,7 +21,7 @@ interface Project {
     title?: string | null;
     taskSlug?: string | null;
     branch?: string | null;
-    status: 'running' | 'needs_attention' | 'idle' | 'error' | 'merged' | 'discarded';
+    status: SessionStatus;
   }[];
 }
 
@@ -37,7 +38,7 @@ export function Sidebar() {
     setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const statusColors: Record<string, string> = {
+  const statusColors: Record<SessionStatus, string> = {
     running: 'bg-success',
     needs_attention: 'bg-warning',
     idle: 'bg-text-muted',
@@ -47,7 +48,10 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="h-full w-[260px] shrink-0 bg-surface/30 backdrop-blur-md border-r border-border flex flex-col overflow-hidden">
+    <aside 
+      aria-label="Main Sidebar"
+      className="h-full w-[260px] shrink-0 bg-surface/30 backdrop-blur-md border-r border-border flex flex-col overflow-hidden"
+    >
       {/* Brand */}
       <div className="p-4 flex items-center justify-between">
         <h2 className="text-[10px] font-bold text-text-muted uppercase tracking-[0.2em]">AgentCTL</h2>
@@ -79,7 +83,11 @@ export function Sidebar() {
         {isLoading ? (
           <div className="px-2 space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-3 bg-border/40 rounded animate-pulse w-full"></div>
+              <div 
+                key={i} 
+                aria-hidden="true"
+                className="h-3 bg-border/40 rounded animate-pulse w-full"
+              ></div>
             ))}
           </div>
         ) : projects.length === 0 ? (
@@ -90,6 +98,7 @@ export function Sidebar() {
               <div key={proj.id} className="space-y-0.5">
                 <button 
                   onClick={() => { toggleProject(proj.id); }}
+                  aria-expanded={!collapsedProjects[proj.id]}
                   className="w-full flex items-center px-2 py-1 text-[11px] font-medium text-text-muted hover:text-text-main transition-colors group text-left"
                 >
                   <span className="shrink-0 w-4 flex justify-center mr-1">
@@ -113,7 +122,7 @@ export function Sidebar() {
                         className={`group flex items-center px-2 py-1 text-[12px] rounded-md transition-all ml-4 ${activeSessionId === s.id ? 'bg-accent/10 text-accent font-medium' : 'text-text-muted hover:bg-surface-hover hover:text-text-main'}`}
                       >
                         <span className="mr-2 opacity-30 text-[10px] font-mono shrink-0">↳</span>
-                        <div className={`w-1.5 h-1.5 rounded-full mr-2 shrink-0 ${statusColors[s.status] ?? 'bg-border'}`} />
+                        <div className={`w-1.5 h-1.5 rounded-full mr-2 shrink-0 ${statusColors[s.status]}`} />
                         <span className="truncate">{s.title ?? s.taskSlug ?? s.branch}</span>
                       </Link>
                     ))}
@@ -125,5 +134,6 @@ export function Sidebar() {
         )}
       </div>
     </aside>
+
   );
 }
