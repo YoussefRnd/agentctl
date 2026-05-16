@@ -67,7 +67,7 @@ export default fp(async (fastify) => {
             }
 
             unsubscribe = eventBus.subscribe(message.sessionId, (event) => {
-              // Event from session-runner also has string data, parse it
+              // Event from ACPSession also has string data, parse it
               const parsed = event as unknown as typeof acpEvents.$inferSelect;
               socket.send(JSON.stringify({ type: 'acp_event', payload: parseEventRow(parsed) }));
             });

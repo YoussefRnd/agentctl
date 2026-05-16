@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { SessionRunner, ACPClient } from '@agentctl/core';
+import { ACPSession } from '@agentctl/core';
 import { spawn } from 'node:child_process';
 import type { WSClientMessage } from '../types.js';
 import type { FastifyInstance } from 'fastify';
@@ -17,7 +17,7 @@ interface RestartOptions {
 }
 
 export class SessionManagerService {
-  private runners = new Map<string, SessionRunner>();
+  private sessions = new Map<string, ACPSession>();
 
   constructor(private fastify: FastifyInstance) {}
 
@@ -26,32 +26,36 @@ export class SessionManagerService {
       cwd: worktreePath,
       env: { ...process.env, ...env },
     });
-    const client = new ACPClient(child);
-    const runner = new SessionRunner(sessionId, client, this.fastify.db, this.fastify.eventBus);
-    this.runners.set(sessionId, runner);
-    return runner;
+    const session = new ACPSession(sessionId, child, this.fastify.db, this.fastify.eventBus);
+    void session.initialize();
+    this.sessions.set(sessionId, session);
+    return session;
   }
 
   restartSession(sessionId: string, worktreePath: string, options: RestartOptions) {
-    const runner = this.runners.get(sessionId);
-    if (runner) {
-      runner.kill();
-      this.runners.delete(sessionId);
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.kill();
+      this.sessions.delete(sessionId);
     }
 
     return this.startSession(sessionId, worktreePath, options.command, options.args, options.env);
   }
 
   async handleClientMessage(msg: WSClientMessage) {
-    const runner = this.runners.get(msg.sessionId);
-    if (!runner) return;
+    const session = this.sessions.get(msg.sessionId);
+    if (!session) return;
 
     if (msg.action === 'approve') {
-      await runner.approve(msg.eventId);
+      session.resolvePermission(String(msg.eventId), { 
+        outcome: { outcome: 'selected', optionId: 'allow-always' } 
+      });
     } else if (msg.action === 'deny') {
-      await runner.deny(msg.eventId);
+      session.resolvePermission(String(msg.eventId), { 
+        outcome: { outcome: 'selected', optionId: 'deny-once' } 
+      });
     } else if (msg.action === 'session.input') {
-      await runner.input(msg.input);
+      await session.prompt(msg.input);
     }
   }
 }

@@ -1,6 +1,7 @@
 import { execSync, spawn } from 'node:child_process';
 import os from 'node:os';
-import { ACPClient } from './acp-client.js';
+import { Readable, Writable } from 'node:stream';
+import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type { DriverDiscovery, ACPConfigOption, RegistryAgent } from '@agentctl/shared';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
@@ -113,17 +114,36 @@ async function probeAgent(
     env: { ...process.env, ...launch.env },
   });
 
-  const client = new ACPClient(child);
-  client.removeAllListeners('error');
-  client.on('error', () => { /* ignore during probe */ });
+  const stdin = child.stdin;
+  const stdout = child.stdout;
+
+  const stream = ndJsonStream(
+    Writable.toWeb(stdin) as WritableStream<Uint8Array>,
+    Readable.toWeb(stdout) as ReadableStream<Uint8Array>
+  );
+
+  const connection = new ClientSideConnection(() => {
+    return {
+      async sessionUpdate() {
+        // Probe only needs initialization
+      },
+      async requestPermission() {
+        const result = { outcome: { outcome: 'selected' as const, optionId: 'allow-always' } };
+        return await Promise.resolve(result);
+      }
+    };
+  }, stream);
 
   try {
     const result = await Promise.race([
       (async () => {
-        await client.initialize();
-        const response = (await client.call('session/new', {
-          workingDirectory: process.cwd(),
-        })) as { configOptions?: ACPConfigOption[] };
+        const initResult = await connection.initialize({
+          protocolVersion: 1,
+          clientInfo: { name: 'agentctl-probe', version: '1.0.0' }
+        });
+
+        const initResultTyped = initResult as Record<string, unknown>;
+        const configOptions = initResultTyped.configOptions as ACPConfigOption[] | undefined;
 
         return {
           id: agent.id,
@@ -132,7 +152,7 @@ async function probeAgent(
           command: launch.command,
           launchArgs: launch.args,
           launchEnv: launch.env,
-          configOptions: response.configOptions,
+          configOptions: configOptions ?? [],
           version: agent.version,
           description: agent.description,
           icon: agent.icon,
@@ -144,7 +164,9 @@ async function probeAgent(
     ]);
 
     return result;
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`Probe failed for ${agent.id}:`, err);
     return {
       id: agent.id,
       label: agent.name,
@@ -157,7 +179,7 @@ async function probeAgent(
       icon: agent.icon,
     };
   } finally {
-    client.kill();
+    child.kill();
   }
 }
 
