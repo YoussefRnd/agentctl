@@ -99,11 +99,18 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
     sendMessage({ action: 'session.input', sessionId, input: text });
   };
 
-  const handleHarnessSelect = (driverId: string) => {
+  const handleHarnessSelect = (driverId: string, modelId?: string) => {
     const capability = sessionData?.capabilities.find((item) => item.id === driverId);
-    const modelOption = capability?.configOptions?.find(
-      (option) => option.id === 'model' || option.id === 'selectedModel',
-    );
+    
+    // If a model is explicitly passed, use it. Otherwise, fallback to the current/default.
+    let selectedModel = modelId;
+    if (!selectedModel) {
+      const modelOption = capability?.configOptions?.find(
+        (option) => option.id === 'model' || option.id === 'selectedModel',
+      );
+      selectedModel = modelOption?.currentValue ?? modelOption?.options[0]?.value ?? 'default';
+    }
+
     const thinkingOption = capability?.configOptions?.find(
       (option) =>
         option.id === 'thinking' ||
@@ -113,7 +120,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
 
     providerMutation.mutate({
       selectedDriver: driverId as DriverName,
-      selectedModel: modelOption?.currentValue ?? modelOption?.options[0]?.value ?? 'default',
+      selectedModel: selectedModel,
       selectedThinkingEffort: (thinkingOption?.currentValue ??
         thinkingOption?.options[0]?.value ??
         'medium') as ThinkingEffort,
@@ -267,6 +274,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
                 onSend={handleSend}
                 disabled={!isConnected || providerMutation.isPending}
                 selectedHarnessId={sessionData?.session.selectedDriver}
+                selectedModelId={sessionData?.session.selectedModel}
                 onHarnessSelect={handleHarnessSelect}
               />
             </div>
