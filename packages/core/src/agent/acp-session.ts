@@ -34,7 +34,7 @@ export class ACPSession {
   ) {
     this.child.on('error', (err) => {
       this.logger.error(err, `Child process error in session ${this.sessionId}`);
-      void this.handleError(err);
+      void this.handleError(err).catch((e: unknown) => { this.logger.error(e, 'Failed to handle error'); });
     });
 
     const stdin = this.child.stdin;
@@ -79,14 +79,16 @@ export class ACPSession {
       this.child.on('exit', () => {
         void this.db.update(sessions)
           .set({ status: 'idle', closedAt: new Date() })
-          .where(eq(sessions.id, this.sessionId));
+          .where(eq(sessions.id, this.sessionId))
+          .catch((e: unknown) => { this.logger.error(e, 'Failed to update session status on exit'); });
       });
 
       void this.connection.closed.then(() => {
         this.kill();
         void this.db.update(sessions)
           .set({ status: 'idle', closedAt: new Date() })
-          .where(eq(sessions.id, this.sessionId));
+          .where(eq(sessions.id, this.sessionId))
+          .catch((e: unknown) => { this.logger.error(e, 'Failed to update session status on close'); });
       }).catch(async (error: unknown) => {
         this.logger.error(error, 'Connection closed with error');
         await this.handleError(error);
@@ -187,7 +189,7 @@ export class ACPSession {
 
       await this.persistEvent(eventType, uiData);
     } catch (error) {
-      await this.handleError(error);
+      await this.handleError(error).catch((e: unknown) => { this.logger.error(e, 'Failed to handle error in onSessionUpdate'); });
     }
   }
 
@@ -206,6 +208,9 @@ export class ACPSession {
             toolCallId: permissionId,
             requiresApproval: true,
             request,
+          }).catch((e: unknown) => {
+            this.logger.error(e, 'Failed to persist approval_request event');
+            return undefined;
           });
 
           if (eventId !== undefined) {
