@@ -6,6 +6,55 @@ import type { DriverDiscovery, ACPConfigOption, RegistryAgent } from '@agentctl/
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
 
+/**
+ * Built-in fallback agents to ensure common harnesses are always discoverable
+ * even if the remote registry is inaccessible or slow.
+ */
+const BUILTIN_AGENTS: RegistryAgent[] = [
+  {
+    id: 'claude-code',
+    name: 'Claude Code',
+    version: 'latest',
+    authors: ['Anthropic'],
+    description: 'Anthropic\'s official CLI agent for coding tasks.',
+    distribution: {
+      npx: {
+        package: '@anthropic-ai/claude-code',
+        args: ['--acp'],
+        env: {},
+      }
+    }
+  },
+  {
+    id: 'gemini-cli',
+    name: 'Gemini CLI',
+    version: 'latest',
+    authors: ['Google'],
+    description: 'Google\'s official CLI agent for coding tasks.',
+    distribution: {
+      npx: {
+        package: '@google/gemini-cli',
+        args: ['--acp'],
+        env: {},
+      }
+    }
+  },
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    version: 'latest',
+    authors: ['OpenSource'],
+    description: 'Open-source coding agent with ACP support.',
+    distribution: {
+      npx: {
+        package: 'opencode',
+        args: ['--acp'],
+        env: {},
+      }
+    }
+  }
+];
+
 function getPlatformKey(): string {
   const arch = os.arch();
   const platform = os.platform();
@@ -62,7 +111,8 @@ function resolveLaunchConfig(agent: RegistryAgent): LaunchConfig | null {
     if (npx) {
       return {
         command: npx,
-        args: [dist.npx.package, ...dist.npx.args],
+        // CRITICAL: use --yes to avoid interactive prompts
+        args: ['--yes', dist.npx.package, ...dist.npx.args],
         env: dist.npx.env,
       };
     }
@@ -94,14 +144,20 @@ function resolveLaunchConfig(agent: RegistryAgent): LaunchConfig | null {
 }
 
 async function fetchRegistry(): Promise<RegistryAgent[]> {
-  const response = await fetch(REGISTRY_URL);
+  try {
+    const response = await fetch(REGISTRY_URL);
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ACP registry: ${String(response.status)} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ACP registry: ${String(response.status)} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as { agents: RegistryAgent[] };
+    return data.agents;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('Failed to fetch remote registry, using built-ins only:', err);
+    return [];
   }
-
-  const data = (await response.json()) as { agents: RegistryAgent[] };
-  return data.agents;
 }
 
 async function probeAgent(
@@ -159,7 +215,8 @@ async function probeAgent(
         };
       })(),
       new Promise<DriverDiscovery>((_, reject) => {
-        setTimeout(() => { reject(new Error(`Probe for ${agent.id} timed out`)); }, 10_000);
+        // Increased timeout to 30s to allow for npx initialization
+        setTimeout(() => { reject(new Error(`Probe for ${agent.id} timed out after 30s`)); }, 30_000);
       }),
     ]);
 
@@ -191,7 +248,18 @@ export class DriverRegistry {
   async discover(): Promise<DriverDiscovery[]> {
     const now = Date.now();
     if (!this.cachedDrivers || now - this.lastFetchTime > DriverRegistry.CACHE_TTL) {
-      const agents = await fetchRegistry();
+      const registryAgents = await fetchRegistry();
+      
+      // Merge built-in agents with registry agents, avoiding duplicates
+      const allAgentsMap = new Map<string, RegistryAgent>();
+      for (const agent of BUILTIN_AGENTS) {
+        allAgentsMap.set(agent.id, agent);
+      }
+      for (const agent of registryAgents) {
+        allAgentsMap.set(agent.id, agent);
+      }
+      
+      const agents = Array.from(allAgentsMap.values());
 
       const launchable = agents
         .map((agent) => ({ agent, launch: resolveLaunchConfig(agent) }))

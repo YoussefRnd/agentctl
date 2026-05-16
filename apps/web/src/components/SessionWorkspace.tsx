@@ -87,7 +87,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
             <span className="font-mono text-text-muted">{sessionId.slice(0, 8)}</span>
             <span className="flex items-center gap-1.5 px-2 py-0.5 bg-success/10 text-success text-[10px] font-bold rounded-md tracking-wider">
               <span className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
-              CONNECTED
+              LIVE
             </span>
           </div>
           <div className="h-4 w-px bg-border hidden sm:block" />
@@ -143,26 +143,26 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
           aria-labelledby="workspace-tab-feed"
           className={activeTab === 'feed' ? 'flex h-full min-h-0 flex-col' : 'hidden h-full min-h-0 flex-col'}
         >
-          <div className="flex-1 min-h-0 overflow-hidden pb-40 sm:pb-52">
+          <div className="flex-1 min-h-0 overflow-hidden pb-44 sm:pb-56">
             {feedErrorMessage ? (
-              <div className="p-8 max-w-lg mx-auto text-center">
-                <div className="rounded-2xl border border-danger/20 bg-danger/5 p-6">
-                  <div className="text-sm font-semibold text-danger mb-2">Connection Interrupted</div>
+              <div className="p-8 max-w-lg mx-auto text-center text-accent">
+                <div className="rounded-2xl border border-accent/20 bg-accent/5 p-6">
+                  <div className="text-sm font-semibold mb-2 uppercase tracking-widest">Protocol Sync Failed</div>
                   <div className="text-[13px] text-text-muted mb-6">{feedErrorMessage}</div>
                   <button
                     type="button"
                     onClick={() => { void refetchEvents(); }}
-                    className="w-full rounded-xl bg-surface border border-border px-4 py-2.5 text-sm font-medium hover:bg-surface-hover transition-colors"
+                    className="w-full rounded-xl bg-accent text-background px-4 py-2.5 text-sm font-bold hover:bg-accent-hover transition-colors shadow-lg"
                   >
-                    Reconnect Session
+                    Resynchronize
                   </button>
                 </div>
               </div>
             ) : isLoadingEvents ? (
               <div className="flex items-center justify-center h-full">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                  <span className="text-xs text-text-muted font-medium">SYNCHRONIZING</span>
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-10 h-10 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                  <span className="text-[10px] text-accent/60 font-black tracking-[0.2em] uppercase">Fetching Turn History</span>
                 </div>
               </div>
             ) : (
@@ -183,7 +183,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
       <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
         <div className="max-w-3xl mx-auto px-4 pointer-events-auto">
           {showApproval && (
-            <div className="mb-4">
+            <div className="mb-6">
               <ApprovalCard
                 eventId={lastEvent.id}
                 data={lastEvent.data as { message?: string } | null}
@@ -194,7 +194,11 @@ export function SessionWorkspace({ sessionId }: { sessionId: string }) {
           )}
         </div>
         <div className="pointer-events-auto">
-          <CommandBar onSend={handleSend} disabled={!isConnected} />
+          <CommandBar 
+            onSend={handleSend} 
+            disabled={!isConnected} 
+            selectedHarnessId={sessionData?.session.agent}
+          />
         </div>
       </div>
     </div>
