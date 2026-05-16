@@ -46,14 +46,27 @@ export function ReviewView({ files, isLoading, error, onRetry }: { files: Review
     return <div className="flex-1 p-4 text-sm text-text-muted">No worktree changes.</div>;
   }
 
-  return (
-    <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-8">
-      {(Object.keys(grouped) as FileState[]).map((state) => {
-        const entries = grouped[state];
-        if (entries.length === 0) return null;
+  const activeStates = (Object.keys(grouped) as FileState[]).filter(state => grouped[state].length > 0);
 
-        return (
-          <section key={state} className="space-y-4">
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="shrink-0 p-4 bg-surface/30 backdrop-blur-xl border-b border-border shadow-sm">
+        <h2 className="font-display text-lg font-medium text-text-main mb-4">Code Review</h2>
+        <div className="flex flex-wrap gap-6">
+          {activeStates.map((state) => (
+            <div key={state} className="flex flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-[0.15em] text-text-muted/70">{state}</span>
+              <span className="font-mono text-xl font-medium text-text-main">{grouped[state].length}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-8">
+        {activeStates.map((state) => {
+          const entries = grouped[state];
+
+          return (
+            <section key={state} className="space-y-4">
             <div className="flex items-center gap-3">
               <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted">{state}</h3>
               <div className="h-px flex-1 bg-border/40" />
@@ -76,6 +89,7 @@ export function ReviewView({ files, isLoading, error, onRetry }: { files: Review
           </section>
         );
       })}
+      </div>
     </div>
   );
 }

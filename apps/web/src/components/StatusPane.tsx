@@ -37,7 +37,7 @@ export function StatusPane({ events, files }: StatusPaneProps) {
   }, [events]);
 
   return (
-    <aside className="w-80 border-l border-border bg-background flex flex-col min-h-0 hidden xl:flex">
+    <div className="flex flex-col h-full min-h-0">
       <div className="p-4 border-b border-border flex items-center justify-between">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-text-muted">Agent Status</h2>
         <div className="flex items-center gap-1.5">
@@ -87,6 +87,6 @@ export function StatusPane({ events, files }: StatusPaneProps) {
           </div>
         </section>
       </div>
-    </aside>
+    </div>
   );
 }
