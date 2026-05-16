@@ -40,9 +40,7 @@ export function DirectoryExplorer({
       if (data.error) {
         setError(data.error);
       }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to explore:', err);
+    } catch {
       setError('Connection failed. Is the server running?');
     } finally {
       setIsLoading(false);
