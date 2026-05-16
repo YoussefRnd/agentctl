@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { sessions, projects } from '@agentctl/core';
+import { AppError } from '../utils/app-error.js';
 
 const reviewParamsSchema = z.object({
   id: z.uuid(),
@@ -23,21 +24,25 @@ export const sessionReviewRoutes: FastifyPluginCallbackZod = (fastify, _opts, do
       });
 
       if (!session) {
-        return { files: [] };
+        throw new AppError('Session not found', 404);
       }
 
       const project = await fastify.db.query.projects.findFirst({
         where: eq(projects.id, session.projectId),
       });
 
-      if (!project) {
+      if (!project?.repoRoot) {
         return { files: [] };
       }
 
-      const files = await fastify.worktreeManager.getReviewFiles(project.path, session.worktreePath, session.baseCommit);
+      const files = await fastify.worktreeManager.getReviewFiles(
+        project.repoRoot,
+        session.worktreePath,
+        session.baseCommit,
+      );
 
       return { files };
-    }
+    },
   );
 
   done();

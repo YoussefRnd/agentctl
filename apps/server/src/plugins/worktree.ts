@@ -14,6 +14,9 @@ export default fp((fastify) => {
         const allProjects = await db.select().from(projects);
 
         for (const project of allProjects) {
+          // Only git-tracked projects have worktrees to sync
+          if (!project.repoRoot) continue;
+
           // Fetch active session IDs (exclude terminal statuses)
           const activeSessions = await db
             .select({ id: sessions.id })
@@ -26,7 +29,7 @@ export default fp((fastify) => {
             );
 
           const activeIds = activeSessions.map((s: { id: string }) => s.id);
-          await worktreeManager.sync(project.path, activeIds);
+          await worktreeManager.sync(project.repoRoot, activeIds);
         }
 
         fastify.log.info('Background worktree sync completed successfully.');

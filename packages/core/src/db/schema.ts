@@ -23,7 +23,12 @@ const eventTimestamps = {
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  /** The user-selected directory (may be a subdirectory of the git repo). */
   path: text('path').notNull(),
+  /** Absolute path to the git repo root. Null if the folder is not inside a git repo. */
+  repoRoot: text('repo_root'),
+  /** Relative path from repoRoot to `path` (e.g. "apps/web"). Empty string if path == repoRoot. */
+  subdir: text('subdir').notNull().default(''),
   ...timestamps,
 });
 
