@@ -39,9 +39,18 @@ export class ACPSession {
 
     const stdin = this.child.stdin;
     const stdout = this.child.stdout;
+    const stderr = this.child.stderr;
+
     if (stdin === null || stdout === null) {
       throw new Error('Child process missing stdin/stdout');
     }
+
+    if (stderr) {
+      stderr.on('data', (data: Buffer) => {
+        this.logger.warn(`Agent stderr: ${data.toString()}`);
+      });
+    }
+
     const stream = ndJsonStream(
       Writable.toWeb(stdin) as WritableStream<Uint8Array>,
       Readable.toWeb(stdout) as ReadableStream<Uint8Array>

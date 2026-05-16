@@ -43,7 +43,7 @@ function buildLaunchArgs(
 
   return {
     command: driver.command,
-    args: [...baseArgs, ...extraArgs],
+    args: [...extraArgs, ...baseArgs],
     env: baseEnv,
   };
 }

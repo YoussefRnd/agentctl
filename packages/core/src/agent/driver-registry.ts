@@ -6,11 +6,11 @@ import type { DriverDiscovery, ACPConfigOption, RegistryAgent } from '@agentctl/
 import { type Logger, noopLogger } from '../logger.js';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
-const SUPPORTED_AGENTS = new Set(['opencode', 'claude-code', 'gemini-cli', 'codex-acp']);
+const SUPPORTED_AGENTS = new Set(['opencode', 'claude-acp', 'gemini', 'codex-acp']);
 
 const AGENT_BINARY: Record<string, string> = {
-  'claude-code': 'claude',
-  'gemini-cli': 'gemini',
+  'claude-acp': 'claude',
+  'gemini': 'gemini',
   'opencode': 'opencode',
   'codex-acp': 'codex',
 };

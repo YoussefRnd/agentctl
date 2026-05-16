@@ -32,7 +32,7 @@ function buildLaunchArgs(
   if (thinkingEffort) extraArgs.push('--thinking-effort', thinkingEffort);
   return {
     command: driver.command,
-    args: [...driver.launchArgs, ...extraArgs],
+    args: [...extraArgs, ...driver.launchArgs],
     env: driver.launchEnv,
   };
 }
