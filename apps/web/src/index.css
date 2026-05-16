@@ -1,32 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Space+Grotesk:wght@300..700&display=swap');
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @plugin "tailwindcss-animate";
 
 @theme {
-  /* Codex-like color palette */
+  /* Liquid Glass Palette */
   --color-background: #0b0c0e;
-  --color-surface: #121417;
-  --color-surface-hover: #1a1d21;
-  --color-border: #22252a;
+  --color-surface: rgba(18, 20, 23, 0.7);
+  --color-surface-hover: rgba(26, 29, 33, 0.8);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-glass-highlight: rgba(255, 255, 255, 0.03);
+  
   --color-text-main: #e2e4e7;
   --color-text-muted: #8e939a;
+  
   --color-accent: #3b82f6;
+  --color-accent-glow: rgba(59, 130, 246, 0.3);
   --color-accent-hover: #60a5fa;
+  
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
   
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  
+  /* Typography */
+  --font-display: "Geist", "Space Grotesk", system-ui;
+  --font-sans: "Geist", "Inter", system-ui, -apple-system, sans-serif;
 }
 
-body {
-  background-color: var(--color-background);
-  color: var(--color-text-main);
-  margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  body {
+    @apply bg-background text-text-main font-sans antialiased m-0;
+  }
+}
+
+@layer components {
+  .liquid-glass {
+    @apply backdrop-blur-3xl bg-surface border border-border shadow-2xl;
+    box-shadow: inset 0 1px 1px var(--color-glass-highlight);
+  }
 }
 
 /* Custom scrollbar for an immersive feel */
