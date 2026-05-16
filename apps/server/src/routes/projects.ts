@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { projects, sessions, GitService } from '@agentctl/core';
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import path from 'node:path';
 import { createAgentSession } from '../utils/session-factory.js';
 import { AppError } from '../utils/app-error.js';
@@ -24,7 +24,9 @@ const openProjectSchema = createProjectSchema.extend({
  * Non-git folders are accepted; they just won't support worktrees / sessions.
  */
 async function findOrCreateProject(fastify: FastifyInstance, selectedPath: string) {
-  const repoInfo = await gitService.resolveRepository(selectedPath).catch((err: unknown) => {
+  const normalizedPath = path.resolve(path.normalize(selectedPath));
+
+  const repoInfo = await gitService.resolveRepository(normalizedPath).catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
     throw new AppError(`Cannot open folder: ${msg}`, 400);
   });
@@ -35,7 +37,7 @@ async function findOrCreateProject(fastify: FastifyInstance, selectedPath: strin
   const existing = await fastify.db
     .select()
     .from(projects)
-    .where(sql`path = ${selectedPath}`)
+    .where(eq(projects.path, normalizedPath))
     .limit(1);
 
   if (existing.length > 0) {
@@ -54,7 +56,7 @@ async function findOrCreateProject(fastify: FastifyInstance, selectedPath: strin
     return project;
   }
 
-  const projectName = path.basename(selectedPath);
+  const projectName = path.basename(normalizedPath);
   const projectId = crypto.randomUUID();
 
   const [createdProject] = await fastify.db
@@ -62,7 +64,7 @@ async function findOrCreateProject(fastify: FastifyInstance, selectedPath: strin
     .values({
       id: projectId,
       name: projectName,
-      path: selectedPath,
+      path: normalizedPath,
       repoRoot,
       subdir,
     })
@@ -94,13 +96,6 @@ export const projectsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     },
     async (request) => {
       const project = await findOrCreateProject(fastify, request.body.path);
-
-      if (!project.repoRoot) {
-        throw new AppError(
-          'This folder is not inside a Git repository. Sessions require Git.',
-          400,
-        );
-      }
 
       const existingSessions = await fastify.db
         .select()

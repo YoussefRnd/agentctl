@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DirectoryExplorer } from './DirectoryExplorer.js';
 import { AlertCircle, Sparkles } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
 import { apiClient } from '../lib/api-client.js';
-import { openProjectSession } from '../lib/project-sessions.js';
+import { openProjectSession, type SidebarProject } from '../lib/project-sessions.js';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();
@@ -13,6 +14,11 @@ export function NewProjectPalette() {
   const { data: drivers = [] } = useQuery({
     queryKey: ['drivers'],
     queryFn: () => apiClient.fetch<DriverDiscovery[]>('/api/drivers'),
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => apiClient.fetch<SidebarProject[]>('/api/projects'),
   });
 
   const mutation = useMutation({
@@ -26,6 +32,10 @@ export function NewProjectPalette() {
   const handleFolderSelect = (path: string) => {
     mutation.mutate(path);
   };
+
+  const [showExplorer, setShowExplorer] = useState(false);
+
+  const shouldShowExplorer = projects.length === 0 || showExplorer;
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 bg-background relative overflow-hidden">
@@ -44,8 +54,11 @@ export function NewProjectPalette() {
               Welcome to Agent Workbench!
             </h1>
             <p className="text-text-muted text-lg mb-12">
-              Pick a Git project folder and start collaborating with your agents.
+              {shouldShowExplorer
+                ? 'Pick a Git project folder and start collaborating with your agents.'
+                : 'Select a project from the sidebar to continue, or open a new one.'}
             </p>
+            
             {mutation.error && (
               <div className="mb-6 rounded-xl border border-danger/30 bg-danger/10 p-4 text-left text-sm text-text-main">
                 <div className="flex items-center gap-2 font-bold text-danger">
@@ -55,7 +68,19 @@ export function NewProjectPalette() {
                 <p className="mt-1 text-text-muted">{mutation.error.message}</p>
               </div>
             )}
-            <DirectoryExplorer onSelect={handleFolderSelect} />
+            
+            {shouldShowExplorer ? (
+              <DirectoryExplorer onSelect={handleFolderSelect} />
+            ) : (
+              <button
+                onClick={() => {
+                  setShowExplorer(true);
+                }}
+                className="px-6 py-3 bg-surface hover:bg-surface-hover border border-border text-text-main rounded-xl font-medium transition-colors"
+              >
+                Open New Project
+              </button>
+            )}
           </>
         )}
       </div>

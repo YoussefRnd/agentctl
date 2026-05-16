@@ -60,7 +60,11 @@ export class GitService {
 		} catch {
 			const branchSummary = await git.branchLocal();
 			ref = branchSummary.current || 'HEAD';
-			commit = await git.revparse([ref]);
+			try {
+				commit = await git.revparse([ref]);
+			} catch {
+				commit = 'empty';
+			}
 		}
 
 		return {

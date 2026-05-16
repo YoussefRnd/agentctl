@@ -59,10 +59,6 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
     throw new AppError('Project not found', 404);
   }
 
-  if (!project.repoRoot) {
-    throw new AppError('This project is not inside a Git repository. Sessions require Git.', 400);
-  }
-
   const driver = await fastify.driverRegistry.getDriver(agent);
   if (driver?.status !== 'ready') {
     throw new AppError(`Selected agent is not ready: ${agent}`, 400);
@@ -70,14 +66,25 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
 
   const sessionId = crypto.randomUUID();
 
-  // Create the worktree at the repo root, preserving the subdirectory offset
-  const worktree = await fastify.worktreeManager.create(
-    project.repoRoot,
-    sessionId,
-    taskSlug,
-    'main',
-    project.subdir,
-  );
+  let branch = 'main';
+  let worktreePath = project.path;
+  let workspacePath = project.path;
+  let baseCommit = 'none';
+
+  if (project.repoRoot) {
+    // Create the worktree at the repo root, preserving the subdirectory offset
+    const worktree = await fastify.worktreeManager.create(
+      project.repoRoot,
+      sessionId,
+      taskSlug,
+      'main',
+      project.subdir,
+    );
+    branch = worktree.branch;
+    worktreePath = worktree.path;
+    workspacePath = worktree.workspacePath;
+    baseCommit = worktree.baseCommit;
+  }
 
   const selection = await resolveInitialSelection(fastify.driverRegistry, agent);
 
@@ -86,13 +93,13 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
     .values({
       id: sessionId,
       projectId,
-      branch: worktree.branch,
+      branch,
       // Store the worktree root path; workspacePath is derived from subdir at runtime
-      worktreePath: worktree.path,
+      worktreePath,
       agent,
       status: 'idle',
       taskSlug,
-      baseCommit: worktree.baseCommit,
+      baseCommit,
       ...selection,
     })
     .returning();
@@ -108,7 +115,7 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
     // in the correct subdirectory for backend/frontend monorepo projects.
     fastify.sessionManager.startSession(
       sessionId,
-      worktree.workspacePath,
+      workspacePath,
       launch.command,
       launch.args,
       launch.env,
