@@ -1,9 +1,14 @@
 import { useParams } from 'react-router-dom';
-import { SessionWorkspace } from '../components/SessionWorkspace.js';
+import { SessionWorkspace } from '../components/SessionWorkspace';
+import { SessionProvider } from '../contexts/SessionContext';
 
 export function SessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
   if (!sessionId) return null;
 
-  return <SessionWorkspace sessionId={sessionId} />;
+  return (
+    <SessionProvider sessionId={sessionId}>
+      <SessionWorkspace />
+    </SessionProvider>
+  );
 }

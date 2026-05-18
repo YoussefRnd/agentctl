@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Terminal, ChevronRight, ChevronDown } from 'lucide-react';
+import type { ACPEventToolCallData } from '@agentctl/shared';
 
-export function ToolCallCard({ tool, payload }: { tool: string, payload: unknown }) {
+export const ToolCallCard = memo(function ToolCallCard({ tool, payload }: { tool: string, payload: ACPEventToolCallData }) {
   const [open, setOpen] = useState(false);
+  
+  // Extract arguments for preview, excluding protocol fields
+  const args = payload.arguments ?? {};
+  const argKeys = Object.keys(args).filter(k => !['toolCallId', 'name'].includes(k));
+
   return (
     <div className="relative pl-14 pr-6 py-1 group">
       {/* Causality Node (Dot) */}
@@ -20,8 +26,8 @@ export function ToolCallCard({ tool, payload }: { tool: string, payload: unknown
               {tool}
             </span>
             <span className="text-[12px] font-mono text-text-muted/40 truncate ml-2">
-               {payload && typeof payload === 'object' && Object.keys(payload).length > 0 
-                 ? `{ ${Object.keys(payload).join(', ')} }`
+               {argKeys.length > 0 
+                 ? `{ ${argKeys.join(', ')} }`
                  : ''}
             </span>
           </div>
@@ -33,9 +39,9 @@ export function ToolCallCard({ tool, payload }: { tool: string, payload: unknown
       
       {open && (
         <div className="mt-2 mb-3 p-3 rounded-md border border-white/10 bg-black/40 backdrop-blur-xl text-[12px] font-mono text-text-muted/80 overflow-x-auto selection:bg-accent/20">
-          <pre className="leading-relaxed">{JSON.stringify(payload, null, 2)}</pre>
+          <pre className="leading-relaxed">{JSON.stringify(args, null, 2)}</pre>
         </div>
       )}
     </div>
   );
-}
+});

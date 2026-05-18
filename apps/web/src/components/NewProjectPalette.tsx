@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DirectoryExplorer } from './DirectoryExplorer.js';
+import { DirectoryExplorer } from './DirectoryExplorer';
 import { AlertCircle, Sparkles } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
-import { apiClient } from '../lib/api-client.js';
-import { openProjectSession, type SidebarProject } from '../lib/project-sessions.js';
+import { apiClient } from '../lib/api-client';
+import { openProjectSession, type SidebarProject } from '../lib/project-sessions';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();

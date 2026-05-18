@@ -1,40 +1,13 @@
-import { useMemo } from 'react';
-import type { ACPEventRow } from '@agentctl/shared';
+import { useSession } from '../contexts/SessionContext';
 import type { ReviewFile } from './ReviewView';
 import { CheckCircle2, Circle, FileText } from 'lucide-react';
 
 interface StatusPaneProps {
-  events: ACPEventRow[];
   files: ReviewFile[];
 }
 
-export function StatusPane({ events, files }: StatusPaneProps) {
-  // Parse plan items from events, deduplicating by text and keeping the latest state
-  const planItems = useMemo(() => {
-    const planMap = new Map<string, boolean>();
-    
-    events
-      .filter(e => e.type === 'text')
-      .forEach(e => {
-        const content = (e.data as { content: string }).content;
-        if (!content) return;
-        
-        const lines = content.split('\n');
-        lines.forEach(line => {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('- [ ]') || trimmed.startsWith('- [x]')) {
-            const text = trimmed.replace(/- \[[ x]\]/, '').trim();
-            const completed = trimmed.includes('[x]');
-            planMap.set(text, completed);
-          }
-        });
-      });
-
-    return Array.from(planMap.entries()).map(([text, completed]) => ({
-      text,
-      completed,
-    }));
-  }, [events]);
+export function StatusPane({ files }: StatusPaneProps) {
+  const { planItems } = useSession();
 
   return (
     <div className="flex flex-col h-full min-h-0">

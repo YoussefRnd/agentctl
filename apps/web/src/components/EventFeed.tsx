@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { TextCard } from './cards/TextCard.js';
-import { ToolCallCard } from './cards/ToolCallCard.js';
+import { TextCard } from './cards/TextCard';
+import { ToolCallCard } from './cards/ToolCallCard';
 import type { ACPEventRow } from '@agentctl/shared';
 
 export function EventFeed({ 
@@ -56,7 +56,6 @@ export function EventFeed({
         <div style={{ height: `${String(virtualizer.getTotalSize())}px`, width: '100%', position: 'relative' }}>
           {virtualizer.getVirtualItems().map((item) => {
             const e = events[item.index];
-            const data = e.data as { content?: string; name?: string; message?: string } | null;
             return (
               <div
                 key={item.key}
@@ -65,8 +64,8 @@ export function EventFeed({
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${String(item.start)}px)` }}
                 className="transition-opacity duration-300"
               >
-                {e.type === 'text' && <TextCard content={data?.content ?? ''} />}
-                {e.type === 'tool_call' && <ToolCallCard tool={data?.name ?? 'unknown'} payload={e.data} />}
+                {e.type === 'text' && <TextCard content={e.data.content} />}
+                {e.type === 'tool_call' && <ToolCallCard tool={e.data.name} payload={e.data} />}
               </div>
             );
           })}

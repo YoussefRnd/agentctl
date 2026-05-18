@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../lib/api-client.js';
+import { apiClient } from '../lib/api-client';
 import type { DriverDiscovery, SessionRow, SessionProviderSelection, DriverName, ThinkingEffort } from '@agentctl/shared';
 
 interface SessionWithCapabilities {

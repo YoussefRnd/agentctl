@@ -2,7 +2,7 @@
   "name": "@agentctl/web",
   "version": "1.0.0",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && vite build",
     "dev": "vite",
     "lint": "eslint .",
     "format": "prettier --write ."

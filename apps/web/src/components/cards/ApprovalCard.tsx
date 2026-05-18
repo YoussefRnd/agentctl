@@ -1,14 +1,15 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { ShieldCheck, X, Check } from 'lucide-react';
+import type { ACPEventApprovalRequestData } from '@agentctl/shared';
 
-export function ApprovalCard({ 
+export const ApprovalCard = memo(function ApprovalCard({ 
   eventId, 
   data, 
   onApprove, 
   onDeny 
 }: { 
   eventId: number; 
-  data: { message?: string } | null; 
+  data: ACPEventApprovalRequestData; 
   onApprove: (eventId: number) => void; 
   onDeny: (eventId: number) => void; 
 }) {
@@ -40,7 +41,7 @@ export function ApprovalCard({
           approveButtonRef.current?.focus();
         }
       }}
-      className="p-5 bg-surface border border-accent/30 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-6 animate-in fade-in zoom-in-95 duration-300"
+      className="p-5 bg-surface border border-accent/30 rounded-2xl shadow-immersive-lg flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-6 animate-in fade-in zoom-in-95 duration-300"
     >
       <div className="flex gap-4">
         <div className="shrink-0 w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center">
@@ -49,7 +50,7 @@ export function ApprovalCard({
         <div className="flex-1">
           <div id="approval-title" className="text-[14px] font-bold text-text-main mb-1 tracking-tight">Permission Requested</div>
           <div className="text-[13px] text-text-muted leading-relaxed">
-            {data?.message ?? 'Gemini requires your authorization to execute this action.'}
+            {data.message ?? 'Gemini requires your authorization to execute this action.'}
           </div>
         </div>
       </div>
@@ -75,4 +76,4 @@ export function ApprovalCard({
       </div>
     </div>
   );
-}
+});

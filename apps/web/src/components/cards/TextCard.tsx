@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 
-export function TextCard({ content }: { content: string }) {
+export const TextCard = memo(function TextCard({ content }: { content: string }) {
   return (
     <div className="relative pl-14 pr-6 py-4 my-1 group">
       {/* Causality Node (Dot) */}
@@ -12,4 +13,4 @@ export function TextCard({ content }: { content: string }) {
       </div>
     </div>
   );
-}
+});

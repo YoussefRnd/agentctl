@@ -3,8 +3,8 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster, toast } from 'sonner';
-import { App } from './App.js';
-import { AppErrorBoundary } from './components/AppErrorBoundary.js';
+import { App } from './App';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import './index.css';
 import 'highlight.js/styles/github-dark.css';
 

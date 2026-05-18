@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Folder, ChevronLeft, Home, GitBranch, AlertCircle } from 'lucide-react';
-import { apiClient } from '../lib/api-client.js';
+import { apiClient } from '../lib/api-client';
 
 interface FolderEntry {
   name: string;

@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, ChevronUp, Zap, Paperclip } from 'lucide-react';
-import { HarnessPicker } from './HarnessPicker.js';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../lib/api-client.js';
-import type { DriverDiscovery } from '@agentctl/shared';
+import { HarnessPicker } from './HarnessPicker';
+import { useDrivers } from '../hooks/useDrivers';
+import { useSession } from '../contexts/SessionContext';
 
 interface ControlBarProps {
   onSend: (val: string) => void;
@@ -22,17 +21,14 @@ export function CommandBar({
   onHarnessSelect,
   placeholder = "Send a message to start the conversation..."
 }: ControlBarProps) {
+  const { sessionId } = useSession();
+  const { drivers, isLoadingDrivers } = useDrivers(sessionId);
   const [input, setInput] = useState('');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [internalSelectedHarnessId, setInternalSelectedHarnessId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   const selectedId = propSelectedHarnessId ?? internalSelectedHarnessId;
-
-  const { data: drivers = [], isLoading } = useQuery({
-    queryKey: ['drivers'],
-    queryFn: () => apiClient.fetch<DriverDiscovery[]>('/api/drivers'),
-  });
 
   const selectedDriver = drivers.find((d) => d.id === selectedId);
   const selectedDriverLabel = selectedDriver !== undefined ? selectedDriver.label : 'Select harness';
@@ -133,7 +129,7 @@ export function CommandBar({
                     <Zap className={`w-4 h-4 ${selectedId ? 'text-accent fill-accent/20' : 'text-text-muted'}`} />
                   </div>
                   <span className="text-[12px] font-medium tracking-tight truncate max-w-[200px]">
-                    {isLoading ? '...' : (propSelectedModelId ?? selectedDriverLabel)}
+                    {isLoadingDrivers ? '...' : (propSelectedModelId ?? selectedDriverLabel)}
                   </span>
                   <ChevronUp className={`w-3.5 h-3.5 transition-transform duration-300 opacity-50 ${isPickerOpen ? 'rotate-180' : ''}`} />
                 </button>
