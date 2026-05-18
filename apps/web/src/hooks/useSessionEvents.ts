@@ -39,15 +39,6 @@ export function useSessionEvents(sessionId: string | null) {
 
     ws.onopen = () => {
       setIsConnected(true);
-      // Determine last known ID from current cache to catch up
-      const currentCache = queryClient.getQueryData<ACPEventRow[]>(['events', sessionId]) ?? [];
-      const lastEventId = currentCache.length > 0 ? currentCache[currentCache.length - 1].id : 0;
-      
-      ws.send(JSON.stringify({
-        action: 'subscribe',
-        sessionId,
-        lastEventId
-      }));
     };
 
     ws.onclose = () => {
@@ -74,6 +65,7 @@ export function useSessionEvents(sessionId: string | null) {
           const existingIds = new Set(old.map(e => e.id));
           const uniqueNew = newEvents.filter(e => !existingIds.has(e.id));
           
+          if (uniqueNew.length === 0) return old;
           return [...old, ...uniqueNew];
         });
       }
@@ -86,6 +78,32 @@ export function useSessionEvents(sessionId: string | null) {
       ws.close();
     };
   }, [sessionId, queryClient]);
+
+  const subscribedRef = useRef<string | null>(null);
+
+  // Handle subscription once history is loaded
+  useEffect(() => {
+    if (isConnected && !isLoading && wsRef.current?.readyState === WebSocket.OPEN && sessionId) {
+      // Only subscribe once per sessionId + connection session
+      if (subscribedRef.current === sessionId) return;
+
+      const lastEventId = history.length > 0 ? history[history.length - 1].id : 0;
+      
+      wsRef.current.send(JSON.stringify({
+        action: 'subscribe',
+        sessionId,
+        lastEventId
+      }));
+      subscribedRef.current = sessionId;
+    }
+  }, [isConnected, isLoading, sessionId, history.length]);
+
+  // Reset subscription ref on disconnect
+  useEffect(() => {
+    if (!isConnected) {
+      subscribedRef.current = null;
+    }
+  }, [isConnected]);
 
   return { events: history, isLoading, error, refetch, sendMessage, isConnected };
 }
