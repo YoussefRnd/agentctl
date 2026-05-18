@@ -13,10 +13,11 @@ declare module 'fastify' {
 }
 
 function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
+  const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
   return {
     ...row,
-    data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
-  };
+    data: data as ACPEventRow['data'],
+  } as unknown as ACPEventRow;
 }
 
 export default fp(async (fastify) => {

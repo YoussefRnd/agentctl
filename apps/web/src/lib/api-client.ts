@@ -1,5 +1,5 @@
 import { parseWebEnv } from '@agentctl/shared';
-import { ApiError } from './api-error.js';
+import { ApiError } from './api-error';
 
 const env = parseWebEnv(import.meta.env);
 
@@ -9,37 +9,52 @@ export const apiClient = {
     const headers = new Headers(options.headers);
     headers.set('Content-Type', 'application/json');
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      credentials: 'include',
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: 'include',
+      });
 
-    if (response.status === 401) {
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-      throw new ApiError('Unauthorized', 401);
-    }
-
-    if (!response.ok) {
-      let detail = response.statusText;
-      try {
-        const body = (await response.clone().json()) as { error?: unknown; message?: unknown };
-        const bodyMessage =
-          typeof body.error === 'string'
-            ? body.error
-            : typeof body.message === 'string'
-              ? body.message
-              : null;
-        if (bodyMessage) detail = bodyMessage;
-      } catch {
-        // Keep the HTTP status text if the response body is not JSON.
+      if (response.status === 401) {
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        throw new ApiError('Unauthorized', 401);
       }
 
-      throw new ApiError(detail, response.status);
-    }
+      if (response.status >= 500) {
+        throw new ApiError('Internal Server Error', response.status);
+      }
 
-    return response.json() as Promise<T>;
+      if (!response.ok) {
+        let detail = response.statusText;
+        try {
+          const body = (await response.clone().json()) as { error?: unknown; message?: unknown };
+          const bodyMessage =
+            typeof body.error === 'string'
+              ? body.error
+              : typeof body.message === 'string'
+                ? body.message
+                : null;
+          if (bodyMessage) detail = bodyMessage;
+        } catch {
+          // Keep the HTTP status text if the response body is not JSON.
+        }
+
+        throw new ApiError(detail, response.status);
+      }
+
+      const data = (await response.json()) as T;
+      return data;
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (error instanceof Error && error.name === 'AbortError') throw error;
+      
+      throw new ApiError(
+        error instanceof Error ? error.message : 'Network error',
+        0
+      );
+    }
   },
 };

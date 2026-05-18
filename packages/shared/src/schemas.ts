@@ -104,15 +104,61 @@ export const sessionStatusSchema = z.enum([
 ]);
 
 /**
+ * ACP Event Data Schemas
+ */
+export const acpEventTextDataSchema = z.object({
+  content: z.string(),
+});
+
+export const acpEventToolCallDataSchema = z.object({
+  name: z.string(),
+  arguments: z.record(z.string(), z.any()).optional(),
+  toolCallId: z.string().optional(),
+}).loose();
+
+export const acpEventApprovalRequestDataSchema = z.object({
+  message: z.string().optional(),
+  toolCallId: z.string().optional(),
+  request: z.any().optional(),
+});
+
+/**
  * ACP Event Schema
  * Note: 'compact' is a special event type used by agentctl to capture 
  * the native agent summarization output during handoffs between sessions.
  */
-export const acpEventSchema = z.object({
-  type: z.enum(['tool_call', 'text', 'diff', 'status', 'compact', 'approval_request']),
-  data: z.unknown(),
-  createdAt: z.coerce.date(),
-});
+export const acpEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('text'),
+    data: acpEventTextDataSchema,
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('tool_call'),
+    data: acpEventToolCallDataSchema,
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('approval_request'),
+    data: acpEventApprovalRequestDataSchema,
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('diff'),
+    data: z.record(z.string(), z.any()),
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('status'),
+    data: z.record(z.string(), z.any()),
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('compact'),
+    data: z.record(z.string(), z.any()),
+    createdAt: z.coerce.date(),
+  }),
+]);
 
 export type Project = z.infer<typeof projectSchema>;
 export type DriverName = z.infer<typeof driverSchema>;
@@ -124,15 +170,17 @@ export type ThinkingEffort = z.infer<typeof thinkingEffortSchema>;
 export type SessionWithCapabilities = z.infer<typeof sessionWithCapabilitiesSchema>;
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type ACPEvent = z.infer<typeof acpEventSchema>;
+export type ACPEventTextData = z.infer<typeof acpEventTextDataSchema>;
+export type ACPEventToolCallData = z.infer<typeof acpEventToolCallDataSchema>;
+export type ACPEventApprovalRequestData = z.infer<typeof acpEventApprovalRequestDataSchema>;
 export type DriverStatus = z.infer<typeof driverStatusSchema>;
 export type ACPConfigOption = z.infer<typeof acpConfigOptionSchema>;
 export type DriverDiscovery = z.infer<typeof driverDiscoverySchema>;
 
-export interface ACPEventRow extends Omit<ACPEvent, 'createdAt'> {
+export type ACPEventRow = ACPEvent & {
   id: number;
   sessionId: string;
-  createdAt: Date;
-}
+};
 
 // ACP Registry types
 export const registryDistributionNpxSchema = z.object({

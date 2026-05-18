@@ -6,10 +6,11 @@ import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { ACPEventRow } from '@agentctl/shared';
 
 function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
+  const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
   return {
     ...row,
-    data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
-  };
+    data: data as ACPEventRow['data'],
+  } as unknown as ACPEventRow;
 }
 
 export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
