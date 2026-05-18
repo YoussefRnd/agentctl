@@ -10,9 +10,14 @@
   --color-surface-hover: rgba(26, 29, 33, 0.8);
   --color-border: rgba(255, 255, 255, 0.08);
   --color-glass-highlight: rgba(255, 255, 255, 0.03);
+
+  /* New Tokens */
+  --color-glass-surface: rgba(255, 255, 255, 0.03);
+  --color-glass-border: rgba(255, 255, 255, 0.08);
+  --shadow-immersive-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
   
   --color-text-main: #e2e4e7;
-  --color-text-muted: #8e939a;
+  --color-text-muted: #a1a1aa; /* Increased contrast from #8e939a */
   
   --color-accent: #3b82f6;
   --color-accent-glow: rgba(59, 130, 246, 0.3);
@@ -28,11 +33,19 @@
   /* Typography */
   --font-display: "Geist", "Space Grotesk", system-ui;
   --font-sans: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+
+  --font-size-xs-caps: 10px;
+  --font-size-sm-label: 12px;
 }
 
 @layer base {
   body {
     @apply bg-background text-text-main font-sans antialiased m-0;
+  }
+
+  label {
+    font-size: var(--font-size-sm-label);
+    @apply font-medium text-text-muted;
   }
 }
 
