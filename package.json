@@ -9,6 +9,7 @@
     "lint": "turbo lint",
     "format": "prettier --write .",
     "typecheck": "tsc --build",
+    "clean": "find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name dist -type d -exec rm -rf {} + 2>/dev/null; rm -rf .turbo",
     "prepare": "husky"
   },
   "keywords": [],

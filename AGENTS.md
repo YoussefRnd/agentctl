@@ -18,6 +18,7 @@ pnpm dev            # turbo dev (persistent)
 pnpm lint           # turbo lint (dependsOn ^build)
 pnpm typecheck      # tsc --build (root tsconfig with project references)
 pnpm format         # prettier --write .
+pnpm clean          # remove all node_modules, dist/, .turbo cache, and prune pnpm store
 ```
 
 Pre-commit hook runs `pnpm typecheck && pnpm lint`. No auto-format.
