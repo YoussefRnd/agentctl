@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import { Sidebar } from './Sidebar';
-import { useSession } from '../contexts/SessionContext';
+import { Sidebar } from '../../shell/components/Sidebar';
+import { useSession } from '../../../contexts/SessionContext';
 import { SessionHeader } from './SessionHeader';
 import { Workbench, type WorkbenchTab } from './Workbench';
 import { MainFeed } from './MainFeed';
@@ -14,7 +14,6 @@ export function SessionWorkspace() {
   const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Toggle with Cmd/Ctrl + \
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
@@ -52,11 +51,7 @@ export function SessionWorkspace() {
         />
       }
       workbench={
-        <Workbench
-          isOpen={isWorkbenchOpen}
-          tab={workbenchTab}
-          onTabChange={setWorkbenchTab}
-        />
+        <Workbench isOpen={isWorkbenchOpen} tab={workbenchTab} onTabChange={setWorkbenchTab} />
       }
     >
       <MainFeed

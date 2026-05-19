@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster, toast } from 'sonner';
 import { App } from './App';
-import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { AppErrorBoundary } from './features/shell/components/AppErrorBoundary';
 import './index.css';
 import 'highlight.js/styles/github-dark.css';
 
@@ -60,6 +60,6 @@ if (rootElement) {
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
       <Root />
-    </React.StrictMode>
+    </React.StrictMode>,
   );
 }

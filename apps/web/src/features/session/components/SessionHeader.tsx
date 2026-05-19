@@ -1,5 +1,5 @@
 import { Menu, PanelRight } from 'lucide-react';
-import { Button } from './ui/Button';
+import { Button } from '../../../components/ui/Button';
 
 interface SessionHeaderProps {
   sessionId: string;
@@ -40,7 +40,7 @@ export function SessionHeader({
           size="sm"
           onClick={onToggleWorkbench}
           className={`p-1.5 ${isWorkbenchOpen ? 'bg-accent/10 text-accent' : ''}`}
-          title="Toggle Workbench (Cmd/Ctrl + \)"
+          title="Toggle Workbench (Cmd/Ctrl + \\)"
           aria-label="Toggle Workbench"
         >
           <PanelRight className="w-4 h-4" />

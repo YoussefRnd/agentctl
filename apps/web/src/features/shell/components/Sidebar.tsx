@@ -10,10 +10,10 @@ import {
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { apiClient } from '../lib/api-client';
+import { apiClient } from '../../../lib/api-client';
 import { useState, useMemo, useEffect, useRef, type MouseEvent } from 'react';
 import type { DriverDiscovery, SessionStatus } from '@agentctl/shared';
-import { createProjectSession, type SidebarProject } from '../lib/project-sessions';
+import { createProjectSession, type SidebarProject } from '../../../lib/project-sessions';
 
 export function Sidebar() {
   const { sessionId: activeSessionId } = useParams();
@@ -93,7 +93,6 @@ export function Sidebar() {
       aria-label="Main Sidebar"
       className="h-full w-[260px] shrink-0 liquid-glass border-r border-border flex flex-col overflow-hidden"
     >
-      {/* Brand & Search */}
       <div className="p-4 space-y-4 border-b border-border/50 bg-glass-highlight">
         <div className="flex items-center justify-between">
           <h2 className="text-[10px] font-display font-bold text-text-muted uppercase tracking-[0.2em]">
@@ -121,7 +120,6 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Projects Header */}
       <div className="px-4 py-2 flex items-center justify-between group">
         <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-wider opacity-50">
           Projects
@@ -143,7 +141,6 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Projects List */}
       <div className="flex-1 overflow-y-auto px-2 pb-4">
         {isLoading ? (
           <div className="px-2 space-y-3 mt-2">

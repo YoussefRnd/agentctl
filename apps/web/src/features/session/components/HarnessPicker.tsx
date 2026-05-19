@@ -1,8 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Bot, Cpu, Zap } from 'lucide-react';
+import { Search, Bot, Cpu, Zap, LogIn, Loader2 } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
+import { useDrivers } from '../../../hooks/useDrivers';
 
 interface HarnessPickerProps {
+  sessionId: string | null;
   selectedId: string | null;
   selectedModelId?: string | null;
   onSelect: (driverId: string, modelId?: string) => void;
@@ -11,14 +13,23 @@ interface HarnessPickerProps {
   onClose: () => void;
 }
 
-export function HarnessPicker({ selectedId, selectedModelId, onSelect, drivers, isOpen, _onClose }: HarnessPickerProps & { _onClose?: () => void }) {
+export function HarnessPicker({
+  sessionId,
+  selectedId,
+  selectedModelId,
+  onSelect,
+  drivers,
+  isOpen,
+  onClose,
+}: HarnessPickerProps) {
+  const { login, isLoggingIn } = useDrivers(sessionId);
   const [search, setSearch] = useState('');
   const [internalDriverId, setInternalDriverId] = useState<string | null>(selectedId);
 
   useEffect(() => {
     if (isOpen) {
       setInternalDriverId(selectedId);
-      setSearch(''); // Reset search on open
+      setSearch('');
     }
   }, [isOpen, selectedId]);
 
@@ -30,7 +41,6 @@ export function HarnessPicker({ selectedId, selectedModelId, onSelect, drivers, 
     const modelOption = activeDriver.configOptions?.find(
       (opt) => opt.id === 'model' || opt.id === 'selectedModel',
     );
-    // modelOption.options is always an array based on schema, so we just check if modelOption exists
     if (!modelOption) return [];
 
     return modelOption.options.filter(
@@ -44,12 +54,13 @@ export function HarnessPicker({ selectedId, selectedModelId, onSelect, drivers, 
 
   return (
     <div className="absolute bottom-full left-0 mb-6 w-[560px] bg-surface border border-border rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden flex animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300 z-50">
-      {/* Left Column: Agents */}
       <div className="w-[60px] bg-background/80 border-r border-border flex flex-col items-center py-4 gap-3 shrink-0 overflow-y-auto scrollbar-hide">
         {drivers.map((d) => {
           const isSelected = d.id === internalDriverId;
           const isReady = d.status === 'ready';
-          
+          const needsAuth = d.status === 'needs_auth';
+          const isEnabled = isReady || needsAuth;
+
           return (
             <button
               key={d.id}
@@ -57,24 +68,26 @@ export function HarnessPicker({ selectedId, selectedModelId, onSelect, drivers, 
                 setInternalDriverId(d.id);
                 setSearch('');
               }}
-              disabled={!isReady}
-              title={d.label}
+              disabled={!isEnabled}
+              title={d.label + (needsAuth ? ' (Needs Authentication)' : '')}
               className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-all duration-200 ${
                 isSelected
                   ? 'bg-accent/15 text-accent shadow-[0_0_15px_rgba(59,130,246,0.2)] border border-accent/30'
                   : 'text-text-muted hover:text-text-main hover:bg-surface-hover border border-transparent'
-              } ${!isReady ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${!isEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {d.id.includes('claude') ? <Bot className="w-5 h-5" /> : <Cpu className="w-5 h-5" />}
               {isSelected && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-accent rounded-r-full" />
+              )}
+              {needsAuth && !isSelected && (
+                <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full" />
               )}
             </button>
           );
         })}
       </div>
 
-      {/* Right Column: Models */}
       <div className="flex-1 flex flex-col min-w-0 bg-surface">
         <div className="p-4 border-b border-border/50 bg-background/20">
           <div className="relative group">
@@ -93,7 +106,51 @@ export function HarnessPicker({ selectedId, selectedModelId, onSelect, drivers, 
         </div>
 
         <div className="h-[360px] overflow-y-auto p-2 space-y-1 scrollbar-hide">
-          {models.length === 0 ? (
+          {activeDriver.status === 'needs_auth' ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8">
+              <div className="w-16 h-16 bg-yellow-500/10 rounded-full flex items-center justify-center mb-4">
+                <Bot className="w-8 h-8 text-yellow-500" />
+              </div>
+              <h3 className="text-[15px] font-bold text-text-main mb-2">Authentication Required</h3>
+              <p className="text-[13px] text-text-muted mb-6 max-w-[280px]">
+                {activeDriver.label} needs to be logged in or configured with an API key before it
+                can be used.
+              </p>
+
+              <div className="flex flex-col gap-3 w-full max-w-[280px]">
+                {activeDriver.authMethods.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const methodId = activeDriver.authMethods[0].id;
+                      if (methodId) login({ driverId: activeDriver.id, methodId });
+                      onClose();
+                    }}
+                    disabled={isLoggingIn}
+                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-accent hover:bg-accent-hover text-background rounded-xl text-[13px] font-bold transition-all shadow-lg disabled:opacity-50"
+                  >
+                    {isLoggingIn ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <LogIn className="w-4 h-4" />
+                    )}
+                    {activeDriver.authMethods[0].name}
+                  </button>
+                )}
+
+                <div className="text-[11px] text-text-muted text-left mb-1 uppercase tracking-wider font-bold">
+                  Manual Configuration
+                </div>
+                <div className="p-3 bg-background/50 border border-border rounded-xl text-[12px] font-mono text-left break-all select-all">
+                  {activeDriver.id.includes('claude')
+                    ? 'export ANTHROPIC_API_KEY=...'
+                    : 'export GOOGLE_API_KEY=...'}
+                </div>
+                <p className="text-[11px] text-text-muted mt-1 text-center">
+                  Restart the server after setting environment variables.
+                </p>
+              </div>
+            </div>
+          ) : models.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <button
                 onClick={() => {
@@ -122,7 +179,9 @@ export function HarnessPicker({ selectedId, selectedModelId, onSelect, drivers, 
                     onSelect(activeDriver.id, model.value);
                   }}
                   className={`w-full flex items-center justify-between px-3 py-3 rounded-xl group transition-all text-left ${
-                    isSelected ? 'bg-accent/5 border border-accent/20' : 'hover:bg-surface-hover border border-transparent'
+                    isSelected
+                      ? 'bg-accent/5 border border-accent/20'
+                      : 'hover:bg-surface-hover border border-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-4 min-w-0">

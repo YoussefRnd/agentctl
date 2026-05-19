@@ -10,24 +10,28 @@ interface MagicBarProps {
 
 export function MagicBar({ files, onAction, isReviewOpen, onOpenReview }: MagicBarProps) {
   const hasChanges = files.length > 0;
-  
+
   return (
     <div className="flex items-center gap-2 p-2 px-4 mb-2">
-      <button 
-        onClick={() => { onOpenReview(); }}
+      <button
+        onClick={() => {
+          onOpenReview();
+        }}
         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
-          isReviewOpen 
-            ? 'bg-accent/10 border-accent text-accent' 
+          isReviewOpen
+            ? 'bg-accent/10 border-accent text-accent'
             : 'border-transparent text-text-muted hover:bg-surface-hover hover:border-border'
         }`}
       >
         <Eye className="w-3.5 h-3.5" />
         Review Changes
       </button>
-      
+
       {hasChanges && (
-        <button 
-          onClick={() => { onAction('Generate Commit'); }}
+        <button
+          onClick={() => {
+            onAction('Generate Commit');
+          }}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border border-transparent text-text-muted hover:bg-surface-hover hover:border-border"
         >
           <FileCheck className="w-3.5 h-3.5" />
@@ -36,8 +40,10 @@ export function MagicBar({ files, onAction, isReviewOpen, onOpenReview }: MagicB
       )}
 
       {hasChanges && (
-        <button 
-          onClick={() => { onAction('Create PR'); }}
+        <button
+          onClick={() => {
+            onAction('Create PR');
+          }}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border border-transparent text-text-muted hover:bg-surface-hover hover:border-border"
         >
           <GitPullRequest className="w-3.5 h-3.5" />
@@ -45,8 +51,10 @@ export function MagicBar({ files, onAction, isReviewOpen, onOpenReview }: MagicB
         </button>
       )}
 
-      <button 
-        onClick={() => { onAction('Investigate'); }}
+      <button
+        onClick={() => {
+          onAction('Investigate');
+        }}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border border-transparent text-text-muted hover:bg-surface-hover hover:border-border"
       >
         <Search className="w-3.5 h-3.5" />

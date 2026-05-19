@@ -27,7 +27,6 @@ export function SessionLayout({
         {sidebar}
       </div>
 
-      {/* Mobile Sidebar Overlay */}
       <aside
         className={`fixed inset-y-0 left-0 w-[280px] bg-background z-50 border-r border-border transition-transform duration-300 ease-in-out lg:hidden ${
           isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -36,7 +35,6 @@ export function SessionLayout({
         <div className="h-full flex flex-col">{sidebar}</div>
       </aside>
 
-      {/* Mobile Sidebar Backdrop */}
       {isMobileSidebarOpen && (
         <div
           className="fixed inset-0 bg-background/60 backdrop-blur-sm z-40 lg:hidden"
@@ -44,7 +42,6 @@ export function SessionLayout({
         />
       )}
 
-      {/* Main Content Area */}
       <main className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden relative">
         {header}
         {children}
@@ -52,7 +49,6 @@ export function SessionLayout({
 
       {workbench}
 
-      {/* Workbench Mobile Backdrop */}
       {isWorkbenchOpen && (
         <div
           className="absolute inset-0 bg-background/50 backdrop-blur-sm z-20 lg:hidden"

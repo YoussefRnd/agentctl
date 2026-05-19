@@ -1,10 +1,21 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "outDir": "./dist",
-    "module": "Preserve",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx"
-  },
-  "include": ["src/**/*", "vite-env.d.ts", "vite.config.ts", "vitest.config.ts"]
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"lucide-react": [
+				"src/lib/lucide-react.tsx"
+			]
+		},
+		"outDir": "./dist",
+		"module": "Preserve",
+		"moduleResolution": "bundler",
+		"jsx": "react-jsx"
+	},
+	"include": [
+		"src/**/*",
+		"vite-env.d.ts",
+		"vite.config.ts",
+		"vitest.config.ts"
+	]
 }

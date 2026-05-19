@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { SessionWorkspace } from '../components/SessionWorkspace';
+import { SessionWorkspace } from '../features/session/components/SessionWorkspace';
 import { SessionProvider } from '../contexts/SessionContext';
 
 export function SessionView() {

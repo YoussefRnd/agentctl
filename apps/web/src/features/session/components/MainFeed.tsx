@@ -2,9 +2,9 @@ import { EventFeed } from './EventFeed';
 import { MagicBar } from './MagicBar';
 import { CommandBar } from './CommandBar';
 import { ApprovalCard } from './cards/ApprovalCard';
-import { useSession } from '../contexts/SessionContext';
-import { useSessionActions } from '../hooks/useSessionActions';
-import { useDrivers } from '../hooks/useDrivers';
+import { useSession } from '../../../contexts/SessionContext';
+import { useSessionActions } from '../../../hooks/useSessionActions';
+import { useDrivers } from '../../../hooks/useDrivers';
 import type { WorkbenchTab } from './Workbench';
 
 interface MainFeedProps {

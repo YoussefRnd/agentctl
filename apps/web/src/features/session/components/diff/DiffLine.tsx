@@ -1,4 +1,4 @@
-import type { DiffLine as DiffLineType } from '../../utils/diff-parser';
+import type { DiffLine as DiffLineType } from '../../../../utils/diff-parser';
 
 interface DiffLineProps {
   line: DiffLineType;
@@ -21,25 +21,19 @@ export function DiffLine({ line }: DiffLineProps) {
     let lastIndex = 0;
 
     line.highlights.forEach((highlight, idx) => {
-      // Add non-highlighted segment
       if (highlight.start > lastIndex) {
         segments.push(line.content.slice(lastIndex, highlight.start));
       }
 
-      // Add highlighted segment
       segments.push(
-        <span
-          key={idx}
-          className={`${isAdded ? 'bg-success/30' : 'bg-danger/30'} rounded-sm`}
-        >
+        <span key={idx} className={`${isAdded ? 'bg-success/30' : 'bg-danger/30'} rounded-sm`}>
           {line.content.slice(highlight.start, highlight.end)}
-        </span>
+        </span>,
       );
 
       lastIndex = highlight.end;
     });
 
-    // Add remaining non-highlighted segment
     if (lastIndex < line.content.length) {
       segments.push(line.content.slice(lastIndex));
     }
@@ -48,19 +42,17 @@ export function DiffLine({ line }: DiffLineProps) {
   };
 
   return (
-    <div className={`flex font-mono text-xs leading-5 ${bgColor} group hover:bg-surface-hover/50 transition-colors`}>
+    <div
+      className={`flex font-mono text-xs leading-5 ${bgColor} group hover:bg-surface-hover/50 transition-colors`}
+    >
       <div className="w-12 shrink-0 select-none text-right pr-2 border-r border-border/30 opacity-40">
         {line.oldLineNumber ?? ''}
       </div>
       <div className="w-12 shrink-0 select-none text-right pr-2 border-r border-border/30 opacity-40">
         {line.newLineNumber ?? ''}
       </div>
-      <div className={`w-6 shrink-0 select-none text-center opacity-60 ${textColor}`}>
-        {symbol}
-      </div>
-      <div className="flex-1 px-1 break-all whitespace-pre-wrap">
-        {renderContent()}
-      </div>
+      <div className={`w-6 shrink-0 select-none text-center opacity-60 ${textColor}`}>{symbol}</div>
+      <div className="flex-1 px-1 break-all whitespace-pre-wrap">{renderContent()}</div>
     </div>
   );
 }

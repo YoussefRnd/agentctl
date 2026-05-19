@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Folder, ChevronLeft, Home, GitBranch, AlertCircle } from 'lucide-react';
-import { apiClient } from '../lib/api-client';
+import { apiClient } from '../../../lib/api-client';
 
 interface FolderEntry {
   name: string;
@@ -15,11 +15,7 @@ interface ExploreResponse {
   error?: string;
 }
 
-export function DirectoryExplorer({ 
-  onSelect 
-}: { 
-  onSelect: (path: string) => void 
-}) {
+export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => void }) {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [folders, setFolders] = useState<FolderEntry[]>([]);
@@ -60,7 +56,9 @@ export function DirectoryExplorer({
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => { void explore(); }}
+            onClick={() => {
+              void explore();
+            }}
             className="p-1.5 hover:bg-surface rounded-lg transition-colors text-text-muted"
             title="Home"
           >
@@ -68,7 +66,9 @@ export function DirectoryExplorer({
           </button>
           {parentPath && parentPath !== currentPath && (
             <button
-              onClick={() => { void explore(parentPath); }}
+              onClick={() => {
+                void explore(parentPath);
+              }}
               className="p-1.5 hover:bg-surface rounded-lg transition-colors text-text-muted"
               title="Go Up"
             >
@@ -77,7 +77,7 @@ export function DirectoryExplorer({
           )}
         </div>
       </div>
-      
+
       <div className="h-80 overflow-y-auto p-2 scrollbar-hide">
         {isLoading ? (
           <div className="h-full flex items-center justify-center">
@@ -87,8 +87,10 @@ export function DirectoryExplorer({
           <div className="h-full flex flex-col items-center justify-center text-center p-8">
             <AlertCircle className="w-8 h-8 text-danger mb-3 opacity-50" />
             <p className="text-[13px] font-bold text-text-main">{error}</p>
-            <button 
-              onClick={() => { void explore(currentPath ?? undefined); }}
+            <button
+              onClick={() => {
+                void explore(currentPath ?? undefined);
+              }}
               className="mt-4 text-[11px] font-black text-accent hover:underline uppercase tracking-widest"
             >
               Retry
@@ -105,16 +107,28 @@ export function DirectoryExplorer({
               <div
                 key={f.path}
                 className="group flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent/5 transition-all text-left cursor-pointer"
-                onClick={() => { void explore(f.path); }}
-                onDoubleClick={() => { onSelect(f.path); }}
+                onClick={() => {
+                  void explore(f.path);
+                }}
+                onDoubleClick={() => {
+                  onSelect(f.path);
+                }}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`p-1.5 rounded-lg ${f.isRepo ? 'bg-success/10 text-success' : 'bg-surface-hover text-text-muted group-hover:text-accent'}`}>
+                  <div
+                    className={`p-1.5 rounded-lg ${f.isRepo ? 'bg-success/10 text-success' : 'bg-surface-hover text-text-muted group-hover:text-accent'}`}
+                  >
                     {f.isRepo ? <GitBranch className="w-4 h-4" /> : <Folder className="w-4 h-4" />}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[13px] font-medium text-text-main group-hover:text-accent transition-colors">{f.name}</span>
-                    {f.isRepo && <span className="text-[10px] text-success/60 font-medium -mt-0.5 tracking-tight uppercase">GIT REPOSITORY</span>}
+                    <span className="text-[13px] font-medium text-text-main group-hover:text-accent transition-colors">
+                      {f.name}
+                    </span>
+                    {f.isRepo && (
+                      <span className="text-[10px] text-success/60 font-medium -mt-0.5 tracking-tight uppercase">
+                        GIT REPOSITORY
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button
@@ -125,18 +139,21 @@ export function DirectoryExplorer({
                   className="px-3 py-1 bg-accent/10 hover:bg-accent text-accent hover:text-background text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-all"
                 >
                   SELECT
-                  </button>
-                </div>
+                </button>
+              </div>
             ))}
           </div>
         )}
       </div>
-      
+
       <div className="px-4 py-3 bg-background/30 border-t border-border flex items-center justify-between text-[11px] text-text-muted font-medium">
         <span>Choose a project directory</span>
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <kbd className="bg-surface px-1.5 py-0.5 rounded border border-border">Double Click</kbd> to open
+            <kbd className="bg-surface px-1.5 py-0.5 rounded border border-border">
+              Double Click
+            </kbd>{' '}
+            to open
           </span>
         </div>
       </div>

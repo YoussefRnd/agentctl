@@ -1,4 +1,4 @@
-import type { DiffHunk } from '../../utils/diff-parser';
+import type { DiffHunk } from '../../../../utils/diff-parser';
 import { DiffLine } from './DiffLine';
 
 interface DiffBlockProps {
@@ -12,9 +12,7 @@ export function DiffBlock({ path, hunks, onStage, onRevert }: DiffBlockProps) {
   return (
     <div className="rounded border border-border bg-background overflow-hidden">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 px-3 py-2 bg-surface border-b border-border">
-        <div className="font-mono text-xs font-medium text-text-main truncate">
-          {path}
-        </div>
+        <div className="font-mono text-xs font-medium text-text-main truncate">{path}</div>
         <div className="flex items-center gap-2">
           {onRevert && (
             <button

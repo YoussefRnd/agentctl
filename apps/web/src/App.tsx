@@ -1,8 +1,8 @@
 import { Routes, Route } from 'react-router-dom';
-import { Layout } from './components/Layout';
+import { Layout } from './features/shell/components/Layout';
 import { SessionView } from './routes/SessionView';
 import { LoginView } from './routes/LoginView';
-import { NewProjectPalette } from './components/NewProjectPalette';
+import { NewProjectPalette } from './features/project/components/NewProjectPalette';
 
 export function App() {
   return (

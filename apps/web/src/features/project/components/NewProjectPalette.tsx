@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DirectoryExplorer } from './DirectoryExplorer';
 import { AlertCircle, Sparkles } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
-import { apiClient } from '../lib/api-client';
-import { openProjectSession, type SidebarProject } from '../lib/project-sessions';
+import { apiClient } from '../../../lib/api-client';
+import { openProjectSession, type SidebarProject } from '../../../lib/project-sessions';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();
@@ -58,7 +58,7 @@ export function NewProjectPalette() {
                 ? 'Pick a Git project folder and start collaborating with your agents.'
                 : 'Select a project from the sidebar to continue, or open a new one.'}
             </p>
-            
+
             {mutation.error && (
               <div className="mb-6 rounded-xl border border-danger/30 bg-danger/10 p-4 text-left text-sm text-text-main">
                 <div className="flex items-center gap-2 font-bold text-danger">
@@ -68,7 +68,7 @@ export function NewProjectPalette() {
                 <p className="mt-1 text-text-muted">{mutation.error.message}</p>
               </div>
             )}
-            
+
             {shouldShowExplorer ? (
               <DirectoryExplorer onSelect={handleFolderSelect} />
             ) : (

@@ -65,10 +65,28 @@ export function useDrivers(sessionId: string | null) {
     });
   };
 
+  const loginMutation = useMutation({
+    mutationFn: async ({ driverId, methodId }: { driverId: string; methodId: string }) => {
+      return apiClient.fetch(`/api/drivers/${driverId}/login`, {
+        method: 'POST',
+        body: JSON.stringify({ methodId }),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      toast.success('Login initiated. Please check your browser or terminal.');
+    },
+    onError: (err) => {
+      toast.error(`Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    },
+  });
+
   return {
     drivers,
     isLoadingDrivers,
     switchProvider,
+    login: loginMutation.mutate,
+    isLoggingIn: loginMutation.isPending,
     isSwitching: providerMutation.isPending,
   };
 }
