@@ -7,6 +7,6 @@ export * from './git/worktree-manager.js';
 export * from './agent/acp-transport.js';
 export * from './agent/acp-probe.js';
 export * from './agent/acp-session.js';
-export * from './agent/driver-registry.js';
+export * from './agent/acp-driver-registry.js';
 export * from './config/index.js';
 export * from './logger.js';
