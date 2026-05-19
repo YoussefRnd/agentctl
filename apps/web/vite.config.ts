@@ -9,7 +9,7 @@ export default defineConfig({
   envDir: path.resolve(__dirname, '../../'),
   resolve: {
     alias: {
-      'lucide-react': path.resolve(__dirname, './src/lib/lucide-react.tsx'),
+      'lucide-react': path.resolve(__dirname, './src/utils/lucide-react.tsx'),
     },
   },
   server: {

@@ -31,6 +31,8 @@ export function CommandBar({
   const selectedId = propSelectedHarnessId ?? internalSelectedHarnessId;
 
   const selectedDriver = drivers.find((d) => d.id === selectedId);
+  const firstId = drivers[0]?.id ?? null;
+  const resolvedId = selectedId ?? firstId;
   const selectedDriverLabel =
     selectedDriver !== undefined ? selectedDriver.label : 'Select harness';
 
@@ -79,7 +81,7 @@ export function CommandBar({
             setIsPickerOpen(false);
           }}
           drivers={drivers}
-          selectedId={selectedId ?? drivers[0]?.id ?? null}
+          selectedId={resolvedId}
           selectedModelId={propSelectedModelId ?? null}
           onSelect={handleHarnessSelect}
         />

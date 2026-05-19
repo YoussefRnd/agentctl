@@ -13,7 +13,7 @@ export interface ProbeConnectionHandle {
       protocolVersion: number;
       clientInfo: { name: string; version: string };
     }): Promise<{
-      authMethods?: Array<{ id: string; name: string }>;
+      authMethods?: { id: string; name: string }[];
     }>;
     newSession(params: { cwd: string; mcpServers: [] }): Promise<{
       configOptions?: ACPConfigOption[] | null;

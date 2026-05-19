@@ -44,14 +44,6 @@ export const sessionProviderSelectionSchema = z.object({
   selectedThinkingEffort: thinkingEffortSchema,
 });
 
-export const driverCapabilitySchema = z.object({
-  driver: driverSchema,
-  label: z.string().min(1),
-  command: z.string().min(1),
-  models: z.array(z.string().min(1)),
-  thinkingEfforts: z.array(thinkingEffortSchema),
-});
-
 export const driverStatusSchema = z.enum(['ready', 'not_found', 'error', 'needs_auth']);
 
 export const acpConfigOptionSchema = z.object({
@@ -67,6 +59,17 @@ export const acpConfigOptionSchema = z.object({
       description: z.string().optional(),
     }),
   ),
+});
+
+export const driverCapabilitySchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: driverStatusSchema,
+  command: z.string(),
+  configOptions: z.array(acpConfigOptionSchema).optional(),
+  version: z.string().optional(),
+  description: z.string().optional(),
+  icon: z.string().optional(),
 });
 
 export const authMethodSchema = z.object({

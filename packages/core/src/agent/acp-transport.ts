@@ -41,6 +41,7 @@ export function createAgentConnection(
   const stdin = child.stdin;
   const stdout = child.stdout;
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (stdin === null || stdout === null) {
     child.kill();
     throw new Error('Spawned agent missing stdin/stdout');

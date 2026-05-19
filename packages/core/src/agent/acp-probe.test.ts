@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import type { ChildProcess } from 'node:child_process';
-import type { DriverDiscovery, RegistryAgent } from '@agentctl/shared';
+import type { RegistryAgent } from '@agentctl/shared';
 import { probeAgent } from './acp-probe.js';
 
 function createAgent(): RegistryAgent {
@@ -34,7 +34,7 @@ function createChild(): { child: ChildProcess; killCount: () => number } {
   return { child, killCount: () => killCount };
 }
 
-test('probeAgent returns ready discovery data on success', async () => {
+await test('probeAgent returns ready discovery data on success', async () => {
   const agent = createAgent();
   const { child, killCount } = createChild();
   const initCalls: unknown[] = [];
@@ -44,19 +44,21 @@ test('probeAgent returns ready discovery data on success', async () => {
     agent,
     { command: 'agent', args: ['--probe'], env: { AGENTCTL_TEST_FLAG: '1' } },
     {
-      debug() {},
-      error() {},
-      warn() {},
-      info() {},
+      debug: () => undefined,
+      error: () => undefined,
+      warn: () => undefined,
+      info: () => undefined,
     },
     {
       createConnection: () => ({
         child,
         connection: {
+          // eslint-disable-next-line @typescript-eslint/require-await
           initialize: async (params) => {
             initCalls.push(params);
             return { authMethods: [{ id: 'login', name: 'Login' }] };
           },
+          // eslint-disable-next-line @typescript-eslint/require-await
           newSession: async (params) => {
             sessionCalls.push(params);
             return {
@@ -87,7 +89,7 @@ test('probeAgent returns ready discovery data on success', async () => {
   assert.equal(killCount(), 1);
 });
 
-test('probeAgent maps auth_required to needs_auth', async () => {
+await test('probeAgent maps auth_required to needs_auth', async () => {
   const agent = createAgent();
   const { child, killCount } = createChild();
 
@@ -95,17 +97,20 @@ test('probeAgent maps auth_required to needs_auth', async () => {
     agent,
     { command: 'agent', args: [], env: {} },
     {
-      debug() {},
-      error() {},
-      warn() {},
-      info() {},
+      debug: () => undefined,
+      error: () => undefined,
+      warn: () => undefined,
+      info: () => undefined,
     },
     {
       createConnection: () => ({
         child,
         connection: {
+          // eslint-disable-next-line @typescript-eslint/require-await
           initialize: async () => ({ authMethods: [] }),
+          // eslint-disable-next-line @typescript-eslint/require-await
           newSession: async () => {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error
             throw {
               code: 'auth_required',
               data: {
@@ -132,7 +137,7 @@ test('probeAgent maps auth_required to needs_auth', async () => {
   assert.equal(killCount(), 1);
 });
 
-test('probeAgent returns not_found when initialization times out', async () => {
+await test('probeAgent returns not_found when initialization times out', async () => {
   const agent = createAgent();
   const { child, killCount } = createChild();
 
@@ -140,17 +145,18 @@ test('probeAgent returns not_found when initialization times out', async () => {
     agent,
     { command: 'agent', args: [], env: {} },
     {
-      debug() {},
-      error() {},
-      warn() {},
-      info() {},
+      debug: () => undefined,
+      error: () => undefined,
+      warn: () => undefined,
+      info: () => undefined,
     },
     {
       timeoutMs: 1,
       createConnection: () => ({
         child,
         connection: {
-          initialize: async () => new Promise(() => {}),
+          initialize: async () => new Promise(() => undefined),
+          // eslint-disable-next-line @typescript-eslint/require-await
           newSession: async () => ({ configOptions: [] }),
           closed: Promise.resolve(),
         },

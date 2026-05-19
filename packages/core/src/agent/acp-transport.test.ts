@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
 import { cleanEnv, createAgentConnection } from './acp-transport.js';
 
-test('cleanEnv overlays values and strips npm config variables', () => {
+await test('cleanEnv overlays values and strips npm config variables', () => {
   const previousUserAgent = process.env.npm_config_user_agent;
   const previousCustom = process.env.AGENTCTL_TEST_FLAG;
 
@@ -31,7 +31,7 @@ test('cleanEnv overlays values and strips npm config variables', () => {
   }
 });
 
-test('createAgentConnection passes cleaned env to spawn and returns the child handle', () => {
+await test('createAgentConnection passes cleaned env to spawn and returns the child handle', () => {
   let killCount = 0;
   const stdin = new PassThrough();
   const stdout = new PassThrough();
@@ -71,7 +71,7 @@ test('createAgentConnection passes cleaned env to spawn and returns the child ha
 
     assert.equal(handle.child, child);
     assert.equal(capturedEnv?.AGENTCTL_TEST_FLAG, '1');
-    assert.equal(capturedEnv?.npm_config_user_agent, undefined);
+    assert.equal(capturedEnv.npm_config_user_agent, undefined);
     assert.equal(killCount, 0);
 
     stdin.destroy();
@@ -85,7 +85,7 @@ test('createAgentConnection passes cleaned env to spawn and returns the child ha
   }
 });
 
-test('createAgentConnection throws if stdio is missing', () => {
+await test('createAgentConnection throws if stdio is missing', () => {
   let killCount = 0;
   const child = {
     stdin: null,

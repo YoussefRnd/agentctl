@@ -11,7 +11,7 @@ interface CreateAgentSessionInput {
   taskSlug: string;
 }
 
-async function resolveInitialSelection(driverId: string, driver: DriverDiscovery | null) {
+function resolveInitialSelection(driverId: string, driver: DriverDiscovery | null) {
   if (!driver) {
     return {
       selectedDriver: driverId,
@@ -67,7 +67,7 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
     baseCommit = worktree.baseCommit;
   }
 
-  const selection = await resolveInitialSelection(agent, driver);
+  const selection = resolveInitialSelection(agent, driver);
 
   const [createdSession] = await fastify.db
     .insert(sessions)

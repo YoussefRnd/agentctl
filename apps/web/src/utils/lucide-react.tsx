@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from 'react';
 
-interface IconProps extends HTMLAttributes<HTMLSpanElement> {}
+type IconProps = HTMLAttributes<HTMLSpanElement>;
 
 const createIcon = (glyph: string) => {
   return function Icon({ className = '', ...props }: IconProps) {
@@ -16,34 +16,34 @@ const createIcon = (glyph: string) => {
   };
 };
 
-export const Menu = createIcon('≡');
-export const PanelRight = createIcon('▥');
-export const Folder = createIcon('📁');
+export const Menu = createIcon('\u2261');
+export const PanelRight = createIcon('\u25A5');
+export const Folder = createIcon('\uD83D\uDCC1');
 export const Plus = createIcon('+');
-export const Search = createIcon('⌕');
-export const ArrowUpDown = createIcon('⇅');
-export const ChevronRight = createIcon('›');
-export const ChevronDown = createIcon('⌄');
-export const Loader2 = createIcon('⟳');
+export const Search = createIcon('\u2315');
+export const ArrowUpDown = createIcon('\u21C5');
+export const ChevronRight = createIcon('\u203A');
+export const ChevronDown = createIcon('\u2304');
+export const Loader2 = createIcon('\u27F3');
 export const AlertCircle = createIcon('!');
-export const Sparkles = createIcon('✦');
-export const GitBranch = createIcon('⎇');
-export const Send = createIcon('➤');
-export const ChevronUp = createIcon('⌃');
-export const Zap = createIcon('⚡');
-export const Paperclip = createIcon('⌁');
-export const Bot = createIcon('◉');
-export const Cpu = createIcon('◫');
-export const LogIn = createIcon('⇢');
-export const ShieldCheck = createIcon('🛡');
-export const X = createIcon('×');
-export const Check = createIcon('✓');
+export const Sparkles = createIcon('\u2726');
+export const GitBranch = createIcon('\u2387');
+export const Send = createIcon('\u27A4');
+export const ChevronUp = createIcon('\u2303');
+export const Zap = createIcon('\u26A1');
+export const Paperclip = createIcon('\u2341');
+export const Bot = createIcon('\u25C9');
+export const Cpu = createIcon('\u25AB');
+export const LogIn = createIcon('\u21E2');
+export const ShieldCheck = createIcon('\uD83D\uDEE1');
+export const X = createIcon('\u00D7');
+export const Check = createIcon('\u2713');
 export const Terminal = createIcon('>');
-export const Eye = createIcon('◔');
-export const FileCheck = createIcon('☑');
-export const GitPullRequest = createIcon('↺');
-export const CheckCircle2 = createIcon('◉');
-export const Circle = createIcon('○');
-export const FileText = createIcon('≡');
-export const Home = createIcon('⌂');
-export const ChevronLeft = createIcon('‹');
+export const Eye = createIcon('\u25D4');
+export const FileCheck = createIcon('\u2611');
+export const GitPullRequest = createIcon('\u21BA');
+export const CheckCircle2 = createIcon('\u25C9');
+export const Circle = createIcon('\u25CB');
+export const FileText = createIcon('\u2261');
+export const Home = createIcon('\u2302');
+export const ChevronLeft = createIcon('\u2039');
