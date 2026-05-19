@@ -4,6 +4,8 @@ export * from './db/schema.js';
 export * from './utils/git-mutex.js';
 export * from './git/git-service.js';
 export * from './git/worktree-manager.js';
+export * from './agent/acp-transport.js';
+export * from './agent/acp-probe.js';
 export * from './agent/acp-session.js';
 export * from './agent/driver-registry.js';
 export * from './config/index.js';

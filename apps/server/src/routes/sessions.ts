@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { sessions, type DriverRegistry } from '@agentctl/core';
+import { sessions } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { createAgentSession } from '../utils/session-factory.js';
+import { buildLaunchConfig } from '../utils/driver-selection.js';
 import { AppError } from '../utils/app-error.js';
 
 const createSessionSchema = z.object({
@@ -21,21 +22,6 @@ const updateSessionProviderSchema = z.object({
 const sessionParamsSchema = z.object({
   id: z.uuid(),
 });
-
-function buildLaunchArgs(
-  driver: NonNullable<Awaited<ReturnType<DriverRegistry['getDriver']>>>,
-  model: string,
-  thinkingEffort: string,
-): { command: string; args: string[]; env: Record<string, string> } {
-  const extraArgs: string[] = [];
-  if (model && model !== 'default') extraArgs.push('--model', model);
-  if (thinkingEffort) extraArgs.push('--thinking-effort', thinkingEffort);
-  return {
-    command: driver.command,
-    args: [...extraArgs, ...driver.launchArgs],
-    env: driver.launchEnv,
-  };
-}
 
 export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
   fastify.withTypeProvider<ZodTypeProvider>().post(
@@ -100,7 +86,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 
       const driver = await fastify.driverRegistry.getDriver(updatedSession.selectedDriver);
       if (driver?.status === 'ready') {
-        const launch = buildLaunchArgs(
+        const launch = buildLaunchConfig(
           driver,
           updatedSession.selectedModel,
           updatedSession.selectedThinkingEffort,

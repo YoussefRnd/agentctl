@@ -1,23 +1,34 @@
-import { execSync, spawn } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import os from 'node:os';
-import { Readable, Writable } from 'node:stream';
-import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import type { DriverDiscovery, ACPConfigOption, RegistryAgent } from '@agentctl/shared';
+import fs from 'node:fs';
+import type { DriverDiscovery, RegistryAgent } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
+import { createAgentConnection } from './acp-transport.js';
+import { notFoundEntry, probeAgent } from './acp-probe.js';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
-const SUPPORTED_AGENTS = new Set(['opencode', 'claude-acp', 'gemini', 'codex-acp']);
+const SUPPORTED_AGENTS = new Set([
+  'opencode',
+  'claude-acp',
+  'claude-code-acp',
+  'gemini',
+  'gemini-acp',
+  'codex-acp',
+  'claude-code',
+  'gemini-cli',
+]);
 
-const AGENT_BINARY: Record<string, string> = {
-  'claude-acp': 'claude',
-  'gemini': 'gemini',
-  'opencode': 'opencode',
-  'codex-acp': 'codex',
-};
+const LOCAL_BINARY_HINTS = [
+  { id: 'gemini', command: 'gemini', args: ['--acp'], label: 'Gemini CLI (Local)' },
+  { id: 'opencode', command: 'opencode', args: ['acp'], label: 'OpenCode (Local)' },
+  { id: 'codex-acp', command: 'codex-acp', args: [], label: 'Codex ACP (Local)' },
+  { id: 'claude-acp', command: 'claude-agent-acp', args: [], label: 'Claude ACP Bridge (Local)' },
+];
 
-function isBinaryOnPath(binary: string): boolean {
+function isBinaryOnPath(command: string): boolean {
   try {
-    execSync(`command -v ${binary}`, { stdio: 'ignore' });
+    const checkCmd = os.platform() === 'win32' ? `where ${command}` : `which ${command}`;
+    execSync(checkCmd, { stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -46,28 +57,46 @@ function getPlatformKey(): string {
   return `${normalizedPlatform}-${normalizedArch}`;
 }
 
-function resolveLaunchConfig(agent: RegistryAgent): { command: string; args: string[]; env: Record<string, string> } | null {
-  const binary = AGENT_BINARY[agent.id];
-  if (!binary || !isBinaryOnPath(binary)) return null;
-
+function resolveLaunchConfig(
+  agent: RegistryAgent,
+): { command: string; args: string[]; env: Record<string, string> } | null {
   const platform = getPlatformKey();
 
-  // Prefer ACP flags from the registry binary entry for this platform
   const binaryTarget = agent.distribution.binary?.[platform];
   if (binaryTarget) {
+    let command = binaryTarget.cmd;
+    if (command.startsWith('./')) {
+      if (!fs.existsSync(command)) {
+        command = command.substring(2);
+      }
+    }
+
     return {
-      command: binary,
+      command,
       args: [...binaryTarget.args],
       env: binaryTarget.env,
     };
   }
 
-  // Fallback: use --acp flag (works for most agents)
-  return {
-    command: binary,
-    args: ['--acp'],
-    env: {},
-  };
+  if (agent.distribution.npx) {
+    const { package: pkg, args, env } = agent.distribution.npx;
+    return {
+      command: 'npx',
+      args: ['-y', pkg, ...args],
+      env,
+    };
+  }
+
+  if (agent.distribution.uvx) {
+    const { package: pkg, args, env } = agent.distribution.uvx;
+    return {
+      command: 'uvx',
+      args: [pkg, ...args],
+      env,
+    };
+  }
+
+  return null;
 }
 
 async function fetchRegistry(logger: Logger): Promise<RegistryAgent[]> {
@@ -75,7 +104,9 @@ async function fetchRegistry(logger: Logger): Promise<RegistryAgent[]> {
     const response = await fetch(REGISTRY_URL);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch ACP registry: ${String(response.status)} ${response.statusText}`);
+      throw new Error(
+        `Failed to fetch ACP registry: ${String(response.status)} ${response.statusText}`,
+      );
     }
 
     const data = (await response.json()) as { agents: RegistryAgent[] };
@@ -83,93 +114,6 @@ async function fetchRegistry(logger: Logger): Promise<RegistryAgent[]> {
   } catch (err) {
     logger.warn(err, 'Failed to fetch remote registry');
     return [];
-  }
-}
-
-function notFoundEntry(agent: RegistryAgent): DriverDiscovery {
-  return {
-    id: agent.id,
-    label: agent.name,
-    status: 'not_found',
-    command: AGENT_BINARY[agent.id] ?? agent.id,
-    launchArgs: [],
-    launchEnv: {},
-    version: agent.version,
-    description: agent.description,
-    icon: agent.icon,
-  };
-}
-
-async function probeAgent(
-  agent: RegistryAgent,
-  launch: { command: string; args: string[]; env: Record<string, string> },
-  logger: Logger,
-): Promise<DriverDiscovery> {
-  const child = spawn(launch.command, launch.args, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, ...launch.env },
-  });
-
-  child.on('error', (err) => {
-    logger.warn(err, `Spawning agent ${agent.id} failed`);
-  });
-
-  const stdin = child.stdin;
-  const stdout = child.stdout;
-
-  const stream = ndJsonStream(
-    Writable.toWeb(stdin) as WritableStream<Uint8Array>,
-    Readable.toWeb(stdout) as ReadableStream<Uint8Array>
-  );
-
-  const connection = new ClientSideConnection(() => ({
-    sessionUpdate() { return Promise.resolve(); },
-    requestPermission() {
-      return Promise.resolve({ outcome: { outcome: 'selected' as const, optionId: 'allow-once' } });
-    },
-  }), stream);
-
-  try {
-    const result = await Promise.race([
-      (async () => {
-        await connection.initialize({
-          protocolVersion: 1,
-          clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
-        });
-
-        const sessionResult = await connection.newSession({
-          cwd: os.tmpdir(),
-          mcpServers: [],
-        });
-
-        const configOptions = sessionResult.configOptions as ACPConfigOption[] | undefined;
-
-        return {
-          id: agent.id,
-          label: agent.name,
-          status: 'ready' as const,
-          command: launch.command,
-          launchArgs: launch.args,
-          launchEnv: launch.env,
-          configOptions: configOptions ?? [],
-          version: agent.version,
-          description: agent.description,
-          icon: agent.icon,
-        };
-      })(),
-      new Promise<DriverDiscovery>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error(`Probe for ${agent.id} timed out`));
-        }, 15_000);
-      }),
-    ]);
-
-    return result;
-  } catch (err) {
-    logger.error(err, `Probe failed for ${agent.id}`);
-    return notFoundEntry(agent);
-  } finally {
-    child.kill();
   }
 }
 
@@ -182,26 +126,89 @@ export class DriverRegistry {
 
   async discover(): Promise<DriverDiscovery[]> {
     const now = Date.now();
-    if (!this.cachedDrivers || now - this.lastFetchTime > DriverRegistry.CACHE_TTL) {
-      const registryAgents = await fetchRegistry(this.logger);
-
-      const agents = registryAgents.filter((agent) => SUPPORTED_AGENTS.has(agent.id));
-
-      this.cachedDrivers = await Promise.all(
-        agents.map(async (agent) => {
-          const launch = resolveLaunchConfig(agent);
-          if (!launch) return notFoundEntry(agent);
-          return probeAgent(agent, launch, this.logger);
-        })
-      );
-
-      this.lastFetchTime = now;
+    if (this.cachedDrivers && now - this.lastFetchTime < DriverRegistry.CACHE_TTL) {
+      return this.cachedDrivers;
     }
-    return this.cachedDrivers;
+
+    this.logger.info('Starting agent discovery...');
+    const registryAgents = await fetchRegistry(this.logger);
+    const supportedRegistry = registryAgents.filter((a) => SUPPORTED_AGENTS.has(a.id));
+
+    const results: DriverDiscovery[] = [];
+
+    // 1. Check for local binaries first (faster and more reliable)
+    for (const hint of LOCAL_BINARY_HINTS) {
+      if (isBinaryOnPath(hint.command)) {
+        this.logger.info(`Found local agent binary: ${hint.command}`);
+        const probeResult = await probeAgent(
+          {
+            id: hint.id,
+            name: hint.label,
+            version: 'local',
+            description: 'Local installation',
+            authors: [],
+            distribution: {},
+          },
+          { command: hint.command, args: hint.args, env: {} },
+          this.logger,
+        );
+        if (probeResult.status === 'ready' || probeResult.status === 'needs_auth') {
+          results.push(probeResult);
+        }
+      }
+    }
+
+    // 2. Process registry agents (only those not already found locally)
+    const pendingProbes = supportedRegistry
+      .filter((agent) => !results.some((r) => r.id === agent.id))
+      .map(async (agent) => {
+        const launch = resolveLaunchConfig(agent);
+        if (!launch) return notFoundEntry(agent);
+        return probeAgent(agent, launch, this.logger);
+      });
+
+    const registryResults = await Promise.all(pendingProbes);
+    results.push(...registryResults);
+
+    this.cachedDrivers = results;
+    this.lastFetchTime = now;
+    return results;
   }
 
   async getDriver(id: string): Promise<DriverDiscovery | undefined> {
     const drivers = await this.discover();
     return drivers.find((d) => d.id === id);
+  }
+
+  async login(
+    driverId: string,
+    methodId: string,
+    params: Record<string, unknown> = {},
+  ): Promise<void> {
+    const driver = await this.getDriver(driverId);
+    if (!driver) throw new Error(`Driver ${driverId} not found`);
+
+    const { child, connection } = createAgentConnection(
+      driver.command,
+      driver.launchArgs,
+      driver.launchEnv,
+    );
+
+    try {
+      await connection.initialize({
+        protocolVersion: 1,
+        clientInfo: { name: 'agentctl-login', version: '1.0.0' },
+      });
+
+      await (connection.authenticate({
+        methodId,
+        _meta: params,
+      }) as Promise<unknown>);
+
+      // Clear cache so the status updates to 'ready' on next discovery
+      this.cachedDrivers = null;
+    } finally {
+      child.kill();
+    }
   }
 }

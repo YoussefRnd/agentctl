@@ -1,7 +1,8 @@
-import { sessions, projects, type DriverRegistry } from '@agentctl/core';
+import { sessions, projects } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import type { ThinkingEffort } from '@agentctl/shared';
+import type { DriverDiscovery } from '@agentctl/shared';
+import { buildLaunchConfig, resolveDriverSelection } from './driver-selection.js';
 import { AppError } from './app-error.js';
 
 interface CreateAgentSessionInput {
@@ -10,41 +11,21 @@ interface CreateAgentSessionInput {
   taskSlug: string;
 }
 
-async function resolveInitialSelection(driverRegistry: DriverRegistry, driverId: string) {
-  const drivers = await driverRegistry.discover();
-  const driver = drivers.find((d) => d.id === driverId);
-  const options = driver?.configOptions ?? [];
+async function resolveInitialSelection(driverId: string, driver: DriverDiscovery | null) {
+  if (!driver) {
+    return {
+      selectedDriver: driverId,
+      selectedModel: 'default',
+      selectedThinkingEffort: 'medium',
+    };
+  }
 
-  const modelOpt = options.find((o) => o.id === 'model' || o.id === 'selectedModel');
-  const thinkingOpt = options.find(
-    (o) => o.id === 'thinking' || o.id === 'thinking_effort' || o.id === 'selectedThinkingEffort',
-  );
+  const { selectedModel, selectedThinkingEffort } = resolveDriverSelection(driver);
 
   return {
     selectedDriver: driverId,
-    selectedModel: modelOpt?.currentValue ?? modelOpt?.options[0]?.value ?? 'default',
-    selectedThinkingEffort: (thinkingOpt?.currentValue ??
-      thinkingOpt?.options[0]?.value ??
-      'medium') as ThinkingEffort,
-  };
-}
-
-function buildLaunchArgs(
-  driver: NonNullable<Awaited<ReturnType<DriverRegistry['getDriver']>>>,
-  model: string,
-  thinkingEffort: string,
-): { command: string; args: string[]; env: Record<string, string> } {
-  const baseArgs = driver.launchArgs;
-  const baseEnv = driver.launchEnv;
-  const extraArgs: string[] = [];
-
-  if (model && model !== 'default') extraArgs.push('--model', model);
-  if (thinkingEffort) extraArgs.push('--thinking-effort', thinkingEffort);
-
-  return {
-    command: driver.command,
-    args: [...extraArgs, ...baseArgs],
-    env: baseEnv,
+    selectedModel,
+    selectedThinkingEffort,
   };
 }
 
@@ -86,7 +67,7 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
     baseCommit = worktree.baseCommit;
   }
 
-  const selection = await resolveInitialSelection(fastify.driverRegistry, agent);
+  const selection = await resolveInitialSelection(agent, driver);
 
   const [createdSession] = await fastify.db
     .insert(sessions)
@@ -104,7 +85,7 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
     })
     .returning();
 
-  const launch = buildLaunchArgs(
+  const launch = buildLaunchConfig(
     driver,
     createdSession.selectedModel,
     createdSession.selectedThinkingEffort,
@@ -126,4 +107,3 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
 
   return createdSession;
 }
-

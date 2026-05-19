@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { ACPSession } from '@agentctl/core';
+import { ACPSession, cleanEnv } from '@agentctl/core';
 import { spawn } from 'node:child_process';
 import type { WSClientMessage } from '../types.js';
 import type { FastifyInstance } from 'fastify';
@@ -21,12 +21,25 @@ export class SessionManagerService {
 
   constructor(private fastify: FastifyInstance) {}
 
-  startSession(sessionId: string, worktreePath: string, command: string, args: string[], env?: Record<string, string>) {
+  startSession(
+    sessionId: string,
+    worktreePath: string,
+    command: string,
+    args: string[],
+    env?: Record<string, string>,
+  ) {
     const child = spawn(command, args, {
       cwd: worktreePath,
-      env: { ...process.env, ...env },
+      env: cleanEnv(env),
     });
-    const session = new ACPSession(sessionId, child, this.fastify.db, this.fastify.eventBus, worktreePath, this.fastify.log);
+    const session = new ACPSession(
+      sessionId,
+      child,
+      this.fastify.db,
+      this.fastify.eventBus,
+      worktreePath,
+      this.fastify.log,
+    );
     void session.initialize().catch((err: unknown) => {
       this.fastify.log.error(err, `Failed to initialize session ${sessionId}`);
     });
@@ -49,12 +62,12 @@ export class SessionManagerService {
     if (!session) return;
 
     if (msg.action === 'approve') {
-      session.resolvePermission(String(msg.eventId), { 
-        outcome: { outcome: 'selected', optionId: 'allow-once' } 
+      session.resolvePermission(String(msg.eventId), {
+        outcome: { outcome: 'selected', optionId: 'allow-once' },
       });
     } else if (msg.action === 'deny') {
-      session.resolvePermission(String(msg.eventId), { 
-        outcome: { outcome: 'selected', optionId: 'deny-once' } 
+      session.resolvePermission(String(msg.eventId), {
+        outcome: { outcome: 'cancelled' },
       });
     } else if (msg.action === 'session.input') {
       await session.prompt(msg.input);
