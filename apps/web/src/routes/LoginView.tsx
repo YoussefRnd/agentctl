@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiClient } from '../lib/api-client';
+import { apiClient } from '../api/api-client';
 
 export function LoginView() {
   const [key, setKey] = React.useState('');

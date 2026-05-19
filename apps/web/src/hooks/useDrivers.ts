@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { apiClient } from '../lib/api-client';
+import { apiClient } from '../api/api-client';
 import type {
   DriverDiscovery,
   DriverName,

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow } from '@agentctl/shared';
 
-import { apiClient } from '../lib/api-client';
+import { apiClient } from '../api/api-client';
 
 const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
   return apiClient.fetch<ACPEventRow[]>(`/api/sessions/${sessionId}/events`);
