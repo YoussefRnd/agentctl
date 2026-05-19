@@ -14,7 +14,7 @@ import { fsRoutes } from './routes/fs.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
 import { db as defaultDb, WorktreeManager, GitMutex, DriverRegistry } from '@agentctl/core';
-import { AppError } from './utils/app-error.js';
+import { AppError } from './errors/app-error.js';
 import type { FastifyError } from 'fastify';
 import { parseEnv } from '@agentctl/shared';
 

@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { DriverDiscovery } from '@agentctl/shared';
 import { buildLaunchConfig, resolveDriverSelection } from './driver-selection.js';
-import { AppError } from './app-error.js';
+import { AppError } from '../errors/app-error.js';
 
 interface CreateAgentSessionInput {
   projectId: string;

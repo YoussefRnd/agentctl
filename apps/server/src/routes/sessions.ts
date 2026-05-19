@@ -3,9 +3,9 @@ import { sessions } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
-import { createAgentSession } from '../utils/session-factory.js';
-import { buildLaunchConfig } from '../utils/driver-selection.js';
-import { AppError } from '../utils/app-error.js';
+import { createAgentSession } from '../services/session-factory.js';
+import { buildLaunchConfig } from '../services/driver-selection.js';
+import { AppError } from '../errors/app-error.js';
 
 const createSessionSchema = z.object({
   projectId: z.uuid(),

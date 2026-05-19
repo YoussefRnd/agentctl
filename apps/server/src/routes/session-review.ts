@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { sessions, projects } from '@agentctl/core';
-import { AppError } from '../utils/app-error.js';
+import { AppError } from '../errors/app-error.js';
 
 const reviewParamsSchema = z.object({
   id: z.uuid(),
