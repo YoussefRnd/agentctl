@@ -1,4 +1,4 @@
-import type { DriverDiscovery, SessionRow } from '@agentctl/shared';
+import { type DriverDiscovery, type SessionRow, getReadyDriverId, createTaskSlug } from '@agentctl/shared';
 import { apiClient } from '../api-client.js';
 
 export interface SidebarProject {
@@ -15,15 +15,6 @@ export interface OpenProjectResponse {
   project: { id: string; name: string; path: string };
   session: SessionRow;
   created: boolean;
-}
-
-export function getReadyDriverId(drivers: DriverDiscovery[]) {
-  return drivers.find((driver) => driver.status === 'ready')?.id ?? 'opencode';
-}
-
-export function createTaskSlug(prefix = 'new-session') {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `${prefix}-${timestamp}`;
 }
 
 export async function openProjectSession(path: string, drivers: DriverDiscovery[]) {
