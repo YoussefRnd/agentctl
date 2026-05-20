@@ -1,12 +1,12 @@
 import { execSync } from 'node:child_process';
 import os from 'node:os';
 import fs from 'node:fs';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import type { ACPConfigOption, AuthMethod, DriverDiscovery, RegistryAgent } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import { createAgentConnection } from './acp-transport.js';
 import { notFoundEntry, probeAgent } from './acp-probe.js';
-import { drivers } from '../db/schema.js';
+import { drivers, registrySnapshots } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
@@ -20,75 +20,6 @@ const SUPPORTED_AGENTS = new Set([
 const LOCAL_BINARY_HINTS = [
   { id: 'opencode', command: 'opencode', args: ['acp'], label: 'OpenCode (Local)' },
 ];
-
-const CLAUDE_ACP_FALLBACK: DriverDiscovery = {
-  id: 'claude-acp',
-  label: 'Claude Agent',
-  status: 'inactive',
-  command: 'npx',
-  launchArgs: ['-y', '@agentclientprotocol/claude-agent-acp@0.36.1'],
-  launchEnv: {},
-  configOptions: [
-    {
-      id: 'model',
-      name: 'Model',
-      type: 'select',
-      currentValue: 'claude-3-7-sonnet-latest',
-      options: [
-        { value: 'claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet (Latest)' },
-        { value: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet (Latest)' },
-        { value: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (20241022)' },
-        { value: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku (Latest)' },
-        { value: 'claude-3-opus-latest', name: 'Claude 3 Opus (Latest)' },
-      ],
-    },
-  ],
-  authMethods: [
-    {
-      id: 'env_api_key',
-      name: 'Configure ANTHROPIC_API_KEY',
-      description: 'Ensure the ANTHROPIC_API_KEY environment variable is set.',
-    },
-  ],
-  version: '0.36.1',
-  description: "ACP wrapper for Anthropic's Claude",
-  icon: 'https://cdn.agentclientprotocol.com/registry/v1/latest/claude-acp.svg',
-};
-
-const CODEX_ACP_FALLBACK: DriverDiscovery = {
-  id: 'codex-acp',
-  label: 'Codex CLI',
-  status: 'inactive',
-  command: 'npx',
-  launchArgs: ['-y', '@zed-industries/codex-acp@0.14.0'],
-  launchEnv: {},
-  configOptions: [
-    {
-      id: 'model',
-      name: 'Model',
-      type: 'select',
-      currentValue: 'gpt-4o',
-      options: [
-        { value: 'gpt-4o', name: 'GPT-4o' },
-        { value: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-        { value: 'o3-mini', name: 'o3-mini' },
-        { value: 'o1', name: 'o1' },
-        { value: 'o1-preview', name: 'o1 Preview' },
-        { value: 'o1-mini', name: 'o1 Mini' },
-      ],
-    },
-  ],
-  authMethods: [
-    {
-      id: 'env_api_key',
-      name: 'Configure OPENAI_API_KEY',
-      description: 'Ensure the OPENAI_API_KEY environment variable is set.',
-    },
-  ],
-  version: '0.14.0',
-  description: "ACP adapter for OpenAI's coding assistant",
-  icon: 'https://cdn.agentclientprotocol.com/registry/v1/latest/codex-acp.svg',
-};
 
 function isBinaryOnPath(command: string): boolean {
   try {
@@ -175,24 +106,6 @@ function resolveLaunchConfig(
   return null;
 }
 
-async function fetchRegistry(logger: Logger): Promise<RegistryAgent[]> {
-  try {
-    const response = await fetch(REGISTRY_URL);
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch ACP registry: ${String(response.status)} ${response.statusText}`,
-      );
-    }
-
-    const data = (await response.json()) as { agents: RegistryAgent[] };
-    return data.agents;
-  } catch (err) {
-    logger.warn(err, 'Failed to fetch remote registry');
-    return [];
-  }
-}
-
 export class DriverRegistry {
   constructor(
     private db: DbClient,
@@ -223,12 +136,59 @@ export class DriverRegistry {
     }));
   }
 
+  private async fetchRegistryWithCache(): Promise<{ agents: RegistryAgent[]; source: 'remote' | 'cache' }> {
+    const snapshots = await this.db
+      .select()
+      .from(registrySnapshots)
+      .orderBy(desc(registrySnapshots.fetchedAt))
+      .limit(1);
+    const lastSnapshot = snapshots[0] as typeof registrySnapshots.$inferSelect | undefined;
+
+    const headers: Record<string, string> = {};
+    if (lastSnapshot?.etag) headers['If-None-Match'] = lastSnapshot.etag;
+    if (lastSnapshot?.lastModified) headers['If-Modified-Since'] = lastSnapshot.lastModified;
+
+    try {
+      const response = await fetch(REGISTRY_URL, { headers });
+
+      if (response.status === 304 && lastSnapshot) {
+        this.logger.info('Registry unchanged (304), using cached snapshot');
+        return { agents: (JSON.parse(lastSnapshot.data) as { agents: RegistryAgent[] }).agents, source: 'cache' };
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch registry: ${String(response.status)} ${response.statusText}`);
+      }
+
+      const data = await response.json() as { agents: RegistryAgent[] };
+      const etag = response.headers.get('etag');
+      const lastModified = response.headers.get('last-modified');
+
+      await this.db.insert(registrySnapshots).values({
+        data: JSON.stringify(data),
+        etag,
+        lastModified,
+        fetchedAt: new Date(),
+      });
+
+      return { agents: data.agents, source: 'remote' };
+    } catch (err) {
+      this.logger.warn(err, 'Failed to fetch remote registry, falling back to cache');
+      if (lastSnapshot) {
+        return { agents: (JSON.parse(lastSnapshot.data) as { agents: RegistryAgent[] }).agents, source: 'cache' };
+      }
+      return { agents: [], source: 'cache' };
+    }
+  }
+
   async sync(): Promise<void> {
     this.logger.info('Starting agent discovery and sync...');
-    const registryAgents = await fetchRegistry(this.logger);
+    const { agents: registryAgents } = await this.fetchRegistryWithCache();
     const supportedRegistry = registryAgents.filter((a) => SUPPORTED_AGENTS.has(a.id));
 
     const discovered: DriverDiscovery[] = [];
+    const existingDrivers = await this.db.select().from(drivers);
+    const existingMap = new Map(existingDrivers.map(d => [d.id, d]));
 
     // 1. Check for local binaries first (faster and more reliable)
     for (const hint of LOCAL_BINARY_HINTS) {
@@ -252,42 +212,44 @@ export class DriverRegistry {
       }
     }
 
-    // 2. Process registry agents sequentially (only those not already found locally)
-    const registryResults: DriverDiscovery[] = [];
+    // 2. Process registry agents
     for (const agent of supportedRegistry) {
       if (discovered.some((r) => r.id === agent.id)) {
         continue;
       }
 
-      const existingDriver = await this.getDriver(agent.id);
-
-      let fallback: DriverDiscovery | null = null;
-      if (agent.id === 'claude-acp') {
-        fallback = { ...CLAUDE_ACP_FALLBACK };
-      } else if (agent.id === 'codex-acp') {
-        fallback = { ...CODEX_ACP_FALLBACK };
-      }
-
-      // If it's an NPX agent (has a fallback), skip the automatic 60s probe to avoid hangs.
-      if (fallback) {
-        if (existingDriver?.status === 'ready') {
-          fallback.status = 'ready';
-        }
-        registryResults.push(fallback);
-        continue;
-      }
-
+      const existing = existingMap.get(agent.id);
       const launch = resolveLaunchConfig(agent);
+
       if (!launch) {
-        registryResults.push(notFoundEntry(agent));
+        discovered.push(notFoundEntry(agent));
         continue;
+      }
+
+      // If we have an existing 'ready' driver and it's an NPX/UVX package, 
+      // we prefer the cached data to avoid slow probing on every sync.
+      const isPackage = Boolean(agent.distribution.npx ?? agent.distribution.uvx);
+      if (existing?.status === 'ready' && isPackage) {
+         discovered.push({
+            id: agent.id,
+            label: agent.name,
+            status: 'ready',
+            command: launch.command,
+            launchArgs: launch.args,
+            launchEnv: launch.env,
+            configOptions: JSON.parse(existing.configOptions) as ACPConfigOption[],
+            authMethods: JSON.parse(existing.authMethods) as AuthMethod[],
+            version: agent.version,
+            description: agent.description,
+            icon: agent.icon,
+         });
+         continue;
       }
 
       this.logger.info(`Probing registry agent: ${agent.id}...`);
       const probeResult = await probeAgent(agent, launch, this.logger);
-      registryResults.push(probeResult);
+      discovered.push(probeResult);
     }
-    discovered.push(...registryResults);
 
     // 3. Persist to DB
     for (const driver of discovered) {

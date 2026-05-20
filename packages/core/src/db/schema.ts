@@ -71,6 +71,16 @@ export const drivers = sqliteTable('drivers', {
   ...timestamps,
 });
 
+export const registrySnapshots = sqliteTable('registry_snapshots', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  data: text('data').notNull(), // Raw registry JSON string
+  etag: text('etag'),
+  lastModified: text('last_modified'),
+  fetchedAt: integer('fetched_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
 export const acpEvents = sqliteTable('acp_events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   sessionId: text('session_id')
