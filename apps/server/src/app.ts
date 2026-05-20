@@ -111,8 +111,8 @@ export async function buildApp(deps: AppDependencies = {}) {
 
   // Register other plugins
   await fastify.register(worktreePlugin);
-  await fastify.register(sessionManagerPlugin);
   await fastify.register(websocketPlugin);
+  await fastify.register(sessionManagerPlugin);
 
   // Register routes
   await fastify.register(authRoutes, { prefix: '/api' });

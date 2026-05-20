@@ -10,6 +10,32 @@ const start = async () => {
   }
 
   const fastify = await buildApp({ env });
+
+  const shutdown = async (signal: string) => {
+    fastify.log.info(`${signal} received, starting graceful shutdown...`);
+
+    // 1. Close Fastify (stops new connections)
+    try {
+      await fastify.close();
+      fastify.log.info('Fastify server closed');
+    } catch (err) {
+      fastify.log.error(err, 'Error closing Fastify server');
+    }
+
+    // 2. Stop all agent sessions
+    try {
+      await fastify.sessionManager.stopAll();
+      fastify.log.info('All agent sessions stopped');
+    } catch (err) {
+      fastify.log.error(err, 'Error stopping agent sessions');
+    }
+
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+
   try {
     const port = env.PORT;
     const host = process.env.AGENTCTL_HOST ?? '127.0.0.1';

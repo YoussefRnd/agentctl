@@ -73,10 +73,9 @@ export class SessionManager {
     }
   }
 
-  stopAll(): void {
-    for (const session of this.sessions.values()) {
-      session.kill();
-    }
+  async stopAll(): Promise<void> {
+    const stopPromises = Array.from(this.sessions.values()).map((session) => session.stop());
+    await Promise.all(stopPromises);
     this.sessions.clear();
   }
 

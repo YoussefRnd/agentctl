@@ -14,7 +14,7 @@ export default fp((fastify: FastifyInstance) => {
   fastify.decorate('sessionManager', manager);
 
   fastify.addHook('onClose', () => {
-    manager.stopAll();
+    void manager.stopAll();
   });
 
   return Promise.resolve();

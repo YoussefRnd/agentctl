@@ -14,13 +14,11 @@ const SUPPORTED_AGENTS = new Set([
   'opencode',
   'claude-acp',
   'codex-acp',
-  'gemini-cli',
   'gemini-acp',
 ]);
 
 const LOCAL_BINARY_HINTS = [
   { id: 'opencode', command: 'opencode', args: ['acp'], label: 'OpenCode (Local)' },
-  { id: 'gemini-cli', command: 'gemini', args: ['--acp'], label: 'Gemini CLI (Local)' },
 ];
 
 const CLAUDE_ACP_FALLBACK: DriverDiscovery = {
@@ -35,8 +33,9 @@ const CLAUDE_ACP_FALLBACK: DriverDiscovery = {
       id: 'model',
       name: 'Model',
       type: 'select',
-      currentValue: 'claude-3-5-sonnet-latest',
+      currentValue: 'claude-3-7-sonnet-latest',
       options: [
+        { value: 'claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet (Latest)' },
         { value: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet (Latest)' },
         { value: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (20241022)' },
         { value: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku (Latest)' },
@@ -72,6 +71,8 @@ const CODEX_ACP_FALLBACK: DriverDiscovery = {
       options: [
         { value: 'gpt-4o', name: 'GPT-4o' },
         { value: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+        { value: 'o3-mini', name: 'o3-mini' },
+        { value: 'o1', name: 'o1' },
         { value: 'o1-preview', name: 'o1 Preview' },
         { value: 'o1-mini', name: 'o1 Mini' },
       ],

@@ -150,6 +150,11 @@ export class ACPSession {
 
   async prompt(text: string): Promise<void> {
     try {
+      this.currentMessage = '';
+      this.currentThought = '';
+      this.messageEventId = null;
+      this.thoughtEventId = null;
+
       await this.db
         .update(sessions)
         .set({ status: 'running', updatedAt: new Date() })
@@ -186,6 +191,11 @@ export class ACPSession {
     }
 
     this.child.kill();
+  }
+
+  async stop(): Promise<void> {
+    this.kill();
+    await this.markSessionStopped('idle');
   }
 
   private async handleError(error: unknown): Promise<void> {
@@ -250,6 +260,11 @@ export class ACPSession {
     return undefined;
   }
 
+  private currentMessage = '';
+  private currentThought = '';
+  private messageEventId: number | null = null;
+  private thoughtEventId: number | null = null;
+
   private async onSessionUpdate(notification: SessionNotification): Promise<void> {
     try {
       const update = notification.update;
@@ -272,23 +287,53 @@ export class ACPSession {
       const eventType = typeMap[typeKey];
       if (eventType === undefined) return;
 
+      // Handle message chunks with buffering
+      if (typeKey === 'agent_message_chunk') {
+        const chunk = update as { content?: { type: string; text?: string } };
+        const text = chunk.content?.text;
+        if (text !== undefined) {
+          this.currentMessage += text;
+          if (this.messageEventId) {
+            await this.updateEvent(this.messageEventId, { content: this.currentMessage });
+          } else {
+            this.messageEventId = (await this.persistEvent('text', { content: this.currentMessage })) ?? null;
+          }
+        }
+        return;
+      }
+
+      // Handle thought chunks with buffering
+      if (typeKey === 'agent_thought_chunk') {
+        const chunk = update as { content?: { type: string; thought?: string } };
+        const thought = chunk.content?.thought;
+        if (thought !== undefined) {
+          this.currentThought += thought;
+          if (this.thoughtEventId) {
+            await this.updateEvent(this.thoughtEventId, { content: this.currentThought });
+          } else {
+            this.thoughtEventId = (await this.persistEvent('text', { content: this.currentThought })) ?? null;
+          }
+        }
+        return;
+      }
+
+      // Reset buffers on new tool calls or other major events that imply message end
+      if (typeKey === 'tool_call' || typeKey === 'plan') {
+        this.currentMessage = '';
+        this.currentThought = '';
+        this.messageEventId = null;
+        this.thoughtEventId = null;
+      }
+
       let uiData: unknown = update;
 
-      // Transform all content chunks (agent message, thought, or user message)
+      // Transform content chunks (user message only, others handled above)
       // into the format expected by the UI ({ content: string })
-      if (
-        typeKey === 'agent_message_chunk' ||
-        typeKey === 'agent_thought_chunk' ||
-        typeKey === 'user_message_chunk'
-      ) {
-        const chunk = update as { content?: { type: string; text?: string; thought?: string } };
+      if (typeKey === 'user_message_chunk') {
+        const chunk = update as { content?: { type: string; text?: string } };
         const content = chunk.content;
-        if (content && typeof content === 'object') {
-          if ('text' in content && content.text !== undefined) {
-            uiData = { content: content.text };
-          } else if ('thought' in content && content.thought !== undefined) {
-            uiData = { content: content.thought };
-          }
+        if (content && typeof content === 'object' && 'text' in content && content.text !== undefined) {
+          uiData = { content: content.text };
         }
       }
 
@@ -296,6 +341,23 @@ export class ACPSession {
     } catch (error) {
       await this.handleError(error).catch((e: unknown) => {
         this.logger.error(e, 'Failed to handle error in onSessionUpdate');
+      });
+    }
+  }
+
+  private async updateEvent(id: number, data: unknown): Promise<void> {
+    const updatedArray = await this.db
+      .update(acpEvents)
+      .set({
+        data: JSON.stringify(data),
+      })
+      .where(eq(acpEvents.id, id))
+      .returning();
+
+    if (updatedArray.length > 0) {
+      this.eventBus.publish({
+        ...updatedArray[0],
+        createdAt: new Date(updatedArray[0].createdAt),
       });
     }
   }
