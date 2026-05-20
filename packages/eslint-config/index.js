@@ -24,6 +24,5 @@ export const baseConfig = [
     },
   },
 
-
   prettier,
 ];

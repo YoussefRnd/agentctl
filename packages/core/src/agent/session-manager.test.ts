@@ -31,13 +31,7 @@ test('SessionManager startSession creates and initializes a session', () => {
   // let's just test that it returns a session.
 
   // NOTE: This test will actually try to spawn 'echo', which is safe on linux.
-  const session = manager.startSession(
-    'session-1',
-    '/tmp',
-    'sleep',
-    ['10'],
-    {}
-  );
+  const session = manager.startSession('session-1', '/tmp', 'sleep', ['10'], {});
 
   assert.ok(session);
   assert.equal(session.sessionId, 'session-1');

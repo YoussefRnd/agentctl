@@ -12,5 +12,4 @@ export const vitestConfig = [
       'vitest/expect-expect': 'off',
     },
   },
-
 ];

@@ -8,4 +8,5 @@ export const serverEnvSchema = z.object({
   DATABASE_URL: z.string().optional().default('sqlite.db'),
 });
 
-export const parseServerEnv = (env: Record<string, string | undefined>) => serverEnvSchema.parse(env);
+export const parseServerEnv = (env: Record<string, string | undefined>) =>
+  serverEnvSchema.parse(env);

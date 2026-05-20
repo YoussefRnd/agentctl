@@ -13,7 +13,7 @@ const start = async () => {
   try {
     const port = env.PORT;
     const host = process.env.AGENTCTL_HOST ?? '127.0.0.1';
-    
+
     await fastify.listen({ port, host });
     fastify.log.info(`server listening on ${host}:${String(port)}`);
     fastify.log.info(`one-time login key: ${env.AGENTCTL_SECRET}`);

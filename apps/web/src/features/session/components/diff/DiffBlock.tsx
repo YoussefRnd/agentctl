@@ -10,14 +10,14 @@ interface DiffBlockProps {
 
 export function DiffBlock({ path, hunks, onStage, onRevert }: DiffBlockProps) {
   return (
-    <div className="rounded border border-border bg-background overflow-hidden">
-      <header className="sticky top-0 z-10 flex items-center justify-between gap-3 px-3 py-2 bg-surface border-b border-border">
-        <div className="font-mono text-xs font-medium text-text-main truncate">{path}</div>
+    <div className="border-border bg-background overflow-hidden rounded border">
+      <header className="bg-surface border-border sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-3 py-2">
+        <div className="text-text-main truncate font-mono text-xs font-medium">{path}</div>
         <div className="flex items-center gap-2">
           {onRevert && (
             <button
               onClick={onRevert}
-              className="px-2 py-1 text-[10px] uppercase tracking-wider font-bold rounded border border-border hover:bg-surface-hover text-text-muted transition-colors"
+              className="border-border hover:bg-surface-hover text-text-muted rounded border px-2 py-1 text-[10px] font-bold tracking-wider uppercase transition-colors"
             >
               Revert
             </button>
@@ -25,17 +25,17 @@ export function DiffBlock({ path, hunks, onStage, onRevert }: DiffBlockProps) {
           {onStage && (
             <button
               onClick={onStage}
-              className="px-2 py-1 text-[10px] uppercase tracking-wider font-bold rounded border border-border bg-text-main text-background hover:opacity-90 transition-opacity"
+              className="border-border bg-text-main text-background rounded border px-2 py-1 text-[10px] font-bold tracking-wider uppercase transition-opacity hover:opacity-90"
             >
               Stage
             </button>
           )}
         </div>
       </header>
-      <div className="divide-y divide-border/20">
+      <div className="divide-border/20 divide-y">
         {hunks.map((hunk, hunkIdx) => (
           <div key={hunkIdx}>
-            <div className="px-3 py-1 bg-surface/30 font-mono text-[10px] text-text-muted border-y border-border/10">
+            <div className="bg-surface/30 text-text-muted border-border/10 border-y px-3 py-1 font-mono text-[10px]">
               {hunk.header}
             </div>
             <div className="py-1">

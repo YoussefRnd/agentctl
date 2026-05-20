@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@agentctl/api-client';
+import { ThemeProvider } from './contexts/ThemeProvider';
 import { App } from './App';
 import { AppErrorBoundary } from './features/shell/components/AppErrorBoundary';
 import './index.css';
@@ -21,11 +22,13 @@ if (rootElement) {
 
     return (
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <AppErrorBoundary key={appKey} onRetry={handleRetry}>
-            <App />
-          </AppErrorBoundary>
-        </BrowserRouter>
+        <ThemeProvider>
+          <BrowserRouter>
+            <AppErrorBoundary key={appKey} onRetry={handleRetry}>
+              <App />
+            </AppErrorBoundary>
+          </BrowserRouter>
+        </ThemeProvider>
         {/* Toaster lives outside the error boundary so toasts survive crashes */}
         <Toaster
           position="bottom-right"

@@ -48,10 +48,10 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
   }, []);
 
   return (
-    <div className="flex flex-col w-full max-w-xl bg-surface border border-border rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-300">
-      <div className="bg-background/50 px-4 py-3 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[12px] font-mono text-text-muted truncate">
-          <Folder className="w-3.5 h-3.5" />
+    <div className="bg-surface border-border animate-in fade-in zoom-in-95 flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border shadow-2xl duration-300">
+      <div className="bg-background/50 border-border flex items-center justify-between border-b px-4 py-3">
+        <div className="text-text-muted flex items-center gap-2 truncate font-mono text-[12px]">
+          <Folder className="h-3.5 w-3.5" />
           <span className="truncate">{currentPath ?? 'Browsing...'}</span>
         </div>
         <div className="flex items-center gap-1">
@@ -59,46 +59,46 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
             onClick={() => {
               void explore();
             }}
-            className="p-1.5 hover:bg-surface rounded-lg transition-colors text-text-muted"
+            className="hover:bg-surface text-text-muted rounded-lg p-1.5 transition-colors"
             title="Home"
           >
-            <Home className="w-4 h-4" />
+            <Home className="h-4 w-4" />
           </button>
           {parentPath && parentPath !== currentPath && (
             <button
               onClick={() => {
                 void explore(parentPath);
               }}
-              className="p-1.5 hover:bg-surface rounded-lg transition-colors text-text-muted"
+              className="hover:bg-surface text-text-muted rounded-lg p-1.5 transition-colors"
               title="Go Up"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="h-4 w-4" />
             </button>
           )}
         </div>
       </div>
 
-      <div className="h-80 overflow-y-auto p-2 scrollbar-hide">
+      <div className="scrollbar-hide h-80 overflow-y-auto p-2">
         {isLoading ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          <div className="flex h-full items-center justify-center">
+            <div className="border-accent h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
           </div>
         ) : error ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-8">
-            <AlertCircle className="w-8 h-8 text-danger mb-3 opacity-50" />
-            <p className="text-[13px] font-bold text-text-main">{error}</p>
+          <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+            <AlertCircle className="text-danger mb-3 h-8 w-8 opacity-50" />
+            <p className="text-text-main text-[13px] font-bold">{error}</p>
             <button
               onClick={() => {
                 void explore(currentPath ?? undefined);
               }}
-              className="mt-4 text-[11px] font-black text-accent hover:underline uppercase tracking-widest"
+              className="text-accent mt-4 text-[11px] font-black tracking-widest uppercase hover:underline"
             >
               Retry
             </button>
           </div>
         ) : folders.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-50">
-            <Folder className="w-8 h-8 text-text-muted mb-3" />
+          <div className="flex h-full flex-col items-center justify-center p-8 text-center opacity-50">
+            <Folder className="text-text-muted mb-3 h-8 w-8" />
             <p className="text-[13px] font-medium">Empty directory</p>
           </div>
         ) : (
@@ -106,7 +106,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
             {folders.map((f) => (
               <div
                 key={f.path}
-                className="group flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent/5 transition-all text-left cursor-pointer"
+                className="group hover:bg-accent/5 flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left transition-all"
                 onClick={() => {
                   void explore(f.path);
                 }}
@@ -116,16 +116,16 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className={`p-1.5 rounded-lg ${f.isRepo ? 'bg-success/10 text-success' : 'bg-surface-hover text-text-muted group-hover:text-accent'}`}
+                    className={`rounded-lg p-1.5 ${f.isRepo ? 'bg-success/10 text-success' : 'bg-surface-hover text-text-muted group-hover:text-accent'}`}
                   >
-                    {f.isRepo ? <GitBranch className="w-4 h-4" /> : <Folder className="w-4 h-4" />}
+                    {f.isRepo ? <GitBranch className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[13px] font-medium text-text-main group-hover:text-accent transition-colors">
+                    <span className="text-text-main group-hover:text-accent text-[13px] font-medium transition-colors">
                       {f.name}
                     </span>
                     {f.isRepo && (
-                      <span className="text-[10px] text-success/60 font-medium -mt-0.5 tracking-tight uppercase">
+                      <span className="text-success/60 -mt-0.5 text-[10px] font-medium tracking-tight uppercase">
                         GIT REPOSITORY
                       </span>
                     )}
@@ -136,7 +136,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                     e.stopPropagation();
                     onSelect(f.path);
                   }}
-                  className="px-3 py-1 bg-accent/10 hover:bg-accent text-accent hover:text-background text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-all"
+                  className="bg-accent/10 hover:bg-accent text-accent hover:text-background rounded px-3 py-1 text-[10px] font-bold opacity-0 transition-all group-hover:opacity-100"
                 >
                   SELECT
                 </button>
@@ -146,11 +146,11 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         )}
       </div>
 
-      <div className="px-4 py-3 bg-background/30 border-t border-border flex items-center justify-between text-[11px] text-text-muted font-medium">
+      <div className="bg-background/30 border-border text-text-muted flex items-center justify-between border-t px-4 py-3 text-[11px] font-medium">
         <span>Choose a project directory</span>
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <kbd className="bg-surface px-1.5 py-0.5 rounded border border-border">
+            <kbd className="bg-surface border-border rounded border px-1.5 py-0.5">
               Double Click
             </kbd>{' '}
             to open

@@ -9,11 +9,7 @@ declare module 'fastify' {
 }
 
 export default fp((fastify: FastifyInstance) => {
-  const manager = new SessionManager(
-    fastify.db,
-    fastify.eventBus,
-    fastify.log,
-  );
+  const manager = new SessionManager(fastify.db, fastify.eventBus, fastify.log);
 
   fastify.decorate('sessionManager', manager);
 

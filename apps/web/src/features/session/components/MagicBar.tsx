@@ -12,18 +12,18 @@ export function MagicBar({ files, onAction, isReviewOpen, onOpenReview }: MagicB
   const hasChanges = files.length > 0;
 
   return (
-    <div className="flex items-center gap-2 p-2 px-4 mb-2">
+    <div className="mb-2 flex items-center gap-2 p-2 px-4">
       <button
         onClick={() => {
           onOpenReview();
         }}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
+        className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12px] font-medium transition-all ${
           isReviewOpen
             ? 'bg-accent/10 border-accent text-accent'
-            : 'border-transparent text-text-muted hover:bg-surface-hover hover:border-border'
+            : 'text-text-muted hover:bg-surface-hover hover:border-border border-transparent'
         }`}
       >
-        <Eye className="w-3.5 h-3.5" />
+        <Eye className="h-3.5 w-3.5" />
         Review Changes
       </button>
 
@@ -32,9 +32,9 @@ export function MagicBar({ files, onAction, isReviewOpen, onOpenReview }: MagicB
           onClick={() => {
             onAction('Generate Commit');
           }}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border border-transparent text-text-muted hover:bg-surface-hover hover:border-border"
+          className="text-text-muted hover:bg-surface-hover hover:border-border flex items-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-[12px] font-medium transition-all"
         >
-          <FileCheck className="w-3.5 h-3.5" />
+          <FileCheck className="h-3.5 w-3.5" />
           Generate Commit
         </button>
       )}
@@ -44,9 +44,9 @@ export function MagicBar({ files, onAction, isReviewOpen, onOpenReview }: MagicB
           onClick={() => {
             onAction('Create PR');
           }}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border border-transparent text-text-muted hover:bg-surface-hover hover:border-border"
+          className="text-text-muted hover:bg-surface-hover hover:border-border flex items-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-[12px] font-medium transition-all"
         >
-          <GitPullRequest className="w-3.5 h-3.5" />
+          <GitPullRequest className="h-3.5 w-3.5" />
           Create PR
         </button>
       )}
@@ -55,9 +55,9 @@ export function MagicBar({ files, onAction, isReviewOpen, onOpenReview }: MagicB
         onClick={() => {
           onAction('Investigate');
         }}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border border-transparent text-text-muted hover:bg-surface-hover hover:border-border"
+        className="text-text-muted hover:bg-surface-hover hover:border-border flex items-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-[12px] font-medium transition-all"
       >
-        <Search className="w-3.5 h-3.5" />
+        <Search className="h-3.5 w-3.5" />
         Investigate
       </button>
     </div>

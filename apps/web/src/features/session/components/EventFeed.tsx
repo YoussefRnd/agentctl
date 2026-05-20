@@ -30,12 +30,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
 
   if (events.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex h-full items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 bg-surface rounded-full flex items-center justify-center border border-border">
-            <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          <div className="bg-surface border-border flex h-12 w-12 items-center justify-center rounded-full border">
+            <div className="border-accent h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
           </div>
-          <span className="text-[13px] text-text-muted font-medium tracking-wide">
+          <span className="text-text-muted text-[13px] font-medium tracking-wide">
             WAITING FOR AGENT
           </span>
         </div>
@@ -45,12 +45,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
 
   return (
     <div
-      className="flex-1 overflow-y-auto px-4 sm:px-0 relative h-full scroll-smooth"
+      className="relative h-full flex-1 overflow-y-auto scroll-smooth px-4 sm:px-0"
       ref={parentRef}
       onScroll={handleScroll}
     >
-      <div className="max-w-3xl mx-auto py-8 relative">
-        <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent z-0" />
+      <div className="relative mx-auto max-w-3xl py-8">
+        <div className="absolute top-0 bottom-0 left-8 z-0 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
 
         <div
           style={{
@@ -86,12 +86,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
       {!autoScroll && (
         <button
           type="button"
-          className="fixed bottom-32 left-1/2 -translate-x-1/2 bg-surface/80 backdrop-blur-md border border-border text-text-main px-4 py-2 rounded-full text-[11px] font-bold shadow-xl flex items-center gap-2 hover:bg-surface transition-all animate-in fade-in slide-in-from-bottom-2"
+          className="bg-surface/80 border-border text-text-main hover:bg-surface animate-in fade-in slide-in-from-bottom-2 fixed bottom-32 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 text-[11px] font-bold shadow-xl backdrop-blur-md transition-all"
           onClick={() => {
             setAutoScroll(true);
           }}
         >
-          <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+          <span className="bg-accent h-1.5 w-1.5 animate-pulse rounded-full" />
           LATEST MESSAGES
         </button>
       )}

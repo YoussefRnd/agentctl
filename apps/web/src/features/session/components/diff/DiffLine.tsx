@@ -45,13 +45,13 @@ export function DiffLine({ line }: DiffLineProps) {
     <div
       className={`flex font-mono text-xs leading-5 ${bgColor} group hover:bg-surface-hover/50 transition-colors`}
     >
-      <div className="w-12 shrink-0 select-none text-right pr-2 border-r border-border/30 opacity-40">
+      <div className="border-border/30 w-12 shrink-0 border-r pr-2 text-right opacity-40 select-none">
         {line.oldLineNumber ?? ''}
       </div>
-      <div className="w-12 shrink-0 select-none text-right pr-2 border-r border-border/30 opacity-40">
+      <div className="border-border/30 w-12 shrink-0 border-r pr-2 text-right opacity-40 select-none">
         {line.newLineNumber ?? ''}
       </div>
-      <div className={`w-6 shrink-0 select-none text-center opacity-60 ${textColor}`}>{symbol}</div>
+      <div className={`w-6 shrink-0 text-center opacity-60 select-none ${textColor}`}>{symbol}</div>
       <div className="flex-1 px-1 break-all whitespace-pre-wrap">{renderContent()}</div>
     </div>
   );

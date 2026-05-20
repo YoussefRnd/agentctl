@@ -9,8 +9,6 @@
     "dev": "tsc -b --watch",
     "lint": "eslint .",
     "typecheck": "tsc -b"
-
-
   },
   "keywords": [],
   "author": "",
@@ -24,4 +22,3 @@
     "@agentctl/tsconfig": "workspace:*"
   }
 }
-

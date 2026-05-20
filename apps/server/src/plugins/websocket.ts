@@ -57,8 +57,8 @@ export default fp(async (fastify) => {
                 .where(
                   and(
                     eq(acpEvents.sessionId, message.sessionId),
-                    gt(acpEvents.id, message.lastEventId)
-                  )
+                    gt(acpEvents.id, message.lastEventId),
+                  ),
                 )
                 .orderBy(asc(acpEvents.id));
 
@@ -76,7 +76,7 @@ export default fp(async (fastify) => {
             await req.server.sessionManager.handleClientMessage(
               message.sessionId,
               message.action,
-              message
+              message,
             );
           }
         } catch (error) {

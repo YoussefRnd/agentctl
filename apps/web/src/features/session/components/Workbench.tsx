@@ -15,16 +15,16 @@ export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
 
   return (
     <aside
-      className={`shrink-0 overflow-hidden bg-surface/90 backdrop-blur-xl transition-[width,transform,opacity,border-color] duration-300 ease-in-out will-change-[width,transform] absolute lg:relative right-0 h-full z-30 shadow-2xl lg:shadow-none border-l ${
+      className={`bg-surface/90 absolute right-0 z-30 h-full shrink-0 overflow-hidden border-l shadow-2xl backdrop-blur-xl transition-[width,transform,opacity,border-color] duration-300 ease-in-out will-change-[width,transform] lg:relative lg:shadow-none ${
         isOpen
-          ? 'w-[85vw] sm:w-[360px] lg:w-[40%] translate-x-0 opacity-100 border-border'
-          : 'w-[85vw] sm:w-[360px] lg:w-0 translate-x-full lg:translate-x-0 opacity-0 lg:opacity-100 border-transparent'
+          ? 'border-border w-[85vw] translate-x-0 opacity-100 sm:w-[360px] lg:w-[40%]'
+          : 'w-[85vw] translate-x-full border-transparent opacity-0 sm:w-[360px] lg:w-0 lg:translate-x-0 lg:opacity-100'
       }`}
     >
-      <div className="w-[85vw] sm:w-[360px] lg:w-[40vw] h-full flex flex-col bg-background/50">
-        <div className="flex items-center p-2 border-b border-border bg-surface">
+      <div className="bg-background/50 flex h-full w-[85vw] flex-col sm:w-[360px] lg:w-[40vw]">
+        <div className="border-border bg-surface flex items-center border-b p-2">
           <button
-            className={`flex-1 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] transition-colors rounded-md ${
+            className={`flex-1 rounded-md py-1.5 text-[11px] font-bold tracking-[0.1em] uppercase transition-colors ${
               tab === 'status'
                 ? 'bg-background text-text-main shadow-sm'
                 : 'text-text-muted hover:bg-background/50 hover:text-text-main'
@@ -36,7 +36,7 @@ export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
             Agent Status
           </button>
           <button
-            className={`flex-1 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] transition-colors rounded-md ${
+            className={`flex-1 rounded-md py-1.5 text-[11px] font-bold tracking-[0.1em] uppercase transition-colors ${
               tab === 'changes'
                 ? 'bg-background text-text-main shadow-sm'
                 : 'text-text-muted hover:bg-background/50 hover:text-text-main'
@@ -48,7 +48,7 @@ export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
             Code Changes
           </button>
         </div>
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {tab === 'status' ? (
             <StatusPane files={reviewData.files} />
           ) : (

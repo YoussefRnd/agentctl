@@ -67,15 +67,15 @@ export function parseDiff(diff: string): DiffHunk[] {
         newLineNumber: newLineNum++,
       });
     } else if (line === '') {
-        // Handle empty lines which might be context or just trailing
-        if (i < lines.length - 1) {
-             currentHunk.lines.push({
-                type: 'context',
-                content: '',
-                oldLineNumber: oldLineNum++,
-                newLineNumber: newLineNum++,
-            });
-        }
+      // Handle empty lines which might be context or just trailing
+      if (i < lines.length - 1) {
+        currentHunk.lines.push({
+          type: 'context',
+          content: '',
+          oldLineNumber: oldLineNum++,
+          newLineNumber: newLineNum++,
+        });
+      }
     }
   }
 
@@ -86,7 +86,10 @@ export function parseDiff(diff: string): DiffHunk[] {
       const next = hunk.lines[i + 1];
 
       if (current.type === 'removed' && next.type === 'added') {
-        const { removedHighlights, addedHighlights } = computeLineDiff(current.content, next.content);
+        const { removedHighlights, addedHighlights } = computeLineDiff(
+          current.content,
+          next.content,
+        );
         current.highlights = removedHighlights;
         next.highlights = addedHighlights;
       }
@@ -105,7 +108,11 @@ function computeLineDiff(oldLine: string, newLine: string) {
 
   // Very simple approach: find common prefix and suffix
   let prefixLen = 0;
-  while (prefixLen < oldLine.length && prefixLen < newLine.length && oldLine[prefixLen] === newLine[prefixLen]) {
+  while (
+    prefixLen < oldLine.length &&
+    prefixLen < newLine.length &&
+    oldLine[prefixLen] === newLine[prefixLen]
+  ) {
     prefixLen++;
   }
 

@@ -12,7 +12,7 @@ export default defineWorkspace([
         'apps/server/**/*.{test,spec}.{ts,js}',
       ],
       exclude: ['**/node_modules/**', '**/dist/**'],
-    }
+    },
   },
   {
     extends: './vitest.config.js',
@@ -24,6 +24,6 @@ export default defineWorkspace([
         'apps/web/**/*.{test,spec}.{ts,js,tsx,jsx}',
       ],
       exclude: ['**/node_modules/**', '**/dist/**'],
-    }
-  }
+    },
+  },
 ]);

@@ -9,7 +9,6 @@
     "lint": "turbo lint",
     "format": "prettier --write .",
     "typecheck": "turbo typecheck",
-
     "test": "turbo test",
     "clean": "find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name dist -type d -exec rm -rf {} + 2>/dev/null; rm -rf .turbo",
     "prepare": "husky"
@@ -28,8 +27,6 @@
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
     "eslint": "^9.21.0",
-
-
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.5",
@@ -45,6 +42,3 @@
     "vitest": "^4.1.6"
   }
 }
-
-
-

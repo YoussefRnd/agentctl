@@ -29,32 +29,34 @@ export function LoginView() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md rounded-2xl bg-surface p-8 shadow-xl animate-in fade-in zoom-in duration-300">
+    <div className="bg-background flex min-h-screen items-center justify-center p-4">
+      <div className="bg-surface animate-in fade-in zoom-in w-full max-w-md rounded-2xl p-8 shadow-xl duration-300">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-text mb-2">Agent Workbench</h1>
+          <h1 className="text-text mb-2 text-3xl font-bold">Agent Workbench</h1>
           <p className="text-text-muted">Enter your one-time login key to continue</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="login-key" className="block text-sm font-medium text-text-muted mb-2">
+            <label htmlFor="login-key" className="text-text-muted mb-2 block text-sm font-medium">
               One-time login key
             </label>
             <input
               id="login-key"
               type="password"
               value={key}
-              onChange={(e) => { setKey(e.target.value); }}
+              onChange={(e) => {
+                setKey(e.target.value);
+              }}
               placeholder="••••••••••••••••"
-              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-text outline-none transition-all focus:border-accent focus:ring-2 focus:ring-accent/20"
+              className="border-border bg-background text-text focus:border-accent focus:ring-accent/20 w-full rounded-xl border px-4 py-3 transition-all outline-none focus:ring-2"
               required
               autoFocus
             />
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-500 animate-in fade-in slide-in-from-top-1">
+            <div className="animate-in fade-in slide-in-from-top-1 rounded-lg bg-red-500/10 p-3 text-sm text-red-500">
               {error}
             </div>
           )}
@@ -62,13 +64,13 @@ export function LoginView() {
           <button
             type="submit"
             disabled={isLoading || !key.trim()}
-            className="w-full rounded-xl bg-accent px-6 py-3 font-semibold text-background transition-all hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-accent text-background hover:bg-accent-hover w-full rounded-xl px-6 py-3 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? 'Verifying...' : 'Unlock Workspace'}
           </button>
         </form>
 
-        <p className="mt-8 text-center text-xs text-text-muted">
+        <p className="text-text-muted mt-8 text-center text-xs">
           Check your server logs for the one-time login key.
         </p>
       </div>

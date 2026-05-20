@@ -53,8 +53,8 @@ export function HarnessPicker({
   if (!isOpen) return null;
 
   return (
-    <div className="absolute bottom-full left-0 mb-6 w-[560px] bg-surface border border-border rounded-2xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden flex animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300 z-50">
-      <div className="w-[60px] bg-background/80 border-r border-border flex flex-col items-center py-4 gap-3 shrink-0 overflow-y-auto scrollbar-hide">
+    <div className="bg-surface border-border animate-in fade-in zoom-in-95 slide-in-from-bottom-4 absolute bottom-full left-0 z-50 mb-6 flex w-[560px] overflow-hidden rounded-2xl border shadow-[0_30px_60px_rgba(0,0,0,0.6)] duration-300">
+      <div className="bg-background/80 border-border scrollbar-hide flex w-[60px] shrink-0 flex-col items-center gap-3 overflow-y-auto border-r py-4">
         {drivers.map((d) => {
           const isSelected = d.id === internalDriverId;
           const isReady = d.status === 'ready';
@@ -70,33 +70,33 @@ export function HarnessPicker({
               }}
               disabled={!isEnabled}
               title={d.label + (needsAuth ? ' (Needs Authentication)' : '')}
-              className={`relative w-11 h-11 flex items-center justify-center rounded-xl transition-all duration-200 ${
+              className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 ${
                 isSelected
-                  ? 'bg-accent/15 text-accent shadow-[0_0_15px_rgba(59,130,246,0.2)] border border-accent/30'
+                  ? 'bg-accent/15 text-accent border-accent/30 border shadow-[0_0_15px_rgba(59,130,246,0.2)]'
                   : 'text-text-muted hover:text-text-main hover:bg-surface-hover border border-transparent'
-              } ${!isEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              } ${!isEnabled ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              {d.id.includes('claude') ? <Bot className="w-5 h-5" /> : <Cpu className="w-5 h-5" />}
+              {d.id.includes('claude') ? <Bot className="h-5 w-5" /> : <Cpu className="h-5 w-5" />}
               {isSelected && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-accent rounded-r-full" />
+                <div className="bg-accent absolute top-1/2 left-0 h-5 w-1 -translate-y-1/2 rounded-r-full" />
               )}
               {needsAuth && !isSelected && (
-                <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full" />
+                <div className="absolute top-1 right-1 h-2 w-2 rounded-full bg-yellow-500" />
               )}
             </button>
           );
         })}
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 bg-surface">
-        <div className="p-4 border-b border-border/50 bg-background/20">
-          <div className="relative group">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-accent transition-colors" />
+      <div className="bg-surface flex min-w-0 flex-1 flex-col">
+        <div className="border-border/50 bg-background/20 border-b p-4">
+          <div className="group relative">
+            <Search className="text-text-muted group-focus-within:text-accent absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 transition-colors" />
             <input
               type="text"
               placeholder="Search models..."
               autoFocus
-              className="w-full bg-background/50 border border-border/50 rounded-xl pl-10 pr-4 py-2 text-[13px] font-medium focus:ring-1 focus:ring-accent/50 focus:border-accent/50 transition-all placeholder:text-text-muted/40"
+              className="bg-background/50 border-border/50 focus:ring-accent/50 focus:border-accent/50 placeholder:text-text-muted/40 w-full rounded-xl border py-2 pr-4 pl-10 text-[13px] font-medium transition-all focus:ring-1"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -105,19 +105,19 @@ export function HarnessPicker({
           </div>
         </div>
 
-        <div className="h-[360px] overflow-y-auto p-2 space-y-1 scrollbar-hide">
+        <div className="scrollbar-hide h-[360px] space-y-1 overflow-y-auto p-2">
           {activeDriver.status === 'needs_auth' ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-8">
-              <div className="w-16 h-16 bg-yellow-500/10 rounded-full flex items-center justify-center mb-4">
-                <Bot className="w-8 h-8 text-yellow-500" />
+            <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-500/10">
+                <Bot className="h-8 w-8 text-yellow-500" />
               </div>
-              <h3 className="text-[15px] font-bold text-text-main mb-2">Authentication Required</h3>
-              <p className="text-[13px] text-text-muted mb-6 max-w-[280px]">
+              <h3 className="text-text-main mb-2 text-[15px] font-bold">Authentication Required</h3>
+              <p className="text-text-muted mb-6 max-w-[280px] text-[13px]">
                 {activeDriver.label} needs to be logged in or configured with an API key before it
                 can be used.
               </p>
 
-              <div className="flex flex-col gap-3 w-full max-w-[280px]">
+              <div className="flex w-full max-w-[280px] flex-col gap-3">
                 {activeDriver.authMethods.length > 0 && (
                   <button
                     onClick={() => {
@@ -126,43 +126,43 @@ export function HarnessPicker({
                       onClose();
                     }}
                     disabled={isLoggingIn}
-                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-accent hover:bg-accent-hover text-background rounded-xl text-[13px] font-bold transition-all shadow-lg disabled:opacity-50"
+                    className="bg-accent hover:bg-accent-hover text-background flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-[13px] font-bold shadow-lg transition-all disabled:opacity-50"
                   >
                     {isLoggingIn ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <LogIn className="w-4 h-4" />
+                      <LogIn className="h-4 w-4" />
                     )}
                     {activeDriver.authMethods[0].name}
                   </button>
                 )}
 
-                <div className="text-[11px] text-text-muted text-left mb-1 uppercase tracking-wider font-bold">
+                <div className="text-text-muted mb-1 text-left text-[11px] font-bold tracking-wider uppercase">
                   Manual Configuration
                 </div>
-                <div className="p-3 bg-background/50 border border-border rounded-xl text-[12px] font-mono text-left break-all select-all">
+                <div className="bg-background/50 border-border rounded-xl border p-3 text-left font-mono text-[12px] break-all select-all">
                   {activeDriver.id.includes('claude')
                     ? 'export ANTHROPIC_API_KEY=...'
                     : 'export GOOGLE_API_KEY=...'}
                 </div>
-                <p className="text-[11px] text-text-muted mt-1 text-center">
+                <p className="text-text-muted mt-1 text-center text-[11px]">
                   Restart the server after setting environment variables.
                 </p>
               </div>
             </div>
           ) : models.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-8">
+            <div className="flex h-full flex-col items-center justify-center p-8 text-center">
               <button
                 onClick={() => {
                   onSelect(activeDriver.id);
                 }}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-surface-hover transition-all text-left border border-border"
+                className="hover:bg-surface-hover border-border flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-all"
               >
                 <div className="min-w-0">
-                  <div className="text-[13px] font-bold text-text-main mb-0.5">
+                  <div className="text-text-main mb-0.5 text-[13px] font-bold">
                     {activeDriver.label}
                   </div>
-                  <div className="text-[11px] text-text-muted font-medium truncate">
+                  <div className="text-text-muted truncate text-[11px] font-medium">
                     Default Configuration
                   </div>
                 </div>
@@ -178,41 +178,41 @@ export function HarnessPicker({
                   onClick={() => {
                     onSelect(activeDriver.id, model.value);
                   }}
-                  className={`w-full flex items-center justify-between px-3 py-3 rounded-xl group transition-all text-left ${
+                  className={`group flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition-all ${
                     isSelected
-                      ? 'bg-accent/5 border border-accent/20'
+                      ? 'bg-accent/5 border-accent/20 border'
                       : 'hover:bg-surface-hover border border-transparent'
                   }`}
                 >
-                  <div className="flex items-center gap-4 min-w-0">
+                  <div className="flex min-w-0 items-center gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
+                      <div className="mb-0.5 flex items-center gap-2">
                         <div
-                          className={`text-[13px] font-bold transition-colors truncate ${
+                          className={`truncate text-[13px] font-bold transition-colors ${
                             isSelected ? 'text-accent' : 'text-text-main group-hover:text-text-main'
                           }`}
                         >
                           {model.name}
                         </div>
                       </div>
-                      <div className="text-[11px] text-text-muted font-medium flex items-center gap-1.5 truncate">
-                        <div className="w-1.5 h-1.5 bg-success rounded-full opacity-80" />
+                      <div className="text-text-muted flex items-center gap-1.5 truncate text-[11px] font-medium">
+                        <div className="bg-success h-1.5 w-1.5 rounded-full opacity-80" />
                         {activeDriver.label}
                       </div>
                     </div>
                   </div>
                   <div
-                    className={`text-[10px] font-bold text-text-muted transition-all duration-300 ${
+                    className={`text-text-muted text-[10px] font-bold transition-all duration-300 ${
                       isSelected ? 'hidden' : ''
                     }`}
                   >
-                    <span className="bg-surface-hover px-1.5 py-1 rounded-md border border-border shadow-sm">
+                    <span className="bg-surface-hover border-border rounded-md border px-1.5 py-1 shadow-sm">
                       Ctrl+{String(i + 1)}
                     </span>
                   </div>
                   {isSelected && (
-                    <div className="w-5 h-5 bg-accent rounded-full flex items-center justify-center shadow-lg animate-in zoom-in duration-300 shrink-0 ml-2">
-                      <Zap className="w-3 h-3 text-background fill-current" />
+                    <div className="bg-accent animate-in zoom-in ml-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full shadow-lg duration-300">
+                      <Zap className="text-background h-3 w-3 fill-current" />
                     </div>
                   )}
                 </button>

@@ -37,34 +37,35 @@ export function NewProjectPalette() {
   const shouldShowExplorer = projects.length === 0 || showExplorer;
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-background relative overflow-hidden">
-      <div className="max-w-2xl w-full text-center animate-in fade-in zoom-in-95 duration-1000 relative z-10">
+    <div className="bg-background animate-fade-in-up relative flex flex-1 flex-col items-center justify-center overflow-hidden p-8">
+      <div className="bg-accent-glow/20 animate-pulse-slow pointer-events-none absolute top-1/2 left-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-40 blur-[150px]" />
+      <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-8">
         {mutation.isPending ? (
           <div className="flex flex-col items-center gap-6">
-            <Sparkles className="w-12 h-12 text-accent animate-pulse" />
-            <p className="text-2xl font-black tracking-tight text-text-main">
+            <Sparkles className="text-accent h-12 w-12 animate-pulse" />
+            <p className="text-text-main text-2xl font-black tracking-tight">
               Setting up your workspace...
             </p>
             <p className="text-text-muted">Opening the project and preparing a session</p>
           </div>
         ) : (
           <>
-            <h1 className="text-5xl font-black mb-4 tracking-tight text-text-main">
-              Welcome to Agent Workbench!
+            <h1 className="font-display from-text-main to-text-muted bg-gradient-to-br bg-clip-text text-4xl font-bold tracking-tight text-transparent">
+              What are we building today?
             </h1>
-            <p className="text-text-muted text-lg mb-12">
+            <p className="text-text-muted mb-12 text-lg">
               {shouldShowExplorer
                 ? 'Pick a Git project folder and start collaborating with your agents.'
                 : 'Select a project from the sidebar to continue, or open a new one.'}
             </p>
 
             {mutation.error && (
-              <div className="mb-6 rounded-xl border border-danger/30 bg-danger/10 p-4 text-left text-sm text-text-main">
-                <div className="flex items-center gap-2 font-bold text-danger">
+              <div className="border-danger/30 bg-danger/10 text-text-main mb-6 rounded-xl border p-4 text-left text-sm">
+                <div className="text-danger flex items-center gap-2 font-bold">
                   <AlertCircle className="h-4 w-4" />
                   Could not open project
                 </div>
-                <p className="mt-1 text-text-muted">{mutation.error.message}</p>
+                <p className="text-text-muted mt-1">{mutation.error.message}</p>
               </div>
             )}
 
@@ -75,7 +76,7 @@ export function NewProjectPalette() {
                 onClick={() => {
                   setShowExplorer(true);
                 }}
-                className="px-6 py-3 bg-surface hover:bg-surface-hover border border-border text-text-main rounded-xl font-medium transition-colors"
+                className="bg-surface-secondary/80 shadow-immersive-lg hover:bg-surface-hover hover:border-accent/50 text-text-main rounded-2xl border border-white/10 px-6 py-3 font-medium backdrop-blur-xl transition-all duration-300"
               >
                 Open New Project
               </button>
@@ -83,7 +84,7 @@ export function NewProjectPalette() {
           </>
         )}
       </div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-accent/5 rounded-full blur-[150px] -z-0 pointer-events-none opacity-50" />
+      <div className="bg-accent/5 pointer-events-none absolute top-1/2 left-1/2 -z-0 h-[1000px] w-[1000px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-[150px]" />
     </div>
   );
 }

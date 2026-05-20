@@ -1,13 +1,6 @@
 import { z } from 'zod';
 
-export const driverSchema = z.enum([
-  'claude-code',
-  'claude-acp',
-  'gemini-cli',
-  'gemini',
-  'opencode',
-  'codex-acp',
-]);
+export const driverSchema = z.enum(['claude-code', 'claude-acp', 'opencode', 'codex-acp']);
 
 export const thinkingEffortSchema = z.enum(['low', 'medium', 'high']);
 
@@ -44,7 +37,7 @@ export const sessionProviderSelectionSchema = z.object({
   selectedThinkingEffort: thinkingEffortSchema,
 });
 
-export const driverStatusSchema = z.enum(['ready', 'not_found', 'error', 'needs_auth']);
+export const driverStatusSchema = z.enum(['ready', 'not_found', 'error', 'needs_auth', 'inactive']);
 
 export const acpConfigOptionSchema = z.object({
   id: z.string(),

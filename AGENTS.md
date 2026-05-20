@@ -73,4 +73,3 @@ PORT=3000
 DATABASE_URL=sqlite.db   # default: ~/.agentctl/agentctl.db
 VITE_API_URL             # web only, must start with http
 ```
-

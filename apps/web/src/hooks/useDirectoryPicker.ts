@@ -6,7 +6,9 @@ export function useDirectoryPicker() {
   const pickDirectory = useCallback(async (): Promise<string | null> => {
     if ('showDirectoryPicker' in window) {
       try {
-        const showPicker = (window as Window & typeof globalThis & { showDirectoryPicker: ShowDirectoryPicker }).showDirectoryPicker;
+        const showPicker = (
+          window as Window & typeof globalThis & { showDirectoryPicker: ShowDirectoryPicker }
+        ).showDirectoryPicker;
         const handle = await showPicker();
         return handle.name;
       } catch {

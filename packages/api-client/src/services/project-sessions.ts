@@ -1,4 +1,9 @@
-import { type DriverDiscovery, type SessionRow, getReadyDriverId, createTaskSlug } from '@agentctl/shared';
+import {
+  type DriverDiscovery,
+  type SessionRow,
+  getReadyDriverId,
+  createTaskSlug,
+} from '@agentctl/shared';
 import { apiClient } from '../api-client.js';
 
 export interface SidebarProject {

@@ -32,20 +32,20 @@ export function ReviewView({
   }, [files]);
 
   if (isLoading) {
-    return <div className="flex-1 p-4 text-sm text-text-muted">Loading review diff...</div>;
+    return <div className="text-text-muted flex-1 p-4 text-sm">Loading review diff...</div>;
   }
 
   if (error) {
     return (
       <div className="flex-1 p-4">
-        <div className="rounded-lg border border-danger/30 bg-danger/10 p-4 text-sm">
-          <div className="font-medium text-danger">Failed to load review diff</div>
-          <div className="mt-1 text-text-muted">{error.message}</div>
+        <div className="border-danger/30 bg-danger/10 rounded-lg border p-4 text-sm">
+          <div className="text-danger font-medium">Failed to load review diff</div>
+          <div className="text-text-muted mt-1">{error.message}</div>
           {onRetry && (
             <button
               type="button"
               onClick={onRetry}
-              className="mt-4 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-main transition-colors hover:bg-background"
+              className="border-border bg-surface text-text-main hover:bg-background mt-4 rounded-lg border px-3 py-2 text-sm transition-colors"
             >
               Retry
             </button>
@@ -56,7 +56,7 @@ export function ReviewView({
   }
 
   if (files.length === 0) {
-    return <div className="flex-1 p-4 text-sm text-text-muted">No worktree changes.</div>;
+    return <div className="text-text-muted flex-1 p-4 text-sm">No worktree changes.</div>;
   }
 
   const activeStates = (Object.keys(grouped) as FileState[]).filter(
@@ -64,34 +64,34 @@ export function ReviewView({
   );
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="shrink-0 p-4 bg-surface/30 backdrop-blur-xl border-b border-border shadow-sm">
-        <h2 className="font-display text-lg font-medium text-text-main mb-4">Code Review</h2>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="bg-surface/30 border-border shrink-0 border-b p-4 shadow-sm backdrop-blur-xl">
+        <h2 className="font-display text-text-main mb-4 text-lg font-medium">Code Review</h2>
         <div className="flex flex-wrap gap-6">
           {activeStates.map((state) => (
             <div key={state} className="flex flex-col gap-1">
-              <span className="text-[10px] font-black uppercase tracking-[0.15em] text-text-muted/70">
+              <span className="text-text-muted/70 text-[10px] font-black tracking-[0.15em] uppercase">
                 {state}
               </span>
-              <span className="font-mono text-xl font-medium text-text-main">
+              <span className="text-text-main font-mono text-xl font-medium">
                 {grouped[state].length}
               </span>
             </div>
           ))}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-8">
+      <div className="flex-1 space-y-8 overflow-y-auto p-3 sm:p-4">
         {activeStates.map((state) => {
           const entries = grouped[state];
 
           return (
             <section key={state} className="space-y-4">
               <div className="flex items-center gap-3">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted">
+                <h3 className="text-text-muted text-xs font-bold tracking-widest uppercase">
                   {state}
                 </h3>
-                <div className="h-px flex-1 bg-border/40" />
-                <span className="text-[10px] font-mono text-text-muted/60">
+                <div className="bg-border/40 h-px flex-1" />
+                <span className="text-text-muted/60 font-mono text-[10px]">
                   {entries.length} files
                 </span>
               </div>

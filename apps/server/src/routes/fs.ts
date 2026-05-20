@@ -19,17 +19,22 @@ export const fsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
     },
     async (request) => {
       const targetPath = request.body.path ?? os.homedir();
-      
+
       try {
         const stats = await fs.stat(targetPath);
         if (!stats.isDirectory()) {
-          return { currentPath: targetPath, parentPath: path.dirname(targetPath), folders: [], error: 'Not a directory' };
+          return {
+            currentPath: targetPath,
+            parentPath: path.dirname(targetPath),
+            folders: [],
+            error: 'Not a directory',
+          };
         }
 
         const entries = await fs.readdir(targetPath, { withFileTypes: true });
-        
+
         const folderPromises = entries
-          .filter(e => e.isDirectory() && !e.name.startsWith('.')) // Filter out hidden and files
+          .filter((e) => e.isDirectory() && !e.name.startsWith('.')) // Filter out hidden and files
           .map(async (e) => {
             const fullPath = path.join(targetPath, e.name);
             let isRepo = false;
@@ -61,14 +66,14 @@ export const fsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
         };
       } catch (err) {
         fastify.log.error(err, `Failed to explore path: ${targetPath}`);
-        return { 
-          currentPath: targetPath, 
-          parentPath: path.dirname(targetPath), 
-          folders: [], 
-          error: err instanceof Error ? err.message : 'Unknown error' 
+        return {
+          currentPath: targetPath,
+          parentPath: path.dirname(targetPath),
+          folders: [],
+          error: err instanceof Error ? err.message : 'Unknown error',
         };
       }
-    }
+    },
   );
 
   done();

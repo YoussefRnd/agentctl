@@ -6,7 +6,10 @@ import { parseServerEnv } from '@agentctl/shared';
 function findWorkspaceRoot(startDir: string): string {
   let current = startDir;
   while (current !== path.parse(current).root) {
-    if (fs.existsSync(path.join(current, 'pnpm-workspace.yaml')) || fs.existsSync(path.join(current, '.git'))) {
+    if (
+      fs.existsSync(path.join(current, 'pnpm-workspace.yaml')) ||
+      fs.existsSync(path.join(current, '.git'))
+    ) {
       return current;
     }
     current = path.dirname(current);
@@ -22,5 +25,5 @@ export const Config = {
       dotenv.config({ path: envPath });
     }
     return parseServerEnv(process.env);
-  }
+  },
 };

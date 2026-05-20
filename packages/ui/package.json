@@ -10,7 +10,6 @@
     "dev": "tsc -b --watch",
     "typecheck": "tsc -b"
   },
-
   "files": [
     "dist",
     "src"

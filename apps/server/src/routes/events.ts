@@ -33,7 +33,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
         .orderBy(asc(acpEvents.id));
 
       return rows.map(parseEventRow);
-    }
+    },
   );
 
   done();

@@ -25,6 +25,22 @@ export const driversRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =>
       return { success: true };
     },
   );
+  fastify.withTypeProvider<ZodTypeProvider>().post(
+    '/drivers/:id/activate',
+    {
+      schema: {
+        params: z.object({ id: z.string() }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+      return await fastify.driverRegistry.activate(id);
+    },
+  );
 
+  fastify.withTypeProvider<ZodTypeProvider>().post('/drivers/sync', async () => {
+    await fastify.driverRegistry.sync();
+    return await fastify.driverRegistry.discover();
+  });
   done();
 };

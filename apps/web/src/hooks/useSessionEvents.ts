@@ -11,11 +11,16 @@ const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
 export function useSessionEvents(sessionId: string | null) {
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
-  
+
   // 1. Fetch historical data
-  const { data: history = [], isLoading, error, refetch } = useQuery({
+  const {
+    data: history = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['events', sessionId],
-    queryFn: () => sessionId ? fetchEvents(sessionId) : Promise.resolve([]),
+    queryFn: () => (sessionId ? fetchEvents(sessionId) : Promise.resolve([])),
     enabled: !!sessionId,
   });
 
@@ -60,11 +65,11 @@ export function useSessionEvents(sessionId: string | null) {
         queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
           const newEvents = [...bufferRef.current];
           bufferRef.current = [];
-          
+
           // Deduplicate
-          const existingIds = new Set(old.map(e => e.id));
-          const uniqueNew = newEvents.filter(e => !existingIds.has(e.id));
-          
+          const existingIds = new Set(old.map((e) => e.id));
+          const uniqueNew = newEvents.filter((e) => !existingIds.has(e.id));
+
           if (uniqueNew.length === 0) return old;
           return [...old, ...uniqueNew];
         });
@@ -88,12 +93,14 @@ export function useSessionEvents(sessionId: string | null) {
       if (subscribedRef.current === sessionId) return;
 
       const lastEventId = history.length > 0 ? history[history.length - 1].id : 0;
-      
-      wsRef.current.send(JSON.stringify({
-        action: 'subscribe',
-        sessionId,
-        lastEventId
-      }));
+
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'subscribe',
+          sessionId,
+          lastEventId,
+        }),
+      );
       subscribedRef.current = sessionId;
     }
   }, [isConnected, isLoading, sessionId, history]);

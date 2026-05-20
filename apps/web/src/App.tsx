@@ -3,27 +3,40 @@ import { Layout } from './features/shell/components/Layout';
 import { SessionView } from './routes/SessionView';
 import { LoginView } from './routes/LoginView';
 import { NewProjectPalette } from './features/project/components/NewProjectPalette';
+import { SetupWizard } from './features/settings/components/SetupWizard';
+import { SettingsPage } from './features/settings/components/SettingsPage';
 
 export function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginView />} />
-      <Route
-        path="/"
-        element={
-          <Layout showSidebar={true}>
-            <NewProjectPalette />
-          </Layout>
-        }
-      />
-      <Route
-        path="/sessions/:sessionId"
-        element={
-          <Layout showSidebar={false}>
-            <SessionView />
-          </Layout>
-        }
-      />
-    </Routes>
+    <>
+      <SetupWizard />
+      <Routes>
+        <Route path="/login" element={<LoginView />} />
+        <Route
+          path="/"
+          element={
+            <Layout sidebarType="projects">
+              <NewProjectPalette />
+            </Layout>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <Layout sidebarType="settings">
+              <SettingsPage />
+            </Layout>
+          }
+        />
+        <Route
+          path="/sessions/:sessionId"
+          element={
+            <Layout sidebarType="none">
+              <SessionView />
+            </Layout>
+          }
+        />
+      </Routes>
+    </>
   );
 }

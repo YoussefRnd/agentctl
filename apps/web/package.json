@@ -8,17 +8,15 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -b"
   },
-
-
   "type": "module",
   "dependencies": {
+    "@agentctl/api-client": "workspace:*",
     "@agentctl/shared": "workspace:*",
     "@agentctl/ui": "workspace:*",
-    "@agentctl/api-client": "workspace:*",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-virtual": "^3.13.24",
     "highlight.js": "^11.11.1",
-    "lucide-react": "^1.14.0",
+    "lucide-react": "^1.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
@@ -39,5 +37,4 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.11"
   }
-
 }

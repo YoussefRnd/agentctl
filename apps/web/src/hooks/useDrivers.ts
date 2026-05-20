@@ -37,9 +37,13 @@ export function useDrivers(sessionId: string | null) {
     },
   });
 
-  const switchProvider = (driverId: string, modelId?: string, sessionData?: SessionResponse | null) => {
+  const switchProvider = (
+    driverId: string,
+    modelId?: string,
+    sessionData?: SessionResponse | null,
+  ) => {
     const capability = sessionData?.capabilities.find((item) => item.id === driverId);
-    
+
     // If a model is explicitly passed, use it. Otherwise, fallback to the current/default.
     let selectedModel = modelId;
     if (!selectedModel) {
@@ -81,6 +85,36 @@ export function useDrivers(sessionId: string | null) {
     },
   });
 
+  const activateMutation = useMutation({
+    mutationFn: async (driverId: string) => {
+      return apiClient.fetch(`/api/drivers/${driverId}/activate`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      toast.success('Agent activated successfully!');
+    },
+    onError: (err) => {
+      toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    },
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      return apiClient.fetch<DriverDiscovery[]>('/api/drivers/sync', {
+        method: 'POST',
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['drivers'], data);
+      toast.success('Agents synced successfully!');
+    },
+    onError: (err) => {
+      toast.error(`Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    },
+  });
+
   return {
     drivers,
     isLoadingDrivers,
@@ -88,5 +122,9 @@ export function useDrivers(sessionId: string | null) {
     login: loginMutation.mutate,
     isLoggingIn: loginMutation.isPending,
     isSwitching: providerMutation.isPending,
+    activate: activateMutation.mutate,
+    isActivating: activateMutation.isPending,
+    syncDrivers: syncMutation.mutate,
+    isSyncing: syncMutation.isPending,
   };
 }
