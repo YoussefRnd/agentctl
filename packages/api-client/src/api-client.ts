@@ -5,14 +5,22 @@ const env = parseWebEnv(import.meta.env);
 
 export const apiClient = {
   async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const url = `${env.VITE_API_URL}${path}`;
+    const url = path;
     const headers = new Headers(options.headers);
-    headers.set('Content-Type', 'application/json');
+
+    const method = options.method?.toUpperCase() ?? 'GET';
+    const hasBody = ['POST', 'PUT', 'PATCH'].includes(method);
+
+    if (hasBody && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
 
     try {
       const response = await fetch(url, {
         ...options,
+        method,
         headers,
+        body: hasBody && options.body === undefined ? JSON.stringify({}) : options.body,
         credentials: 'include',
       });
 
@@ -50,11 +58,8 @@ export const apiClient = {
     } catch (error) {
       if (error instanceof ApiError) throw error;
       if (error instanceof Error && error.name === 'AbortError') throw error;
-      
-      throw new ApiError(
-        error instanceof Error ? error.message : 'Network error',
-        0
-      );
+
+      throw new ApiError(error instanceof Error ? error.message : 'Network error', 0);
     }
   },
 };

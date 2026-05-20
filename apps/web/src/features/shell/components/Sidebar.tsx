@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -90,17 +91,18 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Main Sidebar"
-      className="h-full w-[260px] shrink-0 liquid-glass border-r border-border flex flex-col overflow-hidden"
+      className="liquid-glass border-border relative z-20 flex h-full w-[260px] shrink-0 flex-col overflow-hidden border-r shadow-[4px_0_24px_rgba(0,0,0,0.5)]"
     >
-      <div className="p-4 space-y-4 border-b border-border/50 bg-glass-highlight">
+      <div className="from-glass-highlight/20 pointer-events-none absolute inset-0 bg-gradient-to-b to-transparent" />
+      <div className="border-border/50 bg-background/20 relative z-10 space-y-4 border-b p-4 backdrop-blur-md">
         <div className="flex items-center justify-between">
-          <h2 className="text-[10px] font-display font-bold text-text-muted uppercase tracking-[0.2em]">
+          <h2 className="font-display text-text-muted text-[10px] font-bold tracking-[0.2em] uppercase">
             AgentCTL
           </h2>
         </div>
 
-        <div className="relative group">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted group-focus-within:text-accent transition-colors" />
+        <div className="group relative">
+          <Search className="text-text-muted group-focus-within:text-accent absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 transition-colors" />
           <input
             ref={searchInputRef}
             type="text"
@@ -109,51 +111,51 @@ export function Sidebar() {
             onChange={(e) => {
               setSearchQuery(e.target.value);
             }}
-            className="w-full bg-background/50 border border-border rounded-lg py-1.5 pl-8 pr-10 text-[12px] focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-all placeholder:text-text-muted/50"
+            className="bg-background/50 border-border focus:border-accent/50 focus:ring-accent/20 placeholder:text-text-muted/50 w-full rounded-lg border py-1.5 pr-10 pl-8 text-[12px] transition-all focus:ring-1 focus:outline-none"
           />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <kbd className="text-[9px] font-mono text-text-muted/50 border border-border px-1 rounded bg-surface/50">
+          <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
+            <kbd className="text-text-muted/50 border-border bg-surface/50 rounded border px-1 font-mono text-[9px]">
               Ctrl+K
             </kbd>
           </div>
         </div>
       </div>
 
-      <div className="px-4 py-2 flex items-center justify-between group">
-        <h3 className="text-[10px] font-bold text-text-muted uppercase tracking-wider opacity-50">
+      <div className="group flex items-center justify-between px-4 py-2">
+        <h3 className="text-text-muted text-[10px] font-bold tracking-wider uppercase opacity-50">
           Projects
         </h3>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
-            className="p-1 hover:bg-surface-hover rounded transition-colors text-text-muted"
+            className="hover:bg-surface-hover text-text-muted rounded p-1 transition-colors"
             title="Sort Projects"
           >
-            <ArrowUpDown className="w-3 h-3" />
+            <ArrowUpDown className="h-3 w-3" />
           </button>
           <Link
             to="/"
-            className="p-1 hover:bg-surface-hover rounded transition-colors text-text-muted"
+            className="hover:bg-surface-hover text-text-muted rounded p-1 transition-colors"
             title="Add Project"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-4">
         {isLoading ? (
-          <div className="px-2 space-y-3 mt-2">
+          <div className="mt-2 space-y-3 px-2">
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
                 aria-hidden="true"
-                className="h-3 bg-border/40 rounded animate-pulse w-full"
+                className="bg-border/40 h-3 w-full animate-pulse rounded"
               ></div>
             ))}
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="px-2 mt-4 text-center">
-            <div className="text-[11px] text-text-muted italic">
+          <div className="mt-4 px-2 text-center">
+            <div className="text-text-muted text-[11px] italic">
               {searchQuery ? 'No results found.' : 'No projects found.'}
             </div>
           </div>
@@ -168,27 +170,27 @@ export function Sidebar() {
               return (
                 <div key={proj.id} className="space-y-0.5">
                   <div
-                    className={`group flex items-center justify-between px-2 py-1 rounded-lg transition-all cursor-pointer ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-surface-hover/50' : 'hover:bg-surface-hover/30'}`}
+                    className={`group flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 transition-all duration-300 ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-surface-hover/80 shadow-accent/5 shadow-md' : 'hover:bg-surface-hover/50 hover:-translate-y-[1px] hover:shadow-sm'}`}
                     onClick={() => {
                       toggleProject(proj.id);
                     }}
                   >
-                    <div className="flex items-center min-w-0">
-                      <span className="shrink-0 w-4 flex justify-center mr-1">
+                    <div className="flex min-w-0 items-center">
+                      <span className="mr-1 flex w-4 shrink-0 justify-center">
                         {isCollapsed ? (
-                          <ChevronRight className="w-3 h-3 opacity-50" />
+                          <ChevronRight className="h-3 w-3 opacity-50" />
                         ) : (
-                          <ChevronDown className="w-3 h-3 opacity-50" />
+                          <ChevronDown className="h-3 w-3 opacity-50" />
                         )}
                       </span>
-                      <Folder className="w-3.5 h-3.5 mr-2 text-text-muted group-hover:text-accent transition-colors shrink-0" />
-                      <span className="truncate text-[13px] font-display font-medium text-text-main/90">
+                      <Folder className="text-text-muted group-hover:text-accent mr-2 h-3.5 w-3.5 shrink-0 transition-colors" />
+                      <span className="font-display text-text-main/90 truncate text-[13px] font-medium">
                         {proj.name}
                       </span>
                     </div>
                     <button
                       type="button"
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-accent transition-all disabled:opacity-50"
+                      className="hover:text-accent p-1 opacity-0 transition-all group-hover:opacity-100 disabled:opacity-50"
                       title={`New session in ${proj.name}`}
                       disabled={isCreatingSession}
                       onClick={(event) => {
@@ -196,17 +198,17 @@ export function Sidebar() {
                       }}
                     >
                       {isCreatingSession ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
-                        <Plus className="w-3 h-3" />
+                        <Plus className="h-3 w-3" />
                       )}
                     </button>
                   </div>
 
                   {showSessions && (
-                    <div className="space-y-0.5 mt-0.5">
+                    <div className="mt-0.5 space-y-0.5">
                       {proj.sessions.length === 0 ? (
-                        <div className="pl-9 py-1 text-[11px] text-text-muted/40 italic">
+                        <div className="text-text-muted/40 py-1 pl-9 text-[11px] italic">
                           No sessions yet
                         </div>
                       ) : (
@@ -215,10 +217,10 @@ export function Sidebar() {
                             key={s.id}
                             to={`/sessions/${s.id}`}
                             aria-current={activeSessionId === s.id ? 'page' : undefined}
-                            className={`group flex items-center px-2 py-1 text-[12px] rounded-md transition-all ml-7 ${activeSessionId === s.id ? 'bg-accent/10 text-accent font-medium' : 'text-text-muted hover:text-text-main'}`}
+                            className={`group ml-7 flex items-center rounded-md px-2 py-1.5 text-[12px] transition-all duration-300 ${activeSessionId === s.id ? 'bg-accent/15 text-accent font-semibold shadow-[0_0_10px_var(--color-accent-glow)]' : 'text-text-muted hover:text-text-main hover:bg-surface-hover/40'}`}
                           >
                             <div
-                              className={`w-1.5 h-1.5 rounded-full mr-2.5 shrink-0 ${statusColors[s.status]}`}
+                              className={`mr-2.5 h-1.5 w-1.5 shrink-0 rounded-full transition-all ${statusColors[s.status]} ${activeSessionId === s.id ? 'scale-110 shadow-[0_0_8px_currentColor]' : ''}`}
                             />
                             <span className="truncate">
                               {s.title || s.taskSlug || s.branch || 'New session'}
@@ -233,6 +235,18 @@ export function Sidebar() {
             })}
           </div>
         )}
+      </div>
+
+      <div className="border-border/50 bg-background/30 relative z-10 flex shrink-0 items-center justify-between border-t p-4">
+        <Link
+          to="/settings"
+          className="text-text-muted hover:text-text-main hover:bg-surface-hover/50 group -mx-1 flex w-full items-center gap-2.5 rounded-xl p-2.5 text-xs font-semibold transition-all"
+        >
+          <div className="bg-surface-tertiary flex h-7 w-7 items-center justify-center rounded-lg border border-white/5 transition-all group-hover:border-white/10 group-hover:shadow-[0_0_10px_var(--color-accent-glow)]">
+            <Sparkles className="text-text-muted group-hover:text-accent h-3.5 w-3.5 transition-colors" />
+          </div>
+          Settings
+        </Link>
       </div>
     </aside>
   );

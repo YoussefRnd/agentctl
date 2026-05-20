@@ -26,10 +26,7 @@ export class SessionManager {
     args: string[],
     env?: Record<string, string>,
   ): ACPSession {
-    this.logger.info(
-      { sessionId, command, args, worktreePath },
-      'Starting new agent session',
-    );
+    this.logger.info({ sessionId, command, args, worktreePath }, 'Starting new agent session');
 
     const child = spawn(command, args, {
       cwd: worktreePath,
@@ -53,11 +50,7 @@ export class SessionManager {
     return session;
   }
 
-  restartSession(
-    sessionId: string,
-    worktreePath: string,
-    options: RestartOptions,
-  ): ACPSession {
+  restartSession(sessionId: string, worktreePath: string, options: RestartOptions): ACPSession {
     this.logger.info({ sessionId }, 'Restarting session');
     const existing = this.sessions.get(sessionId);
     if (existing) {
@@ -65,13 +58,7 @@ export class SessionManager {
       this.sessions.delete(sessionId);
     }
 
-    return this.startSession(
-      sessionId,
-      worktreePath,
-      options.command,
-      options.args,
-      options.env,
-    );
+    return this.startSession(sessionId, worktreePath, options.command, options.args, options.env);
   }
 
   getSession(sessionId: string): ACPSession | undefined {

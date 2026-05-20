@@ -13,21 +13,81 @@ const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/reg
 const SUPPORTED_AGENTS = new Set([
   'opencode',
   'claude-acp',
-  'claude-code-acp',
-  'gemini',
-  'gemini-acp',
   'codex-acp',
-  'claude-code',
   'gemini-cli',
+  'gemini-acp',
 ]);
 
 const LOCAL_BINARY_HINTS = [
-  { id: 'gemini', command: 'gemini', args: ['--acp'], label: 'Gemini CLI (Local)' },
   { id: 'opencode', command: 'opencode', args: ['acp'], label: 'OpenCode (Local)' },
-  { id: 'codex-acp', command: 'codex-acp', args: [], label: 'Codex ACP (Local)' },
-  { id: 'claude-acp', command: 'claude-agent-acp', args: [], label: 'Claude ACP Bridge (Local)' },
-  { id: 'claude-code', command: 'claude', args: [], label: 'Claude Code (Local)' },
+  { id: 'gemini-cli', command: 'gemini', args: ['--acp'], label: 'Gemini CLI (Local)' },
 ];
+
+const CLAUDE_ACP_FALLBACK: DriverDiscovery = {
+  id: 'claude-acp',
+  label: 'Claude Agent',
+  status: 'inactive',
+  command: 'npx',
+  launchArgs: ['-y', '@agentclientprotocol/claude-agent-acp@0.36.1'],
+  launchEnv: {},
+  configOptions: [
+    {
+      id: 'model',
+      name: 'Model',
+      type: 'select',
+      currentValue: 'claude-3-5-sonnet-latest',
+      options: [
+        { value: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet (Latest)' },
+        { value: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (20241022)' },
+        { value: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku (Latest)' },
+        { value: 'claude-3-opus-latest', name: 'Claude 3 Opus (Latest)' },
+      ],
+    },
+  ],
+  authMethods: [
+    {
+      id: 'env_api_key',
+      name: 'Configure ANTHROPIC_API_KEY',
+      description: 'Ensure the ANTHROPIC_API_KEY environment variable is set.',
+    },
+  ],
+  version: '0.36.1',
+  description: "ACP wrapper for Anthropic's Claude",
+  icon: 'https://cdn.agentclientprotocol.com/registry/v1/latest/claude-acp.svg',
+};
+
+const CODEX_ACP_FALLBACK: DriverDiscovery = {
+  id: 'codex-acp',
+  label: 'Codex CLI',
+  status: 'inactive',
+  command: 'npx',
+  launchArgs: ['-y', '@zed-industries/codex-acp@0.14.0'],
+  launchEnv: {},
+  configOptions: [
+    {
+      id: 'model',
+      name: 'Model',
+      type: 'select',
+      currentValue: 'gpt-4o',
+      options: [
+        { value: 'gpt-4o', name: 'GPT-4o' },
+        { value: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+        { value: 'o1-preview', name: 'o1 Preview' },
+        { value: 'o1-mini', name: 'o1 Mini' },
+      ],
+    },
+  ],
+  authMethods: [
+    {
+      id: 'env_api_key',
+      name: 'Configure OPENAI_API_KEY',
+      description: 'Ensure the OPENAI_API_KEY environment variable is set.',
+    },
+  ],
+  version: '0.14.0',
+  description: "ACP adapter for OpenAI's coding assistant",
+  icon: 'https://cdn.agentclientprotocol.com/registry/v1/latest/codex-acp.svg',
+};
 
 function isBinaryOnPath(command: string): boolean {
   try {
@@ -69,17 +129,28 @@ function resolveLaunchConfig(
   const binaryTarget = agent.distribution.binary?.[platform];
   if (binaryTarget) {
     let command = binaryTarget.cmd;
+    let exists = false;
     if (command.startsWith('./')) {
-      if (!fs.existsSync(command)) {
-        command = command.substring(2);
+      if (fs.existsSync(command)) {
+        exists = true;
+      } else {
+        const pathCmd = command.substring(2);
+        if (isBinaryOnPath(pathCmd)) {
+          command = pathCmd;
+          exists = true;
+        }
       }
+    } else {
+      exists = isBinaryOnPath(command);
     }
 
-    return {
-      command,
-      args: [...binaryTarget.args],
-      env: binaryTarget.env,
-    };
+    if (exists) {
+      return {
+        command,
+        args: [...binaryTarget.args],
+        env: binaryTarget.env,
+      };
+    }
   }
 
   if (agent.distribution.npx) {
@@ -180,16 +251,41 @@ export class DriverRegistry {
       }
     }
 
-    // 2. Process registry agents (only those not already found locally)
-    const pendingProbes = supportedRegistry
-      .filter((agent) => !discovered.some((r) => r.id === agent.id))
-      .map(async (agent) => {
-        const launch = resolveLaunchConfig(agent);
-        if (!launch) return notFoundEntry(agent);
-        return probeAgent(agent, launch, this.logger);
-      });
+    // 2. Process registry agents sequentially (only those not already found locally)
+    const registryResults: DriverDiscovery[] = [];
+    for (const agent of supportedRegistry) {
+      if (discovered.some((r) => r.id === agent.id)) {
+        continue;
+      }
 
-    const registryResults = await Promise.all(pendingProbes);
+      const existingDriver = await this.getDriver(agent.id);
+
+      let fallback: DriverDiscovery | null = null;
+      if (agent.id === 'claude-acp') {
+        fallback = { ...CLAUDE_ACP_FALLBACK };
+      } else if (agent.id === 'codex-acp') {
+        fallback = { ...CODEX_ACP_FALLBACK };
+      }
+
+      // If it's an NPX agent (has a fallback), skip the automatic 60s probe to avoid hangs.
+      if (fallback) {
+        if (existingDriver?.status === 'ready') {
+          fallback.status = 'ready';
+        }
+        registryResults.push(fallback);
+        continue;
+      }
+
+      const launch = resolveLaunchConfig(agent);
+      if (!launch) {
+        registryResults.push(notFoundEntry(agent));
+        continue;
+      }
+
+      this.logger.info(`Probing registry agent: ${agent.id}...`);
+      const probeResult = await probeAgent(agent, launch, this.logger);
+      registryResults.push(probeResult);
+    }
     discovered.push(...registryResults);
 
     // 3. Persist to DB
@@ -283,5 +379,22 @@ export class DriverRegistry {
     } finally {
       child.kill();
     }
+  }
+
+  async activate(driverId: string): Promise<DriverDiscovery> {
+    const driver = await this.getDriver(driverId);
+    if (!driver) throw new Error(`Driver ${driverId} not found`);
+
+    if (driver.status === 'inactive' || driver.status === 'not_found') {
+      await this.db
+        .update(drivers)
+        .set({ status: 'ready', updatedAt: new Date() })
+        .where(eq(drivers.id, driverId));
+
+      const updated = await this.getDriver(driverId);
+      if (!updated) throw new Error('Driver failed to activate or was deleted');
+      return updated;
+    }
+    return driver;
   }
 }

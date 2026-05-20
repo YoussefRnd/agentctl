@@ -8,9 +8,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   envDir: path.resolve(__dirname, '../../'),
   resolve: {
-    alias: {
-      'lucide-react': path.resolve(__dirname, './src/utils/lucide-react.tsx'),
-    },
+    alias: {},
   },
   server: {
     port: 5173,

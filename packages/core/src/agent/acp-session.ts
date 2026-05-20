@@ -63,8 +63,8 @@ export class ACPSession {
     );
     this.connection = new ClientSideConnection(
       () => ({
-        sessionUpdate: (notification) => this.onSessionUpdate(notification),
-        requestPermission: (request) => this.onRequestPermission(request),
+        sessionUpdate: (n) => this.onSessionUpdate(n),
+        requestPermission: (r) => this.onRequestPermission(r),
       }),
       stream,
     );
