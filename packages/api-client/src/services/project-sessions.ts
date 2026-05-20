@@ -1,5 +1,5 @@
 import type { DriverDiscovery, SessionRow } from '@agentctl/shared';
-import { apiClient } from '../api/api-client';
+import { apiClient } from '../api-client.js';
 
 export interface SidebarProject {
   id: string;

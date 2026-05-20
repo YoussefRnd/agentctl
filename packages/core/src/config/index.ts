@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
 import fs from 'node:fs';
-import { parseEnv } from '@agentctl/shared';
+import { parseServerEnv } from '@agentctl/shared';
 
 function findWorkspaceRoot(startDir: string): string {
   let current = startDir;
@@ -21,6 +21,6 @@ export const Config = {
     if (fs.existsSync(envPath)) {
       dotenv.config({ path: envPath });
     }
-    return parseEnv(process.env);
+    return parseServerEnv(process.env);
   }
 };

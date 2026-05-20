@@ -4,8 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DirectoryExplorer } from './DirectoryExplorer';
 import { AlertCircle, Sparkles } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
-import { apiClient } from '../../../api/api-client';
-import { openProjectSession, type SidebarProject } from '../../../services/project-sessions';
+import { apiClient, openProjectSession, type SidebarProject } from '@agentctl/api-client';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();

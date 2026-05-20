@@ -2,14 +2,19 @@
   "name": "@agentctl/web",
   "version": "1.0.0",
   "scripts": {
-    "build": "tsc && vite build",
+    "build": "tsc -b && vite build",
     "dev": "vite",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -b"
   },
+
+
   "type": "module",
   "dependencies": {
     "@agentctl/shared": "workspace:*",
+    "@agentctl/ui": "workspace:*",
+    "@agentctl/api-client": "workspace:*",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-virtual": "^3.13.24",
     "highlight.js": "^11.11.1",
@@ -23,6 +28,8 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@agentctl/eslint-config": "workspace:*",
+    "@agentctl/tsconfig": "workspace:*",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.3.0",
     "@types/react": "^19.2.14",
@@ -32,4 +39,5 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.11"
   }
+
 }

@@ -1,6 +1,6 @@
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import test from 'node:test';
 import type { ChildProcess } from 'node:child_process';
 import type { RegistryAgent } from '@agentctl/shared';
 import { probeAgent } from './acp-probe.js';
@@ -34,7 +34,7 @@ function createChild(): { child: ChildProcess; killCount: () => number } {
   return { child, killCount: () => killCount };
 }
 
-await test('probeAgent returns ready discovery data on success', async () => {
+test('probeAgent returns ready discovery data on success', async () => {
   const agent = createAgent();
   const { child, killCount } = createChild();
   const initCalls: unknown[] = [];
@@ -89,7 +89,7 @@ await test('probeAgent returns ready discovery data on success', async () => {
   assert.equal(killCount(), 1);
 });
 
-await test('probeAgent maps auth_required to needs_auth', async () => {
+test('probeAgent maps auth_required to needs_auth', async () => {
   const agent = createAgent();
   const { child, killCount } = createChild();
 
@@ -137,7 +137,7 @@ await test('probeAgent maps auth_required to needs_auth', async () => {
   assert.equal(killCount(), 1);
 });
 
-await test('probeAgent returns not_found when initialization times out', async () => {
+test('probeAgent returns not_found when initialization times out', async () => {
   const agent = createAgent();
   const { child, killCount } = createChild();
 

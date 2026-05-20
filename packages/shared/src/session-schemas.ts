@@ -136,3 +136,4 @@ export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type DriverStatus = z.infer<typeof driverStatusSchema>;
 export type ACPConfigOption = z.infer<typeof acpConfigOptionSchema>;
 export type DriverDiscovery = z.infer<typeof driverDiscoverySchema>;
+export type AuthMethod = z.infer<typeof authMethodSchema>;

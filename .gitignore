@@ -11,3 +11,4 @@ dist
 docs/superpowers/
 *.tsbuildinfo
 .gemini/
+.antigravitycli

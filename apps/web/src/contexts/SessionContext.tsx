@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ACPEventRow, SessionWithCapabilities } from '@agentctl/shared';
-import { apiClient } from '../api/api-client';
+import { apiClient } from '@agentctl/api-client';
 import { useSessionEvents } from '../hooks/useSessionEvents';
 import type { ReviewFile } from '../features/session/components/ReviewView';
 

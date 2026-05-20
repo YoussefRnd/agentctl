@@ -1,5 +1,5 @@
 import { Menu, PanelRight } from 'lucide-react';
-import { Button } from '../../../components/ui/Button';
+import { Button } from '@agentctl/ui';
 
 interface SessionHeaderProps {
   sessionId: string;

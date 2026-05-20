@@ -41,7 +41,7 @@ export function HarnessPicker({
     const modelOption = activeDriver.configOptions?.find(
       (opt) => opt.id === 'model' || opt.id === 'selectedModel',
     );
-    if (!modelOption) return [];
+    if (!modelOption?.options) return [];
 
     return modelOption.options.filter(
       (opt) =>

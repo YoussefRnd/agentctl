@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow } from '@agentctl/shared';
 
-import { apiClient } from '../api/api-client';
+import { apiClient } from '@agentctl/api-client';
 
 const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
   return apiClient.fetch<ACPEventRow[]>(`/api/sessions/${sessionId}/events`);
@@ -96,7 +96,7 @@ export function useSessionEvents(sessionId: string | null) {
       }));
       subscribedRef.current = sessionId;
     }
-  }, [isConnected, isLoading, sessionId, history.length]);
+  }, [isConnected, isLoading, sessionId, history]);
 
   // Reset subscription ref on disconnect
   useEffect(() => {

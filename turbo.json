@@ -5,6 +5,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": ["tsconfig.tsbuildinfo"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
@@ -15,6 +19,7 @@
     "lint": {
       "dependsOn": ["^build"]
     },
+
     "clean": {
       "cache": false
     },

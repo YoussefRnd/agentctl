@@ -10,10 +10,9 @@ import {
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { apiClient } from '../../../api/api-client';
+import { apiClient, createProjectSession, type SidebarProject } from '@agentctl/api-client';
 import { useState, useMemo, useEffect, useRef, type MouseEvent } from 'react';
 import type { DriverDiscovery, SessionStatus } from '@agentctl/shared';
-import { createProjectSession, type SidebarProject } from '../../../services/project-sessions';
 
 export function Sidebar() {
   const { sessionId: activeSessionId } = useParams();

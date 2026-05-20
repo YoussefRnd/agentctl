@@ -1,51 +1,5 @@
-// packages/shared/src/index.ts
-export {
-  projectSchema,
-  createProjectSchema,
-  projectCreatedResponseSchema,
-  createSessionSchema,
-  sessionSchema,
-  sessionProviderSelectionSchema,
-  driverCapabilitySchema,
-  sessionRowSchema,
-  sessionWithCapabilitiesSchema,
-  sessionStatusSchema,
-  acpEventSchema,
-  driverSchema,
-  thinkingEffortSchema,
-  driverStatusSchema,
-  acpConfigOptionSchema,
-  driverDiscoverySchema,
-  registryDistributionNpxSchema,
-  registryDistributionBinaryTargetSchema,
-  registryDistributionUvxSchema,
-  registryDistributionSchema,
-  registryAgentSchema,
-  registrySchema,
-} from './schemas.js';
-export type {
-  Project,
-  DriverName,
-  Session,
-  SessionRow,
-  SessionProviderSelection,
-  DriverCapability,
-  SessionWithCapabilities,
-  SessionStatus,
-  ThinkingEffort,
-  ACPEvent,
-  ACPEventRow,
-  ACPEventTextData,
-  ACPEventToolCallData,
-  ACPEventApprovalRequestData,
-  DriverStatus,
-  ACPConfigOption,
-  DriverDiscovery,
-  RegistryDistributionNpx,
-  RegistryDistributionBinaryTarget,
-  RegistryDistributionUvx,
-  RegistryDistribution,
-  RegistryAgent,
-  Registry,
-} from './schemas.js';
-export * from './env.js';
+export * from './env-server.js';
+export * from './env-web.js';
+export * from './session-schemas.js';
+export * from './acp-event-schemas.js';
+export * from './registry-schemas.js';

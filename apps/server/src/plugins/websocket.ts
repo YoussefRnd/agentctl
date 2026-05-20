@@ -73,7 +73,11 @@ export default fp(async (fastify) => {
               socket.send(JSON.stringify({ type: 'acp_event', payload: parseEventRow(parsed) }));
             });
           } else {
-            await req.server.sessionManager.handleClientMessage(message);
+            await req.server.sessionManager.handleClientMessage(
+              message.sessionId,
+              message.action,
+              message
+            );
           }
         } catch (error) {
           req.log.error(error, 'WebSocket message error');

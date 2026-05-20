@@ -8,7 +8,9 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "prettier --write .",
-    "typecheck": "tsc --build",
+    "typecheck": "turbo typecheck",
+
+    "test": "turbo test",
     "clean": "find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name dist -type d -exec rm -rf {} + 2>/dev/null; rm -rf .turbo",
     "prepare": "husky"
   },
@@ -20,20 +22,29 @@
   "devDependencies": {
     "@commitlint/cli": "^21.0.0",
     "@commitlint/config-conventional": "^21.0.0",
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.21.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.2",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
-    "eslint": "^10.3.0",
+    "eslint": "^9.21.0",
+
+
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-tailwindcss": "^3.18.3",
+    "eslint-plugin-vitest": "^0.5.4",
     "husky": "^9.1.7",
     "prettier": "^3.8.3",
+    "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.9.12",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.2"
-  },
-  "dependencies": {
-    "@agentclientprotocol/sdk": "^0.21.1"
+    "typescript-eslint": "^8.59.2",
+    "vitest": "^4.1.6"
   }
 }
+
+
+

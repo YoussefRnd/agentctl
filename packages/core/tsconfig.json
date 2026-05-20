@@ -1,5 +1,6 @@
 {
-  "extends": "../../tsconfig.json",
+  "extends": "@agentctl/tsconfig/base.json",
+
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src"

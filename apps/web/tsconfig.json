@@ -1,5 +1,6 @@
 {
-	"extends": "../../tsconfig.json",
+	"extends": "@agentctl/tsconfig/react.json",
+
 	"compilerOptions": {
 			"baseUrl": ".",
 		"paths": {
@@ -18,5 +19,10 @@
 		"vite-env.d.ts",
 		"vite.config.ts",
 		"vitest.config.ts"
+	],
+	"references": [
+		{ "path": "../../packages/shared" },
+		{ "path": "../../packages/ui" },
+		{ "path": "../../packages/api-client" }
 	]
 }

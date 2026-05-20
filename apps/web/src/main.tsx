@@ -1,27 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster, toast } from 'sonner';
+import { Toaster } from 'sonner';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@agentctl/api-client';
 import { App } from './App';
 import { AppErrorBoundary } from './features/shell/components/AppErrorBoundary';
 import './index.css';
 import 'highlight.js/styles/github-dark.css';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
-    },
-    mutations: {
-      onError: (error: unknown) => {
-        const message = error instanceof Error ? error.message : 'Something went wrong';
-        toast.error(message);
-      },
-    },
-  },
-});
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

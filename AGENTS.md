@@ -2,13 +2,13 @@
 
 ## Monorepo layout
 
-| package | path | purpose |
-|---|---|---|
-| `@agentctl/shared` | `packages/shared` | Zod schemas, types, env parsing (only deps: zod) |
-| `@agentctl/core` | `packages/core` | DB (Drizzle+better-sqlite3), git worktrees, ACP sessions, driver registry |
-| `@agentctl/server` | `apps/server` | Fastify HTTP+WebSocket server |
-| `@agentctl/web` | `apps/web` | React 19 + Vite + Tailwind 4 frontend |
-| `@agentctl/desktop` | `apps/desktop` | placeholder (empty) |
+| package             | path              | purpose                                                                   |
+| ------------------- | ----------------- | ------------------------------------------------------------------------- |
+| `@agentctl/shared`  | `packages/shared` | Zod schemas, types, env parsing (only deps: zod)                          |
+| `@agentctl/core`    | `packages/core`   | DB (Drizzle+better-sqlite3), git worktrees, ACP sessions, driver registry |
+| `@agentctl/server`  | `apps/server`     | Fastify HTTP+WebSocket server                                             |
+| `@agentctl/web`     | `apps/web`        | React 19 + Vite + Tailwind 4 frontend                                     |
+| `@agentctl/desktop` | `apps/desktop`    | placeholder (empty)                                                       |
 
 ## Commands (from root)
 
@@ -73,3 +73,4 @@ PORT=3000
 DATABASE_URL=sqlite.db   # default: ~/.agentctl/agentctl.db
 VITE_API_URL             # web only, must start with http
 ```
+

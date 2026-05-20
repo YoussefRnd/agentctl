@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import type { SessionStatus, ACPEvent } from '@agentctl/shared';
+import type { SessionStatus, ACPEvent, DriverStatus } from '@agentctl/shared';
 
 // Timestamps with DB-level defaults and auto-update on updatedAt
 const timestamps = {
@@ -53,6 +53,21 @@ export const sessions = sqliteTable('sessions', {
   estimatedCost: real('estimated_cost').notNull().default(0.0),
   lastHeartbeat: integer('last_heartbeat', { mode: 'timestamp' }),
   closedAt: integer('closed_at', { mode: 'timestamp' }),
+  ...timestamps,
+});
+
+export const drivers = sqliteTable('drivers', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  status: text('status').$type<DriverStatus>().notNull().default('not_found'),
+  command: text('command').notNull(),
+  launchArgs: text('launch_args').notNull().default('[]'), // JSON string
+  launchEnv: text('launch_env').notNull().default('{}'), // JSON string
+  configOptions: text('config_options').notNull().default('[]'), // JSON string
+  authMethods: text('auth_methods').notNull().default('[]'), // JSON string
+  version: text('version'),
+  description: text('description'),
+  icon: text('icon'),
   ...timestamps,
 });
 

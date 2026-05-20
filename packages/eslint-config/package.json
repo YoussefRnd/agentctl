@@ -1,0 +1,29 @@
+{
+  "name": "@agentctl/eslint-config",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+
+  "exports": {
+    ".": "./index.js",
+    "./react": "./react.js",
+    "./vitest": "./vitest.js"
+  },
+  "files": [
+    "index.js",
+    "react.js",
+    "vitest.js"
+  ],
+  "dependencies": {
+    "@eslint/compat": "^1.2.7",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-tailwindcss": "^3.18.3",
+    "eslint-plugin-vitest": "^0.5.4",
+    "tailwindcss": "^4.3.0"
+  }
+}
+
+

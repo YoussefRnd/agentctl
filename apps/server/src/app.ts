@@ -16,13 +16,13 @@ import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zo
 import { db as defaultDb, WorktreeManager, GitMutex, DriverRegistry } from '@agentctl/core';
 import { AppError } from './errors/app-error.js';
 import type { FastifyError } from 'fastify';
-import { parseEnv } from '@agentctl/shared';
+import { parseServerEnv } from '@agentctl/shared';
 
 export interface AppDependencies {
   db?: typeof defaultDb;
   worktreeManager?: WorktreeManager;
   driverRegistry?: DriverRegistry;
-  env?: ReturnType<typeof parseEnv>;
+  env?: ReturnType<typeof parseServerEnv>;
 }
 
 declare module 'fastify' {
@@ -31,7 +31,7 @@ declare module 'fastify' {
     worktreeManager: WorktreeManager;
     gitMutex: GitMutex;
     driverRegistry: DriverRegistry;
-    config: ReturnType<typeof parseEnv>;
+    config: ReturnType<typeof parseServerEnv>;
   }
 }
 
@@ -55,14 +55,19 @@ export async function buildApp(deps: AppDependencies = {}) {
   const db = deps.db ?? defaultDb;
   const gitMutex = new GitMutex();
   const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
-  const driverRegistry = deps.driverRegistry ?? new DriverRegistry(fastify.log);
-  const config = deps.env ?? parseEnv(process.env);
+  const driverRegistry = deps.driverRegistry ?? new DriverRegistry(db, fastify.log);
+  const config = deps.env ?? parseServerEnv(process.env);
 
   fastify.decorate('db', db);
   fastify.decorate('gitMutex', gitMutex);
   fastify.decorate('worktreeManager', worktreeManager);
   fastify.decorate('driverRegistry', driverRegistry);
   fastify.decorate('config', config);
+
+  // Sync drivers in the background on startup
+  void driverRegistry.sync().catch((err: unknown) => {
+    fastify.log.error(err, 'Failed to sync driver registry on startup');
+  });
 
   // Global error handler — keeps all error serialization in one place.
   fastify.setErrorHandler((error: FastifyError, _request, reply) => {

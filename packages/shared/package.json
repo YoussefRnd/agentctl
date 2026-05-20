@@ -5,10 +5,12 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "typecheck": "tsc -b"
+
+
   },
   "keywords": [],
   "author": "",
@@ -18,5 +20,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@agentctl/eslint-config": "workspace:*",
+    "@agentctl/tsconfig": "workspace:*"
   }
 }
+

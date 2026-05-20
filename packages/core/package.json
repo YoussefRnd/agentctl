@@ -5,10 +5,13 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -b"
+
+
   },
   "keywords": [],
   "author": "",
@@ -20,11 +23,16 @@
     "better-sqlite3": "^12.9.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
-    "simple-git": "^3.36.0"
+    "drizzle-zod": "^0.8.3",
+    "simple-git": "^3.36.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@agentctl/eslint-config": "workspace:*",
+    "@agentctl/tsconfig": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.2",
     "drizzle-kit": "^0.31.10"
   }
+
 }
