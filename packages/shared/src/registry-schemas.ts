@@ -2,20 +2,20 @@ import { z } from 'zod';
 
 export const registryDistributionNpxSchema = z.object({
   package: z.string().min(1),
-  args: z.array(z.string()).optional().default([]),
+  args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional().default({}),
 });
 
 export const registryDistributionBinaryTargetSchema = z.object({
   archive: z.url(),
   cmd: z.string().min(1),
-  args: z.array(z.string()).optional().default([]),
+  args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional().default({}),
 });
 
 export const registryDistributionUvxSchema = z.object({
   package: z.string().min(1),
-  args: z.array(z.string()).optional().default([]),
+  args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional().default({}),
 });
 

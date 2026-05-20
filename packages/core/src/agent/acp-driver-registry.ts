@@ -79,7 +79,7 @@ function resolveLaunchConfig(
     if (exists) {
       return {
         command,
-        args: [...binaryTarget.args],
+        args: [...(binaryTarget.args ?? [])],
         env: binaryTarget.env,
       };
     }
@@ -89,7 +89,7 @@ function resolveLaunchConfig(
     const { package: pkg, args, env } = agent.distribution.npx;
     return {
       command: 'npx',
-      args: ['-y', pkg, ...args],
+      args: ['-y', pkg, ...(args ?? [])],
       env,
     };
   }
@@ -98,7 +98,7 @@ function resolveLaunchConfig(
     const { package: pkg, args, env } = agent.distribution.uvx;
     return {
       command: 'uvx',
-      args: [pkg, ...args],
+      args: [pkg, ...(args ?? [])],
       env,
     };
   }
