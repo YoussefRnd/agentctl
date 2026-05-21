@@ -110,6 +110,7 @@ test('DriverRegistry ensureDriverReady performs lazy binary check when force is 
     enabled: true,
     launchArgs: [],
     launchEnv: {},
+    customEnv: {},
     configOptions: [],
     authMethods: [],
     version: '1.0.0',

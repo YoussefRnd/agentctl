@@ -1,10 +1,21 @@
+import { useState } from 'react';
 import { useSetupWizard } from '../hooks/useSetupWizard';
 import { useDrivers } from '../../../hooks/useDrivers';
-import { Sparkles } from 'lucide-react';
+import { DRIVER_ENV_KEYS } from '@agentctl/shared';
+import { Sparkles, RefreshCw } from 'lucide-react';
 
 export function SetupWizard() {
 	const { showWizard, markDone } = useSetupWizard();
-	const { drivers, activate, toggleDriver, isLoadingDrivers } = useDrivers(null);
+	const {
+		drivers,
+		activate,
+		toggleDriver,
+		isLoadingDrivers,
+		updateDriverConfig,
+		isUpdatingConfig,
+	} = useDrivers(null);
+	const [localCustomEnvs, setLocalCustomEnvs] = useState<Record<string, Record<string, string> | undefined>>({});
+
 	const enabledDrivers = drivers.filter((driver) => driver.enabled);
 	const defaultDriverId = enabledDrivers[0]?.id ?? null;
 
@@ -38,74 +49,141 @@ export function SetupWizard() {
 					) : (
 						drivers.map((driver) => {
 							const isActive = driver.enabled;
+							const envKeys = DRIVER_ENV_KEYS[driver.id] ?? [];
+							const hasKeys = envKeys.length > 0;
+
+							const keysValues = envKeys.reduce<Record<string, string>>((acc, key) => {
+								acc[key] = localCustomEnvs[driver.id]?.[key] ?? (driver.customEnv[key] || '');
+								return acc;
+							}, {});
+
+							const hasChanges = envKeys.some((key) => {
+								const val = keysValues[key];
+								return val !== (driver.customEnv[key] || '');
+							});
+
 							return (
 								<div
 									key={driver.id}
-									className="bg-surface-secondary/40 flex items-center justify-between rounded-xl border border-white/5 p-3 transition-colors hover:border-white/10"
+									className="bg-surface-secondary/40 flex flex-col gap-3 rounded-xl border border-white/5 p-3 transition-colors hover:border-white/10"
 								>
-									<div className="flex min-w-0 items-center gap-3">
-										<div className="bg-surface-tertiary relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 p-1">
-											{driver.icon ? (
-												<img
-													src={driver.icon}
-													alt={driver.label}
-													className="h-full w-full object-contain"
-												/>
-											) : (
-												<div className="from-accent/20 to-accent/5 absolute inset-0 flex items-center justify-center bg-gradient-to-br select-none">
-													<span className="text-accent text-xs font-bold drop-shadow-sm">
-														{driver.label.charAt(0)}
-													</span>
+									<div className="flex items-center justify-between">
+										<div className="flex min-w-0 items-center gap-3">
+											<div className="bg-surface-tertiary relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 p-1">
+												{driver.icon ? (
+													<img
+														src={driver.icon}
+														alt={driver.label}
+														className="h-full w-full object-contain"
+													/>
+												) : (
+													<div className="from-accent/20 to-accent/5 absolute inset-0 flex items-center justify-center bg-gradient-to-br select-none">
+														<span className="text-accent text-xs font-bold drop-shadow-sm">
+															{driver.label.charAt(0)}
+														</span>
+													</div>
+												)}
+											</div>
+											<div className="min-w-0">
+												<div className="text-text-main truncate text-sm font-semibold">
+													{driver.label}
 												</div>
-											)}
-										</div>
-										<div className="min-w-0">
-											<div className="text-text-main truncate text-sm font-semibold">
-												{driver.label}
-											</div>
-											<div className="text-text-muted mt-0.5 text-[10px]">
-												{!driver.enabled && driver.status === 'ready' && (
-													<span className="text-blue-400">Supported</span>
-												)}
-												{!driver.enabled && driver.status === 'needs_auth' && (
-													<span className="text-amber-500/80">Supported</span>
-												)}
-												{driver.enabled && (
-													driver.status === 'not_found' ? (
-														<span className="text-red-400 font-semibold">Not Installed</span>
-													) : driver.status === 'needs_auth' ? (
-														<span className="text-amber-400 font-semibold">Needs Auth</span>
-													) : (
-														<span className="text-green-500 font-semibold">Active</span>
-													)
-												)}
-												{!driver.enabled && driver.status !== 'ready' && driver.status !== 'needs_auth' && (
-													driver.status === 'not_found' ? (
-														<span className="text-red-400/60">Not Installed</span>
-													) : (
-														<span className="text-zinc-500">Inactive</span>
-													)
-												)}
+												<div className="text-text-muted mt-0.5 text-[10px]">
+													{!driver.enabled && driver.status === 'ready' && (
+														<span className="text-blue-400">Supported</span>
+													)}
+													{!driver.enabled && driver.status === 'needs_auth' && (
+														<span className="text-amber-500/80">Supported</span>
+													)}
+													{driver.enabled && (
+														driver.status === 'not_found' ? (
+															<span className="text-red-400 font-semibold">Not Installed</span>
+														) : driver.status === 'needs_auth' ? (
+															<span className="text-amber-400 font-semibold">Needs Auth</span>
+														) : (
+															<span className="text-green-500 font-semibold">Active</span>
+														)
+													)}
+													{!driver.enabled && driver.status !== 'ready' && driver.status !== 'needs_auth' && (
+														driver.status === 'not_found' ? (
+															<span className="text-red-400/60">Not Installed</span>
+														) : (
+															<span className="text-zinc-500">Inactive</span>
+														)
+													)}
+												</div>
 											</div>
 										</div>
+
+										<button
+											role="switch"
+											aria-checked={isActive}
+											onClick={() => {
+												const nextEnabled = !driver.enabled;
+												toggleDriver({ driverId: driver.id, enabled: nextEnabled });
+												if (nextEnabled && driver.status === 'inactive') {
+													activate(driver.id);
+												}
+											}}
+											className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-accent' : 'bg-surface-tertiary border-white/5'}`}
+										>
+											<span
+												className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isActive ? 'translate-x-4' : 'translate-x-0'}`}
+											/>
+										</button>
 									</div>
 
-									<button
-										role="switch"
-										aria-checked={isActive}
-										onClick={() => {
-											const nextEnabled = !driver.enabled;
-											toggleDriver({ driverId: driver.id, enabled: nextEnabled });
-											if (nextEnabled && driver.status === 'inactive') {
-												activate(driver.id);
-											}
-										}}
-										className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-accent' : 'bg-surface-tertiary border-white/5'}`}
-									>
-										<span
-											className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isActive ? 'translate-x-4' : 'translate-x-0'}`}
-										/>
-									</button>
+									{isActive && hasKeys && (
+										<div className="space-y-2 border-t border-white/5 pt-2">
+											<div className="space-y-2">
+												{envKeys.map((key) => (
+													<div key={key} className="space-y-1">
+														<label className="text-text-muted text-[9px] font-medium uppercase tracking-wider">
+															{key}
+														</label>
+														<input
+															type="password"
+															value={keysValues[key]}
+															onChange={(e) => {
+																setLocalCustomEnvs({
+																	...localCustomEnvs,
+																	[driver.id]: {
+																		...(localCustomEnvs[driver.id] ?? {}),
+																		[key]: e.target.value,
+																	},
+																});
+															}}
+															placeholder={`Enter your ${key}`}
+															className="bg-surface/50 border-white/5 focus:border-accent/40 w-full rounded-lg border px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:ring-0"
+														/>
+													</div>
+												))}
+												{hasChanges && (
+													<div className="flex justify-end pt-1">
+														<button
+															onClick={() => {
+																updateDriverConfig({
+																	driverId: driver.id,
+																	customEnv: keysValues,
+																});
+															}}
+															disabled={isUpdatingConfig}
+															className="bg-accent hover:bg-accent-hover flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white transition-colors disabled:opacity-50"
+														>
+															{isUpdatingConfig ? (
+																<>
+																	<RefreshCw className="h-3 w-3 animate-spin" />
+																	Connecting...
+																</>
+															) : (
+																'Quick Connect'
+															)}
+														</button>
+													</div>
+												)}
+											</div>
+										</div>
+									)}
 								</div>
 							);
 						})

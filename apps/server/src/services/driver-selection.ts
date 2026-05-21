@@ -33,7 +33,10 @@ export function resolveDriverSelection(driver: DriverDiscovery): {
 }
 
 export function buildLaunchConfig(
-  driver: Pick<DriverDiscovery, 'id' | 'command' | 'launchArgs' | 'launchEnv' | 'configOptions'>,
+  driver: Pick<
+    DriverDiscovery,
+    'id' | 'command' | 'launchArgs' | 'launchEnv' | 'customEnv' | 'configOptions'
+  >,
   selectedModel: string,
   selectedThinkingEffort: string,
 ): DriverLaunchConfig {
@@ -63,6 +66,9 @@ export function buildLaunchConfig(
   return {
     command: driver.command,
     args: [...driver.launchArgs, ...extraArgs],
-    env: driver.launchEnv,
+    env: {
+      ...driver.launchEnv,
+      ...driver.customEnv,
+    },
   };
 }

@@ -68,9 +68,14 @@ export async function buildApp(deps: AppDependencies = {}) {
 	fastify.decorate('config', config);
 
 	// Sync drivers in the background on startup
-	void driverRegistry.sync().catch((err: unknown) => {
-		fastify.log.error(err, 'Failed to sync driver registry on startup');
-	});
+	void driverRegistry
+		.sync()
+		.then(() => {
+			driverRegistry.startBackgroundWarmup();
+		})
+		.catch((err: unknown) => {
+			fastify.log.error(err, 'Failed to sync driver registry on startup');
+		});
 
 	const registrySyncInterval =
 		process.env.NODE_ENV === 'test'

@@ -41,7 +41,7 @@ export async function createAgentSession(fastify: FastifyInstance, input: Create
 	}
 
 	const driver = await fastify.driverRegistry.ensureDriverReady(agent, { force: false });
-	if (driver.status !== 'ready') {
+	if (driver.status !== 'ready' && driver.status !== 'needs_auth') {
 		throw new AppError(`Selected agent is not ready: ${agent}`, 400);
 	}
 

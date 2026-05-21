@@ -84,10 +84,10 @@ export function CommandBar({
           selectedId={resolvedId}
           selectedModelId={propSelectedModelId ?? null}
           onSelect={handleHarnessSelect}
-        />
+          />
 
-        <div className="group relative mx-auto max-w-3xl">
-          <div className="pointer-events-none absolute -inset-1 animate-pulse rounded-3xl bg-[var(--color-accent-glow)] opacity-40 blur-xl transition-opacity duration-700 group-focus-within:opacity-80" />
+          <div className="group relative mx-auto max-w-3xl">
+            <div className="pointer-events-none absolute -inset-1 animate-pulse rounded-3xl bg-accent-glow opacity-40 blur-xl transition-opacity duration-700 group-focus-within:opacity-80" />
 
           <div
             className={`bg-surface/80 border-border/40 group-focus-within:border-accent/40 relative flex flex-col rounded-3xl border shadow-[0_20px_50px_rgba(0,0,0,0.3)] backdrop-blur-2xl transition-all duration-300 group-focus-within:shadow-[0_0_20px_var(--color-accent-glow)] ${disabled ? 'opacity-50' : ''}`}
@@ -107,7 +107,7 @@ export function CommandBar({
                   }
                 }}
                 placeholder={disabled ? 'Processing...' : placeholder}
-                className="placeholder:text-text-muted/50 selection:bg-accent/30 max-h-48 min-h-[60px] w-full resize-none border-none bg-transparent px-3 py-2 text-[15px] leading-relaxed focus:ring-0"
+                className="placeholder:text-text-muted/50 selection:bg-accent/30 max-h-48 min-h-15 w-full resize-none border-none bg-transparent px-3 py-2 text-[15px] leading-relaxed focus:ring-0"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 disabled={disabled}
               />
@@ -127,7 +127,7 @@ export function CommandBar({
                       className={`h-4 w-4 ${selectedId ? 'text-accent fill-accent/20' : 'text-text-muted'}`}
                     />
                   </div>
-                  <span className="max-w-[200px] truncate text-[12px] font-medium tracking-tight">
+                  <span className="max-w-50 truncate text-[12px] font-medium tracking-tight">
                     {isLoadingDrivers ? '...' : (propSelectedModelId ?? selectedDriverLabel)}
                   </span>
                   <ChevronUp
@@ -146,7 +146,7 @@ export function CommandBar({
 
                 <button
                   onClick={handleSubmit}
-                  className={`flex items-center justify-center rounded-xl p-2 transition-all duration-300 ${input.trim() && !disabled ? 'from-accent to-accent-hover bg-gradient-to-r text-white shadow-[0_0_20px_var(--color-accent-glow)] hover:-translate-y-0.5 active:translate-y-0' : 'text-text-muted/40 hover:text-text-muted/80 bg-background/50'}`}
+                  className={`flex items-center justify-center rounded-xl p-2 transition-all duration-300 ${input.trim() && !disabled ? 'from-accent to-accent-hover bg-linear-to-r text-white shadow-[0_0_20px_var(--color-accent-glow)] hover:-translate-y-0.5 active:translate-y-0' : 'text-text-muted/40 hover:text-text-muted/80 bg-background/50'}`}
                   disabled={!input.trim() || disabled}
                 >
                   <Send className="h-4 w-4" />

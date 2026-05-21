@@ -10,7 +10,8 @@ import { drivers, registrySnapshots, systemSettings } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
-const SUPPORTED_AGENTS = new Set(['opencode', 'claude-acp', 'codex-acp', 'gemini-acp']);
+const SUPPORTED_AGENTS = new Set(['opencode', 'claude-acp', 'codex-acp', 'gemini']);
+
 
 
 type DriverRow = typeof drivers.$inferSelect;
@@ -28,20 +29,40 @@ interface DriverSettings {
 	defaultDriverId?: string;
 }
 
-function parseStringArray(value: string): string[] {
-	return JSON.parse(value) as string[];
+function parseStringArray(value: string | null | undefined): string[] {
+	if (!value) return [];
+	try {
+		return JSON.parse(value) as string[];
+	} catch {
+		return [];
+	}
 }
 
-function parseStringRecord(value: string): Record<string, string> {
-	return JSON.parse(value) as Record<string, string>;
+function parseStringRecord(value: string | null | undefined): Record<string, string> {
+	if (!value) return {};
+	try {
+		return JSON.parse(value) as Record<string, string>;
+	} catch {
+		return {};
+	}
 }
 
-function parseConfigOptions(value: string): ACPConfigOption[] {
-	return JSON.parse(value) as ACPConfigOption[];
+function parseConfigOptions(value: string | null | undefined): ACPConfigOption[] {
+	if (!value) return [];
+	try {
+		return JSON.parse(value) as ACPConfigOption[];
+	} catch {
+		return [];
+	}
 }
 
-function parseAuthMethods(value: string): AuthMethod[] {
-	return JSON.parse(value) as AuthMethod[];
+function parseAuthMethods(value: string | null | undefined): AuthMethod[] {
+	if (!value) return [];
+	try {
+		return JSON.parse(value) as AuthMethod[];
+	} catch {
+		return [];
+	}
 }
 
 function isBinaryOnPath(command: string): boolean {
@@ -139,6 +160,7 @@ function driverRowToDiscovery(row: DriverRow): DriverDiscovery {
 		enabled: row.enabled,
 		launchArgs: parseStringArray(row.launchArgs),
 		launchEnv: parseStringRecord(row.launchEnv),
+		customEnv: parseStringRecord(row.customEnv),
 		configOptions: parseConfigOptions(row.configOptions),
 		authMethods: parseAuthMethods(row.authMethods),
 		version: row.version ?? undefined,
@@ -168,6 +190,7 @@ function buildSyncedDiscovery(
 	const command = launch?.command ?? existing?.command ?? agent.id;
 	const launchArgs = launch?.args ?? (existing ? parseStringArray(existing.launchArgs) : []);
 	const launchEnv = launch?.env ?? (existing ? parseStringRecord(existing.launchEnv) : {});
+	const customEnv = existing ? parseStringRecord(existing.customEnv) : {};
 	const configOptions = existing ? parseConfigOptions(existing.configOptions) : [];
 	const authMethods = existing ? parseAuthMethods(existing.authMethods) : [];
 	const enabled = existing ? existing.enabled : false;
@@ -184,6 +207,7 @@ function buildSyncedDiscovery(
 		enabled,
 		launchArgs,
 		launchEnv,
+		customEnv,
 		configOptions,
 		authMethods,
 		version: agent.version,
@@ -309,7 +333,8 @@ export class DriverRegistry {
 				enabled,
 				launchArgs: JSON.stringify(driver.launchArgs),
 				launchEnv: JSON.stringify(driver.launchEnv),
-				configOptions: JSON.stringify(driver.configOptions),
+				customEnv: JSON.stringify(driver.customEnv),
+				configOptions: JSON.stringify(driver.configOptions ?? []),
 				authMethods: JSON.stringify(driver.authMethods),
 				version: driver.version,
 				description: driver.description,
@@ -324,7 +349,8 @@ export class DriverRegistry {
 					enabled,
 					launchArgs: JSON.stringify(driver.launchArgs),
 					launchEnv: JSON.stringify(driver.launchEnv),
-					configOptions: JSON.stringify(driver.configOptions),
+					customEnv: JSON.stringify(driver.customEnv),
+					configOptions: JSON.stringify(driver.configOptions ?? []),
 					authMethods: JSON.stringify(driver.authMethods),
 					version: driver.version,
 					description: driver.description,
@@ -384,11 +410,15 @@ export class DriverRegistry {
 		const launch = {
 			command: row.command,
 			args: parseStringArray(row.launchArgs),
-			env: parseStringRecord(row.launchEnv),
+			env: {
+				...parseStringRecord(row.launchEnv),
+				...parseStringRecord(row.customEnv),
+			},
 		};
 
 		const probeResult = await probeAgent(buildAgentFromRow(row), launch, this.logger);
 		probeResult.enabled = row.enabled;
+		probeResult.customEnv = parseStringRecord(row.customEnv);
 		await this.persistDriver(probeResult);
 		return probeResult;
 	}
@@ -413,6 +443,7 @@ export class DriverRegistry {
 
 		const existingRows = await this.db.select().from(drivers);
 		const warmDriverId = await this.pickWarmDriverId(existingRows, supportedRegistry);
+		const supportedIds = new Set(supportedRegistry.map((agent) => agent.id));
 		const existingMap = new Map(existingRows.map((row) => [row.id, row]));
 
 		for (const agent of supportedRegistry) {
@@ -428,6 +459,16 @@ export class DriverRegistry {
 			}
 		}
 
+		const obsoleteRows = existingRows.filter((row) => !supportedIds.has(row.id));
+		for (const row of obsoleteRows) {
+			await this.db.delete(drivers).where(eq(drivers.id, row.id));
+		}
+
+		const settings = await this.getSettings();
+		if (settings.defaultDriverId && !supportedIds.has(settings.defaultDriverId)) {
+			await this.updateSetting('defaultDriverId', '');
+		}
+
 		this.logger.info(`Sync complete. Persisted ${String(supportedRegistry.length)} drivers.`);
 	}
 
@@ -435,6 +476,10 @@ export class DriverRegistry {
 		const row = await this.getDriverRow(id);
 		if (!row) return undefined;
 		return driverRowToDiscovery(row);
+	}
+
+	async refreshDriver(driverId: string): Promise<DriverDiscovery> {
+		return this.ensureDriverReady(driverId, { force: true });
 	}
 
 	async login(
@@ -447,7 +492,10 @@ export class DriverRegistry {
 		const { child, connection } = createAgentConnection(
 			driver.command,
 			driver.launchArgs,
-			driver.launchEnv,
+			{
+				...driver.launchEnv,
+				...driver.customEnv,
+			},
 		);
 
 		try {
@@ -528,5 +576,46 @@ export class DriverRegistry {
 			.where(eq(drivers.id, driverId));
 
 		return driverRowToDiscovery({ ...row, enabled });
+	}
+
+	async setDriverConfig(driverId: string, customEnv: Record<string, string>): Promise<DriverDiscovery> {
+		const row = await this.getDriverRow(driverId);
+		if (!row) {
+			throw new Error(`Driver ${driverId} not found`);
+		}
+
+		await this.db
+			.update(drivers)
+			.set({
+				customEnv: JSON.stringify(customEnv),
+				updatedAt: new Date(),
+			})
+			.where(eq(drivers.id, driverId));
+
+		return await this.ensureDriverReady(driverId, { force: true });
+	}
+
+	startBackgroundWarmup(): void {
+		this.logger.info('Starting background driver warmup...');
+		void (async () => {
+			try {
+				const allDrivers = await this.db.select().from(drivers);
+				const settings = await this.getSettings();
+				const targets = allDrivers.filter(
+					(d) => d.status === 'inactive' && (d.enabled || d.id === settings.defaultDriverId)
+				);
+				
+				for (const d of targets) {
+					this.logger.info(`Background probing driver: ${d.id}`);
+					try {
+						await this.ensureDriverReady(d.id, { force: true });
+					} catch (err) {
+						this.logger.error(err, `Failed background warmup for driver ${d.id}`);
+					}
+				}
+			} catch (err) {
+				this.logger.error(err, 'Failed background driver warmup scan');
+			}
+		})();
 	}
 }

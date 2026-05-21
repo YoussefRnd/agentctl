@@ -87,7 +87,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 			const driver = await fastify.driverRegistry.ensureDriverReady(updatedSession.selectedDriver, {
 				force: false,
 			});
-			if (driver.status === 'ready') {
+			if (driver.status === 'ready' || driver.status === 'needs_auth') {
 				const launch = buildLaunchConfig(
 					driver,
 					updatedSession.selectedModel,

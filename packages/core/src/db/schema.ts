@@ -69,6 +69,7 @@ export const drivers = sqliteTable('drivers', {
   description: text('description'),
   icon: text('icon'),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  customEnv: text('custom_env').notNull().default('{}'), // Store user-configured credentials as a JSON string
   ...timestamps,
 });
 

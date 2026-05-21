@@ -3,7 +3,16 @@ import { useDrivers } from '../../../hooks/useDrivers';
 import { Loader2, RefreshCw } from 'lucide-react';
 
 export function SettingsPage() {
-  const { drivers, activate, syncDrivers, isLoadingDrivers, isSyncing, toggleDriver } = useDrivers(null);
+  const {
+    drivers,
+    activate,
+    syncDrivers,
+    isLoadingDrivers,
+    isSyncing,
+    toggleDriver,
+    updateDriverConfig,
+    isUpdatingConfig,
+  } = useDrivers(null);
 
   return (
     <div className="animate-fade-in-up relative mx-auto h-full w-full max-w-4xl overflow-y-auto p-8">
@@ -54,6 +63,10 @@ export function SettingsPage() {
                 onResync={() => {
                   syncDrivers();
                 }}
+                onUpdateConfig={(id, customEnv) => {
+                  updateDriverConfig({ driverId: id, customEnv });
+                }}
+                isUpdatingConfig={isUpdatingConfig}
               />
             ))}
             {drivers.length === 0 && (

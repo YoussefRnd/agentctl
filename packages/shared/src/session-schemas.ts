@@ -80,12 +80,20 @@ export const driverDiscoverySchema = z.object({
   enabled: z.boolean().default(false),
   launchArgs: z.array(z.string()).optional().default([]),
   launchEnv: z.record(z.string(), z.string()).optional().default({}),
+  customEnv: z.record(z.string(), z.string()).optional().default({}),
   configOptions: z.array(acpConfigOptionSchema).optional(),
   authMethods: z.array(authMethodSchema).optional().default([]),
   version: z.string().optional(),
   description: z.string().optional(),
   icon: z.string().optional(),
 });
+
+export const DRIVER_ENV_KEYS: Record<string, string[] | undefined> = {
+  'claude-code': ['ANTHROPIC_API_KEY'],
+  'claude-acp': ['ANTHROPIC_API_KEY'],
+  'gemini': ['GEMINI_API_KEY'],
+  'codex-acp': ['OPENAI_API_KEY'],
+};
 
 export const sessionRowSchema = sessionSchema.extend({
   id: z.uuid(),

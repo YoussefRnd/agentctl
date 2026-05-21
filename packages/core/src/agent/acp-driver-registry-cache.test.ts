@@ -274,6 +274,7 @@ test('DriverRegistry sync does not hydrate any providers on startup', async () =
 		enabled: false,
 		launchArgs: ['-y', 'p'],
 		launchEnv: {},
+		customEnv: {},
 		configOptions: [],
 		authMethods: [],
 		version: '1.0.0',
@@ -384,6 +385,7 @@ test('DriverRegistry sync hydrates the saved default driver on startup', async (
 		enabled: true,
 		launchArgs: ['-y', 'p'],
 		launchEnv: {},
+		customEnv: {},
 		configOptions: [],
 		authMethods: [],
 		version: '1.0.0',
@@ -397,3 +399,215 @@ test('DriverRegistry sync hydrates the saved default driver on startup', async (
 	assert.equal(probeSpy.mock.calls.length, 1);
 	assert.equal(probeSpy.mock.calls[0]?.[0].id, 'claude-acp');
 });
+
+test('DriverRegistry sync prunes stale local gemini rows and clears stale defaults', async () => {
+	const registryAgents: RegistryAgent[] = [
+		{
+			id: 'gemini',
+			name: 'Gemini CLI',
+			version: '0.42.0',
+			description: "Google's official CLI for Gemini",
+			distribution: { npx: { package: '@google/gemini-cli', args: [], env: {} } },
+			authors: [],
+		},
+	];
+
+	const snapshot = {
+		data: JSON.stringify({ agents: registryAgents }),
+		etag: null,
+		lastModified: null,
+		fetchedAt: new Date(),
+	};
+
+	const rows = [
+		{
+			id: 'gemini',
+			name: 'Gemini CLI',
+			status: 'ready',
+			command: 'npx',
+			enabled: false,
+			launchArgs: JSON.stringify(['-y', '@google/gemini-cli']),
+			launchEnv: '{}',
+			configOptions: '[]',
+			authMethods: '[]',
+			version: '0.42.0',
+			description: "Google's official CLI for Gemini",
+			icon: null,
+		},
+		{
+			id: 'gemini-cli',
+			name: 'Gemini CLI (Local)',
+			status: 'ready',
+			command: 'gemini',
+			enabled: false,
+			launchArgs: JSON.stringify([]),
+			launchEnv: '{}',
+			configOptions: '[]',
+			authMethods: '[]',
+			version: 'local',
+			description: 'Local installation',
+			icon: null,
+		},
+	];
+
+	let driverDeleteCount = 0;
+	let snapshotDeleteCount = 0;
+	let driverUpsertCount = 0;
+	let settingsUpsertCount = 0;
+	const selectFrom = vi.fn((table: unknown) => {
+		if (table === registrySnapshots) {
+			return {
+				orderBy: vi.fn().mockReturnValue({
+					limit: vi.fn().mockResolvedValue([snapshot]),
+				}),
+			};
+		}
+
+		if (table === systemSettings) {
+			return Promise.resolve([{ key: 'defaultDriverId', value: 'gemini-cli' }]);
+		}
+
+		if (table === drivers) {
+			return Promise.resolve(rows);
+		}
+
+		return undefined;
+	});
+
+	const db = {
+		select: vi.fn().mockReturnValue({
+			from: selectFrom,
+		}),
+		insert: vi.fn().mockImplementation((table: unknown) => {
+			if (table === drivers) {
+				return {
+					values: () => ({
+						onConflictDoUpdate: () => {
+							driverUpsertCount += 1;
+							return Promise.resolve({});
+						},
+					}),
+				};
+			}
+
+			return {
+				values: () => ({
+					onConflictDoUpdate: () => {
+						settingsUpsertCount += 1;
+						return Promise.resolve({});
+					},
+				}),
+			};
+		}),
+		delete: vi.fn().mockImplementation((table: unknown) => {
+			if (table === drivers) {
+				return {
+					where: () => {
+						driverDeleteCount += 1;
+						return Promise.resolve({});
+					},
+				};
+			}
+
+			return {
+				where: () => {
+					snapshotDeleteCount += 1;
+					return Promise.resolve({});
+				},
+			};
+		}),
+		update: vi.fn().mockReturnValue({
+			set: vi.fn().mockReturnValue({
+				where: vi.fn().mockResolvedValue({}),
+			}),
+		}),
+	} as unknown as DbClient;
+
+	const fetchSpy = vi.spyOn(global, 'fetch');
+	fetchSpy.mockResolvedValue(new Response(JSON.stringify({ agents: registryAgents }), { status: 200 }));
+
+	const registry = new DriverRegistry(db, noopLogger);
+	await registry.sync();
+
+	assert.equal(driverDeleteCount, 1);
+	assert.equal(snapshotDeleteCount, 1);
+	assert.equal(driverUpsertCount, 1);
+	assert.equal(settingsUpsertCount, 1);
+});
+
+test('DriverRegistry setDriverConfig updates database and triggers dynamic probe', async () => {
+	const driverRow = {
+		id: 'claude-acp',
+		name: 'Claude',
+		status: 'inactive',
+		command: 'npx',
+		enabled: true,
+		launchArgs: JSON.stringify(['-y', 'p']),
+		launchEnv: '{}',
+		customEnv: '{}',
+		configOptions: '[]',
+		authMethods: '[]',
+		version: '1.0.0',
+		description: 'test',
+		icon: null,
+	};
+
+	const dbUpdateSet = vi.fn().mockReturnValue({
+		where: vi.fn().mockResolvedValue({}),
+	});
+
+	let selectCount = 0;
+	const db = {
+		select: vi.fn().mockReturnValue({
+			from: vi.fn().mockReturnValue({
+				where: vi.fn().mockImplementation(() => {
+					selectCount++;
+					if (selectCount === 1) {
+						return Promise.resolve([driverRow]);
+					} else {
+						return Promise.resolve([{
+							...driverRow,
+							customEnv: JSON.stringify({ ANTHROPIC_API_KEY: 'test-key' }),
+						}]);
+					}
+				}),
+			}),
+		}),
+		update: vi.fn().mockReturnValue({
+			set: dbUpdateSet,
+		}),
+		insert: vi.fn().mockReturnValue({
+			values: vi.fn().mockReturnValue({
+				onConflictDoUpdate: vi.fn().mockResolvedValue({}),
+			}),
+		}),
+	} as unknown as DbClient;
+
+	const probeSpy = vi.spyOn(probeModule, 'probeAgent').mockResolvedValue({
+		id: 'claude-acp',
+		label: 'Claude',
+		status: 'ready',
+		command: 'npx',
+		enabled: true,
+		launchArgs: ['-y', 'p'],
+		launchEnv: {},
+		customEnv: { ANTHROPIC_API_KEY: 'test-key' },
+		configOptions: [],
+		authMethods: [],
+		version: '1.0.0',
+		description: 'test',
+		icon: undefined,
+	});
+
+	const registry = new DriverRegistry(db, noopLogger);
+	const result = await registry.setDriverConfig('claude-acp', { ANTHROPIC_API_KEY: 'test-key' });
+
+	assert.equal(dbUpdateSet.mock.calls.length, 1);
+	const updatedFields = dbUpdateSet.mock.calls[0]?.[0] as Record<string, unknown>;
+	assert.deepEqual(updatedFields.customEnv, JSON.stringify({ ANTHROPIC_API_KEY: 'test-key' }));
+	assert.equal(probeSpy.mock.calls.length, 1);
+	assert.deepEqual(probeSpy.mock.calls[0][1].env, { ANTHROPIC_API_KEY: 'test-key' });
+	assert.equal(result.status, 'ready');
+	assert.deepEqual(result.customEnv, { ANTHROPIC_API_KEY: 'test-key' });
+});
+

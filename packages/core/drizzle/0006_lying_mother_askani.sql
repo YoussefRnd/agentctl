@@ -1,0 +1,1 @@
+ALTER TABLE `drivers` ADD `custom_env` text DEFAULT '{}' NOT NULL;
