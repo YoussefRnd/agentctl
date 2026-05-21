@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Bot, Cpu, Zap, LogIn, Loader2 } from 'lucide-react';
+import { Search, Bot, Cpu, Zap, LogIn, Loader2, RefreshCw } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
 import { DRIVER_ENV_KEYS } from '@agentctl/shared';
 import { useDrivers } from '../../../hooks/useDrivers';
@@ -23,7 +23,7 @@ export function HarnessPicker({
 	isOpen,
 	onClose,
 }: HarnessPickerProps) {
-	const { login, isLoggingIn, updateDriverConfig, isUpdatingConfig } = useDrivers(sessionId);
+	const { login, isLoggingIn, updateDriverConfig, isUpdatingConfig, refreshDriver, isRefreshing } = useDrivers(sessionId);
 	const [search, setSearch] = useState('');
 	const [internalDriverId, setInternalDriverId] = useState<string | null>(selectedId);
 	const [localCustomEnvs, setLocalCustomEnvs] = useState<Record<string, Record<string, string> | undefined>>({});
@@ -94,7 +94,13 @@ export function HarnessPicker({
 								: 'text-text-muted hover:text-text-main hover:bg-surface-hover border border-transparent'
 								} ${!isEnabled ? 'cursor-not-allowed opacity-50' : ''}`}
 						>
-							{d.id.includes('claude') ? <Bot className="h-5 w-5" /> : <Cpu className="h-5 w-5" />}
+							{d.icon ? (
+								<img src={d.icon} alt={d.label} className="h-5 w-5 object-contain" />
+							) : d.id.includes('claude') ? (
+								<Bot className="h-5 w-5" />
+							) : (
+								<Cpu className="h-5 w-5" />
+							)}
 							{isSelected && (
 								<div className="bg-accent absolute top-1/2 left-0 h-5 w-1 -translate-y-1/2 rounded-r-full" />
 							)}
@@ -107,8 +113,8 @@ export function HarnessPicker({
 			</div>
 
 			<div className="bg-surface flex min-w-0 flex-1 flex-col">
-				<div className="border-border/50 bg-background/20 border-b p-4">
-					<div className="group relative">
+				<div className="border-border/50 bg-background/20 border-b p-4 flex gap-2 items-center">
+					<div className="group relative flex-1">
 						<Search className="text-text-muted group-focus-within:text-accent absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 transition-colors" />
 						<input
 							type="text"
@@ -121,13 +127,27 @@ export function HarnessPicker({
 							}}
 						/>
 					</div>
+					<button
+						onClick={() => {
+							refreshDriver(activeDriver.id);
+						}}
+						disabled={isRefreshing}
+						title="Refresh driver capabilities and models"
+						className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-background/50 text-text-muted hover:bg-surface-hover hover:text-text-main disabled:opacity-50 transition-colors"
+					>
+						<RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+					</button>
 				</div>
 
 				<div className="scrollbar-hide h-[360px] space-y-1 overflow-y-auto p-2">
 					{activeDriver.status === 'needs_auth' ? (
 						<div className="flex h-full flex-col items-center justify-center p-6 text-center">
 							<div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-500/10">
-								<Bot className="h-7 w-7 text-yellow-500" />
+								{activeDriver.icon ? (
+									<img src={activeDriver.icon} alt={activeDriver.label} className="h-7 w-7 object-contain" />
+								) : (
+									<Bot className="h-7 w-7 text-yellow-500" />
+								)}
 							</div>
 							<h3 className="text-text-main mb-1.5 text-[14px] font-bold">Authentication Required</h3>
 							<p className="text-text-muted mb-4 max-w-[280px] text-xs">

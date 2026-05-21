@@ -5,7 +5,7 @@ import type {
   RequestPermissionResponse,
   PromptRequest,
 } from '@agentclientprotocol/sdk';
-import { acpEvents, sessions } from '../db/schema.js';
+import { acpEvents, sessions, drivers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { ACPEvent } from '@agentctl/shared';
 import type { createDatabase } from '../db/index.js';
@@ -142,6 +142,59 @@ export class ACPSession {
         .update(sessions)
         .set({ agentSessionId: this.acpSessionId, status: 'running' })
         .where(eq(sessions.id, this.sessionId));
+
+      interface DynamicConn {
+        unstable_setSessionModel?: (p: { sessionId: string; modelId: string }) => Promise<unknown>;
+        setSessionConfigOption?: (p: {
+          sessionId: string;
+          configId: string;
+          value: string;
+        }) => Promise<unknown>;
+      }
+      const dynConn = this.connection as unknown as DynamicConn;
+
+      try {
+        const session = (await this.db
+          .select()
+          .from(sessions)
+          .where(eq(sessions.id, this.sessionId))).at(0);
+
+        if (session) {
+          const driver = (await this.db
+            .select()
+            .from(drivers)
+            .where(eq(drivers.id, session.selectedDriver))).at(0);
+
+          if (driver) {
+            if (driver.supportsDynamicModel && session.selectedModel && session.selectedModel !== 'default') {
+              this.logger.info(`Setting dynamic model: ${session.selectedModel} for session ${this.sessionId}`);
+              if (typeof dynConn.unstable_setSessionModel === 'function') {
+                await dynConn.unstable_setSessionModel({
+                  sessionId: this.acpSessionId,
+                  modelId: session.selectedModel,
+                });
+              } else {
+                this.logger.warn(`Driver advertised supportsDynamicModel but connection.unstable_setSessionModel is not a function`);
+              }
+            }
+
+            if (driver.supportsDynamicConfig && session.selectedThinkingEffort) {
+              this.logger.info(`Setting dynamic config (thinking_effort): ${session.selectedThinkingEffort} for session ${this.sessionId}`);
+              if (typeof dynConn.setSessionConfigOption === 'function') {
+                await dynConn.setSessionConfigOption({
+                  sessionId: this.acpSessionId,
+                  configId: 'thinking_effort',
+                  value: session.selectedThinkingEffort,
+                });
+              } else {
+                this.logger.warn(`Driver advertised supportsDynamicConfig but connection.setSessionConfigOption is not a function`);
+              }
+            }
+          }
+        }
+      } catch (err: unknown) {
+        this.logger.error(err, `Failed to configure session dynamically for ${this.sessionId}`);
+      }
     } catch (error) {
       await this.handleError(error);
       throw error;

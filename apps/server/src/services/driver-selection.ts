@@ -35,14 +35,12 @@ export function resolveDriverSelection(driver: DriverDiscovery): {
 export function buildLaunchConfig(
   driver: Pick<
     DriverDiscovery,
-    'id' | 'command' | 'launchArgs' | 'launchEnv' | 'customEnv' | 'configOptions'
+    'id' | 'command' | 'launchArgs' | 'launchEnv' | 'customEnv' | 'configOptions' | 'supportsDynamicModel' | 'supportsDynamicConfig'
   >,
   selectedModel: string,
   selectedThinkingEffort: string,
 ): DriverLaunchConfig {
   const extraArgs: string[] = [];
-
-  const isNativeAgent = driver.id === 'opencode' || driver.id === 'opencode-local';
 
   const hasModelOption = driver.configOptions?.some((opt) =>
     (MODEL_OPTION_IDS as readonly string[]).includes(opt.id),
@@ -51,16 +49,15 @@ export function buildLaunchConfig(
     (THINKING_OPTION_IDS as readonly string[]).includes(opt.id),
   );
 
-  // Native agents like opencode usually don't support these as CLI flags, 
-  // they expect them via ACP protocol or have their own logic.
-  if (!isNativeAgent) {
-    if (hasModelOption && selectedModel && selectedModel !== 'default') {
-      extraArgs.push('--model', selectedModel);
-    }
+  const supportsModelDynamic = driver.supportsDynamicModel;
+  const supportsConfigDynamic = driver.supportsDynamicConfig;
 
-    if (hasThinkingOption && selectedThinkingEffort) {
-      extraArgs.push('--thinking-effort', selectedThinkingEffort);
-    }
+  if (!supportsModelDynamic && hasModelOption && selectedModel && selectedModel !== 'default') {
+    extraArgs.push('--model', selectedModel);
+  }
+
+  if (!supportsConfigDynamic && hasThinkingOption && selectedThinkingEffort) {
+    extraArgs.push('--thinking-effort', selectedThinkingEffort);
   }
 
   return {

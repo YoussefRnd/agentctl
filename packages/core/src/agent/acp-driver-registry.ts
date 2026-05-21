@@ -166,6 +166,8 @@ function driverRowToDiscovery(row: DriverRow): DriverDiscovery {
 		version: row.version ?? undefined,
 		description: row.description ?? undefined,
 		icon: row.icon ?? undefined,
+		supportsDynamicModel: row.supportsDynamicModel,
+		supportsDynamicConfig: row.supportsDynamicConfig,
 	};
 }
 
@@ -194,6 +196,8 @@ function buildSyncedDiscovery(
 	const configOptions = existing ? parseConfigOptions(existing.configOptions) : [];
 	const authMethods = existing ? parseAuthMethods(existing.authMethods) : [];
 	const enabled = existing ? existing.enabled : false;
+	const supportsDynamicModel = existing ? existing.supportsDynamicModel : false;
+	const supportsDynamicConfig = existing ? existing.supportsDynamicConfig : false;
 
 	if (!launch && !existing) {
 		return notFoundEntry(agent, enabled);
@@ -213,6 +217,8 @@ function buildSyncedDiscovery(
 		version: agent.version,
 		description: agent.description,
 		icon: agent.icon,
+		supportsDynamicModel,
+		supportsDynamicConfig,
 	};
 }
 
@@ -339,6 +345,8 @@ export class DriverRegistry {
 				version: driver.version,
 				description: driver.description,
 				icon: driver.icon,
+				supportsDynamicModel: driver.supportsDynamicModel,
+				supportsDynamicConfig: driver.supportsDynamicConfig,
 			})
 			.onConflictDoUpdate({
 				target: drivers.id,
@@ -355,6 +363,8 @@ export class DriverRegistry {
 					version: driver.version,
 					description: driver.description,
 					icon: driver.icon,
+					supportsDynamicModel: driver.supportsDynamicModel,
+					supportsDynamicConfig: driver.supportsDynamicConfig,
 					updatedAt: new Date(),
 				},
 			});

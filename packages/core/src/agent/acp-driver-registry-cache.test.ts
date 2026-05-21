@@ -280,6 +280,8 @@ test('DriverRegistry sync does not hydrate any providers on startup', async () =
 		version: '1.0.0',
 		description: 'test',
 		icon: undefined,
+		supportsDynamicModel: false,
+		supportsDynamicConfig: false,
 	});
 
 	const registry = new DriverRegistry(db, noopLogger);
@@ -391,6 +393,8 @@ test('DriverRegistry sync hydrates the saved default driver on startup', async (
 		version: '1.0.0',
 		description: 'test',
 		icon: undefined,
+		supportsDynamicModel: false,
+		supportsDynamicConfig: false,
 	});
 
 	const registry = new DriverRegistry(db, noopLogger);
@@ -597,6 +601,8 @@ test('DriverRegistry setDriverConfig updates database and triggers dynamic probe
 		version: '1.0.0',
 		description: 'test',
 		icon: undefined,
+		supportsDynamicModel: false,
+		supportsDynamicConfig: false,
 	});
 
 	const registry = new DriverRegistry(db, noopLogger);

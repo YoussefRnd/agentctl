@@ -44,7 +44,7 @@ export const sessions = sqliteTable('sessions', {
   baseCommit: text('base_commit').notNull(),
   agent: text('agent').notNull(),
   agentSessionId: text('agent_session_id'),
-  selectedDriver: text('selected_driver').notNull().default('claude-code'),
+  selectedDriver: text('selected_driver').notNull().default('claude-acp'),
   selectedModel: text('selected_model').notNull().default('sonnet-4'),
   selectedThinkingEffort: text('selected_thinking_effort').notNull().default('medium'),
   status: text('status').$type<SessionStatus>().notNull().default('idle'),
@@ -70,6 +70,8 @@ export const drivers = sqliteTable('drivers', {
   icon: text('icon'),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
   customEnv: text('custom_env').notNull().default('{}'), // Store user-configured credentials as a JSON string
+  supportsDynamicModel: integer('supports_dynamic_model', { mode: 'boolean' }).notNull().default(false),
+  supportsDynamicConfig: integer('supports_dynamic_config', { mode: 'boolean' }).notNull().default(false),
   ...timestamps,
 });
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const driverSchema = z.enum(['claude-code', 'claude-acp', 'opencode', 'codex-acp']);
+export const driverSchema = z.enum(['claude-acp', 'opencode', 'codex-acp', 'gemini']);
 
 export const thinkingEffortSchema = z.enum(['low', 'medium', 'high']);
 
@@ -63,6 +63,8 @@ export const driverCapabilitySchema = z.object({
   version: z.string().optional(),
   description: z.string().optional(),
   icon: z.string().optional(),
+  supportsDynamicModel: z.boolean().optional(),
+  supportsDynamicConfig: z.boolean().optional(),
 });
 
 export const authMethodSchema = z.object({
@@ -86,10 +88,11 @@ export const driverDiscoverySchema = z.object({
   version: z.string().optional(),
   description: z.string().optional(),
   icon: z.string().optional(),
+  supportsDynamicModel: z.boolean().optional().default(false),
+  supportsDynamicConfig: z.boolean().optional().default(false),
 });
 
 export const DRIVER_ENV_KEYS: Record<string, string[] | undefined> = {
-  'claude-code': ['ANTHROPIC_API_KEY'],
   'claude-acp': ['ANTHROPIC_API_KEY'],
   'gemini': ['GEMINI_API_KEY'],
   'codex-acp': ['OPENAI_API_KEY'],
