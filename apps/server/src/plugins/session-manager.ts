@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { SessionManager } from '@agentctl/core';
+import type { SessionManager } from '@agentctl/core';
 import type { FastifyInstance } from 'fastify';
 
 declare module 'fastify' {
@@ -9,12 +9,8 @@ declare module 'fastify' {
 }
 
 export default fp((fastify: FastifyInstance) => {
-  const manager = new SessionManager(fastify.db, fastify.eventBus, fastify.log);
-
-  fastify.decorate('sessionManager', manager);
-
   fastify.addHook('onClose', () => {
-    void manager.stopAll();
+    void fastify.sessionManager.stopAll();
   });
 
   return Promise.resolve();

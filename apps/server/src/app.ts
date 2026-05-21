@@ -14,7 +14,15 @@ import { settingsRoutes } from './routes/settings.js';
 import { fsRoutes } from './routes/fs.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
-import { db as defaultDb, WorktreeManager, GitMutex, DriverRegistry } from '@agentctl/core';
+import {
+	db as defaultDb,
+	WorktreeManager,
+	GitMutex,
+	DriverRegistry,
+	SessionOrchestrator,
+	SessionManager,
+} from '@agentctl/core';
+import { EventBus } from './utils/event-bus.js';
 import { AppError } from './errors/app-error.js';
 import type { FastifyError } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
@@ -23,6 +31,8 @@ export interface AppDependencies {
 	db?: typeof defaultDb;
 	worktreeManager?: WorktreeManager;
 	driverRegistry?: DriverRegistry;
+	sessionManager?: SessionManager;
+	sessionOrchestrator?: SessionOrchestrator;
 	env?: ReturnType<typeof parseServerEnv>;
 }
 
@@ -32,6 +42,9 @@ declare module 'fastify' {
 		worktreeManager: WorktreeManager;
 		gitMutex: GitMutex;
 		driverRegistry: DriverRegistry;
+		sessionManager: SessionManager;
+		sessionOrchestrator: SessionOrchestrator;
+		eventBus: EventBus;
 		config: ReturnType<typeof parseServerEnv>;
 	}
 }
@@ -60,11 +73,22 @@ export async function buildApp(deps: AppDependencies = {}) {
 	const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
 	const driverRegistry = deps.driverRegistry ?? new DriverRegistry(db, fastify.log);
 	const config = deps.env ?? parseServerEnv(process.env);
+	const eventBus = new EventBus();
+
+	const sessionManager =
+		deps.sessionManager ?? new SessionManager(db, eventBus, fastify.log);
+
+	const sessionOrchestrator =
+		deps.sessionOrchestrator ??
+		new SessionOrchestrator(db, worktreeManager, driverRegistry, sessionManager);
 
 	fastify.decorate('db', db);
 	fastify.decorate('gitMutex', gitMutex);
 	fastify.decorate('worktreeManager', worktreeManager);
 	fastify.decorate('driverRegistry', driverRegistry);
+	fastify.decorate('sessionManager', sessionManager);
+	fastify.decorate('sessionOrchestrator', sessionOrchestrator);
+	fastify.decorate('eventBus', eventBus);
 	fastify.decorate('config', config);
 
 	// Sync drivers in the background on startup

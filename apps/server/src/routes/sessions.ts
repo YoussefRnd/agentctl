@@ -1,10 +1,8 @@
 import { z } from 'zod';
-import { sessions } from '@agentctl/core';
+import { sessions, buildLaunchConfig } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
-import { createAgentSession } from '../services/session-factory.js';
-import { buildLaunchConfig } from '../services/driver-selection.js';
 import { AppError } from '../errors/app-error.js';
 
 const createSessionSchema = z.object({
@@ -32,7 +30,34 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 			},
 		},
 		async (request) => {
-			return await createAgentSession(fastify, request.body);
+			try {
+				const session = await fastify.sessionOrchestrator.create({
+					projectId: request.body.projectId,
+					driverId: request.body.agent,
+					taskSlug: request.body.taskSlug,
+				});
+
+				// Return the created session record from the database
+				const sessionRecord = await fastify.db.query.sessions.findFirst({
+					where: eq(sessions.id, session.sessionId),
+				});
+
+				if (!sessionRecord) {
+					throw new AppError('Failed to retrieve created session', 500);
+				}
+
+				return sessionRecord;
+			} catch (err) {
+				if (err instanceof Error) {
+					if (err.message.includes('not found')) {
+						throw new AppError(err.message, 404);
+					}
+					if (err.message.includes('not ready')) {
+						throw new AppError(err.message, 400);
+					}
+				}
+				throw err;
+			}
 		},
 	);
 

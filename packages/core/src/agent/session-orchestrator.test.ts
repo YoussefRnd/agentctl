@@ -1,0 +1,114 @@
+import { test, expect, describe } from 'vitest';
+import { SessionOrchestrator } from './session-orchestrator.js';
+import { type DbClient } from './acp-session.js';
+import type { WorktreeManager } from '../git/worktree-manager.js';
+import type { DriverRegistry } from './acp-driver-registry.js';
+import type { SessionManager } from './session-manager.js';
+import type { DriverDiscovery } from '@agentctl/shared';
+
+describe('SessionOrchestrator', () => {
+  test('create orchestrates project, driver, worktree and session', async () => {
+    // Mock DB
+    const mockDb = {
+      query: {
+        projects: {
+          findFirst: async () => {
+            await Promise.resolve();
+            return {
+              id: 'proj-1',
+              path: '/path/to/proj',
+              repoRoot: '/path/to/repo',
+              subdir: 'src',
+            };
+          },
+        },
+      },
+      insert: () => ({
+        values: async () => {
+          await Promise.resolve();
+        },
+      }),
+    } as unknown as DbClient;
+
+    // Mock WorktreeManager
+    const mockWorktreeManager = {
+      create: async () => {
+        await Promise.resolve();
+        return {
+          branch: 'agentctl/session-1/slug',
+          path: '/path/to/worktree',
+          workspacePath: '/path/to/worktree/src',
+          baseCommit: 'abc123',
+        };
+      },
+    } as unknown as WorktreeManager;
+
+    // Mock DriverRegistry
+    const mockDriverRegistry = {
+      ensureDriverReady: async () => {
+        await Promise.resolve();
+        return {
+          id: 'driver-1',
+          label: 'Driver 1',
+          status: 'ready',
+          command: 'agent-cmd',
+          enabled: true,
+          launchArgs: [],
+          launchEnv: {},
+          customEnv: {},
+          configOptions: [],
+          authMethods: [],
+          supportsDynamicModel: false,
+          supportsDynamicConfig: false,
+        } as DriverDiscovery;
+      },
+    } as unknown as DriverRegistry;
+
+    // Mock SessionManager
+    const mockSessionManager = {
+      startSession: (id: string, path: string) => ({ sessionId: id, cwd: path }),
+    } as unknown as SessionManager;
+
+    const orchestrator = new SessionOrchestrator(
+      mockDb,
+      mockWorktreeManager,
+      mockDriverRegistry,
+      mockSessionManager,
+    );
+
+    const session = await orchestrator.create({
+      projectId: 'proj-1',
+      driverId: 'driver-1',
+      taskSlug: 'test-slug',
+    });
+
+    expect(session).toBeDefined();
+    expect(session.sessionId).toBeDefined();
+  });
+
+  test('create throws if project not found', async () => {
+    const mockDb = {
+      query: {
+        projects: {
+          findFirst: async () => {
+            await Promise.resolve();
+            return null;
+          },
+        },
+      },
+    } as unknown as DbClient;
+
+    const orchestrator = new SessionOrchestrator(
+      mockDb,
+      {} as WorktreeManager,
+      {} as DriverRegistry,
+      {} as SessionManager,
+    );
+
+    await expect(orchestrator.create({
+      projectId: 'missing',
+      driverId: 'driver-1',
+      taskSlug: 'slug'
+    })).rejects.toThrow('Project not found');
+  });
+});

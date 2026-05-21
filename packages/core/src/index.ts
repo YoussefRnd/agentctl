@@ -11,5 +11,7 @@ export * from './agent/acp-session.js';
 export * from './agent/session-manager.js';
 export { cleanEnv } from './agent/acp-transport.js';
 export * from './agent/acp-driver-registry.js';
+export * from './agent/driver-logic.js';
+export * from './agent/session-orchestrator.js';
 export * from './config/index.js';
 export * from './logger.js';

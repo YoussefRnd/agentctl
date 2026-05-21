@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { projects, sessions, GitService } from '@agentctl/core';
 import { desc, eq } from 'drizzle-orm';
 import path from 'node:path';
-import { createAgentSession } from '../services/session-factory.js';
 import { AppError } from '../errors/app-error.js';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
@@ -112,15 +111,19 @@ export const projectsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
         };
       }
 
-      const session = await createAgentSession(fastify, {
+      const session = await fastify.sessionOrchestrator.create({
         projectId: project.id,
-        agent: request.body.agent,
+        driverId: request.body.agent,
         taskSlug: request.body.taskSlug ?? 'new-session',
+      });
+
+      const sessionRecord = await fastify.db.query.sessions.findFirst({
+        where: eq(sessions.id, session.sessionId),
       });
 
       return {
         project,
-        session,
+        session: sessionRecord,
         created: true,
       };
     },

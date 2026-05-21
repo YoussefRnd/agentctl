@@ -2,15 +2,8 @@ import fp from 'fastify-plugin';
 import fastifyWebsocket from '@fastify/websocket';
 import { acpEvents } from '@agentctl/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
-import { EventBus } from '../utils/event-bus.js';
 import { wsMessageSchema } from '../types.js';
 import type { ACPEventRow } from '@agentctl/shared';
-
-declare module 'fastify' {
-  interface FastifyInstance {
-    eventBus: EventBus;
-  }
-}
 
 function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
   const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
@@ -22,9 +15,6 @@ function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
 
 export default fp(async (fastify) => {
   await fastify.register(fastifyWebsocket);
-
-  const eventBus = new EventBus();
-  fastify.decorate('eventBus', eventBus);
 
   fastify.get('/ws', { websocket: true }, (socket, req) => {
     if (!req.session.get('authenticated')) {
@@ -67,7 +57,7 @@ export default fp(async (fastify) => {
               }
             }
 
-            unsubscribe = eventBus.subscribe(message.sessionId, (event) => {
+            unsubscribe = fastify.eventBus.subscribe(message.sessionId, (event) => {
               // Event from ACPSession also has string data, parse it
               const parsed = event as unknown as typeof acpEvents.$inferSelect;
               socket.send(JSON.stringify({ type: 'acp_event', payload: parseEventRow(parsed) }));

@@ -35,7 +35,14 @@ export function resolveDriverSelection(driver: DriverDiscovery): {
 export function buildLaunchConfig(
   driver: Pick<
     DriverDiscovery,
-    'id' | 'command' | 'launchArgs' | 'launchEnv' | 'customEnv' | 'configOptions' | 'supportsDynamicModel' | 'supportsDynamicConfig'
+    | 'id'
+    | 'command'
+    | 'launchArgs'
+    | 'launchEnv'
+    | 'customEnv'
+    | 'configOptions'
+    | 'supportsDynamicModel'
+    | 'supportsDynamicConfig'
   >,
   selectedModel: string,
   selectedThinkingEffort: string,
