@@ -1,363 +1,532 @@
 import { execSync } from 'node:child_process';
-import os from 'node:os';
 import fs from 'node:fs';
-import { eq, desc } from 'drizzle-orm';
+import os from 'node:os';
+import { desc, eq, lt } from 'drizzle-orm';
 import type { ACPConfigOption, AuthMethod, DriverDiscovery, RegistryAgent } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import { createAgentConnection } from './acp-transport.js';
 import { notFoundEntry, probeAgent } from './acp-probe.js';
-import { drivers, registrySnapshots } from '../db/schema.js';
+import { drivers, registrySnapshots, systemSettings } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
-const SUPPORTED_AGENTS = new Set([
-  'opencode',
-  'claude-acp',
-  'codex-acp',
-  'gemini-acp',
-]);
+const SUPPORTED_AGENTS = new Set(['opencode', 'claude-acp', 'codex-acp', 'gemini-acp']);
 
-const LOCAL_BINARY_HINTS = [
-  { id: 'opencode', command: 'opencode', args: ['acp'], label: 'OpenCode (Local)' },
-];
+
+type DriverRow = typeof drivers.$inferSelect;
+type RegistrySnapshotRow = typeof registrySnapshots.$inferSelect;
+interface LaunchConfig {
+	command: string;
+	args: string[];
+	env: Record<string, string>;
+}
+
+interface DriverSettings {
+	onboardingCompleted?: string;
+	onboardingVersion?: string;
+	setupStep?: string;
+	defaultDriverId?: string;
+}
+
+function parseStringArray(value: string): string[] {
+	return JSON.parse(value) as string[];
+}
+
+function parseStringRecord(value: string): Record<string, string> {
+	return JSON.parse(value) as Record<string, string>;
+}
+
+function parseConfigOptions(value: string): ACPConfigOption[] {
+	return JSON.parse(value) as ACPConfigOption[];
+}
+
+function parseAuthMethods(value: string): AuthMethod[] {
+	return JSON.parse(value) as AuthMethod[];
+}
 
 function isBinaryOnPath(command: string): boolean {
-  try {
-    const checkCmd = os.platform() === 'win32' ? `where ${command}` : `which ${command}`;
-    execSync(checkCmd, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+	try {
+		const checkCmd = os.platform() === 'win32' ? `where ${command}` : `which ${command}`;
+		execSync(checkCmd, { stdio: 'ignore' });
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 function getPlatformKey(): string {
-  const arch = os.arch();
-  const platform = os.platform();
+	const arch = os.arch();
+	const platform = os.platform();
 
-  const archMap: Record<string, string> = {
-    x64: 'x86_64',
-    arm64: 'aarch64',
-    aarch64: 'aarch64',
-  };
+	const archMap: Record<string, string> = {
+		x64: 'x86_64',
+		arm64: 'aarch64',
+		aarch64: 'aarch64',
+	};
 
-  const platformMap: Record<string, string> = {
-    darwin: 'darwin',
-    linux: 'linux',
-    win32: 'windows',
-  };
+	const platformMap: Record<string, string> = {
+		darwin: 'darwin',
+		linux: 'linux',
+		win32: 'windows',
+	};
 
-  const normalizedArch = archMap[arch] ?? arch;
-  const normalizedPlatform = platformMap[platform] ?? platform;
+	const normalizedArch = archMap[arch] ?? arch;
+	const normalizedPlatform = platformMap[platform] ?? platform;
 
-  return `${normalizedPlatform}-${normalizedArch}`;
+	return `${normalizedPlatform}-${normalizedArch}`;
 }
 
 function resolveLaunchConfig(
-  agent: RegistryAgent,
-): { command: string; args: string[]; env: Record<string, string> } | null {
-  const platform = getPlatformKey();
+	agent: RegistryAgent,
+): LaunchConfig | null {
+	const platform = getPlatformKey();
 
-  const binaryTarget = agent.distribution.binary?.[platform];
-  if (binaryTarget) {
-    let command = binaryTarget.cmd;
-    let exists = false;
-    if (command.startsWith('./')) {
-      if (fs.existsSync(command)) {
-        exists = true;
-      } else {
-        const pathCmd = command.substring(2);
-        if (isBinaryOnPath(pathCmd)) {
-          command = pathCmd;
-          exists = true;
-        }
-      }
-    } else {
-      exists = isBinaryOnPath(command);
-    }
+	const binaryTarget = agent.distribution.binary?.[platform];
+	if (binaryTarget) {
+		let command = binaryTarget.cmd;
+		let exists = false;
 
-    if (exists) {
-      return {
-        command,
-        args: [...(binaryTarget.args ?? [])],
-        env: binaryTarget.env,
-      };
-    }
-  }
+		if (command.startsWith('./')) {
+			if (fs.existsSync(command)) {
+				exists = true;
+			} else {
+				const pathCmd = command.substring(2);
+				if (isBinaryOnPath(pathCmd)) {
+					command = pathCmd;
+					exists = true;
+				}
+			}
+		} else {
+			exists = isBinaryOnPath(command);
+		}
 
-  if (agent.distribution.npx) {
-    const { package: pkg, args, env } = agent.distribution.npx;
-    return {
-      command: 'npx',
-      args: ['-y', pkg, ...(args ?? [])],
-      env,
-    };
-  }
+		if (exists) {
+			return {
+				command,
+				args: [...(binaryTarget.args ?? [])],
+				env: binaryTarget.env,
+			};
+		}
+	}
 
-  if (agent.distribution.uvx) {
-    const { package: pkg, args, env } = agent.distribution.uvx;
-    return {
-      command: 'uvx',
-      args: [pkg, ...(args ?? [])],
-      env,
-    };
-  }
+	if (agent.distribution.npx) {
+		const { package: pkg, args, env } = agent.distribution.npx;
+		return {
+			command: 'npx',
+			args: ['-y', pkg, ...(args ?? [])],
+			env,
+		};
+	}
 
-  return null;
+	if (agent.distribution.uvx) {
+		const { package: pkg, args, env } = agent.distribution.uvx;
+		return {
+			command: 'uvx',
+			args: [pkg, ...(args ?? [])],
+			env,
+		};
+	}
+
+	return null;
+}
+
+function driverRowToDiscovery(row: DriverRow): DriverDiscovery {
+	return {
+		id: row.id,
+		label: row.name,
+		status: row.status,
+		command: row.command,
+		enabled: row.enabled,
+		launchArgs: parseStringArray(row.launchArgs),
+		launchEnv: parseStringRecord(row.launchEnv),
+		configOptions: parseConfigOptions(row.configOptions),
+		authMethods: parseAuthMethods(row.authMethods),
+		version: row.version ?? undefined,
+		description: row.description ?? undefined,
+		icon: row.icon ?? undefined,
+	};
+}
+
+function buildAgentFromRow(row: DriverRow): RegistryAgent {
+	return {
+		id: row.id,
+		name: row.name,
+		version: row.version ?? 'local',
+		description: row.description ?? '',
+		authors: [],
+		icon: row.icon ?? undefined,
+		distribution: {},
+	};
+}
+
+function buildSyncedDiscovery(
+	agent: RegistryAgent,
+	launch: LaunchConfig | null,
+	existing: DriverRow | undefined,
+): DriverDiscovery {
+	const existingIsActive = existing?.status === 'ready' || existing?.status === 'needs_auth';
+	const command = launch?.command ?? existing?.command ?? agent.id;
+	const launchArgs = launch?.args ?? (existing ? parseStringArray(existing.launchArgs) : []);
+	const launchEnv = launch?.env ?? (existing ? parseStringRecord(existing.launchEnv) : {});
+	const configOptions = existing ? parseConfigOptions(existing.configOptions) : [];
+	const authMethods = existing ? parseAuthMethods(existing.authMethods) : [];
+	const enabled = existing ? existing.enabled : false;
+
+	if (!launch && !existing) {
+		return notFoundEntry(agent, enabled);
+	}
+
+	return {
+		id: agent.id,
+		label: agent.name,
+		status: existingIsActive ? existing.status : launch ? 'inactive' : 'not_found',
+		command,
+		enabled,
+		launchArgs,
+		launchEnv,
+		configOptions,
+		authMethods,
+		version: agent.version,
+		description: agent.description,
+		icon: agent.icon,
+	};
+}
+
+function parseRegistryAgents(data: string): RegistryAgent[] {
+	const parsed = JSON.parse(data) as { agents: RegistryAgent[] };
+	return parsed.agents;
 }
 
 export class DriverRegistry {
-  constructor(
-    private db: DbClient,
-    private logger: Logger = noopLogger,
-  ) {}
+	private syncInFlight: Promise<void> | null = null;
 
-  async discover(): Promise<DriverDiscovery[]> {
-    const rows = await this.db.select().from(drivers);
+	constructor(
+		private db: DbClient,
+		private logger: Logger = noopLogger,
+	) { }
 
-    if (rows.length === 0) {
-      this.logger.info('Registry is empty, performing initial sync...');
-      await this.sync();
-      return this.discover();
-    }
+	async discover(): Promise<DriverDiscovery[]> {
+		const rows = await this.db.select().from(drivers);
 
-    return rows.map((row) => ({
-      id: row.id,
-      label: row.name,
-      status: row.status,
-      command: row.command,
-      launchArgs: JSON.parse(row.launchArgs) as string[],
-      launchEnv: JSON.parse(row.launchEnv) as Record<string, string>,
-      configOptions: JSON.parse(row.configOptions) as ACPConfigOption[],
-      authMethods: JSON.parse(row.authMethods) as AuthMethod[],
-      version: row.version ?? undefined,
-      description: row.description ?? undefined,
-      icon: row.icon ?? undefined,
-    }));
-  }
+		if (rows.length === 0) {
+			this.logger.info('Registry is empty, performing initial sync...');
+			await this.sync();
 
-  private async fetchRegistryWithCache(): Promise<{ agents: RegistryAgent[]; source: 'remote' | 'cache' }> {
-    const snapshots = await this.db
-      .select()
-      .from(registrySnapshots)
-      .orderBy(desc(registrySnapshots.fetchedAt))
-      .limit(1);
-    const lastSnapshot = snapshots[0] as typeof registrySnapshots.$inferSelect | undefined;
+			const syncedRows = await this.db.select().from(drivers);
+			if (syncedRows.length === 0) {
+				this.logger.warn('Driver registry sync completed without any discoverable drivers');
+				return [];
+			}
 
-    const headers: Record<string, string> = {};
-    if (lastSnapshot?.etag) headers['If-None-Match'] = lastSnapshot.etag;
-    if (lastSnapshot?.lastModified) headers['If-Modified-Since'] = lastSnapshot.lastModified;
+			return syncedRows.map(driverRowToDiscovery);
+		}
 
-    try {
-      const response = await fetch(REGISTRY_URL, { headers });
+		return rows.map(driverRowToDiscovery);
+	}
 
-      if (response.status === 304 && lastSnapshot) {
-        this.logger.info('Registry unchanged (304), using cached snapshot');
-        return { agents: (JSON.parse(lastSnapshot.data) as { agents: RegistryAgent[] }).agents, source: 'cache' };
-      }
+	private async loadLatestSnapshot(): Promise<RegistrySnapshotRow | undefined> {
+		const snapshots = await this.db
+			.select()
+			.from(registrySnapshots)
+			.orderBy(desc(registrySnapshots.id))
+			.limit(1);
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch registry: ${String(response.status)} ${response.statusText}`);
-      }
+		return snapshots[0];
+	}
 
-      const data = await response.json() as { agents: RegistryAgent[] };
-      const etag = response.headers.get('etag');
-      const lastModified = response.headers.get('last-modified');
+	private async persistSnapshot(data: {
+		agents: RegistryAgent[];
+		etag: string | null;
+		lastModified: string | null;
+	}): Promise<void> {
+		await this.db.insert(registrySnapshots).values({
+			data: JSON.stringify(data),
+			etag: data.etag,
+			lastModified: data.lastModified,
+			fetchedAt: new Date(),
+		});
 
-      await this.db.insert(registrySnapshots).values({
-        data: JSON.stringify(data),
-        etag,
-        lastModified,
-        fetchedAt: new Date(),
-      });
+		const latestSnapshot = await this.loadLatestSnapshot();
+		if (!latestSnapshot) return;
 
-      return { agents: data.agents, source: 'remote' };
-    } catch (err) {
-      this.logger.warn(err, 'Failed to fetch remote registry, falling back to cache');
-      if (lastSnapshot) {
-        return { agents: (JSON.parse(lastSnapshot.data) as { agents: RegistryAgent[] }).agents, source: 'cache' };
-      }
-      return { agents: [], source: 'cache' };
-    }
-  }
+		await this.db.delete(registrySnapshots).where(lt(registrySnapshots.id, latestSnapshot.id));
+	}
 
-  async sync(): Promise<void> {
-    this.logger.info('Starting agent discovery and sync...');
-    const { agents: registryAgents } = await this.fetchRegistryWithCache();
-    const supportedRegistry = registryAgents.filter((a) => SUPPORTED_AGENTS.has(a.id));
+	private async fetchRegistryWithCache(): Promise<{
+		agents: RegistryAgent[];
+		source: 'remote' | 'cache';
+	}> {
+		const lastSnapshot = await this.loadLatestSnapshot();
 
-    const discovered: DriverDiscovery[] = [];
-    const existingDrivers = await this.db.select().from(drivers);
-    const existingMap = new Map(existingDrivers.map(d => [d.id, d]));
+		const headers: Record<string, string> = {};
+		if (lastSnapshot?.etag) headers['If-None-Match'] = lastSnapshot.etag;
+		if (lastSnapshot?.lastModified) headers['If-Modified-Since'] = lastSnapshot.lastModified;
 
-    // 1. Check for local binaries first (faster and more reliable)
-    for (const hint of LOCAL_BINARY_HINTS) {
-      if (isBinaryOnPath(hint.command)) {
-        this.logger.info(`Found local agent binary: ${hint.command}`);
-        const probeResult = await probeAgent(
-          {
-            id: hint.id,
-            name: hint.label,
-            version: 'local',
-            description: 'Local installation',
-            authors: [],
-            distribution: {},
-          },
-          { command: hint.command, args: hint.args, env: {} },
-          this.logger,
-        );
-        if (probeResult.status === 'ready' || probeResult.status === 'needs_auth') {
-          discovered.push(probeResult);
-        }
-      }
-    }
+		try {
+			const response = await fetch(REGISTRY_URL, { headers });
 
-    // 2. Process registry agents
-    for (const agent of supportedRegistry) {
-      if (discovered.some((r) => r.id === agent.id)) {
-        continue;
-      }
+			if (response.status === 304 && lastSnapshot) {
+				this.logger.info('Registry unchanged (304), using cached snapshot');
+				return { agents: parseRegistryAgents(lastSnapshot.data), source: 'cache' };
+			}
 
-      const existing = existingMap.get(agent.id);
-      const launch = resolveLaunchConfig(agent);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch registry: ${String(response.status)} ${response.statusText}`);
+			}
 
-      if (!launch) {
-        discovered.push(notFoundEntry(agent));
-        continue;
-      }
+			const data = (await response.json()) as { agents: RegistryAgent[] };
+			await this.persistSnapshot({
+				agents: data.agents,
+				etag: response.headers.get('etag'),
+				lastModified: response.headers.get('last-modified'),
+			});
 
-      // If we have an existing 'ready' driver and it's an NPX/UVX package, 
-      // we prefer the cached data to avoid slow probing on every sync.
-      const isPackage = Boolean(agent.distribution.npx ?? agent.distribution.uvx);
-      if (existing?.status === 'ready' && isPackage) {
-         discovered.push({
-            id: agent.id,
-            label: agent.name,
-            status: 'ready',
-            command: launch.command,
-            launchArgs: launch.args,
-            launchEnv: launch.env,
-            configOptions: JSON.parse(existing.configOptions) as ACPConfigOption[],
-            authMethods: JSON.parse(existing.authMethods) as AuthMethod[],
-            version: agent.version,
-            description: agent.description,
-            icon: agent.icon,
-         });
-         continue;
-      }
+			return { agents: data.agents, source: 'remote' };
+		} catch (err) {
+			this.logger.warn(err, 'Failed to fetch remote registry, falling back to cache');
+			if (lastSnapshot) {
+				return { agents: parseRegistryAgents(lastSnapshot.data), source: 'cache' };
+			}
+			return { agents: [], source: 'cache' };
+		}
+	}
 
-      this.logger.info(`Probing registry agent: ${agent.id}...`);
-      const probeResult = await probeAgent(agent, launch, this.logger);
-      discovered.push(probeResult);
-    }
+	private async getDriverRow(id: string): Promise<DriverRow | undefined> {
+		const rows = await this.db.select().from(drivers).where(eq(drivers.id, id));
+		return rows[0];
+	}
 
-    // 3. Persist to DB
-    for (const driver of discovered) {
-      await this.db
-        .insert(drivers)
-        .values({
-          id: driver.id,
-          name: driver.label,
-          status: driver.status,
-          command: driver.command,
-          launchArgs: JSON.stringify(driver.launchArgs),
-          launchEnv: JSON.stringify(driver.launchEnv),
-          configOptions: JSON.stringify(driver.configOptions),
-          authMethods: JSON.stringify(driver.authMethods),
-          version: driver.version,
-          description: driver.description,
-          icon: driver.icon,
-        })
-        .onConflictDoUpdate({
-          target: drivers.id,
-          set: {
-            name: driver.label,
-            status: driver.status,
-            command: driver.command,
-            launchArgs: JSON.stringify(driver.launchArgs),
-            launchEnv: JSON.stringify(driver.launchEnv),
-            configOptions: JSON.stringify(driver.configOptions),
-            authMethods: JSON.stringify(driver.authMethods),
-            version: driver.version,
-            description: driver.description,
-            icon: driver.icon,
-            updatedAt: new Date(),
-          },
-        });
-    }
+	private async persistDriver(driver: DriverDiscovery): Promise<void> {
+		const enabled = driver.enabled;
 
-    this.logger.info(`Sync complete. Persisted ${String(discovered.length)} drivers.`);
-  }
+		await this.db
+			.insert(drivers)
+			.values({
+				id: driver.id,
+				name: driver.label,
+				status: driver.status,
+				command: driver.command,
+				enabled,
+				launchArgs: JSON.stringify(driver.launchArgs),
+				launchEnv: JSON.stringify(driver.launchEnv),
+				configOptions: JSON.stringify(driver.configOptions),
+				authMethods: JSON.stringify(driver.authMethods),
+				version: driver.version,
+				description: driver.description,
+				icon: driver.icon,
+			})
+			.onConflictDoUpdate({
+				target: drivers.id,
+				set: {
+					name: driver.label,
+					status: driver.status,
+					command: driver.command,
+					enabled,
+					launchArgs: JSON.stringify(driver.launchArgs),
+					launchEnv: JSON.stringify(driver.launchEnv),
+					configOptions: JSON.stringify(driver.configOptions),
+					authMethods: JSON.stringify(driver.authMethods),
+					version: driver.version,
+					description: driver.description,
+					icon: driver.icon,
+					updatedAt: new Date(),
+				},
+			});
+	}
 
-  async getDriver(id: string): Promise<DriverDiscovery | undefined> {
-    const rows = await this.db.select().from(drivers).where(eq(drivers.id, id));
-    if (rows.length === 0) return undefined;
-    const row = rows[0];
+	private async pickWarmDriverId(
+		existingRows: DriverRow[],
+		supportedRegistry: RegistryAgent[],
+	): Promise<string | null> {
+		const settings = await this.getSettings();
+		const preferredIds = [settings.defaultDriverId, ...existingRows.filter((row) => row.enabled).map((row) => row.id)].filter(
+			(id): id is string => id !== undefined && id !== '',
+		);
 
-    return {
-      id: row.id,
-      label: row.name,
-      status: row.status,
-      command: row.command,
-      launchArgs: JSON.parse(row.launchArgs) as string[],
-      launchEnv: JSON.parse(row.launchEnv) as Record<string, string>,
-      configOptions: JSON.parse(row.configOptions) as ACPConfigOption[],
-      authMethods: JSON.parse(row.authMethods) as AuthMethod[],
-      version: row.version ?? undefined,
-      description: row.description ?? undefined,
-      icon: row.icon ?? undefined,
-    };
-  }
+		for (const driverId of preferredIds) {
+			if (supportedRegistry.some((agent) => agent.id === driverId)) {
+				return driverId;
+			}
+		}
 
-  async login(
-    driverId: string,
-    methodId: string,
-    params: Record<string, unknown> = {},
-  ): Promise<void> {
-    const driver = await this.getDriver(driverId);
-    if (!driver) throw new Error(`Driver ${driverId} not found`);
+		return null;
+	}
 
-    const { child, connection } = createAgentConnection(
-      driver.command,
-      driver.launchArgs,
-      driver.launchEnv,
-    );
+	async ensureDriverReady(
+		driverId: string,
+		options: { force?: boolean } = {},
+	): Promise<DriverDiscovery> {
+		const force = options.force ?? false;
+		let row = await this.getDriverRow(driverId);
 
-    try {
-      await connection.initialize({
-        protocolVersion: 1,
-        clientInfo: { name: 'agentctl-login', version: '1.0.0' },
-      });
+		if (!row) {
+			await this.sync();
+			row = await this.getDriverRow(driverId);
+		}
 
-      await (connection.authenticate({
-        methodId,
-        _meta: params,
-      }) as Promise<unknown>);
+		if (!row) {
+			throw new Error(`Driver ${driverId} not found`);
+		}
 
-      // Update status in DB to ready after successful login
-      await this.db
-        .update(drivers)
-        .set({ status: 'ready', updatedAt: new Date() })
-        .where(eq(drivers.id, driverId));
-    } finally {
-      child.kill();
-    }
-  }
+		if (!force && (row.status === 'ready' || row.status === 'needs_auth')) {
+			if (row.command !== 'npx' && row.command !== 'uvx' && !isBinaryOnPath(row.command)) {
+				this.logger.warn(`Binary missing for driver ${driverId}: ${row.command}`);
+				await this.db
+					.update(drivers)
+					.set({ status: 'not_found', updatedAt: new Date() })
+					.where(eq(drivers.id, driverId));
+				row.status = 'not_found';
+			} else {
+				return driverRowToDiscovery(row);
+			}
+		}
 
-  async activate(driverId: string): Promise<DriverDiscovery> {
-    const driver = await this.getDriver(driverId);
-    if (!driver) throw new Error(`Driver ${driverId} not found`);
+		const launch = {
+			command: row.command,
+			args: parseStringArray(row.launchArgs),
+			env: parseStringRecord(row.launchEnv),
+		};
 
-    if (driver.status === 'inactive' || driver.status === 'not_found') {
-      await this.db
-        .update(drivers)
-        .set({ status: 'ready', updatedAt: new Date() })
-        .where(eq(drivers.id, driverId));
+		const probeResult = await probeAgent(buildAgentFromRow(row), launch, this.logger);
+		probeResult.enabled = row.enabled;
+		await this.persistDriver(probeResult);
+		return probeResult;
+	}
 
-      const updated = await this.getDriver(driverId);
-      if (!updated) throw new Error('Driver failed to activate or was deleted');
-      return updated;
-    }
-    return driver;
-  }
+	async sync(): Promise<void> {
+		if (this.syncInFlight) {
+			this.logger.debug('Driver registry sync already in progress, waiting for existing sync');
+			return this.syncInFlight;
+		}
+
+		this.syncInFlight = this.runSync().finally(() => {
+			this.syncInFlight = null;
+		});
+
+		return this.syncInFlight;
+	}
+
+	private async runSync(): Promise<void> {
+		this.logger.info('Starting agent discovery and sync...');
+		const { agents: registryAgents } = await this.fetchRegistryWithCache();
+		const supportedRegistry = registryAgents.filter((agent) => SUPPORTED_AGENTS.has(agent.id));
+
+		const existingRows = await this.db.select().from(drivers);
+		const warmDriverId = await this.pickWarmDriverId(existingRows, supportedRegistry);
+		const existingMap = new Map(existingRows.map((row) => [row.id, row]));
+
+		for (const agent of supportedRegistry) {
+			const existing = existingMap.get(agent.id);
+			const launch = resolveLaunchConfig(agent);
+			const discovery = buildSyncedDiscovery(agent, launch, existing);
+
+			await this.persistDriver(discovery);
+
+			if (warmDriverId === agent.id && discovery.status !== 'not_found') {
+				this.logger.info(`Hydrating selected driver: ${agent.id}`);
+				await this.ensureDriverReady(agent.id);
+			}
+		}
+
+		this.logger.info(`Sync complete. Persisted ${String(supportedRegistry.length)} drivers.`);
+	}
+
+	async getDriver(id: string): Promise<DriverDiscovery | undefined> {
+		const row = await this.getDriverRow(id);
+		if (!row) return undefined;
+		return driverRowToDiscovery(row);
+	}
+
+	async login(
+		driverId: string,
+		methodId: string,
+		params: Record<string, unknown> = {},
+	): Promise<void> {
+		const driver = await this.ensureDriverReady(driverId, { force: true });
+
+		const { child, connection } = createAgentConnection(
+			driver.command,
+			driver.launchArgs,
+			driver.launchEnv,
+		);
+
+		try {
+			await connection.initialize({
+				protocolVersion: 1,
+				clientInfo: { name: 'agentctl-login', version: '1.0.0' },
+			});
+
+			await (connection.authenticate({
+				methodId,
+				_meta: params,
+			}) as Promise<unknown>);
+
+			await this.db
+				.update(drivers)
+				.set({ status: 'ready', enabled: true, updatedAt: new Date() })
+				.where(eq(drivers.id, driverId));
+		} finally {
+			child.kill();
+		}
+	}
+
+	async activate(driverId: string): Promise<DriverDiscovery> {
+		const discovery = await this.ensureDriverReady(driverId, { force: true });
+		if (!discovery.enabled) {
+			return await this.setDriverEnabled(driverId, true);
+		}
+		return discovery;
+	}
+
+	async getSettings(): Promise<DriverSettings> {
+		const rows = await this.db.select().from(systemSettings);
+		const settings: DriverSettings = {};
+		for (const row of rows) {
+			switch (row.key) {
+				case 'onboardingCompleted':
+					settings.onboardingCompleted = row.value;
+					break;
+				case 'onboardingVersion':
+					settings.onboardingVersion = row.value;
+					break;
+				case 'setupStep':
+					settings.setupStep = row.value;
+					break;
+				case 'defaultDriverId':
+					settings.defaultDriverId = row.value;
+					break;
+			}
+		}
+		return settings;
+	}
+
+	async updateSetting(key: string, value: string): Promise<void> {
+		await this.db
+			.insert(systemSettings)
+			.values({
+				key,
+				value,
+			})
+			.onConflictDoUpdate({
+				target: systemSettings.key,
+				set: {
+					value,
+					updatedAt: new Date(),
+				},
+			});
+	}
+
+	async setDriverEnabled(driverId: string, enabled: boolean): Promise<DriverDiscovery> {
+		const row = await this.getDriverRow(driverId);
+		if (!row) {
+			throw new Error(`Driver ${driverId} not found`);
+		}
+
+		await this.db
+			.update(drivers)
+			.set({ enabled, updatedAt: new Date() })
+			.where(eq(drivers.id, driverId));
+
+		return driverRowToDiscovery({ ...row, enabled });
+	}
 }

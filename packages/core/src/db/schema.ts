@@ -68,6 +68,13 @@ export const drivers = sqliteTable('drivers', {
   version: text('version'),
   description: text('description'),
   icon: text('icon'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  ...timestamps,
+});
+
+export const systemSettings = sqliteTable('system_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
   ...timestamps,
 });
 

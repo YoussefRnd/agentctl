@@ -1,24 +1,18 @@
-import { useState, useEffect } from 'react';
-
-const STORAGE_KEY = 'agentctl-setup-wizard-done';
+import { useSettings } from '../../../hooks/useSettings';
 
 export function useSetupWizard() {
-  const [isDone, setIsDone] = useState<boolean>(true); // default to true until we check
-  const [isMounted, setIsMounted] = useState(false);
+	const { settings, isLoading, updateSettings } = useSettings();
 
-  useEffect(() => {
-    setIsMounted(true);
-    const stored = localStorage.getItem(STORAGE_KEY);
-    setIsDone(stored === 'true');
-  }, []);
+	const markDone = async (defaultDriverId?: string | null) => {
+		await updateSettings({
+			onboardingCompleted: true,
+			defaultDriverId: defaultDriverId ?? settings?.defaultDriverId ?? null,
+		});
+	};
 
-  const markDone = () => {
-    localStorage.setItem(STORAGE_KEY, 'true');
-    setIsDone(true);
-  };
-
-  return {
-    showWizard: isMounted && !isDone,
-    markDone,
-  };
+	return {
+		showWizard: !isLoading && !!settings && !settings.onboardingCompleted,
+		markDone,
+		isLoading,
+	};
 }

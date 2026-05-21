@@ -1,8 +1,9 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { DriverRegistry } from './acp-driver-registry.js';
 import type { DbClient } from './acp-session.js';
 import { noopLogger } from '../logger.js';
+import * as probeModule from './acp-probe.js';
 
 test('DriverRegistry discover returns drivers from DB', async () => {
   const mockRows = [
@@ -11,6 +12,7 @@ test('DriverRegistry discover returns drivers from DB', async () => {
       name: 'Claude Code',
       status: 'ready',
       command: 'claude',
+      enabled: false,
       launchArgs: '[]',
       launchEnv: '{}',
       configOptions: '[]',
@@ -41,6 +43,7 @@ test('DriverRegistry getDriver returns specific driver from DB', async () => {
     name: 'Claude Code',
     status: 'ready',
     command: 'claude',
+    enabled: false,
     launchArgs: '[]',
     launchEnv: '{}',
     configOptions: '[]',
@@ -63,4 +66,69 @@ test('DriverRegistry getDriver returns specific driver from DB', async () => {
 
   assert.ok(driver);
   assert.equal(driver.id, 'claude-code');
+});
+
+test('DriverRegistry ensureDriverReady performs lazy binary check when force is false', async () => {
+  const mockRow = {
+    id: 'claude-code',
+    name: 'Claude Code',
+    status: 'ready' as const,
+    command: 'node', // exists on path
+    enabled: true,
+    launchArgs: '[]',
+    launchEnv: '{}',
+    configOptions: '[]',
+    authMethods: '[]',
+    version: '1.0.0',
+    description: 'test',
+    icon: 'icon',
+  };
+
+  const db = {
+    select: () => ({
+      from: () => ({
+        where: () => Promise.resolve([mockRow]),
+      }),
+    }),
+    update: () => ({
+      set: () => ({
+        where: () => Promise.resolve(),
+      }),
+    }),
+    insert: () => ({
+      values: () => ({
+        onConflictDoUpdate: () => Promise.resolve(),
+      }),
+    }),
+  } as unknown as DbClient;
+
+  const probeSpy = vi.spyOn(probeModule, 'probeAgent').mockResolvedValue({
+    id: 'claude-code',
+    label: 'Claude Code',
+    status: 'ready',
+    command: 'node',
+    enabled: true,
+    launchArgs: [],
+    launchEnv: {},
+    configOptions: [],
+    authMethods: [],
+    version: '1.0.0',
+    description: 'test',
+  });
+
+  const registry = new DriverRegistry(db, noopLogger);
+
+  // 1. Call ensureDriverReady with force: false
+  // Since status is 'ready' and binary 'node' is on PATH, it should return immediately without probing
+  const resultLazy = await registry.ensureDriverReady('claude-code', { force: false });
+  assert.equal(resultLazy.status, 'ready');
+  assert.equal(probeSpy.mock.calls.length, 0);
+
+  // 2. Call ensureDriverReady with force: true
+  // It should bypass the cache and run probeAgent
+  const resultForced = await registry.ensureDriverReady('claude-code', { force: true });
+  assert.equal(resultForced.status, 'ready');
+  assert.equal(probeSpy.mock.calls.length, 1);
+
+  probeSpy.mockRestore();
 });

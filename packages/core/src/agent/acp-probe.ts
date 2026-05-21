@@ -24,12 +24,13 @@ export interface ProbeConnectionHandle {
 
 const PROBE_TIMEOUT_MS = 60_000;
 
-export function notFoundEntry(agent: RegistryAgent): DriverDiscovery {
+export function notFoundEntry(agent: RegistryAgent, enabled = false): DriverDiscovery {
   return {
     id: agent.id,
     label: agent.name,
     status: 'not_found',
     command: agent.id,
+    enabled,
     launchArgs: [],
     launchEnv: {},
     authMethods: [],
@@ -96,6 +97,7 @@ export async function probeAgent(
           label: agent.name,
           status,
           command: launch.command,
+          enabled: false,
           launchArgs: launch.args,
           launchEnv: launch.env,
           configOptions,

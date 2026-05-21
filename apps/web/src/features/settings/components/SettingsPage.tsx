@@ -3,7 +3,7 @@ import { useDrivers } from '../../../hooks/useDrivers';
 import { Loader2, RefreshCw } from 'lucide-react';
 
 export function SettingsPage() {
-  const { drivers, activate, syncDrivers, isLoadingDrivers, isSyncing } = useDrivers(null);
+  const { drivers, activate, syncDrivers, isLoadingDrivers, isSyncing, toggleDriver } = useDrivers(null);
 
   return (
     <div className="animate-fade-in-up relative mx-auto h-full w-full max-w-4xl overflow-y-auto p-8">
@@ -11,9 +11,9 @@ export function SettingsPage() {
       <div className="relative z-10 mb-10 flex items-center justify-between">
         <div>
           <h1 className="font-display from-text-main to-text-muted bg-gradient-to-br bg-clip-text text-3xl font-bold text-transparent">
-            Providers
+            Drivers
           </h1>
-          <p className="text-text-muted mt-2">Activate and configure your AI agent providers.</p>
+          <p className="text-text-muted mt-2">Activate and configure your AI agent drivers.</p>
         </div>
         <button
           onClick={() => {
@@ -48,6 +48,9 @@ export function SettingsPage() {
                 key={driver.id}
                 driver={driver}
                 onActivate={activate}
+                onToggle={(id, enabled) => {
+                  toggleDriver({ driverId: id, enabled });
+                }}
                 onResync={() => {
                   syncDrivers();
                 }}

@@ -77,6 +77,7 @@ export const driverDiscoverySchema = z.object({
   label: z.string(),
   status: driverStatusSchema,
   command: z.string(),
+  enabled: z.boolean().default(false),
   launchArgs: z.array(z.string()).optional().default([]),
   launchEnv: z.record(z.string(), z.string()).optional().default({}),
   configOptions: z.array(acpConfigOptionSchema).optional(),

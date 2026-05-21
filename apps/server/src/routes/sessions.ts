@@ -8,100 +8,102 @@ import { buildLaunchConfig } from '../services/driver-selection.js';
 import { AppError } from '../errors/app-error.js';
 
 const createSessionSchema = z.object({
-  projectId: z.uuid(),
-  agent: z.string().min(1),
-  taskSlug: z.string().min(1),
+	projectId: z.uuid(),
+	agent: z.string().min(1),
+	taskSlug: z.string().min(1),
 });
 
 const updateSessionProviderSchema = z.object({
-  selectedDriver: z.string().min(1),
-  selectedModel: z.string().min(1),
-  selectedThinkingEffort: z.enum(['low', 'medium', 'high']),
+	selectedDriver: z.string().min(1),
+	selectedModel: z.string().min(1),
+	selectedThinkingEffort: z.enum(['low', 'medium', 'high']),
 });
 
 const sessionParamsSchema = z.object({
-  id: z.uuid(),
+	id: z.uuid(),
 });
 
 export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
-  fastify.withTypeProvider<ZodTypeProvider>().post(
-    '/sessions',
-    {
-      schema: {
-        body: createSessionSchema,
-      },
-    },
-    async (request) => {
-      return await createAgentSession(fastify, request.body);
-    },
-  );
+	fastify.withTypeProvider<ZodTypeProvider>().post(
+		'/sessions',
+		{
+			schema: {
+				body: createSessionSchema,
+			},
+		},
+		async (request) => {
+			return await createAgentSession(fastify, request.body);
+		},
+	);
 
-  fastify.withTypeProvider<ZodTypeProvider>().get(
-    '/sessions/:id',
-    {
-      schema: {
-        params: sessionParamsSchema,
-      },
-    },
-    async (request) => {
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-      });
+	fastify.withTypeProvider<ZodTypeProvider>().get(
+		'/sessions/:id',
+		{
+			schema: {
+				params: sessionParamsSchema,
+			},
+		},
+		async (request) => {
+			const session = await fastify.db.query.sessions.findFirst({
+				where: eq(sessions.id, request.params.id),
+			});
 
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
+			if (!session) {
+				throw new AppError('Session not found', 404);
+			}
 
-      const drivers = await fastify.driverRegistry.discover();
-      return { session, capabilities: drivers };
-    },
-  );
+			const drivers = await fastify.driverRegistry.discover();
+			return { session, capabilities: drivers };
+		},
+	);
 
-  fastify.withTypeProvider<ZodTypeProvider>().patch(
-    '/sessions/:id/provider',
-    {
-      schema: {
-        params: sessionParamsSchema,
-        body: updateSessionProviderSchema,
-      },
-    },
-    async (request) => {
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-      });
+	fastify.withTypeProvider<ZodTypeProvider>().patch(
+		'/sessions/:id/provider',
+		{
+			schema: {
+				params: sessionParamsSchema,
+				body: updateSessionProviderSchema,
+			},
+		},
+		async (request) => {
+			const session = await fastify.db.query.sessions.findFirst({
+				where: eq(sessions.id, request.params.id),
+			});
 
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
+			if (!session) {
+				throw new AppError('Session not found', 404);
+			}
 
-      const [updatedSession] = await fastify.db
-        .update(sessions)
-        .set({
-          selectedDriver: request.body.selectedDriver,
-          selectedModel: request.body.selectedModel,
-          selectedThinkingEffort: request.body.selectedThinkingEffort,
-        })
-        .where(eq(sessions.id, request.params.id))
-        .returning();
+			const [updatedSession] = await fastify.db
+				.update(sessions)
+				.set({
+					selectedDriver: request.body.selectedDriver,
+					selectedModel: request.body.selectedModel,
+					selectedThinkingEffort: request.body.selectedThinkingEffort,
+				})
+				.where(eq(sessions.id, request.params.id))
+				.returning();
 
-      const driver = await fastify.driverRegistry.getDriver(updatedSession.selectedDriver);
-      if (driver?.status === 'ready') {
-        const launch = buildLaunchConfig(
-          driver,
-          updatedSession.selectedModel,
-          updatedSession.selectedThinkingEffort,
-        );
-        fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
-          command: launch.command,
-          args: launch.args,
-          env: launch.env,
-        });
-      }
+			const driver = await fastify.driverRegistry.ensureDriverReady(updatedSession.selectedDriver, {
+				force: false,
+			});
+			if (driver.status === 'ready') {
+				const launch = buildLaunchConfig(
+					driver,
+					updatedSession.selectedModel,
+					updatedSession.selectedThinkingEffort,
+				);
+				fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
+					command: launch.command,
+					args: launch.args,
+					env: launch.env,
+				});
+			}
 
-      const drivers = await fastify.driverRegistry.discover();
-      return { session: updatedSession, capabilities: drivers };
-    },
-  );
+			const drivers = await fastify.driverRegistry.discover();
+			return { session: updatedSession, capabilities: drivers };
+		},
+	);
 
-  done();
+	done();
 };

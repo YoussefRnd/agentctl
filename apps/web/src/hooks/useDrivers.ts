@@ -115,6 +115,22 @@ export function useDrivers(sessionId: string | null) {
     },
   });
 
+  const toggleMutation = useMutation({
+    mutationFn: async ({ driverId, enabled }: { driverId: string; enabled: boolean }) => {
+      return apiClient.fetch<DriverDiscovery>(`/api/drivers/${driverId}/toggle`, {
+        method: 'POST',
+        body: JSON.stringify({ enabled }),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      toast.success('Driver selection updated successfully.');
+    },
+    onError: (err) => {
+      toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    },
+  });
+
   return {
     drivers,
     isLoadingDrivers,
@@ -126,5 +142,7 @@ export function useDrivers(sessionId: string | null) {
     isActivating: activateMutation.isPending,
     syncDrivers: syncMutation.mutate,
     isSyncing: syncMutation.isPending,
+    toggleDriver: toggleMutation.mutate,
+    isToggling: toggleMutation.isPending,
   };
 }
