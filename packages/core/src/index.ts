@@ -8,6 +8,7 @@ export * from './git/worktree-manager.js';
 export * from './agent/acp-transport.js';
 export * from './agent/acp-probe.js';
 export * from './agent/acp-session.js';
+export * from './agent/session-event-store.js';
 export * from './agent/session-manager.js';
 export { cleanEnv } from './agent/acp-transport.js';
 export * from './agent/acp-driver-registry.js';

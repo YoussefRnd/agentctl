@@ -1,8 +1,13 @@
 import { spawn } from 'node:child_process';
-import { ACPSession, type DbClient, type IEventBus } from './acp-session.js';
+import { ACPSession, type DbClient } from './acp-session.js';
 import { cleanEnv } from './acp-transport.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
+import { SessionEventStore } from './session-event-store.js';
+
+export interface IEventBus {
+  publish(event: unknown): void;
+}
 
 interface RestartOptions {
   command: string;
@@ -12,12 +17,15 @@ interface RestartOptions {
 
 export class SessionManager {
   private sessions = new Map<string, ACPSession>();
+  private eventStore: SessionEventStore;
 
   constructor(
     private db: DbClient,
-    private eventBus: IEventBus,
+    eventBus: IEventBus,
     private logger: Logger = noopLogger,
-  ) {}
+  ) {
+    this.eventStore = new SessionEventStore(db, eventBus);
+  }
 
   startSession(
     sessionId: string,
@@ -37,7 +45,7 @@ export class SessionManager {
       sessionId,
       child,
       this.db,
-      this.eventBus,
+      this.eventStore,
       worktreePath,
       this.logger,
     );

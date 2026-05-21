@@ -1,8 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 
-import { SessionManager } from './session-manager.js';
-import type { DbClient, IEventBus } from './acp-session.js';
+import { SessionManager, type IEventBus } from './session-manager.js';
+import type { DbClient } from './acp-session.js';
 import { noopLogger } from '../logger.js';
 
 test('SessionManager startSession creates and initializes a session', () => {

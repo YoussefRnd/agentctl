@@ -5,17 +5,13 @@ import type {
   RequestPermissionResponse,
   PromptRequest,
 } from '@agentclientprotocol/sdk';
-import { acpEvents, sessions, drivers } from '../db/schema.js';
+import { sessions, drivers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import type { ACPEvent } from '@agentctl/shared';
 import type { createDatabase } from '../db/index.js';
 import type { ChildProcess } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
 import { type Logger, noopLogger } from '../logger.js';
-
-export interface IEventBus {
-  publish(event: unknown): void;
-}
+import type { SessionEventStore } from './session-event-store.js';
 
 export type DbClient = ReturnType<typeof createDatabase>;
 
@@ -32,7 +28,7 @@ export class ACPSession {
     public sessionId: string,
     private child: ChildProcess,
     private db: DbClient,
-    private eventBus: IEventBus,
+    private eventStore: SessionEventStore,
     private cwd: string,
     private logger: Logger = noopLogger,
   ) {
@@ -128,7 +124,7 @@ export class ACPSession {
             .set({ status: 'needs_attention' })
             .where(eq(sessions.id, this.sessionId));
 
-          await this.persistEvent('status', {
+          await this.eventStore.append(this.sessionId, 'status', {
             status: 'needs_auth',
             message: 'Authentication required. Please check your API keys or log in via CLI.',
           });
@@ -293,26 +289,6 @@ export class ACPSession {
     }
   }
 
-  private async persistEvent(type: ACPEvent['type'], data: unknown): Promise<number | undefined> {
-    const insertedArray = await this.db
-      .insert(acpEvents)
-      .values({
-        sessionId: this.sessionId,
-        type,
-        data: JSON.stringify(data),
-      })
-      .returning();
-
-    if (insertedArray.length > 0) {
-      this.eventBus.publish({
-        ...insertedArray[0],
-        createdAt: new Date(insertedArray[0].createdAt),
-      });
-      return insertedArray[0].id;
-    }
-    return undefined;
-  }
-
   private currentMessage = '';
   private currentThought = '';
   private messageEventId: number | null = null;
@@ -323,7 +299,7 @@ export class ACPSession {
       const update = notification.update;
       const typeKey = update.sessionUpdate;
 
-      const typeMap: Record<string, ACPEvent['type'] | undefined> = {
+      const typeMap: Record<string, 'tool_call' | 'text' | 'status' | undefined> = {
         tool_call: 'tool_call',
         tool_call_update: 'tool_call',
         agent_message_chunk: 'text',
@@ -347,9 +323,9 @@ export class ACPSession {
         if (text !== undefined) {
           this.currentMessage += text;
           if (this.messageEventId) {
-            await this.updateEvent(this.messageEventId, { content: this.currentMessage });
+            await this.eventStore.update(this.messageEventId, { content: this.currentMessage });
           } else {
-            this.messageEventId = (await this.persistEvent('text', { content: this.currentMessage })) ?? null;
+            this.messageEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentMessage });
           }
         }
         return;
@@ -362,9 +338,9 @@ export class ACPSession {
         if (thought !== undefined) {
           this.currentThought += thought;
           if (this.thoughtEventId) {
-            await this.updateEvent(this.thoughtEventId, { content: this.currentThought });
+            await this.eventStore.update(this.thoughtEventId, { content: this.currentThought });
           } else {
-            this.thoughtEventId = (await this.persistEvent('text', { content: this.currentThought })) ?? null;
+            this.thoughtEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentThought });
           }
         }
         return;
@@ -390,27 +366,10 @@ export class ACPSession {
         }
       }
 
-      await this.persistEvent(eventType, uiData);
+      await this.eventStore.append(this.sessionId, eventType, uiData);
     } catch (error) {
       await this.handleError(error).catch((e: unknown) => {
         this.logger.error(e, 'Failed to handle error in onSessionUpdate');
-      });
-    }
-  }
-
-  private async updateEvent(id: number, data: unknown): Promise<void> {
-    const updatedArray = await this.db
-      .update(acpEvents)
-      .set({
-        data: JSON.stringify(data),
-      })
-      .where(eq(acpEvents.id, id))
-      .returning();
-
-    if (updatedArray.length > 0) {
-      this.eventBus.publish({
-        ...updatedArray[0],
-        createdAt: new Date(updatedArray[0].createdAt),
       });
     }
   }
@@ -426,16 +385,12 @@ export class ACPSession {
         .set({ status: 'needs_attention', lastHeartbeat: new Date() })
         .where(eq(sessions.id, this.sessionId));
 
-      const eventId = await this.persistEvent('approval_request', {
+      const eventId = await this.eventStore.append(this.sessionId, 'approval_request', {
         name: 'request_permission',
         toolCallId: permissionId,
         requiresApproval: true,
         request,
       });
-
-      if (eventId === undefined) {
-        throw new Error('Failed to persist approval_request event');
-      }
 
       const approvalPromise = new Promise<RequestPermissionResponse>((resolve) => {
         this.pendingApprovals.set(String(eventId), resolve);
@@ -453,3 +408,4 @@ export class ACPSession {
     }
   }
 }
+
