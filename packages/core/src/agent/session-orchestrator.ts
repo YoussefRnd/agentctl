@@ -4,8 +4,6 @@ import type { DbClient, ACPSession } from './acp-session.js';
 import type { WorktreeManager } from '../git/worktree-manager.js';
 import type { DriverRegistry } from './acp-driver-registry.js';
 import type { SessionManager } from './session-manager.js';
-import { resolveDriverSelection, buildLaunchConfig } from './driver-logic.js';
-import type { DriverDiscovery } from '@agentctl/shared';
 
 export interface CreateSessionParams {
   projectId: string;
@@ -58,7 +56,7 @@ export class SessionOrchestrator {
       baseCommit = worktree.baseCommit;
     }
 
-    const selection = this.resolveInitialSelection(driverId, driver);
+    const selection = driver.resolveDefaultSelection();
 
     await this.db.insert(sessions).values({
       id: sessionId,
@@ -72,8 +70,7 @@ export class SessionOrchestrator {
       ...selection,
     });
 
-    const launch = buildLaunchConfig(
-      driver,
+    const launch = driver.getLaunchConfig(
       selection.selectedModel,
       selection.selectedThinkingEffort,
     );
@@ -85,23 +82,5 @@ export class SessionOrchestrator {
       launch.args,
       launch.env,
     );
-  }
-
-  private resolveInitialSelection(driverId: string, driver: DriverDiscovery | null) {
-    if (!driver) {
-      return {
-        selectedDriver: driverId,
-        selectedModel: 'default',
-        selectedThinkingEffort: 'medium' as const,
-      };
-    }
-
-    const { selectedModel, selectedThinkingEffort } = resolveDriverSelection(driver);
-
-    return {
-      selectedDriver: driverId,
-      selectedModel,
-      selectedThinkingEffort,
-    };
   }
 }

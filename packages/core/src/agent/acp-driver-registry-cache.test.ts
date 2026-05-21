@@ -568,9 +568,15 @@ test('DriverRegistry setDriverConfig updates database and triggers dynamic probe
 					selectCount++;
 					if (selectCount === 1) {
 						return Promise.resolve([driverRow]);
+					} else if (selectCount === 2) {
+						return Promise.resolve([{
+							...driverRow,
+							customEnv: JSON.stringify({ ANTHROPIC_API_KEY: 'test-key' }),
+						}]);
 					} else {
 						return Promise.resolve([{
 							...driverRow,
+							status: 'ready',
 							customEnv: JSON.stringify({ ANTHROPIC_API_KEY: 'test-key' }),
 						}]);
 					}

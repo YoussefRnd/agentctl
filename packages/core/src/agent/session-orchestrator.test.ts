@@ -4,7 +4,7 @@ import { type DbClient } from './acp-session.js';
 import type { WorktreeManager } from '../git/worktree-manager.js';
 import type { DriverRegistry } from './acp-driver-registry.js';
 import type { SessionManager } from './session-manager.js';
-import type { DriverDiscovery } from '@agentctl/shared';
+import { Driver } from './driver.js';
 
 describe('SessionOrchestrator', () => {
   test('create orchestrates project, driver, worktree and session', async () => {
@@ -47,20 +47,25 @@ describe('SessionOrchestrator', () => {
     const mockDriverRegistry = {
       ensureDriverReady: async () => {
         await Promise.resolve();
-        return {
+        return new Driver({
           id: 'driver-1',
-          label: 'Driver 1',
+          name: 'Driver 1',
           status: 'ready',
           command: 'agent-cmd',
           enabled: true,
-          launchArgs: [],
-          launchEnv: {},
-          customEnv: {},
-          configOptions: [],
-          authMethods: [],
+          launchArgs: '[]',
+          launchEnv: '{}',
+          customEnv: '{}',
+          configOptions: '[]',
+          authMethods: '[]',
           supportsDynamicModel: false,
           supportsDynamicConfig: false,
-        } as DriverDiscovery;
+          version: '1.0.0',
+          description: 'test',
+          icon: '',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
       },
     } as unknown as DriverRegistry;
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { sessions, buildLaunchConfig } from '@agentctl/core';
+import { sessions } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
@@ -112,9 +112,9 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 			const driver = await fastify.driverRegistry.ensureDriverReady(updatedSession.selectedDriver, {
 				force: false,
 			});
+
 			if (driver.status === 'ready' || driver.status === 'needs_auth') {
-				const launch = buildLaunchConfig(
-					driver,
+				const launch = driver.getLaunchConfig(
 					updatedSession.selectedModel,
 					updatedSession.selectedThinkingEffort,
 				);
