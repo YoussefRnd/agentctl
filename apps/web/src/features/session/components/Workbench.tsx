@@ -17,20 +17,20 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
 
   return (
     <aside
-      className={`terminal-glass absolute right-0 z-30 h-full shrink-0 overflow-hidden border-l transition-[width,transform,opacity,border-color] duration-300 ease-in-out will-change-[width,transform] lg:relative ${
+      className={`terminal-glass h-full shrink-0 overflow-hidden border border-border shadow-2xl transition-[width,opacity] duration-500 cubic-bezier(0.16, 1, 0.3, 1) will-change-[width] ${
         isOpen
-          ? 'w-[85vw] translate-x-0 opacity-100 sm:w-[320px] lg:w-[35%]'
-          : 'w-[85vw] translate-x-full opacity-0 sm:w-[320px] lg:w-[44px] lg:translate-x-0 lg:opacity-100'
+          ? 'w-[320px] lg:w-[480px] opacity-100'
+          : 'w-0 opacity-0 border-none'
       }`}
     >
-      <div className="flex h-full flex-col min-w-[320px] lg:min-w-0">
-        <div className="border-border flex shrink-0 h-11 items-center border-b p-1 gap-1 bg-surface-secondary">
-          <div className={`flex flex-1 gap-1 h-full transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 lg:hidden'}`}>
+      <div className="flex h-full flex-col min-w-[320px]">
+        <div className="border-border flex shrink-0 h-11 items-center border-b p-1 gap-1 bg-surface-secondary/50 backdrop-blur-md">
+          <div className="flex flex-1 gap-1 h-full px-1">
             <button
-              className={`flex-1 text-[9px] font-display font-extrabold tracking-widest uppercase transition-colors rounded-sm ${
+              className={`flex-1 text-[9px] font-display font-extrabold tracking-widest uppercase transition-all duration-300 rounded-sm ${
                 tab === 'status'
-                  ? 'bg-surface-tertiary text-text-main border border-border shadow-sm'
-                  : 'text-text-muted hover:text-text-main hover:bg-surface-tertiary/30'
+                  ? 'bg-text-main text-background shadow-[0_0_15px_rgba(205,214,244,0.2)]'
+                  : 'text-text-muted hover:text-text-main hover:bg-surface-tertiary/40'
               }`}
               onClick={() => {
                 onTabChange('status');
@@ -39,10 +39,10 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
               STATUS
             </button>
             <button
-              className={`flex-1 text-[9px] font-display font-extrabold tracking-widest uppercase transition-colors rounded-sm ${
+              className={`flex-1 text-[9px] font-display font-extrabold tracking-widest uppercase transition-all duration-300 rounded-sm ${
                 tab === 'changes'
-                  ? 'bg-surface-tertiary text-text-main border border-border shadow-sm'
-                  : 'text-text-muted hover:text-text-main hover:bg-surface-tertiary/30'
+                  ? 'bg-text-main text-background shadow-[0_0_15px_rgba(205,214,244,0.2)]'
+                  : 'text-text-muted hover:text-text-main hover:bg-surface-tertiary/40'
               }`}
               onClick={() => {
                 onTabChange('changes');
@@ -53,15 +53,13 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
           </div>
           <button
             onClick={onToggle}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm transition-all ${
-              isOpen ? 'text-text-main hover:bg-surface-tertiary/50' : 'text-text-muted hover:text-text-main hover:bg-surface-tertiary/30'
-            }`}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm transition-all text-text-muted hover:text-text-main hover:bg-surface-tertiary/50"
             title="Toggle Inspector"
           >
             <PanelRight className="h-4 w-4" />
           </button>
         </div>
-        <div className={`min-h-0 flex-1 overflow-hidden transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className="min-h-0 flex-1 overflow-hidden">
           {tab === 'status' ? (
             <StatusPane files={reviewData.files} />
           ) : (

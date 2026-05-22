@@ -27,7 +27,7 @@ export const ToolCallCard = memo(function ToolCallCard({
         <div className="bg-surface border-border hover:border-accent/30 hover:bg-surface-secondary/60 flex flex-1 items-center justify-between border px-2 py-1 transition-all duration-200">
           <div className="flex items-center gap-2 overflow-hidden">
             <Terminal className="h-3 w-3 shrink-0 opacity-50" />
-            <span className="text-text-main font-bold text-[11px] uppercase tracking-tighter whitespace-nowrap">
+            <span className="text-text-main font-display font-bold text-[11px] uppercase tracking-tighter whitespace-nowrap">
               CALL::{tool}
             </span>
             <span className="text-text-muted/30 ml-2 truncate text-[10px] font-bold">

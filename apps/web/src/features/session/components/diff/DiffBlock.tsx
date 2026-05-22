@@ -12,12 +12,12 @@ export function DiffBlock({ path, hunks, onStage, onRevert }: DiffBlockProps) {
   return (
     <div className="border-border bg-background/50 overflow-hidden rounded-md border shadow-sm">
       <header className="border-border bg-surface-secondary/80 sticky top-0 z-10 flex items-center justify-between gap-2 border-b px-2 py-1.5 backdrop-blur-sm">
-        <div className="text-text-main truncate text-[10px] font-bold uppercase tracking-tighter">{path}</div>
+        <div className="text-text-main font-display truncate text-[10px] font-bold uppercase tracking-tighter">{path}</div>
         <div className="flex items-center gap-1">
           {onRevert && (
             <button
               onClick={onRevert}
-              className="text-text-muted hover:text-danger px-1.5 py-0.5 text-[9px] font-black uppercase transition-colors"
+              className="text-text-muted font-display hover:text-danger px-1.5 py-0.5 text-[9px] font-black uppercase transition-colors"
             >
               REVERT
             </button>
@@ -25,7 +25,7 @@ export function DiffBlock({ path, hunks, onStage, onRevert }: DiffBlockProps) {
           {onStage && (
             <button
               onClick={onStage}
-              className="terminal-button !bg-accent !text-background !h-6 px-2 text-[9px] font-accent"
+              className="terminal-button font-display !bg-accent !text-background !h-6 px-2 text-[9px] font-accent"
             >
               STAGE
             </button>

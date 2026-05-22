@@ -43,12 +43,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
 
   return (
     <div
-      className="stream-viewport relative h-full flex-1 overflow-y-auto scroll-smooth"
+      className="stream-viewport relative h-full flex-1 overflow-y-auto scroll-smooth pb-20"
       ref={parentRef}
       onScroll={handleScroll}
     >
-      <div className="relative mx-auto max-w-4xl py-8">
-        <div className="absolute top-0 bottom-0 left-10 z-0 w-px bg-border/40" />
+      <div className="relative max-w-[1200px] pl-10 pr-6 lg:pl-16 py-12">
+        <div className="absolute top-0 bottom-0 left-10 lg:left-16 z-0 w-px bg-gradient-to-b from-transparent via-border/50 to-transparent" />
 
         <div
           style={{
@@ -63,7 +63,7 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
             
             // Layout logic: tight spacing for tool call sequences
             const isConsecutiveTool = e.type === 'tool_call' && item.index < events.length - 1 && nextEvent.type === 'tool_call';
-            const spacingClass = isConsecutiveTool ? 'pb-1' : 'pb-6';
+            const spacingClass = isConsecutiveTool ? 'pb-2' : 'pb-10';
 
             return (
               <div
@@ -77,13 +77,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
                   width: '100%',
                   transform: `translateY(${String(item.start)}px)`,
                 }}
-                className={`${spacingClass} animate-in fade-in slide-in-from-top-1 duration-150 ease-out`}
+                className={`${spacingClass} animate-in fade-in slide-in-from-top-2 duration-300 ease-out`}
               >
                 {e.type === 'text' && <TextCard content={e.data.content} />}
                 {e.type === 'tool_call' && <ToolCallCard tool={e.data.name} payload={e.data} />}
               </div>
             );
-
           })}
         </div>
       </div>
@@ -92,12 +91,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
       {!autoScroll && (
         <button
           type="button"
-          className="terminal-button !bg-accent !text-background fixed bottom-24 left-1/2 -translate-x-1/2 shadow-2xl hover:scale-105 active:scale-95"
+          className="terminal-button !bg-accent !text-background fixed bottom-32 left-1/2 -translate-x-1/2 shadow-[0_0_25px_rgba(203,166,247,0.3)] hover:scale-105 active:scale-95 z-50 backdrop-blur-md"
           onClick={() => {
             setAutoScroll(true);
           }}
         >
-          <span className="font-accent font-black tracking-tighter">RETURN_TO_LATEST</span>
+          <span className="font-accent font-black tracking-tighter text-[10px]">RETURN_TO_LATEST</span>
         </button>
       )}
     </div>

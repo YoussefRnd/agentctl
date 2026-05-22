@@ -103,10 +103,10 @@ export function MainFeed() {
         <div className="flex h-full min-h-0 flex-col">
           <div className="min-h-0 flex-1 overflow-hidden pb-40">
             {isLoadingEvents ? (
-              <div className="flex h-full items-center justify-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="h-6 w-6 animate-spin border-2 border-text-main border-t-transparent" />
-                  <span className="text-text-main text-[10px] font-display font-extrabold uppercase tracking-widest opacity-40">
+              <div className="flex h-full items-center justify-center p-12">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="h-10 w-10 animate-spin border-2 border-accent border-t-transparent rounded-full" />
+                  <span className="text-text-main text-[11px] font-display font-extrabold uppercase tracking-[0.2em] opacity-60">
                     {loadingMsg}
                   </span>
                 </div>
@@ -118,33 +118,36 @@ export function MainFeed() {
         </div>
       </div>
 
-      <div className="z-10 shrink-0 bg-background pt-4 border-t border-white/5">
-        <div className="mx-auto max-w-4xl">
-          {events.length > 0 && lastEvent.type === 'approval_request' && (
-            <div className="px-4 mb-2">
-              <ApprovalCard
-                eventId={lastEvent.id}
-                data={lastEvent.data}
-                onApprove={handleApprove}
-                onDeny={handleDeny}
+      <div className="z-10 shrink-0 bg-background/80 backdrop-blur-xl border-t border-border/50">
+        <div className="max-w-[1200px] pl-10 pr-6 lg:pl-16">
+          <div className="flex flex-col gap-2 py-4">
+            {events.length > 0 && lastEvent.type === 'approval_request' && (
+              <div className="mb-2">
+                <ApprovalCard
+                  eventId={lastEvent.id}
+                  data={lastEvent.data}
+                  onApprove={handleApprove}
+                  onDeny={handleDeny}
+                />
+              </div>
+            )}
+            
+            <div className="terminal-glass rounded-md border border-border/40 shadow-2xl overflow-hidden transition-all duration-300">
+              <MagicBar
+                files={reviewData.files}
+                onAction={(action) => {
+                  handleSend(action);
+                }}
+              />
+
+              <CommandBar
+                onSend={handleSend}
+                disabled={!isConnected || isSwitching || isLoadingSession}
+                selectedHarnessId={sessionData?.session.selectedDriver}
+                selectedModelId={sessionData?.session.selectedModel}
+                onHarnessSelect={handleHarnessSelect}
               />
             </div>
-          )}
-          <MagicBar
-            files={reviewData.files}
-            onAction={(action) => {
-              handleSend(action);
-            }}
-          />
-
-          <div className="mb-4">
-            <CommandBar
-              onSend={handleSend}
-              disabled={!isConnected || isSwitching || isLoadingSession}
-              selectedHarnessId={sessionData?.session.selectedDriver}
-              selectedModelId={sessionData?.session.selectedModel}
-              onHarnessSelect={handleHarnessSelect}
-            />
           </div>
         </div>
       </div>

@@ -50,11 +50,11 @@ export const ApprovalCard = memo(function ApprovalCard({
         <div className="flex-1">
           <div
             id="approval-title"
-            className="text-text-main mb-0.5 text-[12px] font-black uppercase tracking-widest"
+            className="text-text-main font-display mb-0.5 text-[12px] font-black uppercase tracking-widest"
           >
             AUTHORIZATION_REQUESTED
           </div>
-          <div className="text-text-muted text-[11px] font-bold uppercase tracking-tight opacity-60">
+          <div className="text-text-muted font-display text-[11px] font-bold uppercase tracking-tight opacity-60">
             {data.message ?? 'ACTION_REQUIRES_EXPLICIT_USER_CONSENT.'}
           </div>
         </div>
@@ -66,7 +66,7 @@ export const ApprovalCard = memo(function ApprovalCard({
           onClick={() => {
             onDeny(eventId);
           }}
-          className="text-text-muted hover:text-danger px-3 py-1 text-[10px] font-black uppercase transition-colors"
+          className="text-text-muted font-display hover:text-danger px-3 py-1 text-[10px] font-black uppercase transition-colors"
         >
           DENY
         </button>
@@ -76,7 +76,7 @@ export const ApprovalCard = memo(function ApprovalCard({
           onClick={() => {
             onApprove(eventId);
           }}
-          className="terminal-button !h-8 !px-4 text-[10px]"
+          className="terminal-button font-display !h-8 !px-4 text-[10px]"
         >
           APPROVE_ACTION
         </button>

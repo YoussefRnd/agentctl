@@ -66,14 +66,14 @@ export function ReviewView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-border shrink-0 border-b p-2">
-        <h2 className="text-white text-[12px] font-black tracking-[0.2em] uppercase mb-3">CODE_REVIEW_MANIFEST</h2>
+        <h2 className="text-white font-display text-[12px] font-black tracking-[0.2em] uppercase mb-3">CODE_REVIEW_MANIFEST</h2>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {activeStates.map((state) => (
             <div key={state} className="flex items-baseline gap-2">
-              <span className="text-white/30 text-[9px] font-black tracking-widest uppercase">
+              <span className="text-white/30 font-display text-[9px] font-black tracking-widest uppercase">
                 {state}
               </span>
-              <span className="text-white text-[16px] font-black tabular-nums">
+              <span className="text-white font-display text-[16px] font-black tabular-nums">
                 {grouped[state].length}
               </span>
             </div>
@@ -87,11 +87,11 @@ export function ReviewView({
           return (
             <section key={state} className="space-y-3 content-visibility-auto contain-intrinsic-size-[auto_400px]">
               <div className="flex items-center gap-3">
-                <h3 className="text-white/20 text-[10px] font-black tracking-[0.3em] uppercase">
+                <h3 className="text-white/20 font-display text-[10px] font-black tracking-[0.3em] uppercase">
                   {state}
                 </h3>
                 <div className="bg-white/5 h-px flex-1" />
-                <span className="text-white/40 text-[9px] font-bold uppercase tracking-tight tabular-nums">
+                <span className="text-white/40 font-display text-[9px] font-bold uppercase tracking-tight tabular-nums">
                   {entries.length} UNIT(S)
                 </span>
               </div>
