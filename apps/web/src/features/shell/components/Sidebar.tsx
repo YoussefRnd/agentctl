@@ -90,34 +90,19 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Main Sidebar"
-      className="bg-background relative z-20 flex h-full w-[220px] shrink-0 flex-col overflow-hidden border-r border-border/50"
+      className="bg-background relative z-20 flex h-full w-[240px] shrink-0 flex-col overflow-hidden border-r border-border/50 shadow-2xl"
     >
-      <div className="border-border/50 relative z-10 flex h-11 items-center gap-2 border-b px-3 py-1.5">
-        <div className="flex shrink-0 items-center px-1">
-          <h2 className="text-text-main text-[10px] font-display font-extrabold uppercase tracking-[0.2em]">
+      <div className="border-border/50 relative z-10 flex h-14 items-center gap-2 border-b px-4 py-2 bg-surface-secondary/20">
+        <div className="flex shrink-0 items-center">
+          <h2 className="text-text-main text-[11px] font-display font-black uppercase tracking-[0.3em]">
             AGENTCTL
           </h2>
         </div>
       </div>
 
-      <div className="px-3 mt-6 mb-1">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-text-muted text-[10px] font-display font-extrabold tracking-widest uppercase opacity-30">
-            ::PROJECT_MANIFEST
-          </h3>
-          <div className="flex items-center gap-1">
-            <Link
-              to="/"
-              className="hover:text-accent text-text-muted transition-colors p-1"
-              title="Add Project"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        </div>
-
-        <div className="relative">
-          <Search className="text-text-muted absolute top-1/2 left-2 h-3 w-3 -translate-y-1/2" />
+      <div className="px-4 mt-8 mb-2 space-y-6">
+        <div className="relative group">
+          <Search className="text-text-muted absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 transition-colors group-focus-within:text-accent" />
           <input
             ref={searchInputRef}
             type="text"
@@ -126,20 +111,38 @@ export function Sidebar() {
             onChange={(e) => {
               setSearchQuery(e.target.value);
             }}
-            className="terminal-input w-full pl-7 !h-7 !text-[11px]"
+            className="terminal-input w-full pl-9 !h-9 !text-[11px] bg-surface-secondary/30 border-border/40 focus:border-accent/40"
           />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-20 pointer-events-none group-focus-within:opacity-0 transition-opacity">
+            <span className="text-[9px] font-mono border border-text-muted rounded px-1">⌘K</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <h3 className="text-text-main text-[9px] font-display font-black tracking-[0.25em] uppercase opacity-30">
+            ::PROJECT_MANIFEST
+          </h3>
+          <div className="flex items-center gap-1">
+            <Link
+              to="/"
+              className="hover:text-accent text-text-muted transition-all p-1 hover:bg-accent/10 rounded-sm"
+              title="Add Project"
+            >
+              <Plus className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-1.5 pb-6 mt-4">
+      <div className="flex-1 overflow-y-auto px-2 pb-8 mt-2">
         {isLoading ? (
-          <div className="space-y-1 p-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-surface-secondary h-2 w-full animate-pulse rounded-full" />
+          <div className="space-y-3 p-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="bg-text-main/5 h-2 w-full animate-pulse rounded-full" />
             ))}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-1.5">
             {filteredProjects.map((proj) => {
               const isCollapsed = collapsedProjects[proj.id] ?? true;
               const showSessions = searchQuery ? true : !isCollapsed;
