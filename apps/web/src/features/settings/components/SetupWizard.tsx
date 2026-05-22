@@ -67,7 +67,13 @@ export function SetupWizard() {
 									<div className="flex items-center justify-between">
 										<div className="flex min-w-0 items-center gap-2.5">
 											<div className="bg-black flex h-7 w-7 shrink-0 items-center justify-center border border-white/10 p-1">
-												{driver.id.includes('claude') ? <span className="text-white text-xs font-bold">C</span> : <Bot className="text-white h-3.5 w-3.5" />}
+												{driver.icon ? (
+													<img src={driver.icon} alt="" className="h-4 w-4 object-contain" />
+												) : driver.id.includes('claude') ? (
+													<span className="text-white text-xs font-bold">C</span>
+												) : (
+													<Bot className="text-white h-3.5 w-3.5" />
+												)}
 											</div>
 											<div className="min-w-0">
 												<div className="text-white truncate text-[11px] font-black uppercase tracking-tight">

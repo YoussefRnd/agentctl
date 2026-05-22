@@ -58,14 +58,7 @@ export function SessionWorkspace() {
       }
 
     >
-      <MainFeed
-        isWorkbenchOpen={isWorkbenchOpen}
-        workbenchTab={workbenchTab}
-        onOpenWorkbench={(tab) => {
-          setIsWorkbenchOpen(true);
-          setWorkbenchTab(tab);
-        }}
-      />
+      <MainFeed />
     </SessionLayout>
   );
 }

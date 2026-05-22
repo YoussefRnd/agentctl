@@ -6,15 +6,8 @@ import { ApprovalCard } from './cards/ApprovalCard';
 import { useSession } from '../../../contexts/SessionContext';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import { useDrivers } from '../../../hooks/useDrivers';
-import type { WorkbenchTab } from './Workbench';
 
-interface MainFeedProps {
-  isWorkbenchOpen: boolean;
-  workbenchTab: WorkbenchTab;
-  onOpenWorkbench: (tab: WorkbenchTab) => void;
-}
-
-export function MainFeed({ isWorkbenchOpen, workbenchTab, onOpenWorkbench }: MainFeedProps) {
+export function MainFeed() {
   const {
     sessionId,
     sessionData,
@@ -141,10 +134,6 @@ export function MainFeed({ isWorkbenchOpen, workbenchTab, onOpenWorkbench }: Mai
             files={reviewData.files}
             onAction={(action) => {
               handleSend(action);
-            }}
-            isReviewOpen={isWorkbenchOpen && workbenchTab === 'changes'}
-            onOpenReview={() => {
-              onOpenWorkbench('changes');
             }}
           />
 

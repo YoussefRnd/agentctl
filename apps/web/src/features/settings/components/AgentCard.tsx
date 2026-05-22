@@ -86,7 +86,13 @@ export function AgentCard({
 			>
 				<div className="flex min-w-0 items-center gap-3">
 					<div className="bg-white/5 flex h-9 w-9 shrink-0 items-center justify-center border border-white/10 p-1.5 transition-all group-hover:bg-white/10">
-						{driver.id.includes('claude') ? <span className="text-white text-lg font-bold">C</span> : <Terminal className="text-white h-4 w-4" />}
+						{driver.icon ? (
+							<img src={driver.icon} alt="" className="h-5 w-5 object-contain" />
+						) : driver.id.includes('claude') ? (
+							<span className="text-white text-lg font-bold">C</span>
+						) : (
+							<Terminal className="text-white h-4 w-4" />
+						)}
 					</div>
 					<div className="min-w-0">
 						<h3 className="text-white flex items-center gap-3 text-[13px] font-black uppercase tracking-tighter">

@@ -30,11 +30,11 @@ export function CommandBar({
 
   const selectedId = propSelectedHarnessId ?? internalSelectedHarnessId;
 
-  const selectedDriver = drivers.find((d) => d.id === selectedId);
   const firstId = drivers[0]?.id ?? null;
   const resolvedId = selectedId ?? firstId;
+  const activeDriver = drivers.find((d) => d.id === resolvedId);
   const selectedDriverLabel =
-    selectedDriver !== undefined ? selectedDriver.label : 'Select harness';
+    activeDriver !== undefined ? activeDriver.label : 'Select harness';
 
   const handleSubmit = () => {
     if (input.trim() && !disabled) {
@@ -73,7 +73,7 @@ export function CommandBar({
 
   return (
     <div className="relative z-40 w-full bg-black px-4 pt-1 pb-4">
-      <div className="relative mx-auto max-w-4xl">
+      <div className="relative mx-auto max-w-3xl">
         <HarnessPicker
           sessionId={sessionId}
           isOpen={isPickerOpen}
@@ -87,7 +87,7 @@ export function CommandBar({
           />
 
           <form 
-            className="mx-auto max-w-3xl"
+            className="w-full"
             aria-label="Command interface"
             onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
           >
@@ -127,7 +127,11 @@ export function CommandBar({
                   aria-expanded={isPickerOpen}
                   className={`flex items-center gap-2 rounded-sm px-2 py-1 transition-all ${isPickerOpen ? 'bg-white text-black' : 'hover:bg-white/5 text-text-muted hover:text-white'}`}
                 >
-                  <Zap className={`h-3 w-3 ${isPickerOpen ? 'fill-black' : 'fill-none'}`} />
+                  {activeDriver?.icon ? (
+                    <img src={activeDriver.icon} alt="" className="h-3 w-3 object-contain" />
+                  ) : (
+                    <Zap className={`h-3 w-3 ${isPickerOpen ? 'fill-black' : 'fill-none'}`} />
+                  )}
                   <span className="max-w-[120px] truncate text-[10px] font-black uppercase tracking-widest">
                     {isLoadingDrivers ? '...' : (propSelectedModelId ?? selectedDriverLabel)}
                   </span>

@@ -93,7 +93,11 @@ export function HarnessPicker({
 								: 'text-text-muted hover:text-white hover:bg-white/5'
 								} ${!isEnabled ? 'cursor-not-allowed opacity-30' : ''}`}
 						>
-							{d.id.includes('claude') ? <Bot className="h-4 w-4" /> : <Cpu className="h-4 w-4" />}
+							{d.icon ? (
+								<img src={d.icon} alt="" className="h-4 w-4 object-contain" />
+							) : (
+								d.id.includes('claude') ? <Bot className="h-4 w-4" /> : <Cpu className="h-4 w-4" />
+							)}
 							{needsAuth && !isSelected && (
 								<div className="absolute top-0 right-0 h-1.5 w-1.5 bg-white" />
 							)}

@@ -6,7 +6,7 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
-  Sparkles,
+  Settings,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -95,11 +95,28 @@ export function Sidebar() {
       <div className="border-white/5 relative z-10 flex h-11 items-center gap-2 border-b px-3 py-1.5">
         <div className="flex shrink-0 items-center px-1">
           <h2 className="text-white text-[10px] font-black uppercase tracking-[0.2em]">
-            CTL
+            AGENTCTL
           </h2>
         </div>
+      </div>
 
-        <div className="relative flex-1">
+      <div className="px-3 mt-6 mb-1">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white text-[10px] font-black tracking-widest uppercase opacity-30">
+            ::PROJECT_MANIFEST
+          </h3>
+          <div className="flex items-center gap-1">
+            <Link
+              to="/"
+              className="hover:text-text-main text-text-muted transition-colors p-1"
+              title="Add Project"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        <div className="relative">
           <Search className="text-text-muted absolute top-1/2 left-2 h-3 w-3 -translate-y-1/2" />
           <input
             ref={searchInputRef}
@@ -114,22 +131,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-3 mt-6 mb-1">
-        <h3 className="text-white text-[10px] font-black tracking-widest uppercase opacity-30">
-          ::PROJECT_MANIFEST
-        </h3>
-        <div className="flex items-center gap-1">
-          <Link
-            to="/"
-            className="hover:text-text-main text-text-muted transition-colors p-1"
-            title="Add Project"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-1.5 pb-6">
+      <div className="flex-1 overflow-y-auto px-1.5 pb-6 mt-4">
         {isLoading ? (
           <div className="space-y-1 p-2">
             {[1, 2, 3].map((i) => (
@@ -221,7 +223,7 @@ export function Sidebar() {
           to="/settings"
           className="text-text-muted hover:text-text-main hover:bg-white/5 group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-bold uppercase tracking-tighter transition-all"
         >
-          <Sparkles className="h-3 w-3" />
+          <Settings className="h-3 w-3" />
           Settings
         </Link>
       </div>
