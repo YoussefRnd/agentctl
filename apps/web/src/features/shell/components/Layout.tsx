@@ -13,21 +13,24 @@ export function Layout({ children, sidebarType = 'none' }: LayoutProps) {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div 
           className="absolute -top-[10%] -left-[10%] h-[40%] w-[40%] rounded-full opacity-20 blur-[120px] animate-pulse"
-          style={{ backgroundColor: '#cba6f7' }} // Mauve
+          style={{ backgroundColor: 'var(--color-accent)', willChange: 'transform, filter' }} // Mauve
         />
         <div 
           className="absolute top-[20%] -right-[5%] h-[50%] w-[50%] rounded-full opacity-10 blur-[120px]"
-          style={{ backgroundColor: '#89b4fa', animation: 'pulse 8s infinite' }} // Blue
+          style={{ backgroundColor: '#89b4fa', animation: 'pulse 8s infinite', willChange: 'transform, filter' }} // Blue (Catppuccin Blue #89b4fa)
         />
         <div 
           className="absolute -bottom-[10%] left-[20%] h-[45%] w-[45%] rounded-full opacity-15 blur-[120px]"
-          style={{ backgroundColor: '#b4befe', animation: 'pulse 12s infinite' }} // Lavender
+          style={{ backgroundColor: 'var(--color-accent-secondary)', animation: 'pulse 12s infinite', willChange: 'transform, filter' }} // Lavender
         />
       </div>
 
       {sidebarType === 'projects' && <Sidebar />}
       {sidebarType === 'settings' && <SettingsSidebar />}
-      <main className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main 
+        className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden"
+        style={{ filter: 'url(#liquid-distort)' }}
+      >
         {children}
       </main>
 
