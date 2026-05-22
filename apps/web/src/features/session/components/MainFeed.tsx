@@ -40,47 +40,47 @@ export function MainFeed() {
 
   if (!sessionId) {
     return (
-      <div className="flex h-full flex-col bg-black p-8 items-center justify-center text-center">
+      <div className="flex h-full flex-col bg-background p-8 items-center justify-center text-center">
         <div className="max-w-md w-full space-y-8">
           <div>
-            <h1 className="text-white text-3xl font-black uppercase tracking-[0.3em] mb-2">TERMINAL_INITIALIZED</h1>
-            <div className="bg-white/5 border border-white/10 p-2 text-[10px] font-black uppercase tracking-widest text-text-muted">
+            <h1 className="text-text-main text-3xl font-display font-extrabold uppercase tracking-[0.3em] mb-2">TERMINAL_INITIALIZED</h1>
+            <div className="bg-white/5 border border-white/10 p-2 text-[10px] font-display font-extrabold uppercase tracking-widest text-text-muted">
               SYSTEM_STATUS::READY_FOR_ORCHESTRATION
             </div>
           </div>
 
           <div className="space-y-4 text-left">
             <section className="space-y-2">
-              <h3 className="text-white text-[11px] font-black uppercase tracking-widest border-b border-white/5 pb-1">::MANIFESTO</h3>
+              <h3 className="text-text-main text-[11px] font-display font-extrabold uppercase tracking-widest border-b border-white/5 pb-1">::MANIFESTO</h3>
               <div className="space-y-3">
                 <div className="flex gap-3">
-                  <span className="text-white font-black text-[11px]">01</span>
+                  <span className="text-text-main font-display font-extrabold text-[11px]">01</span>
                   <p className="text-text-muted text-[11px] font-bold uppercase tracking-tight leading-4">
-                    <span className="text-white">ORCHESTRATION::</span> RUN MULTIPLE AI AGENTS IN PARALLEL WITHOUT CONTEXT COLLISION.
+                    <span className="text-text-main">ORCHESTRATION::</span> RUN MULTIPLE AI AGENTS IN PARALLEL WITHOUT CONTEXT COLLISION.
                   </p>
                 </div>
                 <div className="flex gap-3">
-                  <span className="text-white font-black text-[11px]">02</span>
+                  <span className="text-text-main font-display font-extrabold text-[11px]">02</span>
                   <p className="text-text-muted text-[11px] font-bold uppercase tracking-tight leading-4">
-                    <span className="text-white">ISOLATION::</span> EVERY TASK OPERATES WITHIN A PROTECTED GIT WORKTREE.
+                    <span className="text-text-main">ISOLATION::</span> EVERY TASK OPERATES WITHIN A PROTECTED GIT WORKTREE.
                   </p>
                 </div>
                 <div className="flex gap-3">
-                  <span className="text-white font-black text-[11px]">03</span>
+                  <span className="text-text-main font-display font-extrabold text-[11px]">03</span>
                   <p className="text-text-muted text-[11px] font-bold uppercase tracking-tight leading-4">
-                    <span className="text-white">PROTOCOL::</span> BUILT ON ACP FOR STANDARDIZED AGENT-CLIENT COMMUNICATION.
+                    <span className="text-text-main">PROTOCOL::</span> BUILT ON ACP FOR STANDARDIZED AGENT-CLIENT COMMUNICATION.
                   </p>
                 </div>
               </div>
             </section>
 
             <section className="space-y-2 pt-4">
-              <h3 className="text-white text-[11px] font-black uppercase tracking-widest border-b border-white/5 pb-1">::NEXT_STEPS</h3>
+              <h3 className="text-text-main text-[11px] font-display font-extrabold uppercase tracking-widest border-b border-white/5 pb-1">::NEXT_STEPS</h3>
               <div className="bg-white/[0.02] border border-white/5 p-3 space-y-2">
-                <p className="text-text-muted text-[10px] font-black uppercase tracking-widest">
+                <p className="text-text-muted text-[10px] font-display font-extrabold uppercase tracking-widest">
                   1. SELECT_PROJECT_FROM_SIDEBAR
                 </p>
-                <p className="text-text-muted text-[10px] font-black uppercase tracking-widest">
+                <p className="text-text-muted text-[10px] font-display font-extrabold uppercase tracking-widest">
                   2. INITIALIZE_NEW_SESSION_CONTEXT
                 </p>
               </div>
@@ -88,7 +88,7 @@ export function MainFeed() {
           </div>
 
           <div className="pt-4">
-            <p className="text-text-muted/30 text-[9px] font-black uppercase tracking-[0.2em] animate-pulse">
+            <p className="text-text-muted/30 text-[9px] font-display font-extrabold uppercase tracking-[0.2em] animate-pulse">
               AWAITING_INPUT...
             </p>
           </div>
@@ -99,14 +99,14 @@ export function MainFeed() {
 
   return (
     <>
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
         <div className="flex h-full min-h-0 flex-col">
           <div className="min-h-0 flex-1 overflow-hidden pb-40">
             {isLoadingEvents ? (
               <div className="flex h-full items-center justify-center">
                 <div className="flex flex-col items-center gap-2">
-                  <div className="h-6 w-6 animate-spin border-2 border-white border-t-transparent" />
-                  <span className="text-white text-[10px] font-black uppercase tracking-widest opacity-40">
+                  <div className="h-6 w-6 animate-spin border-2 border-text-main border-t-transparent" />
+                  <span className="text-text-main text-[10px] font-display font-extrabold uppercase tracking-widest opacity-40">
                     {loadingMsg}
                   </span>
                 </div>
@@ -118,7 +118,7 @@ export function MainFeed() {
         </div>
       </div>
 
-      <div className="z-10 shrink-0 bg-black pt-4 border-t border-white/5">
+      <div className="z-10 shrink-0 bg-background pt-4 border-t border-white/5">
         <div className="mx-auto max-w-4xl">
           {events.length > 0 && lastEvent.type === 'approval_request' && (
             <div className="px-4 mb-2">

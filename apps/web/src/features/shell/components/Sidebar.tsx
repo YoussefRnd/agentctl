@@ -79,10 +79,10 @@ export function Sidebar() {
   };
 
   const statusColors: Record<SessionStatus, string> = {
-    running: 'bg-white',
+    running: 'bg-accent',
     needs_attention: 'bg-zinc-400',
     idle: 'bg-zinc-600',
-    error: 'bg-white',
+    error: 'bg-danger',
     merged: 'bg-zinc-200',
     discarded: 'bg-zinc-800',
   };
@@ -94,7 +94,7 @@ export function Sidebar() {
     >
       <div className="border-white/5 relative z-10 flex h-11 items-center gap-2 border-b px-3 py-1.5">
         <div className="flex shrink-0 items-center px-1">
-          <h2 className="text-white text-[10px] font-black uppercase tracking-[0.2em]">
+          <h2 className="text-text-main text-[10px] font-display font-extrabold uppercase tracking-[0.2em]">
             AGENTCTL
           </h2>
         </div>
@@ -102,7 +102,7 @@ export function Sidebar() {
 
       <div className="px-3 mt-6 mb-1">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white text-[10px] font-black tracking-widest uppercase opacity-30">
+          <h3 className="text-text-main text-[10px] font-display font-extrabold tracking-widest uppercase opacity-30">
             ::PROJECT_MANIFEST
           </h3>
           <div className="flex items-center gap-1">
@@ -166,13 +166,13 @@ export function Sidebar() {
                         )}
                       </span>
                       <Folder className="text-text-muted mr-2 h-3.5 w-3.5 shrink-0" />
-                      <span className="text-white truncate text-[12px] font-black uppercase tracking-tight [@media(pointer:coarse)]:text-[14px]">
+                      <span className="text-text-main truncate text-[12px] font-display font-extrabold uppercase tracking-tight [@media(pointer:coarse)]:text-[14px]">
                         {proj.name}
                       </span>
                     </div>
                     <button
                       type="button"
-                      className="hover:text-white opacity-0 group-hover:opacity-100 disabled:opacity-50 [@media(pointer:coarse)]:opacity-100 [@media(pointer:coarse)]:p-2"
+                      className="hover:text-text-main opacity-0 group-hover:opacity-100 disabled:opacity-50 [@media(pointer:coarse)]:opacity-100 [@media(pointer:coarse)]:p-2"
                       disabled={isCreatingSession}
                       onClick={(event) => {
                         handleCreateSession(event, proj.id);
@@ -194,7 +194,7 @@ export function Sidebar() {
                             key={s.id}
                             to={`/sessions/${s.id}`}
                             className={`group ml-8 flex items-center border-l border-white/5 py-1.5 pr-2 pl-4 text-[11px] transition-all 
-                              ${activeSessionId === s.id ? 'bg-white/10 border-white/20 text-white font-bold' : 'text-text-muted hover:text-white hover:bg-white/5'}
+                              ${activeSessionId === s.id ? 'bg-white/10 border-white/20 text-text-main font-bold' : 'text-text-muted hover:text-text-main hover:bg-white/5'}
                               [@media(pointer:coarse)]:py-3 [@media(pointer:coarse)]:pl-6 [@media(pointer:coarse)]:text-[13px]
                             `}
                           >

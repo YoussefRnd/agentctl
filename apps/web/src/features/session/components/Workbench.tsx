@@ -24,13 +24,13 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
       }`}
     >
       <div className="flex h-full flex-col min-w-[320px] lg:min-w-0">
-        <div className="border-border flex shrink-0 h-11 items-center border-b p-1 gap-1 bg-black">
+        <div className="border-border flex shrink-0 h-11 items-center border-b p-1 gap-1 bg-surface-secondary">
           <div className={`flex flex-1 gap-1 h-full transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 lg:hidden'}`}>
             <button
-              className={`flex-1 text-[9px] font-black tracking-widest uppercase transition-colors rounded-sm ${
+              className={`flex-1 text-[9px] font-display font-extrabold tracking-widest uppercase transition-colors rounded-sm ${
                 tab === 'status'
-                  ? 'bg-white text-black'
-                  : 'text-text-muted hover:text-white hover:bg-white/5'
+                  ? 'bg-text-main text-background'
+                  : 'text-text-muted hover:text-text-main hover:bg-white/5'
               }`}
               onClick={() => {
                 onTabChange('status');
@@ -39,10 +39,10 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
               STATUS
             </button>
             <button
-              className={`flex-1 text-[9px] font-black tracking-widest uppercase transition-colors rounded-sm ${
+              className={`flex-1 text-[9px] font-display font-extrabold tracking-widest uppercase transition-colors rounded-sm ${
                 tab === 'changes'
-                  ? 'bg-white text-black'
-                  : 'text-text-muted hover:text-white hover:bg-white/5'
+                  ? 'bg-text-main text-background'
+                  : 'text-text-muted hover:text-text-main hover:bg-white/5'
               }`}
               onClick={() => {
                 onTabChange('changes');
@@ -54,7 +54,7 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
           <button
             onClick={onToggle}
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm transition-all ${
-              isOpen ? 'text-white hover:bg-white/10' : 'text-text-muted hover:text-white hover:bg-white/5'
+              isOpen ? 'text-text-main hover:bg-white/10' : 'text-text-muted hover:text-text-main hover:bg-white/5'
             }`}
             title="Toggle Inspector"
           >
