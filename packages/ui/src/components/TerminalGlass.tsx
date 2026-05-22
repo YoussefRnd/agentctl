@@ -18,7 +18,7 @@ export const TerminalGlass = memo(function TerminalGlass({
   return (
     <div
       className={cn(
-        "terminal-glass",
+        "glass-card",
         animate && "animate-in fade-in zoom-in-95 duration-200",
         className
       )}

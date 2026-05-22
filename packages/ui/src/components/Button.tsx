@@ -25,19 +25,19 @@ export const Button = <T extends ElementType = 'button'>({
   const Component = as ?? 'button';
 
   const variants = {
-    solid: 'bg-white text-black hover:bg-zinc-200',
-    outline: 'bg-transparent border border-white/10 hover:bg-white/5 text-white',
-    ghost: 'bg-transparent hover:bg-white/5 text-zinc-400 hover:text-white',
+    solid: 'bg-accent text-background hover:bg-accent/90',
+    outline: 'bg-transparent border border-accent/20 hover:bg-accent/5 text-accent-secondary',
+    ghost: 'bg-transparent hover:bg-accent/5 text-text-muted hover:text-accent',
   };
 
   const sizes = {
-    sm: 'px-2 py-1 text-[10px]',
-    md: 'px-3 py-1.5 text-[11px]',
-    lg: 'px-4 py-2 text-[13px]',
+    sm: 'px-3 py-1 text-[11px]',
+    md: 'px-4 py-1.5 text-[12px]',
+    lg: 'px-6 py-2.5 text-[14px]',
   };
 
   const baseStyles =
-    'inline-flex items-center justify-center rounded-sm font-bold uppercase tracking-tight transition-all focus:outline-none focus:ring-1 focus:ring-white/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
+    'inline-flex items-center justify-center rounded-md font-accent font-bold uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
 
   const combinedClassName = `${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`.trim();
 
