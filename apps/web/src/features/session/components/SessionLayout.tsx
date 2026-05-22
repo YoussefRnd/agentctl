@@ -22,13 +22,13 @@ export function SessionLayout({
   onCloseWorkbench,
 }: SessionLayoutProps) {
   return (
-    <div className="relative flex h-full w-full overflow-hidden bg-black">
-      <div className="border-white/5 z-20 hidden w-[220px] shrink-0 border-r lg:block">
+    <div className="relative flex h-full w-full overflow-hidden bg-background">
+      <div className="border-border z-20 hidden w-[220px] shrink-0 border-r lg:block">
         {sidebar}
       </div>
 
       <aside
-        className={`bg-black border-white/10 fixed inset-y-0 left-0 z-50 w-[240px] border-r transition-transform duration-300 ease-in-out lg:hidden ${
+        className={`bg-background border-border fixed inset-y-0 left-0 z-50 w-[240px] border-r transition-transform duration-300 ease-in-out lg:hidden ${
           isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

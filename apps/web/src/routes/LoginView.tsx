@@ -29,7 +29,7 @@ export function LoginView() {
   };
 
   return (
-    <div className="bg-black flex min-h-screen items-center justify-center p-4">
+    <div className="bg-background flex min-h-screen items-center justify-center p-4">
       <div className="terminal-glass animate-in fade-in zoom-in w-full max-w-sm rounded-sm p-6 shadow-2xl duration-300">
         <div className="mb-6 text-center">
           <h1 className="text-white mb-1 text-2xl font-black uppercase tracking-widest">AGENTCTL::AUTH</h1>
@@ -56,7 +56,7 @@ export function LoginView() {
           </div>
 
           {error && (
-            <div className="border border-white/10 bg-white/5 p-2 text-[10px] font-bold text-white uppercase text-center">
+            <div className="border border-surface-tertiary bg-surface-secondary p-2 text-[10px] font-bold text-danger uppercase text-center">
               ERROR::ACCESS_DENIED::{error}
             </div>
           )}
