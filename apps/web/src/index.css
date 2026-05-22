@@ -74,8 +74,8 @@
   }
 
   .terminal-button {
-    @apply bg-white text-black hover:bg-zinc-200 active:scale-[0.98] h-8 rounded-sm px-3 text-[11px] font-accent font-black tracking-tight transition-all disabled:opacity-30;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
+    @apply bg-text-main text-background hover:opacity-90 active:scale-[0.98] h-8 rounded-sm px-3 text-[11px] font-accent font-black tracking-tight transition-all disabled:opacity-30;
+    box-shadow: 0 0 10px rgba(205, 214, 244, 0.05);
   }
 
   .status-glow {
