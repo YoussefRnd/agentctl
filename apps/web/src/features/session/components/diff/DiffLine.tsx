@@ -8,8 +8,8 @@ export function DiffLine({ line }: DiffLineProps) {
   const isAdded = line.type === 'added';
   const isRemoved = line.type === 'removed';
 
-  const bgColor = isAdded ? 'bg-white/10' : isRemoved ? 'bg-white/5' : '';
-  const textColor = isAdded ? 'text-white font-bold' : isRemoved ? 'text-zinc-600 line-through' : 'text-zinc-400';
+  const bgColor = isAdded ? 'bg-success/10' : isRemoved ? 'bg-danger/10' : '';
+  const textColor = isAdded ? 'text-success' : isRemoved ? 'text-danger/60 line-through' : 'text-text-main/80';
   const symbol = isAdded ? '+' : isRemoved ? '-' : ' ';
 
   const renderContent = () => {
@@ -26,7 +26,7 @@ export function DiffLine({ line }: DiffLineProps) {
       }
 
       segments.push(
-        <span key={idx} className={`${isAdded ? 'bg-white/20' : 'bg-white/10'} rounded-sm px-0.5`}>
+        <span key={idx} className={`${isAdded ? 'bg-success/20' : 'bg-danger/20'} rounded-sm px-0.5 font-bold`}>
           {line.content.slice(highlight.start, highlight.end)}
         </span>,
       );
@@ -43,12 +43,12 @@ export function DiffLine({ line }: DiffLineProps) {
 
   return (
     <div
-      className={`flex font-mono text-[11px] leading-4 ${bgColor} transition-colors hover:bg-white/[0.08]`}
+      className={`flex font-mono text-[11px] leading-4 ${bgColor} transition-colors hover:bg-surface-quaternary/30 group`}
     >
-      <div className="border-white/5 w-8 shrink-0 border-r pr-1 text-right opacity-20 select-none">
+      <div className="border-border w-8 shrink-0 border-r pr-1 text-right text-text-muted/20 select-none group-hover:text-text-muted/40">
         {line.oldLineNumber ?? ''}
       </div>
-      <div className="border-white/5 w-8 shrink-0 border-r pr-1 text-right opacity-20 select-none">
+      <div className="border-border w-8 shrink-0 border-r pr-1 text-right text-text-muted/20 select-none group-hover:text-text-muted/40">
         {line.newLineNumber ?? ''}
       </div>
       <div className={`w-4 shrink-0 text-center opacity-40 select-none ${textColor}`}>{symbol}</div>

@@ -17,7 +17,9 @@ export const Card = ({ children, className = '' }: CardProps) => {
 };
 
 export const CardHeader = ({ children, className = '' }: CardProps) => (
-  <div className={`border-white/5 bg-white/5 border-b px-2 py-1.5 ${className}`}>{children}</div>
+  <div className={`border-border bg-surface-secondary/50 border-b px-2 py-1.5 ${className}`}>
+    {children}
+  </div>
 );
 
 export const CardContent = ({ children, className = '' }: CardProps) => (
@@ -25,7 +27,7 @@ export const CardContent = ({ children, className = '' }: CardProps) => (
 );
 
 export const CardFooter = ({ children, className = '' }: CardProps) => (
-  <div className={`border-white/5 bg-white/[0.02] border-t px-2 py-1.5 ${className}`}>
+  <div className={`border-border bg-surface-tertiary/30 border-t px-2 py-1.5 ${className}`}>
     {children}
   </div>
 );

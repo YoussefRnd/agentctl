@@ -12,25 +12,25 @@ export function MagicBar({ files, onAction }: MagicBarProps) {
   if (!hasChanges) return null;
 
   return (
-    <div className="flex items-center gap-1.5 p-1 px-2 border-b border-white/5">
+    <div className="flex items-center gap-1.5 p-1 px-2 border-b border-border bg-surface-secondary/30">
       <button
         onClick={() => {
           onAction('Generate Commit');
         }}
-        className="terminal-button flex items-center gap-1.5 !bg-transparent !text-text-muted hover:!text-white border-none"
+        className="terminal-button flex items-center gap-1.5 !bg-transparent !text-text-muted hover:!text-accent border-none transition-colors"
       >
         <FileCheck className="h-3 w-3" />
-        <span className="text-[9px] font-black uppercase">GENERATE_COMMIT</span>
+        <span className="text-[9px] font-accent font-black uppercase tracking-tight">GENERATE_COMMIT</span>
       </button>
 
       <button
         onClick={() => {
           onAction('Create PR');
         }}
-        className="terminal-button flex items-center gap-1.5 !bg-transparent !text-text-muted hover:!text-white border-none"
+        className="terminal-button flex items-center gap-1.5 !bg-transparent !text-text-muted hover:!text-accent border-none transition-colors"
       >
         <GitPullRequest className="h-3 w-3" />
-        <span className="text-[9px] font-black uppercase">CREATE_PR</span>
+        <span className="text-[9px] font-accent font-black uppercase tracking-tight">CREATE_PR</span>
       </button>
     </div>
   );

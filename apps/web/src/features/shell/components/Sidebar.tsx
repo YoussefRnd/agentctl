@@ -79,20 +79,20 @@ export function Sidebar() {
   };
 
   const statusColors: Record<SessionStatus, string> = {
-    running: 'bg-accent',
-    needs_attention: 'bg-zinc-400',
-    idle: 'bg-zinc-600',
-    error: 'bg-danger',
-    merged: 'bg-zinc-200',
-    discarded: 'bg-zinc-800',
+    running: 'bg-accent shadow-[0_0_8px_rgba(203,166,247,0.4)]',
+    needs_attention: 'bg-warning shadow-[0_0_8px_rgba(250,179,135,0.4)]',
+    idle: 'bg-surface-quaternary',
+    error: 'bg-danger shadow-[0_0_8px_rgba(243,139,168,0.4)]',
+    merged: 'bg-success/50',
+    discarded: 'bg-surface-quaternary/40',
   };
 
   return (
     <aside
       aria-label="Main Sidebar"
-      className="terminal-glass relative z-20 flex h-full w-[220px] shrink-0 flex-col overflow-hidden border-r"
+      className="bg-background relative z-20 flex h-full w-[220px] shrink-0 flex-col overflow-hidden border-r border-border/50"
     >
-      <div className="border-white/5 relative z-10 flex h-11 items-center gap-2 border-b px-3 py-1.5">
+      <div className="border-border/50 relative z-10 flex h-11 items-center gap-2 border-b px-3 py-1.5">
         <div className="flex shrink-0 items-center px-1">
           <h2 className="text-text-main text-[10px] font-display font-extrabold uppercase tracking-[0.2em]">
             AGENTCTL
@@ -102,13 +102,13 @@ export function Sidebar() {
 
       <div className="px-3 mt-6 mb-1">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-text-main text-[10px] font-display font-extrabold tracking-widest uppercase opacity-30">
+          <h3 className="text-text-muted text-[10px] font-display font-extrabold tracking-widest uppercase opacity-30">
             ::PROJECT_MANIFEST
           </h3>
           <div className="flex items-center gap-1">
             <Link
               to="/"
-              className="hover:text-text-main text-text-muted transition-colors p-1"
+              className="hover:text-accent text-text-muted transition-colors p-1"
               title="Add Project"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -135,7 +135,7 @@ export function Sidebar() {
         {isLoading ? (
           <div className="space-y-1 p-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white/5 h-2 w-full animate-pulse" />
+              <div key={i} className="bg-surface-secondary h-2 w-full animate-pulse rounded-full" />
             ))}
           </div>
         ) : (
@@ -150,7 +150,7 @@ export function Sidebar() {
                 <div key={proj.id} className="space-y-1">
                   <div
                     className={`group flex cursor-pointer items-center justify-between rounded-sm px-2 py-1.5 transition-colors 
-                      ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-white/10' : 'hover:bg-white/5'}
+                      ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-surface-tertiary' : 'hover:bg-surface-secondary'}
                       [@media(pointer:coarse)]:py-3 [@media(pointer:coarse)]:px-3
                     `}
                     onClick={() => {
@@ -172,7 +172,7 @@ export function Sidebar() {
                     </div>
                     <button
                       type="button"
-                      className="hover:text-text-main opacity-0 group-hover:opacity-100 disabled:opacity-50 [@media(pointer:coarse)]:opacity-100 [@media(pointer:coarse)]:p-2"
+                      className="hover:text-accent text-text-muted opacity-0 group-hover:opacity-100 disabled:opacity-50 [@media(pointer:coarse)]:opacity-100 [@media(pointer:coarse)]:p-2"
                       disabled={isCreatingSession}
                       onClick={(event) => {
                         handleCreateSession(event, proj.id);
@@ -193,13 +193,13 @@ export function Sidebar() {
                           <Link
                             key={s.id}
                             to={`/sessions/${s.id}`}
-                            className={`group ml-8 flex items-center border-l border-white/5 py-1.5 pr-2 pl-4 text-[11px] transition-all 
-                              ${activeSessionId === s.id ? 'bg-white/10 border-white/20 text-text-main font-bold' : 'text-text-muted hover:text-text-main hover:bg-white/5'}
+                            className={`group ml-8 flex items-center border-l border-border/40 py-1.5 pr-2 pl-4 text-[11px] transition-all 
+                              ${activeSessionId === s.id ? 'bg-surface-secondary border-accent text-text-main font-bold' : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/50'}
                               [@media(pointer:coarse)]:py-3 [@media(pointer:coarse)]:pl-6 [@media(pointer:coarse)]:text-[13px]
                             `}
                           >
                             <div
-                              className={`mr-2.5 h-1 w-1 shrink-0 ${statusColors[s.status]}`}
+                              className={`mr-2.5 h-1 w-1 shrink-0 rounded-full ${statusColors[s.status]}`}
                             />
                             <span className="truncate uppercase tracking-tight">
                               {s.title || s.taskSlug || s.branch || 'NEW_SESSION'}
@@ -221,7 +221,7 @@ export function Sidebar() {
       <div className="border-border/50 relative z-10 mt-auto border-t p-2">
         <Link
           to="/settings"
-          className="text-text-muted hover:text-text-main hover:bg-white/5 group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-bold uppercase tracking-tighter transition-all"
+          className="text-text-muted hover:text-accent hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-bold uppercase tracking-tighter transition-all"
         >
           <Settings className="h-3 w-3" />
           Settings

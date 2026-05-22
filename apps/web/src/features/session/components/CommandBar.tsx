@@ -72,7 +72,7 @@ export function CommandBar({
   }, [isPickerOpen]);
 
   return (
-    <div className="relative z-40 w-full bg-black px-4 pt-1 pb-4">
+    <div className="relative z-40 w-full bg-background px-4 pt-1 pb-4">
       <div className="relative mx-auto max-w-3xl">
         <HarnessPicker
           sessionId={sessionId}
@@ -92,7 +92,7 @@ export function CommandBar({
             onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
           >
           <div
-            className={`terminal-glass flex flex-col rounded-sm transition-all duration-300 ${disabled ? 'opacity-30' : ''}`}
+            className={`terminal-glass flex flex-col rounded-md transition-all duration-300 ${disabled ? 'opacity-30' : ''}`}
           >
             <div className="w-full p-2">
               <textarea
@@ -110,13 +110,13 @@ export function CommandBar({
                 }}
                 placeholder={disabled ? 'PROCESSING...' : placeholder}
                 aria-label="Command input"
-                className="placeholder:text-text-muted/20 selection:bg-white selection:text-black max-h-48 min-h-[40px] w-full resize-none border-none bg-black px-2 py-1.5 text-[13px] leading-tight focus:ring-0"
+                className="placeholder:text-text-muted/20 selection:bg-accent/30 selection:text-text-main max-h-48 min-h-[40px] w-full resize-none border-none bg-transparent px-2 py-1.5 text-[13px] leading-tight focus:ring-0"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 disabled={disabled}
               />
             </div>
 
-            <div className="border-white/5 flex items-center justify-between border-t px-2 py-1.5">
+            <div className="border-border flex items-center justify-between border-t px-2 py-1.5 bg-surface-secondary/50">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -125,14 +125,14 @@ export function CommandBar({
                   }}
                   aria-label="Select AI harness"
                   aria-expanded={isPickerOpen}
-                  className={`flex items-center gap-2 rounded-sm px-2 py-1 transition-all ${isPickerOpen ? 'bg-white text-black' : 'hover:bg-white/5 text-text-muted hover:text-white'}`}
+                  className={`flex items-center gap-2 rounded-sm px-2 py-1 transition-all ${isPickerOpen ? 'bg-accent text-background' : 'hover:bg-surface-tertiary text-text-muted hover:text-text-main'}`}
                 >
                   {activeDriver?.icon ? (
                     <img src={activeDriver.icon} alt="" className="h-3 w-3 object-contain" />
                   ) : (
-                    <Zap className={`h-3 w-3 ${isPickerOpen ? 'fill-black' : 'fill-none'}`} />
+                    <Zap className={`h-3 w-3 ${isPickerOpen ? 'fill-background' : 'fill-none'}`} />
                   )}
-                  <span className="max-w-[120px] truncate text-[10px] font-black uppercase tracking-widest">
+                  <span className="max-w-[120px] truncate text-[10px] font-accent font-black uppercase tracking-widest">
                     {isLoadingDrivers ? '...' : (propSelectedModelId ?? selectedDriverLabel)}
                   </span>
                   <ChevronUp
@@ -144,7 +144,7 @@ export function CommandBar({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="text-text-muted hover:text-white transition-colors"
+                  className="text-text-muted hover:text-accent transition-colors p-1"
                   title="Attach file"
                   aria-label="Attach file"
                 >
@@ -155,10 +155,10 @@ export function CommandBar({
                   type="submit"
                   onClick={handleSubmit}
                   aria-label="Execute command"
-                  className={`terminal-button flex items-center gap-1.5 ${input.trim() && !disabled ? '' : 'opacity-20 grayscale'}`}
+                  className={`terminal-button flex items-center gap-1.5 ${input.trim() && !disabled ? '!bg-accent !text-background' : 'opacity-20 grayscale'}`}
                   disabled={!input.trim() || disabled}
                 >
-                  <span className="text-[10px] font-black">EXECUTE</span>
+                  <span className="text-[10px] font-accent font-black tracking-tighter">EXECUTE</span>
                   <Send className="h-3 w-3" />
                 </button>
               </div>

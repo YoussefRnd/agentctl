@@ -29,8 +29,8 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
             <button
               className={`flex-1 text-[9px] font-display font-extrabold tracking-widest uppercase transition-colors rounded-sm ${
                 tab === 'status'
-                  ? 'bg-text-main text-background'
-                  : 'text-text-muted hover:text-text-main hover:bg-white/5'
+                  ? 'bg-surface-tertiary text-text-main border border-border shadow-sm'
+                  : 'text-text-muted hover:text-text-main hover:bg-surface-tertiary/30'
               }`}
               onClick={() => {
                 onTabChange('status');
@@ -41,8 +41,8 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
             <button
               className={`flex-1 text-[9px] font-display font-extrabold tracking-widest uppercase transition-colors rounded-sm ${
                 tab === 'changes'
-                  ? 'bg-text-main text-background'
-                  : 'text-text-muted hover:text-text-main hover:bg-white/5'
+                  ? 'bg-surface-tertiary text-text-main border border-border shadow-sm'
+                  : 'text-text-muted hover:text-text-main hover:bg-surface-tertiary/30'
               }`}
               onClick={() => {
                 onTabChange('changes');
@@ -54,7 +54,7 @@ export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps
           <button
             onClick={onToggle}
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm transition-all ${
-              isOpen ? 'text-text-main hover:bg-white/10' : 'text-text-muted hover:text-text-main hover:bg-white/5'
+              isOpen ? 'text-text-main hover:bg-surface-tertiary/50' : 'text-text-muted hover:text-text-main hover:bg-surface-tertiary/30'
             }`}
             title="Toggle Inspector"
           >

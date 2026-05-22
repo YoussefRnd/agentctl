@@ -8,6 +8,8 @@
   --color-background: #11111b; /* Crust */
   --color-surface: rgba(30, 30, 46, 0.4); /* Base @ 40% */
   --color-surface-secondary: #181825; /* Mantle */
+  --color-surface-tertiary: #1e1e2e; /* Base */
+  --color-surface-quaternary: #313244; /* Surface 0 */
   --color-border: rgba(180, 190, 254, 0.08); /* Lavender Tint */
   
   --color-text-main: #cdd6f4;

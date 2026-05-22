@@ -7,12 +7,12 @@ export function SettingsSidebar() {
   return (
     <aside
       aria-label="Settings Sidebar"
-      className="terminal-glass relative z-20 flex h-full w-[220px] shrink-0 flex-col overflow-hidden border-r"
+      className="bg-background relative z-20 flex h-full w-[220px] shrink-0 flex-col overflow-hidden border-r border-border/50"
     >
       <div className="border-border/50 relative z-10 border-b p-2">
         <Link
           to="/"
-          className="text-text-muted hover:text-text-main bg-white/5 hover:bg-white/10 group flex items-center gap-2 rounded-sm border border-white/5 px-2 py-1.5 text-[10px] font-bold uppercase transition-all"
+          className="text-text-muted hover:text-accent bg-surface-secondary/40 hover:bg-surface-secondary group flex items-center gap-2 rounded-sm border border-border/30 px-2 py-1.5 text-[10px] font-bold uppercase transition-all"
         >
           <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
           Back to Projects
@@ -29,12 +29,12 @@ export function SettingsSidebar() {
             to="/settings"
             className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-[11px] font-bold uppercase transition-all ${
               location.pathname === '/settings'
-                ? 'bg-white/10 text-white shadow-[0_0_10px_rgba(255,255,255,0.1)]'
-                : 'text-text-muted hover:text-white hover:bg-white/5'
+                ? 'bg-surface-tertiary text-accent shadow-[0_0_10px_rgba(203,166,247,0.1)]'
+                : 'text-text-muted hover:text-accent hover:bg-surface-secondary'
             }`}
           >
             <Sparkles
-              className={`h-3.5 w-3.5 ${location.pathname === '/settings' ? 'text-white' : ''}`}
+              className={`h-3.5 w-3.5 ${location.pathname === '/settings' ? 'text-accent' : ''}`}
             />
             Providers
           </Link>

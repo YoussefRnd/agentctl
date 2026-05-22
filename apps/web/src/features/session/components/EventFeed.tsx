@@ -32,8 +32,8 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
     return (
       <div className="bg-background flex h-full items-center justify-center">
         <div className="flex flex-col items-center gap-2">
-          <div className="h-4 w-4 animate-spin border-2 border-white border-t-transparent" />
-          <span className="text-text-muted text-[10px] font-bold tracking-widest">
+          <div className="h-4 w-4 animate-spin border-2 border-accent border-t-transparent" />
+          <span className="text-text-muted font-display text-[10px] font-bold tracking-widest uppercase">
             INITIALIZING_TERMINAL...
           </span>
         </div>
@@ -48,7 +48,7 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
       onScroll={handleScroll}
     >
       <div className="relative mx-auto max-w-4xl py-8">
-        <div className="absolute top-0 bottom-0 left-10 z-0 w-px bg-white/5" />
+        <div className="absolute top-0 bottom-0 left-10 z-0 w-px bg-border/40" />
 
         <div
           style={{
@@ -62,7 +62,7 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
             const nextEvent = events[item.index + 1];
             
             // Layout logic: tight spacing for tool call sequences
-            const isConsecutiveTool = e.type === 'tool_call' && nextEvent.type === 'tool_call';
+            const isConsecutiveTool = e.type === 'tool_call' && item.index < events.length - 1 && nextEvent.type === 'tool_call';
             const spacingClass = isConsecutiveTool ? 'pb-1' : 'pb-6';
 
             return (
@@ -92,12 +92,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
       {!autoScroll && (
         <button
           type="button"
-          className="terminal-button fixed bottom-24 left-1/2 -translate-x-1/2 shadow-2xl"
+          className="terminal-button !bg-accent !text-background fixed bottom-24 left-1/2 -translate-x-1/2 shadow-2xl hover:scale-105 active:scale-95"
           onClick={() => {
             setAutoScroll(true);
           }}
         >
-          RETURN_TO_LATEST
+          <span className="font-accent font-black tracking-tighter">RETURN_TO_LATEST</span>
         </button>
       )}
     </div>

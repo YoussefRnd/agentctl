@@ -37,19 +37,19 @@ export function NewProjectPalette() {
   const shouldShowExplorer = projects.length === 0 || showExplorer;
 
   return (
-    <div className="bg-black relative flex flex-1 flex-col items-center justify-center overflow-hidden p-4">
+    <div className="bg-background relative flex flex-1 flex-col items-center justify-center overflow-hidden p-4">
       <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-6">
         {mutation.isPending ? (
           <div className="flex flex-col items-center gap-4">
-            <div className="h-8 w-8 animate-spin border-4 border-white border-t-transparent" />
-            <p className="text-white text-xl font-black uppercase tracking-widest">
+            <div className="h-8 w-8 animate-spin border-4 border-accent border-t-transparent" />
+            <p className="text-text-main text-xl font-black uppercase tracking-widest">
               INITIALIZING_WORKSPACE...
             </p>
             <p className="text-text-muted text-[11px] font-bold uppercase">PREPARING_SESSION_CONTEXT</p>
           </div>
         ) : (
           <>
-            <h1 className="text-white text-3xl font-black uppercase tracking-widest text-center">
+            <h1 className="text-text-main text-3xl font-black uppercase tracking-widest text-center">
               AGENTCTL::START_COLLABORATION
             </h1>
             <p className="text-text-muted mb-8 text-[12px] font-bold uppercase tracking-tight text-center max-w-md">
@@ -59,12 +59,12 @@ export function NewProjectPalette() {
             </p>
 
             {mutation.error && (
-              <div className="border-white/20 bg-white/5 text-white mb-4 rounded-sm border p-3 text-left text-[11px]">
+              <div className="border-danger/30 bg-danger/5 text-danger mb-4 rounded-sm border p-3 text-left text-[11px]">
                 <div className="flex items-center gap-2 font-black uppercase">
                   <AlertCircle className="h-3.5 w-3.5" />
                   ERROR::MOUNT_FAILED
                 </div>
-                <p className="text-text-muted mt-1 font-bold uppercase opacity-60">{mutation.error.message}</p>
+                <p className="text-danger/80 mt-1 font-bold uppercase opacity-80">{mutation.error.message}</p>
               </div>
             )}
 

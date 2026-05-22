@@ -41,16 +41,16 @@ export const ApprovalCard = memo(function ApprovalCard({
           approveButtonRef.current?.focus();
         }
       }}
-      className="terminal-glass animate-in fade-in zoom-in-95 flex flex-col items-stretch justify-between gap-3 rounded-sm p-3 shadow-2xl duration-300 sm:flex-row sm:items-center"
+      className="glass-card animate-in fade-in zoom-in-95 flex flex-col items-stretch justify-between gap-3 p-3 shadow-2xl duration-300 sm:flex-row sm:items-center"
     >
       <div className="flex gap-3">
-        <div className="bg-white/5 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-white/10">
-          <ShieldCheck className="text-white h-4 w-4" />
+        <div className="bg-surface-secondary/50 border-border flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border">
+          <ShieldCheck className="text-accent h-4 w-4" />
         </div>
         <div className="flex-1">
           <div
             id="approval-title"
-            className="text-white mb-0.5 text-[12px] font-black uppercase tracking-widest"
+            className="text-text-main mb-0.5 text-[12px] font-black uppercase tracking-widest"
           >
             AUTHORIZATION_REQUESTED
           </div>
@@ -66,7 +66,7 @@ export const ApprovalCard = memo(function ApprovalCard({
           onClick={() => {
             onDeny(eventId);
           }}
-          className="text-text-muted hover:text-white px-3 py-1 text-[10px] font-black uppercase transition-colors"
+          className="text-text-muted hover:text-danger px-3 py-1 text-[10px] font-black uppercase transition-colors"
         >
           DENY
         </button>

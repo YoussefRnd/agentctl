@@ -48,10 +48,10 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
   }, []);
 
   return (
-    <div className="terminal-glass animate-in fade-in zoom-in-95 flex w-full max-w-xl flex-col overflow-hidden rounded-sm border shadow-2xl">
-      <div className="border-white/5 flex items-center justify-between border-b px-3 py-2">
+    <div className="glass-card animate-in fade-in zoom-in-95 flex w-full max-w-xl flex-col overflow-hidden shadow-2xl">
+      <div className="border-border flex items-center justify-between border-b px-3 py-2">
         <div className="text-text-muted flex items-center gap-2 truncate text-[11px] font-bold uppercase tracking-tight">
-          <Folder className="h-3 w-3" />
+          <Folder className="h-3.5 w-3.5" />
           <span className="truncate">{currentPath ?? 'SCANNING_FS...'}</span>
         </div>
         <div className="flex items-center gap-1">
@@ -59,7 +59,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
             onClick={() => {
               void explore();
             }}
-            className="hover:text-white text-text-muted p-1 transition-colors"
+            className="hover:text-accent text-text-muted p-1 transition-colors"
             title="Home"
           >
             <Home className="h-3.5 w-3.5" />
@@ -69,7 +69,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
               onClick={() => {
                 void explore(parentPath);
               }}
-              className="hover:text-white text-text-muted p-1 transition-colors"
+              className="hover:text-accent text-text-muted p-1 transition-colors"
               title="Go Up"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -81,12 +81,12 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
       <div className="h-72 overflow-y-auto p-1">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
-            <div className="h-4 w-4 animate-spin border-2 border-white border-t-transparent" />
+            <div className="h-4 w-4 animate-spin border-2 border-accent border-t-transparent" />
           </div>
         ) : error ? (
           <div className="flex h-full flex-col items-center justify-center p-4 text-center">
-            <AlertCircle className="text-white mb-2 h-6 w-6 opacity-30" />
-            <p className="text-white text-[11px] font-black uppercase">{error}</p>
+            <AlertCircle className="text-danger mb-2 h-6 w-6 opacity-30" />
+            <p className="text-text-main text-[11px] font-black uppercase">{error}</p>
             <button
               onClick={() => {
                 void explore(currentPath ?? undefined);
@@ -106,7 +106,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
             {folders.map((f) => (
               <div
                 key={f.path}
-                className="group hover:bg-white/5 flex cursor-pointer items-center justify-between rounded-sm px-2 py-1.5 transition-all"
+                className="group hover:bg-surface-secondary/60 flex cursor-pointer items-center justify-between rounded-sm px-2 py-1.5 transition-all"
                 onClick={() => {
                   void explore(f.path);
                 }}
@@ -115,15 +115,15 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                 }}
               >
                 <div className="flex items-center gap-2.5">
-                  <div className={`p-1 ${f.isRepo ? 'text-white' : 'text-text-muted'}`}>
+                  <div className={`p-1 ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}>
                     {f.isRepo ? <GitBranch className="h-3.5 w-3.5" /> : <Folder className="h-3.5 w-3.5" />}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-white text-[12px] font-bold uppercase tracking-tight">
+                    <span className="text-text-main text-[12px] font-bold uppercase tracking-tight">
                       {f.name}
                     </span>
                     {f.isRepo && (
-                      <span className="text-white/40 text-[8px] font-black tracking-widest uppercase">
+                      <span className="text-accent/40 text-[8px] font-black tracking-widest uppercase">
                         REPO
                       </span>
                     )}
@@ -144,7 +144,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         )}
       </div>
 
-      <div className="border-white/5 text-text-muted flex items-center justify-between border-t px-3 py-2 text-[9px] font-black uppercase tracking-widest">
+      <div className="border-border text-text-muted flex items-center justify-between border-t px-3 py-2 text-[9px] font-black uppercase tracking-widest">
         <span>DOUBLE_CLICK_TO_OPEN</span>
       </div>
     </div>

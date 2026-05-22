@@ -16,7 +16,7 @@ export const ToolCallCard = memo(function ToolCallCard({
 
   return (
     <div className="group relative py-0.5 pr-4 pl-16">
-      <div className="absolute top-1/2 left-10 z-10 h-1 w-1 -translate-x-1/2 -translate-y-1/2 bg-white/60 ring-2 ring-black transition-all duration-300 group-hover:scale-150 group-hover:bg-white" />
+      <div className="bg-text-main/60 ring-background absolute top-1/2 left-10 z-10 h-1 w-1 -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ring-2 group-hover:scale-150 group-hover:bg-text-main" />
 
       <div
         className="flex cursor-pointer items-center gap-2 select-none"
@@ -24,7 +24,7 @@ export const ToolCallCard = memo(function ToolCallCard({
           setOpen(!open);
         }}
       >
-        <div className="flex flex-1 items-center justify-between border border-white/5 bg-white/[0.03] px-2 py-1 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.06]">
+        <div className="bg-surface border-border hover:border-accent/30 hover:bg-surface-secondary/60 flex flex-1 items-center justify-between border px-2 py-1 transition-all duration-200">
           <div className="flex items-center gap-2 overflow-hidden">
             <Terminal className="h-3 w-3 shrink-0 opacity-50" />
             <span className="text-text-main font-bold text-[11px] uppercase tracking-tighter whitespace-nowrap">
@@ -45,7 +45,7 @@ export const ToolCallCard = memo(function ToolCallCard({
       </div>
 
       {open && (
-        <div className="text-text-muted border-white/5 mt-1 mb-2 overflow-x-auto border bg-zinc-900 p-2 text-[11px] leading-tight">
+        <div className="text-text-muted border-border bg-surface-tertiary mt-1 mb-2 overflow-x-auto border p-2 text-[11px] leading-tight rounded-sm">
           <pre>{JSON.stringify(args, null, 2)}</pre>
         </div>
       )}
