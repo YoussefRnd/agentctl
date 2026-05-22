@@ -30,6 +30,18 @@
   --font-accent: 'Syne', sans-serif;
   --font-sans: 'Inter', sans-serif;
   --font-mono: 'Space Mono', monospace;
+
+  --animate-pulse-block: pulse-block 1s steps(1) infinite;
+
+  @keyframes pulse-block {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+}
+
+@utility glass-card {
+  @apply bg-surface border border-border backdrop-blur-2xl saturate-150 rounded-lg;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 @layer base {

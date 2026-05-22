@@ -9,11 +9,35 @@ interface LayoutProps {
 export function Layout({ children, sidebarType = 'none' }: LayoutProps) {
   return (
     <div className="bg-background text-text-main relative flex h-screen w-full overflow-hidden">
+      {/* Light Leaks */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div 
+          className="absolute -top-[10%] -left-[10%] h-[40%] w-[40%] rounded-full opacity-20 blur-[120px] animate-pulse"
+          style={{ backgroundColor: '#cba6f7' }} // Mauve
+        />
+        <div 
+          className="absolute top-[20%] -right-[5%] h-[50%] w-[50%] rounded-full opacity-10 blur-[120px]"
+          style={{ backgroundColor: '#89b4fa', animation: 'pulse 8s infinite' }} // Blue
+        />
+        <div 
+          className="absolute -bottom-[10%] left-[20%] h-[45%] w-[45%] rounded-full opacity-15 blur-[120px]"
+          style={{ backgroundColor: '#b4befe', animation: 'pulse 12s infinite' }} // Lavender
+        />
+      </div>
+
       {sidebarType === 'projects' && <Sidebar />}
       {sidebarType === 'settings' && <SettingsSidebar />}
       <main className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         {children}
       </main>
+
+      {/* Liquid Refraction Filter */}
+      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+        <filter id="liquid-distort">
+          <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="50" />
+        </filter>
+      </svg>
     </div>
   );
 }
