@@ -44,15 +44,19 @@ export function SessionWorkspace() {
           onOpenMobileSidebar={() => {
             setIsMobileSidebarOpen(true);
           }}
-          isWorkbenchOpen={isWorkbenchOpen}
-          onToggleWorkbench={() => {
-            setIsWorkbenchOpen((prev) => !prev);
-          }}
         />
       }
+
       workbench={
-        <Workbench isOpen={isWorkbenchOpen} tab={workbenchTab} onTabChange={setWorkbenchTab} />
+        <Workbench 
+          isOpen={isWorkbenchOpen} 
+          tab={workbenchTab} 
+          onTabChange={setWorkbenchTab} 
+          onToggle={() => { setIsWorkbenchOpen((prev) => !prev); }}
+
+        />
       }
+
     >
       <MainFeed
         isWorkbenchOpen={isWorkbenchOpen}

@@ -3,9 +3,12 @@
 
   "compilerOptions": {
     "baseUrl": ".",
-    "paths": {},
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "ignoreDeprecations": "6.0",
     "outDir": "./dist",
+    "rootDir": ".",
     "module": "Preserve",
     "moduleResolution": "bundler",
     "jsx": "react-jsx"

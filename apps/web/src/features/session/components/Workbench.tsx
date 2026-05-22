@@ -1,6 +1,7 @@
 import { StatusPane } from './StatusPane';
 import { ReviewView } from './ReviewView';
 import { useSession } from '../../../contexts/SessionContext';
+import { PanelRight } from 'lucide-react';
 
 export type WorkbenchTab = 'status' | 'changes';
 
@@ -8,47 +9,59 @@ interface WorkbenchProps {
   isOpen: boolean;
   tab: WorkbenchTab;
   onTabChange: (tab: WorkbenchTab) => void;
+  onToggle: () => void;
 }
 
-export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
+export function Workbench({ isOpen, tab, onTabChange, onToggle }: WorkbenchProps) {
   const { reviewData, isLoadingReview } = useSession();
 
   return (
     <aside
-      className={`bg-surface/90 absolute right-0 z-30 h-full shrink-0 overflow-hidden border-l shadow-2xl backdrop-blur-xl transition-[width,transform,opacity,border-color] duration-300 ease-in-out will-change-[width,transform] lg:relative lg:shadow-none ${
+      className={`terminal-glass absolute right-0 z-30 h-full shrink-0 overflow-hidden border-l transition-[width,transform,opacity,border-color] duration-300 ease-in-out will-change-[width,transform] lg:relative ${
         isOpen
-          ? 'border-border w-[85vw] translate-x-0 opacity-100 sm:w-[360px] lg:w-[40%]'
-          : 'w-[85vw] translate-x-full border-transparent opacity-0 sm:w-[360px] lg:w-0 lg:translate-x-0 lg:opacity-100'
+          ? 'w-[85vw] translate-x-0 opacity-100 sm:w-[320px] lg:w-[35%]'
+          : 'w-[85vw] translate-x-full opacity-0 sm:w-[320px] lg:w-[44px] lg:translate-x-0 lg:opacity-100'
       }`}
     >
-      <div className="bg-background/50 flex h-full w-[85vw] flex-col sm:w-[360px] lg:w-[40vw]">
-        <div className="border-border bg-surface flex items-center border-b p-2">
+      <div className="flex h-full flex-col min-w-[320px] lg:min-w-0">
+        <div className="border-border flex shrink-0 h-11 items-center border-b p-1 gap-1 bg-black">
+          <div className={`flex flex-1 gap-1 h-full transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 lg:hidden'}`}>
+            <button
+              className={`flex-1 text-[9px] font-black tracking-widest uppercase transition-colors rounded-sm ${
+                tab === 'status'
+                  ? 'bg-white text-black'
+                  : 'text-text-muted hover:text-white hover:bg-white/5'
+              }`}
+              onClick={() => {
+                onTabChange('status');
+              }}
+            >
+              STATUS
+            </button>
+            <button
+              className={`flex-1 text-[9px] font-black tracking-widest uppercase transition-colors rounded-sm ${
+                tab === 'changes'
+                  ? 'bg-white text-black'
+                  : 'text-text-muted hover:text-white hover:bg-white/5'
+              }`}
+              onClick={() => {
+                onTabChange('changes');
+              }}
+            >
+              CHANGES
+            </button>
+          </div>
           <button
-            className={`flex-1 rounded-md py-1.5 text-[11px] font-bold tracking-[0.1em] uppercase transition-colors ${
-              tab === 'status'
-                ? 'bg-background text-text-main shadow-sm'
-                : 'text-text-muted hover:bg-background/50 hover:text-text-main'
+            onClick={onToggle}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-sm transition-all ${
+              isOpen ? 'text-white hover:bg-white/10' : 'text-text-muted hover:text-white hover:bg-white/5'
             }`}
-            onClick={() => {
-              onTabChange('status');
-            }}
+            title="Toggle Inspector"
           >
-            Agent Status
-          </button>
-          <button
-            className={`flex-1 rounded-md py-1.5 text-[11px] font-bold tracking-[0.1em] uppercase transition-colors ${
-              tab === 'changes'
-                ? 'bg-background text-text-main shadow-sm'
-                : 'text-text-muted hover:bg-background/50 hover:text-text-main'
-            }`}
-            onClick={() => {
-              onTabChange('changes');
-            }}
-          >
-            Code Changes
+            <PanelRight className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className={`min-h-0 flex-1 overflow-hidden transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           {tab === 'status' ? (
             <StatusPane files={reviewData.files} />
           ) : (
@@ -65,3 +78,5 @@ export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
     </aside>
   );
 }
+
+

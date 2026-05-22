@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSetupWizard } from '../hooks/useSetupWizard';
 import { useDrivers } from '../../../hooks/useDrivers';
 import { DRIVER_ENV_KEYS } from '@agentctl/shared';
-import { Sparkles, RefreshCw } from 'lucide-react';
+import { Bot, Terminal } from 'lucide-react';
 
 export function SetupWizard() {
 	const { showWizard, markDone } = useSetupWizard();
@@ -22,27 +22,24 @@ export function SetupWizard() {
 	if (!showWizard) return null;
 
 	return (
-		<div className="bg-background/80 animate-fade-in-up fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4 backdrop-blur-md">
-			<div className="bg-accent-glow pointer-events-none absolute top-1/2 left-1/2 h-[450px] w-[450px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-40 blur-[100px]" />
-
-			{/* Compact card layout: max-w-md */}
-			<div className="liquid-glass shadow-immersive-lg relative z-10 flex w-full max-w-md flex-col rounded-2xl border border-white/5 p-6">
-				<div className="mb-5 text-center">
-					<h1 className="font-display from-text-main to-text-muted bg-gradient-to-br bg-clip-text text-2xl font-bold text-transparent">
-						Choose AI Drivers
+		<div className="bg-black/60 fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4 backdrop-blur-md">
+			<div className="terminal-glass relative z-10 flex w-full max-w-md flex-col rounded-sm border p-4 shadow-2xl">
+				<div className="mb-4 text-center">
+					<h1 className="text-white text-xl font-black uppercase tracking-widest">
+						INITIAL_SETUP::AI_PIPELINE
 					</h1>
-					<p className="text-text-muted mt-1.5 text-xs">
-						Enable the AI drivers you wish to work with. Local installations have been auto-detected.
+					<p className="text-text-muted mt-1 text-[10px] font-bold uppercase tracking-tight opacity-60">
+						ENABLE_DRIVERS_FOR_TASK_ORCHESTRATION.
 					</p>
 				</div>
 
-				<div className="max-h-[300px] flex-1 space-y-2 overflow-y-auto py-2 pr-1">
+				<div className="max-h-[320px] flex-1 space-y-1 overflow-y-auto py-1 pr-1">
 					{isLoadingDrivers ? (
-						<div className="animate-pulse space-y-2">
+						<div className="animate-pulse space-y-1">
 							{[1, 2, 3].map((i) => (
 								<div
 									key={i}
-									className="bg-surface-tertiary border-border-main h-12 rounded-xl border"
+									className="bg-white/5 h-10 rounded-sm border border-white/5"
 								/>
 							))}
 						</div>
@@ -65,52 +62,19 @@ export function SetupWizard() {
 							return (
 								<div
 									key={driver.id}
-									className="bg-surface-secondary/40 flex flex-col gap-3 rounded-xl border border-white/5 p-3 transition-colors hover:border-white/10"
+									className="bg-white/5 flex flex-col gap-2 rounded-sm border border-white/5 p-2 transition-colors hover:border-white/10"
 								>
 									<div className="flex items-center justify-between">
-										<div className="flex min-w-0 items-center gap-3">
-											<div className="bg-surface-tertiary relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 p-1">
-												{driver.icon ? (
-													<img
-														src={driver.icon}
-														alt={driver.label}
-														className="h-full w-full object-contain"
-													/>
-												) : (
-													<div className="from-accent/20 to-accent/5 absolute inset-0 flex items-center justify-center bg-gradient-to-br select-none">
-														<span className="text-accent text-xs font-bold drop-shadow-sm">
-															{driver.label.charAt(0)}
-														</span>
-													</div>
-												)}
+										<div className="flex min-w-0 items-center gap-2.5">
+											<div className="bg-black flex h-7 w-7 shrink-0 items-center justify-center border border-white/10 p-1">
+												{driver.id.includes('claude') ? <span className="text-white text-xs font-bold">C</span> : <Bot className="text-white h-3.5 w-3.5" />}
 											</div>
 											<div className="min-w-0">
-												<div className="text-text-main truncate text-sm font-semibold">
+												<div className="text-white truncate text-[11px] font-black uppercase tracking-tight">
 													{driver.label}
 												</div>
-												<div className="text-text-muted mt-0.5 text-[10px]">
-													{!driver.enabled && driver.status === 'ready' && (
-														<span className="text-blue-400">Supported</span>
-													)}
-													{!driver.enabled && driver.status === 'needs_auth' && (
-														<span className="text-amber-500/80">Supported</span>
-													)}
-													{driver.enabled && (
-														driver.status === 'not_found' ? (
-															<span className="text-red-400 font-semibold">Not Installed</span>
-														) : driver.status === 'needs_auth' ? (
-															<span className="text-amber-400 font-semibold">Needs Auth</span>
-														) : (
-															<span className="text-green-500 font-semibold">Active</span>
-														)
-													)}
-													{!driver.enabled && driver.status !== 'ready' && driver.status !== 'needs_auth' && (
-														driver.status === 'not_found' ? (
-															<span className="text-red-400/60">Not Installed</span>
-														) : (
-															<span className="text-zinc-500">Inactive</span>
-														)
-													)}
+												<div className="text-text-muted mt-0.5 text-[8px] font-black uppercase tracking-widest opacity-40">
+													{!driver.enabled ? 'SUPPORTED' : driver.status === 'ready' ? 'ACTIVE' : driver.status.replace('_', ' ')}
 												</div>
 											</div>
 										</div>
@@ -125,20 +89,20 @@ export function SetupWizard() {
 													activate(driver.id);
 												}
 											}}
-											className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-accent' : 'bg-surface-tertiary border-white/5'}`}
+											className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-sm border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-white border-white' : 'bg-black border-white/10'}`}
 										>
 											<span
-												className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isActive ? 'translate-x-4' : 'translate-x-0'}`}
+												className={`pointer-events-none inline-block h-3 w-3 transform rounded-sm transition duration-200 ease-in-out ${isActive ? 'translate-x-4 bg-black' : 'translate-x-0 bg-white/20'}`}
 											/>
 										</button>
 									</div>
 
 									{isActive && hasKeys && (
 										<div className="space-y-2 border-t border-white/5 pt-2">
-											<div className="space-y-2">
+											<div className="space-y-1.5">
 												{envKeys.map((key) => (
 													<div key={key} className="space-y-1">
-														<label className="text-text-muted text-[9px] font-medium uppercase tracking-wider">
+														<label className="text-text-muted text-[8px] font-black uppercase tracking-widest">
 															{key}
 														</label>
 														<input
@@ -153,8 +117,7 @@ export function SetupWizard() {
 																	},
 																});
 															}}
-															placeholder={`Enter your ${key}`}
-															className="bg-surface/50 border-white/5 focus:border-accent/40 w-full rounded-lg border px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:ring-0"
+															className="terminal-input w-full !h-6 !text-[10px]"
 														/>
 													</div>
 												))}
@@ -168,16 +131,9 @@ export function SetupWizard() {
 																});
 															}}
 															disabled={isUpdatingConfig}
-															className="bg-accent hover:bg-accent-hover flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white transition-colors disabled:opacity-50"
+															className="terminal-button !h-6 !px-2 text-[9px]"
 														>
-															{isUpdatingConfig ? (
-																<>
-																	<RefreshCw className="h-3 w-3 animate-spin" />
-																	Connecting...
-																</>
-															) : (
-																'Quick Connect'
-															)}
+															{isUpdatingConfig ? 'CONNECTING...' : 'SAVE_CONFIG'}
 														</button>
 													</div>
 												)}
@@ -198,29 +154,29 @@ export function SetupWizard() {
 							void markDone(defaultDriverId);
 							window.location.href = '/settings';
 						}}
-						className="text-accent inline-flex items-center gap-1 text-[11px] font-medium hover:underline"
+						className="text-text-muted hover:text-white inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest transition-colors"
 					>
-						<Sparkles className="h-3 w-3" />
-						Configure advanced credentials in Settings
+						<Terminal className="h-3 w-3" />
+						ADVANCED_CONFIGURATION
 					</a>
 				</div>
 
-				<div className="mt-6 flex justify-end gap-3 border-t border-white/5 pt-4">
+				<div className="mt-4 flex justify-end gap-2 border-t border-white/5 pt-3">
 					<button
 						onClick={() => {
 							void markDone(defaultDriverId);
 						}}
-						className="text-text-muted hover:text-text-main bg-surface-tertiary hover:bg-surface-hover rounded-lg border border-white/5 px-4 py-1.5 text-xs font-medium transition-colors"
+						className="text-text-muted hover:text-white px-3 py-1.5 text-[10px] font-black uppercase transition-colors"
 					>
-						Skip
+						SKIP
 					</button>
 					<button
 						onClick={() => {
 							void markDone(defaultDriverId);
 						}}
-						className="from-accent to-accent-hover rounded-lg bg-gradient-to-r px-4 py-1.5 text-xs font-semibold text-white transition-all hover:shadow-[0_0_12px_var(--color-accent-glow)]"
+						className="terminal-button !h-8 !px-4 text-[11px]"
 					>
-						Done
+						INITIALIZATION_COMPLETE
 					</button>
 				</div>
 			</div>

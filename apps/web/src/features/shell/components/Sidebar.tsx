@@ -3,7 +3,6 @@ import {
   Folder,
   Plus,
   Search,
-  ArrowUpDown,
   ChevronRight,
   ChevronDown,
   Loader2,
@@ -80,61 +79,49 @@ export function Sidebar() {
   };
 
   const statusColors: Record<SessionStatus, string> = {
-    running: 'bg-success',
-    needs_attention: 'bg-warning',
-    idle: 'bg-text-muted',
-    error: 'bg-danger',
-    merged: 'bg-accent',
-    discarded: 'bg-border',
+    running: 'bg-white',
+    needs_attention: 'bg-zinc-400',
+    idle: 'bg-zinc-600',
+    error: 'bg-white',
+    merged: 'bg-zinc-200',
+    discarded: 'bg-zinc-800',
   };
 
   return (
     <aside
       aria-label="Main Sidebar"
-      className="liquid-glass border-border relative z-20 flex h-full w-[260px] shrink-0 flex-col overflow-hidden border-r shadow-[4px_0_24px_rgba(0,0,0,0.5)]"
+      className="terminal-glass relative z-20 flex h-full w-[220px] shrink-0 flex-col overflow-hidden border-r"
     >
-      <div className="from-glass-highlight/20 pointer-events-none absolute inset-0 bg-gradient-to-b to-transparent" />
-      <div className="border-border/50 bg-background/20 relative z-10 space-y-4 border-b p-4 backdrop-blur-md">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-text-muted text-[10px] font-bold tracking-[0.2em] uppercase">
-            AgentCTL
+      <div className="border-white/5 relative z-10 flex h-11 items-center gap-2 border-b px-3 py-1.5">
+        <div className="flex shrink-0 items-center px-1">
+          <h2 className="text-white text-[10px] font-black uppercase tracking-[0.2em]">
+            CTL
           </h2>
         </div>
 
-        <div className="group relative">
-          <Search className="text-text-muted group-focus-within:text-accent absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 transition-colors" />
+        <div className="relative flex-1">
+          <Search className="text-text-muted absolute top-1/2 left-2 h-3 w-3 -translate-y-1/2" />
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Search"
+            placeholder="SEARCH..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
             }}
-            className="bg-background/50 border-border focus:border-accent/50 focus:ring-accent/20 placeholder:text-text-muted/50 w-full rounded-lg border py-1.5 pr-10 pl-8 text-[12px] transition-all focus:ring-1 focus:outline-none"
+            className="terminal-input w-full pl-7 !h-7 !text-[11px]"
           />
-          <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
-            <kbd className="text-text-muted/50 border-border bg-surface/50 rounded border px-1 font-mono text-[9px]">
-              Ctrl+K
-            </kbd>
-          </div>
         </div>
       </div>
 
-      <div className="group flex items-center justify-between px-4 py-2">
-        <h3 className="text-text-muted text-[10px] font-bold tracking-wider uppercase opacity-50">
-          Projects
+      <div className="flex items-center justify-between px-3 mt-6 mb-1">
+        <h3 className="text-white text-[10px] font-black tracking-widest uppercase opacity-30">
+          ::PROJECT_MANIFEST
         </h3>
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            className="hover:bg-surface-hover text-text-muted rounded p-1 transition-colors"
-            title="Sort Projects"
-          >
-            <ArrowUpDown className="h-3 w-3" />
-          </button>
+        <div className="flex items-center gap-1">
           <Link
             to="/"
-            className="hover:bg-surface-hover text-text-muted rounded p-1 transition-colors"
+            className="hover:text-text-main text-text-muted transition-colors p-1"
             title="Add Project"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -142,25 +129,15 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-4">
+      <div className="flex-1 overflow-y-auto px-1.5 pb-6">
         {isLoading ? (
-          <div className="mt-2 space-y-3 px-2">
+          <div className="space-y-1 p-2">
             {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                aria-hidden="true"
-                className="bg-border/40 h-3 w-full animate-pulse rounded"
-              ></div>
+              <div key={i} className="bg-white/5 h-2 w-full animate-pulse" />
             ))}
           </div>
-        ) : filteredProjects.length === 0 ? (
-          <div className="mt-4 px-2 text-center">
-            <div className="text-text-muted text-[11px] italic">
-              {searchQuery ? 'No results found.' : 'No projects found.'}
-            </div>
-          </div>
         ) : (
-          <div className="space-y-0.5">
+          <div className="space-y-3">
             {filteredProjects.map((proj) => {
               const isCollapsed = collapsedProjects[proj.id] ?? true;
               const showSessions = searchQuery ? true : !isCollapsed;
@@ -168,30 +145,32 @@ export function Sidebar() {
                 createSessionMutation.isPending && createSessionMutation.variables === proj.id;
 
               return (
-                <div key={proj.id} className="space-y-0.5">
+                <div key={proj.id} className="space-y-1">
                   <div
-                    className={`group flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 transition-all duration-300 ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-surface-hover/80 shadow-accent/5 shadow-md' : 'hover:bg-surface-hover/50 hover:-translate-y-[1px] hover:shadow-sm'}`}
+                    className={`group flex cursor-pointer items-center justify-between rounded-sm px-2 py-1.5 transition-colors 
+                      ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-white/10' : 'hover:bg-white/5'}
+                      [@media(pointer:coarse)]:py-3 [@media(pointer:coarse)]:px-3
+                    `}
                     onClick={() => {
                       toggleProject(proj.id);
                     }}
                   >
                     <div className="flex min-w-0 items-center">
-                      <span className="mr-1 flex w-4 shrink-0 justify-center">
+                      <span className="mr-1.5 flex w-3 shrink-0 justify-center">
                         {isCollapsed ? (
-                          <ChevronRight className="h-3 w-3 opacity-50" />
+                          <ChevronRight className="h-3 w-3 opacity-30" />
                         ) : (
-                          <ChevronDown className="h-3 w-3 opacity-50" />
+                          <ChevronDown className="h-3 w-3 opacity-30" />
                         )}
                       </span>
-                      <Folder className="text-text-muted group-hover:text-accent mr-2 h-3.5 w-3.5 shrink-0 transition-colors" />
-                      <span className="font-display text-text-main/90 truncate text-[13px] font-medium">
+                      <Folder className="text-text-muted mr-2 h-3.5 w-3.5 shrink-0" />
+                      <span className="text-white truncate text-[12px] font-black uppercase tracking-tight [@media(pointer:coarse)]:text-[14px]">
                         {proj.name}
                       </span>
                     </div>
                     <button
                       type="button"
-                      className="hover:text-accent p-1 opacity-0 transition-all group-hover:opacity-100 disabled:opacity-50"
-                      title={`New session in ${proj.name}`}
+                      className="hover:text-white opacity-0 group-hover:opacity-100 disabled:opacity-50 [@media(pointer:coarse)]:opacity-100 [@media(pointer:coarse)]:p-2"
                       disabled={isCreatingSession}
                       onClick={(event) => {
                         handleCreateSession(event, proj.id);
@@ -200,36 +179,36 @@ export function Sidebar() {
                       {isCreatingSession ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
-                        <Plus className="h-3 w-3" />
+                        <Plus className="h-3.5 w-3.5" />
                       )}
                     </button>
                   </div>
 
                   {showSessions && (
-                    <div className="mt-0.5 space-y-0.5">
-                      {proj.sessions.length === 0 ? (
-                        <div className="text-text-muted/40 py-1 pl-9 text-[11px] italic">
-                          No sessions yet
-                        </div>
-                      ) : (
-                        proj.sessions.map((s) => (
+                    <div className="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden" style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
+                      <div className="min-h-0 space-y-px">
+                        {proj.sessions.map((s) => (
                           <Link
                             key={s.id}
                             to={`/sessions/${s.id}`}
-                            aria-current={activeSessionId === s.id ? 'page' : undefined}
-                            className={`group ml-7 flex items-center rounded-md px-2 py-1.5 text-[12px] transition-all duration-300 ${activeSessionId === s.id ? 'bg-accent/15 text-accent font-semibold shadow-[0_0_10px_var(--color-accent-glow)]' : 'text-text-muted hover:text-text-main hover:bg-surface-hover/40'}`}
+                            className={`group ml-8 flex items-center border-l border-white/5 py-1.5 pr-2 pl-4 text-[11px] transition-all 
+                              ${activeSessionId === s.id ? 'bg-white/10 border-white/20 text-white font-bold' : 'text-text-muted hover:text-white hover:bg-white/5'}
+                              [@media(pointer:coarse)]:py-3 [@media(pointer:coarse)]:pl-6 [@media(pointer:coarse)]:text-[13px]
+                            `}
                           >
                             <div
-                              className={`mr-2.5 h-1.5 w-1.5 shrink-0 rounded-full transition-all ${statusColors[s.status]} ${activeSessionId === s.id ? 'scale-110 shadow-[0_0_8px_currentColor]' : ''}`}
+                              className={`mr-2.5 h-1 w-1 shrink-0 ${statusColors[s.status]}`}
                             />
-                            <span className="truncate">
-                              {s.title || s.taskSlug || s.branch || 'New session'}
+                            <span className="truncate uppercase tracking-tight">
+                              {s.title || s.taskSlug || s.branch || 'NEW_SESSION'}
                             </span>
                           </Link>
-                        ))
-                      )}
+                        ))}
+                      </div>
                     </div>
                   )}
+
+
                 </div>
               );
             })}
@@ -237,17 +216,16 @@ export function Sidebar() {
         )}
       </div>
 
-      <div className="border-border/50 bg-background/30 relative z-10 flex shrink-0 items-center justify-between border-t p-4">
+      <div className="border-border/50 relative z-10 mt-auto border-t p-2">
         <Link
           to="/settings"
-          className="text-text-muted hover:text-text-main hover:bg-surface-hover/50 group -mx-1 flex w-full items-center gap-2.5 rounded-xl p-2.5 text-xs font-semibold transition-all"
+          className="text-text-muted hover:text-text-main hover:bg-white/5 group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-bold uppercase tracking-tighter transition-all"
         >
-          <div className="bg-surface-tertiary flex h-7 w-7 items-center justify-center rounded-lg border border-white/5 transition-all group-hover:border-white/10 group-hover:shadow-[0_0_10px_var(--color-accent-glow)]">
-            <Sparkles className="text-text-muted group-hover:text-accent h-3.5 w-3.5 transition-colors" />
-          </div>
+          <Sparkles className="h-3 w-3" />
           Settings
         </Link>
       </div>
     </aside>
   );
 }
+

@@ -29,17 +29,17 @@ export function LoginView() {
   };
 
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <div className="bg-surface animate-in fade-in zoom-in w-full max-w-md rounded-2xl p-8 shadow-xl duration-300">
-        <div className="mb-8 text-center">
-          <h1 className="text-text mb-2 text-3xl font-bold">Agent Workbench</h1>
-          <p className="text-text-muted">Enter your one-time login key to continue</p>
+    <div className="bg-black flex min-h-screen items-center justify-center p-4">
+      <div className="terminal-glass animate-in fade-in zoom-in w-full max-w-sm rounded-sm p-6 shadow-2xl duration-300">
+        <div className="mb-6 text-center">
+          <h1 className="text-white mb-1 text-2xl font-black uppercase tracking-widest">AGENTCTL::AUTH</h1>
+          <p className="text-text-muted text-[10px] font-bold uppercase tracking-tight">ENTER_DECRYPT_KEY_TO_ACCESS_WORKSPACE</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="login-key" className="text-text-muted mb-2 block text-sm font-medium">
-              One-time login key
+            <label htmlFor="login-key" className="text-text-muted mb-1.5 block text-[9px] font-black uppercase tracking-widest">
+              SECRET_ACCESS_KEY
             </label>
             <input
               id="login-key"
@@ -49,31 +49,32 @@ export function LoginView() {
                 setKey(e.target.value);
               }}
               placeholder="••••••••••••••••"
-              className="border-border bg-background text-text focus:border-accent focus:ring-accent/20 w-full rounded-xl border px-4 py-3 transition-all outline-none focus:ring-2"
+              className="terminal-input w-full !h-10 text-center tracking-[0.5em]"
               required
               autoFocus
             />
           </div>
 
           {error && (
-            <div className="animate-in fade-in slide-in-from-top-1 rounded-lg bg-red-500/10 p-3 text-sm text-red-500">
-              {error}
+            <div className="border border-white/10 bg-white/5 p-2 text-[10px] font-bold text-white uppercase text-center">
+              ERROR::ACCESS_DENIED::{error}
             </div>
           )}
 
           <button
             type="submit"
             disabled={isLoading || !key.trim()}
-            className="bg-accent text-background hover:bg-accent-hover w-full rounded-xl px-6 py-3 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50"
+            className="terminal-button w-full !h-10 text-[12px] font-black"
           >
-            {isLoading ? 'Verifying...' : 'Unlock Workspace'}
+            {isLoading ? 'VERIFYING...' : 'UNLOCK_WORKSPACE'}
           </button>
         </form>
 
-        <p className="text-text-muted mt-8 text-center text-xs">
-          Check your server logs for the one-time login key.
+        <p className="text-text-muted/40 mt-6 text-center text-[9px] font-bold uppercase tracking-tighter">
+          Check server stdout for the one-time access key.
         </p>
       </div>
     </div>
   );
 }
+

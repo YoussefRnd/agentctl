@@ -10,35 +10,35 @@ interface DiffBlockProps {
 
 export function DiffBlock({ path, hunks, onStage, onRevert }: DiffBlockProps) {
   return (
-    <div className="border-border bg-background overflow-hidden rounded border">
-      <header className="bg-surface border-border sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-3 py-2">
-        <div className="text-text-main truncate font-mono text-xs font-medium">{path}</div>
-        <div className="flex items-center gap-2">
+    <div className="border-white/5 bg-black overflow-hidden rounded-sm border">
+      <header className="border-white/5 bg-white/5 sticky top-0 z-10 flex items-center justify-between gap-2 border-b px-2 py-1">
+        <div className="text-white truncate text-[10px] font-bold uppercase tracking-tighter">{path}</div>
+        <div className="flex items-center gap-1">
           {onRevert && (
             <button
               onClick={onRevert}
-              className="border-border hover:bg-surface-hover text-text-muted rounded border px-2 py-1 text-[10px] font-bold tracking-wider uppercase transition-colors"
+              className="text-text-muted hover:text-white px-1.5 py-0.5 text-[9px] font-black uppercase transition-colors"
             >
-              Revert
+              REVERT
             </button>
           )}
           {onStage && (
             <button
               onClick={onStage}
-              className="border-border bg-text-main text-background rounded border px-2 py-1 text-[10px] font-bold tracking-wider uppercase transition-opacity hover:opacity-90"
+              className="terminal-button !h-6 px-2 text-[9px]"
             >
-              Stage
+              STAGE
             </button>
           )}
         </div>
       </header>
-      <div className="divide-border/20 divide-y">
+      <div className="divide-white/5 divide-y">
         {hunks.map((hunk, hunkIdx) => (
           <div key={hunkIdx}>
-            <div className="bg-surface/30 text-text-muted border-border/10 border-y px-3 py-1 font-mono text-[10px]">
+            <div className="bg-white/[0.02] text-text-muted border-white/5 border-y px-2 py-0.5 text-[9px] font-bold tracking-widest uppercase">
               {hunk.header}
             </div>
-            <div className="py-1">
+            <div className="py-0.5">
               {hunk.lines.map((line, lineIdx) => (
                 <DiffLine key={lineIdx} line={line} />
               ))}
@@ -49,3 +49,4 @@ export function DiffBlock({ path, hunks, onStage, onRevert }: DiffBlockProps) {
     </div>
   );
 }
+

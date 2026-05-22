@@ -15,40 +15,41 @@ export const ToolCallCard = memo(function ToolCallCard({
   const argKeys = Object.keys(args).filter((k) => !['toolCallId', 'name'].includes(k));
 
   return (
-    <div className="group relative py-1 pr-6 pl-14">
-      <div className="bg-accent/40 border-accent/80 ring-background absolute top-1/2 left-8 z-10 h-1.5 w-1.5 -translate-x-[2.5px] -translate-y-1/2 rounded-full border ring-4 transition-transform duration-300 group-hover:scale-150" />
+    <div className="group relative py-0.5 pr-4 pl-16">
+      <div className="absolute top-1/2 left-10 z-10 h-1 w-1 -translate-x-1/2 -translate-y-1/2 bg-white/60 ring-2 ring-black transition-all duration-300 group-hover:scale-150 group-hover:bg-white" />
 
       <div
-        className="flex cursor-pointer items-center gap-3 select-none"
+        className="flex cursor-pointer items-center gap-2 select-none"
         onClick={() => {
           setOpen(!open);
         }}
       >
-        <div className="flex flex-1 items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-3 py-1.5 backdrop-blur-xl transition-all duration-200 hover:border-white/20 hover:bg-white/[0.04]">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <Terminal className="text-accent/80 h-3.5 w-3.5 shrink-0" />
-            <span className="text-text-main/90 font-mono text-[13px] font-medium whitespace-nowrap">
-              {tool}
+        <div className="flex flex-1 items-center justify-between border border-white/5 bg-white/[0.03] px-2 py-1 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.06]">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <Terminal className="h-3 w-3 shrink-0 opacity-50" />
+            <span className="text-text-main font-bold text-[11px] uppercase tracking-tighter whitespace-nowrap">
+              CALL::{tool}
             </span>
-            <span className="text-text-muted/40 ml-2 truncate font-mono text-[12px]">
-              {argKeys.length > 0 ? `{ ${argKeys.join(', ')} }` : ''}
+            <span className="text-text-muted/30 ml-2 truncate text-[10px] font-bold">
+              {argKeys.length > 0 ? `(${argKeys.join(', ')})` : '()'}
             </span>
           </div>
-          <div className="shrink-0 pl-3">
+          <div className="shrink-0 pl-2">
             {open ? (
-              <ChevronDown className="text-text-muted/60 h-3.5 w-3.5" />
+              <ChevronDown className="text-text-muted/40 h-3 w-3" />
             ) : (
-              <ChevronRight className="text-text-muted/60 h-3.5 w-3.5" />
+              <ChevronRight className="text-text-muted/40 h-3 w-3" />
             )}
           </div>
         </div>
       </div>
 
       {open && (
-        <div className="text-text-muted/80 selection:bg-accent/20 mt-2 mb-3 overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 font-mono text-[12px] backdrop-blur-xl">
-          <pre className="leading-relaxed">{JSON.stringify(args, null, 2)}</pre>
+        <div className="text-text-muted border-white/5 mt-1 mb-2 overflow-x-auto border bg-zinc-900 p-2 text-[11px] leading-tight">
+          <pre>{JSON.stringify(args, null, 2)}</pre>
         </div>
       )}
     </div>
   );
 });
+

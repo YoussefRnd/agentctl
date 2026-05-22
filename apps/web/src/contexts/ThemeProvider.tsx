@@ -11,7 +11,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'liquid-glass',
+  defaultTheme = 'oled-glass',
   storageKey = 'agentctl-ui-theme',
 }: {
   children: React.ReactNode;

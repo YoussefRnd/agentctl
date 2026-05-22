@@ -11,8 +11,8 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
   const virtualizer = useVirtualizer({
     count: events.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 100,
-    overscan: 5,
+    estimateSize: () => 60,
+    overscan: 10,
   });
 
   useEffect(() => {
@@ -24,19 +24,17 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
   const handleScroll = () => {
     if (!parentRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = parentRef.current;
-    const isBottom = scrollHeight - scrollTop - clientHeight < 100;
+    const isBottom = scrollHeight - scrollTop - clientHeight < 50;
     setAutoScroll(isBottom);
   };
 
   if (events.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="bg-surface border-border flex h-12 w-12 items-center justify-center rounded-full border">
-            <div className="border-accent h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
-          </div>
-          <span className="text-text-muted text-[13px] font-medium tracking-wide">
-            WAITING FOR AGENT
+      <div className="bg-background flex h-full items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <div className="h-4 w-4 animate-spin border-2 border-white border-t-transparent" />
+          <span className="text-text-muted text-[10px] font-bold tracking-widest">
+            INITIALIZING_TERMINAL...
           </span>
         </div>
       </div>
@@ -45,12 +43,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
 
   return (
     <div
-      className="relative h-full flex-1 overflow-y-auto scroll-smooth px-4 sm:px-0"
+      className="stream-viewport relative h-full flex-1 overflow-y-auto scroll-smooth"
       ref={parentRef}
       onScroll={handleScroll}
     >
-      <div className="relative mx-auto max-w-3xl py-8">
-        <div className="absolute top-0 bottom-0 left-8 z-0 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
+      <div className="relative mx-auto max-w-4xl py-8">
+        <div className="absolute top-0 bottom-0 left-10 z-0 w-px bg-white/5" />
 
         <div
           style={{
@@ -61,6 +59,12 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
         >
           {virtualizer.getVirtualItems().map((item) => {
             const e = events[item.index];
+            const nextEvent = events[item.index + 1];
+            
+            // Layout logic: tight spacing for tool call sequences
+            const isConsecutiveTool = e.type === 'tool_call' && nextEvent.type === 'tool_call';
+            const spacingClass = isConsecutiveTool ? 'pb-1' : 'pb-6';
+
             return (
               <div
                 key={item.key}
@@ -73,28 +77,30 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
                   width: '100%',
                   transform: `translateY(${String(item.start)}px)`,
                 }}
-                className="transition-opacity duration-300"
+                className={`${spacingClass} animate-in fade-in slide-in-from-top-1 duration-150 ease-out`}
               >
                 {e.type === 'text' && <TextCard content={e.data.content} />}
                 {e.type === 'tool_call' && <ToolCallCard tool={e.data.name} payload={e.data} />}
               </div>
             );
+
           })}
         </div>
       </div>
 
+
       {!autoScroll && (
         <button
           type="button"
-          className="bg-surface/80 border-border text-text-main hover:bg-surface animate-in fade-in slide-in-from-bottom-2 fixed bottom-32 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 text-[11px] font-bold shadow-xl backdrop-blur-md transition-all"
+          className="terminal-button fixed bottom-24 left-1/2 -translate-x-1/2 shadow-2xl"
           onClick={() => {
             setAutoScroll(true);
           }}
         >
-          <span className="bg-accent h-1.5 w-1.5 animate-pulse rounded-full" />
-          LATEST MESSAGES
+          RETURN_TO_LATEST
         </button>
       )}
     </div>
   );
 }
+

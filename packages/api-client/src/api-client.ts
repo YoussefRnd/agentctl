@@ -1,7 +1,7 @@
 import { parseWebEnv } from '@agentctl/shared';
 import { ApiError } from './api-error';
 
-const env = parseWebEnv(import.meta.env);
+parseWebEnv(import.meta.env);
 
 export const apiClient = {
   async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -24,18 +24,18 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex h-full w-full items-center justify-center p-4 sm:p-8">
-          <div className="border-border bg-surface/95 w-full max-w-lg rounded-xl border p-6 text-center shadow-2xl">
-            <h1 className="text-xl font-semibold">Something went wrong</h1>
-            <p className="text-text-muted mt-2 text-sm">
-              The app crashed while rendering. Retry to clear state and reload the workspace.
+        <div className="flex h-full w-full items-center justify-center p-4">
+          <div className="terminal-glass w-full max-w-md rounded-sm p-6 text-center shadow-2xl">
+            <h1 className="text-white text-xl font-black uppercase tracking-widest">CRITICAL_SYSTEM_FAILURE</h1>
+            <p className="text-text-muted mt-2 text-[11px] font-bold uppercase tracking-tight opacity-60">
+              A_RENDERING_EXCEPTION_HAS_OCCURRED_IN_THE_WORKSPACE_CORE.
             </p>
             <button
               type="button"
               onClick={this.handleRetry}
-              className="bg-accent text-background hover:bg-accent-hover mt-6 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+              className="terminal-button mt-6 !h-10 !px-6"
             >
-              Retry
+              REBOOT_WORKSPACE
             </button>
           </div>
         </div>
@@ -45,3 +45,4 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     return this.props.children;
   }
 }
+

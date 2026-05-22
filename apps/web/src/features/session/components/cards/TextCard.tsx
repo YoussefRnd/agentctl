@@ -4,12 +4,14 @@ import rehypeHighlight from 'rehype-highlight';
 
 export const TextCard = memo(function TextCard({ content }: { content: string }) {
   return (
-    <div className="group relative my-1 py-4 pr-6 pl-14">
-      <div className="ring-background absolute top-7 left-8 z-10 h-1.5 w-1.5 -translate-x-[2.5px] -translate-y-1/2 rounded-full border border-white/40 bg-white/20 ring-4 transition-transform duration-300 group-hover:scale-150" />
+    <div className="group relative py-2 pr-4 pl-16">
+      <div className="absolute top-6 left-10 z-10 h-1 w-1 -translate-x-1/2 -translate-y-1/2 bg-white/40 ring-2 ring-black transition-all duration-300 group-hover:scale-150 group-hover:bg-white" />
 
-      <div className="prose prose-invert prose-p:text-text-main/90 prose-headings:text-text-main prose-strong:text-text-main prose-code:text-accent/90 prose-pre:bg-black/40 prose-pre:backdrop-blur-xl prose-pre:border prose-pre:border-white/10 prose-pre:rounded-md max-w-none font-sans text-[14px] leading-relaxed">
+      <div className="prose prose-invert prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-white/5 prose-pre:rounded-sm max-w-none text-[13px] leading-6 tracking-tight">
         <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>
       </div>
     </div>
   );
 });
+
+

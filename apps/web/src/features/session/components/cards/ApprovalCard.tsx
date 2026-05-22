@@ -1,5 +1,5 @@
 import { useEffect, useRef, memo } from 'react';
-import { ShieldCheck, X, Check } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import type { ACPEventApprovalRequestData } from '@agentctl/shared';
 
 export const ApprovalCard = memo(function ApprovalCard({
@@ -41,21 +41,21 @@ export const ApprovalCard = memo(function ApprovalCard({
           approveButtonRef.current?.focus();
         }
       }}
-      className="bg-surface border-accent/30 shadow-immersive-lg animate-in fade-in zoom-in-95 flex flex-col items-stretch justify-between gap-6 rounded-2xl border p-5 duration-300 sm:flex-row sm:items-center"
+      className="terminal-glass animate-in fade-in zoom-in-95 flex flex-col items-stretch justify-between gap-3 rounded-sm p-3 shadow-2xl duration-300 sm:flex-row sm:items-center"
     >
-      <div className="flex gap-4">
-        <div className="bg-accent/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
-          <ShieldCheck className="text-accent h-5 w-5" />
+      <div className="flex gap-3">
+        <div className="bg-white/5 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-white/10">
+          <ShieldCheck className="text-white h-4 w-4" />
         </div>
         <div className="flex-1">
           <div
             id="approval-title"
-            className="text-text-main mb-1 text-[14px] font-bold tracking-tight"
+            className="text-white mb-0.5 text-[12px] font-black uppercase tracking-widest"
           >
-            Permission Requested
+            AUTHORIZATION_REQUESTED
           </div>
-          <div className="text-text-muted text-[13px] leading-relaxed">
-            {data.message ?? 'Gemini requires your authorization to execute this action.'}
+          <div className="text-text-muted text-[11px] font-bold uppercase tracking-tight opacity-60">
+            {data.message ?? 'ACTION_REQUIRES_EXPLICIT_USER_CONSENT.'}
           </div>
         </div>
       </div>
@@ -66,10 +66,9 @@ export const ApprovalCard = memo(function ApprovalCard({
           onClick={() => {
             onDeny(eventId);
           }}
-          className="bg-surface-hover hover:bg-danger/10 text-text-muted hover:text-danger border-border flex flex-1 items-center justify-center gap-2 rounded-xl border px-5 py-2.5 text-[13px] font-semibold transition-all duration-200 sm:flex-none"
+          className="text-text-muted hover:text-white px-3 py-1 text-[10px] font-black uppercase transition-colors"
         >
-          <X className="h-4 w-4" />
-          Deny
+          DENY
         </button>
         <button
           ref={approveButtonRef}
@@ -77,12 +76,12 @@ export const ApprovalCard = memo(function ApprovalCard({
           onClick={() => {
             onApprove(eventId);
           }}
-          className="bg-accent hover:bg-accent-hover text-background flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-[13px] font-bold shadow-[0_4px_12px_rgba(59,130,246,0.3)] transition-all duration-200 sm:flex-none"
+          className="terminal-button !h-8 !px-4 text-[10px]"
         >
-          <Check className="h-4 w-4" />
-          Approve
+          APPROVE_ACTION
         </button>
       </div>
     </div>
   );
 });
+

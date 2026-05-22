@@ -12,3 +12,5 @@ docs/superpowers/
 *.tsbuildinfo
 .gemini/
 .antigravitycli
+DESIGN.md
+PRODUCT.md

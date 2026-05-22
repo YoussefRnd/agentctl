@@ -9,7 +9,7 @@ interface CardProps {
 export const Card = ({ children, className = '' }: CardProps) => {
   return (
     <div
-      className={`liquid-glass overflow-hidden rounded-xl transition-all duration-300 hover:border-white/20 ${className}`}
+      className={`terminal-glass overflow-hidden rounded-sm transition-all duration-200 hover:border-white/20 ${className}`}
     >
       {children}
     </div>
@@ -17,15 +17,16 @@ export const Card = ({ children, className = '' }: CardProps) => {
 };
 
 export const CardHeader = ({ children, className = '' }: CardProps) => (
-  <div className={`border-border bg-glass-surface border-b px-4 py-3 ${className}`}>{children}</div>
+  <div className={`border-white/5 bg-white/5 border-b px-2 py-1.5 ${className}`}>{children}</div>
 );
 
 export const CardContent = ({ children, className = '' }: CardProps) => (
-  <div className={`px-4 py-4 ${className}`}>{children}</div>
+  <div className={`p-2 ${className}`}>{children}</div>
 );
 
 export const CardFooter = ({ children, className = '' }: CardProps) => (
-  <div className={`border-border bg-glass-surface/50 border-t px-4 py-3 ${className}`}>
+  <div className={`border-white/5 bg-white/[0.02] border-t px-2 py-1.5 ${className}`}>
     {children}
   </div>
 );
+

@@ -8,8 +8,8 @@ export function DiffLine({ line }: DiffLineProps) {
   const isAdded = line.type === 'added';
   const isRemoved = line.type === 'removed';
 
-  const bgColor = isAdded ? 'bg-success/10' : isRemoved ? 'bg-danger/10' : '';
-  const textColor = isAdded ? 'text-success' : isRemoved ? 'text-danger' : 'text-text-muted';
+  const bgColor = isAdded ? 'bg-white/10' : isRemoved ? 'bg-white/5' : '';
+  const textColor = isAdded ? 'text-white font-bold' : isRemoved ? 'text-zinc-600 line-through' : 'text-zinc-400';
   const symbol = isAdded ? '+' : isRemoved ? '-' : ' ';
 
   const renderContent = () => {
@@ -26,7 +26,7 @@ export function DiffLine({ line }: DiffLineProps) {
       }
 
       segments.push(
-        <span key={idx} className={`${isAdded ? 'bg-success/30' : 'bg-danger/30'} rounded-sm`}>
+        <span key={idx} className={`${isAdded ? 'bg-white/20' : 'bg-white/10'} rounded-sm px-0.5`}>
           {line.content.slice(highlight.start, highlight.end)}
         </span>,
       );
@@ -43,16 +43,17 @@ export function DiffLine({ line }: DiffLineProps) {
 
   return (
     <div
-      className={`flex font-mono text-xs leading-5 ${bgColor} group hover:bg-surface-hover/50 transition-colors`}
+      className={`flex font-mono text-[11px] leading-4 ${bgColor} transition-colors hover:bg-white/[0.08]`}
     >
-      <div className="border-border/30 w-12 shrink-0 border-r pr-2 text-right opacity-40 select-none">
+      <div className="border-white/5 w-8 shrink-0 border-r pr-1 text-right opacity-20 select-none">
         {line.oldLineNumber ?? ''}
       </div>
-      <div className="border-border/30 w-12 shrink-0 border-r pr-2 text-right opacity-40 select-none">
+      <div className="border-white/5 w-8 shrink-0 border-r pr-1 text-right opacity-20 select-none">
         {line.newLineNumber ?? ''}
       </div>
-      <div className={`w-6 shrink-0 text-center opacity-60 select-none ${textColor}`}>{symbol}</div>
-      <div className="flex-1 px-1 break-all whitespace-pre-wrap">{renderContent()}</div>
+      <div className={`w-4 shrink-0 text-center opacity-40 select-none ${textColor}`}>{symbol}</div>
+      <div className={`flex-1 px-1 break-all whitespace-pre-wrap ${textColor}`}>{renderContent()}</div>
     </div>
   );
 }
+

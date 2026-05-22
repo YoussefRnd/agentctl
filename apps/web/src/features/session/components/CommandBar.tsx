@@ -19,7 +19,7 @@ export function CommandBar({
   selectedHarnessId: propSelectedHarnessId,
   selectedModelId: propSelectedModelId,
   onHarnessSelect,
-  placeholder = 'Send a message to start the conversation...',
+  placeholder = 'INPUT_COMMAND...',
 }: ControlBarProps) {
   const { sessionId } = useSession();
   const { drivers, isLoadingDrivers } = useDrivers(sessionId);
@@ -72,7 +72,7 @@ export function CommandBar({
   }, [isPickerOpen]);
 
   return (
-    <div className="from-background via-background/80 relative z-40 w-full bg-gradient-to-t to-transparent px-4 pt-2 pb-6">
+    <div className="relative z-40 w-full bg-black px-4 pt-1 pb-4">
       <div className="relative mx-auto max-w-4xl">
         <HarnessPicker
           sessionId={sessionId}
@@ -86,13 +86,15 @@ export function CommandBar({
           onSelect={handleHarnessSelect}
           />
 
-          <div className="group relative mx-auto max-w-3xl">
-            <div className="pointer-events-none absolute -inset-1 animate-pulse rounded-3xl bg-accent-glow opacity-40 blur-xl transition-opacity duration-700 group-focus-within:opacity-80" />
-
-          <div
-            className={`bg-surface/80 border-border/40 group-focus-within:border-accent/40 relative flex flex-col rounded-3xl border shadow-[0_20px_50px_rgba(0,0,0,0.3)] backdrop-blur-2xl transition-all duration-300 group-focus-within:shadow-[0_0_20px_var(--color-accent-glow)] ${disabled ? 'opacity-50' : ''}`}
+          <form 
+            className="mx-auto max-w-3xl"
+            aria-label="Command interface"
+            onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
           >
-            <div className="w-full p-3">
+          <div
+            className={`terminal-glass flex flex-col rounded-sm transition-all duration-300 ${disabled ? 'opacity-30' : ''}`}
+          >
+            <div className="w-full p-2">
               <textarea
                 ref={textareaRef}
                 rows={1}
@@ -106,56 +108,61 @@ export function CommandBar({
                     handleSubmit();
                   }
                 }}
-                placeholder={disabled ? 'Processing...' : placeholder}
-                className="placeholder:text-text-muted/50 selection:bg-accent/30 max-h-48 min-h-15 w-full resize-none border-none bg-transparent px-3 py-2 text-[15px] leading-relaxed focus:ring-0"
+                placeholder={disabled ? 'PROCESSING...' : placeholder}
+                aria-label="Command input"
+                className="placeholder:text-text-muted/20 selection:bg-white selection:text-black max-h-48 min-h-[40px] w-full resize-none border-none bg-black px-2 py-1.5 text-[13px] leading-tight focus:ring-0"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 disabled={disabled}
               />
             </div>
 
-            <div className="flex items-center justify-between px-3 pt-1 pb-3">
+            <div className="border-white/5 flex items-center justify-between border-t px-2 py-1.5">
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setIsPickerOpen(!isPickerOpen);
                   }}
-                  title={propSelectedModelId ?? selectedDriverLabel}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 transition-all ${isPickerOpen ? 'bg-background/80 text-accent border-accent/20' : 'bg-background/40 hover:bg-background/80 text-text-muted hover:text-text-main border-transparent'}`}
+                  aria-label="Select AI harness"
+                  aria-expanded={isPickerOpen}
+                  className={`flex items-center gap-2 rounded-sm px-2 py-1 transition-all ${isPickerOpen ? 'bg-white text-black' : 'hover:bg-white/5 text-text-muted hover:text-white'}`}
                 >
-                  <div className="flex items-center justify-center">
-                    <Zap
-                      className={`h-4 w-4 ${selectedId ? 'text-accent fill-accent/20' : 'text-text-muted'}`}
-                    />
-                  </div>
-                  <span className="max-w-50 truncate text-[12px] font-medium tracking-tight">
+                  <Zap className={`h-3 w-3 ${isPickerOpen ? 'fill-black' : 'fill-none'}`} />
+                  <span className="max-w-[120px] truncate text-[10px] font-black uppercase tracking-widest">
                     {isLoadingDrivers ? '...' : (propSelectedModelId ?? selectedDriverLabel)}
                   </span>
                   <ChevronUp
-                    className={`h-3.5 w-3.5 opacity-50 transition-transform duration-300 ${isPickerOpen ? 'rotate-180' : ''}`}
+                    className={`h-3 w-3 transition-transform duration-300 ${isPickerOpen ? 'rotate-180' : ''}`}
                   />
                 </button>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
-                  className="text-text-muted/60 hover:text-text-main hover:bg-background/50 rounded-xl p-2 transition-colors duration-200"
+                  type="button"
+                  className="text-text-muted hover:text-white transition-colors"
                   title="Attach file"
+                  aria-label="Attach file"
                 >
-                  <Paperclip className="h-4 w-4" />
+                  <Paperclip className="h-3.5 w-3.5" />
                 </button>
 
                 <button
+                  type="submit"
                   onClick={handleSubmit}
-                  className={`flex items-center justify-center rounded-xl p-2 transition-all duration-300 ${input.trim() && !disabled ? 'from-accent to-accent-hover bg-linear-to-r text-white shadow-[0_0_20px_var(--color-accent-glow)] hover:-translate-y-0.5 active:translate-y-0' : 'text-text-muted/40 hover:text-text-muted/80 bg-background/50'}`}
+                  aria-label="Execute command"
+                  className={`terminal-button flex items-center gap-1.5 ${input.trim() && !disabled ? '' : 'opacity-20 grayscale'}`}
                   disabled={!input.trim() || disabled}
                 >
-                  <Send className="h-4 w-4" />
+                  <span className="text-[10px] font-black">EXECUTE</span>
+                  <Send className="h-3 w-3" />
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
 }
+

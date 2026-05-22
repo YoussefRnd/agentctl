@@ -15,6 +15,10 @@
   "author": "",
   "license": "ISC",
   "type": "module",
+  "files": [
+    "dist",
+    "src"
+  ],
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.1",
     "@agentctl/shared": "workspace:*",

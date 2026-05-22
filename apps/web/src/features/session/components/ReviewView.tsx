@@ -32,22 +32,22 @@ export function ReviewView({
   }, [files]);
 
   if (isLoading) {
-    return <div className="text-text-muted flex-1 p-4 text-sm">Loading review diff...</div>;
+    return <div className="text-text-muted p-2 text-[10px] font-bold uppercase animate-pulse">Scanning changes...</div>;
   }
 
   if (error) {
     return (
-      <div className="flex-1 p-4">
-        <div className="border-danger/30 bg-danger/10 rounded-lg border p-4 text-sm">
-          <div className="text-danger font-medium">Failed to load review diff</div>
-          <div className="text-text-muted mt-1">{error.message}</div>
+      <div className="flex-1 p-2">
+        <div className="border-white/20 bg-white/5 rounded-sm border p-2 text-[11px]">
+          <div className="text-white font-bold uppercase">Critical Error</div>
+          <div className="text-text-muted mt-1 uppercase tracking-tighter">{error.message}</div>
           {onRetry && (
             <button
               type="button"
               onClick={onRetry}
-              className="border-border bg-surface text-text-main hover:bg-background mt-4 rounded-lg border px-3 py-2 text-sm transition-colors"
+              className="terminal-button mt-4"
             >
-              Retry
+              RETRY_SCAN
             </button>
           )}
         </div>
@@ -56,7 +56,7 @@ export function ReviewView({
   }
 
   if (files.length === 0) {
-    return <div className="text-text-muted flex-1 p-4 text-sm">No worktree changes.</div>;
+    return <div className="text-text-muted p-2 text-[10px] font-bold uppercase opacity-30">Worktree clean.</div>;
   }
 
   const activeStates = (Object.keys(grouped) as FileState[]).filter(
@@ -65,37 +65,38 @@ export function ReviewView({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="bg-surface/30 border-border shrink-0 border-b p-4 shadow-sm backdrop-blur-xl">
-        <h2 className="font-display text-text-main mb-4 text-lg font-medium">Code Review</h2>
-        <div className="flex flex-wrap gap-6">
+      <div className="border-border shrink-0 border-b p-2">
+        <h2 className="text-white text-[12px] font-black tracking-[0.2em] uppercase mb-3">CODE_REVIEW_MANIFEST</h2>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
           {activeStates.map((state) => (
-            <div key={state} className="flex flex-col gap-1">
-              <span className="text-text-muted/70 text-[10px] font-black tracking-[0.15em] uppercase">
+            <div key={state} className="flex items-baseline gap-2">
+              <span className="text-white/30 text-[9px] font-black tracking-widest uppercase">
                 {state}
               </span>
-              <span className="text-text-main font-mono text-xl font-medium">
+              <span className="text-white text-[16px] font-black tabular-nums">
                 {grouped[state].length}
               </span>
             </div>
           ))}
         </div>
       </div>
-      <div className="flex-1 space-y-8 overflow-y-auto p-3 sm:p-4">
+      <div className="flex-1 space-y-6 overflow-y-auto p-2">
         {activeStates.map((state) => {
           const entries = grouped[state];
 
           return (
-            <section key={state} className="space-y-4">
+            <section key={state} className="space-y-3 content-visibility-auto contain-intrinsic-size-[auto_400px]">
               <div className="flex items-center gap-3">
-                <h3 className="text-text-muted text-xs font-bold tracking-widest uppercase">
+                <h3 className="text-white/20 text-[10px] font-black tracking-[0.3em] uppercase">
                   {state}
                 </h3>
-                <div className="bg-border/40 h-px flex-1" />
-                <span className="text-text-muted/60 font-mono text-[10px]">
-                  {entries.length} files
+                <div className="bg-white/5 h-px flex-1" />
+                <span className="text-white/40 text-[9px] font-bold uppercase tracking-tight tabular-nums">
+                  {entries.length} UNIT(S)
                 </span>
               </div>
-              <div className="space-y-6">
+
+              <div className="space-y-2">
                 {entries.map((file) => {
                   const hunks = parseDiff(file.diff);
                   return (
@@ -128,3 +129,4 @@ export function ReviewView({
     </div>
   );
 }
+

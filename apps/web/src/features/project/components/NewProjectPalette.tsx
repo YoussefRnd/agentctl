@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DirectoryExplorer } from './DirectoryExplorer';
-import { AlertCircle, Sparkles } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
 import { apiClient, openProjectSession, type SidebarProject } from '@agentctl/api-client';
 
@@ -37,35 +37,34 @@ export function NewProjectPalette() {
   const shouldShowExplorer = projects.length === 0 || showExplorer;
 
   return (
-    <div className="bg-background animate-fade-in-up relative flex flex-1 flex-col items-center justify-center overflow-hidden p-8">
-      <div className="bg-accent-glow/20 animate-pulse-slow pointer-events-none absolute top-1/2 left-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-40 blur-[150px]" />
-      <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-8">
+    <div className="bg-black relative flex flex-1 flex-col items-center justify-center overflow-hidden p-4">
+      <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-6">
         {mutation.isPending ? (
-          <div className="flex flex-col items-center gap-6">
-            <Sparkles className="text-accent h-12 w-12 animate-pulse" />
-            <p className="text-text-main text-2xl font-black tracking-tight">
-              Setting up your workspace...
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-8 w-8 animate-spin border-4 border-white border-t-transparent" />
+            <p className="text-white text-xl font-black uppercase tracking-widest">
+              INITIALIZING_WORKSPACE...
             </p>
-            <p className="text-text-muted">Opening the project and preparing a session</p>
+            <p className="text-text-muted text-[11px] font-bold uppercase">PREPARING_SESSION_CONTEXT</p>
           </div>
         ) : (
           <>
-            <h1 className="font-display from-text-main to-text-muted bg-gradient-to-br bg-clip-text text-4xl font-bold tracking-tight text-transparent">
-              What are we building today?
+            <h1 className="text-white text-3xl font-black uppercase tracking-widest text-center">
+              AGENTCTL::START_COLLABORATION
             </h1>
-            <p className="text-text-muted mb-12 text-lg">
+            <p className="text-text-muted mb-8 text-[12px] font-bold uppercase tracking-tight text-center max-w-md">
               {shouldShowExplorer
-                ? 'Pick a Git project folder and start collaborating with your agents.'
-                : 'Select a project from the sidebar to continue, or open a new one.'}
+                ? 'SELECT_GIT_PROJECT_DIRECTORY_TO_BEGIN_TASK_ORCHESTRATION.'
+                : 'CHOOSE_ACTIVE_PROJECT_FROM_SIDEBAR_OR_OPEN_NEW_DIRECTORY.'}
             </p>
 
             {mutation.error && (
-              <div className="border-danger/30 bg-danger/10 text-text-main mb-6 rounded-xl border p-4 text-left text-sm">
-                <div className="text-danger flex items-center gap-2 font-bold">
-                  <AlertCircle className="h-4 w-4" />
-                  Could not open project
+              <div className="border-white/20 bg-white/5 text-white mb-4 rounded-sm border p-3 text-left text-[11px]">
+                <div className="flex items-center gap-2 font-black uppercase">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  ERROR::MOUNT_FAILED
                 </div>
-                <p className="text-text-muted mt-1">{mutation.error.message}</p>
+                <p className="text-text-muted mt-1 font-bold uppercase opacity-60">{mutation.error.message}</p>
               </div>
             )}
 
@@ -76,15 +75,15 @@ export function NewProjectPalette() {
                 onClick={() => {
                   setShowExplorer(true);
                 }}
-                className="bg-surface-secondary/80 shadow-immersive-lg hover:bg-surface-hover hover:border-accent/50 text-text-main rounded-2xl border border-white/10 px-6 py-3 font-medium backdrop-blur-xl transition-all duration-300"
+                className="terminal-button !h-12 !px-8 text-[14px]"
               >
-                Open New Project
+                OPEN_NEW_PROJECT
               </button>
             )}
           </>
         )}
       </div>
-      <div className="bg-accent/5 pointer-events-none absolute top-1/2 left-1/2 -z-0 h-[1000px] w-[1000px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-[150px]" />
     </div>
   );
 }
+

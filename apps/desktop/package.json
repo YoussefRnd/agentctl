@@ -1,10 +1,12 @@
 {
   "name": "@agentctl/desktop",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch",
     "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -b"
   },
   "type": "module",

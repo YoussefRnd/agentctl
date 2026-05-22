@@ -22,13 +22,13 @@ export function SessionLayout({
   onCloseWorkbench,
 }: SessionLayoutProps) {
   return (
-    <div className="relative flex h-full w-full overflow-hidden">
-      <div className="border-border/50 bg-background z-20 hidden w-[260px] shrink-0 border-r lg:block">
+    <div className="relative flex h-full w-full overflow-hidden bg-black">
+      <div className="border-white/5 z-20 hidden w-[220px] shrink-0 border-r lg:block">
         {sidebar}
       </div>
 
       <aside
-        className={`bg-background border-border fixed inset-y-0 left-0 z-50 w-[280px] border-r transition-transform duration-300 ease-in-out lg:hidden ${
+        className={`bg-black border-white/10 fixed inset-y-0 left-0 z-50 w-[240px] border-r transition-transform duration-300 ease-in-out lg:hidden ${
           isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -37,7 +37,7 @@ export function SessionLayout({
 
       {isMobileSidebarOpen && (
         <div
-          className="bg-background/60 fixed inset-0 z-40 backdrop-blur-sm lg:hidden"
+          className="bg-black/80 fixed inset-0 z-40 lg:hidden"
           onClick={onCloseMobileSidebar}
         />
       )}
@@ -51,10 +51,11 @@ export function SessionLayout({
 
       {isWorkbenchOpen && (
         <div
-          className="bg-background/50 absolute inset-0 z-20 backdrop-blur-sm lg:hidden"
+          className="bg-black/40 absolute inset-0 z-20 lg:hidden"
           onClick={onCloseWorkbench}
         />
       )}
     </div>
   );
 }
+

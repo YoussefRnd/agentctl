@@ -1,6 +1,7 @@
 {
   "name": "@agentctl/server",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
     "build": "tsc -b",
     "dev": "tsx watch src/index.ts",

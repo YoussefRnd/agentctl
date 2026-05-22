@@ -8,6 +8,8 @@
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -b"
   },
   "files": [
@@ -23,6 +25,7 @@
     "react": "^19.2.6"
   },
   "devDependencies": {
+    "@agentctl/eslint-config": "workspace:*",
     "@agentctl/tsconfig": "workspace:*",
     "@types/react": "^19.2.14",
     "react": "^19.2.6",
