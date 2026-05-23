@@ -3,12 +3,12 @@ import { SessionWorkspace } from '../features/session/components/SessionWorkspac
 import { SessionProvider } from '../contexts/SessionContext';
 
 export function SessionView() {
-  const { sessionId } = useParams<{ sessionId: string }>();
-  if (!sessionId) return null;
+ const { sessionId } = useParams<{ sessionId: string }>();
+ if (!sessionId) return null;
 
-  return (
-    <SessionProvider sessionId={sessionId}>
-      <SessionWorkspace />
-    </SessionProvider>
-  );
+ return (
+  <SessionProvider sessionId={sessionId}>
+   <SessionWorkspace />
+  </SessionProvider>
+ );
 }

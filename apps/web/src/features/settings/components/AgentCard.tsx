@@ -113,14 +113,14 @@ export function AgentCard({
 						}}
 					>
 						<button
-						        role="switch"
-						        aria-checked={isActive}
-						        onClick={handleToggle}
-						        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-sm border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-text-main border-text-main' : 'bg-background border-border/40'}`}
+						    role="switch"
+						    aria-checked={isActive}
+						    onClick={handleToggle}
+						    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-sm border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-text-main border-text-main' : 'bg-background border-border/40'}`}
 						>
-						        <span
-						                className={`pointer-events-none inline-block h-4 w-4 transform rounded-sm transition duration-200 ease-in-out ${isActive ? 'translate-x-4 bg-background' : 'translate-x-0 bg-text-main/20'}`}
-						        />
+						    <span
+						        className={`pointer-events-none inline-block h-4 w-4 transform rounded-sm transition duration-200 ease-in-out ${isActive ? 'translate-x-4 bg-background' : 'translate-x-0 bg-text-main/20'}`}
+						    />
 						</button>
 						</div>
 
@@ -139,30 +139,30 @@ export function AgentCard({
 
 						{driver.status === 'not_found' && (
 						<div className="flex items-center justify-between border border-border/20 bg-surface-secondary/20 p-2">
-						        <span className="text-text-main text-[10px] font-bold uppercase">BINARY_NOT_DETECTED_IN_PATH</span>
-						        <button
-						                onClick={onResync}
-						                className="text-text-muted hover:text-text-main text-[10px] font-black uppercase transition-colors"
-						        >
-						                RE_SYNC
-						        </button>
+						    <span className="text-text-main text-[10px] font-bold uppercase">BINARY_NOT_DETECTED_IN_PATH</span>
+						    <button
+						        onClick={onResync}
+						        className="text-text-muted hover:text-text-main text-[10px] font-black uppercase transition-colors"
+						    >
+						        RE_SYNC
+						    </button>
 						</div>
 						)}
 
 						<div className="space-y-1.5">
 						<div className="text-text-main flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest opacity-60">
-						        <Terminal className="h-3 w-3" />
-						        LAUNCH_CONFIG
+						    <Terminal className="h-3 w-3" />
+						    LAUNCH_CONFIG
 						</div>
 						<div className="bg-background border border-border/20 p-2 font-mono text-[11px] text-text-muted">
-						        <div>
-						                CMD: <span className="text-text-main">{driver.command}</span>
+						    <div>
+						        CMD: <span className="text-text-main">{driver.command}</span>
+						    </div>
+						    {driver.launchArgs.length > 0 && (
+						        <div className="mt-1">
+						            ARGS: <span className="text-text-main">{JSON.stringify(driver.launchArgs)}</span>
 						        </div>
-						        {driver.launchArgs.length > 0 && (
-						                <div className="mt-1">
-						                        ARGS: <span className="text-text-main">{JSON.stringify(driver.launchArgs)}</span>
-						                </div>
-						        )}
+						    )}
 						</div>
 						</div>
 					{envKeys.length > 0 && (
