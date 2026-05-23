@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Space+Mono&family=Syne:wght@400..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 @plugin 'tailwindcss-animate';
@@ -27,11 +27,11 @@
   --radius-md: 1rem;
   --radius-lg: 2rem; /* 32px */
 
-  /* Editorial Typography */
-  --font-display: 'Bricolage Grotesque', sans-serif;
-  --font-accent: 'Syne', sans-serif;
-  --font-sans: 'Inter', sans-serif;
-  --font-mono: 'Space Mono', monospace;
+  /* Simplified Typography */
+  --font-display: 'Geist', sans-serif;
+  --font-accent: 'Geist', sans-serif;
+  --font-sans: 'Geist', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
   --animate-pulse-block: pulse-block 1s steps(1) infinite;
 
