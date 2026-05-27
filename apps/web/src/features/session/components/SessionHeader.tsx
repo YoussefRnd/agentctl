@@ -1,39 +1,55 @@
-import { Menu } from 'lucide-react';
+import { Menu, PanelRight } from 'lucide-react';
 
 interface SessionHeaderProps {
- sessionId: string;
- onOpenMobileSidebar: () => void;
+	sessionId: string;
+	onOpenMobileSidebar: () => void;
+	onToggleWorkbench: () => void;
+	isWorkbenchOpen: boolean;
+	sessionTitle?: string | null;
 }
 
 export function SessionHeader({
- sessionId,
- onOpenMobileSidebar,
+	sessionId,
+	onOpenMobileSidebar,
+	onToggleWorkbench,
+	isWorkbenchOpen,
+	sessionTitle,
 }: SessionHeaderProps) {
 
- return (
-  <header className="border-border/50 flex shrink-0 h-14 items-center justify-between border-b px-6 bg-surface-secondary/10 backdrop-blur-md">
-   <div className="flex min-w-0 items-center gap-4 max-w-[1200px] w-full pl-4 lg:pl-10">
-    <button
-     type="button"
-     className="text-text-muted hover:text-accent -ml-1 p-1 transition-all lg:hidden hover:bg-accent/10 rounded"
-     onClick={onOpenMobileSidebar}
-     aria-label="Open Sidebar"
-    >
-     <Menu className="h-5 w-5" />
-    </button>
-    <div className="flex items-center gap-3">
-     <span className="text-text-muted font-black text-[10px] tracking-[0.1em] opacity-40">
-      SESSION::{sessionId.slice(0, 8)}
-     </span>
-     <div className="h-3 w-px bg-border/40 mx-1" />
-     <span className="border-accent/30 text-accent flex items-center gap-2 px-2 py-0.5 text-[9px] font-black tracking-widest uppercase border rounded-full bg-accent/5">
-      <span className="bg-success h-1 w-1 animate-pulse rounded-full shadow-[0_0_8px_rgba(166,227,161,0.5)]" />
-      LIVE_FEED
-     </span>
-    </div>
-   </div>
-  </header>
- );
+	return (
+		<div className="flex h-full w-full min-w-0 items-center justify-between">
+			<div className="flex min-w-0 items-center gap-3">
+				<button
+					type="button"
+					className="text-text-muted hover:text-accent -ml-1 p-1 transition-all lg:hidden hover:bg-accent/10 rounded"
+					onClick={onOpenMobileSidebar}
+					aria-label="Open Sidebar"
+				>
+					<Menu className="h-5 w-5" />
+				</button>
+				{/* Session chip */}
+				<div className="flex items-center gap-1.5 rounded-full border border-border/20 bg-surface/40 px-2.5 py-1">
+					<span className="h-1.5 w-1.5 rounded-full bg-accent/60 animate-pulse" />
+					<span className="text-text-muted font-bold text-[10px] tracking-[0.15em] uppercase truncate max-w-[180px]">
+						{sessionTitle ?? `session::${sessionId.slice(0, 8)}`}
+					</span>
+				</div>
+			</div>
+
+			{/* Workbench toggle — always visible in navbar */}
+			<button
+				type="button"
+				onClick={onToggleWorkbench}
+				aria-label="Toggle Inspector"
+				title="Toggle Inspector (⌘\\)"
+				className={`flex items-center justify-center rounded-md w-8 h-8 transition-all duration-300 border ${
+					isWorkbenchOpen
+						? 'border-accent/30 bg-accent/10 text-accent'
+						: 'border-border/20 bg-surface/30 text-text-muted hover:text-text-main hover:border-border/40 hover:bg-surface/60'
+				}`}
+			>
+				<PanelRight className="h-4 w-4" />
+			</button>
+		</div>
+	);
 }
-
-

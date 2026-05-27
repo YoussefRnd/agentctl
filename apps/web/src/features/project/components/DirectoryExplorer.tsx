@@ -110,9 +110,6 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         onClick={() => {
          void explore(f.path);
         }}
-        onDoubleClick={() => {
-         onSelect(f.path);
-        }}
        >
         <div className="flex items-center gap-2.5">
          <div className={`p-1 ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}>
@@ -145,9 +142,8 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
    </div>
 
    <div className="border-border text-text-muted flex items-center justify-between border-t px-3 py-2 text-[9px] font-black uppercase tracking-widest">
-    <span className="">DOUBLE_CLICK_TO_OPEN</span>
+    <span className="">CLICK_FOLDER_TO_EXPLORE_/_CLICK_MOUNT_TO_SELECT</span>
    </div>
   </div>
  );
 }
-

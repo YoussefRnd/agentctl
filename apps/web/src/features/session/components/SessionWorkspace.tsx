@@ -8,7 +8,7 @@ import { MainFeed } from './MainFeed';
 import { SessionLayout } from './SessionLayout';
 
 export function SessionWorkspace() {
- const { sessionId } = useSession();
+ const { sessionId, sessionData } = useSession();
 
  const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>('status');
  const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(true);
@@ -44,6 +44,9 @@ export function SessionWorkspace() {
      onOpenMobileSidebar={() => {
       setIsMobileSidebarOpen(true);
      }}
+     onToggleWorkbench={() => { setIsWorkbenchOpen((prev) => !prev); }}
+     isWorkbenchOpen={isWorkbenchOpen}
+     sessionTitle={sessionData?.session.title ?? null}
     />
    }
 
@@ -52,8 +55,6 @@ export function SessionWorkspace() {
      isOpen={isWorkbenchOpen} 
      tab={workbenchTab} 
      onTabChange={setWorkbenchTab} 
-     onToggle={() => { setIsWorkbenchOpen((prev) => !prev); }}
-
     />
    }
 

@@ -88,20 +88,12 @@ export function Sidebar() {
  };
 
  return (
-  <aside
-   aria-label="Main Sidebar"
-   className="bg-background relative z-20 flex h-full w-[240px] shrink-0 flex-col overflow-hidden border-r border-border/50 shadow-2xl"
-  >
-   <div className="border-border/50 relative z-10 flex h-14 items-center gap-2 border-b px-4 py-2 bg-surface-secondary/20">
-    <div className="flex shrink-0 items-center">
-     <h2 className="text-text-main text-[11px] font-black uppercase tracking-[0.3em]">
-      AGENTCTL
-     </h2>
-    </div>
-   </div>
-
-   <div className="px-4 mt-8 mb-2 space-y-6">
-    <div className="relative group">
+   <aside
+     aria-label="Main Sidebar"
+     className="bg-transparent relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden"
+   >
+     <div className="px-4 mt-8 mb-2 space-y-6">
+       <div className="relative group">
      <Search className="text-text-muted absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 transition-colors group-focus-within:text-accent" />
      <input
       ref={searchInputRef}

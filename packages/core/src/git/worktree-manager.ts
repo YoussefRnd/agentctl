@@ -286,4 +286,28 @@ export class WorktreeManager {
       await this.removeWorktree(repoPath, worktreePath, branchName);
     });
   }
+
+  /**
+   * Stages a file in the worktree.
+   */
+  async stageFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      await this.gitService.raw(worktreePath, ['add', filePath]);
+    });
+  }
+
+  /**
+   * Discards changes in the worktree. Unstages if it is currently staged.
+   */
+  async revertFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      try {
+        await this.gitService.raw(worktreePath, ['reset', 'HEAD', filePath]);
+      } catch {
+        // File might not be staged
+      }
+      await this.gitService.raw(worktreePath, ['checkout', '--', filePath]);
+    });
+  }
 }
+

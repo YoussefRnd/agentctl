@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Bot, Cpu, Zap, RefreshCw } from 'lucide-react';
 import type { DriverDiscovery } from '@agentctl/shared';
-import { DRIVER_ENV_KEYS } from '@agentctl/shared';
+import { DRIVER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { useDrivers } from '../../../hooks/useDrivers';
 
 interface HarnessPickerProps {
@@ -21,12 +21,32 @@ export function HarnessPicker({
 	onSelect,
 	drivers,
 	isOpen,
-	onClose: _,
+	onClose,
 }: HarnessPickerProps) {
 	const { updateDriverConfig, isUpdatingConfig, refreshDriver, isRefreshing } = useDrivers(sessionId);
 	const [search, setSearch] = useState('');
 	const [internalDriverId, setInternalDriverId] = useState<string | null>(selectedId);
 	const [localCustomEnvs, setLocalCustomEnvs] = useState<Record<string, Record<string, string> | undefined>>({});
+	const pickerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+			if (isOpen && pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+				const target = event.target as HTMLElement;
+				if (target.closest('[aria-label="Select AI harness"]')) {
+					return;
+				}
+				onClose();
+			}
+		};
+
+		document.addEventListener('mousedown', handleClickOutside);
+		document.addEventListener('touchstart', handleClickOutside);
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+			document.removeEventListener('touchstart', handleClickOutside);
+		};
+	}, [isOpen, onClose]);
 
 	useEffect(() => {
 		if (isOpen) {
@@ -71,7 +91,7 @@ export function HarnessPicker({
 	if (!isOpen || !activeDriver) return null;
 
 	return (
-		<div className="terminal-glass animate-in fade-in zoom-in-95 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2 flex w-[480px] overflow-hidden rounded-sm border shadow-2xl">
+		<div ref={pickerRef} className="terminal-glass animate-in fade-in zoom-in-95 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2 flex w-[480px] overflow-hidden border shadow-2xl">
 			<div className="border-white/5 flex w-12 shrink-0 flex-col items-center gap-2 border-r py-2">
 				{drivers.map((d) => {
 					const isSelected = d.id === internalDriverId;
@@ -99,7 +119,7 @@ export function HarnessPicker({
 								d.id.includes('claude') ? <Bot className="h-4 w-4" /> : <Cpu className="h-4 w-4" />
 							)}
 							{needsAuth && !isSelected && (
-								<div className="absolute top-0 right-0 h-1.5 w-1.5 bg-white" />
+								<div className="absolute top-0 right-0 h-1.5 w-1.5 bg-warning rounded-full status-glow" />
 							)}
 						</button>
 					);
@@ -141,27 +161,37 @@ export function HarnessPicker({
 							</p>
 
 							<div className="flex w-full max-w-[240px] flex-col gap-2 text-left">
-								{envKeys.map((key) => (
-									<div key={key} className="space-y-1">
-										<label className="text-text-muted text-[9px] font-black uppercase tracking-widest">
-											{key}
-										</label>
-										<input
-											type="password"
-											value={keysValues[key] || ''}
-											onChange={(e) => {
-												setLocalCustomEnvs({
-													...localCustomEnvs,
-													[activeDriver.id]: {
-														...(localCustomEnvs[activeDriver.id] ?? {}),
-														[key]: e.target.value,
-													},
-												});
-											}}
-											className="terminal-input w-full"
-										/>
-									</div>
-								))}
+								{envKeys.map((key) => {
+									const errorMsg = validateApiKey(key, keysValues[key] || '');
+									return (
+										<div key={key} className="space-y-1">
+											<div className="flex justify-between items-baseline">
+												<label className="text-text-muted text-[9px] font-black uppercase tracking-widest">
+													{key}
+												</label>
+												{errorMsg && (
+													<span className="text-danger text-[9px] font-bold uppercase tracking-tight">
+														{errorMsg}
+													</span>
+												)}
+											</div>
+											<input
+												type="password"
+												value={keysValues[key] || ''}
+												onChange={(e) => {
+													setLocalCustomEnvs({
+														...localCustomEnvs,
+														[activeDriver.id]: {
+															...(localCustomEnvs[activeDriver.id] ?? {}),
+															[key]: e.target.value,
+														},
+													});
+												}}
+												className={`terminal-input w-full ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
+											/>
+										</div>
+									);
+								})}
 								<button
 									onClick={() => {
 										updateDriverConfig(
@@ -173,7 +203,7 @@ export function HarnessPicker({
 											}
 										);
 									}}
-									disabled={isUpdatingConfig || envKeys.some((k) => !keysValues[k])}
+									disabled={isUpdatingConfig || envKeys.some((key) => validateApiKey(key, keysValues[key] || '') !== null)}
 									className="terminal-button w-full mt-2"
 								>
 									{isUpdatingConfig ? 'CONNECTING...' : 'SAVE_AND_CONNECT'}

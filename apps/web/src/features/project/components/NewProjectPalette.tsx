@@ -37,7 +37,7 @@ export function NewProjectPalette() {
  const shouldShowExplorer = projects.length === 0 || showExplorer;
 
  return (
-  <div className="bg-background relative flex flex-1 flex-col items-center justify-center overflow-hidden p-4">
+  <div className="bg-transparent relative flex flex-1 flex-col items-center justify-center overflow-hidden p-4">
    <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-6">
     {mutation.isPending ? (
      <div className="flex flex-col items-center gap-4">
@@ -59,7 +59,7 @@ export function NewProjectPalette() {
       </p>
 
       {mutation.error && (
-       <div className="border-danger/30 bg-danger/5 text-danger mb-4 rounded-sm border p-3 text-left text-[11px]">
+       <div className="border-danger/30 bg-danger/5 text-danger mb-4 rounded-md border p-3 text-left text-[11px]">
         <div className="flex items-center gap-2 font-black uppercase">
          <AlertCircle className="h-3.5 w-3.5" />
          ERROR::MOUNT_FAILED

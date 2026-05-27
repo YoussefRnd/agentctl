@@ -58,23 +58,23 @@
 @layer components {
   /* OLED Glass Panel */
   .terminal-glass {
-    @apply bg-surface border-border border backdrop-blur-md overflow-hidden min-w-0 rounded-sm;
+    @apply bg-surface border-border border backdrop-blur-md overflow-hidden min-w-0 rounded-md;
     box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.7);
   }
 
   /* Performance Rule: No blur on streams */
   .stream-viewport {
-    @apply bg-background border-border border-x-0 border-y;
+    @apply bg-transparent;
     backdrop-filter: none !important;
   }
 
   /* High Density Input */
   .terminal-input {
-    @apply bg-transparent border-border focus:border-white/40 focus:ring-1 focus:ring-white/10 h-8 rounded-sm border px-2 text-[12px] outline-none transition-all font-mono;
+    @apply bg-transparent border-border focus:border-white/40 focus:ring-1 focus:ring-white/10 h-8 rounded-md border px-2 text-[12px] outline-none transition-all font-mono;
   }
 
   .terminal-button {
-    @apply bg-text-main text-background hover:opacity-90 active:scale-[0.98] h-8 rounded-sm px-3 text-[11px] font-accent font-black tracking-tight transition-all disabled:opacity-30;
+    @apply bg-text-main text-background hover:opacity-90 active:scale-[0.98] h-8 rounded-md px-3 text-[11px] font-accent font-black tracking-tight transition-all disabled:opacity-30;
     box-shadow: 0 0 10px rgba(205, 214, 244, 0.05);
   }
 

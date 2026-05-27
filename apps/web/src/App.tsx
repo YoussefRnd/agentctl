@@ -30,11 +30,7 @@ export function App() {
     />
     <Route
      path="/sessions/:sessionId"
-     element={
-      <Layout sidebarType="none">
-       <SessionView />
-      </Layout>
-     }
+     element={<SessionView />}
     />
    </Routes>
   </>

@@ -13,15 +13,17 @@ interface ControlBarProps {
  placeholder?: string;
 }
 
+import { MagicBar } from './MagicBar';
+
 export function CommandBar({
  onSend,
  disabled,
  selectedHarnessId: propSelectedHarnessId,
  selectedModelId: propSelectedModelId,
  onHarnessSelect,
- placeholder = 'INPUT_COMMAND...',
+ placeholder = 'Ask for follow-up changes or attach images',
 }: ControlBarProps) {
- const { sessionId } = useSession();
+ const { sessionId, reviewData } = useSession();
  const { drivers, isLoadingDrivers } = useDrivers(sessionId);
  const [input, setInput] = useState('');
  const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -72,8 +74,8 @@ export function CommandBar({
  }, [isPickerOpen]);
 
  return (
-  <div className="relative z-40 w-full px-6 pt-2 pb-6">
-   <div className="relative max-w-[1200px] pl-10 pr-6 lg:pl-16">
+  <div className="relative z-40 w-full px-6 pb-12">
+   <div className="relative max-w-[1000px] mx-auto">
     <HarnessPicker
      sessionId={sessionId}
      isOpen={isPickerOpen}
@@ -92,9 +94,9 @@ export function CommandBar({
       onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
      >
      <div
-      className={`terminal-glass flex flex-col rounded-xl border border-border/40 shadow-2xl transition-all duration-500 bg-surface-secondary/20 backdrop-blur-2xl ${disabled ? 'opacity-30' : ''}`}
+      className={`glass-card flex flex-col rounded-[32px] border border-border/30 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] transition-all duration-500 bg-surface/60 backdrop-blur-3xl overflow-hidden ${disabled ? 'opacity-30' : ''}`}
      >
-      <div className="w-full p-3">
+      <div className="w-full p-5 pb-2">
        <textarea
         ref={textareaRef}
         rows={1}
@@ -110,14 +112,14 @@ export function CommandBar({
         }}
         placeholder={disabled ? 'PROCESSING...' : placeholder}
         aria-label="Command input"
-        className="placeholder:text-text-muted/30 selection:bg-accent/30 selection:text-text-main max-h-48 min-h-[48px] w-full resize-none border-none bg-transparent px-3 py-2 text-[14px] leading-relaxed focus:ring-0 text-text-main font-mono"
+        className="placeholder:text-text-muted/30 selection:bg-accent/30 selection:text-text-main max-h-60 w-full resize-none border-none bg-transparent p-0 text-[15px] leading-relaxed focus:ring-0 text-text-main font-sans"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         disabled={disabled}
        />
       </div>
 
-      <div className="border-border/30 flex items-center justify-between border-t px-3 py-2.5 bg-surface-secondary/10">
-       <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-4 py-3">
+       <div className="flex items-center gap-2">
         <button
          type="button"
          onClick={() => {
@@ -125,43 +127,50 @@ export function CommandBar({
          }}
          aria-label="Select AI harness"
          aria-expanded={isPickerOpen}
-         className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 transition-all duration-300 border font-accent ${isPickerOpen ? 'bg-accent text-background border-accent shadow-[0_0_15px_rgba(203,166,247,0.3)]' : 'hover:bg-surface-tertiary text-text-muted hover:text-text-main border-transparent'}`}
+         className={`flex items-center gap-2 rounded-full px-3 h-10 transition-all duration-300 border border-transparent ${isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main'}`}
         >
          {activeDriver?.icon ? (
-          <img src={activeDriver.icon} alt="" className="h-3.5 w-3.5 object-contain" />
+          <img src={activeDriver.icon} alt="" className="h-4 w-4 object-contain" />
          ) : (
-          <Zap className={`h-3.5 w-3.5 ${isPickerOpen ? 'fill-background' : 'fill-none'}`} />
+          <Zap className={`h-4 w-4 ${isPickerOpen ? 'fill-accent' : 'fill-none'}`} />
          )}
-         <span className="max-w-[140px] truncate text-[10px] font-black uppercase tracking-[0.15em]">
+         <span className="max-w-[120px] truncate text-[12px] font-bold uppercase tracking-tight">
           {isLoadingDrivers ? '...' : (propSelectedModelId ?? selectedDriverLabel)}
          </span>
          <ChevronUp
-          className={`h-3.5 w-3.5 transition-transform duration-500 ${isPickerOpen ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 transition-transform duration-500 ${isPickerOpen ? 'rotate-180' : ''}`}
          />
         </button>
-       </div>
 
-       <div className="flex items-center gap-3">
+        <div className="h-4 w-px bg-border/20 mx-1" />
+
+        <MagicBar
+          files={reviewData.files}
+          onAction={(action) => {
+            onSend(action);
+          }}
+        />
+
         <button
          type="button"
-         className="text-text-muted hover:text-accent transition-all p-1.5 hover:bg-accent/10 rounded-full"
+         className="text-text-muted hover:text-accent transition-all px-3 h-10 flex items-center gap-2 hover:bg-accent/10 rounded-full"
          title="Attach file"
          aria-label="Attach file"
         >
          <Paperclip className="h-4 w-4" />
-        </button>
-
-        <button
-         type="submit"
-         onClick={handleSubmit}
-         aria-label="Execute command"
-         className={`terminal-button flex items-center gap-2 !h-9 !px-5 !rounded-lg !bg-accent !text-background hover:scale-[1.02] active:scale-[0.98] ${input.trim() && !disabled ? 'shadow-[0_0_20px_rgba(203,166,247,0.4)]' : 'opacity-20 grayscale'}`}
-         disabled={!input.trim() || disabled}
-        >
-         <span className="text-[10px] font-black tracking-widest text-background">EXECUTE</span>
-         <Send className="h-3.5 w-3.5 text-background" />
+         <span className="text-[11px] font-bold uppercase tracking-tight">Files</span>
         </button>
        </div>
+
+       <button
+        type="submit"
+        onClick={handleSubmit}
+        aria-label="Execute command"
+        className={`flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300 ${input.trim() && !disabled ? 'bg-accent text-background shadow-[0_0_20px_rgba(203,166,247,0.4)] hover:scale-105 active:scale-95' : 'bg-surface-quaternary text-text-muted/40 cursor-not-allowed'}`}
+        disabled={!input.trim() || disabled}
+       >
+        <Send className="h-4 w-4" />
+       </button>
       </div>
      </div>
     </form>
@@ -169,4 +178,3 @@ export function CommandBar({
   </div>
  );
 }
-

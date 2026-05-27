@@ -1,7 +1,7 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { createContext, useContext, useMemo, useCallback, type ReactNode } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import type { ACPEventRow, SessionWithCapabilities } from '@agentctl/shared';
-import { apiClient } from '@agentctl/api-client';
+import { apiClient, stageReviewFile, revertReviewFile } from '@agentctl/api-client';
 import { useSessionEvents } from '../hooks/useSessionEvents';
 import type { ReviewFile } from '../features/session/components/ReviewView';
 
@@ -25,6 +25,9 @@ interface SessionContextValue {
  reviewData: ReviewResponse;
  isLoadingReview: boolean;
  planItems: PlanItem[];
+ stageFile: (filePath: string) => Promise<void>;
+ revertFile: (filePath: string) => Promise<void>;
+ refetchReview: () => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -57,11 +60,33 @@ export function SessionProvider({
   enabled: !!sessionId,
  });
 
- const { data: reviewData = { files: [] }, isLoading: isLoadingReview } = useQuery({
+ const { data: reviewData = { files: [] }, isLoading: isLoadingReview, refetch: refetchReview } = useQuery({
   queryKey: ['session-review', sessionId],
   queryFn: () => fetchReview(sessionId),
   enabled: !!sessionId,
  });
+
+ const stageMutation = useMutation({
+  mutationFn: (filePath: string) => stageReviewFile(sessionId, filePath),
+  onSuccess: () => {
+   void refetchReview();
+  },
+ });
+
+ const revertMutation = useMutation({
+  mutationFn: (filePath: string) => revertReviewFile(sessionId, filePath),
+  onSuccess: () => {
+   void refetchReview();
+  },
+ });
+
+ const stageFile = useCallback(async (filePath: string) => {
+  await stageMutation.mutateAsync(filePath);
+ }, [stageMutation]);
+
+ const revertFile = useCallback(async (filePath: string) => {
+  await revertMutation.mutateAsync(filePath);
+ }, [revertMutation]);
 
  const planItems = useMemo(() => {
   const planMap = new Map<string, boolean>();
@@ -102,6 +127,9 @@ export function SessionProvider({
    reviewData,
    isLoadingReview,
    planItems,
+   stageFile,
+   revertFile,
+   refetchReview,
   }),
   [
    sessionId,
@@ -114,6 +142,9 @@ export function SessionProvider({
    reviewData,
    isLoadingReview,
    planItems,
+   stageFile,
+   revertFile,
+   refetchReview,
   ],
  );
 

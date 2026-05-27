@@ -15,11 +15,15 @@ export function ReviewView({
  isLoading,
  error,
  onRetry,
+ onStage,
+ onRevert,
 }: {
  files: ReviewFile[];
  isLoading: boolean;
  error?: Error | null;
  onRetry?: () => void;
+ onStage?: (filePath: string) => void;
+ onRevert?: (filePath: string) => void;
 }) {
  const grouped = useMemo(() => {
   return files.reduce<Record<FileState, ReviewFile[]>>(
@@ -105,17 +109,13 @@ export function ReviewView({
            path={file.path}
            hunks={hunks}
            onStage={
-            file.state === 'modified' || file.state === 'untracked'
-             ? () => {
-               /* TODO: Implement staging */
-              }
+            onStage && (file.state === 'modified' || file.state === 'untracked')
+             ? () => { onStage(file.path); }
              : undefined
            }
            onRevert={
-            file.state === 'modified'
-             ? () => {
-               /* TODO: Implement revert */
-              }
+            onRevert && (file.state === 'modified' || file.state === 'deleted')
+             ? () => { onRevert(file.path); }
              : undefined
            }
           />

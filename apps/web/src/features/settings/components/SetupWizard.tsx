@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSetupWizard } from '../hooks/useSetupWizard';
 import { useDrivers } from '../../../hooks/useDrivers';
-import { DRIVER_ENV_KEYS } from '@agentctl/shared';
+import { DRIVER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { Bot, Terminal } from 'lucide-react';
 
 export function SetupWizard() {
@@ -16,6 +16,15 @@ export function SetupWizard() {
 	} = useDrivers(null);
 	const [localCustomEnvs, setLocalCustomEnvs] = useState<Record<string, Record<string, string> | undefined>>({});
 
+	const hasAnyInvalidDriver = drivers.some((driver) => {
+		if (!driver.enabled) return false;
+		const envKeys = DRIVER_ENV_KEYS[driver.id] ?? [];
+		return envKeys.some((key) => {
+			const val = localCustomEnvs[driver.id]?.[key] ?? (driver.customEnv[key] || '');
+			return validateApiKey(key, val) !== null;
+		});
+	});
+
 	const enabledDrivers = drivers.filter((driver) => driver.enabled);
 	const defaultDriverId = enabledDrivers[0]?.id ?? null;
 
@@ -23,7 +32,7 @@ export function SetupWizard() {
 
 	return (
 	    <div className="bg-background/80 fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4 backdrop-blur-md">
-	        <div className="terminal-glass relative z-10 flex w-full max-w-md flex-col rounded-sm border p-4 shadow-2xl">
+	        <div className="terminal-glass relative z-10 flex w-full max-w-md flex-col rounded-3xl border p-4 shadow-2xl">
 	            <div className="mb-4 text-center">
 	                <h1 className="text-text-main text-xl font-black uppercase tracking-widest">
 	                    INITIAL_SETUP::AI_PIPELINE
@@ -62,11 +71,11 @@ export function SetupWizard() {
 	                        return (
 	                            <div
 	                                key={driver.id}
-	                                className="bg-surface-secondary/20 flex flex-col gap-2 rounded-sm border border-border/20 p-2 transition-colors hover:border-border/40"
+	                                className="bg-surface-secondary/20 flex flex-col gap-2 rounded-md border border-border/20 p-2 transition-colors hover:border-border/40"
 	                            >
 	                                <div className="flex items-center justify-between">
 	                                    <div className="flex min-w-0 items-center gap-2.5">
-	                                        <div className="bg-background flex h-7 w-7 shrink-0 items-center justify-center border border-border/20 p-1">
+	                                        <div className="bg-background flex h-7 w-7 shrink-0 items-center justify-center border border-border/20 p-1 rounded-md">
 	                                            {driver.icon ? (
 	                                                <img src={driver.icon} alt="" className="h-4 w-4 object-contain" />
 	                                            ) : driver.id.includes('claude') ? (
@@ -95,37 +104,47 @@ export function SetupWizard() {
 	                                                activate(driver.id);
 	                                            }
 	                                        }}
-	                                        className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-sm border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-text-main border-text-main' : 'bg-background border-border/20'}`}
+	                                        className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-md border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-text-main border-text-main' : 'bg-background border-border/20'}`}
 	                                    >
 	                                        <span
-	                                            className={`pointer-events-none inline-block h-3 w-3 transform rounded-sm transition duration-200 ease-in-out ${isActive ? 'translate-x-4 bg-background' : 'translate-x-0 bg-text-main/20'}`}
+	                                            className={`pointer-events-none inline-block h-3 w-3 transform rounded-md transition duration-200 ease-in-out ${isActive ? 'translate-x-4 bg-background' : 'translate-x-0 bg-text-main/20'}`}
 	                                        />
 	                                    </button>
 	                                </div>
 									{isActive && hasKeys && (
 										<div className="space-y-2 border-t border-white/5 pt-2">
 											<div className="space-y-1.5">
-												{envKeys.map((key) => (
-													<div key={key} className="space-y-1">
-														<label className="text-text-muted text-[8px] font-black uppercase tracking-widest">
-															{key}
-														</label>
-														<input
-															type="password"
-															value={keysValues[key]}
-															onChange={(e) => {
-																setLocalCustomEnvs({
-																	...localCustomEnvs,
-																	[driver.id]: {
-																		...(localCustomEnvs[driver.id] ?? {}),
-																		[key]: e.target.value,
-																	},
-																});
-															}}
-															className="terminal-input w-full !h-6 !text-[10px]"
-														/>
-													</div>
-												))}
+												{envKeys.map((key) => {
+													const errorMsg = validateApiKey(key, keysValues[key]);
+													return (
+														<div key={key} className="space-y-1">
+															<div className="flex justify-between items-baseline">
+																<label className="text-text-muted text-[8px] font-black uppercase tracking-widest">
+																	{key}
+																</label>
+																{errorMsg && (
+																	<span className="text-danger text-[8px] font-bold uppercase tracking-tight">
+																		{errorMsg}
+																	</span>
+																)}
+															</div>
+															<input
+																type="password"
+																value={keysValues[key]}
+																onChange={(e) => {
+																	setLocalCustomEnvs({
+																		...localCustomEnvs,
+																		[driver.id]: {
+																			...(localCustomEnvs[driver.id] ?? {}),
+																			[key]: e.target.value,
+																		},
+																	});
+																}}
+																className={`terminal-input w-full !h-6 !text-[10px] ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
+															/>
+														</div>
+													);
+												})}
 												{hasChanges && (
 													<div className="flex justify-end pt-1">
 														<button
@@ -135,7 +154,7 @@ export function SetupWizard() {
 																	customEnv: keysValues,
 																});
 															}}
-															disabled={isUpdatingConfig}
+															disabled={isUpdatingConfig || envKeys.some(key => validateApiKey(key, keysValues[key]) !== null)}
 															className="terminal-button !h-6 !px-2 text-[9px]"
 														>
 															{isUpdatingConfig ? 'CONNECTING...' : 'SAVE_CONFIG'}
@@ -179,6 +198,7 @@ export function SetupWizard() {
 						onClick={() => {
 							void markDone(defaultDriverId);
 						}}
+						disabled={hasAnyInvalidDriver}
 						className="terminal-button !h-8 !px-4 text-[11px]"
 					>
 						INITIALIZATION_COMPLETE

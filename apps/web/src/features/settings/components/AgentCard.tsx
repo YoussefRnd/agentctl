@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { DriverDiscovery } from '@agentctl/shared';
-import { DRIVER_ENV_KEYS } from '@agentctl/shared';
+import { DRIVER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { ChevronDown, Terminal, Eye } from 'lucide-react';
 
 interface AgentCardProps {
@@ -26,12 +26,13 @@ export function AgentCard({
 	const [customEnv, setCustomEnv] = useState<Record<string, string>>(() => {
 		const state: Record<string, string> = {};
 		for (const key of envKeys) {
-			state[key] = driver.customEnv[key] || '';
+			state[key] = driver.customEnv[key] ?? '';
 		}
 		return state;
 	});
 
-	const hasChanges = envKeys.some((key) => customEnv[key] !== (driver.customEnv[key] || ''));
+	const hasChanges = envKeys.some((key) => customEnv[key] !== (driver.customEnv[key] ?? ''));
+	const hasInvalidKeys = envKeys.some((key) => validateApiKey(key, customEnv[key] ?? '') !== null);
 
 	const handleSaveConfig = () => {
 		if (onUpdateConfig) {
@@ -77,7 +78,7 @@ export function AgentCard({
 	};
 
 	return (
-		<div className="terminal-glass group overflow-hidden rounded-sm transition-all duration-200">
+		<div className="terminal-glass group overflow-hidden rounded-md transition-all duration-200">
 			<div
 				onClick={() => {
 					setIsExpanded(!isExpanded);
@@ -85,7 +86,7 @@ export function AgentCard({
 				className="flex cursor-pointer items-center justify-between p-3 select-none"
 			>
 				<div className="flex min-w-0 items-center gap-3">
-					<div className="bg-white/5 flex h-9 w-9 shrink-0 items-center justify-center border border-white/10 p-1.5 transition-all group-hover:bg-white/10">
+					<div className="bg-white/5 flex h-9 w-9 shrink-0 items-center justify-center border border-white/10 p-1.5 transition-all group-hover:bg-white/10 rounded-md">
 						{driver.icon ? (
 							<img src={driver.icon} alt="" className="h-5 w-5 object-contain" />
 						) : driver.id.includes('claude') ? (
@@ -113,16 +114,16 @@ export function AgentCard({
 						}}
 					>
 						<button
-						    role="switch"
-						    aria-checked={isActive}
-						    onClick={handleToggle}
-						    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-sm border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-text-main border-text-main' : 'bg-background border-border/40'}`}
+							role="switch"
+							aria-checked={isActive}
+							onClick={handleToggle}
+							className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-md border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-text-main border-text-main' : 'bg-background border-border/40'}`}
 						>
-						    <span
-						        className={`pointer-events-none inline-block h-4 w-4 transform rounded-sm transition duration-200 ease-in-out ${isActive ? 'translate-x-4 bg-background' : 'translate-x-0 bg-text-main/20'}`}
-						    />
+							<span
+								className={`pointer-events-none inline-block h-4 w-4 transform rounded-md transition duration-200 ease-in-out ${isActive ? 'translate-x-4 bg-background' : 'translate-x-0 bg-text-main/20'}`}
+							/>
 						</button>
-						</div>
+					</div>
 
 						<ChevronDown
 						className={`text-text-muted h-3.5 w-3.5 transition-transform duration-300 ${isExpanded ? 'text-text-main rotate-180' : ''}`}
@@ -138,7 +139,7 @@ export function AgentCard({
 						</div>
 
 						{driver.status === 'not_found' && (
-						<div className="flex items-center justify-between border border-border/20 bg-surface-secondary/20 p-2">
+						<div className="flex items-center justify-between border border-border/20 bg-surface-secondary/20 p-2 rounded-md">
 						    <span className="text-text-main text-[10px] font-bold uppercase">BINARY_NOT_DETECTED_IN_PATH</span>
 						    <button
 						        onClick={onResync}
@@ -154,7 +155,7 @@ export function AgentCard({
 						    <Terminal className="h-3 w-3" />
 						    LAUNCH_CONFIG
 						</div>
-						<div className="bg-background border border-border/20 p-2 font-mono text-[11px] text-text-muted">
+						<div className="bg-background border border-border/20 p-2 font-mono text-[11px] text-text-muted rounded-md">
 						    <div>
 						        CMD: <span className="text-text-main">{driver.command}</span>
 						    </div>
@@ -172,24 +173,34 @@ export function AgentCard({
 								CREDENTIALS
 							</div>
 							<div className="space-y-2">
-								{envKeys.map((key) => (
-									<div key={key} className="space-y-1">
-										<label className="text-text-muted text-[9px] font-black uppercase tracking-widest">
-											{key}
-										</label>
-										<input
-											type="password"
-											value={customEnv[key] || ''}
-											onChange={(e) => { setCustomEnv({ ...customEnv, [key]: e.target.value }); }}
-											className="terminal-input w-full"
-										/>
-									</div>
-								))}
+								{envKeys.map((key) => {
+									const errorMsg = validateApiKey(key, customEnv[key] ?? '');
+									return (
+										<div key={key} className="space-y-1">
+											<div className="flex justify-between items-baseline">
+												<label className="text-text-muted text-[9px] font-black uppercase tracking-widest">
+													{key}
+												</label>
+												{errorMsg && (
+													<span className="text-danger text-[9px] font-bold uppercase tracking-tight">
+														{errorMsg}
+													</span>
+												)}
+											</div>
+											<input
+												type="password"
+												value={customEnv[key] ?? ''}
+												onChange={(e) => { setCustomEnv({ ...customEnv, [key]: e.target.value }); }}
+												className={`terminal-input w-full ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
+											/>
+										</div>
+									);
+								})}
 								{hasChanges && (
 									<div className="flex justify-end pt-1">
 										<button
 											onClick={handleSaveConfig}
-											disabled={isUpdatingConfig}
+											disabled={(isUpdatingConfig ?? false) || hasInvalidKeys}
 											className="terminal-button"
 										>
 											{isUpdatingConfig ? 'SAVING...' : 'SAVE_CONFIG'}

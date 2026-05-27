@@ -43,3 +43,18 @@ export async function createProjectSession(projectId: string, drivers: DriverDis
     }),
   });
 }
+
+export async function stageReviewFile(sessionId: string, filePath: string) {
+  return apiClient.fetch<{ success: boolean }>(`/api/sessions/${sessionId}/review/stage`, {
+    method: 'POST',
+    body: JSON.stringify({ filePath }),
+  });
+}
+
+export async function revertReviewFile(sessionId: string, filePath: string) {
+  return apiClient.fetch<{ success: boolean }>(`/api/sessions/${sessionId}/review/revert`, {
+    method: 'POST',
+    body: JSON.stringify({ filePath }),
+  });
+}
+

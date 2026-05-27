@@ -11,16 +11,6 @@ export function StatusPane({ files }: StatusPaneProps) {
 
  return (
   <div className="flex h-full min-h-0 flex-col">
-   <div className="border-border/50 flex items-center justify-between border-b px-3 py-2.5 bg-surface-secondary/20">
-    <h2 className="text-text-muted text-[9px] font-black tracking-[0.2em] uppercase opacity-60">
-     AGENT_STATUS
-    </h2>
-    <div className="flex items-center gap-1.5 bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
-     <span className="bg-accent h-1.5 w-1.5 animate-pulse rounded-full shadow-[0_0_8px_rgba(203,166,247,0.5)]" />
-     <span className="text-accent text-[9px] font-black uppercase tracking-tight">ACTIVE</span>
-    </div>
-   </div>
-
    <div className="flex-1 space-y-8 overflow-y-auto p-4 custom-scrollbar">
     <section className="content-visibility-auto contain-intrinsic-size-[auto_120px]">
      <h3 className="text-text-muted/30 mb-4 text-[9px] font-black tracking-[0.25em] uppercase">
@@ -74,4 +64,3 @@ export function StatusPane({ files }: StatusPaneProps) {
   </div>
  );
 }
-

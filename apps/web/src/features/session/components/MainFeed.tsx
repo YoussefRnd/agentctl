@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { EventFeed } from './EventFeed';
-import { MagicBar } from './MagicBar';
 import { CommandBar } from './CommandBar';
 import { ApprovalCard } from './cards/ApprovalCard';
 import { useSession } from '../../../contexts/SessionContext';
@@ -15,7 +14,6 @@ export function MainFeed() {
   isLoadingEvents,
   isConnected,
   isLoadingSession,
-  reviewData,
  } = useSession();
 
  const { handleSend, handleApprove, handleDeny } = useSessionActions();
@@ -99,7 +97,7 @@ export function MainFeed() {
 
  return (
   <>
-   <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+   <div className="relative min-h-0 flex-1 overflow-hidden">
     <div className="flex h-full min-h-0 flex-col">
      <div className="min-h-0 flex-1 overflow-hidden pb-40">
       {isLoadingEvents ? (
@@ -118,39 +116,29 @@ export function MainFeed() {
     </div>
    </div>
 
-   <div className="z-10 shrink-0 bg-background/80 backdrop-blur-xl border-t border-border/50">
-    <div className="max-w-[1200px] pl-10 pr-6 lg:pl-16">
-     <div className="flex flex-col gap-2 py-4">
-      {events.length > 0 && lastEvent.type === 'approval_request' && (
-       <div className="mb-2">
-        <ApprovalCard
-         eventId={lastEvent.id}
-         data={lastEvent.data}
-         onApprove={handleApprove}
-         onDeny={handleDeny}
-        />
-       </div>
-      )}
-      
-      <div className="terminal-glass rounded-md border border-border/40 shadow-2xl overflow-hidden transition-all duration-300">
-       <MagicBar
-        files={reviewData.files}
-        onAction={(action) => {
-         handleSend(action);
-        }}
-       />
+   <div className="z-10 shrink-0 pointer-events-none">
+     <div className="max-w-[1200px] pointer-events-auto">
+       <div className="flex flex-col gap-2">
+         {events.length > 0 && lastEvent.type === 'approval_request' && (
+           <div className="mb-2 px-6">
+             <ApprovalCard
+               eventId={lastEvent.id}
+               data={lastEvent.data}
+               onApprove={handleApprove}
+               onDeny={handleDeny}
+             />
+           </div>
+         )}
 
-       <CommandBar
-        onSend={handleSend}
-        disabled={!isConnected || isSwitching || isLoadingSession}
-        selectedHarnessId={sessionData?.session.selectedDriver}
-        selectedModelId={sessionData?.session.selectedModel}
-        onHarnessSelect={handleHarnessSelect}
-       />
-      </div>
+         <CommandBar
+           onSend={handleSend}
+           disabled={!isConnected || isSwitching || isLoadingSession}
+           selectedHarnessId={sessionData?.session.selectedDriver}
+           selectedModelId={sessionData?.session.selectedModel}
+           onHarnessSelect={handleHarnessSelect}
+         />
+       </div>
      </div>
-    </div>
-   </div>
-  </>
+   </div>  </>
  );
 }
