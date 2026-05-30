@@ -2,13 +2,13 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import { desc, eq, lt } from 'drizzle-orm';
-import type { ACPConfigOption, AuthMethod, DriverDiscovery, RegistryAgent } from '@agentctl/shared';
+import type { ACPConfigOption, AuthMethod, ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import { createAgentConnection } from './acp-transport.js';
 import { notFoundEntry, probeAgent } from './acp-probe.js';
-import { drivers, registrySnapshots, systemSettings } from '../db/schema.js';
+import { providers, registrySnapshots, systemSettings } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
-import { Driver, type DriverData } from './driver.js';
+import { Provider, type ProviderData } from './provider.js';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
 const SUPPORTED_AGENTS = new Set(['opencode', 'claude-acp', 'codex-acp', 'gemini']);
@@ -20,11 +20,11 @@ interface LaunchConfig {
 	env: Record<string, string>;
 }
 
-interface DriverSettings {
+interface ProviderSettings {
 	onboardingCompleted?: string;
 	onboardingVersion?: string;
 	setupStep?: string;
-	defaultDriverId?: string;
+	defaultProviderId?: string;
 }
 
 function parseJSON<T>(value: string | null | undefined, fallback: T): T {
@@ -77,7 +77,6 @@ function resolveLaunchConfig(
 	if (binaryTarget) {
 		let command = binaryTarget.cmd;
 		let exists = false;
-
 		if (command.startsWith('./')) {
 			if (fs.existsSync(command)) {
 				exists = true;
@@ -125,8 +124,8 @@ function resolveLaunchConfig(
 function buildSyncedDiscovery(
 	agent: RegistryAgent,
 	launch: LaunchConfig | null,
-	existing: DriverData | undefined,
-): DriverDiscovery {
+	existing: ProviderData | undefined,
+): ProviderDiscovery {
 	const existingIsActive = existing?.status === 'ready' || existing?.status === 'needs_auth';
 	const command = launch?.command ?? existing?.command ?? agent.id;
 	const launchArgs = parseJSON(existing?.launchArgs, [] as string[]);
@@ -166,7 +165,7 @@ function parseRegistryAgents(data: string): RegistryAgent[] {
 	return parsed.agents;
 }
 
-export class DriverRegistry {
+export class ProviderRegistry {
 	private syncInFlight: Promise<void> | null = null;
 
 	constructor(
@@ -174,23 +173,23 @@ export class DriverRegistry {
 		private logger: Logger = noopLogger,
 	) { }
 
-	async discover(): Promise<DriverDiscovery[]> {
-		const rows = await this.db.select().from(drivers);
+	async discover(): Promise<ProviderDiscovery[]> {
+		const rows = await this.db.select().from(providers);
 
 		if (rows.length === 0) {
 			this.logger.info('Registry is empty, performing initial sync...');
 			await this.sync();
 
-			const syncedRows = await this.db.select().from(drivers);
+			const syncedRows = await this.db.select().from(providers);
 			if (syncedRows.length === 0) {
-				this.logger.warn('Driver registry sync completed without any discoverable drivers');
+				this.logger.warn('Provider registry sync completed without any discoverable providers');
 				return [];
 			}
 
-			return syncedRows.map((row) => new Driver(row).toDiscovery());
+			return syncedRows.map((row) => new Provider(row).toDiscovery());
 		}
 
-		return rows.map((row) => new Driver(row).toDiscovery());
+		return rows.map((row) => new Provider(row).toDiscovery());
 	}
 
 	private async loadLatestSnapshot(): Promise<RegistrySnapshotRow | undefined> {
@@ -260,102 +259,101 @@ export class DriverRegistry {
 		}
 	}
 
-	private async getDriverRow(id: string): Promise<DriverData | undefined> {
-		const rows = await this.db.select().from(drivers).where(eq(drivers.id, id));
+	private async getProviderRow(id: string): Promise<ProviderData | undefined> {
+		const rows = await this.db.select().from(providers).where(eq(providers.id, id));
 		return rows[0];
 	}
 
-	private async persistDriver(driver: DriverDiscovery): Promise<void> {
-		const enabled = driver.enabled;
+	private async persistProvider(provider: ProviderDiscovery): Promise<void> {
+		const enabled = provider.enabled;
 
 		await this.db
-			.insert(drivers)
+			.insert(providers)
 			.values({
-				id: driver.id,
-				name: driver.label,
-				status: driver.status,
-				command: driver.command,
+				id: provider.id,
+				name: provider.label,
+				status: provider.status,
+				command: provider.command,
 				enabled,
-				launchArgs: JSON.stringify(driver.launchArgs),
-				launchEnv: JSON.stringify(driver.launchEnv),
-				customEnv: JSON.stringify(driver.customEnv),
-				configOptions: JSON.stringify(driver.configOptions ?? []),
-				authMethods: JSON.stringify(driver.authMethods),
-				version: driver.version,
-				description: driver.description,
-				icon: driver.icon,
-				supportsDynamicModel: driver.supportsDynamicModel,
-				supportsDynamicConfig: driver.supportsDynamicConfig,
+				launchArgs: JSON.stringify(provider.launchArgs),
+				launchEnv: JSON.stringify(provider.launchEnv),
+				customEnv: JSON.stringify(provider.customEnv),
+				configOptions: JSON.stringify(provider.configOptions ?? []),
+				authMethods: JSON.stringify(provider.authMethods),
+				version: provider.version,
+				description: provider.description,
+				icon: provider.icon,
+				supportsDynamicModel: provider.supportsDynamicModel,
+				supportsDynamicConfig: provider.supportsDynamicConfig,
 			})
 			.onConflictDoUpdate({
-				target: drivers.id,
+				target: providers.id,
 				set: {
-					name: driver.label,
-					status: driver.status,
-					command: driver.command,
+					name: provider.label,
+					status: provider.status,
+					command: provider.command,
 					enabled,
-					launchArgs: JSON.stringify(driver.launchArgs),
-					launchEnv: JSON.stringify(driver.launchEnv),
-					customEnv: JSON.stringify(driver.customEnv),
-					configOptions: JSON.stringify(driver.configOptions ?? []),
-					authMethods: JSON.stringify(driver.authMethods),
-					version: driver.version,
-					description: driver.description,
-					icon: driver.icon,
-					supportsDynamicModel: driver.supportsDynamicModel,
-					supportsDynamicConfig: driver.supportsDynamicConfig,
+					launchArgs: JSON.stringify(provider.launchArgs),
+					launchEnv: JSON.stringify(provider.launchEnv),
+					customEnv: JSON.stringify(provider.customEnv),
+					configOptions: JSON.stringify(provider.configOptions ?? []),
+					authMethods: JSON.stringify(provider.authMethods),
+					version: provider.version,
+					description: provider.description,
+					icon: provider.icon,
+					supportsDynamicModel: provider.supportsDynamicModel,
+					supportsDynamicConfig: provider.supportsDynamicConfig,
 					updatedAt: new Date(),
 				},
 			});
 	}
 
-	private async pickWarmDriverId(
-		existingRows: DriverData[],
+	private async pickWarmProviderId(
+		existingRows: ProviderData[],
 		supportedRegistry: RegistryAgent[],
 	): Promise<string | null> {
 		const settings = await this.getSettings();
-		const preferredIds = [settings.defaultDriverId, ...existingRows.filter((row) => row.enabled).map((row) => row.id)].filter(
+		const preferredIds = [settings.defaultProviderId, ...existingRows.filter((row) => row.enabled).map((row) => row.id)].filter(
 			(id): id is string => id !== undefined && id !== '',
 		);
 
-		for (const driverId of preferredIds) {
-			if (supportedRegistry.some((agent) => agent.id === driverId)) {
-				return driverId;
+		for (const providerId of preferredIds) {
+			if (supportedRegistry.some((agent) => agent.id === providerId)) {
+				return providerId;
 			}
 		}
 
 		return null;
 	}
 
-	async ensureDriverReady(
-		driverId: string,
+	async ensureProviderReady(
+		providerId: string,
 		options: { force?: boolean } = {},
-	): Promise<Driver> {
+	): Promise<Provider> {
 		const force = options.force ?? false;
-		let row = await this.getDriverRow(driverId);
+		let row = await this.getProviderRow(providerId);
 
 		if (!row) {
 			await this.sync();
-			row = await this.getDriverRow(driverId);
+			row = await this.getProviderRow(providerId);
 		}
 
 		if (!row) {
-			throw new Error(`Driver ${driverId} not found`);
+			throw new Error(`Provider ${providerId} not found`);
 		}
 
-		const driver = new Driver(row);
+		const provider = new Provider(row);
 
 		if (!force && (row.status === 'ready' || row.status === 'needs_auth')) {
 			if (row.command !== 'npx' && row.command !== 'uvx' && !isBinaryOnPath(row.command)) {
-				this.logger.warn(`Binary missing for driver ${driverId}: ${row.command}`);
+				this.logger.warn(`Binary missing for provider ${providerId}: ${row.command}`);
 				await this.db
-					.update(drivers)
+					.update(providers)
 					.set({ status: 'not_found', updatedAt: new Date() })
-					.where(eq(drivers.id, driverId));
-				// Update row status manually for returning the correct current state
-				return new Driver({ ...row, status: 'not_found' });
+					.where(eq(providers.id, providerId));
+				return new Provider({ ...row, status: 'not_found' });
 			} else {
-				return driver;
+				return provider;
 			}
 		}
 
@@ -380,19 +378,18 @@ export class DriverRegistry {
 		const probeResult = await probeAgent(agentStub, launch, this.logger);
 		probeResult.enabled = row.enabled;
 		probeResult.customEnv = parseJSON(row.customEnv, {});
-		await this.persistDriver(probeResult);
-		
-		// Return updated driver
-		const updatedRow = await this.getDriverRow(driverId);
+		await this.persistProvider(probeResult);
+
+		const updatedRow = await this.getProviderRow(providerId);
 		if (!updatedRow) {
-			throw new Error(`Driver ${driverId} vanished after probe`);
+			throw new Error(`Provider ${providerId} vanished after probe`);
 		}
-		return new Driver(updatedRow);
+		return new Provider(updatedRow);
 	}
 
 	async sync(): Promise<void> {
 		if (this.syncInFlight) {
-			this.logger.debug('Driver registry sync already in progress, waiting for existing sync');
+			this.logger.debug('Provider registry sync already in progress, waiting for existing sync');
 			return this.syncInFlight;
 		}
 
@@ -404,12 +401,12 @@ export class DriverRegistry {
 	}
 
 	private async runSync(): Promise<void> {
-		this.logger.info('Starting agent discovery and sync...');
+		this.logger.info('Starting provider discovery and sync...');
 		const { agents: registryAgents } = await this.fetchRegistryWithCache();
 		const supportedRegistry = registryAgents.filter((agent) => SUPPORTED_AGENTS.has(agent.id));
 
-		const existingRows = await this.db.select().from(drivers);
-		const warmDriverId = await this.pickWarmDriverId(existingRows, supportedRegistry);
+		const existingRows = await this.db.select().from(providers);
+		const warmProviderId = await this.pickWarmProviderId(existingRows, supportedRegistry);
 		const supportedIds = new Set(supportedRegistry.map((agent) => agent.id));
 		const existingMap = new Map(existingRows.map((row) => [row.id, row]));
 
@@ -418,45 +415,45 @@ export class DriverRegistry {
 			const launch = resolveLaunchConfig(agent);
 			const discovery = buildSyncedDiscovery(agent, launch, existing);
 
-			await this.persistDriver(discovery);
+			await this.persistProvider(discovery);
 
-			if (warmDriverId === agent.id && discovery.status !== 'not_found') {
-				this.logger.info(`Hydrating selected driver: ${agent.id}`);
-				await this.ensureDriverReady(agent.id);
+			if (warmProviderId === agent.id && discovery.status !== 'not_found') {
+				this.logger.info(`Hydrating selected provider: ${agent.id}`);
+				await this.ensureProviderReady(agent.id);
 			}
 		}
 
 		const obsoleteRows = existingRows.filter((row) => !supportedIds.has(row.id));
 		for (const row of obsoleteRows) {
-			await this.db.delete(drivers).where(eq(drivers.id, row.id));
+			await this.db.delete(providers).where(eq(providers.id, row.id));
 		}
 
 		const settings = await this.getSettings();
-		if (settings.defaultDriverId && !supportedIds.has(settings.defaultDriverId)) {
-			await this.updateSetting('defaultDriverId', '');
+		if (settings.defaultProviderId && !supportedIds.has(settings.defaultProviderId)) {
+			await this.updateSetting('defaultProviderId', '');
 		}
 
-		this.logger.info(`Sync complete. Persisted ${String(supportedRegistry.length)} drivers.`);
+		this.logger.info(`Sync complete. Persisted ${String(supportedRegistry.length)} providers.`);
 	}
 
-	async getDriver(id: string): Promise<Driver | undefined> {
-		const row = await this.getDriverRow(id);
+	async getProvider(id: string): Promise<Provider | undefined> {
+		const row = await this.getProviderRow(id);
 		if (!row) return undefined;
-		return new Driver(row);
+		return new Provider(row);
 	}
 
-	async refreshDriver(driverId: string): Promise<DriverDiscovery> {
-		const driver = await this.ensureDriverReady(driverId, { force: true });
-		return driver.toDiscovery();
+	async refreshProvider(providerId: string): Promise<ProviderDiscovery> {
+		const provider = await this.ensureProviderReady(providerId, { force: true });
+		return provider.toDiscovery();
 	}
 
 	async login(
-		driverId: string,
+		providerId: string,
 		methodId: string,
 		params: Record<string, unknown> = {},
 	): Promise<void> {
-		const driver = await this.ensureDriverReady(driverId, { force: true });
-		const discovery = driver.toDiscovery();
+		const provider = await this.ensureProviderReady(providerId, { force: true });
+		const discovery = provider.toDiscovery();
 
 		const { child, connection } = createAgentConnection(
 			discovery.command,
@@ -479,25 +476,25 @@ export class DriverRegistry {
 			}) as Promise<unknown>);
 
 			await this.db
-				.update(drivers)
+				.update(providers)
 				.set({ status: 'ready', enabled: true, updatedAt: new Date() })
-				.where(eq(drivers.id, driverId));
+				.where(eq(providers.id, providerId));
 		} finally {
 			child.kill();
 		}
 	}
 
-	async activate(driverId: string): Promise<DriverDiscovery> {
-		const driver = await this.ensureDriverReady(driverId, { force: true });
-		if (!driver.enabled) {
-			return await this.setDriverEnabled(driverId, true);
+	async activate(providerId: string): Promise<ProviderDiscovery> {
+		const provider = await this.ensureProviderReady(providerId, { force: true });
+		if (!provider.enabled) {
+			return await this.setProviderEnabled(providerId, true);
 		}
-		return driver.toDiscovery();
+		return provider.toDiscovery();
 	}
 
-	async getSettings(): Promise<DriverSettings> {
+	async getSettings(): Promise<ProviderSettings> {
 		const rows = await this.db.select().from(systemSettings);
-		const settings: DriverSettings = {};
+		const settings: ProviderSettings = {};
 		for (const row of rows) {
 			switch (row.key) {
 				case 'onboardingCompleted':
@@ -509,8 +506,8 @@ export class DriverRegistry {
 				case 'setupStep':
 					settings.setupStep = row.value;
 					break;
-				case 'defaultDriverId':
-					settings.defaultDriverId = row.value;
+				case 'defaultProviderId':
+					settings.defaultProviderId = row.value;
 					break;
 			}
 		}
@@ -533,58 +530,58 @@ export class DriverRegistry {
 			});
 	}
 
-	async setDriverEnabled(driverId: string, enabled: boolean): Promise<DriverDiscovery> {
-		const row = await this.getDriverRow(driverId);
+	async setProviderEnabled(providerId: string, enabled: boolean): Promise<ProviderDiscovery> {
+		const row = await this.getProviderRow(providerId);
 		if (!row) {
-			throw new Error(`Driver ${driverId} not found`);
+			throw new Error(`Provider ${providerId} not found`);
 		}
 
 		await this.db
-			.update(drivers)
+			.update(providers)
 			.set({ enabled, updatedAt: new Date() })
-			.where(eq(drivers.id, driverId));
+			.where(eq(providers.id, providerId));
 
-		return new Driver({ ...row, enabled }).toDiscovery();
+		return new Provider({ ...row, enabled }).toDiscovery();
 	}
 
-	async setDriverConfig(driverId: string, customEnv: Record<string, string>): Promise<DriverDiscovery> {
-		const row = await this.getDriverRow(driverId);
+	async setProviderConfig(providerId: string, customEnv: Record<string, string>): Promise<ProviderDiscovery> {
+		const row = await this.getProviderRow(providerId);
 		if (!row) {
-			throw new Error(`Driver ${driverId} not found`);
+			throw new Error(`Provider ${providerId} not found`);
 		}
 
 		await this.db
-			.update(drivers)
+			.update(providers)
 			.set({
 				customEnv: JSON.stringify(customEnv),
 				updatedAt: new Date(),
 			})
-			.where(eq(drivers.id, driverId));
+			.where(eq(providers.id, providerId));
 
-		const driver = await this.ensureDriverReady(driverId, { force: true });
-		return driver.toDiscovery();
+		const provider = await this.ensureProviderReady(providerId, { force: true });
+		return provider.toDiscovery();
 	}
 
 	startBackgroundWarmup(): void {
-		this.logger.info('Starting background driver warmup...');
+		this.logger.info('Starting background provider warmup...');
 		void (async () => {
 			try {
-				const allDrivers = await this.db.select().from(drivers);
+				const allProviders = await this.db.select().from(providers);
 				const settings = await this.getSettings();
-				const targets = allDrivers.filter(
-					(d) => d.status === 'inactive' && (d.enabled || d.id === settings.defaultDriverId)
+				const targets = allProviders.filter(
+					(p) => p.status === 'inactive' && (p.enabled || p.id === settings.defaultProviderId)
 				);
-				
-				for (const d of targets) {
-					this.logger.info(`Background probing driver: ${d.id}`);
+
+				for (const p of targets) {
+					this.logger.info(`Background probing provider: ${p.id}`);
 					try {
-						await this.ensureDriverReady(d.id, { force: true });
+						await this.ensureProviderReady(p.id, { force: true });
 					} catch (err) {
-						this.logger.error(err, `Failed background warmup for driver ${d.id}`);
+						this.logger.error(err, `Failed background warmup for provider ${p.id}`);
 					}
 				}
 			} catch (err) {
-				this.logger.error(err, 'Failed background driver warmup scan');
+				this.logger.error(err, 'Failed background provider warmup scan');
 			}
 		})();
 	}

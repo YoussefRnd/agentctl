@@ -1,7 +1,7 @@
 import {
-  type DriverDiscovery,
+  type ProviderDiscovery,
   type SessionRow,
-  getReadyDriverId,
+  getReadyProviderId,
   createTaskSlug,
 } from '@agentctl/shared';
 import { apiClient } from '../api-client.js';
@@ -22,23 +22,23 @@ export interface OpenProjectResponse {
   created: boolean;
 }
 
-export async function openProjectSession(path: string, drivers: DriverDiscovery[]) {
+export async function openProjectSession(path: string, providers: ProviderDiscovery[]) {
   return apiClient.fetch<OpenProjectResponse>('/api/projects/open', {
     method: 'POST',
     body: JSON.stringify({
       path,
-      agent: getReadyDriverId(drivers),
+      agent: getReadyProviderId(providers),
       taskSlug: createTaskSlug('new-session'),
     }),
   });
 }
 
-export async function createProjectSession(projectId: string, drivers: DriverDiscovery[]) {
+export async function createProjectSession(projectId: string, providers: ProviderDiscovery[]) {
   return apiClient.fetch<SessionRow>('/api/sessions', {
     method: 'POST',
     body: JSON.stringify({
       projectId,
-      agent: getReadyDriverId(drivers),
+      agent: getReadyProviderId(providers),
       taskSlug: createTaskSlug('new-session'),
     }),
   });
@@ -57,4 +57,3 @@ export async function revertReviewFile(sessionId: string, filePath: string) {
     body: JSON.stringify({ filePath }),
   });
 }
-

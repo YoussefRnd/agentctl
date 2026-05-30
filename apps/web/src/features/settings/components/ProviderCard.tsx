@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import type { DriverDiscovery } from '@agentctl/shared';
-import { DRIVER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
+import type { ProviderDiscovery } from '@agentctl/shared';
+import { PROVIDER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { ChevronDown, Terminal, Eye } from 'lucide-react';
 
-interface AgentCardProps {
-	driver: DriverDiscovery;
+interface ProviderCardProps {
+	provider: ProviderDiscovery;
 	onActivate: (id: string) => void;
 	onToggle: (id: string, enabled: boolean) => void;
 	onResync: () => void;
@@ -12,42 +12,42 @@ interface AgentCardProps {
 	isUpdatingConfig?: boolean;
 }
 
-export function AgentCard({
-	driver,
+export function ProviderCard({
+	provider,
 	onActivate,
 	onToggle,
 	onResync,
 	onUpdateConfig,
 	isUpdatingConfig,
-}: AgentCardProps) {
+}: ProviderCardProps) {
 	const [isExpanded, setIsExpanded] = useState(false);
 
-	const envKeys = DRIVER_ENV_KEYS[driver.id] ?? [];
+	const envKeys = PROVIDER_ENV_KEYS[provider.id] ?? [];
 	const [customEnv, setCustomEnv] = useState<Record<string, string>>(() => {
 		const state: Record<string, string> = {};
 		for (const key of envKeys) {
-			state[key] = driver.customEnv[key] ?? '';
+			state[key] = provider.customEnv[key] ?? '';
 		}
 		return state;
 	});
 
-	const hasChanges = envKeys.some((key) => customEnv[key] !== (driver.customEnv[key] ?? ''));
+	const hasChanges = envKeys.some((key) => customEnv[key] !== (provider.customEnv[key] ?? ''));
 	const hasInvalidKeys = envKeys.some((key) => validateApiKey(key, customEnv[key] ?? '') !== null);
 
 	const handleSaveConfig = () => {
 		if (onUpdateConfig) {
-			onUpdateConfig(driver.id, customEnv);
+			onUpdateConfig(provider.id, customEnv);
 		}
 	};
 
 	const getStatusBadge = () => {
 		const baseStyles = "inline-flex items-center px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest border rounded-sm";
-		
-		if (!driver.enabled) {
+
+		if (!provider.enabled) {
 			return <span className={`${baseStyles} border-white/10 text-text-muted opacity-50`}>DISABLED</span>;
 		}
 
-		switch (driver.status) {
+		switch (provider.status) {
 			case 'ready':
 				return <span className={`${baseStyles} border-white/40 text-white bg-white/5`}>READY</span>;
 			case 'needs_auth':
@@ -55,23 +55,23 @@ export function AgentCard({
 			case 'not_found':
 				return <span className={`${baseStyles} border-white/10 text-zinc-600`}>MISSING</span>;
 			default:
-				return <span className={`${baseStyles} border-white/10 text-zinc-600 uppercase`}>{driver.status}</span>;
+				return <span className={`${baseStyles} border-white/10 text-zinc-600 uppercase`}>{provider.status}</span>;
 		}
 	};
 
-	const isActive = driver.enabled;
+	const isActive = provider.enabled;
 
 	const handleToggle = (e: React.MouseEvent) => {
 		e.stopPropagation();
-		const nextEnabled = !driver.enabled;
-		onToggle(driver.id, nextEnabled);
+		const nextEnabled = !provider.enabled;
+		onToggle(provider.id, nextEnabled);
 
 		if (nextEnabled) {
-			if (driver.status === 'inactive') {
-				onActivate(driver.id);
-			} else if (driver.status === 'needs_auth') {
+			if (provider.status === 'inactive') {
+				onActivate(provider.id);
+			} else if (provider.status === 'needs_auth') {
 				setIsExpanded(true);
-			} else if (driver.status === 'not_found') {
+			} else if (provider.status === 'not_found') {
 				setIsExpanded(true);
 			}
 		}
@@ -87,9 +87,9 @@ export function AgentCard({
 			>
 				<div className="flex min-w-0 items-center gap-3">
 					<div className="bg-white/5 flex h-9 w-9 shrink-0 items-center justify-center border border-white/10 p-1.5 transition-all group-hover:bg-white/10 rounded-md">
-						{driver.icon ? (
-							<img src={driver.icon} alt="" className="h-5 w-5 object-contain" />
-						) : driver.id.includes('claude') ? (
+						{provider.icon ? (
+							<img src={provider.icon} alt="" className="h-5 w-5 object-contain" />
+						) : provider.id.includes('claude') ? (
 							<span className="text-white text-lg font-bold">C</span>
 						) : (
 							<Terminal className="text-white h-4 w-4" />
@@ -97,11 +97,11 @@ export function AgentCard({
 					</div>
 					<div className="min-w-0">
 						<h3 className="text-white flex items-center gap-3 text-[13px] font-black uppercase tracking-tighter">
-							{driver.label}
+							{provider.label}
 							{getStatusBadge()}
 						</h3>
 						<p className="text-text-muted mt-0.5 max-w-md truncate text-[10px] font-bold uppercase tracking-tight opacity-50">
-							{driver.description ?? 'NO_DESCRIPTION'}
+							{provider.description ?? 'NO_DESCRIPTION'}
 						</p>
 					</div>
 				</div>
@@ -125,47 +125,47 @@ export function AgentCard({
 						</button>
 					</div>
 
-						<ChevronDown
+					<ChevronDown
 						className={`text-text-muted h-3.5 w-3.5 transition-transform duration-300 ${isExpanded ? 'text-text-main rotate-180' : ''}`}
-						/>
-						</div>
-						</div>
+					/>
+				</div>
+			</div>
 
-						{isExpanded && (
-						<div className="animate-in fade-in slide-in-from-top-1 space-y-4 border-t border-border/30 p-3">
-						<div className="space-y-1">
+			{isExpanded && (
+				<div className="animate-in fade-in slide-in-from-top-1 space-y-4 border-t border-border/30 p-3">
+					<div className="space-y-1">
 						<strong className="text-text-main text-[10px] font-black uppercase tracking-widest opacity-60">DESCRIPTION</strong>
-						<p className="text-text-muted text-[11px] font-bold uppercase tracking-tight">{driver.description ?? 'NO_DESCRIPTION_AVAILABLE'}</p>
-						</div>
+						<p className="text-text-muted text-[11px] font-bold uppercase tracking-tight">{provider.description ?? 'NO_DESCRIPTION_AVAILABLE'}</p>
+					</div>
 
-						{driver.status === 'not_found' && (
+					{provider.status === 'not_found' && (
 						<div className="flex items-center justify-between border border-border/20 bg-surface-secondary/20 p-2 rounded-md">
-						    <span className="text-text-main text-[10px] font-bold uppercase">BINARY_NOT_DETECTED_IN_PATH</span>
-						    <button
-						        onClick={onResync}
-						        className="text-text-muted hover:text-text-main text-[10px] font-black uppercase transition-colors"
-						    >
-						        RE_SYNC
-						    </button>
+							<span className="text-text-main text-[10px] font-bold uppercase">BINARY_NOT_DETECTED_IN_PATH</span>
+							<button
+								onClick={onResync}
+								className="text-text-muted hover:text-text-main text-[10px] font-black uppercase transition-colors"
+							>
+								RE_SYNC
+							</button>
 						</div>
-						)}
+					)}
 
-						<div className="space-y-1.5">
+					<div className="space-y-1.5">
 						<div className="text-text-main flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest opacity-60">
-						    <Terminal className="h-3 w-3" />
-						    LAUNCH_CONFIG
+							<Terminal className="h-3 w-3" />
+							LAUNCH_CONFIG
 						</div>
 						<div className="bg-background border border-border/20 p-2 font-mono text-[11px] text-text-muted rounded-md">
-						    <div>
-						        CMD: <span className="text-text-main">{driver.command}</span>
-						    </div>
-						    {driver.launchArgs.length > 0 && (
-						        <div className="mt-1">
-						            ARGS: <span className="text-text-main">{JSON.stringify(driver.launchArgs)}</span>
-						        </div>
-						    )}
+							<div>
+								CMD: <span className="text-text-main">{provider.command}</span>
+							</div>
+							{provider.launchArgs.length > 0 && (
+								<div className="mt-1">
+									ARGS: <span className="text-text-main">{JSON.stringify(provider.launchArgs)}</span>
+								</div>
+							)}
 						</div>
-						</div>
+					</div>
 					{envKeys.length > 0 && (
 						<div className="space-y-3 border-t border-white/5 pt-3">
 							<div className="text-white flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest">

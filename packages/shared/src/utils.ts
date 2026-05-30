@@ -1,7 +1,7 @@
-import type { DriverDiscovery } from './session-schemas.js';
+import type { ProviderDiscovery } from './session-schemas.js';
 
-export function getReadyDriverId(drivers: DriverDiscovery[]) {
-  return drivers.find((driver) => driver.status === 'ready')?.id ?? 'opencode';
+export function getReadyProviderId(providers: ProviderDiscovery[]) {
+  return providers.find((provider) => provider.status === 'ready')?.id ?? 'opencode';
 }
 
 export function createTaskSlug(prefix = 'new-session') {

@@ -1,11 +1,11 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { DriverRegistry } from './acp-driver-registry.js';
+import { ProviderRegistry } from './acp-provider-registry.js';
 import type { DbClient } from './acp-session.js';
 import { noopLogger } from '../logger.js';
 import * as probeModule from './acp-probe.js';
 
-test('DriverRegistry discover returns drivers from DB', async () => {
+test('ProviderRegistry discover returns providers from DB', async () => {
   const mockRows = [
     {
       id: 'claude-acp',
@@ -34,15 +34,15 @@ test('DriverRegistry discover returns drivers from DB', async () => {
     }),
   } as unknown as DbClient;
 
-  const registry = new DriverRegistry(db, noopLogger);
-  const drivers = await registry.discover();
+  const registry = new ProviderRegistry(db, noopLogger);
+  const providersList = await registry.discover();
 
-  assert.equal(drivers.length, 1);
-  assert.equal(drivers[0].id, 'claude-acp');
-  assert.equal(drivers[0].status, 'ready');
+  assert.equal(providersList.length, 1);
+  assert.equal(providersList[0].id, 'claude-acp');
+  assert.equal(providersList[0].status, 'ready');
 });
 
-test('DriverRegistry getDriver returns specific driver from DB', async () => {
+test('ProviderRegistry getProvider returns specific provider from DB', async () => {
   const mockRow = {
     id: 'claude-acp',
     name: 'Claude Code',
@@ -71,14 +71,14 @@ test('DriverRegistry getDriver returns specific driver from DB', async () => {
     }),
   } as unknown as DbClient;
 
-  const registry = new DriverRegistry(db, noopLogger);
-  const driver = await registry.getDriver('claude-acp');
+  const registry = new ProviderRegistry(db, noopLogger);
+  const provider = await registry.getProvider('claude-acp');
 
-  assert.ok(driver);
-  assert.equal(driver.id, 'claude-acp');
+  assert.ok(provider);
+  assert.equal(provider.id, 'claude-acp');
 });
 
-test('DriverRegistry ensureDriverReady performs lazy binary check when force is false', async () => {
+test('ProviderRegistry ensureProviderReady performs lazy binary check when force is false', async () => {
   const mockRow = {
     id: 'claude-acp',
     name: 'Claude Code',
@@ -134,17 +134,17 @@ test('DriverRegistry ensureDriverReady performs lazy binary check when force is 
     supportsDynamicConfig: false,
   });
 
-  const registry = new DriverRegistry(db, noopLogger);
+  const registry = new ProviderRegistry(db, noopLogger);
 
-  // 1. Call ensureDriverReady with force: false
+  // 1. Call ensureProviderReady with force: false
   // Since status is 'ready' and binary 'node' is on PATH, it should return immediately without probing
-  const resultLazy = await registry.ensureDriverReady('claude-acp', { force: false });
+  const resultLazy = await registry.ensureProviderReady('claude-acp', { force: false });
   assert.equal(resultLazy.status, 'ready');
   assert.equal(probeSpy.mock.calls.length, 0);
 
-  // 2. Call ensureDriverReady with force: true
+  // 2. Call ensureProviderReady with force: true
   // It should bypass the cache and run probeAgent
-  const resultForced = await registry.ensureDriverReady('claude-acp', { force: true });
+  const resultForced = await registry.ensureProviderReady('claude-acp', { force: true });
   assert.equal(resultForced.status, 'ready');
   assert.equal(probeSpy.mock.calls.length, 1);
 

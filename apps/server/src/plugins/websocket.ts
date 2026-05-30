@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import fastifyWebsocket from '@fastify/websocket';
-import { acpEvents } from '@agentctl/core';
+import { acpEvents, sessions } from '@agentctl/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { wsMessageSchema } from '../types.js';
 import type { ACPEventRow } from '@agentctl/shared';
@@ -39,6 +39,32 @@ export default fp(async (fastify) => {
 
           if (message.action === 'subscribe') {
             if (unsubscribe) unsubscribe();
+
+            // Lazy resuscitation of session if not running in memory
+            let session = fastify.sessionManager.getSession(message.sessionId);
+            if (!session) {
+              const sessionRecord = await fastify.db.query.sessions.findFirst({
+                where: eq(sessions.id, message.sessionId),
+              });
+              if (sessionRecord) {
+                const provider = await fastify.providerRegistry.ensureProviderReady(sessionRecord.selectedProvider, {
+                  force: false,
+                });
+                if (provider.status === 'ready' || provider.status === 'needs_auth') {
+                  const launch = provider.getLaunchConfig(
+                    sessionRecord.selectedModel,
+                    sessionRecord.selectedThinkingEffort,
+                  );
+                  session = fastify.sessionManager.startSession(
+                    sessionRecord.id,
+                    sessionRecord.worktreePath,
+                    launch.command,
+                    launch.args,
+                    launch.env,
+                  );
+                }
+              }
+            }
 
             if (message.lastEventId !== undefined) {
               const missedEvents = await fastify.db

@@ -21,6 +21,7 @@ interface SessionContextValue {
  events: ACPEventRow[];
  isLoadingEvents: boolean;
  isConnected: boolean;
+ streamingEventId: number | null;
  sendMessage: (payload: unknown) => void;
  reviewData: ReviewResponse;
  isLoadingReview: boolean;
@@ -52,6 +53,7 @@ export function SessionProvider({
   isLoading: isLoadingEvents,
   sendMessage,
   isConnected,
+  streamingEventId,
  } = useSessionEvents(sessionId);
 
  const { data: sessionData = null, isLoading: isLoadingSession } = useQuery({
@@ -123,6 +125,7 @@ export function SessionProvider({
    events,
    isLoadingEvents,
    isConnected,
+   streamingEventId,
    sendMessage,
    reviewData,
    isLoadingReview,
@@ -138,6 +141,7 @@ export function SessionProvider({
    events,
    isLoadingEvents,
    isConnected,
+   streamingEventId,
    sendMessage,
    reviewData,
    isLoadingReview,

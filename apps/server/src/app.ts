@@ -9,7 +9,7 @@ import { sessionReviewRoutes } from './routes/session-review.js';
 import { eventsRoutes } from './routes/events.js';
 import { projectsRoutes } from './routes/projects.js';
 import { sessionsRoutes } from './routes/sessions.js';
-import { driversRoutes } from './routes/drivers.js';
+import { providersRoutes } from './routes/providers.js';
 import { settingsRoutes } from './routes/settings.js';
 import { fsRoutes } from './routes/fs.js';
 import { authRoutes } from './routes/auth.js';
@@ -18,7 +18,7 @@ import {
 	db as defaultDb,
 	WorktreeManager,
 	GitMutex,
-	DriverRegistry,
+	ProviderRegistry,
 	SessionOrchestrator,
 	SessionManager,
 } from '@agentctl/core';
@@ -30,7 +30,7 @@ import { parseServerEnv } from '@agentctl/shared';
 export interface AppDependencies {
 	db?: typeof defaultDb;
 	worktreeManager?: WorktreeManager;
-	driverRegistry?: DriverRegistry;
+	providerRegistry?: ProviderRegistry;
 	sessionManager?: SessionManager;
 	sessionOrchestrator?: SessionOrchestrator;
 	env?: ReturnType<typeof parseServerEnv>;
@@ -41,7 +41,7 @@ declare module 'fastify' {
 		db: typeof defaultDb;
 		worktreeManager: WorktreeManager;
 		gitMutex: GitMutex;
-		driverRegistry: DriverRegistry;
+		providerRegistry: ProviderRegistry;
 		sessionManager: SessionManager;
 		sessionOrchestrator: SessionOrchestrator;
 		eventBus: EventBus;
@@ -55,7 +55,7 @@ declare module '@fastify/secure-session' {
 	}
 }
 
-const DRIVER_REGISTRY_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const PROVIDER_REGISTRY_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 export async function buildApp(deps: AppDependencies = {}) {
 	const fastify = Fastify({
@@ -71,7 +71,7 @@ export async function buildApp(deps: AppDependencies = {}) {
 	const db = deps.db ?? defaultDb;
 	const gitMutex = new GitMutex();
 	const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
-	const driverRegistry = deps.driverRegistry ?? new DriverRegistry(db, fastify.log);
+	const providerRegistry = deps.providerRegistry ?? new ProviderRegistry(db, fastify.log);
 	const config = deps.env ?? parseServerEnv(process.env);
 	const eventBus = new EventBus();
 
@@ -80,35 +80,35 @@ export async function buildApp(deps: AppDependencies = {}) {
 
 	const sessionOrchestrator =
 		deps.sessionOrchestrator ??
-		new SessionOrchestrator(db, worktreeManager, driverRegistry, sessionManager);
+		new SessionOrchestrator(db, worktreeManager, providerRegistry, sessionManager);
 
 	fastify.decorate('db', db);
 	fastify.decorate('gitMutex', gitMutex);
 	fastify.decorate('worktreeManager', worktreeManager);
-	fastify.decorate('driverRegistry', driverRegistry);
+	fastify.decorate('providerRegistry', providerRegistry);
 	fastify.decorate('sessionManager', sessionManager);
 	fastify.decorate('sessionOrchestrator', sessionOrchestrator);
 	fastify.decorate('eventBus', eventBus);
 	fastify.decorate('config', config);
 
-	// Sync drivers in the background on startup
-	void driverRegistry
+	// Sync providers in the background on startup
+	void providerRegistry
 		.sync()
 		.then(() => {
-			driverRegistry.startBackgroundWarmup();
+			providerRegistry.startBackgroundWarmup();
 		})
 		.catch((err: unknown) => {
-			fastify.log.error(err, 'Failed to sync driver registry on startup');
+			fastify.log.error(err, 'Failed to sync provider registry on startup');
 		});
 
 	const registrySyncInterval =
 		process.env.NODE_ENV === 'test'
 			? null
 			: setInterval(() => {
-				void driverRegistry.sync().catch((err: unknown) => {
-					fastify.log.error(err, 'Failed to sync driver registry in background');
+				void providerRegistry.sync().catch((err: unknown) => {
+					fastify.log.error(err, 'Failed to sync provider registry in background');
 				});
-			}, DRIVER_REGISTRY_SYNC_INTERVAL_MS);
+			}, PROVIDER_REGISTRY_SYNC_INTERVAL_MS);
 
 	fastify.addHook('onClose', () => {
 		if (registrySyncInterval) {
@@ -166,7 +166,7 @@ export async function buildApp(deps: AppDependencies = {}) {
 	await fastify.register(projectsRoutes, { prefix: '/api' });
 	await fastify.register(sessionsRoutes, { prefix: '/api' });
 	await fastify.register(sessionReviewRoutes, { prefix: '/api' });
-	await fastify.register(driversRoutes, { prefix: '/api' });
+	await fastify.register(providersRoutes, { prefix: '/api' });
 	await fastify.register(settingsRoutes, { prefix: '/api' });
 	await fastify.register(fsRoutes, { prefix: '/api' });
 	await fastify.register(eventsRoutes, { prefix: '/api' });

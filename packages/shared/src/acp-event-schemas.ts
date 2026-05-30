@@ -2,12 +2,13 @@ import { z } from 'zod';
 
 export const acpEventTextDataSchema = z.object({
   content: z.string(),
+  role: z.enum(['provider', 'user', 'thought']).optional(),
 });
 
 export const acpEventToolCallDataSchema = z
   .object({
     name: z.string(),
-    arguments: z.record(z.string(), z.any()).optional(),
+    arguments: z.record(z.string(), z.unknown()).optional(),
     toolCallId: z.string().optional(),
   })
   .loose();
@@ -15,7 +16,7 @@ export const acpEventToolCallDataSchema = z
 export const acpEventApprovalRequestDataSchema = z.object({
   message: z.string().optional(),
   toolCallId: z.string().optional(),
-  request: z.any().optional(),
+  request: z.unknown().optional(),
 });
 
 export const acpEventSchema = z.discriminatedUnion('type', [
@@ -36,17 +37,17 @@ export const acpEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('diff'),
-    data: z.record(z.string(), z.any()),
+    data: z.record(z.string(), z.unknown()),
     createdAt: z.coerce.date(),
   }),
   z.object({
     type: z.literal('status'),
-    data: z.record(z.string(), z.any()),
+    data: z.record(z.string(), z.unknown()),
     createdAt: z.coerce.date(),
   }),
   z.object({
     type: z.literal('compact'),
-    data: z.record(z.string(), z.any()),
+    data: z.record(z.string(), z.unknown()),
     createdAt: z.coerce.date(),
   }),
 ]);

@@ -1,5 +1,5 @@
 import os from 'node:os';
-import type { DriverDiscovery, ACPConfigOption, RegistryAgent } from '@agentctl/shared';
+import type { ProviderDiscovery, ACPConfigOption, RegistryAgent } from '@agentctl/shared';
 import { type Logger } from '../logger.js';
 import { createAgentConnection } from './acp-transport.js';
 
@@ -58,7 +58,7 @@ export interface ProbeConnectionHandle {
 
 const PROBE_TIMEOUT_MS = 60_000;
 
-export function notFoundEntry(agent: RegistryAgent, enabled = false): DriverDiscovery {
+export function notFoundEntry(agent: RegistryAgent, enabled = false): ProviderDiscovery {
   return {
     id: agent.id,
     label: agent.name,
@@ -91,7 +91,7 @@ export async function probeAgent(
   launch: { command: string; args: string[]; env: Record<string, string> },
   logger: Logger,
   options: ProbeAgentOptions = {},
-): Promise<DriverDiscovery> {
+): Promise<ProviderDiscovery> {
   const createConnection = options.createConnection ?? createAgentConnection;
   const timeoutMs = options.timeoutMs ?? PROBE_TIMEOUT_MS;
   const { child, connection } = createConnection(launch.command, launch.args, launch.env);
@@ -222,7 +222,7 @@ export async function probeAgent(
           supportsDynamicConfig,
         };
       })(),
-      new Promise<DriverDiscovery>((_, reject) => {
+      new Promise<ProviderDiscovery>((_, reject) => {
         setTimeout(() => {
           reject(new Error(`Probe for ${agent.id} timed out`));
         }, timeoutMs);

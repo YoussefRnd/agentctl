@@ -12,7 +12,7 @@ const createSessionSchema = z.object({
 });
 
 const updateSessionProviderSchema = z.object({
-	selectedDriver: z.string().min(1),
+	selectedProvider: z.string().min(1),
 	selectedModel: z.string().min(1),
 	selectedThinkingEffort: z.enum(['low', 'medium', 'high']),
 });
@@ -33,7 +33,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 			try {
 				const session = await fastify.sessionOrchestrator.create({
 					projectId: request.body.projectId,
-					driverId: request.body.agent,
+					providerId: request.body.agent,
 					taskSlug: request.body.taskSlug,
 				});
 
@@ -77,8 +77,8 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 				throw new AppError('Session not found', 404);
 			}
 
-			const drivers = await fastify.driverRegistry.discover();
-			return { session, capabilities: drivers };
+			const providersList = await fastify.providerRegistry.discover();
+			return { session, capabilities: providersList };
 		},
 	);
 
@@ -102,19 +102,19 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 			const [updatedSession] = await fastify.db
 				.update(sessions)
 				.set({
-					selectedDriver: request.body.selectedDriver,
+					selectedProvider: request.body.selectedProvider,
 					selectedModel: request.body.selectedModel,
 					selectedThinkingEffort: request.body.selectedThinkingEffort,
 				})
 				.where(eq(sessions.id, request.params.id))
 				.returning();
 
-			const driver = await fastify.driverRegistry.ensureDriverReady(updatedSession.selectedDriver, {
+			const provider = await fastify.providerRegistry.ensureProviderReady(updatedSession.selectedProvider, {
 				force: false,
 			});
 
-			if (driver.status === 'ready' || driver.status === 'needs_auth') {
-				const launch = driver.getLaunchConfig(
+			if (provider.status === 'ready' || provider.status === 'needs_auth') {
+				const launch = provider.getLaunchConfig(
 					updatedSession.selectedModel,
 					updatedSession.selectedThinkingEffort,
 				);
@@ -125,8 +125,8 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 				});
 			}
 
-			const drivers = await fastify.driverRegistry.discover();
-			return { session: updatedSession, capabilities: drivers };
+			const providersList = await fastify.providerRegistry.discover();
+			return { session: updatedSession, capabilities: providersList };
 		},
 	);
 

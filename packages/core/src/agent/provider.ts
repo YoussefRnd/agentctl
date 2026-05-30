@@ -1,9 +1,9 @@
-import type { ACPConfigOption, AuthMethod, DriverDiscovery, ThinkingEffort } from '@agentctl/shared';
-import type { drivers } from '../db/schema.js';
+import type { ACPConfigOption, AuthMethod, ProviderDiscovery, ThinkingEffort } from '@agentctl/shared';
+import type { providers } from '../db/schema.js';
 
-export type DriverData = typeof drivers.$inferSelect;
+export type ProviderData = typeof providers.$inferSelect;
 
-export interface DriverLaunchConfig {
+export interface ProviderLaunchConfig {
   command: string;
   args: string[];
   env: Record<string, string>;
@@ -12,14 +12,14 @@ export interface DriverLaunchConfig {
 const MODEL_OPTION_IDS = ['model', 'selectedModel'] as const;
 const THINKING_OPTION_IDS = ['thinking', 'thinking_effort', 'selectedThinkingEffort'] as const;
 
-export class Driver {
-  constructor(private readonly data: DriverData) {}
+export class Provider {
+  constructor(private readonly data: ProviderData) {}
 
   get id(): string {
     return this.data.id;
   }
 
-  get status(): DriverData['status'] {
+  get status(): ProviderData['status'] {
     return this.data.status;
   }
 
@@ -35,7 +35,7 @@ export class Driver {
     return this.data.supportsDynamicConfig;
   }
 
-  getLaunchConfig(selectedModel: string, selectedThinkingEffort: string): DriverLaunchConfig {
+  getLaunchConfig(selectedModel: string, selectedThinkingEffort: string): ProviderLaunchConfig {
     const extraArgs: string[] = [];
     const configOptions = this.parseConfigOptions();
 
@@ -46,11 +46,11 @@ export class Driver {
       (THINKING_OPTION_IDS as readonly string[]).includes(opt.id),
     );
 
-    if (!this.supportsDynamicModel && hasModelOption && selectedModel && selectedModel !== 'default') {
+    if (this.id !== 'opencode' && !this.supportsDynamicModel && hasModelOption && selectedModel && selectedModel !== 'default') {
       extraArgs.push('--model', selectedModel);
     }
 
-    if (!this.supportsDynamicConfig && hasThinkingOption && selectedThinkingEffort) {
+    if (this.id !== 'opencode' && !this.supportsDynamicConfig && hasThinkingOption && selectedThinkingEffort) {
       extraArgs.push('--thinking-effort', selectedThinkingEffort);
     }
 
@@ -80,7 +80,7 @@ export class Driver {
     };
   }
 
-  toDiscovery(): DriverDiscovery {
+  toDiscovery(): ProviderDiscovery {
     return {
       id: this.data.id,
       label: this.data.name,
@@ -136,4 +136,3 @@ export class Driver {
     }
   }
 }
-

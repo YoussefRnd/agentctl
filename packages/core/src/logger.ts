@@ -7,7 +7,7 @@
  *   constructor(private logger: Logger = noopLogger) {}
  *
  * Usage from the server (Fastify's log is structurally compatible):
- *   new DriverRegistry(fastify.log)
+ *   new ProviderRegistry(fastify.log)
  */
 
 // Matches pino's two-overload log function shape:

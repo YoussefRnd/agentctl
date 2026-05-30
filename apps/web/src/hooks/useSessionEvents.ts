@@ -11,6 +11,8 @@ const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
 export function useSessionEvents(sessionId: string | null) {
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
+  const [streamingEventId, setStreamingEventId] = useState<number | null>(null);
+  const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 1. Fetch historical data
   const {
@@ -48,13 +50,33 @@ export function useSessionEvents(sessionId: string | null) {
 
     ws.onclose = () => {
       setIsConnected(false);
+      setStreamingEventId(null);
     };
 
     ws.onmessage = (event) => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       const msg = JSON.parse(event.data) as { type?: string; payload?: unknown };
       if (msg.type === 'acp_event') {
-        bufferRef.current.push(msg.payload as ACPEventRow);
+        const payload = msg.payload as ACPEventRow;
+        bufferRef.current.push(payload);
+
+        // Track streaming state
+        if (payload.type === 'text') {
+          setStreamingEventId(payload.id);
+          
+          // Reset inactivity timeout
+          if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
+          streamTimeoutRef.current = setTimeout(() => {
+            setStreamingEventId(null);
+          }, 2000); // 2s of silence = stream finished
+        } else {
+          // Any other event (tool call, status, etc) means text stream ended
+          setStreamingEventId(null);
+          if (streamTimeoutRef.current) {
+            clearTimeout(streamTimeoutRef.current);
+            streamTimeoutRef.current = null;
+          }
+        }
       }
     };
 
@@ -66,12 +88,19 @@ export function useSessionEvents(sessionId: string | null) {
           const newEvents = [...bufferRef.current];
           bufferRef.current = [];
 
-          // Deduplicate
-          const existingIds = new Set(old.map((e) => e.id));
-          const uniqueNew = newEvents.filter((e) => !existingIds.has(e.id));
-
-          if (uniqueNew.length === 0) return old;
-          return [...old, ...uniqueNew];
+          // Upsert: replace in-place for existing IDs (streaming updates), append for new ones
+          const idToIndex = new Map(old.map((e, i) => [e.id, i]));
+          const result = [...old];
+          for (const evt of newEvents) {
+            const idx = idToIndex.get(evt.id);
+            if (idx !== undefined) {
+              result[idx] = evt; // update in-place
+            } else {
+              idToIndex.set(evt.id, result.length);
+              result.push(evt); // append new
+            }
+          }
+          return result;
         });
       }
       rafId = requestAnimationFrame(flushBuffer);
@@ -80,6 +109,7 @@ export function useSessionEvents(sessionId: string | null) {
 
     return () => {
       cancelAnimationFrame(rafId);
+      if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
       ws.close();
     };
   }, [sessionId, queryClient]);
@@ -112,5 +142,5 @@ export function useSessionEvents(sessionId: string | null) {
     }
   }, [isConnected]);
 
-  return { events: history, isLoading, error, refetch, sendMessage, isConnected };
+  return { events: history, isLoading, error, refetch, sendMessage, isConnected, streamingEventId };
 }

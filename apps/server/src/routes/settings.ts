@@ -6,7 +6,7 @@ const patchSettingsSchema = z.object({
 	onboardingCompleted: z.boolean().optional(),
 	onboardingVersion: z.union([z.string(), z.number()]).optional(),
 	setupStep: z.string().nullable().optional(),
-	defaultDriverId: z.string().nullable().optional(),
+	defaultProviderId: z.string().nullable().optional(),
 });
 
 function normalizeNullableSetting(value: string | undefined): string | null {
@@ -17,19 +17,19 @@ function toSettingsResponse(settings: {
 	onboardingCompleted?: string;
 	onboardingVersion?: string;
 	setupStep?: string;
-	defaultDriverId?: string;
+	defaultProviderId?: string;
 }) {
 	return {
 		onboardingCompleted: settings.onboardingCompleted === 'true',
 		onboardingVersion: settings.onboardingVersion ?? '1.0.0',
 		setupStep: normalizeNullableSetting(settings.setupStep),
-		defaultDriverId: normalizeNullableSetting(settings.defaultDriverId),
+		defaultProviderId: normalizeNullableSetting(settings.defaultProviderId),
 	};
 }
 
 export const settingsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
 	fastify.withTypeProvider<ZodTypeProvider>().get('/settings', async () => {
-		const raw = await fastify.driverRegistry.getSettings();
+		const raw = await fastify.providerRegistry.getSettings();
 		return toSettingsResponse(raw);
 	});
 
@@ -43,18 +43,18 @@ export const settingsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 		async (request) => {
 			const body = request.body;
 			if (body.onboardingCompleted !== undefined) {
-				await fastify.driverRegistry.updateSetting('onboardingCompleted', String(body.onboardingCompleted));
+				await fastify.providerRegistry.updateSetting('onboardingCompleted', String(body.onboardingCompleted));
 			}
 			if (body.onboardingVersion !== undefined) {
-				await fastify.driverRegistry.updateSetting('onboardingVersion', String(body.onboardingVersion));
+				await fastify.providerRegistry.updateSetting('onboardingVersion', String(body.onboardingVersion));
 			}
 			if (body.setupStep !== undefined) {
-				await fastify.driverRegistry.updateSetting('setupStep', body.setupStep ?? '');
+				await fastify.providerRegistry.updateSetting('setupStep', body.setupStep ?? '');
 			}
-			if (body.defaultDriverId !== undefined) {
-				await fastify.driverRegistry.updateSetting('defaultDriverId', body.defaultDriverId ?? '');
+			if (body.defaultProviderId !== undefined) {
+				await fastify.providerRegistry.updateSetting('defaultProviderId', body.defaultProviderId ?? '');
 			}
-			const raw = await fastify.driverRegistry.getSettings();
+			const raw = await fastify.providerRegistry.getSettings();
 			return toSettingsResponse(raw);
 		},
 	);

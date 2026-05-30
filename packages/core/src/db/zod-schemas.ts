@@ -1,15 +1,15 @@
 import type { z } from 'zod';
 import { createSelectSchema } from 'drizzle-zod';
-import { projects, sessions, drivers, acpEvents, systemSettings } from './schema.js';
+import { projects, sessions, providers, acpEvents, systemSettings } from './schema.js';
 
 export const projectRowSchema = createSelectSchema(projects);
 export const sessionRowSchema = createSelectSchema(sessions);
-export const driverRowSchema = createSelectSchema(drivers);
+export const providerRowSchema = createSelectSchema(providers);
 export const acpEventRowSchema = createSelectSchema(acpEvents);
 export const systemSettingRowSchema = createSelectSchema(systemSettings);
 
 export type ProjectRow = z.infer<typeof projectRowSchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
-export type DriverRow = z.infer<typeof driverRowSchema>;
+export type ProviderRow = z.infer<typeof providerRowSchema>;
 export type ACPEventRow = z.infer<typeof acpEventRowSchema>;
 export type SystemSettingRow = z.infer<typeof systemSettingRowSchema>;

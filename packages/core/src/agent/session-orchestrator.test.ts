@@ -2,12 +2,12 @@ import { test, expect, describe } from 'vitest';
 import { SessionOrchestrator } from './session-orchestrator.js';
 import { type DbClient } from './acp-session.js';
 import type { WorktreeManager } from '../git/worktree-manager.js';
-import type { DriverRegistry } from './acp-driver-registry.js';
+import type { ProviderRegistry } from './acp-provider-registry.js';
 import type { SessionManager } from './session-manager.js';
-import { Driver } from './driver.js';
+import { Provider } from './provider.js';
 
 describe('SessionOrchestrator', () => {
-  test('create orchestrates project, driver, worktree and session', async () => {
+  test('create orchestrates project, provider, worktree and session', async () => {
     // Mock DB
     const mockDb = {
       query: {
@@ -43,13 +43,13 @@ describe('SessionOrchestrator', () => {
       },
     } as unknown as WorktreeManager;
 
-    // Mock DriverRegistry
-    const mockDriverRegistry = {
-      ensureDriverReady: async () => {
+    // Mock ProviderRegistry
+    const mockProviderRegistry = {
+      ensureProviderReady: async () => {
         await Promise.resolve();
-        return new Driver({
-          id: 'driver-1',
-          name: 'Driver 1',
+        return new Provider({
+          id: 'provider-1',
+          name: 'Provider 1',
           status: 'ready',
           command: 'agent-cmd',
           enabled: true,
@@ -67,7 +67,7 @@ describe('SessionOrchestrator', () => {
           updatedAt: new Date(),
         });
       },
-    } as unknown as DriverRegistry;
+    } as unknown as ProviderRegistry;
 
     // Mock SessionManager
     const mockSessionManager = {
@@ -77,13 +77,13 @@ describe('SessionOrchestrator', () => {
     const orchestrator = new SessionOrchestrator(
       mockDb,
       mockWorktreeManager,
-      mockDriverRegistry,
+      mockProviderRegistry,
       mockSessionManager,
     );
 
     const session = await orchestrator.create({
       projectId: 'proj-1',
-      driverId: 'driver-1',
+      providerId: 'provider-1',
       taskSlug: 'test-slug',
     });
 
@@ -106,13 +106,13 @@ describe('SessionOrchestrator', () => {
     const orchestrator = new SessionOrchestrator(
       mockDb,
       {} as WorktreeManager,
-      {} as DriverRegistry,
+      {} as ProviderRegistry,
       {} as SessionManager,
     );
 
     await expect(orchestrator.create({
       projectId: 'missing',
-      driverId: 'driver-1',
+      providerId: 'provider-1',
       taskSlug: 'slug'
     })).rejects.toThrow('Project not found');
   });

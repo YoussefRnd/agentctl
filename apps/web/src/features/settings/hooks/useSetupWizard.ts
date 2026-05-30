@@ -3,10 +3,10 @@ import { useSettings } from '../../../hooks/useSettings';
 export function useSetupWizard() {
 	const { settings, isLoading, updateSettings } = useSettings();
 
-	const markDone = async (defaultDriverId?: string | null) => {
+	const markDone = async (defaultProviderId?: string | null) => {
 		await updateSettings({
 			onboardingCompleted: true,
-			defaultDriverId: defaultDriverId ?? settings?.defaultDriverId ?? null,
+			defaultProviderId: defaultProviderId ?? settings?.defaultProviderId ?? null,
 		});
 	};
 

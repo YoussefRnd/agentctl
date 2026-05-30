@@ -22,8 +22,7 @@ export const ApprovalCard = memo(function ApprovalCard({
 
  return (
   <div
-   role="dialog"
-   aria-modal="true"
+   role="region"
    aria-labelledby="approval-title"
    aria-live="polite"
    tabIndex={-1}

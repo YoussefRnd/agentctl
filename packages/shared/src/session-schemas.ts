@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const driverSchema = z.enum(['claude-acp', 'opencode', 'codex-acp', 'gemini']);
+export const providerSchema = z.enum(['claude-acp', 'opencode', 'codex-acp', 'gemini']);
 
 export const thinkingEffortSchema = z.enum(['low', 'medium', 'high']);
 
@@ -11,7 +11,7 @@ export const projectSchema = z.object({
 
 export const createProjectSchema = z.object({
   path: z.string().min(1),
-  selectedDriver: driverSchema,
+  selectedProvider: providerSchema,
 });
 
 export const projectCreatedResponseSchema = z.object({
@@ -21,7 +21,7 @@ export const projectCreatedResponseSchema = z.object({
 
 export const createSessionSchema = z.object({
   projectId: z.uuid(),
-  agent: driverSchema,
+  agent: providerSchema,
 });
 
 export const sessionSchema = createSessionSchema.extend({
@@ -32,12 +32,12 @@ export const sessionSchema = createSessionSchema.extend({
 });
 
 export const sessionProviderSelectionSchema = z.object({
-  selectedDriver: driverSchema,
+  selectedProvider: providerSchema,
   selectedModel: z.string().min(1),
   selectedThinkingEffort: thinkingEffortSchema,
 });
 
-export const driverStatusSchema = z.enum(['ready', 'not_found', 'error', 'needs_auth', 'inactive']);
+export const providerStatusSchema = z.enum(['ready', 'not_found', 'error', 'needs_auth', 'inactive']);
 
 export const acpConfigOptionSchema = z.object({
   id: z.string(),
@@ -54,10 +54,10 @@ export const acpConfigOptionSchema = z.object({
   ),
 });
 
-export const driverCapabilitySchema = z.object({
+export const providerCapabilitySchema = z.object({
   id: z.string(),
   label: z.string(),
-  status: driverStatusSchema,
+  status: providerStatusSchema,
   command: z.string(),
   configOptions: z.array(acpConfigOptionSchema).optional(),
   version: z.string().optional(),
@@ -74,10 +74,10 @@ export const authMethodSchema = z.object({
   _meta: z.record(z.string(), z.any()).nullable().optional(),
 });
 
-export const driverDiscoverySchema = z.object({
+export const providerDiscoverySchema = z.object({
   id: z.string(),
   label: z.string(),
-  status: driverStatusSchema,
+  status: providerStatusSchema,
   command: z.string(),
   enabled: z.boolean().default(false),
   launchArgs: z.array(z.string()).optional().default([]),
@@ -92,7 +92,7 @@ export const driverDiscoverySchema = z.object({
   supportsDynamicConfig: z.boolean().optional().default(false),
 });
 
-export const DRIVER_ENV_KEYS: Record<string, string[] | undefined> = {
+export const PROVIDER_ENV_KEYS: Record<string, string[] | undefined> = {
   'claude-acp': ['ANTHROPIC_API_KEY'],
   'gemini': ['GEMINI_API_KEY'],
   'codex-acp': ['OPENAI_API_KEY'],
@@ -110,14 +110,14 @@ export const sessionRowSchema = sessionSchema.extend({
   closedAt: z.coerce.date().nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
-  selectedDriver: driverSchema,
+  selectedProvider: providerSchema,
   selectedModel: z.string().min(1),
   selectedThinkingEffort: thinkingEffortSchema,
 });
 
 export const sessionWithCapabilitiesSchema = z.object({
   session: sessionRowSchema,
-  capabilities: z.array(driverCapabilitySchema),
+  capabilities: z.array(providerCapabilitySchema),
 });
 
 export const sessionStatusSchema = z.enum([
@@ -130,15 +130,15 @@ export const sessionStatusSchema = z.enum([
 ]);
 
 export type Project = z.infer<typeof projectSchema>;
-export type DriverName = z.infer<typeof driverSchema>;
+export type ProviderName = z.infer<typeof providerSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
 export type SessionProviderSelection = z.infer<typeof sessionProviderSelectionSchema>;
-export type DriverCapability = z.infer<typeof driverCapabilitySchema>;
+export type ProviderCapability = z.infer<typeof providerCapabilitySchema>;
 export type ThinkingEffort = z.infer<typeof thinkingEffortSchema>;
 export type SessionWithCapabilities = z.infer<typeof sessionWithCapabilitiesSchema>;
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
-export type DriverStatus = z.infer<typeof driverStatusSchema>;
+export type ProviderStatus = z.infer<typeof providerStatusSchema>;
 export type ACPConfigOption = z.infer<typeof acpConfigOptionSchema>;
-export type DriverDiscovery = z.infer<typeof driverDiscoverySchema>;
+export type ProviderDiscovery = z.infer<typeof providerDiscoverySchema>;
 export type AuthMethod = z.infer<typeof authMethodSchema>;

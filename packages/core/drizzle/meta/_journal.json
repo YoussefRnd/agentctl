@@ -57,6 +57,13 @@
       "when": 1779382676083,
       "tag": "0007_large_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1779848307596,
+      "tag": "0008_strong_fantastic_four",
+      "breakpoints": true
     }
   ]
 }

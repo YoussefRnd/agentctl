@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '@agentctl/api-client';
 import type {
-	DriverDiscovery,
-	DriverName,
+	ProviderDiscovery,
+	ProviderName,
 	SessionProviderSelection,
 	SessionWithCapabilities,
 	ThinkingEffort,
@@ -11,12 +11,12 @@ import type {
 
 type SessionResponse = SessionWithCapabilities;
 
-export function useDrivers(sessionId: string | null) {
+export function useProviders(sessionId: string | null) {
 	const queryClient = useQueryClient();
 
-	const { data: drivers = [], isLoading: isLoadingDrivers } = useQuery({
-		queryKey: ['drivers'],
-		queryFn: () => apiClient.fetch<DriverDiscovery[]>('/api/drivers'),
+	const { data: providers = [], isLoading: isLoadingProviders } = useQuery({
+		queryKey: ['providers'],
+		queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/providers'),
 	});
 
 	const providerMutation = useMutation({
@@ -38,11 +38,11 @@ export function useDrivers(sessionId: string | null) {
 	});
 
 	const switchProvider = (
-		driverId: string,
+		providerId: string,
 		modelId?: string,
 		sessionData?: SessionResponse | null,
 	) => {
-		const capability = sessionData?.capabilities.find((item) => item.id === driverId);
+		const capability = sessionData?.capabilities.find((item) => item.id === providerId);
 
 		// If a model is explicitly passed, use it. Otherwise, fallback to the current/default.
 		let selectedModel = modelId;
@@ -61,7 +61,7 @@ export function useDrivers(sessionId: string | null) {
 		);
 
 		providerMutation.mutate({
-			selectedDriver: driverId as DriverName,
+			selectedProvider: providerId as ProviderName,
 			selectedModel: selectedModel,
 			selectedThinkingEffort: (thinkingOption?.currentValue ??
 				thinkingOption?.options[0]?.value ??
@@ -70,14 +70,14 @@ export function useDrivers(sessionId: string | null) {
 	};
 
 	const loginMutation = useMutation({
-		mutationFn: async ({ driverId, methodId }: { driverId: string; methodId: string }) => {
-			return apiClient.fetch(`/api/drivers/${driverId}/login`, {
+		mutationFn: async ({ providerId, methodId }: { providerId: string; methodId: string }) => {
+			return apiClient.fetch(`/api/providers/${providerId}/login`, {
 				method: 'POST',
 				body: JSON.stringify({ methodId }),
 			});
 		},
 		onSuccess: () => {
-			void queryClient.invalidateQueries({ queryKey: ['drivers'] });
+			void queryClient.invalidateQueries({ queryKey: ['providers'] });
 			toast.success('Login initiated. Please check your browser or terminal.');
 		},
 		onError: (err) => {
@@ -86,13 +86,13 @@ export function useDrivers(sessionId: string | null) {
 	});
 
 	const activateMutation = useMutation({
-		mutationFn: async (driverId: string) => {
-			return apiClient.fetch(`/api/drivers/${driverId}/activate`, {
+		mutationFn: async (providerId: string) => {
+			return apiClient.fetch(`/api/providers/${providerId}/activate`, {
 				method: 'POST',
 			});
 		},
 		onSuccess: () => {
-			void queryClient.invalidateQueries({ queryKey: ['drivers'] });
+			void queryClient.invalidateQueries({ queryKey: ['providers'] });
 			toast.success('Agent activated successfully!');
 		},
 		onError: (err) => {
@@ -102,12 +102,12 @@ export function useDrivers(sessionId: string | null) {
 
 	const syncMutation = useMutation({
 		mutationFn: async () => {
-			return apiClient.fetch<DriverDiscovery[]>('/api/drivers/sync', {
+			return apiClient.fetch<ProviderDiscovery[]>('/api/providers/sync', {
 				method: 'POST',
 			});
 		},
 		onSuccess: (data) => {
-			queryClient.setQueryData(['drivers'], data);
+			queryClient.setQueryData(['providers'], data);
 			toast.success('Agents synced successfully!');
 		},
 		onError: (err) => {
@@ -116,15 +116,15 @@ export function useDrivers(sessionId: string | null) {
 	});
 
 	const toggleMutation = useMutation({
-		mutationFn: async ({ driverId, enabled }: { driverId: string; enabled: boolean }) => {
-			return apiClient.fetch<DriverDiscovery>(`/api/drivers/${driverId}/toggle`, {
+		mutationFn: async ({ providerId, enabled }: { providerId: string; enabled: boolean }) => {
+			return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/toggle`, {
 				method: 'POST',
 				body: JSON.stringify({ enabled }),
 			});
 		},
 		onSuccess: () => {
-			void queryClient.invalidateQueries({ queryKey: ['drivers'] });
-			toast.success('Driver selection updated successfully.');
+			void queryClient.invalidateQueries({ queryKey: ['providers'] });
+			toast.success('Provider selection updated successfully.');
 		},
 		onError: (err) => {
 			toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -132,14 +132,14 @@ export function useDrivers(sessionId: string | null) {
 	});
 
 	const refreshMutation = useMutation({
-		mutationFn: async (driverId: string) => {
-			return apiClient.fetch<DriverDiscovery>(`/api/drivers/${driverId}/refresh`, {
+		mutationFn: async (providerId: string) => {
+			return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/refresh`, {
 				method: 'POST',
 			});
 		},
-		onSuccess: (updatedDriver) => {
-			queryClient.setQueryData<DriverDiscovery[]>(['drivers'], (current = []) =>
-				current.map((driver) => (driver.id === updatedDriver.id ? updatedDriver : driver)),
+		onSuccess: (updatedProvider) => {
+			queryClient.setQueryData<ProviderDiscovery[]>(['providers'], (current = []) =>
+				current.map((p) => (p.id === updatedProvider.id ? updatedProvider : p)),
 			);
 		},
 		onError: (err) => {
@@ -147,19 +147,19 @@ export function useDrivers(sessionId: string | null) {
 		},
 	});
 
-	const updateDriverConfigMutation = useMutation({
-		mutationFn: async ({ driverId, customEnv }: { driverId: string; customEnv: Record<string, string> }) => {
-			return apiClient.fetch<DriverDiscovery>(`/api/drivers/${driverId}/config`, {
+	const updateProviderConfigMutation = useMutation({
+		mutationFn: async ({ providerId, customEnv }: { providerId: string; customEnv: Record<string, string> }) => {
+			return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/config`, {
 				method: 'POST',
 				body: JSON.stringify({ customEnv }),
 			});
 		},
-		onSuccess: (updatedDriver) => {
-			queryClient.setQueryData<DriverDiscovery[]>(['drivers'], (current = []) =>
-				current.map((driver) => (driver.id === updatedDriver.id ? updatedDriver : driver)),
+		onSuccess: (updatedProvider) => {
+			queryClient.setQueryData<ProviderDiscovery[]>(['providers'], (current = []) =>
+				current.map((p) => (p.id === updatedProvider.id ? updatedProvider : p)),
 			);
-			void queryClient.invalidateQueries({ queryKey: ['drivers'] });
-			toast.success('Driver configuration updated.');
+			void queryClient.invalidateQueries({ queryKey: ['providers'] });
+			toast.success('Provider configuration updated.');
 		},
 		onError: (err) => {
 			toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -167,21 +167,21 @@ export function useDrivers(sessionId: string | null) {
 	});
 
 	return {
-		drivers,
-		isLoadingDrivers,
+		providers,
+		isLoadingProviders,
 		switchProvider,
 		login: loginMutation.mutate,
 		isLoggingIn: loginMutation.isPending,
 		isSwitching: providerMutation.isPending,
 		activate: activateMutation.mutate,
 		isActivating: activateMutation.isPending,
-		syncDrivers: syncMutation.mutate,
+		syncProviders: syncMutation.mutate,
 		isSyncing: syncMutation.isPending,
-		toggleDriver: toggleMutation.mutate,
+		toggleProvider: toggleMutation.mutate,
 		isToggling: toggleMutation.isPending,
-		refreshDriver: refreshMutation.mutate,
+		refreshProvider: refreshMutation.mutate,
 		isRefreshing: refreshMutation.isPending,
-		updateDriverConfig: updateDriverConfigMutation.mutate,
-		isUpdatingConfig: updateDriverConfigMutation.isPending,
+		updateProviderConfig: updateProviderConfigMutation.mutate,
+		isUpdatingConfig: updateProviderConfigMutation.isPending,
 	};
 }

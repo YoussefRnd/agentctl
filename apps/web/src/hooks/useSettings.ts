@@ -6,7 +6,7 @@ export interface SystemSettings {
 	onboardingCompleted: boolean;
 	onboardingVersion: string | number;
 	setupStep: string | null;
-	defaultDriverId: string | null;
+	defaultProviderId: string | null;
 }
 
 export function useSettings() {

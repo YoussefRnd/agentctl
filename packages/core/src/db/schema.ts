@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import type { SessionStatus, ACPEvent, DriverStatus } from '@agentctl/shared';
+import type { SessionStatus, ACPEvent, ProviderStatus } from '@agentctl/shared';
 
 // Timestamps with DB-level defaults and auto-update on updatedAt
 const timestamps = {
@@ -44,7 +44,7 @@ export const sessions = sqliteTable('sessions', {
   baseCommit: text('base_commit').notNull(),
   agent: text('agent').notNull(),
   agentSessionId: text('agent_session_id'),
-  selectedDriver: text('selected_driver').notNull().default('claude-acp'),
+  selectedProvider: text('selected_provider').notNull().default('claude-acp'),
   selectedModel: text('selected_model').notNull().default('sonnet-4'),
   selectedThinkingEffort: text('selected_thinking_effort').notNull().default('medium'),
   status: text('status').$type<SessionStatus>().notNull().default('idle'),
@@ -56,10 +56,10 @@ export const sessions = sqliteTable('sessions', {
   ...timestamps,
 });
 
-export const drivers = sqliteTable('drivers', {
+export const providers = sqliteTable('providers', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  status: text('status').$type<DriverStatus>().notNull().default('not_found'),
+  status: text('status').$type<ProviderStatus>().notNull().default('not_found'),
   command: text('command').notNull(),
   launchArgs: text('launch_args').notNull().default('[]'), // JSON string
   launchEnv: text('launch_env').notNull().default('{}'), // JSON string

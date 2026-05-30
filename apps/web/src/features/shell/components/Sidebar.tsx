@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient, createProjectSession, type SidebarProject } from '@agentctl/api-client';
 import { useState, useMemo, useEffect, useRef, type MouseEvent } from 'react';
-import type { DriverDiscovery, SessionStatus } from '@agentctl/shared';
+import type { ProviderDiscovery, SessionStatus } from '@agentctl/shared';
 
 export function Sidebar() {
  const { sessionId: activeSessionId } = useParams();
@@ -41,13 +41,13 @@ export function Sidebar() {
   queryFn: () => apiClient.fetch<SidebarProject[]>('/api/projects'),
  });
 
- const { data: drivers = [] } = useQuery({
-  queryKey: ['drivers'],
-  queryFn: () => apiClient.fetch<DriverDiscovery[]>('/api/drivers'),
+ const { data: providers = [] } = useQuery({
+  queryKey: ['providers'],
+  queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/providers'),
  });
 
  const createSessionMutation = useMutation({
-  mutationFn: (projectId: string) => createProjectSession(projectId, drivers),
+  mutationFn: (projectId: string) => createProjectSession(projectId, providers),
   onSuccess: (session) => {
    void queryClient.invalidateQueries({ queryKey: ['projects'] });
    void navigate(`/sessions/${session.id}`);

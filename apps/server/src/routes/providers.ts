@@ -2,13 +2,13 @@ import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { z } from 'zod';
 
-export const driversRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
-	fastify.withTypeProvider<ZodTypeProvider>().get('/drivers', async () => {
-		return await fastify.driverRegistry.discover();
+export const providersRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
+	fastify.withTypeProvider<ZodTypeProvider>().get('/providers', async () => {
+		return await fastify.providerRegistry.discover();
 	});
 
 	fastify.withTypeProvider<ZodTypeProvider>().post(
-		'/drivers/:id/login',
+		'/providers/:id/login',
 		{
 			schema: {
 				params: z.object({ id: z.string() }),
@@ -21,12 +21,12 @@ export const driversRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =>
 		async (request) => {
 			const { id } = request.params;
 			const { methodId, params } = request.body;
-			await fastify.driverRegistry.login(id, methodId, params);
+			await fastify.providerRegistry.login(id, methodId, params);
 			return { success: true };
 		},
 	);
 	fastify.withTypeProvider<ZodTypeProvider>().post(
-		'/drivers/:id/activate',
+		'/providers/:id/activate',
 		{
 			schema: {
 				params: z.object({ id: z.string() }),
@@ -34,12 +34,12 @@ export const driversRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =>
 		},
 		async (request) => {
 			const { id } = request.params;
-			return await fastify.driverRegistry.activate(id);
+			return await fastify.providerRegistry.activate(id);
 		},
 	);
 
 	fastify.withTypeProvider<ZodTypeProvider>().post(
-		'/drivers/:id/refresh',
+		'/providers/:id/refresh',
 		{
 			schema: {
 				params: z.object({ id: z.string() }),
@@ -47,12 +47,12 @@ export const driversRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =>
 		},
 		async (request) => {
 			const { id } = request.params;
-			return await fastify.driverRegistry.refreshDriver(id);
+			return await fastify.providerRegistry.refreshProvider(id);
 		},
 	);
 
 	fastify.withTypeProvider<ZodTypeProvider>().post(
-		'/drivers/:id/toggle',
+		'/providers/:id/toggle',
 		{
 			schema: {
 				params: z.object({ id: z.string() }),
@@ -62,12 +62,12 @@ export const driversRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =>
 		async (request) => {
 			const { id } = request.params;
 			const { enabled } = request.body;
-			return await fastify.driverRegistry.setDriverEnabled(id, enabled);
+			return await fastify.providerRegistry.setProviderEnabled(id, enabled);
 		},
 	);
 
 	fastify.withTypeProvider<ZodTypeProvider>().post(
-		'/drivers/:id/config',
+		'/providers/:id/config',
 		{
 			schema: {
 				params: z.object({ id: z.string() }),
@@ -79,13 +79,13 @@ export const driversRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =>
 		async (request) => {
 			const { id } = request.params;
 			const { customEnv } = request.body;
-			return await fastify.driverRegistry.setDriverConfig(id, customEnv);
+			return await fastify.providerRegistry.setProviderConfig(id, customEnv);
 		},
 	);
 
-	fastify.withTypeProvider<ZodTypeProvider>().post('/drivers/sync', async () => {
-		await fastify.driverRegistry.sync();
-		return await fastify.driverRegistry.discover();
+	fastify.withTypeProvider<ZodTypeProvider>().post('/providers/sync', async () => {
+		await fastify.providerRegistry.sync();
+		return await fastify.providerRegistry.discover();
 	});
 	done();
 };

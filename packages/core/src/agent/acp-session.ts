@@ -5,7 +5,7 @@ import type {
   RequestPermissionResponse,
   PromptRequest,
 } from '@agentclientprotocol/sdk';
-import { sessions, drivers } from '../db/schema.js';
+import { sessions, providers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { createDatabase } from '../db/index.js';
 import type { ChildProcess } from 'node:child_process';
@@ -156,13 +156,13 @@ export class ACPSession {
           .where(eq(sessions.id, this.sessionId))).at(0);
 
         if (session) {
-          const driver = (await this.db
+          const provider = (await this.db
             .select()
-            .from(drivers)
-            .where(eq(drivers.id, session.selectedDriver))).at(0);
+            .from(providers)
+            .where(eq(providers.id, session.selectedProvider))).at(0);
 
-          if (driver) {
-            if (driver.supportsDynamicModel && session.selectedModel && session.selectedModel !== 'default') {
+          if (provider) {
+            if (provider.supportsDynamicModel && session.selectedModel && session.selectedModel !== 'default') {
               this.logger.info(`Setting dynamic model: ${session.selectedModel} for session ${this.sessionId}`);
               if (typeof dynConn.unstable_setSessionModel === 'function') {
                 await dynConn.unstable_setSessionModel({
@@ -170,11 +170,11 @@ export class ACPSession {
                   modelId: session.selectedModel,
                 });
               } else {
-                this.logger.warn(`Driver advertised supportsDynamicModel but connection.unstable_setSessionModel is not a function`);
+                this.logger.warn(`Provider advertised supportsDynamicModel but connection.unstable_setSessionModel is not a function`);
               }
             }
 
-            if (driver.supportsDynamicConfig && session.selectedThinkingEffort) {
+            if (provider.supportsDynamicConfig && session.selectedThinkingEffort) {
               this.logger.info(`Setting dynamic config (thinking_effort): ${session.selectedThinkingEffort} for session ${this.sessionId}`);
               if (typeof dynConn.setSessionConfigOption === 'function') {
                 await dynConn.setSessionConfigOption({
@@ -183,7 +183,7 @@ export class ACPSession {
                   value: session.selectedThinkingEffort,
                 });
               } else {
-                this.logger.warn(`Driver advertised supportsDynamicConfig but connection.setSessionConfigOption is not a function`);
+                this.logger.warn(`Provider advertised supportsDynamicConfig but connection.setSessionConfigOption is not a function`);
               }
             }
           }
@@ -201,8 +201,10 @@ export class ACPSession {
     try {
       this.currentMessage = '';
       this.currentThought = '';
+      this.currentUserMessage = '';
       this.messageEventId = null;
       this.thoughtEventId = null;
+      this.userMessageEventId = null;
 
       await this.db
         .update(sessions)
@@ -213,6 +215,9 @@ export class ACPSession {
         sessionId: this.acpSessionId ?? this.sessionId,
         prompt: [{ type: 'text', text }],
       };
+
+      // Persist user message immediately so it shows up in history
+      await this.eventStore.append(this.sessionId, 'text', { content: text, role: 'user' });
 
       await (this.connection.prompt(request) as Promise<unknown>);
     } catch (error: unknown) {
@@ -291,8 +296,11 @@ export class ACPSession {
 
   private currentMessage = '';
   private currentThought = '';
+  private currentUserMessage = '';
   private messageEventId: number | null = null;
   private thoughtEventId: number | null = null;
+  private userMessageEventId: number | null = null;
+  private toolCallEventId: number | null = null;
 
   private async onSessionUpdate(notification: SessionNotification): Promise<void> {
     try {
@@ -316,6 +324,27 @@ export class ACPSession {
       const eventType = typeMap[typeKey];
       if (eventType === undefined) return;
 
+      // Handle tool calls specifically to extract the toolCall object
+      if (typeKey === 'tool_call' || typeKey === 'tool_call_update') {
+        const chunk = update as { toolCall?: { name: string; arguments?: Record<string, unknown>; toolCallId?: string } };
+        if (chunk.toolCall) {
+          if (typeKey === 'tool_call') {
+            // Reset buffers on new tool calls
+            this.currentMessage = '';
+            this.currentThought = '';
+            this.currentUserMessage = '';
+            this.messageEventId = null;
+            this.thoughtEventId = null;
+            this.userMessageEventId = null;
+
+            this.toolCallEventId = await this.eventStore.append(this.sessionId, 'tool_call', chunk.toolCall);
+          } else if (this.toolCallEventId) {
+            await this.eventStore.update(this.toolCallEventId, chunk.toolCall);
+          }
+        }
+        return;
+      }
+
       // Handle message chunks with buffering
       if (typeKey === 'agent_message_chunk') {
         const chunk = update as { content?: { type: string; text?: string } };
@@ -323,9 +352,9 @@ export class ACPSession {
         if (text !== undefined) {
           this.currentMessage += text;
           if (this.messageEventId) {
-            await this.eventStore.update(this.messageEventId, { content: this.currentMessage });
+            await this.eventStore.update(this.messageEventId, { content: this.currentMessage, role: 'provider' });
           } else {
-            this.messageEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentMessage });
+            this.messageEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentMessage, role: 'provider' });
           }
         }
         return;
@@ -338,34 +367,40 @@ export class ACPSession {
         if (thought !== undefined) {
           this.currentThought += thought;
           if (this.thoughtEventId) {
-            await this.eventStore.update(this.thoughtEventId, { content: this.currentThought });
+            await this.eventStore.update(this.thoughtEventId, { content: this.currentThought, role: 'thought' });
           } else {
-            this.thoughtEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentThought });
+            this.thoughtEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentThought, role: 'thought' });
           }
         }
         return;
       }
 
-      // Reset buffers on new tool calls or other major events that imply message end
-      if (typeKey === 'tool_call' || typeKey === 'plan') {
+      // Reset buffers on major events that imply message end
+      if (typeKey === 'plan') {
         this.currentMessage = '';
         this.currentThought = '';
+        this.currentUserMessage = '';
         this.messageEventId = null;
         this.thoughtEventId = null;
+        this.userMessageEventId = null;
       }
 
-      let uiData: unknown = update;
-
-      // Transform content chunks (user message only, others handled above)
-      // into the format expected by the UI ({ content: string })
+      // Handle user message chunks with buffering
       if (typeKey === 'user_message_chunk') {
         const chunk = update as { content?: { type: string; text?: string } };
-        const content = chunk.content;
-        if (content && typeof content === 'object' && 'text' in content && content.text !== undefined) {
-          uiData = { content: content.text };
+        const text = chunk.content?.text;
+        if (text !== undefined) {
+          this.currentUserMessage += text;
+          if (this.userMessageEventId) {
+            await this.eventStore.update(this.userMessageEventId, { content: this.currentUserMessage, role: 'user' });
+          } else {
+            this.userMessageEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentUserMessage, role: 'user' });
+          }
         }
+        return;
       }
 
+      const uiData = update;
       await this.eventStore.append(this.sessionId, eventType, uiData);
     } catch (error) {
       await this.handleError(error).catch((e: unknown) => {

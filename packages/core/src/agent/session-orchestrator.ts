@@ -2,12 +2,13 @@ import { eq } from 'drizzle-orm';
 import { sessions, projects } from '../db/schema.js';
 import type { DbClient, ACPSession } from './acp-session.js';
 import type { WorktreeManager } from '../git/worktree-manager.js';
-import type { DriverRegistry } from './acp-driver-registry.js';
+import type { ProviderRegistry } from './acp-provider-registry.js';
 import type { SessionManager } from './session-manager.js';
+import type { ProviderName } from '@agentctl/shared';
 
 export interface CreateSessionParams {
   projectId: string;
-  driverId: string;
+  providerId: string;
   taskSlug: string;
 }
 
@@ -15,12 +16,12 @@ export class SessionOrchestrator {
   constructor(
     private db: DbClient,
     private worktreeManager: WorktreeManager,
-    private driverRegistry: DriverRegistry,
+    private providerRegistry: ProviderRegistry,
     private sessionManager: SessionManager,
   ) {}
 
   async create(params: CreateSessionParams): Promise<ACPSession> {
-    const { projectId, driverId, taskSlug } = params;
+    const { projectId, providerId, taskSlug } = params;
 
     const project = await this.db.query.projects.findFirst({
       where: eq(projects.id, projectId),
@@ -30,9 +31,9 @@ export class SessionOrchestrator {
       throw new Error(`Project not found: ${projectId}`);
     }
 
-    const driver = await this.driverRegistry.ensureDriverReady(driverId, { force: false });
-    if (driver.status !== 'ready' && driver.status !== 'needs_auth') {
-      throw new Error(`Selected agent is not ready: ${driverId}`);
+    const provider = await this.providerRegistry.ensureProviderReady(providerId, { force: false });
+    if (provider.status !== 'ready' && provider.status !== 'needs_auth') {
+      throw new Error(`Selected agent is not ready: ${providerId}`);
     }
 
     const sessionId = crypto.randomUUID();
@@ -56,21 +57,23 @@ export class SessionOrchestrator {
       baseCommit = worktree.baseCommit;
     }
 
-    const selection = driver.resolveDefaultSelection();
+    const selection = provider.resolveDefaultSelection();
 
     await this.db.insert(sessions).values({
       id: sessionId,
       projectId,
       branch,
       worktreePath,
-      agent: driverId,
+      agent: providerId,
       status: 'idle',
       taskSlug,
       baseCommit,
-      ...selection,
+      selectedProvider: providerId as ProviderName,
+      selectedModel: selection.selectedModel,
+      selectedThinkingEffort: selection.selectedThinkingEffort,
     });
 
-    const launch = driver.getLaunchConfig(
+    const launch = provider.getLaunchConfig(
       selection.selectedModel,
       selection.selectedThinkingEffort,
     );

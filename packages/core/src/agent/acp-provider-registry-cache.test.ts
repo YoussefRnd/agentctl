@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import type { RegistryAgent } from '@agentctl/shared';
 import { beforeEach, test, vi } from 'vitest';
-import { DriverRegistry } from './acp-driver-registry.js';
+import { ProviderRegistry } from './acp-provider-registry.js';
 import * as probeModule from './acp-probe.js';
 import { noopLogger } from '../logger.js';
-import { drivers, registrySnapshots, systemSettings } from '../db/schema.js';
+import { providers, registrySnapshots, systemSettings } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
 
 
@@ -19,7 +19,7 @@ beforeEach(() => {
 	vi.restoreAllMocks();
 });
 
-test('DriverRegistry sync handles 304 Not Modified', async () => {
+test('ProviderRegistry sync handles 304 Not Modified', async () => {
 	const mockAgents: RegistryAgent[] = [{
 		id: 'claude-acp',
 		name: 'Claude',
@@ -58,7 +58,7 @@ test('DriverRegistry sync handles 304 Not Modified', async () => {
 		return Promise.resolve(new Response(null, { status: 304 }));
 	});
 
-	const registry = new DriverRegistry(db, noopLogger);
+	const registry = new ProviderRegistry(db, noopLogger);
 	const registryInternal = registry as unknown as RegistryInternal;
 	await registryInternal.fetchRegistryWithCache();
 
@@ -66,7 +66,7 @@ test('DriverRegistry sync handles 304 Not Modified', async () => {
 	assert.equal(headers['If-None-Match'], 'W/"123"');
 });
 
-test('DriverRegistry sync falls back to cache on fetch error', async () => {
+test('ProviderRegistry sync falls back to cache on fetch error', async () => {
 	const mockAgents: RegistryAgent[] = [{
 		id: 'claude-acp',
 		name: 'Claude',
@@ -93,7 +93,7 @@ test('DriverRegistry sync falls back to cache on fetch error', async () => {
 	const fetchSpy = vi.spyOn(global, 'fetch');
 	fetchSpy.mockRejectedValue(new Error('Network error'));
 
-	const registry = new DriverRegistry(db, noopLogger);
+	const registry = new ProviderRegistry(db, noopLogger);
 	const registryInternal = registry as unknown as RegistryInternal;
 	const result = await registryInternal.fetchRegistryWithCache();
 
@@ -101,7 +101,7 @@ test('DriverRegistry sync falls back to cache on fetch error', async () => {
 	assert.equal(result.source, 'cache');
 });
 
-test('DriverRegistry discover does not recurse forever when sync yields no drivers', async () => {
+test('ProviderRegistry discover does not recurse forever when sync yields no providers', async () => {
 	const selectFrom = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 	const sync = vi.fn().mockResolvedValue(undefined);
 
@@ -111,17 +111,17 @@ test('DriverRegistry discover does not recurse forever when sync yields no drive
 		}),
 	} as unknown as DbClient;
 
-	const registry = new DriverRegistry(db, noopLogger);
+	const registry = new ProviderRegistry(db, noopLogger);
 	registry.sync = sync;
 
-	const drivers = await registry.discover();
+	const providers = await registry.discover();
 
-	assert.deepEqual(drivers, []);
+	assert.deepEqual(providers, []);
 	assert.equal(sync.mock.calls.length, 1);
 	assert.equal(selectFrom.mock.calls.length, 2);
 });
 
-test('DriverRegistry sync prunes older registry snapshots after a refresh', async () => {
+test('ProviderRegistry sync prunes older registry snapshots after a refresh', async () => {
 	const mockAgents: RegistryAgent[] = [{
 		id: 'claude-acp',
 		name: 'Claude',
@@ -168,7 +168,7 @@ test('DriverRegistry sync prunes older registry snapshots after a refresh', asyn
 	const fetchSpy = vi.spyOn(global, 'fetch');
 	fetchSpy.mockResolvedValue(new Response(JSON.stringify({ agents: mockAgents }), { status: 200 }));
 
-	const registry = new DriverRegistry(db, noopLogger);
+	const registry = new ProviderRegistry(db, noopLogger);
 	const registryInternal = registry as unknown as RegistryInternal;
 	const result = await registryInternal.fetchRegistryWithCache();
 
@@ -177,7 +177,7 @@ test('DriverRegistry sync prunes older registry snapshots after a refresh', asyn
 	assert.equal(deleteWhere.mock.calls.length, 1);
 });
 
-test('DriverRegistry sync does not hydrate any providers on startup', async () => {
+test('ProviderRegistry sync does not hydrate any providers on startup', async () => {
 	const registryAgents: RegistryAgent[] = [
 		{
 			id: 'claude-acp',
@@ -223,7 +223,7 @@ test('DriverRegistry sync does not hydrate any providers on startup', async () =
 		onConflictDoUpdate: vi.fn().mockResolvedValue({}),
 	});
 
-	let driverSelectCount = 0;
+	let providerSelectCount = 0;
 	const selectFrom = vi.fn((table: unknown) => {
 		if (table === registrySnapshots) {
 			return {
@@ -237,9 +237,9 @@ test('DriverRegistry sync does not hydrate any providers on startup', async () =
 			return Promise.resolve([]);
 		}
 
-		if (table === drivers) {
-			driverSelectCount += 1;
-			if (driverSelectCount === 1) {
+		if (table === providers) {
+			providerSelectCount += 1;
+			if (providerSelectCount === 1) {
 				return [];
 			}
 
@@ -284,13 +284,13 @@ test('DriverRegistry sync does not hydrate any providers on startup', async () =
 		supportsDynamicConfig: false,
 	});
 
-	const registry = new DriverRegistry(db, noopLogger);
+	const registry = new ProviderRegistry(db, noopLogger);
 	await registry.sync();
 
 	assert.equal(probeSpy.mock.calls.length, 0);
 });
 
-test('DriverRegistry sync hydrates the saved default driver on startup', async () => {
+test('ProviderRegistry sync hydrates the saved default provider on startup', async () => {
 	const registryAgents: RegistryAgent[] = [
 		{
 			id: 'claude-acp',
@@ -332,11 +332,11 @@ test('DriverRegistry sync hydrates the saved default driver on startup', async (
 		icon: null,
 	};
 
-	const systemSettingsRows = [{ key: 'defaultDriverId', value: 'claude-acp' }];
+	const systemSettingsRows = [{ key: 'defaultProviderId', value: 'claude-acp' }];
 	const insertValues = vi.fn().mockReturnValue({
 		onConflictDoUpdate: vi.fn().mockResolvedValue({}),
 	});
-	let driverSelectCount = 0;
+	let providerSelectCount = 0;
 	const selectFrom = vi.fn((table: unknown) => {
 		if (table === registrySnapshots) {
 			return {
@@ -350,9 +350,9 @@ test('DriverRegistry sync hydrates the saved default driver on startup', async (
 			return Promise.resolve(systemSettingsRows);
 		}
 
-		if (table === drivers) {
-			driverSelectCount += 1;
-			if (driverSelectCount === 1) {
+		if (table === providers) {
+			providerSelectCount += 1;
+			if (providerSelectCount === 1) {
 				return [];
 			}
 
@@ -397,14 +397,14 @@ test('DriverRegistry sync hydrates the saved default driver on startup', async (
 		supportsDynamicConfig: false,
 	});
 
-	const registry = new DriverRegistry(db, noopLogger);
+	const registry = new ProviderRegistry(db, noopLogger);
 	await registry.sync();
 
 	assert.equal(probeSpy.mock.calls.length, 1);
 	assert.equal(probeSpy.mock.calls[0]?.[0].id, 'claude-acp');
 });
 
-test('DriverRegistry sync prunes stale local gemini rows and clears stale defaults', async () => {
+test('ProviderRegistry sync prunes stale local gemini rows and clears stale defaults', async () => {
 	const registryAgents: RegistryAgent[] = [
 		{
 			id: 'gemini',
@@ -454,9 +454,9 @@ test('DriverRegistry sync prunes stale local gemini rows and clears stale defaul
 		},
 	];
 
-	let driverDeleteCount = 0;
+	let providerDeleteCount = 0;
 	let snapshotDeleteCount = 0;
-	let driverUpsertCount = 0;
+	let providerUpsertCount = 0;
 	let settingsUpsertCount = 0;
 	const selectFrom = vi.fn((table: unknown) => {
 		if (table === registrySnapshots) {
@@ -468,10 +468,10 @@ test('DriverRegistry sync prunes stale local gemini rows and clears stale defaul
 		}
 
 		if (table === systemSettings) {
-			return Promise.resolve([{ key: 'defaultDriverId', value: 'gemini-cli' }]);
+			return Promise.resolve([{ key: 'defaultProviderId', value: 'gemini-cli' }]);
 		}
 
-		if (table === drivers) {
+		if (table === providers) {
 			return Promise.resolve(rows);
 		}
 
@@ -483,11 +483,11 @@ test('DriverRegistry sync prunes stale local gemini rows and clears stale defaul
 			from: selectFrom,
 		}),
 		insert: vi.fn().mockImplementation((table: unknown) => {
-			if (table === drivers) {
+			if (table === providers) {
 				return {
 					values: () => ({
 						onConflictDoUpdate: () => {
-							driverUpsertCount += 1;
+							providerUpsertCount += 1;
 							return Promise.resolve({});
 						},
 					}),
@@ -504,10 +504,10 @@ test('DriverRegistry sync prunes stale local gemini rows and clears stale defaul
 			};
 		}),
 		delete: vi.fn().mockImplementation((table: unknown) => {
-			if (table === drivers) {
+			if (table === providers) {
 				return {
 					where: () => {
-						driverDeleteCount += 1;
+						providerDeleteCount += 1;
 						return Promise.resolve({});
 					},
 				};
@@ -530,17 +530,17 @@ test('DriverRegistry sync prunes stale local gemini rows and clears stale defaul
 	const fetchSpy = vi.spyOn(global, 'fetch');
 	fetchSpy.mockResolvedValue(new Response(JSON.stringify({ agents: registryAgents }), { status: 200 }));
 
-	const registry = new DriverRegistry(db, noopLogger);
+	const registry = new ProviderRegistry(db, noopLogger);
 	await registry.sync();
 
-	assert.equal(driverDeleteCount, 1);
+	assert.equal(providerDeleteCount, 1);
 	assert.equal(snapshotDeleteCount, 1);
-	assert.equal(driverUpsertCount, 1);
+	assert.equal(providerUpsertCount, 1);
 	assert.equal(settingsUpsertCount, 1);
 });
 
-test('DriverRegistry setDriverConfig updates database and triggers dynamic probe', async () => {
-	const driverRow = {
+test('ProviderRegistry setProviderConfig updates database and triggers dynamic probe', async () => {
+	const providerRow = {
 		id: 'claude-acp',
 		name: 'Claude',
 		status: 'inactive',
@@ -567,15 +567,15 @@ test('DriverRegistry setDriverConfig updates database and triggers dynamic probe
 				where: vi.fn().mockImplementation(() => {
 					selectCount++;
 					if (selectCount === 1) {
-						return Promise.resolve([driverRow]);
+						return Promise.resolve([providerRow]);
 					} else if (selectCount === 2) {
 						return Promise.resolve([{
-							...driverRow,
+							...providerRow,
 							customEnv: JSON.stringify({ ANTHROPIC_API_KEY: 'test-key' }),
 						}]);
 					} else {
 						return Promise.resolve([{
-							...driverRow,
+							...providerRow,
 							status: 'ready',
 							customEnv: JSON.stringify({ ANTHROPIC_API_KEY: 'test-key' }),
 						}]);
@@ -611,8 +611,8 @@ test('DriverRegistry setDriverConfig updates database and triggers dynamic probe
 		supportsDynamicConfig: false,
 	});
 
-	const registry = new DriverRegistry(db, noopLogger);
-	const result = await registry.setDriverConfig('claude-acp', { ANTHROPIC_API_KEY: 'test-key' });
+	const registry = new ProviderRegistry(db, noopLogger);
+	const result = await registry.setProviderConfig('claude-acp', { ANTHROPIC_API_KEY: 'test-key' });
 
 	assert.equal(dbUpdateSet.mock.calls.length, 1);
 	const updatedFields = dbUpdateSet.mock.calls[0]?.[0] as Record<string, unknown>;
