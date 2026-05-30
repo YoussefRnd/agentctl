@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { AppError } from '../errors/app-error.js';
+import { sessionModeSchema } from '@agentctl/shared';
 
 const gitService = new GitService();
 
@@ -218,6 +219,92 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 				return updatedSession;
 			} catch (err) {
 				throw new AppError(err instanceof Error ? err.message : 'Failed to change branch', 500);
+			}
+		},
+	);
+
+	fastify.withTypeProvider<ZodTypeProvider>().patch(
+		'/sessions/:id/mode',
+		{
+			schema: {
+				params: sessionParamsSchema,
+				body: z.object({ mode: sessionModeSchema }),
+			},
+		},
+		async (request) => {
+			const session = await fastify.db.query.sessions.findFirst({
+				where: eq(sessions.id, request.params.id),
+			});
+
+			if (!session) {
+				throw new AppError('Session not found', 404);
+			}
+
+			const project = await fastify.db.query.projects.findFirst({
+				where: eq(projects.id, session.projectId),
+			});
+
+			if (!project) {
+				throw new AppError('Project not found', 404);
+			}
+
+			const newMode = request.body.mode;
+			let worktreePath = session.worktreePath;
+			let branch = session.branch;
+			let baseCommit = session.baseCommit;
+
+			try {
+				if (newMode === 'worktree' && session.mode === 'local') {
+					if (!project.repoRoot) {
+						throw new AppError('Project repo root not set. Cannot create worktree.', 400);
+					}
+					// Switching from local to worktree
+					const result = await fastify.worktreeManager.create(project.repoRoot, session.id, session.taskSlug);
+					worktreePath = result.path;
+					branch = result.branch;
+					baseCommit = result.baseCommit;
+				} else if (newMode === 'local' && session.mode === 'worktree') {
+					if (!project.repoRoot) {
+						throw new AppError('Project repo root not set. Cannot switch to local mode.', 400);
+					}
+					// Switching from worktree to local
+					worktreePath = project.repoRoot;
+					// Optionally: cleanup the worktree if we want to be tidy, 
+					// but maybe better to keep it if we might switch back.
+					// For now, we just update the path to the main repo root.
+				}
+
+				const [updatedSession] = await fastify.db
+					.update(sessions)
+					.set({
+						mode: newMode,
+						worktreePath,
+						branch,
+						baseCommit,
+					})
+					.where(eq(sessions.id, request.params.id))
+					.returning();
+
+				// Restart the agent process if it was running or if we want to ensure it starts in the new mode
+				const provider = await fastify.providerRegistry.ensureProviderReady(updatedSession.selectedProvider, {
+					force: false,
+				});
+
+				if (provider.status === 'ready' || provider.status === 'needs_auth') {
+					const launch = provider.getLaunchConfig(
+						updatedSession.selectedModel,
+						updatedSession.selectedThinkingEffort,
+					);
+					fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
+						command: launch.command,
+						args: launch.args,
+						env: launch.env,
+					});
+				}
+
+				return updatedSession;
+			} catch (err) {
+				throw new AppError(err instanceof Error ? err.message : 'Failed to switch session mode', 500);
 			}
 		},
 	);
