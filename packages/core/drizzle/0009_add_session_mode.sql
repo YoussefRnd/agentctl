@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `mode` text DEFAULT 'local' NOT NULL;

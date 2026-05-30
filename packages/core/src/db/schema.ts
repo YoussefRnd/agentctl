@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import type { SessionStatus, ACPEvent, ProviderStatus } from '@agentctl/shared';
+import type { SessionStatus, ACPEvent, ProviderStatus, SessionMode } from '@agentctl/shared';
 
 // Timestamps with DB-level defaults and auto-update on updatedAt
 const timestamps = {
@@ -47,6 +47,7 @@ export const sessions = sqliteTable('sessions', {
   selectedProvider: text('selected_provider').notNull().default('claude-acp'),
   selectedModel: text('selected_model').notNull().default('sonnet-4'),
   selectedThinkingEffort: text('selected_thinking_effort').notNull().default('medium'),
+  mode: text('mode').$type<SessionMode>().notNull().default('local'),
   status: text('status').$type<SessionStatus>().notNull().default('idle'),
   totalTokens: integer('total_tokens').notNull().default(0),
   contextLimit: integer('context_limit').notNull().default(128000),

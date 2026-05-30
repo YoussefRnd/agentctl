@@ -64,6 +64,13 @@
       "when": 1779848307596,
       "tag": "0008_strong_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1780111262740,
+      "tag": "0009_add_session_mode",
+      "breakpoints": true
     }
   ]
 }

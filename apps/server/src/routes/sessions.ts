@@ -1,9 +1,11 @@
 import { z } from 'zod';
-import { sessions } from '@agentctl/core';
+import { sessions, projects, GitService } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { AppError } from '../errors/app-error.js';
+
+const gitService = new GitService();
 
 const createSessionSchema = z.object({
 	projectId: z.uuid(),
@@ -127,6 +129,96 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 
 			const providersList = await fastify.providerRegistry.discover();
 			return { session: updatedSession, capabilities: providersList };
+		},
+	);
+
+	fastify.withTypeProvider<ZodTypeProvider>().get(
+		'/sessions/:id/branches',
+		{
+			schema: {
+				params: sessionParamsSchema,
+			},
+		},
+		async (request) => {
+			const session = await fastify.db.query.sessions.findFirst({
+				where: eq(sessions.id, request.params.id),
+			});
+
+			if (!session) {
+				throw new AppError('Session not found', 404);
+			}
+
+			const project = await fastify.db.query.projects.findFirst({
+				where: eq(projects.id, session.projectId),
+			});
+
+			if (!project?.repoRoot) {
+				return [];
+			}
+
+			try {
+				return await gitService.listBranches(project.repoRoot);
+			} catch (err) {
+				throw new AppError(err instanceof Error ? err.message : 'Failed to list branches', 500);
+			}
+		},
+	);
+
+	fastify.withTypeProvider<ZodTypeProvider>().post(
+		'/sessions/:id/branch',
+		{
+			schema: {
+				params: sessionParamsSchema,
+				body: z.object({
+					branch: z.string().min(1),
+				}),
+			},
+		},
+		async (request) => {
+			const session = await fastify.db.query.sessions.findFirst({
+				where: eq(sessions.id, request.params.id),
+			});
+
+			if (!session) {
+				throw new AppError('Session not found', 404);
+			}
+
+			try {
+				// Checkout the branch in the worktree
+				await gitService.checkout(session.worktreePath, request.body.branch);
+
+				// Update database
+				const [updatedSession] = await fastify.db
+					.update(sessions)
+					.set({
+						branch: request.body.branch,
+					})
+					.where(eq(sessions.id, request.params.id))
+					.returning();
+
+				// If session is running, restart the connection to reload new state
+				const activeSession = fastify.sessionManager.getSession(request.params.id);
+				if (activeSession) {
+					const provider = await fastify.providerRegistry.ensureProviderReady(updatedSession.selectedProvider, {
+						force: false,
+					});
+					if (provider.status === 'ready' || provider.status === 'needs_auth') {
+						const launch = provider.getLaunchConfig(
+							updatedSession.selectedModel,
+							updatedSession.selectedThinkingEffort,
+						);
+						fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
+							command: launch.command,
+							args: launch.args,
+							env: launch.env,
+						});
+					}
+				}
+
+				return updatedSession;
+			} catch (err) {
+				throw new AppError(err instanceof Error ? err.message : 'Failed to change branch', 500);
+			}
 		},
 	);
 
