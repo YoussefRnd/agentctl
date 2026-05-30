@@ -46,19 +46,34 @@ export class SessionOrchestrator {
     let resolvedMode: SessionMode = mode ?? (project.repoRoot ? 'worktree' : 'local');
 
     if (project.repoRoot && resolvedMode === 'worktree') {
-      const worktree = await this.worktreeManager.create(
-        project.repoRoot,
-        sessionId,
-        taskSlug,
-        'main',
-        project.subdir,
-      );
-      branch = worktree.branch;
-      worktreePath = worktree.path;
-      workspacePath = worktree.workspacePath;
-      baseCommit = worktree.baseCommit;
-    } else {
-      // Local mode or fallback if no repoRoot
+      try {
+        const worktree = await this.worktreeManager.create(
+          project.repoRoot,
+          sessionId,
+          taskSlug,
+          'main',
+          project.subdir,
+        );
+        branch = worktree.branch;
+        worktreePath = worktree.path;
+        workspacePath = worktree.workspacePath;
+        baseCommit = worktree.baseCommit;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('empty repository')) {
+          // Fallback to local mode
+          resolvedMode = 'local';
+          worktreePath = project.path;
+          workspacePath = project.path;
+          baseCommit = 'none';
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    if (resolvedMode === 'local') {
+      // Local mode or fallback if no repoRoot or empty repo
       branch = 'main'; // TODO: or current branch if local
       worktreePath = project.path;
       workspacePath = project.path;

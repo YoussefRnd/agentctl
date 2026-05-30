@@ -12,6 +12,7 @@ export interface RepositoryInfo {
 export interface BaseRefInfo {
   ref: string;
   commit: string;
+  isEmpty: boolean;
 }
 
 export interface ListedWorktree {
@@ -57,20 +58,29 @@ export class GitService {
 
     try {
       commit = await git.revparse([ref]);
+      return {
+        ref,
+        commit: commit.trim(),
+        isEmpty: false,
+      };
     } catch {
       const branchSummary = await git.branchLocal();
       ref = branchSummary.current || 'HEAD';
       try {
         commit = await git.revparse([ref]);
+        return {
+          ref,
+          commit: commit.trim(),
+          isEmpty: false,
+        };
       } catch {
-        commit = 'empty';
+        return {
+          ref,
+          commit: 'empty',
+          isEmpty: true,
+        };
       }
     }
-
-    return {
-      ref,
-      commit: commit.trim(),
-    };
   }
 
   async addWorktree(repoPath: string, branchName: string, storagePath: string, baseRef: string) {

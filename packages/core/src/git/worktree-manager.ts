@@ -71,6 +71,9 @@ export class WorktreeManager {
 
     return await this.gitMutex.run(repoPath, async () => {
       const base = await this.gitService.resolveBaseRef(repoPath, baseBranch);
+      if (base.isEmpty) {
+        throw new Error('Cannot create worktree in an empty repository (no commits found)');
+      }
 
       try {
         await this.gitService.addWorktree(repoPath, branchName, storagePath, base.ref);

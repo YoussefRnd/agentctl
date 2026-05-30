@@ -12,6 +12,7 @@ const createSessionSchema = z.object({
 	projectId: z.uuid(),
 	agent: z.string().min(1),
 	taskSlug: z.string().min(1),
+	mode: sessionModeSchema.optional(),
 });
 
 const updateSessionProviderSchema = z.object({
@@ -38,6 +39,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 					projectId: request.body.projectId,
 					providerId: request.body.agent,
 					taskSlug: request.body.taskSlug,
+					mode: request.body.mode,
 				});
 
 				// Return the created session record from the database
