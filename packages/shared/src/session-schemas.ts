@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const providerSchema = z.enum(['claude-acp', 'opencode', 'codex-acp', 'gemini']);
 
+export const sessionModeSchema = z.enum(['worktree', 'local']);
+
 export const thinkingEffortSchema = z.enum(['low', 'medium', 'high']);
 
 export const projectSchema = z.object({
@@ -22,6 +24,7 @@ export const projectCreatedResponseSchema = z.object({
 export const createSessionSchema = z.object({
   projectId: z.uuid(),
   agent: providerSchema,
+  mode: sessionModeSchema.optional(),
 });
 
 export const sessionSchema = createSessionSchema.extend({
@@ -103,6 +106,7 @@ export const sessionRowSchema = sessionSchema.extend({
   worktreePath: z.string().min(1),
   agentSessionId: z.string().nullable(),
   status: z.enum(['running', 'needs_attention', 'idle', 'error', 'merged', 'discarded']),
+  mode: sessionModeSchema.default('local'),
   totalTokens: z.number(),
   contextLimit: z.number(),
   estimatedCost: z.number(),
@@ -131,6 +135,7 @@ export const sessionStatusSchema = z.enum([
 
 export type Project = z.infer<typeof projectSchema>;
 export type ProviderName = z.infer<typeof providerSchema>;
+export type SessionMode = z.infer<typeof sessionModeSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
 export type SessionProviderSelection = z.infer<typeof sessionProviderSelectionSchema>;
