@@ -23,7 +23,16 @@ export function CommandBar({
 	onProviderSelect,
 	placeholder = 'Ask for follow-up changes or attach images',
 }: ControlBarProps) {
-	const { sessionId, reviewData } = useSession();
+	const {
+		sessionId,
+		reviewData,
+		sessionData,
+		branches,
+		switchBranch,
+		isSwitchingBranch,
+		switchMode,
+		isSwitchingMode,
+	} = useSession();
 	const { providers, isLoadingProviders } = useProviders(sessionId);
 	const [input, setInput] = useState('');
 	const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -174,6 +183,61 @@ export function CommandBar({
 						</div>
 					</div>
 				</form>
+				{sessionData?.session && (
+					<div className="mt-4 flex items-center justify-between px-4 text-[10px] font-bold uppercase tracking-widest text-text-muted/40">
+						<div className="flex items-center gap-4">
+							<button
+								type="button"
+								disabled={isSwitchingMode}
+								onClick={() => { void switchMode('local'); }}
+								className={`transition-all duration-300 ${sessionData.session.mode === 'local' ? 'text-text-main font-black' : 'opacity-40 hover:opacity-100 hover:text-text-main cursor-pointer'}`}
+							>
+								Local
+							</button>
+							<button
+								type="button"
+								disabled={isSwitchingMode || (branches.length === 0 && sessionData.session.mode !== 'worktree')}
+								onClick={() => { void switchMode('worktree'); }}
+								className={`transition-all duration-300 ${sessionData.session.mode === 'worktree' ? 'text-text-main font-black' : 'opacity-40 hover:opacity-100 hover:text-text-main cursor-pointer'} ${(branches.length === 0 && sessionData.session.mode !== 'worktree') ? 'hidden' : ''}`}
+							>
+								Worktree
+							</button>
+						</div>
+
+						<div className="flex items-center gap-1.5 text-text-muted/60 hover:text-text-main transition-colors">
+							<svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+								<line x1="6" y1="3" x2="6" y2="15"></line>
+								<circle cx="18" cy="6" r="3"></circle>
+								<circle cx="6" cy="18" r="3"></circle>
+								<path d="M18 9a9 9 0 0 1-9 9"></path>
+							</svg>
+							<div className="relative inline-flex items-center">
+								<select
+									value={sessionData.session.branch}
+									disabled={isSwitchingBranch}
+									onChange={(e) => { void switchBranch(e.target.value); }}
+									className="appearance-none bg-transparent pr-5 text-[10px] font-bold uppercase tracking-widest text-text-muted/80 hover:text-text-main focus:outline-none cursor-pointer transition-all disabled:opacity-50 border-none p-0"
+								>
+									{branches.map((b) => (
+										<option key={b} value={b} className="bg-background text-text-main uppercase">
+											{b}
+										</option>
+									))}
+									{branches.length === 0 || !branches.includes(sessionData.session.branch) ? (
+										<option value={sessionData.session.branch} className="bg-background text-text-main uppercase">
+											{sessionData.session.branch}
+										</option>
+									) : null}
+								</select>
+								<div className="pointer-events-none absolute right-0 flex items-center text-text-muted/50">
+									<svg className="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+										<path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+									</svg>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
 			</div>
 		</div>
 	);

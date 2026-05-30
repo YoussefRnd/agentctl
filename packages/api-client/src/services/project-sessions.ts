@@ -1,6 +1,7 @@
 import {
   type ProviderDiscovery,
   type SessionRow,
+  type SessionMode,
   getReadyProviderId,
   createTaskSlug,
 } from '@agentctl/shared';
@@ -55,5 +56,12 @@ export async function revertReviewFile(sessionId: string, filePath: string) {
   return apiClient.fetch<{ success: boolean }>(`/api/sessions/${sessionId}/review/revert`, {
     method: 'POST',
     body: JSON.stringify({ filePath }),
+  });
+}
+
+export async function switchSessionMode(sessionId: string, mode: SessionMode) {
+  return apiClient.fetch<{ success: boolean }>(`/api/sessions/${sessionId}/mode`, {
+    method: 'PATCH',
+    body: JSON.stringify({ mode }),
   });
 }

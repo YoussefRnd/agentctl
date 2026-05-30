@@ -206,9 +206,25 @@ export class ACPSession {
       this.thoughtEventId = null;
       this.userMessageEventId = null;
 
+      const sessionRecord = await this.db.query.sessions.findFirst({
+        where: eq(sessions.id, this.sessionId),
+      });
+
+      const updateFields: Partial<typeof sessions.$inferInsert> = {
+        status: 'running',
+        updatedAt: new Date(),
+      };
+
+      if (sessionRecord?.title === 'new session') {
+        const summary = text.trim();
+        const firstLine = summary.split('\n')[0] || '';
+        const titleVal = firstLine.length > 40 ? firstLine.slice(0, 40) + '...' : firstLine;
+        updateFields.title = titleVal || 'new session';
+      }
+
       await this.db
         .update(sessions)
-        .set({ status: 'running', updatedAt: new Date() })
+        .set(updateFields)
         .where(eq(sessions.id, this.sessionId));
 
       const request: PromptRequest = {

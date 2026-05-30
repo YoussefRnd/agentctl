@@ -1,34 +1,44 @@
 import { createContext, useContext, useMemo, useCallback, type ReactNode } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import type { ACPEventRow, SessionWithCapabilities } from '@agentctl/shared';
-import { apiClient, stageReviewFile, revertReviewFile } from '@agentctl/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { ACPEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
+import {
+  apiClient,
+  stageReviewFile,
+  revertReviewFile,
+  switchSessionMode,
+} from '@agentctl/api-client';
 import { useSessionEvents } from '../hooks/useSessionEvents';
 import type { ReviewFile } from '../features/session/components/ReviewView';
 
 interface ReviewResponse {
- files: ReviewFile[];
+  files: ReviewFile[];
 }
 
 interface PlanItem {
- text: string;
- completed: boolean;
+  text: string;
+  completed: boolean;
 }
 
 interface SessionContextValue {
- sessionId: string;
- sessionData: SessionWithCapabilities | null;
- isLoadingSession: boolean;
- events: ACPEventRow[];
- isLoadingEvents: boolean;
- isConnected: boolean;
- streamingEventId: number | null;
- sendMessage: (payload: unknown) => void;
- reviewData: ReviewResponse;
- isLoadingReview: boolean;
- planItems: PlanItem[];
- stageFile: (filePath: string) => Promise<void>;
- revertFile: (filePath: string) => Promise<void>;
- refetchReview: () => void;
+  sessionId: string;
+  sessionData: SessionWithCapabilities | null;
+  isLoadingSession: boolean;
+  events: ACPEventRow[];
+  isLoadingEvents: boolean;
+  isConnected: boolean;
+  streamingEventId: number | null;
+  sendMessage: (payload: unknown) => void;
+  reviewData: ReviewResponse;
+  isLoadingReview: boolean;
+  planItems: PlanItem[];
+  stageFile: (filePath: string) => Promise<void>;
+  revertFile: (filePath: string) => Promise<void>;
+  refetchReview: () => void;
+  branches: string[];
+  switchBranch: (branch: string) => Promise<void>;
+  isSwitchingBranch: boolean;
+  switchMode: (mode: SessionMode) => Promise<void>;
+  isSwitchingMode: boolean;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -67,6 +77,44 @@ export function SessionProvider({
   queryFn: () => fetchReview(sessionId),
   enabled: !!sessionId,
  });
+
+ const queryClient = useQueryClient();
+
+ const { data: branches = [] } = useQuery({
+  queryKey: ['session-branches', sessionId],
+  queryFn: () => apiClient.fetch<string[]>(`/api/sessions/${sessionId}/branches`),
+  enabled: !!sessionId,
+ });
+
+ const switchBranchMutation = useMutation({
+  mutationFn: (branch: string) =>
+   apiClient.fetch(`/api/sessions/${sessionId}/branch`, {
+    method: 'POST',
+    body: JSON.stringify({ branch }),
+   }),
+  onSuccess: () => {
+   void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+   void queryClient.invalidateQueries({ queryKey: ['session-branches', sessionId] });
+  },
+ });
+
+ const switchBranch = useCallback(async (branch: string) => {
+  await switchBranchMutation.mutateAsync(branch);
+ }, [switchBranchMutation]);
+
+ const switchModeMutation = useMutation({
+  mutationFn: (mode: SessionMode) => switchSessionMode(sessionId, mode),
+  onSuccess: () => {
+   void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+  },
+ });
+
+ const switchMode = useCallback(
+  async (mode: SessionMode) => {
+   await switchModeMutation.mutateAsync(mode);
+  },
+  [switchModeMutation],
+ );
 
  const stageMutation = useMutation({
   mutationFn: (filePath: string) => stageReviewFile(sessionId, filePath),
@@ -133,6 +181,11 @@ export function SessionProvider({
    stageFile,
    revertFile,
    refetchReview,
+   branches,
+   switchBranch,
+   isSwitchingBranch: switchBranchMutation.isPending,
+   switchMode,
+   isSwitchingMode: switchModeMutation.isPending,
   }),
   [
    sessionId,
@@ -149,6 +202,11 @@ export function SessionProvider({
    stageFile,
    revertFile,
    refetchReview,
+   branches,
+   switchBranch,
+   switchBranchMutation.isPending,
+   switchMode,
+   switchModeMutation.isPending,
   ],
  );
 

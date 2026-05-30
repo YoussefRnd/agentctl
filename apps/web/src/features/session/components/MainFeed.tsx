@@ -72,27 +72,6 @@ export function MainFeed() {
 			</div>
 
 			<div className="relative z-10 flex h-full flex-col min-w-0">
-				{/* Transparent Header */}
-				<header className="flex h-16 shrink-0 items-center justify-between px-8 border-b border-white/5 bg-background/40 backdrop-blur-md">
-					<div className="flex items-center gap-6">
-						<div className="flex items-center gap-3">
-							<div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse" />
-							<span className="text-[12px] font-black uppercase tracking-widest text-text-main">
-								{sessionData?.session.taskSlug}
-							</span>
-						</div>
-						<div className="h-4 w-px bg-white/5" />
-						<div className="flex items-center gap-2 px-3 py-1 rounded-md bg-white/5 border border-white/5">
-							<span className="text-[10px] font-black uppercase tracking-tighter text-text-muted/60">Branch::</span>
-							<span className="text-[10px] font-black uppercase tracking-tighter text-text-main">{sessionData?.session.branch}</span>
-						</div>
-					</div>
-					
-					<div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-text-muted/30">
-						<span>SESSION_ID: {sessionId.slice(0, 8)}</span>
-					</div>
-				</header>
-
 				<main className="flex min-h-0 flex-1 flex-col relative">
 					{isLoadingEvents ? (
 						<div className="flex h-full flex-col items-center justify-center gap-4 font-mono">

@@ -109,6 +109,11 @@ export class GitService {
     return branchSummary.current;
   }
 
+  async listBranches(repoPath: string): Promise<string[]> {
+    const branchSummary = await simpleGit(repoPath).branchLocal();
+    return branchSummary.all;
+  }
+
   async diff(repoPath: string, args: string[]) {
     return simpleGit(repoPath).diff(args);
   }
