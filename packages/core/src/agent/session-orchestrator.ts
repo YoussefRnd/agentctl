@@ -4,12 +4,13 @@ import type { DbClient, ACPSession } from './acp-session.js';
 import type { WorktreeManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from './acp-provider-registry.js';
 import type { SessionManager } from './session-manager.js';
-import type { ProviderName } from '@agentctl/shared';
+import type { ProviderName, SessionMode } from '@agentctl/shared';
 
 export interface CreateSessionParams {
   projectId: string;
   providerId: string;
   taskSlug: string;
+  mode?: SessionMode;
 }
 
 export class SessionOrchestrator {
@@ -21,7 +22,7 @@ export class SessionOrchestrator {
   ) {}
 
   async create(params: CreateSessionParams): Promise<ACPSession> {
-    const { projectId, providerId, taskSlug } = params;
+    const { projectId, providerId, taskSlug, mode } = params;
 
     const project = await this.db.query.projects.findFirst({
       where: eq(projects.id, projectId),
@@ -42,8 +43,9 @@ export class SessionOrchestrator {
     let worktreePath = project.path;
     let workspacePath = project.path;
     let baseCommit = 'none';
+    let resolvedMode: SessionMode = mode ?? (project.repoRoot ? 'worktree' : 'local');
 
-    if (project.repoRoot) {
+    if (project.repoRoot && resolvedMode === 'worktree') {
       const worktree = await this.worktreeManager.create(
         project.repoRoot,
         sessionId,
@@ -55,6 +57,13 @@ export class SessionOrchestrator {
       worktreePath = worktree.path;
       workspacePath = worktree.workspacePath;
       baseCommit = worktree.baseCommit;
+    } else {
+      // Local mode or fallback if no repoRoot
+      branch = 'main'; // TODO: or current branch if local
+      worktreePath = project.path;
+      workspacePath = project.path;
+      baseCommit = 'none';
+      resolvedMode = 'local';
     }
 
     const selection = provider.resolveDefaultSelection();
@@ -68,6 +77,7 @@ export class SessionOrchestrator {
       status: 'idle',
       taskSlug,
       baseCommit,
+      mode: resolvedMode,
       selectedProvider: providerId as ProviderName,
       selectedModel: selection.selectedModel,
       selectedThinkingEffort: selection.selectedThinkingEffort,
