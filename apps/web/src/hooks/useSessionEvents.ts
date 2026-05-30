@@ -63,7 +63,7 @@ export function useSessionEvents(sessionId: string | null) {
         // Track streaming state
         if (payload.type === 'text') {
           setStreamingEventId(payload.id);
-          
+
           // Reset inactivity timeout
           if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
           streamTimeoutRef.current = setTimeout(() => {

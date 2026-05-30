@@ -30,19 +30,26 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
       | { type: 'event'; event: ACPEventRow; isStreaming: boolean }
       | { type: 'activity'; events: ACPEventRow[]; isStreaming: boolean; id: string }
     )[] = [];
-    let currentActivity: { type: 'activity'; events: ACPEventRow[]; isStreaming: boolean; id: string } | null = null;
+    let currentActivity: {
+      type: 'activity';
+      events: ACPEventRow[];
+      isStreaming: boolean;
+      id: string;
+    } | null = null;
 
     for (const e of events) {
-      const isThought =
-        e.type === 'text' &&
-        'role' in e.data &&
-        e.data.role === 'thought';
+      const isThought = e.type === 'text' && 'role' in e.data && e.data.role === 'thought';
       const isTool = e.type === 'tool_call';
       const isStreaming = e.id === streamingEventId;
 
       if (isThought || isTool) {
         if (!currentActivity) {
-          currentActivity = { type: 'activity', events: [e], isStreaming, id: `activity-${String(e.id)}` };
+          currentActivity = {
+            type: 'activity',
+            events: [e],
+            isStreaming,
+            id: `activity-${String(e.id)}`,
+          };
           result.push(currentActivity);
         } else {
           currentActivity.events.push(e);
@@ -67,20 +74,28 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
 
   const isAwaitingAgent = useMemo(() => {
     if (!lastContentEvent) return false;
-    return lastContentEvent.type === 'text' && 'role' in lastContentEvent.data && lastContentEvent.data.role === 'user';
+    return (
+      lastContentEvent.type === 'text' &&
+      'role' in lastContentEvent.data &&
+      lastContentEvent.data.role === 'user'
+    );
   }, [lastContentEvent]);
 
   if (events.length === 0) {
     return (
       <div className="flex h-full items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4 text-center">
-           <div className="relative h-12 w-12">
-             <div className="absolute inset-0 rounded-full border-2 border-white/5" />
-             <div className="absolute inset-0 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-           </div>
+          <div className="relative h-12 w-12">
+            <div className="absolute inset-0 rounded-full border-2 border-white/5" />
+            <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
+          </div>
           <div className="space-y-1">
-            <h3 className="text-[12px] font-black uppercase tracking-[0.2em] text-text-main">Awaiting_Transmission</h3>
-            <p className="text-[10px] text-text-muted/40 font-bold uppercase tracking-widest">establishing secure uplink...</p>
+            <h3 className="text-text-main text-[12px] font-black tracking-[0.2em] uppercase">
+              Awaiting_Transmission
+            </h3>
+            <p className="text-text-muted/40 text-[10px] font-bold tracking-widest uppercase">
+              establishing secure uplink...
+            </p>
           </div>
         </div>
       </div>
@@ -90,7 +105,7 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
   return (
     <div
       ref={containerRef}
-      className="relative h-full flex-1 overflow-y-auto scroll-smooth no-scrollbar"
+      className="no-scrollbar relative h-full flex-1 overflow-y-auto scroll-smooth"
       onScroll={handleScroll}
     >
       <div className="mx-auto max-w-[800px] px-6 py-12">
@@ -98,10 +113,10 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
           {groupedEvents.map((group) => {
             if (group.type === 'activity') {
               return (
-                <ActivityGroup 
-                  key={group.id} 
-                  events={group.events} 
-                  isStreaming={group.isStreaming} 
+                <ActivityGroup
+                  key={group.id}
+                  events={group.events}
+                  isStreaming={group.isStreaming}
                 />
               );
             }
@@ -115,7 +130,14 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
                 {e.type === 'text' && (
                   <TextCard
                     content={e.data.content}
-                    variant={'role' in e.data && (e.data.role === 'provider' || e.data.role === 'user' || e.data.role === 'thought') ? e.data.role : undefined}
+                    variant={
+                      'role' in e.data &&
+                      (e.data.role === 'provider' ||
+                        e.data.role === 'user' ||
+                        e.data.role === 'thought')
+                        ? e.data.role
+                        : undefined
+                    }
                     isStreaming={isStreaming}
                   />
                 )}
@@ -127,9 +149,9 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
           {/* Fallback Thinking Indicator when nothing has started yet after a user message */}
           {streamingEventId === null && isAwaitingAgent && (
             <div className="animate-in fade-in slide-in-from-left-2 duration-1000">
-              <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-white/5 border border-white/10 w-fit shadow-2xl">
-                <Brain className="h-4 w-4 text-accent animate-pulse" />
-                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-accent/80 animate-pulse">
+              <div className="flex w-fit items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 shadow-2xl">
+                <Brain className="text-accent h-4 w-4 animate-pulse" />
+                <span className="text-accent/80 animate-pulse text-[11px] font-black tracking-[0.2em] uppercase">
                   Agent_Thinking...
                 </span>
               </div>
@@ -144,7 +166,7 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
       {!autoScroll && (
         <button
           type="button"
-          className="group absolute bottom-12 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-text-main shadow-2xl transition-all hover:bg-accent hover:text-background hover:scale-105 active:scale-95"
+          className="group text-text-main hover:bg-accent hover:text-background absolute bottom-12 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[10px] font-black tracking-widest uppercase shadow-2xl backdrop-blur-xl transition-all hover:scale-105 active:scale-95"
           onClick={() => {
             setAutoScroll(true);
           }}

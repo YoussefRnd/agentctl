@@ -119,6 +119,7 @@ export const projectsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 
       const sessionRecord = await fastify.db.query.sessions.findFirst({
         where: eq(sessions.id, session.sessionId),
+        with: { project: true },
       });
 
       return {

@@ -5,8 +5,10 @@ export function getReadyProviderId(providers: ProviderDiscovery[]) {
 }
 
 export function createTaskSlug(prefix = 'new-session') {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `${prefix}-${timestamp}`;
+  const now = new Date();
+  const date = now.toISOString().split('T')[0].slice(2).replace(/-/g, '');
+  const time = now.toTimeString().split(' ')[0].replace(/:/g, '').slice(0, 4);
+  return `${prefix}-${date}-${time}`;
 }
 
 export function validateApiKey(keyName: string, value: string): string | null {
@@ -40,4 +42,3 @@ export function validateApiKey(keyName: string, value: string): string | null {
   }
   return null;
 }
-

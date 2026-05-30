@@ -44,7 +44,10 @@ export class SessionEventStore {
     });
   }
 
-  async findLastEventByType(sessionId: string, type: ACPEvent['type']): Promise<{ id: number; data: unknown } | null> {
+  async findLastEventByType(
+    sessionId: string,
+    type: ACPEvent['type'],
+  ): Promise<{ id: number; data: unknown } | null> {
     const last = await this.db
       .select()
       .from(acpEvents)
@@ -55,7 +58,9 @@ export class SessionEventStore {
     if (last.length === 0) return null;
     const first = last[0];
 
-    const parsedData = (typeof first.data === 'string' ? JSON.parse(first.data) : first.data) as unknown;
+    const parsedData = (
+      typeof first.data === 'string' ? JSON.parse(first.data) : first.data
+    ) as unknown;
 
     return {
       id: first.id,

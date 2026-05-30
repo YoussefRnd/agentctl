@@ -150,32 +150,40 @@ export class ACPSession {
       const dynConn = this.connection as unknown as DynamicConn;
 
       try {
-        const session = (await this.db
-          .select()
-          .from(sessions)
-          .where(eq(sessions.id, this.sessionId))).at(0);
+        const session = (
+          await this.db.select().from(sessions).where(eq(sessions.id, this.sessionId))
+        ).at(0);
 
         if (session) {
-          const provider = (await this.db
-            .select()
-            .from(providers)
-            .where(eq(providers.id, session.selectedProvider))).at(0);
+          const provider = (
+            await this.db.select().from(providers).where(eq(providers.id, session.selectedProvider))
+          ).at(0);
 
           if (provider) {
-            if (provider.supportsDynamicModel && session.selectedModel && session.selectedModel !== 'default') {
-              this.logger.info(`Setting dynamic model: ${session.selectedModel} for session ${this.sessionId}`);
+            if (
+              provider.supportsDynamicModel &&
+              session.selectedModel &&
+              session.selectedModel !== 'default'
+            ) {
+              this.logger.info(
+                `Setting dynamic model: ${session.selectedModel} for session ${this.sessionId}`,
+              );
               if (typeof dynConn.unstable_setSessionModel === 'function') {
                 await dynConn.unstable_setSessionModel({
                   sessionId: this.acpSessionId,
                   modelId: session.selectedModel,
                 });
               } else {
-                this.logger.warn(`Provider advertised supportsDynamicModel but connection.unstable_setSessionModel is not a function`);
+                this.logger.warn(
+                  `Provider advertised supportsDynamicModel but connection.unstable_setSessionModel is not a function`,
+                );
               }
             }
 
             if (provider.supportsDynamicConfig && session.selectedThinkingEffort) {
-              this.logger.info(`Setting dynamic config (thinking_effort): ${session.selectedThinkingEffort} for session ${this.sessionId}`);
+              this.logger.info(
+                `Setting dynamic config (thinking_effort): ${session.selectedThinkingEffort} for session ${this.sessionId}`,
+              );
               if (typeof dynConn.setSessionConfigOption === 'function') {
                 await dynConn.setSessionConfigOption({
                   sessionId: this.acpSessionId,
@@ -183,7 +191,9 @@ export class ACPSession {
                   value: session.selectedThinkingEffort,
                 });
               } else {
-                this.logger.warn(`Provider advertised supportsDynamicConfig but connection.setSessionConfigOption is not a function`);
+                this.logger.warn(
+                  `Provider advertised supportsDynamicConfig but connection.setSessionConfigOption is not a function`,
+                );
               }
             }
           }
@@ -222,10 +232,7 @@ export class ACPSession {
         updateFields.title = titleVal || 'new session';
       }
 
-      await this.db
-        .update(sessions)
-        .set(updateFields)
-        .where(eq(sessions.id, this.sessionId));
+      await this.db.update(sessions).set(updateFields).where(eq(sessions.id, this.sessionId));
 
       const request: PromptRequest = {
         sessionId: this.acpSessionId ?? this.sessionId,
@@ -342,7 +349,9 @@ export class ACPSession {
 
       // Handle tool calls specifically to extract the toolCall object
       if (typeKey === 'tool_call' || typeKey === 'tool_call_update') {
-        const chunk = update as { toolCall?: { name: string; arguments?: Record<string, unknown>; toolCallId?: string } };
+        const chunk = update as {
+          toolCall?: { name: string; arguments?: Record<string, unknown>; toolCallId?: string };
+        };
         if (chunk.toolCall) {
           if (typeKey === 'tool_call') {
             // Reset buffers on new tool calls
@@ -353,7 +362,11 @@ export class ACPSession {
             this.thoughtEventId = null;
             this.userMessageEventId = null;
 
-            this.toolCallEventId = await this.eventStore.append(this.sessionId, 'tool_call', chunk.toolCall);
+            this.toolCallEventId = await this.eventStore.append(
+              this.sessionId,
+              'tool_call',
+              chunk.toolCall,
+            );
           } else if (this.toolCallEventId) {
             await this.eventStore.update(this.toolCallEventId, chunk.toolCall);
           }
@@ -368,9 +381,15 @@ export class ACPSession {
         if (text !== undefined) {
           this.currentMessage += text;
           if (this.messageEventId) {
-            await this.eventStore.update(this.messageEventId, { content: this.currentMessage, role: 'provider' });
+            await this.eventStore.update(this.messageEventId, {
+              content: this.currentMessage,
+              role: 'provider',
+            });
           } else {
-            this.messageEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentMessage, role: 'provider' });
+            this.messageEventId = await this.eventStore.append(this.sessionId, 'text', {
+              content: this.currentMessage,
+              role: 'provider',
+            });
           }
         }
         return;
@@ -383,9 +402,15 @@ export class ACPSession {
         if (thought !== undefined) {
           this.currentThought += thought;
           if (this.thoughtEventId) {
-            await this.eventStore.update(this.thoughtEventId, { content: this.currentThought, role: 'thought' });
+            await this.eventStore.update(this.thoughtEventId, {
+              content: this.currentThought,
+              role: 'thought',
+            });
           } else {
-            this.thoughtEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentThought, role: 'thought' });
+            this.thoughtEventId = await this.eventStore.append(this.sessionId, 'text', {
+              content: this.currentThought,
+              role: 'thought',
+            });
           }
         }
         return;
@@ -408,9 +433,15 @@ export class ACPSession {
         if (text !== undefined) {
           this.currentUserMessage += text;
           if (this.userMessageEventId) {
-            await this.eventStore.update(this.userMessageEventId, { content: this.currentUserMessage, role: 'user' });
+            await this.eventStore.update(this.userMessageEventId, {
+              content: this.currentUserMessage,
+              role: 'user',
+            });
           } else {
-            this.userMessageEventId = await this.eventStore.append(this.sessionId, 'text', { content: this.currentUserMessage, role: 'user' });
+            this.userMessageEventId = await this.eventStore.append(this.sessionId, 'text', {
+              content: this.currentUserMessage,
+              role: 'user',
+            });
           }
         }
         return;
@@ -459,4 +490,3 @@ export class ACPSession {
     }
   }
 }
-

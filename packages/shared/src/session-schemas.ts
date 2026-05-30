@@ -7,8 +7,11 @@ export const sessionModeSchema = z.enum(['worktree', 'local']);
 export const thinkingEffortSchema = z.enum(['low', 'medium', 'high']);
 
 export const projectSchema = z.object({
+  id: z.uuid(),
   name: z.string().min(1),
   path: z.string().min(1),
+  repoRoot: z.string().nullable(),
+  subdir: z.string().default(''),
 });
 
 export const createProjectSchema = z.object({
@@ -40,7 +43,13 @@ export const sessionProviderSelectionSchema = z.object({
   selectedThinkingEffort: thinkingEffortSchema,
 });
 
-export const providerStatusSchema = z.enum(['ready', 'not_found', 'error', 'needs_auth', 'inactive']);
+export const providerStatusSchema = z.enum([
+  'ready',
+  'not_found',
+  'error',
+  'needs_auth',
+  'inactive',
+]);
 
 export const acpConfigOptionSchema = z.object({
   id: z.string(),
@@ -97,7 +106,7 @@ export const providerDiscoverySchema = z.object({
 
 export const PROVIDER_ENV_KEYS: Record<string, string[] | undefined> = {
   'claude-acp': ['ANTHROPIC_API_KEY'],
-  'gemini': ['GEMINI_API_KEY'],
+  gemini: ['GEMINI_API_KEY'],
   'codex-acp': ['OPENAI_API_KEY'],
 };
 
@@ -117,6 +126,7 @@ export const sessionRowSchema = sessionSchema.extend({
   selectedProvider: providerSchema,
   selectedModel: z.string().min(1),
   selectedThinkingEffort: thinkingEffortSchema,
+  project: projectSchema.optional(),
 });
 
 export const sessionWithCapabilitiesSchema = z.object({

@@ -15,12 +15,12 @@ import { fsRoutes } from './routes/fs.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
 import {
-	db as defaultDb,
-	WorktreeManager,
-	GitMutex,
-	ProviderRegistry,
-	SessionOrchestrator,
-	SessionManager,
+  db as defaultDb,
+  WorktreeManager,
+  GitMutex,
+  ProviderRegistry,
+  SessionOrchestrator,
+  SessionManager,
 } from '@agentctl/core';
 import { EventBus } from './utils/event-bus.js';
 import { AppError } from './errors/app-error.js';
@@ -28,153 +28,152 @@ import type { FastifyError } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
 
 export interface AppDependencies {
-	db?: typeof defaultDb;
-	worktreeManager?: WorktreeManager;
-	providerRegistry?: ProviderRegistry;
-	sessionManager?: SessionManager;
-	sessionOrchestrator?: SessionOrchestrator;
-	env?: ReturnType<typeof parseServerEnv>;
+  db?: typeof defaultDb;
+  worktreeManager?: WorktreeManager;
+  providerRegistry?: ProviderRegistry;
+  sessionManager?: SessionManager;
+  sessionOrchestrator?: SessionOrchestrator;
+  env?: ReturnType<typeof parseServerEnv>;
 }
 
 declare module 'fastify' {
-	interface FastifyInstance {
-		db: typeof defaultDb;
-		worktreeManager: WorktreeManager;
-		gitMutex: GitMutex;
-		providerRegistry: ProviderRegistry;
-		sessionManager: SessionManager;
-		sessionOrchestrator: SessionOrchestrator;
-		eventBus: EventBus;
-		config: ReturnType<typeof parseServerEnv>;
-	}
+  interface FastifyInstance {
+    db: typeof defaultDb;
+    worktreeManager: WorktreeManager;
+    gitMutex: GitMutex;
+    providerRegistry: ProviderRegistry;
+    sessionManager: SessionManager;
+    sessionOrchestrator: SessionOrchestrator;
+    eventBus: EventBus;
+    config: ReturnType<typeof parseServerEnv>;
+  }
 }
 
 declare module '@fastify/secure-session' {
-	interface SessionData {
-		authenticated: boolean;
-	}
+  interface SessionData {
+    authenticated: boolean;
+  }
 }
 
 const PROVIDER_REGISTRY_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 export async function buildApp(deps: AppDependencies = {}) {
-	const fastify = Fastify({
-		logger: {
-			level: process.env.LOG_LEVEL ?? 'info',
-			transport:
-				process.env.NODE_ENV !== 'production'
-					? { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss' } }
-					: undefined,
-		},
-	});
+  const fastify = Fastify({
+    logger: {
+      level: process.env.LOG_LEVEL ?? 'info',
+      transport:
+        process.env.NODE_ENV !== 'production'
+          ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss' } }
+          : undefined,
+    },
+  });
 
-	const db = deps.db ?? defaultDb;
-	const gitMutex = new GitMutex();
-	const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
-	const providerRegistry = deps.providerRegistry ?? new ProviderRegistry(db, fastify.log);
-	const config = deps.env ?? parseServerEnv(process.env);
-	const eventBus = new EventBus();
+  const db = deps.db ?? defaultDb;
+  const gitMutex = new GitMutex();
+  const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
+  const providerRegistry = deps.providerRegistry ?? new ProviderRegistry(db, fastify.log);
+  const config = deps.env ?? parseServerEnv(process.env);
+  const eventBus = new EventBus();
 
-	const sessionManager =
-		deps.sessionManager ?? new SessionManager(db, eventBus, fastify.log);
+  const sessionManager = deps.sessionManager ?? new SessionManager(db, eventBus, fastify.log);
 
-	const sessionOrchestrator =
-		deps.sessionOrchestrator ??
-		new SessionOrchestrator(db, worktreeManager, providerRegistry, sessionManager);
+  const sessionOrchestrator =
+    deps.sessionOrchestrator ??
+    new SessionOrchestrator(db, worktreeManager, providerRegistry, sessionManager);
 
-	fastify.decorate('db', db);
-	fastify.decorate('gitMutex', gitMutex);
-	fastify.decorate('worktreeManager', worktreeManager);
-	fastify.decorate('providerRegistry', providerRegistry);
-	fastify.decorate('sessionManager', sessionManager);
-	fastify.decorate('sessionOrchestrator', sessionOrchestrator);
-	fastify.decorate('eventBus', eventBus);
-	fastify.decorate('config', config);
+  fastify.decorate('db', db);
+  fastify.decorate('gitMutex', gitMutex);
+  fastify.decorate('worktreeManager', worktreeManager);
+  fastify.decorate('providerRegistry', providerRegistry);
+  fastify.decorate('sessionManager', sessionManager);
+  fastify.decorate('sessionOrchestrator', sessionOrchestrator);
+  fastify.decorate('eventBus', eventBus);
+  fastify.decorate('config', config);
 
-	// Sync providers in the background on startup
-	void providerRegistry
-		.sync()
-		.then(() => {
-			providerRegistry.startBackgroundWarmup();
-		})
-		.catch((err: unknown) => {
-			fastify.log.error(err, 'Failed to sync provider registry on startup');
-		});
+  // Sync providers in the background on startup
+  void providerRegistry
+    .sync()
+    .then(() => {
+      providerRegistry.startBackgroundWarmup();
+    })
+    .catch((err: unknown) => {
+      fastify.log.error(err, 'Failed to sync provider registry on startup');
+    });
 
-	const registrySyncInterval =
-		process.env.NODE_ENV === 'test'
-			? null
-			: setInterval(() => {
-				void providerRegistry.sync().catch((err: unknown) => {
-					fastify.log.error(err, 'Failed to sync provider registry in background');
-				});
-			}, PROVIDER_REGISTRY_SYNC_INTERVAL_MS);
+  const registrySyncInterval =
+    process.env.NODE_ENV === 'test'
+      ? null
+      : setInterval(() => {
+          void providerRegistry.sync().catch((err: unknown) => {
+            fastify.log.error(err, 'Failed to sync provider registry in background');
+          });
+        }, PROVIDER_REGISTRY_SYNC_INTERVAL_MS);
 
-	fastify.addHook('onClose', () => {
-		if (registrySyncInterval) {
-			clearInterval(registrySyncInterval);
-		}
-	});
+  fastify.addHook('onClose', () => {
+    if (registrySyncInterval) {
+      clearInterval(registrySyncInterval);
+    }
+  });
 
-	// Global error handler — keeps all error serialization in one place.
-	fastify.setErrorHandler((error: FastifyError, _request, reply) => {
-		if (error instanceof AppError) {
-			return reply.code(error.statusCode).send({ error: error.message });
-		}
-		// Zod / validation errors carry a statusCode < 500 set by the type provider
-		if (error.statusCode && error.statusCode < 500) {
-			return reply.code(error.statusCode).send({ error: error.message });
-		}
-		fastify.log.error(error, 'Unhandled server error');
-		return reply.code(500).send({ error: 'Internal server error' });
-	});
+  // Global error handler — keeps all error serialization in one place.
+  fastify.setErrorHandler((error: FastifyError, _request, reply) => {
+    if (error instanceof AppError) {
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
+    // Zod / validation errors carry a statusCode < 500 set by the type provider
+    if (error.statusCode && error.statusCode < 500) {
+      return reply.code(error.statusCode).send({ error: error.message });
+    }
+    fastify.log.error(error, 'Unhandled server error');
+    return reply.code(500).send({ error: 'Internal server error' });
+  });
 
-	fastify.setValidatorCompiler(validatorCompiler);
-	fastify.setSerializerCompiler(serializerCompiler);
+  fastify.setValidatorCompiler(validatorCompiler);
+  fastify.setSerializerCompiler(serializerCompiler);
 
-	await fastify.register(cors, {
-		origin: true, // Allow all origins in development or set explicitly based on VITE_API_URL
-		credentials: true,
-		methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-		allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
-	});
+  await fastify.register(cors, {
+    origin: true, // Allow all origins in development or set explicitly based on VITE_API_URL
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
+  });
 
-	// Register Secure Session
-	await fastify.register(secureSession, {
-		secret: config.AGENTCTL_SESSION_KEY,
-		salt: config.AGENTCTL_SESSION_SALT,
-		expiry: 24 * 60 * 60,
-		cookie: {
-			path: '/',
-			httpOnly: true,
-			secure: process.env.NODE_ENV === 'production',
-			maxAge: 24 * 60 * 60,
-			sameSite: 'lax',
-		},
-	});
+  // Register Secure Session
+  await fastify.register(secureSession, {
+    secret: config.AGENTCTL_SESSION_KEY,
+    salt: config.AGENTCTL_SESSION_SALT,
+    expiry: 24 * 60 * 60,
+    cookie: {
+      path: '/',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60,
+      sameSite: 'lax',
+    },
+  });
 
-	// Register Auth Plugin first
-	await fastify.register(authPlugin);
+  // Register Auth Plugin first
+  await fastify.register(authPlugin);
 
-	// Register other plugins
-	await fastify.register(worktreePlugin);
-	await fastify.register(websocketPlugin);
-	await fastify.register(sessionManagerPlugin);
+  // Register other plugins
+  await fastify.register(worktreePlugin);
+  await fastify.register(websocketPlugin);
+  await fastify.register(sessionManagerPlugin);
 
-	// Register routes
-	await fastify.register(authRoutes, { prefix: '/api' });
-	await fastify.register(projectsRoutes, { prefix: '/api' });
-	await fastify.register(sessionsRoutes, { prefix: '/api' });
-	await fastify.register(sessionReviewRoutes, { prefix: '/api' });
-	await fastify.register(providersRoutes, { prefix: '/api' });
-	await fastify.register(settingsRoutes, { prefix: '/api' });
-	await fastify.register(fsRoutes, { prefix: '/api' });
-	await fastify.register(eventsRoutes, { prefix: '/api' });
+  // Register routes
+  await fastify.register(authRoutes, { prefix: '/api' });
+  await fastify.register(projectsRoutes, { prefix: '/api' });
+  await fastify.register(sessionsRoutes, { prefix: '/api' });
+  await fastify.register(sessionReviewRoutes, { prefix: '/api' });
+  await fastify.register(providersRoutes, { prefix: '/api' });
+  await fastify.register(settingsRoutes, { prefix: '/api' });
+  await fastify.register(fsRoutes, { prefix: '/api' });
+  await fastify.register(eventsRoutes, { prefix: '/api' });
 
-	// Basic route to verify server is up
-	fastify.get('/health', () => {
-		return { status: 'ok' };
-	});
+  // Basic route to verify server is up
+  fastify.get('/health', () => {
+    return { status: 'ok' };
+  });
 
-	return fastify;
+  return fastify;
 }

@@ -84,7 +84,26 @@ export class GitService {
   }
 
   async addWorktree(repoPath: string, branchName: string, storagePath: string, baseRef: string) {
-    await simpleGit(repoPath).raw(['worktree', 'add', '-b', branchName, storagePath, baseRef]);
+    const git = simpleGit(repoPath);
+
+    // Remove if already registered
+    const worktrees = await this.listWorktrees(repoPath);
+    const worktreeExists = worktrees.some((w) => w.path === storagePath);
+    if (worktreeExists) {
+      await this.removeWorktree(repoPath, storagePath);
+    }
+
+    // Clear directory from disk
+    await fs.rm(storagePath, { recursive: true, force: true }).catch(() => undefined);
+
+    const branches = await git.branchLocal();
+    const branchExists = branches.all.includes(branchName);
+
+    if (branchExists) {
+      await git.raw(['worktree', 'add', storagePath, branchName]);
+    } else {
+      await git.raw(['worktree', 'add', '-b', branchName, storagePath, baseRef]);
+    }
   }
 
   async listWorktrees(repoPath: string): Promise<ListedWorktree[]> {

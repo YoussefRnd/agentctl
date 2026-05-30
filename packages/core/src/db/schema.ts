@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
-import { sql } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import type { SessionStatus, ACPEvent, ProviderStatus, SessionMode } from '@agentctl/shared';
 
 // Timestamps with DB-level defaults and auto-update on updatedAt
@@ -71,8 +71,12 @@ export const providers = sqliteTable('providers', {
   icon: text('icon'),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
   customEnv: text('custom_env').notNull().default('{}'), // Store user-configured credentials as a JSON string
-  supportsDynamicModel: integer('supports_dynamic_model', { mode: 'boolean' }).notNull().default(false),
-  supportsDynamicConfig: integer('supports_dynamic_config', { mode: 'boolean' }).notNull().default(false),
+  supportsDynamicModel: integer('supports_dynamic_model', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  supportsDynamicConfig: integer('supports_dynamic_config', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   ...timestamps,
 });
 
@@ -101,3 +105,22 @@ export const acpEvents = sqliteTable('acp_events', {
   data: text('data').notNull(), // JSON string
   ...eventTimestamps,
 });
+
+export const projectRelations = relations(projects, ({ many }) => ({
+  sessions: many(sessions),
+}));
+
+export const sessionRelations = relations(sessions, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [sessions.projectId],
+    references: [projects.id],
+  }),
+  events: many(acpEvents),
+}));
+
+export const acpEventRelations = relations(acpEvents, ({ one }) => ({
+  session: one(sessions, {
+    fields: [acpEvents.sessionId],
+    references: [sessions.id],
+  }),
+}));

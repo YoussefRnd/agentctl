@@ -47,9 +47,12 @@ export default fp(async (fastify) => {
                 where: eq(sessions.id, message.sessionId),
               });
               if (sessionRecord) {
-                const provider = await fastify.providerRegistry.ensureProviderReady(sessionRecord.selectedProvider, {
-                  force: false,
-                });
+                const provider = await fastify.providerRegistry.ensureProviderReady(
+                  sessionRecord.selectedProvider,
+                  {
+                    force: false,
+                  },
+                );
                 if (provider.status === 'ready' || provider.status === 'needs_auth') {
                   const launch = provider.getLaunchConfig(
                     sessionRecord.selectedModel,

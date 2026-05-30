@@ -1,4 +1,9 @@
-import type { ACPConfigOption, AuthMethod, ProviderDiscovery, ThinkingEffort } from '@agentctl/shared';
+import type {
+  ACPConfigOption,
+  AuthMethod,
+  ProviderDiscovery,
+  ThinkingEffort,
+} from '@agentctl/shared';
 import type { providers } from '../db/schema.js';
 
 export type ProviderData = typeof providers.$inferSelect;
@@ -46,11 +51,22 @@ export class Provider {
       (THINKING_OPTION_IDS as readonly string[]).includes(opt.id),
     );
 
-    if (this.id !== 'opencode' && !this.supportsDynamicModel && hasModelOption && selectedModel && selectedModel !== 'default') {
+    if (
+      this.id !== 'opencode' &&
+      !this.supportsDynamicModel &&
+      hasModelOption &&
+      selectedModel &&
+      selectedModel !== 'default'
+    ) {
       extraArgs.push('--model', selectedModel);
     }
 
-    if (this.id !== 'opencode' && !this.supportsDynamicConfig && hasThinkingOption && selectedThinkingEffort) {
+    if (
+      this.id !== 'opencode' &&
+      !this.supportsDynamicConfig &&
+      hasThinkingOption &&
+      selectedThinkingEffort
+    ) {
       extraArgs.push('--thinking-effort', selectedThinkingEffort);
     }
 
@@ -69,8 +85,12 @@ export class Provider {
     selectedThinkingEffort: ThinkingEffort;
   } {
     const configOptions = this.parseConfigOptions();
-    const modelOption = configOptions.find((opt) => (MODEL_OPTION_IDS as readonly string[]).includes(opt.id));
-    const thinkingOption = configOptions.find((opt) => (THINKING_OPTION_IDS as readonly string[]).includes(opt.id));
+    const modelOption = configOptions.find((opt) =>
+      (MODEL_OPTION_IDS as readonly string[]).includes(opt.id),
+    );
+    const thinkingOption = configOptions.find((opt) =>
+      (THINKING_OPTION_IDS as readonly string[]).includes(opt.id),
+    );
 
     return {
       selectedModel: modelOption?.currentValue ?? modelOption?.options[0]?.value ?? 'default',
@@ -118,7 +138,9 @@ export class Provider {
     }
   }
 
-  private parseConfigOptions(value: string | null | undefined = this.data.configOptions): ACPConfigOption[] {
+  private parseConfigOptions(
+    value: string | null | undefined = this.data.configOptions,
+  ): ACPConfigOption[] {
     if (!value) return [];
     try {
       return JSON.parse(value) as ACPConfigOption[];

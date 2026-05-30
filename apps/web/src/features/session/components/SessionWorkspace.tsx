@@ -8,58 +8,54 @@ import { MainFeed } from './MainFeed';
 import { SessionLayout } from './SessionLayout';
 
 export function SessionWorkspace() {
- const { sessionId, sessionData } = useSession();
+  const { sessionId, sessionData } = useSession();
 
- const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>('status');
- const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(true);
- const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>('status');
+  const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(true);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
- useEffect(() => {
-  const handleKeyDown = (e: KeyboardEvent) => {
-   if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
-    e.preventDefault();
-    setIsWorkbenchOpen((prev) => !prev);
-   }
-  };
-  window.addEventListener('keydown', handleKeyDown);
-  return () => {
-   window.removeEventListener('keydown', handleKeyDown);
-  };
- }, []);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault();
+        setIsWorkbenchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
- return (
-  <SessionLayout
-   isMobileSidebarOpen={isMobileSidebarOpen}
-   onCloseMobileSidebar={() => {
-    setIsMobileSidebarOpen(false);
-   }}
-   isWorkbenchOpen={isWorkbenchOpen}
-   onCloseWorkbench={() => {
-    setIsWorkbenchOpen(false);
-   }}
-   sidebar={<Sidebar />}
-   header={
-    <SessionHeader
-     sessionId={sessionId}
-     onOpenMobileSidebar={() => {
-      setIsMobileSidebarOpen(true);
-     }}
-     onToggleWorkbench={() => { setIsWorkbenchOpen((prev) => !prev); }}
-     isWorkbenchOpen={isWorkbenchOpen}
-     sessionTitle={sessionData?.session.title ?? null}
-    />
-   }
-
-   workbench={
-    <Workbench 
-     isOpen={isWorkbenchOpen} 
-     tab={workbenchTab} 
-     onTabChange={setWorkbenchTab} 
-    />
-   }
-
-  >
-   <MainFeed />
-  </SessionLayout>
- );
+  return (
+    <SessionLayout
+      isMobileSidebarOpen={isMobileSidebarOpen}
+      onCloseMobileSidebar={() => {
+        setIsMobileSidebarOpen(false);
+      }}
+      isWorkbenchOpen={isWorkbenchOpen}
+      onCloseWorkbench={() => {
+        setIsWorkbenchOpen(false);
+      }}
+      sidebar={<Sidebar />}
+      header={
+        <SessionHeader
+          sessionId={sessionId}
+          onOpenMobileSidebar={() => {
+            setIsMobileSidebarOpen(true);
+          }}
+          onToggleWorkbench={() => {
+            setIsWorkbenchOpen((prev) => !prev);
+          }}
+          isWorkbenchOpen={isWorkbenchOpen}
+          sessionTitle={sessionData?.session.title ?? null}
+        />
+      }
+      workbench={
+        <Workbench isOpen={isWorkbenchOpen} tab={workbenchTab} onTabChange={setWorkbenchTab} />
+      }
+    >
+      <MainFeed />
+    </SessionLayout>
+  );
 }

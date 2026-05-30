@@ -110,10 +110,12 @@ describe('SessionOrchestrator', () => {
       {} as SessionManager,
     );
 
-    await expect(orchestrator.create({
-      projectId: 'missing',
-      providerId: 'provider-1',
-      taskSlug: 'slug'
-    })).rejects.toThrow('Project not found');
+    await expect(
+      orchestrator.create({
+        projectId: 'missing',
+        providerId: 'provider-1',
+        taskSlug: 'slug',
+      }),
+    ).rejects.toThrow('Project not found');
   });
 });

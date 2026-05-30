@@ -61,7 +61,7 @@ export class WorktreeManager {
   ): Promise<WorktreeResult> {
     const projectName = this.sanitize(path.basename(repoPath));
     const cleanSessionId = this.sanitize(sessionId);
-    const cleanTaskSlug = this.sanitize(taskSlug);
+    const cleanTaskSlug = this.sanitize(taskSlug).slice(0, 30);
 
     const storagePath = path.join(this.baseDir, projectName, cleanSessionId);
     const branchName = `agentctl/${cleanSessionId}/${cleanTaskSlug}`;
@@ -313,4 +313,3 @@ export class WorktreeManager {
     });
   }
 }
-
