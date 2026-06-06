@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import type { RegistryAgent } from '@agentctl/shared';
 import { beforeEach, test, vi } from 'vitest';
 import { ProviderRegistry } from './acp-provider-registry.js';
-import * as probeModule from './acp-probe.js';
 import { noopLogger } from '../logger.js';
 import { providers, registrySnapshots, systemSettings } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
@@ -270,7 +269,7 @@ test('ProviderRegistry sync does not hydrate any providers on startup', async ()
     new Response(JSON.stringify({ agents: registryAgents }), { status: 200 }),
   );
 
-  const probeSpy = vi.spyOn(probeModule, 'probeAgent').mockResolvedValue({
+  const probeSpy = vi.spyOn(ProviderRegistry.prototype, 'probeAgent').mockResolvedValue({
     id: 'claude-acp',
     label: 'Claude',
     status: 'ready',
@@ -385,7 +384,7 @@ test('ProviderRegistry sync hydrates the saved default provider on startup', asy
     new Response(JSON.stringify({ agents: registryAgents }), { status: 200 }),
   );
 
-  const probeSpy = vi.spyOn(probeModule, 'probeAgent').mockResolvedValue({
+  const probeSpy = vi.spyOn(ProviderRegistry.prototype, 'probeAgent').mockResolvedValue({
     id: 'claude-acp',
     label: 'Claude',
     status: 'ready',
@@ -605,7 +604,7 @@ test('ProviderRegistry setProviderConfig updates database and triggers dynamic p
     }),
   } as unknown as DbClient;
 
-  const probeSpy = vi.spyOn(probeModule, 'probeAgent').mockResolvedValue({
+  const probeSpy = vi.spyOn(ProviderRegistry.prototype, 'probeAgent').mockResolvedValue({
     id: 'claude-acp',
     label: 'Claude',
     status: 'ready',

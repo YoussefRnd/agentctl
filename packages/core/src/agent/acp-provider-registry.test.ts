@@ -1,13 +1,80 @@
-import { test, vi } from 'vitest';
-import assert from 'node:assert/strict';
-import { ProviderRegistry } from './acp-provider-registry.js';
+import { test, vi, describe, expect } from 'vitest';
+import { ProviderRegistry, type ProbeConnectionHandle } from './acp-provider-registry.js';
 import type { DbClient } from './acp-session.js';
 import { noopLogger } from '../logger.js';
-import * as probeModule from './acp-probe.js';
+import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
+import type { RegistryAgent } from '@agentctl/shared';
 
-test('ProviderRegistry discover returns providers from DB', async () => {
-  const mockRows = [
-    {
+function createAgent(): RegistryAgent {
+  return {
+    id: 'claude-acp',
+    name: 'Claude ACP',
+    version: '1.0.0',
+    description: 'test agent',
+    authors: [],
+    distribution: {},
+  };
+}
+
+function createChild(): { child: ChildProcess; killCount: () => number } {
+  let killCount = 0;
+  const emitter = new EventEmitter();
+
+  const child = {
+    stdin: null,
+    stdout: null,
+    stderr: null,
+    kill: () => {
+      killCount += 1;
+      return true;
+    },
+    on: emitter.on.bind(emitter),
+  } as unknown as ChildProcess;
+
+  return { child, killCount: () => killCount };
+}
+
+describe('ProviderRegistry', () => {
+  test('ProviderRegistry discover returns providers from DB', async () => {
+    const mockRows = [
+      {
+        id: 'claude-acp',
+        name: 'Claude Code',
+        status: 'ready',
+        command: 'claude',
+        enabled: false,
+        launchArgs: '[]',
+        launchEnv: '{}',
+        configOptions: '[]',
+        authMethods: '[]',
+        version: '1.0.0',
+        description: 'test',
+        icon: 'icon',
+        supportsDynamicModel: false,
+        supportsDynamicConfig: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        customEnv: '{}',
+      },
+    ];
+
+    const db = {
+      select: () => ({
+        from: () => Promise.resolve(mockRows),
+      }),
+    } as unknown as DbClient;
+
+    const registry = new ProviderRegistry(db, noopLogger);
+    const providersList = await registry.discover();
+
+    expect(providersList.length).toBe(1);
+    expect(providersList[0].id).toBe('claude-acp');
+    expect(providersList[0].status).toBe('ready');
+  });
+
+  test('ProviderRegistry getProvider returns specific provider from DB', async () => {
+    const mockRow = {
       id: 'claude-acp',
       name: 'Claude Code',
       status: 'ready',
@@ -25,128 +92,110 @@ test('ProviderRegistry discover returns providers from DB', async () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       customEnv: '{}',
-    },
-  ];
+    };
 
-  const db = {
-    select: () => ({
-      from: () => Promise.resolve(mockRows),
-    }),
-  } as unknown as DbClient;
-
-  const registry = new ProviderRegistry(db, noopLogger);
-  const providersList = await registry.discover();
-
-  assert.equal(providersList.length, 1);
-  assert.equal(providersList[0].id, 'claude-acp');
-  assert.equal(providersList[0].status, 'ready');
-});
-
-test('ProviderRegistry getProvider returns specific provider from DB', async () => {
-  const mockRow = {
-    id: 'claude-acp',
-    name: 'Claude Code',
-    status: 'ready',
-    command: 'claude',
-    enabled: false,
-    launchArgs: '[]',
-    launchEnv: '{}',
-    configOptions: '[]',
-    authMethods: '[]',
-    version: '1.0.0',
-    description: 'test',
-    icon: 'icon',
-    supportsDynamicModel: false,
-    supportsDynamicConfig: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    customEnv: '{}',
-  };
-
-  const db = {
-    select: () => ({
-      from: () => ({
-        where: () => Promise.resolve([mockRow]),
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: () => Promise.resolve([mockRow]),
+        }),
       }),
-    }),
-  } as unknown as DbClient;
+    } as unknown as DbClient;
 
-  const registry = new ProviderRegistry(db, noopLogger);
-  const provider = await registry.getProvider('claude-acp');
+    const registry = new ProviderRegistry(db, noopLogger);
+    const provider = await registry.getProvider('claude-acp');
 
-  assert.ok(provider);
-  assert.equal(provider.id, 'claude-acp');
-});
-
-test('ProviderRegistry ensureProviderReady performs lazy binary check when force is false', async () => {
-  const mockRow = {
-    id: 'claude-acp',
-    name: 'Claude Code',
-    status: 'ready' as const,
-    command: 'node', // exists on path
-    enabled: true,
-    launchArgs: '[]',
-    launchEnv: '{}',
-    configOptions: '[]',
-    authMethods: '[]',
-    version: '1.0.0',
-    description: 'test',
-    icon: 'icon',
-    supportsDynamicModel: false,
-    supportsDynamicConfig: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    customEnv: '{}',
-  };
-
-  const db = {
-    select: () => ({
-      from: () => ({
-        where: () => Promise.resolve([mockRow]),
-      }),
-    }),
-    update: () => ({
-      set: () => ({
-        where: () => Promise.resolve(),
-      }),
-    }),
-    insert: () => ({
-      values: () => ({
-        onConflictDoUpdate: () => Promise.resolve(),
-      }),
-    }),
-  } as unknown as DbClient;
-
-  const probeSpy = vi.spyOn(probeModule, 'probeAgent').mockResolvedValue({
-    id: 'claude-acp',
-    label: 'Claude Code',
-    status: 'ready',
-    command: 'node',
-    enabled: true,
-    launchArgs: [],
-    launchEnv: {},
-    customEnv: {},
-    configOptions: [],
-    authMethods: [],
-    version: '1.0.0',
-    description: 'test',
-    supportsDynamicModel: false,
-    supportsDynamicConfig: false,
+    expect(provider).toBeDefined();
+    expect(provider?.id).toBe('claude-acp');
   });
 
-  const registry = new ProviderRegistry(db, noopLogger);
+  test('probeAgent returns ready discovery data on success', async () => {
+    const db = {} as DbClient;
+    const agent = createAgent();
+    const { child, killCount } = createChild();
+    const initCalls: unknown[] = [];
+    const sessionCalls: unknown[] = [];
 
-  // 1. Call ensureProviderReady with force: false
-  // Since status is 'ready' and binary 'node' is on PATH, it should return immediately without probing
-  const resultLazy = await registry.ensureProviderReady('claude-acp', { force: false });
-  assert.equal(resultLazy.status, 'ready');
-  assert.equal(probeSpy.mock.calls.length, 0);
+    const mockCreateConnection = () => ({
+      child,
+      connection: {
+        initialize: async (params: unknown) => {
+          initCalls.push(params);
+          return { authMethods: [{ id: 'login', name: 'Login' }] };
+        },
+        newSession: async (params: unknown) => {
+          sessionCalls.push(params);
+          return {
+            sessionId: 'session-1',
+            configOptions: [
+              {
+                id: 'model',
+                name: 'Model',
+                type: 'select',
+                currentValue: 'sonnet',
+                options: [{ value: 'sonnet', name: 'Sonnet' }],
+              },
+            ],
+          };
+        },
+        closed: Promise.resolve(),
+      },
+    } as any);
 
-  // 2. Call ensureProviderReady with force: true
-  // It should bypass the cache and run probeAgent
-  const resultForced = await registry.ensureProviderReady('claude-acp', { force: true });
-  assert.equal(resultForced.status, 'ready');
-  assert.equal(probeSpy.mock.calls.length, 1);
+    const registry = new ProviderRegistry(db, noopLogger, mockCreateConnection);
 
-  probeSpy.mockRestore();
+    const result = await registry.probeAgent(
+      agent,
+      { command: 'agent', args: ['--probe'], env: { AGENTCTL_TEST_FLAG: '1' } },
+    );
+
+    expect(result.status).toBe('ready');
+    expect(result.id).toBe(agent.id);
+    expect(result.authMethods.length).toBe(1);
+    expect(result.configOptions?.[0]?.currentValue).toBe('sonnet');
+    expect(initCalls.length).toBe(1);
+    expect(sessionCalls.length).toBe(1);
+    expect(killCount()).toBe(1);
+  });
+
+  test('probeAgent maps auth_required to needs_auth', async () => {
+    const db = {} as DbClient;
+    const agent = createAgent();
+    const { child, killCount } = createChild();
+
+    const mockCreateConnection = () => ({
+      child,
+      connection: {
+        initialize: async () => ({ authMethods: [] }),
+        newSession: async () => {
+          throw {
+            code: 'auth_required',
+            data: {
+              configOptions: [
+                {
+                  id: 'thinking',
+                  name: 'Thinking',
+                  type: 'select',
+                  currentValue: 'medium',
+                  options: [{ value: 'medium', name: 'Medium' }],
+                },
+              ],
+            },
+          };
+        },
+        closed: Promise.resolve(),
+      },
+    } as any);
+
+    const registry = new ProviderRegistry(db, noopLogger, mockCreateConnection);
+
+    const result = await registry.probeAgent(
+      agent,
+      { command: 'agent', args: [], env: {} },
+    );
+
+    expect(result.status).toBe('needs_auth');
+    expect(result.configOptions?.[0]?.id).toBe('thinking');
+    expect(killCount()).toBe(1);
+  });
 });
