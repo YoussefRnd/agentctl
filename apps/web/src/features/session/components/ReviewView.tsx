@@ -59,7 +59,7 @@ export function ReviewView({
           </span>
         </div>
         <h3 className="text-[12px] font-black tracking-widest text-white uppercase mb-1">
-          SESSION_{sessionStatus?.toUpperCase()}
+          SESSION_{sessionStatus.toUpperCase()}
         </h3>
         <p className="text-[10px] text-text-muted max-w-[240px] leading-relaxed uppercase">
           This session has been finalized. All changes have been {sessionStatus === 'merged' ? 'merged into the main branch' : 'discarded'}.
@@ -103,40 +103,38 @@ export function ReviewView({
           <h2 className="text-[12px] font-black tracking-[0.2em] text-white uppercase">
             CODE_REVIEW_MANIFEST
           </h2>
-          {sessionStatus && !isClosed && (
-            <div className="flex gap-1">
-              <button
-                type="button"
-                disabled={isMerging || isDiscarding}
-                onClick={() => {
-                  const msg = window.prompt('Enter commit message (optional):', taskSlug || '');
-                  if (msg !== null && onMerge) {
-                    onMerge(msg);
-                  }
-                }}
-                className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:bg-white/5 disabled:text-white/20 text-[9px] font-black tracking-wider text-white uppercase rounded transition-colors"
-              >
-                {isMerging ? 'MERGING...' : 'MERGE'}
-              </button>
-              <button
-                type="button"
-                disabled={isMerging || isDiscarding}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      'Are you sure you want to discard all changes? This cannot be undone.'
-                    ) &&
-                    onDiscard
-                  ) {
-                    onDiscard();
-                  }
-                }}
-                className="px-2 py-1 bg-red-600 hover:bg-red-700 disabled:bg-white/5 disabled:text-white/20 text-[9px] font-black tracking-wider text-white uppercase rounded transition-colors"
-              >
-                {isDiscarding ? 'DISCARDING...' : 'DISCARD'}
-              </button>
-            </div>
-          )}
+          <div className="flex gap-1">
+            <button
+              type="button"
+              disabled={!!isMerging || !!isDiscarding}
+              onClick={() => {
+                const msg = window.prompt('Enter commit message (optional):', taskSlug ?? '');
+                if (msg !== null && onMerge) {
+                  onMerge(msg);
+                }
+              }}
+              className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:bg-white/5 disabled:text-white/20 text-[9px] font-black tracking-wider text-white uppercase rounded transition-colors"
+            >
+              {isMerging ? 'MERGING...' : 'MERGE'}
+            </button>
+            <button
+              type="button"
+              disabled={!!isMerging || !!isDiscarding}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Are you sure you want to discard all changes? This cannot be undone.'
+                  ) &&
+                  onDiscard
+                ) {
+                  onDiscard();
+                }
+              }}
+              className="px-2 py-1 bg-red-600 hover:bg-red-700 disabled:bg-white/5 disabled:text-white/20 text-[9px] font-black tracking-wider text-white uppercase rounded transition-colors"
+            >
+              {isDiscarding ? 'DISCARDING...' : 'DISCARD'}
+            </button>
+          </div>
         </div>
         {files.length > 0 && (
           <div className="flex flex-wrap gap-x-6 gap-y-2 col">

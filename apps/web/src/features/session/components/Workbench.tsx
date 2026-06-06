@@ -78,8 +78,12 @@ export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
               }}
               sessionStatus={sessionData?.session.status}
               taskSlug={sessionData?.session.taskSlug}
-              onMerge={mergeSession}
-              onDiscard={discardSession}
+              onMerge={(msg) => {
+                void mergeSession(msg);
+              }}
+              onDiscard={() => {
+                void discardSession();
+              }}
               isMerging={isMergingSession}
               isDiscarding={isDiscardingSession}
             />
