@@ -335,5 +335,137 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     },
   );
 
+  fastify.withTypeProvider<ZodTypeProvider>().post(
+    '/sessions/:id/merge',
+    {
+      schema: {
+        params: sessionParamsSchema,
+        body: z.object({
+          commitMessage: z.string().optional(),
+        }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+      const { commitMessage } = request.body;
+
+      const session = await fastify.db.query.sessions.findFirst({
+        where: eq(sessions.id, id),
+        with: { project: true },
+      });
+
+      if (!session) {
+        throw new AppError('Session not found', 404);
+      }
+
+      const project = session.project;
+      if (!project) {
+        throw new AppError('Project not found', 404);
+      }
+
+      if (session.mode === 'worktree') {
+        if (!project.repoRoot) {
+          throw new AppError('Project repo root not set. Cannot merge.', 400);
+        }
+
+        // Stop session process
+        fastify.sessionManager.stopSession(id);
+
+        try {
+          await fastify.worktreeManager.finalize(
+            project.repoRoot,
+            session.worktreePath,
+            session.branch,
+            'main', // default to main
+            'merge',
+            session.taskSlug,
+            commitMessage,
+          );
+        } catch (err) {
+          throw new AppError(err instanceof Error ? err.message : 'Merge failed', 500);
+        }
+      } else {
+        // Stop session process
+        fastify.sessionManager.stopSession(id);
+      }
+
+      // Update session status in DB
+      const [updatedSession] = await fastify.db
+        .update(sessions)
+        .set({
+          status: 'merged',
+          closedAt: new Date(),
+        })
+        .where(eq(sessions.id, id))
+        .returning();
+
+      return updatedSession;
+    }
+  );
+
+  fastify.withTypeProvider<ZodTypeProvider>().post(
+    '/sessions/:id/discard',
+    {
+      schema: {
+        params: sessionParamsSchema,
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+
+      const session = await fastify.db.query.sessions.findFirst({
+        where: eq(sessions.id, id),
+        with: { project: true },
+      });
+
+      if (!session) {
+        throw new AppError('Session not found', 404);
+      }
+
+      const project = session.project;
+      if (!project) {
+        throw new AppError('Project not found', 404);
+      }
+
+      if (session.mode === 'worktree') {
+        if (!project.repoRoot) {
+          throw new AppError('Project repo root not set. Cannot discard.', 400);
+        }
+
+        // Stop session process
+        fastify.sessionManager.stopSession(id);
+
+        try {
+          await fastify.worktreeManager.finalize(
+            project.repoRoot,
+            session.worktreePath,
+            session.branch,
+            'main',
+            'discard',
+            session.taskSlug,
+          );
+        } catch (err) {
+          throw new AppError(err instanceof Error ? err.message : 'Discard failed', 500);
+        }
+      } else {
+        // Stop session process
+        fastify.sessionManager.stopSession(id);
+      }
+
+      // Update session status in DB
+      const [updatedSession] = await fastify.db
+        .update(sessions)
+        .set({
+          status: 'discarded',
+          closedAt: new Date(),
+        })
+        .where(eq(sessions.id, id))
+        .returning();
+
+      return updatedSession;
+    }
+  );
+
   done();
 };
+

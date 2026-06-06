@@ -65,3 +65,17 @@ export async function switchSessionMode(sessionId: string, mode: SessionMode) {
     body: JSON.stringify({ mode }),
   });
 }
+
+export async function mergeSession(sessionId: string, commitMessage?: string) {
+  return apiClient.fetch<SessionRow>(`/api/sessions/${sessionId}/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ commitMessage }),
+  });
+}
+
+export async function discardSession(sessionId: string) {
+  return apiClient.fetch<SessionRow>(`/api/sessions/${sessionId}/discard`, {
+    method: 'POST',
+  });
+}
+

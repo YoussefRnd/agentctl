@@ -11,7 +11,18 @@ interface WorkbenchProps {
 }
 
 export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
-  const { reviewData, isLoadingReview, stageFile, revertFile, refetchReview } = useSession();
+  const {
+    reviewData,
+    isLoadingReview,
+    stageFile,
+    revertFile,
+    refetchReview,
+    sessionData,
+    mergeSession,
+    isMergingSession,
+    discardSession,
+    isDiscardingSession,
+  } = useSession();
 
   return (
     <aside
@@ -65,6 +76,12 @@ export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
               onRetry={() => {
                 refetchReview();
               }}
+              sessionStatus={sessionData?.session.status}
+              taskSlug={sessionData?.session.taskSlug}
+              onMerge={mergeSession}
+              onDiscard={discardSession}
+              isMerging={isMergingSession}
+              isDiscarding={isDiscardingSession}
             />
           )}
         </div>

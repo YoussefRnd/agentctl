@@ -6,6 +6,8 @@ import {
   stageReviewFile,
   revertReviewFile,
   switchSessionMode,
+  mergeSession,
+  discardSession,
 } from '@agentctl/api-client';
 import { useSessionEvents } from '../hooks/useSessionEvents';
 import type { ReviewFile } from '../features/session/components/ReviewView';
@@ -39,6 +41,10 @@ interface SessionContextValue {
   isSwitchingBranch: boolean;
   switchMode: (mode: SessionMode) => Promise<void>;
   isSwitchingMode: boolean;
+  mergeSession: (commitMessage?: string) => Promise<void>;
+  isMergingSession: boolean;
+  discardSession: () => Promise<void>;
+  isDiscardingSession: boolean;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -151,6 +157,36 @@ export function SessionProvider({
     [revertMutation],
   );
 
+  const mergeMutation = useMutation({
+    mutationFn: (commitMessage?: string) => mergeSession(sessionId, commitMessage),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void refetchReview();
+    },
+  });
+
+  const mergeSessionFn = useCallback(
+    async (commitMessage?: string) => {
+      await mergeMutation.mutateAsync(commitMessage);
+    },
+    [mergeMutation],
+  );
+
+  const discardMutation = useMutation({
+    mutationFn: () => discardSession(sessionId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void refetchReview();
+    },
+  });
+
+  const discardSessionFn = useCallback(
+    async () => {
+      await discardMutation.mutateAsync();
+    },
+    [discardMutation],
+  );
+
   const planItems = useMemo(() => {
     const planMap = new Map<string, boolean>();
 
@@ -199,6 +235,10 @@ export function SessionProvider({
       isSwitchingBranch: switchBranchMutation.isPending,
       switchMode,
       isSwitchingMode: switchModeMutation.isPending,
+      mergeSession: mergeSessionFn,
+      isMergingSession: mergeMutation.isPending,
+      discardSession: discardSessionFn,
+      isDiscardingSession: discardMutation.isPending,
     }),
     [
       sessionId,
@@ -220,6 +260,10 @@ export function SessionProvider({
       switchBranchMutation.isPending,
       switchMode,
       switchModeMutation.isPending,
+      mergeSessionFn,
+      mergeMutation.isPending,
+      discardSessionFn,
+      discardMutation.isPending,
     ],
   );
 
