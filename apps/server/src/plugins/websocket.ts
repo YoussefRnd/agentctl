@@ -58,7 +58,7 @@ export default fp(async (fastify) => {
                     sessionRecord.selectedModel,
                     sessionRecord.selectedThinkingEffort,
                   );
-                  session = fastify.sessionManager.startSession(
+                  session = await fastify.sessionManager.startSession(
                     sessionRecord.id,
                     sessionRecord.worktreePath,
                     launch.command,

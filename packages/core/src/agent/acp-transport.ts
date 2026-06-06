@@ -2,11 +2,76 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import { Readable, Writable } from 'node:stream';
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import type { RequestPermissionResponse } from '@agentclientprotocol/sdk';
+import type {
+  RequestPermissionResponse,
+  RequestPermissionRequest,
+  SessionNotification,
+} from '@agentclientprotocol/sdk';
+import { type Logger, noopLogger } from '../logger.js';
+import type { AuthMethod, ThinkingEffort, ACPConfigOption } from '@agentctl/shared';
 
 export interface ACPConnectionHandle {
   child: ChildProcess;
   connection: Pick<ClientSideConnection, 'initialize' | 'newSession' | 'authenticate' | 'closed'>;
+}
+
+export interface AgentRuntimeHandle {
+  acpSessionId: string | null;
+  connection: ClientSideConnection;
+  child: ChildProcess;
+  closed: Promise<void>;
+  prompt(text: string): Promise<void>;
+  respondToPermission(permissionId: string, response: RequestPermissionResponse): void;
+  stop(): Promise<void>;
+}
+
+export interface RuntimeOptions {
+  cwd: string;
+  env?: Record<string, string>;
+  selectedModel?: string;
+  selectedThinkingEffort?: ThinkingEffort;
+  supportsDynamicModel?: boolean;
+  supportsDynamicConfig?: boolean;
+}
+
+export interface SessionCallbacks {
+  onUpdate: (notification: SessionNotification) => Promise<void> | void;
+  onRequestPermission: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
+}
+
+export interface AgentProbeResult {
+  status: 'ready' | 'needs_auth';
+  configOptions: ACPConfigOption[];
+  authMethods: AuthMethod[];
+  supportsDynamicModel: boolean;
+  supportsDynamicConfig: boolean;
+}
+
+export interface AgentRuntime {
+  execute(
+    command: string,
+    args: string[],
+    options: RuntimeOptions,
+    callbacks: SessionCallbacks,
+  ): Promise<AgentRuntimeHandle>;
+
+  probe(
+    command: string,
+    args: string[],
+    env?: Record<string, string>,
+  ): Promise<AgentProbeResult>;
+}
+
+export class AuthRequiredError extends Error {
+  constructor(
+    message: string,
+    public connection: ClientSideConnection,
+    public child: ChildProcess,
+    public configOptions: ACPConfigOption[] = [],
+  ) {
+    super(message);
+    this.name = 'AuthRequiredError';
+  }
 }
 
 export function cleanEnv(env: Record<string, string> = {}): Record<string, string> {
@@ -38,10 +103,9 @@ export function createAgentConnection(
     cwd: os.tmpdir(),
   });
 
-  const stdin = child.stdin;
-  const stdout = child.stdout;
+  const stdin = child.stdin as typeof child.stdin | null;
+  const stdout = child.stdout as typeof child.stdout | null;
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (stdin === null || stdout === null) {
     child.kill();
     throw new Error('Spawned agent missing stdin/stdout');
@@ -68,4 +132,509 @@ export function createAgentConnection(
   );
 
   return { child, connection };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Timed out while ${label}`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+export class DefaultAgentRuntime implements AgentRuntime {
+  constructor(
+    private spawnImpl: typeof spawn = spawn,
+    private logger: Logger = noopLogger,
+  ) {}
+
+  async execute(
+    command: string,
+    args: string[],
+    options: RuntimeOptions,
+    callbacks: SessionCallbacks,
+  ): Promise<AgentRuntimeHandle> {
+    const child = this.spawnImpl(command, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: cleanEnv(options.env),
+      cwd: options.cwd,
+    });
+
+    const stdin = child.stdin as typeof child.stdin | null;
+    const stdout = child.stdout as typeof child.stdout | null;
+    const stderr = child.stderr as typeof child.stderr | null;
+
+    if (stdin === null || stdout === null) {
+      child.kill();
+      throw new Error('Spawned agent missing stdin/stdout');
+    }
+
+    if (stderr) {
+      stderr.on('data', (data: Buffer) => {
+        this.logger.warn(`Agent stderr: ${data.toString()}`);
+      });
+    }
+
+    const stream = ndJsonStream(
+      Writable.toWeb(stdin) as WritableStream<Uint8Array>,
+      Readable.toWeb(stdout) as ReadableStream<Uint8Array>,
+    );
+
+    const connection = new ClientSideConnection(
+      () => ({
+        async sessionUpdate(n) {
+          await callbacks.onUpdate(n);
+        },
+        requestPermission: (r) => callbacks.onRequestPermission(r),
+      }),
+      stream,
+    );
+
+    const pendingApprovals = new Map<string, (response: RequestPermissionResponse) => void>();
+
+    const handle: AgentRuntimeHandle = {
+      acpSessionId: null,
+      connection,
+      child,
+      closed: connection.closed,
+      async prompt(text: string): Promise<void> {
+        await (connection.prompt({
+          sessionId: this.acpSessionId ?? '',
+          prompt: [{ type: 'text', text }],
+        }) as Promise<unknown>);
+      },
+      respondToPermission(permissionId: string, response: RequestPermissionResponse): void {
+        const resolve = pendingApprovals.get(permissionId);
+        if (resolve) {
+          resolve(response);
+          pendingApprovals.delete(permissionId);
+        }
+      },
+      async stop(): Promise<void> {
+        pendingApprovals.clear();
+        if (!child.stdin.destroyed) {
+          child.stdin.end();
+        }
+        child.kill();
+        await Promise.resolve();
+      },
+    };
+
+    try {
+      await withTimeout(
+        connection.initialize({
+          protocolVersion: 1,
+          clientCapabilities: {
+            terminal: true,
+            fs: {
+              readTextFile: true,
+              writeTextFile: true,
+            },
+          },
+          clientInfo: { name: 'agentctl', version: '1.0.0' },
+        }),
+        60_000,
+        'initializing ACP connection',
+      );
+
+      let newSessionResult;
+      try {
+        newSessionResult = await withTimeout(
+          connection.newSession({
+            cwd: options.cwd,
+            mcpServers: [],
+          }),
+          60_000,
+          'creating ACP session',
+        );
+      } catch (err: unknown) {
+        const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
+        if (error.code === 'auth_required') {
+          throw new AuthRequiredError(
+            'Authentication required',
+            connection,
+            child,
+            error.data?.configOptions ?? [],
+          );
+        }
+        throw err;
+      }
+
+      handle.acpSessionId = newSessionResult.sessionId;
+
+      const dynConn = connection as unknown as {
+        unstable_setSessionModel?: (p: { sessionId: string; modelId: string }) => Promise<unknown>;
+        setSessionConfigOption?: (p: {
+          sessionId: string;
+          configId: string;
+          value: string;
+        }) => Promise<unknown>;
+      };
+
+      if (options.supportsDynamicModel && options.selectedModel && options.selectedModel !== 'default') {
+        if (typeof dynConn.unstable_setSessionModel === 'function') {
+          await dynConn.unstable_setSessionModel({
+            sessionId: handle.acpSessionId,
+            modelId: options.selectedModel,
+          });
+        }
+      }
+
+      if (options.supportsDynamicConfig && options.selectedThinkingEffort) {
+        if (typeof dynConn.setSessionConfigOption === 'function') {
+          await dynConn.setSessionConfigOption({
+            sessionId: handle.acpSessionId,
+            configId: 'thinking_effort',
+            value: options.selectedThinkingEffort,
+          });
+        }
+      }
+
+      return handle;
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        throw err;
+      }
+      await handle.stop();
+      throw err;
+    }
+  }
+
+  async probe(
+    command: string,
+    args: string[],
+    env?: Record<string, string>,
+  ): Promise<AgentProbeResult> {
+    const child = this.spawnImpl(command, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: cleanEnv(env),
+      cwd: os.tmpdir(),
+    });
+
+    const stdin = child.stdin as typeof child.stdin | null;
+    const stdout = child.stdout as typeof child.stdout | null;
+
+    if (stdin === null || stdout === null) {
+      child.kill();
+      throw new Error('Spawned agent missing stdin/stdout');
+    }
+
+    const stream = ndJsonStream(
+      Writable.toWeb(stdin) as WritableStream<Uint8Array>,
+      Readable.toWeb(stdout) as ReadableStream<Uint8Array>,
+    );
+
+    const connection = new ClientSideConnection(
+      () => ({
+        sessionUpdate() {
+          return Promise.resolve();
+        },
+        requestPermission() {
+          return Promise.resolve<RequestPermissionResponse>({
+            outcome: { outcome: 'selected', optionId: 'allow-once' },
+          });
+        },
+      }),
+      stream,
+    );
+
+    try {
+      const result = await Promise.race([
+        (async (): Promise<AgentProbeResult> => {
+          const initResult = await connection.initialize({
+            protocolVersion: 1,
+            clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
+          });
+
+          let status: 'ready' | 'needs_auth' = 'ready';
+          let configOptions: ACPConfigOption[] = [];
+          let supportsDynamicModel = false;
+          let supportsDynamicConfig = false;
+
+          try {
+            const sessionResult = (await connection.newSession({
+              cwd: os.tmpdir(),
+              mcpServers: [],
+            })) as {
+              sessionId?: string;
+              configOptions?: ACPConfigOption[] | null;
+              models?: { currentModelId?: string; availableModels?: { modelId: string; name: string; description?: string }[] };
+              modes?: { currentModeId?: string; availableModes?: { id: string; name: string; description?: string }[] };
+            };
+
+            if (sessionResult.configOptions) {
+              configOptions = sessionResult.configOptions;
+            } else {
+              const models = sessionResult.models;
+              if (models?.availableModels) {
+                configOptions.push({
+                  id: 'model',
+                  name: 'Model',
+                  description: 'Select the model to use',
+                  type: 'select',
+                  currentValue: models.currentModelId ?? '',
+                  options: models.availableModels.map((m) => ({
+                    value: m.modelId,
+                    name: m.name,
+                    description: m.description,
+                  })),
+                });
+              }
+              const modes = sessionResult.modes;
+              if (modes?.availableModes) {
+                configOptions.push({
+                  id: 'mode',
+                  name: 'Mode',
+                  description: 'Select the tool approval mode',
+                  type: 'select',
+                  currentValue: modes.currentModeId ?? '',
+                  options: modes.availableModes.map((m) => ({
+                    value: m.id,
+                    name: m.name,
+                    description: m.description,
+                  })),
+                });
+              }
+            }
+
+            const sessionId = sessionResult.sessionId;
+            if (sessionId) {
+              const dynConn = connection as unknown as {
+                unstable_setSessionModel?: (p: { sessionId: string; modelId: string }) => Promise<unknown>;
+                setSessionConfigOption?: (p: {
+                  sessionId: string;
+                  configId: string;
+                  value: string;
+                }) => Promise<unknown>;
+              };
+
+              if (typeof dynConn.unstable_setSessionModel === 'function') {
+                try {
+                  await dynConn.unstable_setSessionModel({
+                    sessionId,
+                    modelId: 'probe-test-model-id',
+                  });
+                  supportsDynamicModel = true;
+                } catch (err: unknown) {
+                  const rpcErr = err as { code?: number };
+                  if (rpcErr.code !== -32601) {
+                    supportsDynamicModel = true;
+                  }
+                }
+              }
+
+              if (typeof dynConn.setSessionConfigOption === 'function') {
+                try {
+                  await dynConn.setSessionConfigOption({
+                    sessionId,
+                    configId: 'probe-test-config-id',
+                    value: 'probe-test-value',
+                  });
+                  supportsDynamicConfig = true;
+                } catch (err: unknown) {
+                  const rpcErr = err as { code?: number };
+                  if (rpcErr.code !== -32601) {
+                    supportsDynamicConfig = true;
+                  }
+                }
+              }
+            }
+          } catch (err: unknown) {
+            const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
+            if (error.code === 'auth_required') {
+              status = 'needs_auth';
+              if (error.data?.configOptions) {
+                configOptions = error.data.configOptions;
+              }
+            } else {
+              throw err;
+            }
+          }
+
+          return {
+            status,
+            configOptions,
+            authMethods: initResult.authMethods ?? [],
+            supportsDynamicModel,
+            supportsDynamicConfig,
+          };
+        })(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Probe timed out'));
+          }, 60_000);
+        }),
+      ]);
+
+      return result;
+    } finally {
+      child.kill();
+    }
+  }
+}
+
+interface GeminiModelInfo {
+  modelId: string;
+  name: string;
+  description?: string;
+}
+
+interface GeminiModeInfo {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+interface ExtendedSessionResult {
+  sessionId?: string;
+  configOptions?: ACPConfigOption[] | null;
+  models?: { currentModelId?: string; availableModels?: GeminiModelInfo[] };
+  modes?: { currentModeId?: string; availableModes?: GeminiModeInfo[] };
+}
+
+interface DynamicCapableConnection {
+  unstable_setSessionModel?: (params: { sessionId: string; modelId: string }) => Promise<unknown>;
+  setSessionConfigOption?: (params: {
+    sessionId: string;
+    configId: string;
+    value: string;
+  }) => Promise<unknown>;
+}
+
+export class LegacyConnectionRuntimeAdapter implements AgentRuntime {
+  constructor(
+    private createConnection: typeof createAgentConnection,
+    private logger: Logger,
+  ) {}
+
+  execute(): Promise<AgentRuntimeHandle> {
+    throw new Error('execute is not supported in legacy connection adapter');
+  }
+
+  async probe(
+    command: string,
+    args: string[],
+    env?: Record<string, string>,
+  ): Promise<AgentProbeResult> {
+    const { child, connection } = this.createConnection(command, args, env ?? {});
+    const dynConnection = connection as typeof connection & DynamicCapableConnection;
+
+    try {
+      const initResult = await connection.initialize({
+        protocolVersion: 1,
+        clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
+      });
+
+      let status: 'ready' | 'needs_auth' = 'ready';
+      let configOptions: ACPConfigOption[] = [];
+      let supportsDynamicModel = false;
+      let supportsDynamicConfig = false;
+
+      try {
+        const sessionResult = (await connection.newSession({
+          cwd: os.tmpdir(),
+          mcpServers: [],
+        })) as ExtendedSessionResult;
+
+        if (sessionResult.configOptions) {
+          configOptions = sessionResult.configOptions;
+        } else {
+          const models = sessionResult.models;
+          if (models?.availableModels) {
+            configOptions.push({
+              id: 'model',
+              name: 'Model',
+              description: 'Select the model to use',
+              type: 'select',
+              currentValue: models.currentModelId ?? '',
+              options: models.availableModels.map((m) => ({
+                value: m.modelId,
+                name: m.name,
+                description: m.description,
+              })),
+            });
+          }
+          const modes = sessionResult.modes;
+          if (modes?.availableModes) {
+            configOptions.push({
+              id: 'mode',
+              name: 'Mode',
+              description: 'Select the tool approval mode',
+              type: 'select',
+              currentValue: modes.currentModeId ?? '',
+              options: modes.availableModes.map((m) => ({
+                value: m.id,
+                name: m.name,
+                description: m.description,
+              })),
+            });
+          }
+        }
+
+        const sessionId = sessionResult.sessionId;
+        if (sessionId) {
+          if (typeof dynConnection.unstable_setSessionModel === 'function') {
+            try {
+              await dynConnection.unstable_setSessionModel({
+                sessionId,
+                modelId: 'probe-test-model-id',
+              });
+              supportsDynamicModel = true;
+            } catch (err: unknown) {
+              const rpcErr = err as { code?: number };
+              if (rpcErr.code !== -32601) {
+                supportsDynamicModel = true;
+              }
+            }
+          }
+
+          if (typeof dynConnection.setSessionConfigOption === 'function') {
+            try {
+              await dynConnection.setSessionConfigOption({
+                sessionId,
+                configId: 'probe-test-config-id',
+                value: 'probe-test-value',
+              });
+              supportsDynamicConfig = true;
+            } catch (err: unknown) {
+              const rpcErr = err as { code?: number };
+              if (rpcErr.code !== -32601) {
+                supportsDynamicConfig = true;
+              }
+            }
+          }
+        }
+      } catch (err: unknown) {
+        const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
+        if (error.code === 'auth_required') {
+          status = 'needs_auth';
+          if (error.data?.configOptions) {
+            configOptions = error.data.configOptions;
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      return {
+        status,
+        configOptions,
+        authMethods: initResult.authMethods ?? [],
+        supportsDynamicModel,
+        supportsDynamicConfig,
+      };
+    } finally {
+      child.kill();
+    }
+  }
 }

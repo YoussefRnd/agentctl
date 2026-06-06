@@ -1,14 +1,15 @@
 import { spawn } from 'node:child_process';
 import { eq } from 'drizzle-orm';
 import { ACPSession, type DbClient } from './acp-session.js';
-import { cleanEnv } from './acp-transport.js';
+import type { AgentRuntime, AgentRuntimeHandle } from './acp-transport.js';
+import { DefaultAgentRuntime, AuthRequiredError } from './acp-transport.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import { SessionEventStore } from './session-event-store.js';
 import { sessions, projects } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from './acp-provider-registry.js';
-import type { ProviderName, SessionMode } from '@agentctl/shared';
+import type { ProviderName, SessionMode, ThinkingEffort } from '@agentctl/shared';
 
 export interface IEventBus {
   publish(event: unknown): void;
@@ -31,6 +32,7 @@ export class SessionManager {
     private providerRegistry: ProviderRegistry,
     eventBus: IEventBus,
     private logger: Logger = noopLogger,
+    private runtime: AgentRuntime = new DefaultAgentRuntime(spawn, logger),
   ) {
     this.eventStore = new SessionEventStore(db, eventBus);
   }
@@ -66,7 +68,7 @@ export class SessionManager {
           sessionId,
           taskSlug,
           'main',
-          project.subdir ?? '',
+          project.subdir,
         );
         branch = worktree.branch;
         worktreePath = worktree.path;
@@ -121,35 +123,107 @@ export class SessionManager {
       launch.command,
       launch.args,
       launch.env,
+      selection.selectedModel,
+      selection.selectedThinkingEffort,
+      provider.supportsDynamicModel,
+      provider.supportsDynamicConfig,
     );
   }
 
-  startSession(
+  async startSession(
     sessionId: string,
     worktreePath: string,
     command: string,
     args: string[],
     env?: Record<string, string>,
-  ): ACPSession {
+    selectedModel = 'default',
+    selectedThinkingEffort: ThinkingEffort = 'medium',
+    supportsDynamicModel = false,
+    supportsDynamicConfig = false,
+  ): Promise<ACPSession> {
     this.logger.info({ sessionId, command, args, worktreePath }, 'Starting new agent session');
 
-    const child = spawn(command, args, {
-      cwd: worktreePath,
-      env: cleanEnv(env),
-    });
+    let session: ACPSession | undefined;
 
-    const session = new ACPSession(
-      sessionId,
-      child,
-      this.db,
-      this.eventStore,
-      worktreePath,
-      this.logger,
-    );
+    try {
+      const runtimeHandle = await this.runtime.execute(
+        command,
+        args,
+        {
+          cwd: worktreePath,
+          env,
+          selectedModel,
+          selectedThinkingEffort,
+          supportsDynamicModel,
+          supportsDynamicConfig,
+        },
+        {
+          onUpdate: async (notification) => {
+            if (session) {
+              await session.handleNotification(notification);
+            }
+          },
+          onRequestPermission: async (req) => {
+            if (session) {
+              return await session.handleRequestPermission(req);
+            }
+            return { outcome: { outcome: 'cancelled' } };
+          },
+        },
+      );
 
-    void session.initialize().catch((err: unknown) => {
-      this.logger.error(err, `Failed to initialize session ${sessionId}`);
-    });
+      session = new ACPSession(
+        sessionId,
+        runtimeHandle,
+        this.db,
+        this.eventStore,
+        worktreePath,
+        this.logger,
+      );
+
+      await this.db
+        .update(sessions)
+        .set({ agentSessionId: runtimeHandle.acpSessionId, status: 'running' })
+        .where(eq(sessions.id, sessionId));
+
+    } catch (err: unknown) {
+      if (err instanceof AuthRequiredError) {
+        this.logger.warn(`Session ${sessionId} requires authentication`);
+        await this.db
+          .update(sessions)
+          .set({ status: 'needs_attention' })
+          .where(eq(sessions.id, sessionId));
+
+        await this.eventStore.append(sessionId, 'status', {
+          status: 'needs_auth',
+          message: 'Authentication required. Please check your API keys or log in via CLI.',
+        });
+
+        const runtimeHandle: AgentRuntimeHandle = {
+          acpSessionId: null,
+          connection: err.connection,
+          child: err.child,
+          closed: err.connection.closed,
+          prompt: () => Promise.resolve(),
+          respondToPermission: () => undefined,
+          stop(): Promise<void> {
+            err.child.kill();
+            return Promise.resolve();
+          },
+        };
+
+        session = new ACPSession(
+          sessionId,
+          runtimeHandle,
+          this.db,
+          this.eventStore,
+          worktreePath,
+          this.logger,
+        );
+      } else {
+        throw err;
+      }
+    }
 
     this.sessions.set(sessionId, session);
     return session;
@@ -168,7 +242,7 @@ export class SessionManager {
       with: { project: true },
     });
 
-    if (!sessionRecord || !sessionRecord.project) {
+    if (!sessionRecord) {
       throw new Error(`Session or associated project not found: ${sessionId}`);
     }
 
@@ -183,8 +257,8 @@ export class SessionManager {
         : sessionRecord.project.path;
 
     const launch = provider.getLaunchConfig(
-      sessionRecord.selectedModel ?? 'default',
-      sessionRecord.selectedThinkingEffort ?? 'medium',
+      sessionRecord.selectedModel,
+      sessionRecord.selectedThinkingEffort,
     );
 
     return this.startSession(
@@ -193,6 +267,10 @@ export class SessionManager {
       launch.command,
       launch.args,
       launch.env,
+      sessionRecord.selectedModel,
+      sessionRecord.selectedThinkingEffort as ThinkingEffort,
+      provider.supportsDynamicModel,
+      provider.supportsDynamicConfig,
     );
   }
 
@@ -202,7 +280,7 @@ export class SessionManager {
       with: { project: true },
     });
 
-    if (!sessionRecord || !sessionRecord.project) {
+    if (!sessionRecord) {
       throw new Error(`Session or associated project not found: ${sessionId}`);
     }
 
@@ -233,7 +311,7 @@ export class SessionManager {
       worktreePath = result.path;
       branch = result.branch;
       baseCommit = result.baseCommit;
-    } else if (newMode === 'local') {
+    } else {
       if (!sessionRecord.project.repoRoot) {
         throw new Error('Project repo root not set. Cannot switch to local mode.');
       }

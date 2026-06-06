@@ -1,10 +1,12 @@
-import { test, vi, describe, expect } from 'vitest';
-import { ProviderRegistry, type ProbeConnectionHandle } from './acp-provider-registry.js';
-import type { DbClient } from './acp-session.js';
+import { test, describe, expect } from 'vitest';
+import { ProviderRegistry } from './acp-provider-registry.js';
 import { noopLogger } from '../logger.js';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
+import type { ACPConnectionHandle } from './acp-transport.js';
 import type { RegistryAgent } from '@agentctl/shared';
+import { createDatabase } from '../db/index.js';
+import { providers } from '../db/schema.js';
 
 function createAgent(): RegistryAgent {
   return {
@@ -37,33 +39,27 @@ function createChild(): { child: ChildProcess; killCount: () => number } {
 
 describe('ProviderRegistry', () => {
   test('ProviderRegistry discover returns providers from DB', async () => {
-    const mockRows = [
-      {
-        id: 'claude-acp',
-        name: 'Claude Code',
-        status: 'ready',
-        command: 'claude',
-        enabled: false,
-        launchArgs: '[]',
-        launchEnv: '{}',
-        configOptions: '[]',
-        authMethods: '[]',
-        version: '1.0.0',
-        description: 'test',
-        icon: 'icon',
-        supportsDynamicModel: false,
-        supportsDynamicConfig: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        customEnv: '{}',
-      },
-    ];
+    const db = createDatabase(':memory:');
 
-    const db = {
-      select: () => ({
-        from: () => Promise.resolve(mockRows),
-      }),
-    } as unknown as DbClient;
+    await db.insert(providers).values({
+      id: 'claude-acp',
+      name: 'Claude Code',
+      status: 'ready',
+      command: 'claude',
+      enabled: false,
+      launchArgs: '[]',
+      launchEnv: '{}',
+      customEnv: '{}',
+      configOptions: '[]',
+      authMethods: '[]',
+      version: '1.0.0',
+      description: 'test',
+      icon: 'icon',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    });
 
     const registry = new ProviderRegistry(db, noopLogger);
     const providersList = await registry.discover();
@@ -74,7 +70,9 @@ describe('ProviderRegistry', () => {
   });
 
   test('ProviderRegistry getProvider returns specific provider from DB', async () => {
-    const mockRow = {
+    const db = createDatabase(':memory:');
+
+    await db.insert(providers).values({
       id: 'claude-acp',
       name: 'Claude Code',
       status: 'ready',
@@ -82,25 +80,17 @@ describe('ProviderRegistry', () => {
       enabled: false,
       launchArgs: '[]',
       launchEnv: '{}',
+      customEnv: '{}',
       configOptions: '[]',
       authMethods: '[]',
       version: '1.0.0',
       description: 'test',
       icon: 'icon',
-      supportsDynamicModel: false,
-      supportsDynamicConfig: false,
       createdAt: new Date(),
       updatedAt: new Date(),
-      customEnv: '{}',
-    };
-
-    const db = {
-      select: () => ({
-        from: () => ({
-          where: () => Promise.resolve([mockRow]),
-        }),
-      }),
-    } as unknown as DbClient;
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    });
 
     const registry = new ProviderRegistry(db, noopLogger);
     const provider = await registry.getProvider('claude-acp');
@@ -110,7 +100,7 @@ describe('ProviderRegistry', () => {
   });
 
   test('probeAgent returns ready discovery data on success', async () => {
-    const db = {} as DbClient;
+    const db = createDatabase(':memory:');
     const agent = createAgent();
     const { child, killCount } = createChild();
     const initCalls: unknown[] = [];
@@ -119,13 +109,13 @@ describe('ProviderRegistry', () => {
     const mockCreateConnection = () => ({
       child,
       connection: {
-        initialize: async (params: unknown) => {
+        initialize: (params: unknown) => {
           initCalls.push(params);
-          return { authMethods: [{ id: 'login', name: 'Login' }] };
+          return Promise.resolve({ authMethods: [{ id: 'login', name: 'Login' }] });
         },
-        newSession: async (params: unknown) => {
+        newSession: (params: unknown) => {
           sessionCalls.push(params);
-          return {
+          return Promise.resolve({
             sessionId: 'session-1',
             configOptions: [
               {
@@ -136,11 +126,11 @@ describe('ProviderRegistry', () => {
                 options: [{ value: 'sonnet', name: 'Sonnet' }],
               },
             ],
-          };
+          });
         },
         closed: Promise.resolve(),
       },
-    } as any);
+    } as unknown as ACPConnectionHandle);
 
     const registry = new ProviderRegistry(db, noopLogger, mockCreateConnection);
 
@@ -159,16 +149,16 @@ describe('ProviderRegistry', () => {
   });
 
   test('probeAgent maps auth_required to needs_auth', async () => {
-    const db = {} as DbClient;
+    const db = createDatabase(':memory:');
     const agent = createAgent();
     const { child, killCount } = createChild();
 
     const mockCreateConnection = () => ({
       child,
       connection: {
-        initialize: async () => ({ authMethods: [] }),
-        newSession: async () => {
-          throw {
+        initialize: () => Promise.resolve({ authMethods: [] }),
+        newSession: () => {
+          const err = Object.assign(new Error('auth_required'), {
             code: 'auth_required',
             data: {
               configOptions: [
@@ -181,11 +171,12 @@ describe('ProviderRegistry', () => {
                 },
               ],
             },
-          };
+          });
+          return Promise.reject(err);
         },
         closed: Promise.resolve(),
       },
-    } as any);
+    } as unknown as ACPConnectionHandle);
 
     const registry = new ProviderRegistry(db, noopLogger, mockCreateConnection);
 

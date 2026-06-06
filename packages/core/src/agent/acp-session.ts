@@ -1,210 +1,64 @@
-import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type {
+  ClientSideConnection,
   RequestPermissionRequest,
   SessionNotification,
   RequestPermissionResponse,
-  PromptRequest,
 } from '@agentclientprotocol/sdk';
-import { sessions, providers } from '../db/schema.js';
+import { sessions } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { createDatabase } from '../db/index.js';
-import type { ChildProcess } from 'node:child_process';
-import { Readable, Writable } from 'node:stream';
 import { type Logger, noopLogger } from '../logger.js';
 import type { SessionEventStore } from './session-event-store.js';
+import type { AgentRuntimeHandle } from './acp-transport.js';
 
 export type DbClient = ReturnType<typeof createDatabase>;
 
 export class ACPSession {
   private connection: ClientSideConnection;
-  private acpSessionId: string | null = null;
+  public acpSessionId: string | null = null;
   private pendingApprovals = new Map<string, (response: RequestPermissionResponse) => void>();
   private isStopped = false;
   private stopKind: 'idle' | 'error' | null = null;
 
-  private static readonly STARTUP_TIMEOUT_MS = 60_000;
-
   constructor(
     public sessionId: string,
-    private child: ChildProcess,
+    private runtimeHandle: AgentRuntimeHandle,
     private db: DbClient,
     private eventStore: SessionEventStore,
     private cwd: string,
     private logger: Logger = noopLogger,
   ) {
-    this.child.on('error', (err) => {
+    this.connection = runtimeHandle.connection;
+    this.acpSessionId = runtimeHandle.acpSessionId;
+
+    this.runtimeHandle.child.on('error', (err) => {
       this.logger.error(err, `Child process error in session ${this.sessionId}`);
       void this.handleError(err).catch((e: unknown) => {
         this.logger.error(e, 'Failed to handle error');
       });
     });
 
-    const stdin = this.child.stdin;
-    const stdout = this.child.stdout;
-    const stderr = this.child.stderr;
+    this.runtimeHandle.child.once('exit', () => {
+      if (this.stopKind === 'error') return;
 
-    if (stdin === null || stdout === null) {
-      throw new Error('Child process missing stdin/stdout');
-    }
-
-    if (stderr) {
-      stderr.on('data', (data: Buffer) => {
-        this.logger.warn(`Agent stderr: ${data.toString()}`);
+      void this.markSessionStopped('idle').catch((e: unknown) => {
+        this.logger.error(e, 'Failed to update session status on exit');
       });
-    }
+    });
 
-    const stream = ndJsonStream(
-      Writable.toWeb(stdin) as WritableStream<Uint8Array>,
-      Readable.toWeb(stdout) as ReadableStream<Uint8Array>,
-    );
-    this.connection = new ClientSideConnection(
-      () => ({
-        sessionUpdate: (n) => this.onSessionUpdate(n),
-        requestPermission: (r) => this.onRequestPermission(r),
-      }),
-      stream,
-    );
-  }
-
-  async initialize(): Promise<void> {
-    try {
-      await this.withTimeout(
-        this.connection.initialize({
-          protocolVersion: 1,
-          clientCapabilities: {
-            terminal: true,
-            fs: {
-              readTextFile: true,
-              writeTextFile: true,
-            },
-          },
-          clientInfo: { name: 'agentctl', version: '1.0.0' },
-        }),
-        ACPSession.STARTUP_TIMEOUT_MS,
-        'initializing ACP connection',
-      );
-
-      this.child.once('exit', () => {
+    void this.runtimeHandle.closed
+      .then(() => {
         if (this.stopKind === 'error') return;
 
+        this.kill();
         void this.markSessionStopped('idle').catch((e: unknown) => {
-          this.logger.error(e, 'Failed to update session status on exit');
+          this.logger.error(e, 'Failed to update session status on close');
         });
+      })
+      .catch(async (error: unknown) => {
+        this.logger.error(error, 'Connection closed with error');
+        await this.handleError(error);
       });
-
-      void this.connection.closed
-        .then(() => {
-          if (this.stopKind === 'error') return;
-
-          this.kill();
-          void this.markSessionStopped('idle').catch((e: unknown) => {
-            this.logger.error(e, 'Failed to update session status on close');
-          });
-        })
-        .catch(async (error: unknown) => {
-          this.logger.error(error, 'Connection closed with error');
-          await this.handleError(error);
-        });
-
-      let newSessionResult;
-      try {
-        newSessionResult = await this.withTimeout(
-          this.connection.newSession({
-            cwd: this.cwd,
-            mcpServers: [],
-          }),
-          ACPSession.STARTUP_TIMEOUT_MS,
-          'creating ACP session',
-        );
-      } catch (err: unknown) {
-        if (err && typeof err === 'object' && 'code' in err && err.code === 'auth_required') {
-          this.logger.warn(`Session ${this.sessionId} requires authentication`);
-          await this.db
-            .update(sessions)
-            .set({ status: 'needs_attention' })
-            .where(eq(sessions.id, this.sessionId));
-
-          await this.eventStore.append(this.sessionId, 'status', {
-            status: 'needs_auth',
-            message: 'Authentication required. Please check your API keys or log in via CLI.',
-          });
-          return;
-        }
-        throw err;
-      }
-      this.acpSessionId = newSessionResult.sessionId;
-
-      await this.db
-        .update(sessions)
-        .set({ agentSessionId: this.acpSessionId, status: 'running' })
-        .where(eq(sessions.id, this.sessionId));
-
-      interface DynamicConn {
-        unstable_setSessionModel?: (p: { sessionId: string; modelId: string }) => Promise<unknown>;
-        setSessionConfigOption?: (p: {
-          sessionId: string;
-          configId: string;
-          value: string;
-        }) => Promise<unknown>;
-      }
-      const dynConn = this.connection as unknown as DynamicConn;
-
-      try {
-        const session = (
-          await this.db.select().from(sessions).where(eq(sessions.id, this.sessionId))
-        ).at(0);
-
-        if (session) {
-          const provider = (
-            await this.db.select().from(providers).where(eq(providers.id, session.selectedProvider))
-          ).at(0);
-
-          if (provider) {
-            if (
-              provider.supportsDynamicModel &&
-              session.selectedModel &&
-              session.selectedModel !== 'default'
-            ) {
-              this.logger.info(
-                `Setting dynamic model: ${session.selectedModel} for session ${this.sessionId}`,
-              );
-              if (typeof dynConn.unstable_setSessionModel === 'function') {
-                await dynConn.unstable_setSessionModel({
-                  sessionId: this.acpSessionId,
-                  modelId: session.selectedModel,
-                });
-              } else {
-                this.logger.warn(
-                  `Provider advertised supportsDynamicModel but connection.unstable_setSessionModel is not a function`,
-                );
-              }
-            }
-
-            if (provider.supportsDynamicConfig && session.selectedThinkingEffort) {
-              this.logger.info(
-                `Setting dynamic config (thinking_effort): ${session.selectedThinkingEffort} for session ${this.sessionId}`,
-              );
-              if (typeof dynConn.setSessionConfigOption === 'function') {
-                await dynConn.setSessionConfigOption({
-                  sessionId: this.acpSessionId,
-                  configId: 'thinking_effort',
-                  value: session.selectedThinkingEffort,
-                });
-              } else {
-                this.logger.warn(
-                  `Provider advertised supportsDynamicConfig but connection.setSessionConfigOption is not a function`,
-                );
-              }
-            }
-          }
-        }
-      } catch (err: unknown) {
-        this.logger.error(err, `Failed to configure session dynamically for ${this.sessionId}`);
-      }
-    } catch (error) {
-      await this.handleError(error);
-      throw error;
-    }
   }
 
   async prompt(text: string): Promise<void> {
@@ -234,15 +88,10 @@ export class ACPSession {
 
       await this.db.update(sessions).set(updateFields).where(eq(sessions.id, this.sessionId));
 
-      const request: PromptRequest = {
-        sessionId: this.acpSessionId ?? this.sessionId,
-        prompt: [{ type: 'text', text }],
-      };
-
       // Persist user message immediately so it shows up in history
       await this.eventStore.append(this.sessionId, 'text', { content: text, role: 'user' });
 
-      await (this.connection.prompt(request) as Promise<unknown>);
+      await this.runtimeHandle.prompt(text);
     } catch (error: unknown) {
       await this.handleError(error);
       throw error;
@@ -263,11 +112,7 @@ export class ACPSession {
     this.isStopped = true;
     this.pendingApprovals.clear();
 
-    if (this.child.stdin && !this.child.stdin.destroyed) {
-      this.child.stdin.end();
-    }
-
-    this.child.kill();
+    void this.runtimeHandle.stop();
   }
 
   async stop(): Promise<void> {
@@ -299,24 +144,6 @@ export class ACPSession {
       .where(eq(sessions.id, this.sessionId));
   }
 
-  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-    const timeoutPromise = new Promise<T>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        reject(new Error(`Timed out while ${label}`));
-      }, timeoutMs);
-    });
-
-    try {
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
-  }
-
   private currentMessage = '';
   private currentThought = '';
   private currentUserMessage = '';
@@ -325,7 +152,7 @@ export class ACPSession {
   private userMessageEventId: number | null = null;
   private toolCallEventId: number | null = null;
 
-  private async onSessionUpdate(notification: SessionNotification): Promise<void> {
+  public async handleNotification(notification: SessionNotification): Promise<void> {
     try {
       const update = notification.update;
       const typeKey = update.sessionUpdate;
@@ -451,12 +278,12 @@ export class ACPSession {
       await this.eventStore.append(this.sessionId, eventType, uiData);
     } catch (error) {
       await this.handleError(error).catch((e: unknown) => {
-        this.logger.error(e, 'Failed to handle error in onSessionUpdate');
+        this.logger.error(e, 'Failed to handle error in handleNotification');
       });
     }
   }
 
-  private async onRequestPermission(
+  public async handleRequestPermission(
     request: RequestPermissionRequest,
   ): Promise<RequestPermissionResponse> {
     try {
@@ -480,7 +307,7 @@ export class ACPSession {
 
       return await Promise.race([
         approvalPromise,
-        this.connection.closed.then(() => ({
+        this.runtimeHandle.closed.then(() => ({
           outcome: { outcome: 'cancelled' as const },
         })),
       ]);

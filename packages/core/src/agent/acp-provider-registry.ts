@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import { desc, eq, lt } from 'drizzle-orm';
@@ -9,7 +9,8 @@ import type {
   RegistryAgent,
 } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
-import { createAgentConnection } from './acp-transport.js';
+import type { AgentRuntime } from './acp-transport.js';
+import { createAgentConnection, DefaultAgentRuntime, LegacyConnectionRuntimeAdapter } from './acp-transport.js';
 import { providers, registrySnapshots, systemSettings } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
 import { Provider, type ProviderData } from './provider.js';
@@ -29,34 +30,6 @@ interface ProviderSettings {
   onboardingVersion?: string;
   setupStep?: string;
   defaultProviderId?: string;
-}
-
-interface GeminiModelInfo {
-  modelId: string;
-  name: string;
-  description?: string;
-}
-
-interface GeminiModeInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-interface ExtendedSessionResult {
-  sessionId?: string;
-  configOptions?: ACPConfigOption[] | null;
-  models?: { currentModelId?: string; availableModels?: GeminiModelInfo[] };
-  modes?: { currentModeId?: string; availableModes?: GeminiModeInfo[] };
-}
-
-interface DynamicCapableConnection {
-  unstable_setSessionModel?: (params: { sessionId: string; modelId: string }) => Promise<unknown>;
-  setSessionConfigOption?: (params: {
-    sessionId: string;
-    configId: string;
-    value: string;
-  }) => Promise<unknown>;
 }
 
 export interface ProbeConnectionHandle {
@@ -178,8 +151,8 @@ function buildSyncedDiscovery(
   const existingIsActive = existing?.status === 'ready' || existing?.status === 'needs_auth';
   const command = launch?.command ?? existing?.command ?? agent.id;
   const launchArgs = parseJSON(existing?.launchArgs, [] as string[]);
-  const launchEnv = parseJSON(existing?.launchEnv, {});
-  const customEnv = parseJSON(existing?.customEnv, {});
+  const launchEnv = parseJSON<Record<string, string>>(existing?.launchEnv, {});
+  const customEnv = parseJSON<Record<string, string>>(existing?.customEnv, {});
   const configOptions = parseJSON(existing?.configOptions, [] as ACPConfigOption[]);
   const authMethods = parseJSON(existing?.authMethods, [] as AuthMethod[]);
   const enabled = existing ? existing.enabled : false;
@@ -232,12 +205,22 @@ function parseRegistryAgents(data: string): RegistryAgent[] {
 export class ProviderRegistry {
   private syncInFlight: Promise<void> | null = null;
   private static readonly PROBE_TIMEOUT_MS = 60_000;
+  private runtime: AgentRuntime;
 
   constructor(
     private db: DbClient,
     private logger: Logger = noopLogger,
     private createConnection = createAgentConnection,
-  ) {}
+    runtime?: AgentRuntime,
+  ) {
+    if (runtime) {
+      this.runtime = runtime;
+    } else if (createConnection !== createAgentConnection) {
+      this.runtime = new LegacyConnectionRuntimeAdapter(createConnection, logger);
+    } else {
+      this.runtime = new DefaultAgentRuntime(spawn, logger);
+    }
+  }
 
   // Probing logic internalized within ProviderRegistry
 
@@ -263,146 +246,30 @@ export class ProviderRegistry {
   async probeAgent(
     agent: RegistryAgent,
     launch: { command: string; args: string[]; env: Record<string, string> },
-    options: { timeoutMs?: number } = {},
+    _options: { timeoutMs?: number } = {},
   ): Promise<ProviderDiscovery> {
-    const timeoutMs = options.timeoutMs ?? ProviderRegistry.PROBE_TIMEOUT_MS;
-    const { child, connection } = this.createConnection(launch.command, launch.args, launch.env);
-    const dynConnection = connection as typeof connection & DynamicCapableConnection;
-
-    child.on('error', (err) => {
-      this.logger.warn(err, `Spawning agent ${agent.id} failed`);
-    });
-
     try {
-      const result = await Promise.race([
-        (async () => {
-          const initResult = await connection.initialize({
-            protocolVersion: 1,
-            clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
-          });
-
-          let status: 'ready' | 'needs_auth' = 'ready';
-          let configOptions: ACPConfigOption[] = [];
-          let supportsDynamicModel = false;
-          let supportsDynamicConfig = false;
-
-          try {
-            const sessionResult = (await connection.newSession({
-              cwd: os.tmpdir(),
-              mcpServers: [],
-            })) as ExtendedSessionResult;
-
-            if (sessionResult.configOptions) {
-              configOptions = sessionResult.configOptions;
-            } else {
-              const models = sessionResult.models;
-              if (models?.availableModels) {
-                configOptions.push({
-                  id: 'model',
-                  name: 'Model',
-                  description: 'Select the model to use',
-                  type: 'select',
-                  currentValue: models.currentModelId ?? '',
-                  options: models.availableModels.map((m) => ({
-                    value: m.modelId,
-                    name: m.name,
-                    description: m.description,
-                  })),
-                });
-              }
-              const modes = sessionResult.modes;
-              if (modes?.availableModes) {
-                configOptions.push({
-                  id: 'mode',
-                  name: 'Mode',
-                  description: 'Select the tool approval mode',
-                  type: 'select',
-                  currentValue: modes.currentModeId ?? '',
-                  options: modes.availableModes.map((m) => ({
-                    value: m.id,
-                    name: m.name,
-                    description: m.description,
-                  })),
-                });
-              }
-            }
-
-            const sessionId = sessionResult.sessionId;
-            if (sessionId) {
-              if (typeof dynConnection.unstable_setSessionModel === 'function') {
-                try {
-                  await dynConnection.unstable_setSessionModel({
-                    sessionId,
-                    modelId: 'probe-test-model-id',
-                  });
-                  supportsDynamicModel = true;
-                } catch (err: unknown) {
-                  const rpcErr = err as { code?: number };
-                  if (rpcErr.code !== -32601) {
-                    supportsDynamicModel = true;
-                  }
-                }
-              }
-
-              if (typeof dynConnection.setSessionConfigOption === 'function') {
-                try {
-                  await dynConnection.setSessionConfigOption({
-                    sessionId,
-                    configId: 'probe-test-config-id',
-                    value: 'probe-test-value',
-                  });
-                  supportsDynamicConfig = true;
-                } catch (err: unknown) {
-                  const rpcErr = err as { code?: number };
-                  if (rpcErr.code !== -32601) {
-                    supportsDynamicConfig = true;
-                  }
-                }
-              }
-            }
-          } catch (err: unknown) {
-            const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
-            if (error.code === 'auth_required') {
-              status = 'needs_auth';
-              if (error.data?.configOptions) {
-                configOptions = error.data.configOptions;
-              }
-            } else {
-              throw err;
-            }
-          }
-
-          return {
-            id: agent.id,
-            label: agent.name,
-            status,
-            command: launch.command,
-            enabled: false,
-            launchArgs: launch.args,
-            launchEnv: launch.env,
-            customEnv: {},
-            configOptions,
-            authMethods: initResult.authMethods ?? [],
-            version: agent.version,
-            description: agent.description,
-            icon: agent.icon,
-            supportsDynamicModel,
-            supportsDynamicConfig,
-          };
-        })(),
-        new Promise<ProviderDiscovery>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`Probe for ${agent.id} timed out`));
-          }, timeoutMs);
-        }),
-      ]);
-
-      return result;
+      const probeResult = await this.runtime.probe(launch.command, launch.args, launch.env);
+      return {
+        id: agent.id,
+        label: agent.name,
+        status: probeResult.status,
+        command: launch.command,
+        enabled: false,
+        launchArgs: launch.args,
+        launchEnv: launch.env,
+        customEnv: {},
+        configOptions: probeResult.configOptions,
+        authMethods: probeResult.authMethods,
+        version: agent.version,
+        description: agent.description,
+        icon: agent.icon,
+        supportsDynamicModel: probeResult.supportsDynamicModel,
+        supportsDynamicConfig: probeResult.supportsDynamicConfig,
+      };
     } catch (err) {
       this.logger.error(err, `Probe failed for ${agent.id}`);
       return this.notFoundEntry(agent);
-    } finally {
-      child.kill();
     }
   }
 

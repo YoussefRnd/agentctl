@@ -246,9 +246,6 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       }
 
       const newMode = request.body.mode;
-      let worktreePath = session.worktreePath;
-      let branch = session.branch;
-      let baseCommit = session.baseCommit;
 
       try {
         await fastify.sessionManager.switchMode(request.params.id, newMode);
