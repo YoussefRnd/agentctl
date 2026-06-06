@@ -87,6 +87,8 @@ export interface AgentRuntimeHandle {
   prompt(text: string): Promise<void>;
   respondToPermission(permissionId: string, response: RequestPermissionResponse): void;
   stop(): Promise<void>;
+  updateModel?(modelId: string): Promise<void>;
+  updateConfigOption?(configId: string, value: string): Promise<void>;
 }
 
 export interface RuntimeOptions {
@@ -277,6 +279,33 @@ export class DefaultAgentRuntime implements AgentRuntime {
         pendingApprovals.clear();
         transport.kill();
         await Promise.resolve();
+      },
+      async updateModel(modelId: string): Promise<void> {
+        const dynConn = connection as unknown as {
+          unstable_setSessionModel?: (p: { sessionId: string; modelId: string }) => Promise<unknown>;
+        };
+        if (typeof dynConn.unstable_setSessionModel === 'function' && this.acpSessionId) {
+          await dynConn.unstable_setSessionModel({
+            sessionId: this.acpSessionId,
+            modelId,
+          });
+        }
+      },
+      async updateConfigOption(configId: string, value: string): Promise<void> {
+        const dynConn = connection as unknown as {
+          setSessionConfigOption?: (p: {
+            sessionId: string;
+            configId: string;
+            value: string;
+          }) => Promise<unknown>;
+        };
+        if (typeof dynConn.setSessionConfigOption === 'function' && this.acpSessionId) {
+          await dynConn.setSessionConfigOption({
+            sessionId: this.acpSessionId,
+            configId,
+            value,
+          });
+        }
       },
     };
 

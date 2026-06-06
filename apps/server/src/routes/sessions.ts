@@ -106,25 +106,18 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
         throw new AppError('Session not found', 404);
       }
 
-      const [updatedSession] = await fastify.db
-        .update(sessions)
-        .set({
-          selectedProvider: request.body.selectedProvider,
-          selectedModel: request.body.selectedModel,
-          selectedThinkingEffort: request.body.selectedThinkingEffort,
-        })
-        .where(eq(sessions.id, request.params.id))
-        .returning();
+      await fastify.sessionManager.updateSessionConfig(request.params.id, {
+        selectedProvider: request.body.selectedProvider,
+        selectedModel: request.body.selectedModel,
+        selectedThinkingEffort: request.body.selectedThinkingEffort,
+      });
 
-      const provider = await fastify.providerRegistry.ensureProviderReady(
-        updatedSession.selectedProvider,
-        {
-          force: false,
-        },
-      );
+      const updatedSession = await fastify.db.query.sessions.findFirst({
+        where: eq(sessions.id, request.params.id),
+      });
 
-      if (provider.status === 'ready' || provider.status === 'needs_auth') {
-        await fastify.sessionManager.restartSession(request.params.id);
+      if (!updatedSession) {
+        throw new AppError('Session not found', 404);
       }
 
       const providersList = await fastify.providerRegistry.discover();

@@ -20,6 +20,10 @@ export class ACPSession {
   private isStopped = false;
   private stopKind: 'idle' | 'error' | null = null;
 
+  get isDead(): boolean {
+    return this.isStopped;
+  }
+
   constructor(
     public sessionId: string,
     private runtimeHandle: AgentRuntimeHandle,
@@ -118,6 +122,20 @@ export class ACPSession {
   async stop(): Promise<void> {
     this.kill();
     await this.markSessionStopped('idle');
+  }
+
+  async updateModel(modelId: string): Promise<void> {
+    if (this.isStopped) return;
+    if (typeof this.runtimeHandle.updateModel === 'function') {
+      await this.runtimeHandle.updateModel(modelId);
+    }
+  }
+
+  async updateConfigOption(configId: string, value: string): Promise<void> {
+    if (this.isStopped) return;
+    if (typeof this.runtimeHandle.updateConfigOption === 'function') {
+      await this.runtimeHandle.updateConfigOption(configId, value);
+    }
   }
 
   private async handleError(error: unknown): Promise<void> {

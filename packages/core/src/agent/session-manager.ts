@@ -281,6 +281,75 @@ export class SessionManager {
     );
   }
 
+  async updateSessionConfig(
+    sessionId: string,
+    params: {
+      selectedProvider: string;
+      selectedModel: string;
+      selectedThinkingEffort: ThinkingEffort;
+    },
+  ): Promise<ACPSession | null> {
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const providerIdChanged = sessionRecord.selectedProvider !== params.selectedProvider;
+
+    const [updatedSession] = await this.db
+      .update(sessions)
+      .set({
+        selectedProvider: params.selectedProvider,
+        selectedModel: params.selectedModel,
+        selectedThinkingEffort: params.selectedThinkingEffort,
+      })
+      .where(eq(sessions.id, sessionId))
+      .returning();
+
+    const provider = await this.providerRegistry.ensureProviderReady(
+      updatedSession.selectedProvider,
+      { force: false },
+    );
+
+    if (provider.status !== 'ready' && provider.status !== 'needs_auth') {
+      return null;
+    }
+
+    const activeSession = this.sessions.get(sessionId);
+
+    if (activeSession && !activeSession.isDead && !providerIdChanged) {
+      const supportsDynamicModel = provider.supportsDynamicModel;
+      const supportsDynamicConfig = provider.supportsDynamicConfig;
+
+      if (supportsDynamicModel && params.selectedModel !== sessionRecord.selectedModel) {
+        await activeSession.updateModel(params.selectedModel);
+      }
+
+      if (
+        supportsDynamicConfig &&
+        params.selectedThinkingEffort !== sessionRecord.selectedThinkingEffort
+      ) {
+        await activeSession.updateConfigOption('thinking_effort', params.selectedThinkingEffort);
+      }
+
+      const modelChanged = params.selectedModel !== sessionRecord.selectedModel;
+      const effortChanged = params.selectedThinkingEffort !== sessionRecord.selectedThinkingEffort;
+
+      const needsModelRestart = modelChanged && !supportsDynamicModel;
+      const needsEffortRestart = effortChanged && !supportsDynamicConfig;
+
+      if (!needsModelRestart && !needsEffortRestart) {
+        return activeSession;
+      }
+    }
+
+    return this.restartSession(sessionId);
+  }
+
   async switchMode(sessionId: string, newMode: SessionMode): Promise<ACPSession | null> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
@@ -365,10 +434,25 @@ export class SessionManager {
     action: 'approve' | 'deny' | 'session.input',
     payload: { eventId?: string | number; input?: string },
   ) {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      this.logger.warn({ sessionId }, 'Received message for unknown session');
-      return;
+    let session = this.sessions.get(sessionId);
+
+    if (!session || session.isDead) {
+      const sessionRecord = await this.db.query.sessions.findFirst({
+        where: eq(sessions.id, sessionId),
+      });
+
+      if (!sessionRecord) {
+        this.logger.warn({ sessionId }, 'Received message for unknown session');
+        return;
+      }
+
+      if (sessionRecord.status === 'merged' || sessionRecord.status === 'discarded') {
+        this.logger.warn({ sessionId, status: sessionRecord.status }, 'Cannot resuscitate a merged or discarded session');
+        return;
+      }
+
+      this.logger.info({ sessionId }, 'Resuscitating session runtime');
+      session = await this.restartSession(sessionId);
     }
 
     if (action === 'approve') {
