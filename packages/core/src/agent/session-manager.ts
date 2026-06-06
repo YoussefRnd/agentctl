@@ -8,6 +8,7 @@ import { noopLogger } from '../logger.js';
 import { SessionEventStore } from './session-event-store.js';
 import { sessions, projects } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
+import { negotiateCapabilities } from './capabilities-negotiator.js';
 import type { ProviderRegistry } from './acp-provider-registry.js';
 import type { ProviderName, SessionMode, ThinkingEffort } from '@agentctl/shared';
 
@@ -95,7 +96,7 @@ export class SessionManager {
       resolvedMode = 'local';
     }
 
-    const selection = provider.resolveDefaultSelection();
+    const selection = negotiateCapabilities(provider, undefined, undefined);
 
     await this.db.insert(sessions).values({
       id: sessionId,
@@ -125,8 +126,8 @@ export class SessionManager {
       launch.env,
       selection.selectedModel,
       selection.selectedThinkingEffort,
-      provider.supportsDynamicModel,
-      provider.supportsDynamicConfig,
+      selection.supportsDynamicModel,
+      selection.supportsDynamicConfig,
     );
   }
 
@@ -256,9 +257,15 @@ export class SessionManager {
         ? sessionRecord.worktreePath
         : sessionRecord.project.path;
 
-    const launch = provider.getLaunchConfig(
+    const selection = negotiateCapabilities(
+      provider,
       sessionRecord.selectedModel,
-      sessionRecord.selectedThinkingEffort,
+      sessionRecord.selectedThinkingEffort as ThinkingEffort,
+    );
+
+    const launch = provider.getLaunchConfig(
+      selection.selectedModel,
+      selection.selectedThinkingEffort,
     );
 
     return this.startSession(
@@ -267,10 +274,10 @@ export class SessionManager {
       launch.command,
       launch.args,
       launch.env,
-      sessionRecord.selectedModel,
-      sessionRecord.selectedThinkingEffort as ThinkingEffort,
-      provider.supportsDynamicModel,
-      provider.supportsDynamicConfig,
+      selection.selectedModel,
+      selection.selectedThinkingEffort,
+      selection.supportsDynamicModel,
+      selection.supportsDynamicConfig,
     );
   }
 
