@@ -1,8 +1,26 @@
 import type { GitMutex } from '../utils/git-mutex.js';
-import { GitService } from './git-service.js';
+import { simpleGit, type StatusResult } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+
+export interface RepositoryInfo {
+  selectedPath: string;
+  isGitRepo: boolean;
+  repoRoot: string | null;
+  workdirPrefix: string;
+}
+
+export interface BaseRefInfo {
+  ref: string;
+  commit: string;
+  isEmpty: boolean;
+}
+
+export interface ListedWorktree {
+  path: string;
+  branch: string;
+}
 
 export interface WorktreeResult {
   path: string;
@@ -17,12 +35,22 @@ export interface ReviewFile {
   diff: string;
 }
 
-export class WorktreeManager {
+export interface Workspace {
+  readonly path: string;
+  readonly branch: string;
+  readonly baseCommit: string;
+
+  getDiff(): Promise<string>;
+  getReviewFiles(): Promise<ReviewFile[]>;
+  stageFile(filePath: string): Promise<void>;
+  revertFile(filePath: string): Promise<void>;
+}
+
+export class WorkspaceManager {
   private baseDir = path.join(os.homedir(), '.agentctl', 'worktrees');
 
   constructor(
     private readonly gitMutex: GitMutex,
-    private readonly gitService = new GitService(),
     baseDir?: string,
   ) {
     if (baseDir) {
@@ -30,28 +58,139 @@ export class WorktreeManager {
     }
   }
 
-  /**
-   * Sets the base directory for worktrees.
-   * Useful for testing isolation.
-   */
   public setBaseDir(dir: string): void {
     this.baseDir = dir;
   }
 
-  /**
-   * Sanitizes strings for use in file paths.
-   */
   private sanitize(input: string): string {
     return input.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-');
   }
 
-  /**
-   * Spawns a new worktree for a session.
-   * @param repoPath Absolute path to the main repository
-   * @param sessionId Unique session ID
-   * @param taskSlug URL-friendly task name
-   * @param baseBranch Branch to branch off from (default: main)
-   */
+  // Raw Git helpers encapsulated inside WorkspaceManager
+
+  async resolveRepository(selectedPath: string): Promise<RepositoryInfo> {
+    const stats = await fs.stat(selectedPath);
+    if (!stats.isDirectory()) {
+      throw new Error('Selected path is not a directory');
+    }
+
+    const git = simpleGit(selectedPath);
+    const isGitRepo = await git.checkIsRepo().catch(() => false);
+
+    if (!isGitRepo) {
+      return {
+        selectedPath,
+        isGitRepo: false,
+        repoRoot: null,
+        workdirPrefix: '',
+      };
+    }
+
+    const repoRoot = (await git.revparse(['--show-toplevel'])).trim();
+    const rawPrefix = (await git.revparse(['--show-prefix'])).trim();
+    const workdirPrefix = rawPrefix.replace(/\/$/, '');
+
+    return {
+      selectedPath,
+      isGitRepo: true,
+      repoRoot,
+      workdirPrefix,
+    };
+  }
+
+  async resolveBaseRef(repoPath: string, preferredRef = 'main'): Promise<BaseRefInfo> {
+    const git = simpleGit(repoPath);
+    let ref = preferredRef;
+    let commit: string;
+
+    try {
+      commit = await git.revparse([ref]);
+      return {
+        ref,
+        commit: commit.trim(),
+        isEmpty: false,
+      };
+    } catch {
+      const branchSummary = await git.branchLocal();
+      ref = branchSummary.current || 'HEAD';
+      try {
+        commit = await git.revparse([ref]);
+        return {
+          ref,
+          commit: commit.trim(),
+          isEmpty: false,
+        };
+      } catch {
+        return {
+          ref,
+          commit: 'empty',
+          isEmpty: true,
+        };
+      }
+    }
+  }
+
+  async listBranches(repoPath: string): Promise<string[]> {
+    const branchSummary = await simpleGit(repoPath).branchLocal();
+    return branchSummary.all;
+  }
+
+  async checkout(repoPath: string, ref: string): Promise<void> {
+    await simpleGit(repoPath).checkout(ref);
+  }
+
+  private async addWorktree(repoPath: string, branchName: string, storagePath: string, baseRef: string): Promise<void> {
+    const git = simpleGit(repoPath);
+
+    // Remove if already registered
+    const worktrees = await this.listWorktrees(repoPath);
+    const worktreeExists = worktrees.some((w) => w.path === storagePath);
+    if (worktreeExists) {
+      await this.removeWorktree(repoPath, storagePath);
+    }
+
+    // Clear directory from disk
+    await fs.rm(storagePath, { recursive: true, force: true }).catch(() => undefined);
+
+    const branches = await git.branchLocal();
+    const branchExists = branches.all.includes(branchName);
+
+    if (branchExists) {
+      await git.raw(['worktree', 'add', storagePath, branchName]);
+    } else {
+      await git.raw(['worktree', 'add', '-b', branchName, storagePath, baseRef]);
+    }
+  }
+
+  private async listWorktrees(repoPath: string): Promise<ListedWorktree[]> {
+    const output = await simpleGit(repoPath).raw(['worktree', 'list', '--porcelain']);
+    const lines = output.split('\n');
+    const worktrees: ListedWorktree[] = [];
+
+    let currentPath = '';
+    for (const line of lines) {
+      if (line.startsWith('worktree ')) {
+        currentPath = line.substring(9).trim();
+      } else if (line.startsWith('branch ')) {
+        const fullBranch = line.substring(7).trim();
+        const branch = fullBranch.startsWith('refs/heads/') ? fullBranch.substring(11) : fullBranch;
+        worktrees.push({ path: currentPath, branch });
+      }
+    }
+
+    return worktrees;
+  }
+
+  private async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
+    await simpleGit(repoPath).raw(['worktree', 'remove', '--force', worktreePath]);
+  }
+
+  private async deleteBranch(repoPath: string, branchName: string): Promise<void> {
+    await simpleGit(repoPath).raw(['branch', '-D', branchName]);
+  }
+
+  // Public WorkspaceManager lifecycle API
+
   async create(
     repoPath: string,
     sessionId: string,
@@ -66,38 +205,29 @@ export class WorktreeManager {
     const storagePath = path.join(this.baseDir, projectName, cleanSessionId);
     const branchName = `agentctl/${cleanSessionId}/${cleanTaskSlug}`;
 
-    // Ensure storage path's parent exists
     await fs.mkdir(path.dirname(storagePath), { recursive: true });
 
     return await this.gitMutex.run(repoPath, async () => {
-      const base = await this.gitService.resolveBaseRef(repoPath, baseBranch);
+      const base = await this.resolveBaseRef(repoPath, baseBranch);
       if (base.isEmpty) {
         throw new Error('Cannot create worktree in an empty repository (no commits found)');
       }
 
       try {
-        await this.gitService.addWorktree(repoPath, branchName, storagePath, base.ref);
+        await this.addWorktree(repoPath, branchName, storagePath, base.ref);
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('already exists')) {
-          // Future: could handle existing branches
-        }
         throw error;
       }
 
       return {
         path: storagePath,
-        workspacePath: this.gitService.joinWorkdir(storagePath, workdirPrefix),
+        workspacePath: workdirPrefix ? path.join(storagePath, workdirPrefix) : storagePath,
         branch: branchName,
         baseCommit: base.commit,
       };
     });
   }
 
-  /**
-   * Lists worktrees that are NOT in the activeSessionIds list.
-   * Only considers worktrees with branches starting with 'agentctl/'.
-   */
   async listOrphans(
     repoPath: string,
     activeSessionIds: string[],
@@ -105,7 +235,7 @@ export class WorktreeManager {
     const cleanActiveIds = new Set(activeSessionIds.map((id) => this.sanitize(id)));
 
     return await this.gitMutex.run(repoPath, async () => {
-      const worktrees = await this.gitService.listWorktrees(repoPath);
+      const worktrees = await this.listWorktrees(repoPath);
 
       return worktrees.filter(({ branch }) => {
         if (!branch.startsWith('agentctl/')) return false;
@@ -116,27 +246,19 @@ export class WorktreeManager {
     });
   }
 
-  /**
-   * Removes a worktree and its associated branch.
-   */
   async cleanup(repoPath: string, worktreePath: string, branchName: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
-      await this.removeWorktree(repoPath, worktreePath, branchName);
+      await this.removeWorktreeAndBranch(repoPath, worktreePath, branchName);
     });
   }
 
-  /**
-   * Removes a worktree and its associated branch without mutex.
-   * @internal
-   */
-  public async removeWorktree(
+  private async removeWorktreeAndBranch(
     repoPath: string,
     worktreePath: string,
     branchName: string,
   ): Promise<void> {
-    // 1. Remove worktree
     try {
-      await this.gitService.removeWorktree(repoPath, worktreePath);
+      await this.removeWorktree(repoPath, worktreePath);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (
@@ -148,9 +270,8 @@ export class WorktreeManager {
       }
     }
 
-    // 2. Remove branch
     try {
-      await this.gitService.deleteBranch(repoPath, branchName);
+      await this.deleteBranch(repoPath, branchName);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes('not found')) {
@@ -159,9 +280,6 @@ export class WorktreeManager {
     }
   }
 
-  /**
-   * Reconciles the state by removing worktrees that are no longer active.
-   */
   async sync(repoPath: string, activeSessionIds: string[]): Promise<void> {
     const orphans = await this.listOrphans(repoPath, activeSessionIds);
     for (const orphan of orphans) {
@@ -169,13 +287,11 @@ export class WorktreeManager {
     }
   }
 
-  /**
-   * Returns the unified diff between baseCommit and HEAD in the worktree.
-   */
   async getDiff(repoPath: string, worktreePath: string, baseCommit: string): Promise<string> {
     return await this.gitMutex.run(repoPath, async () => {
-      const currentBranch = await this.gitService.currentBranch(worktreePath);
-      return await this.gitService.diff(repoPath, [`${baseCommit}...${currentBranch}`]);
+      const branchSummary = await simpleGit(worktreePath).branch();
+      const currentBranch = branchSummary.current;
+      return await simpleGit(repoPath).diff([`${baseCommit}...${currentBranch}`]);
     });
   }
 
@@ -185,7 +301,8 @@ export class WorktreeManager {
     baseCommit: string,
   ): Promise<ReviewFile[]> {
     return await this.gitMutex.run(repoPath, async () => {
-      const status = await this.gitService.status(worktreePath);
+      const git = simpleGit(worktreePath);
+      const status = await git.status();
       const files = new Map<string, ReviewFile>();
 
       for (const file of status.files) {
@@ -193,8 +310,8 @@ export class WorktreeManager {
           files.set(file.path, {
             path: file.path,
             state: 'untracked',
-            diff: await this.gitService
-              .raw(worktreePath, ['diff', '--no-index', '--', '/dev/null', file.path])
+            diff: await git
+              .raw(['diff', '--no-index', '--', '/dev/null', file.path])
               .catch(() => `diff --git a/${file.path} b/${file.path}`),
           });
           continue;
@@ -204,7 +321,7 @@ export class WorktreeManager {
           files.set(file.path, {
             path: file.path,
             state: 'staged',
-            diff: await this.gitService.diff(worktreePath, ['--cached', '--', file.path]),
+            diff: await git.diff(['--cached', '--', file.path]),
           });
           continue;
         }
@@ -213,7 +330,7 @@ export class WorktreeManager {
           files.set(file.path, {
             path: file.path,
             state: 'deleted',
-            diff: await this.gitService.diff(worktreePath, ['--', file.path]),
+            diff: await git.diff(['--', file.path]),
           });
           continue;
         }
@@ -222,12 +339,12 @@ export class WorktreeManager {
           files.set(file.path, {
             path: file.path,
             state: 'modified',
-            diff: await this.gitService.diff(worktreePath, ['--', file.path]),
+            diff: await git.diff(['--', file.path]),
           });
         }
       }
 
-      const committedFiles = await this.gitService.raw(worktreePath, [
+      const committedFiles = await git.raw([
         'diff',
         '--name-only',
         `${baseCommit}...HEAD`,
@@ -238,7 +355,7 @@ export class WorktreeManager {
         files.set(filePath, {
           path: filePath,
           state: 'committed',
-          diff: await this.gitService.diff(worktreePath, [`${baseCommit}...HEAD`, '--', filePath]),
+          diff: await git.diff([`${baseCommit}...HEAD`, '--', filePath]),
         });
       }
 
@@ -246,9 +363,6 @@ export class WorktreeManager {
     });
   }
 
-  /**
-   * Finalizes a worktree session by either merging or discarding changes.
-   */
   async finalize(
     repoPath: string,
     worktreePath: string,
@@ -260,17 +374,17 @@ export class WorktreeManager {
   ): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
       if (action === 'merge') {
-        // Ensure the main repository is clean before proceeding
-        if (!(await this.gitService.isClean(repoPath))) {
+        const status = await simpleGit(repoPath).status();
+        if (!status.isClean()) {
           throw new Error('Working tree is not clean. Cannot merge.');
         }
 
-        await this.gitService.checkout(repoPath, baseBranch);
+        await simpleGit(repoPath).checkout(baseBranch);
 
         try {
-          await this.gitService.merge(repoPath, ['--squash', branchName]);
+          await simpleGit(repoPath).merge(['--squash', branchName]);
           try {
-            await this.gitService.commit(repoPath, commitMessage ?? taskSlug);
+            await simpleGit(repoPath).commit(commitMessage ?? taskSlug);
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
             if (
@@ -281,35 +395,60 @@ export class WorktreeManager {
             }
           }
         } catch {
-          // If merge fails (e.g. conflict), we DON'T cleanup.
           throw new Error('Merge conflict occurred');
         }
       }
 
-      await this.removeWorktree(repoPath, worktreePath, branchName);
+      await this.removeWorktreeAndBranch(repoPath, worktreePath, branchName);
     });
   }
 
-  /**
-   * Stages a file in the worktree.
-   */
   async stageFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
-      await this.gitService.raw(worktreePath, ['add', filePath]);
+      await simpleGit(worktreePath).raw(['add', filePath]);
     });
   }
 
-  /**
-   * Discards changes in the worktree. Unstages if it is currently staged.
-   */
   async revertFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
       try {
-        await this.gitService.raw(worktreePath, ['reset', 'HEAD', filePath]);
+        await simpleGit(worktreePath).raw(['reset', 'HEAD', filePath]);
       } catch {
-        // File might not be staged
+        // Not staged
       }
-      await this.gitService.raw(worktreePath, ['checkout', '--', filePath]);
+      await simpleGit(worktreePath).raw(['checkout', '--', filePath]);
     });
   }
+
+  // Factory/adapter method to retrieve a Workspace instance
+  getWorkspace(
+    repoPath: string,
+    sessionId: string,
+    taskSlug: string,
+    worktreePath: string,
+    baseCommit: string,
+    branch: string,
+  ): Workspace {
+    const self = this;
+    return {
+      path: worktreePath,
+      branch,
+      baseCommit,
+      async getDiff() {
+        return self.getDiff(repoPath, worktreePath, baseCommit);
+      },
+      async getReviewFiles() {
+        return self.getReviewFiles(repoPath, worktreePath, baseCommit);
+      },
+      async stageFile(filePath: string) {
+        return self.stageFile(repoPath, worktreePath, filePath);
+      },
+      async revertFile(filePath: string) {
+        return self.revertFile(repoPath, worktreePath, filePath);
+      },
+    };
+  }
 }
+
+// Keep export alias for backward compatibility
+export { WorkspaceManager as WorktreeManager };

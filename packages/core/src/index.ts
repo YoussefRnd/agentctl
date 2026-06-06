@@ -3,7 +3,6 @@ export * from './db/index.js';
 export * from './db/schema.js';
 export * from './db/zod-schemas.js';
 export * from './utils/git-mutex.js';
-export * from './git/git-service.js';
 export * from './git/worktree-manager.js';
 export * from './agent/acp-transport.js';
 export * from './agent/acp-probe.js';

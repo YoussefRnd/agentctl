@@ -1,12 +1,11 @@
 import { z } from 'zod';
-import { sessions, projects, GitService } from '@agentctl/core';
+import { sessions, projects } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { AppError } from '../errors/app-error.js';
 import { sessionModeSchema } from '@agentctl/shared';
 
-const gitService = new GitService();
 
 const createSessionSchema = z.object({
   projectId: z.uuid(),
@@ -167,7 +166,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       }
 
       try {
-        return await gitService.listBranches(project.repoRoot);
+        return await fastify.worktreeManager.listBranches(project.repoRoot);
       } catch (err) {
         throw new AppError(err instanceof Error ? err.message : 'Failed to list branches', 500);
       }
@@ -196,7 +195,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
 
       try {
         // Checkout the branch in the worktree
-        await gitService.checkout(session.worktreePath, request.body.branch);
+        await fastify.worktreeManager.checkout(session.worktreePath, request.body.branch);
 
         // Update database
         const [updatedSession] = await fastify.db

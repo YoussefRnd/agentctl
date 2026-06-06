@@ -1,13 +1,11 @@
 import { z } from 'zod';
-import { projects, sessions, GitService } from '@agentctl/core';
+import { projects, sessions } from '@agentctl/core';
 import { desc, eq } from 'drizzle-orm';
 import path from 'node:path';
 import { AppError } from '../errors/app-error.js';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { FastifyInstance } from 'fastify';
-
-const gitService = new GitService();
 
 const createProjectSchema = z.object({
   path: z.string().min(1),
@@ -25,7 +23,7 @@ const openProjectSchema = createProjectSchema.extend({
 async function findOrCreateProject(fastify: FastifyInstance, selectedPath: string) {
   const normalizedPath = path.resolve(path.normalize(selectedPath));
 
-  const repoInfo = await gitService.resolveRepository(normalizedPath).catch((err: unknown) => {
+  const repoInfo = await fastify.worktreeManager.resolveRepository(normalizedPath).catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
     throw new AppError(`Cannot open folder: ${msg}`, 400);
   });
