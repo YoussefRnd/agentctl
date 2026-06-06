@@ -109,7 +109,7 @@ export const projectsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
         };
       }
 
-      const session = await fastify.sessionOrchestrator.create({
+      const session = await fastify.sessionManager.createSession({
         projectId: project.id,
         providerId: request.body.agent,
         taskSlug: request.body.taskSlug ?? 'new-session',

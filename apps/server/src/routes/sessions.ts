@@ -34,7 +34,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     },
     async (request) => {
       try {
-        const session = await fastify.sessionOrchestrator.create({
+        const session = await fastify.sessionManager.createSession({
           projectId: request.body.projectId,
           providerId: request.body.agent,
           taskSlug: request.body.taskSlug,
@@ -124,15 +124,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       );
 
       if (provider.status === 'ready' || provider.status === 'needs_auth') {
-        const launch = provider.getLaunchConfig(
-          updatedSession.selectedModel,
-          updatedSession.selectedThinkingEffort,
-        );
-        fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
-          command: launch.command,
-          args: launch.args,
-          env: launch.env,
-        });
+        await fastify.sessionManager.restartSession(request.params.id);
       }
 
       const providersList = await fastify.providerRegistry.discover();
@@ -216,15 +208,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
             },
           );
           if (provider.status === 'ready' || provider.status === 'needs_auth') {
-            const launch = provider.getLaunchConfig(
-              updatedSession.selectedModel,
-              updatedSession.selectedThinkingEffort,
-            );
-            fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
-              command: launch.command,
-              args: launch.args,
-              env: launch.env,
-            });
+            await fastify.sessionManager.restartSession(request.params.id);
           }
         }
 
@@ -267,60 +251,15 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       let baseCommit = session.baseCommit;
 
       try {
-        if (newMode === 'worktree' && session.mode === 'local') {
-          if (!project.repoRoot) {
-            throw new AppError('Project repo root not set. Cannot create worktree.', 400);
-          }
-          // Switching from local to worktree
-          const result = await fastify.worktreeManager.create(
-            project.repoRoot,
-            session.id,
-            session.taskSlug,
-            session.branch || 'main',
-          );
-          worktreePath = result.path;
-          branch = result.branch;
-          baseCommit = result.baseCommit;
-        } else if (newMode === 'local' && session.mode === 'worktree') {
-          if (!project.repoRoot) {
-            throw new AppError('Project repo root not set. Cannot switch to local mode.', 400);
-          }
-          // Switching from worktree to local
-          worktreePath = project.repoRoot;
-          // Optionally: cleanup the worktree if we want to be tidy,
-          // but maybe better to keep it if we might switch back.
-          // For now, we just update the path to the main repo root.
-        }
+        await fastify.sessionManager.switchMode(request.params.id, newMode);
 
-        const [updatedSession] = await fastify.db
-          .update(sessions)
-          .set({
-            mode: newMode,
-            worktreePath,
-            branch,
-            baseCommit,
-          })
-          .where(eq(sessions.id, request.params.id))
-          .returning();
+        const updatedSession = await fastify.db.query.sessions.findFirst({
+          where: eq(sessions.id, request.params.id),
+          with: { project: true },
+        });
 
-        // Restart the agent process if it was running or if we want to ensure it starts in the new mode
-        const provider = await fastify.providerRegistry.ensureProviderReady(
-          updatedSession.selectedProvider,
-          {
-            force: false,
-          },
-        );
-
-        if (provider.status === 'ready' || provider.status === 'needs_auth') {
-          const launch = provider.getLaunchConfig(
-            updatedSession.selectedModel,
-            updatedSession.selectedThinkingEffort,
-          );
-          fastify.sessionManager.restartSession(request.params.id, updatedSession.worktreePath, {
-            command: launch.command,
-            args: launch.args,
-            env: launch.env,
-          });
+        if (!updatedSession) {
+          throw new AppError('Session not found', 404);
         }
 
         return updatedSession;
@@ -358,9 +297,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       }
 
       const project = session.project;
-      if (!project) {
-        throw new AppError('Project not found', 404);
-      }
+
 
       if (session.mode === 'worktree') {
         if (!project.repoRoot) {
@@ -422,9 +359,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       }
 
       const project = session.project;
-      if (!project) {
-        throw new AppError('Project not found', 404);
-      }
+
 
       if (session.mode === 'worktree') {
         if (!project.repoRoot) {

@@ -19,7 +19,6 @@ import {
   WorktreeManager,
   GitMutex,
   ProviderRegistry,
-  SessionOrchestrator,
   SessionManager,
 } from '@agentctl/core';
 import { EventBus } from './utils/event-bus.js';
@@ -32,7 +31,6 @@ export interface AppDependencies {
   worktreeManager?: WorktreeManager;
   providerRegistry?: ProviderRegistry;
   sessionManager?: SessionManager;
-  sessionOrchestrator?: SessionOrchestrator;
   env?: ReturnType<typeof parseServerEnv>;
 }
 
@@ -43,7 +41,6 @@ declare module 'fastify' {
     gitMutex: GitMutex;
     providerRegistry: ProviderRegistry;
     sessionManager: SessionManager;
-    sessionOrchestrator: SessionOrchestrator;
     eventBus: EventBus;
     config: ReturnType<typeof parseServerEnv>;
   }
@@ -75,18 +72,15 @@ export async function buildApp(deps: AppDependencies = {}) {
   const config = deps.env ?? parseServerEnv(process.env);
   const eventBus = new EventBus();
 
-  const sessionManager = deps.sessionManager ?? new SessionManager(db, eventBus, fastify.log);
-
-  const sessionOrchestrator =
-    deps.sessionOrchestrator ??
-    new SessionOrchestrator(db, worktreeManager, providerRegistry, sessionManager);
+  const sessionManager =
+    deps.sessionManager ??
+    new SessionManager(db, worktreeManager, providerRegistry, eventBus, fastify.log);
 
   fastify.decorate('db', db);
   fastify.decorate('gitMutex', gitMutex);
   fastify.decorate('worktreeManager', worktreeManager);
   fastify.decorate('providerRegistry', providerRegistry);
   fastify.decorate('sessionManager', sessionManager);
-  fastify.decorate('sessionOrchestrator', sessionOrchestrator);
   fastify.decorate('eventBus', eventBus);
   fastify.decorate('config', config);
 

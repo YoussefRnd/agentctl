@@ -1,5 +1,5 @@
 import type { GitMutex } from '../utils/git-mutex.js';
-import { simpleGit, type StatusResult } from 'simple-git';
+import { simpleGit } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
@@ -213,11 +213,7 @@ export class WorkspaceManager {
         throw new Error('Cannot create worktree in an empty repository (no commits found)');
       }
 
-      try {
-        await this.addWorktree(repoPath, branchName, storagePath, base.ref);
-      } catch (error: unknown) {
-        throw error;
-      }
+      await this.addWorktree(repoPath, branchName, storagePath, base.ref);
 
       return {
         path: storagePath,
@@ -429,22 +425,21 @@ export class WorkspaceManager {
     baseCommit: string,
     branch: string,
   ): Workspace {
-    const self = this;
     return {
       path: worktreePath,
       branch,
       baseCommit,
-      async getDiff() {
-        return self.getDiff(repoPath, worktreePath, baseCommit);
+      getDiff: async () => {
+        return this.getDiff(repoPath, worktreePath, baseCommit);
       },
-      async getReviewFiles() {
-        return self.getReviewFiles(repoPath, worktreePath, baseCommit);
+      getReviewFiles: async () => {
+        return this.getReviewFiles(repoPath, worktreePath, baseCommit);
       },
-      async stageFile(filePath: string) {
-        return self.stageFile(repoPath, worktreePath, filePath);
+      stageFile: async (filePath: string) => {
+        return this.stageFile(repoPath, worktreePath, filePath);
       },
-      async revertFile(filePath: string) {
-        return self.revertFile(repoPath, worktreePath, filePath);
+      revertFile: async (filePath: string) => {
+        return this.revertFile(repoPath, worktreePath, filePath);
       },
     };
   }
