@@ -15,6 +15,70 @@ export interface ACPConnectionHandle {
   connection: Pick<ClientSideConnection, 'initialize' | 'newSession' | 'authenticate' | 'closed'>;
 }
 
+export interface AgentStreamTransport {
+  stdin: WritableStream<Uint8Array>;
+  stdout: ReadableStream<Uint8Array>;
+  closed: Promise<void>;
+  child: ChildProcess;
+  kill(signal?: NodeJS.Signals | number): void;
+}
+
+export class ProcessStreamTransport implements AgentStreamTransport {
+  public readonly stdin: WritableStream<Uint8Array>;
+  public readonly stdout: ReadableStream<Uint8Array>;
+  public readonly closed: Promise<void>;
+
+  constructor(
+    public readonly child: ChildProcess,
+    logger: Logger,
+  ) {
+    const stdin = child.stdin;
+    const stdout = child.stdout;
+    const stderr = child.stderr;
+
+    if (!stdin || !stdout) {
+      child.kill();
+      throw new Error('Spawned process missing stdin/stdout');
+    }
+
+    if (stderr) {
+      stderr.on('data', (data: Buffer) => {
+        logger.warn(`Process stderr: ${data.toString()}`);
+      });
+    }
+
+    this.stdin = Writable.toWeb(stdin) as WritableStream<Uint8Array>;
+    this.stdout = Readable.toWeb(stdout) as ReadableStream<Uint8Array>;
+
+    this.closed = new Promise<void>((resolve, reject) => {
+      let resolved = false;
+
+      const handleExit = (code: number | null, signal: NodeJS.Signals | null) => {
+        if (resolved) return;
+        resolved = true;
+        if (code === 0 || code === null) {
+          resolve();
+        } else {
+          reject(new Error(`Process exited with code ${String(code)}${signal ? ` and signal ${signal}` : ''}`));
+        }
+      };
+
+      child.on('exit', handleExit);
+      child.on('error', (err) => {
+        if (resolved) return;
+        resolved = true;
+        reject(err);
+      });
+    });
+  }
+
+  kill(signal?: NodeJS.Signals | number): void {
+    if (!this.child.killed) {
+      this.child.kill(signal);
+    }
+  }
+}
+
 export interface AgentRuntimeHandle {
   acpSessionId: string | null;
   connection: ClientSideConnection;
@@ -156,6 +220,8 @@ export class DefaultAgentRuntime implements AgentRuntime {
   constructor(
     private spawnImpl: typeof spawn = spawn,
     private logger: Logger = noopLogger,
+    private createTransport: (child: ChildProcess, logger: Logger) => AgentStreamTransport = (child, logger) =>
+      new ProcessStreamTransport(child, logger),
   ) {}
 
   async execute(
@@ -170,24 +236,11 @@ export class DefaultAgentRuntime implements AgentRuntime {
       cwd: options.cwd,
     });
 
-    const stdin = child.stdin as typeof child.stdin | null;
-    const stdout = child.stdout as typeof child.stdout | null;
-    const stderr = child.stderr as typeof child.stderr | null;
-
-    if (stdin === null || stdout === null) {
-      child.kill();
-      throw new Error('Spawned agent missing stdin/stdout');
-    }
-
-    if (stderr) {
-      stderr.on('data', (data: Buffer) => {
-        this.logger.warn(`Agent stderr: ${data.toString()}`);
-      });
-    }
+    const transport = this.createTransport(child, this.logger);
 
     const stream = ndJsonStream(
-      Writable.toWeb(stdin) as WritableStream<Uint8Array>,
-      Readable.toWeb(stdout) as ReadableStream<Uint8Array>,
+      transport.stdin,
+      transport.stdout,
     );
 
     const connection = new ClientSideConnection(
@@ -206,7 +259,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
       acpSessionId: null,
       connection,
       child,
-      closed: connection.closed,
+      closed: Promise.race([connection.closed, transport.closed]),
       async prompt(text: string): Promise<void> {
         await (connection.prompt({
           sessionId: this.acpSessionId ?? '',
@@ -222,10 +275,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
       },
       async stop(): Promise<void> {
         pendingApprovals.clear();
-        if (!child.stdin.destroyed) {
-          child.stdin.end();
-        }
-        child.kill();
+        transport.kill();
         await Promise.resolve();
       },
     };
@@ -321,17 +371,11 @@ export class DefaultAgentRuntime implements AgentRuntime {
       cwd: os.tmpdir(),
     });
 
-    const stdin = child.stdin as typeof child.stdin | null;
-    const stdout = child.stdout as typeof child.stdout | null;
-
-    if (stdin === null || stdout === null) {
-      child.kill();
-      throw new Error('Spawned agent missing stdin/stdout');
-    }
+    const transport = this.createTransport(child, this.logger);
 
     const stream = ndJsonStream(
-      Writable.toWeb(stdin) as WritableStream<Uint8Array>,
-      Readable.toWeb(stdout) as ReadableStream<Uint8Array>,
+      transport.stdin,
+      transport.stdout,
     );
 
     const connection = new ClientSideConnection(
@@ -478,7 +522,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
       return result;
     } finally {
-      child.kill();
+      transport.kill();
     }
   }
 }
