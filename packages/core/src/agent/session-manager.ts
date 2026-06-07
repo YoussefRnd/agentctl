@@ -187,7 +187,7 @@ export class SessionManager {
 
       await this.db
         .update(sessions)
-        .set({ agentSessionId: runtimeHandle.acpSessionId, status: 'running' })
+        .set({ agentSessionId: runtimeHandle.acpSessionId, status: 'idle' })
         .where(eq(sessions.id, sessionId));
 
     } catch (err: unknown) {

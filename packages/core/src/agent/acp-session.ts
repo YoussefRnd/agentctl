@@ -96,6 +96,11 @@ export class ACPSession {
       await this.eventStore.append(this.sessionId, 'text', { content: text, role: 'user' });
 
       await this.runtimeHandle.prompt(text);
+
+      await this.db
+        .update(sessions)
+        .set({ status: 'idle', updatedAt: new Date() })
+        .where(eq(sessions.id, this.sessionId));
     } catch (error: unknown) {
       await this.handleError(error);
       throw error;
