@@ -220,7 +220,13 @@ export function CommandBar({
                     handleSubmit();
                   }
                 }}
-                placeholder={disabled ? 'PROCESSING...' : placeholder}
+                placeholder={
+                  disabled
+                    ? sessionData?.session.status === 'running'
+                      ? 'Agent is thinking...'
+                      : 'Processing...'
+                    : placeholder
+                }
                 aria-label="Command input"
                 className="placeholder:text-text-muted/30 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full resize-none border-none bg-transparent p-0 font-sans text-[15px] leading-relaxed focus:ring-0"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}

@@ -100,7 +100,12 @@ export function MainFeed() {
           <div className="pointer-events-auto">
             <CommandBar
               onSend={handleSend}
-              disabled={!isConnected || isSwitching || isLoadingSession}
+              disabled={
+                !isConnected ||
+                isSwitching ||
+                isLoadingSession ||
+                sessionData?.session.status === 'running'
+              }
               selectedProviderId={sessionData?.session.selectedProvider}
               selectedModelId={sessionData?.session.selectedModel}
               onProviderSelect={handleProviderSelect}
