@@ -6,6 +6,7 @@ export interface NegotiatedCapabilities {
   selectedThinkingEffort: ThinkingEffort;
   supportsDynamicModel: boolean;
   supportsDynamicConfig: boolean;
+  resolvedThinkingConfigId?: string;
 }
 
 export function negotiateCapabilities(
@@ -33,7 +34,9 @@ export function negotiateCapabilities(
   const thinkingOption = configOptions.find(
     (opt) => opt.id === 'thinking' || opt.id === 'thinking_effort' || opt.id === 'selectedThinkingEffort',
   );
+  let resolvedThinkingConfigId: string | undefined = undefined;
   if (thinkingOption) {
+    resolvedThinkingConfigId = thinkingOption.id;
     const isEffortAvailable = thinkingOption.options.some((opt) => opt.value === selectedThinkingEffort);
     if (!isEffortAvailable && thinkingOption.options.length > 0) {
       selectedThinkingEffort = (thinkingOption.options[0]?.value ??
@@ -46,5 +49,6 @@ export function negotiateCapabilities(
     selectedThinkingEffort,
     supportsDynamicModel: provider.supportsDynamicModel,
     supportsDynamicConfig: provider.supportsDynamicConfig,
+    resolvedThinkingConfigId,
   };
 }

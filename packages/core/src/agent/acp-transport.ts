@@ -98,6 +98,7 @@ export interface RuntimeOptions {
   selectedThinkingEffort?: ThinkingEffort;
   supportsDynamicModel?: boolean;
   supportsDynamicConfig?: boolean;
+  resolvedThinkingConfigId?: string;
 }
 
 export interface SessionCallbacks {
@@ -369,13 +370,24 @@ export class DefaultAgentRuntime implements AgentRuntime {
         }
       }
 
-      if (options.supportsDynamicConfig && options.selectedThinkingEffort) {
+      if (
+        options.supportsDynamicConfig &&
+        options.selectedThinkingEffort
+      ) {
         if (typeof dynConn.setSessionConfigOption === 'function') {
-          await dynConn.setSessionConfigOption({
-            sessionId: handle.acpSessionId,
-            configId: 'thinking_effort',
-            value: options.selectedThinkingEffort,
-          });
+          const configId = options.resolvedThinkingConfigId ?? 'thinking_effort';
+          try {
+            await dynConn.setSessionConfigOption({
+              sessionId: handle.acpSessionId,
+              configId,
+              value: options.selectedThinkingEffort,
+            });
+          } catch (configErr) {
+            this.logger.warn(
+              configErr,
+              `Failed to dynamically set thinking effort on init (configId: ${configId})`
+            );
+          }
         }
       }
 

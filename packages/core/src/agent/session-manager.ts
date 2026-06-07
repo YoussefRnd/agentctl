@@ -128,6 +128,7 @@ export class SessionManager {
       selection.selectedThinkingEffort,
       selection.supportsDynamicModel,
       selection.supportsDynamicConfig,
+      selection.resolvedThinkingConfigId,
     );
   }
 
@@ -141,6 +142,7 @@ export class SessionManager {
     selectedThinkingEffort: ThinkingEffort = 'medium',
     supportsDynamicModel = false,
     supportsDynamicConfig = false,
+    resolvedThinkingConfigId?: string,
   ): Promise<ACPSession> {
     this.logger.info({ sessionId, command, args, worktreePath }, 'Starting new agent session');
 
@@ -157,6 +159,7 @@ export class SessionManager {
           selectedThinkingEffort,
           supportsDynamicModel,
           supportsDynamicConfig,
+          resolvedThinkingConfigId,
         },
         {
           onUpdate: async (notification) => {
@@ -278,6 +281,7 @@ export class SessionManager {
       selection.selectedThinkingEffort,
       selection.supportsDynamicModel,
       selection.supportsDynamicConfig,
+      selection.resolvedThinkingConfigId,
     );
   }
 
@@ -333,7 +337,19 @@ export class SessionManager {
         supportsDynamicConfig &&
         params.selectedThinkingEffort !== sessionRecord.selectedThinkingEffort
       ) {
-        await activeSession.updateConfigOption('thinking_effort', params.selectedThinkingEffort);
+        const configOptions = provider.toDiscovery().configOptions ?? [];
+        const thinkingOption = configOptions.find(
+          (opt) => opt.id === 'thinking' || opt.id === 'thinking_effort' || opt.id === 'selectedThinkingEffort',
+        );
+        const configId = thinkingOption?.id ?? 'thinking_effort';
+        try {
+          await activeSession.updateConfigOption(configId, params.selectedThinkingEffort);
+        } catch (configErr) {
+          this.logger.warn(
+            configErr,
+            `Failed to dynamically update thinking effort (configId: ${configId})`
+          );
+        }
       }
 
       const modelChanged = params.selectedModel !== sessionRecord.selectedModel;
