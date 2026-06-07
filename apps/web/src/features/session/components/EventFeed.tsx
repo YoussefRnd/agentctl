@@ -6,7 +6,7 @@ import { ActivityGroup } from './cards/ActivityGroup';
 import type { ACPEventRow } from '@agentctl/shared';
 import { useSession } from '../../../contexts/SessionContext';
 
-export function EventFeed({ events }: { events: ACPEventRow[] }) {
+export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[]; isConnected?: boolean }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -82,19 +82,36 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
   }, [lastContentEvent]);
 
   if (events.length === 0) {
+    if (!isConnected) {
+      return (
+        <div className="flex h-full items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="relative h-12 w-12">
+              <div className="absolute inset-0 rounded-full border-2 border-white/5" />
+              <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-text-main text-[12px] font-black tracking-[0.2em] uppercase">
+                Awaiting_Transmission
+              </h3>
+              <p className="text-text-muted/40 text-[10px] font-bold tracking-widest uppercase">
+                establishing secure uplink...
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex h-full items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="relative h-12 w-12">
-            <div className="absolute inset-0 rounded-full border-2 border-white/5" />
-            <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-text-main text-[12px] font-black tracking-[0.2em] uppercase">
-              Awaiting_Transmission
+          <div className="space-y-2">
+            <h3 className="text-text-main text-[13px] font-black tracking-[0.2em] uppercase">
+              Uplink_Active
             </h3>
-            <p className="text-text-muted/40 text-[10px] font-bold tracking-widest uppercase">
-              establishing secure uplink...
+            <p className="text-text-muted/50 text-[10px] font-bold tracking-widest uppercase">
+              secure session initialized. awaiting instructions...
             </p>
           </div>
         </div>

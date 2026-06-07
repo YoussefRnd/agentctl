@@ -78,7 +78,7 @@ export function MainFeed() {
               <div className="via-accent/40 h-px w-24 animate-pulse bg-gradient-to-r from-transparent to-transparent" />
             </div>
           ) : (
-            <EventFeed events={events} />
+            <EventFeed events={events} isConnected={isConnected} />
           )}
         </main>
 
