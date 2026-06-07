@@ -204,6 +204,7 @@ function parseRegistryAgents(data: string): RegistryAgent[] {
 
 export class ProviderRegistry {
   private syncInFlight: Promise<void> | null = null;
+  private probesInFlight = new Map<string, Promise<Provider>>();
   private static readonly PROBE_TIMEOUT_MS = 60_000;
   private runtime: AgentRuntime;
 
@@ -276,20 +277,30 @@ export class ProviderRegistry {
   async discover(): Promise<ProviderDiscovery[]> {
     const rows = await this.db.select().from(providers);
 
+    let activeRows = rows;
+
     if (rows.length === 0) {
       this.logger.info('Registry is empty, performing initial sync...');
       await this.sync();
 
-      const syncedRows = await this.db.select().from(providers);
-      if (syncedRows.length === 0) {
+      activeRows = await this.db.select().from(providers);
+      if (activeRows.length === 0) {
         this.logger.warn('Provider registry sync completed without any discoverable providers');
         return [];
       }
-
-      return syncedRows.map((row) => new Provider(row).toDiscovery());
     }
 
-    return rows.map((row) => new Provider(row).toDiscovery());
+    // Trigger background probing for any inactive but enabled providers
+    for (const row of activeRows) {
+      if (row.status === 'inactive' && row.enabled) {
+        this.logger.info(`Triggering background probe for enabled provider: ${row.id}`);
+        void this.ensureProviderReady(row.id).catch((err: unknown) => {
+          this.logger.error(err, `Background probe failed for ${row.id}`);
+        });
+      }
+    }
+
+    return activeRows.map((row) => new Provider(row).toDiscovery());
   }
 
   private async loadLatestSnapshot(): Promise<RegistrySnapshotRow | undefined> {
@@ -460,34 +471,49 @@ export class ProviderRegistry {
       }
     }
 
-    const launch = {
-      command: row.command,
-      args: parseJSON(row.launchArgs, [] as string[]),
-      env: {
-        ...parseJSON(row.launchEnv, {}),
-        ...parseJSON(row.customEnv, {}),
-      },
-    };
-
-    const agentStub: RegistryAgent = {
-      id: row.id,
-      name: row.name,
-      version: row.version ?? 'local',
-      description: row.description ?? '',
-      authors: [],
-      distribution: {},
-    };
-
-    const probeResult = await this.probeAgent(agentStub, launch);
-    probeResult.enabled = row.enabled;
-    probeResult.customEnv = parseJSON(row.customEnv, {});
-    await this.persistProvider(probeResult);
-
-    const updatedRow = await this.getProviderRow(providerId);
-    if (!updatedRow) {
-      throw new Error(`Provider ${providerId} vanished after probe`);
+    const existingProbe = this.probesInFlight.get(providerId);
+    if (existingProbe && !force) {
+      return existingProbe;
     }
-    return new Provider(updatedRow);
+
+    const probePromise = (async () => {
+      const launch = {
+        command: row.command,
+        args: parseJSON(row.launchArgs, [] as string[]),
+        env: {
+          ...parseJSON(row.launchEnv, {}),
+          ...parseJSON(row.customEnv, {}),
+        },
+      };
+
+      const agentStub: RegistryAgent = {
+        id: row.id,
+        name: row.name,
+        version: row.version ?? 'local',
+        description: row.description ?? '',
+        authors: [],
+        distribution: {},
+      };
+
+      const probeResult = await this.probeAgent(agentStub, launch);
+      probeResult.enabled = row.enabled;
+      probeResult.customEnv = parseJSON(row.customEnv, {});
+      await this.persistProvider(probeResult);
+
+      const updatedRow = await this.getProviderRow(providerId);
+      if (!updatedRow) {
+        throw new Error(`Provider ${providerId} vanished after probe`);
+      }
+      return new Provider(updatedRow);
+    })();
+
+    this.probesInFlight.set(providerId, probePromise);
+
+    try {
+      return await probePromise;
+    } finally {
+      this.probesInFlight.delete(providerId);
+    }
   }
 
   async sync(): Promise<void> {
@@ -521,8 +547,10 @@ export class ProviderRegistry {
       await this.persistProvider(discovery);
 
       if (warmProviderId === agent.id && discovery.status !== 'not_found') {
-        this.logger.info(`Hydrating selected provider: ${agent.id}`);
-        await this.ensureProviderReady(agent.id);
+        this.logger.info(`Hydrating selected provider asynchronously: ${agent.id}`);
+        void this.ensureProviderReady(agent.id).catch((err: unknown) => {
+          this.logger.error(err, `Failed to hydrate provider ${agent.id}`);
+        });
       }
     }
 
