@@ -1,4 +1,4 @@
-import { useState, memo } from 'react';
+import { useState, memo, useEffect } from 'react';
 import { Terminal, ChevronRight, ChevronDown, FileText, Search, Settings } from 'lucide-react';
 import type { ACPEventToolCallData } from '@agentctl/shared';
 
@@ -83,18 +83,27 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
 export const ToolCallCard = memo(function ToolCallCard({
   tool,
   payload,
+  isStreaming = false,
 }: {
   tool: string;
   payload: ACPEventToolCallData;
+  isStreaming?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+
+  // Auto-expand tool calls while streaming/active, but allow user to toggle after
+  useEffect(() => {
+    if (isStreaming) {
+      setOpen(true);
+    }
+  }, [isStreaming]);
 
   const args = payload.arguments ?? {};
   const argKeys = Object.keys(args).filter((k) => !['toolCallId', 'name'].includes(k));
 
   return (
     <div className="group relative py-1.5 pr-4 pl-16">
-      <div className="bg-accent/40 border-accent/60 group-hover:bg-accent absolute top-6 left-10 z-10 h-2 w-2 -translate-x-1/2 rounded-full border-2 transition-all duration-300 group-hover:scale-125" />
+      <div className={`absolute top-6 left-10 z-10 h-2 w-2 -translate-x-1/2 rounded-full border-2 transition-all duration-300 group-hover:scale-125 ${isStreaming ? 'bg-accent border-accent animate-pulse' : 'bg-accent/40 border-accent/60 group-hover:bg-accent'}`} />
 
       <div
         className="flex cursor-pointer items-center gap-2 select-none"

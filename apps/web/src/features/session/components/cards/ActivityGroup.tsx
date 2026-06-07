@@ -143,7 +143,11 @@ export function ActivityGroup({ events, isStreaming = false }: ActivityGroupProp
               return (
                 <div key={e.id} className="relative">
                   <div className="bg-accent/40 border-accent/60 absolute top-6 -left-[35px] h-2.5 w-2.5 rounded-full border" />
-                  <ToolCallCard tool={e.data.name} payload={e.data} />
+                  <ToolCallCard
+                    tool={e.data.name}
+                    payload={e.data}
+                    isStreaming={isStreaming && e.id === events[events.length - 1].id}
+                  />
                 </div>
               );
             }

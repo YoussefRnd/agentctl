@@ -141,7 +141,9 @@ export function EventFeed({ events }: { events: ACPEventRow[] }) {
                     isStreaming={isStreaming}
                   />
                 )}
-                {e.type === 'tool_call' && <ToolCallCard tool={e.data.name} payload={e.data} />}
+                {e.type === 'tool_call' && (
+                  <ToolCallCard tool={e.data.name} payload={e.data} isStreaming={isStreaming} />
+                )}
               </div>
             );
           })}
