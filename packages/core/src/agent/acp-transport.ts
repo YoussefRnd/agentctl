@@ -372,20 +372,20 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
       if (
         options.supportsDynamicConfig &&
-        options.selectedThinkingEffort
+        options.selectedThinkingEffort &&
+        options.resolvedThinkingConfigId
       ) {
         if (typeof dynConn.setSessionConfigOption === 'function') {
-          const configId = options.resolvedThinkingConfigId ?? 'thinking_effort';
           try {
             await dynConn.setSessionConfigOption({
               sessionId: handle.acpSessionId,
-              configId,
+              configId: options.resolvedThinkingConfigId,
               value: options.selectedThinkingEffort,
             });
           } catch (configErr) {
             this.logger.warn(
               configErr,
-              `Failed to dynamically set thinking effort on init (configId: ${configId})`
+              `Failed to dynamically set thinking effort on init (configId: ${options.resolvedThinkingConfigId})`
             );
           }
         }

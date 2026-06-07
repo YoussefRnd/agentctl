@@ -195,7 +195,7 @@ describe('SessionManager tests', () => {
       launchArgs: '["10"]',
       launchEnv: '{}',
       customEnv: '{}',
-      configOptions: '[]',
+      configOptions: '[{"id": "thinking_effort", "name": "Thinking Effort", "description": "", "type": "string", "options": [{"value": "medium"}, {"value": "high"}]}]',
       authMethods: '[]',
       supportsDynamicModel: true,
       supportsDynamicConfig: true,

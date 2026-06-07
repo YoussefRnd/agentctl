@@ -341,14 +341,15 @@ export class SessionManager {
         const thinkingOption = configOptions.find(
           (opt) => opt.id === 'thinking' || opt.id === 'thinking_effort' || opt.id === 'selectedThinkingEffort',
         );
-        const configId = thinkingOption?.id ?? 'thinking_effort';
-        try {
-          await activeSession.updateConfigOption(configId, params.selectedThinkingEffort);
-        } catch (configErr) {
-          this.logger.warn(
-            configErr,
-            `Failed to dynamically update thinking effort (configId: ${configId})`
-          );
+        if (thinkingOption) {
+          try {
+            await activeSession.updateConfigOption(thinkingOption.id, params.selectedThinkingEffort);
+          } catch (configErr) {
+            this.logger.warn(
+              configErr,
+              `Failed to dynamically update thinking effort (configId: ${thinkingOption.id})`
+            );
+          }
         }
       }
 
