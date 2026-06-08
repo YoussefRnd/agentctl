@@ -1,8 +1,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Brain } from 'lucide-react';
 import { TextCard } from './cards/TextCard';
-import { ToolCallCard } from './cards/ToolCallCard';
-import { ActivityGroup } from './cards/ActivityGroup';
+import { AgentResponse } from './cards/AgentResponse';
 import type { ACPEventRow } from '@agentctl/shared';
 import { useSession } from '../../../contexts/SessionContext';
 
@@ -28,37 +27,36 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
 
   const groupedEvents = useMemo(() => {
     const result: (
-      | { type: 'event'; event: ACPEventRow; isStreaming: boolean }
-      | { type: 'activity'; events: ACPEventRow[]; isStreaming: boolean; id: string }
+      | { type: 'user'; event: ACPEventRow; isStreaming: boolean }
+      | { type: 'agent'; events: ACPEventRow[]; isStreaming: boolean; id: string }
     )[] = [];
-    let currentActivity: {
-      type: 'activity';
+    let currentAgentTurn: {
+      type: 'agent';
       events: ACPEventRow[];
       isStreaming: boolean;
       id: string;
     } | null = null;
 
     for (const e of events) {
-      const isThought = e.type === 'text' && 'role' in e.data && e.data.role === 'thought';
-      const isTool = e.type === 'tool_call';
+      const isUser = e.type === 'text' && 'role' in e.data && e.data.role === 'user';
       const isStreaming = e.id === streamingEventId;
 
-      if (isThought || isTool) {
-        if (!currentActivity) {
-          currentActivity = {
-            type: 'activity',
+      if (isUser) {
+        currentAgentTurn = null;
+        result.push({ type: 'user', event: e, isStreaming });
+      } else {
+        if (!currentAgentTurn) {
+          currentAgentTurn = {
+            type: 'agent',
             events: [e],
             isStreaming,
-            id: `activity-${String(e.id)}`,
+            id: `agent-turn-${String(e.id)}`,
           };
-          result.push(currentActivity);
+          result.push(currentAgentTurn);
         } else {
-          currentActivity.events.push(e);
-          if (isStreaming) currentActivity.isStreaming = true;
+          currentAgentTurn.events.push(e);
+          if (isStreaming) currentAgentTurn.isStreaming = true;
         }
-      } else {
-        currentActivity = null;
-        result.push({ type: 'event', event: e, isStreaming });
       }
     }
     return result;
@@ -129,9 +127,9 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
       <div className="mx-auto max-w-[800px] px-6 py-12">
         <div className="flex flex-col gap-6">
           {groupedEvents.map((group) => {
-            if (group.type === 'activity') {
+            if (group.type === 'agent') {
               return (
-                <ActivityGroup
+                <AgentResponse
                   key={group.id}
                   events={group.events}
                   isStreaming={group.isStreaming}
@@ -145,23 +143,11 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
                 key={e.id}
                 className="animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out"
               >
-                {e.type === 'text' && (
-                  <TextCard
-                    content={e.data.content}
-                    variant={
-                      'role' in e.data &&
-                      (e.data.role === 'provider' ||
-                        e.data.role === 'user' ||
-                        e.data.role === 'thought')
-                        ? e.data.role
-                        : undefined
-                    }
-                    isStreaming={isStreaming}
-                  />
-                )}
-                {e.type === 'tool_call' && (
-                  <ToolCallCard tool={e.data.name} payload={e.data} isStreaming={isStreaming} />
-                )}
+                <TextCard
+                  content={(e.data as { content: string }).content}
+                  variant="user"
+                  isStreaming={isStreaming}
+                />
               </div>
             );
           })}

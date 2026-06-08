@@ -27,9 +27,10 @@ function getToolLabel(name: string, args: Record<string, unknown>) {
 interface ActivityGroupProps {
   events: ACPEventRow[];
   isStreaming?: boolean;
+  layout?: 'standalone' | 'nested';
 }
 
-export function ActivityGroup({ events, isStreaming = false }: ActivityGroupProps) {
+export function ActivityGroup({ events, isStreaming = false, layout = 'standalone' }: ActivityGroupProps) {
   const [isOpen, setIsOpen] = useState(isStreaming);
 
   // Auto-expand when streaming starts
@@ -62,6 +63,60 @@ export function ActivityGroup({ events, isStreaming = false }: ActivityGroupProp
 
     return { breadcrumbs: steps, duration };
   }, [events]);
+
+  if (layout === 'nested') {
+    return (
+      <div className="group/activity my-2">
+        <button
+          type="button"
+          onClick={() => {
+            setIsOpen(!isOpen);
+          }}
+          className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-[11px] font-bold tracking-widest uppercase transition-all duration-300 ${
+            isOpen
+              ? 'text-accent bg-accent/10'
+              : 'text-text-muted/60 hover:text-text-muted hover:bg-white/5'
+          }`}
+        >
+          <Activity className={`h-3.5 w-3.5 ${isStreaming ? 'animate-pulse text-accent' : 'text-text-muted/60'}`} />
+          <span>{isStreaming ? 'Executing actions...' : `Actions completed in ${duration}`}</span>
+          {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        </button>
+
+        {isOpen && (
+          <div className="animate-in fade-in slide-in-from-left-2 mt-3 ml-4 space-y-4 border-l-2 border-white/5 py-1 pl-6 duration-500">
+            {events.map((e) => {
+              if (e.type === 'text' && 'role' in e.data && e.data.role === 'thought') {
+                return (
+                  <div key={e.id} className="relative" role="region" aria-label="Agent thought step">
+                    <div className="absolute top-6 -left-[25px] h-2 w-2 rounded-full border border-white/25 bg-white/10" />
+                    <TextCard
+                      content={e.data.content}
+                      variant="thought"
+                      isStreaming={isStreaming && e.id === events[events.length - 1].id}
+                    />
+                  </div>
+                );
+              }
+              if (e.type === 'tool_call') {
+                return (
+                  <div key={e.id} className="relative">
+                    <div className="bg-accent/30 border-accent/40 absolute top-6 -left-[25px] h-2 w-2 rounded-full border" />
+                    <ToolCallCard
+                      tool={e.data.name}
+                      payload={e.data}
+                      isStreaming={isStreaming && e.id === events[events.length - 1].id}
+                    />
+                  </div>
+                );
+              }
+              return null;
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="group/activity my-6">
