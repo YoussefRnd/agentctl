@@ -4,6 +4,8 @@ export const providerSchema = z.enum(['claude-acp', 'opencode', 'codex-acp', 'ge
 
 export const sessionModeSchema = z.enum(['worktree', 'local']);
 
+export const approvalModeSchema = z.enum(['review', 'auto_approve', 'yolo']);
+
 export const thinkingEffortSchema = z.enum(['low', 'medium', 'high']);
 
 export const projectSchema = z.object({
@@ -126,6 +128,7 @@ export const sessionRowSchema = sessionSchema.extend({
   selectedProvider: providerSchema,
   selectedModel: z.string().min(1),
   selectedThinkingEffort: thinkingEffortSchema,
+  approvalMode: approvalModeSchema,
   project: projectSchema.optional(),
 });
 

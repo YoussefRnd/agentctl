@@ -48,6 +48,7 @@ export const sessions = sqliteTable('sessions', {
   selectedModel: text('selected_model').notNull().default('sonnet-4'),
   selectedThinkingEffort: text('selected_thinking_effort').notNull().default('medium'),
   mode: text('mode').$type<SessionMode>().notNull().default('local'),
+  approvalMode: text('approval_mode').$type<'review' | 'auto_approve' | 'yolo'>().notNull().default('review'),
   status: text('status').$type<SessionStatus>().notNull().default('idle'),
   totalTokens: integer('total_tokens').notNull().default(0),
   contextLimit: integer('context_limit').notNull().default(128000),

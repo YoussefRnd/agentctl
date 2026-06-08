@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { AppError } from '../errors/app-error.js';
-import { sessionModeSchema } from '@agentctl/shared';
+import { sessionModeSchema, approvalModeSchema } from '@agentctl/shared';
 
 
 const createSessionSchema = z.object({
@@ -260,6 +260,36 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
           500,
         );
       }
+    },
+  );
+
+  fastify.withTypeProvider<ZodTypeProvider>().patch(
+    '/sessions/:id/approval-mode',
+    {
+      schema: {
+        params: sessionParamsSchema,
+        body: z.object({ approvalMode: approvalModeSchema }),
+      },
+    },
+    async (request) => {
+      const session = await fastify.db.query.sessions.findFirst({
+        where: eq(sessions.id, request.params.id),
+      });
+
+      if (!session) {
+        throw new AppError('Session not found', 404);
+      }
+
+      await fastify.db
+        .update(sessions)
+        .set({ approvalMode: request.body.approvalMode })
+        .where(eq(sessions.id, request.params.id));
+
+      const updatedSession = await fastify.db.query.sessions.findFirst({
+        where: eq(sessions.id, request.params.id),
+      });
+
+      return updatedSession;
     },
   );
 
