@@ -47,16 +47,16 @@ function CustomDropdown<T extends string>({
   const activeOption = options.find((opt) => opt.value === value);
 
   const buttonClass = variant === 'toolbar'
-    ? `flex h-10 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-300 text-text-muted hover:text-text-main focus:outline-none ${isOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5'}`
-    : "text-text-muted/60 hover:text-text-main flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors focus:outline-none disabled:opacity-50";
+    ? `flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-[color,background-color,border-color] duration-200 text-text-muted hover:text-text-main focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40 ${isOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5'}`
+    : "text-text-muted/60 hover:text-text-main flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase transition-[color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40";
 
   const textClass = variant === 'toolbar'
-    ? "max-w-[150px] truncate text-[11px] font-bold tracking-tight uppercase"
+    ? "max-w-[150px] truncate text-[10px] font-bold tracking-widest uppercase"
     : "max-w-[150px] truncate";
 
   const chevronClass = variant === 'toolbar'
-    ? `text-text-muted/50 h-3.5 w-3.5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`
-    : `text-text-muted/50 h-3 w-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`;
+    ? `text-text-muted/50 h-3 w-3 motion-safe:transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`
+    : `text-text-muted/50 h-3 w-3 motion-safe:transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`;
 
   return (
     <div ref={dropdownRef} className="relative inline-block text-left">
@@ -86,10 +86,10 @@ function CustomDropdown<T extends string>({
                   onChange(opt.value);
                   setIsOpen(false);
                 }}
-                className={`w-full rounded-lg px-3 py-2 text-left text-[10px] font-bold tracking-widest uppercase transition-colors duration-150 ${
+                className={`w-full rounded-lg px-3 py-2 text-left text-[10px] font-bold tracking-widest uppercase transition-[color,background-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
                   opt.value === value
                     ? 'bg-accent/15 text-accent hover:bg-accent/20'
-                    : 'text-text-muted/80 hover:text-text-main hover:bg-white/5'
+                    : 'text-text-muted/80 hover:text-text-main hover:bg-text-main/5'
                 }`}
               >
                 {opt.label}
@@ -218,16 +218,18 @@ export function CommandBar({
           }}
         >
           <div
-            className={`glass-card border-border/30 bg-surface/60 flex flex-col rounded-[32px] border shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-3xl transition-all duration-500 ${disabled ? 'opacity-30' : ''}`}
+            className={`glass-card border-border/30 bg-surface/60 flex flex-col rounded-[2rem] border shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-3xl transition-opacity duration-300 ${disabled ? 'opacity-30' : 'opacity-100'}`}
           >
-            <div className="flex w-full items-start gap-3 p-5 pb-2">
+            {/* Input row — generous top padding, tighter bottom leading into the toolbar */}
+            <div className="flex w-full items-start gap-2.5 px-4 pt-4 pb-3">
               <button
                 type="button"
-                className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all mt-0.5"
+                disabled={disabled}
+                className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-[color,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40"
                 title="Attach file"
                 aria-label="Attach file"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
               </button>
               <textarea
                 ref={textareaRef}
@@ -256,8 +258,12 @@ export function CommandBar({
               />
             </div>
 
-            <div className="flex items-center justify-between px-4 py-3">
-              <div className="flex items-center gap-2">
+            {/* Hairline separator anchors toolbar below input */}
+            <div className="mx-4 h-px bg-border/20" />
+
+            {/* Toolbar row — tighter, clearly secondary density */}
+            <div className="flex items-center justify-between px-3 py-2">
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -265,18 +271,18 @@ export function CommandBar({
                   }}
                   aria-label="Select AI provider"
                   aria-expanded={isPickerOpen}
-                  className={`flex h-10 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-300 ${isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main'}`}
+                  className={`flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-[color,background-color,border-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent ${isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main'}`}
                 >
                   {activeProvider?.icon ? (
-                    <img src={activeProvider.icon} alt="" className="h-4 w-4 object-contain" />
+                    <img src={activeProvider.icon} alt="" className="h-3.5 w-3.5 object-contain" />
                   ) : (
-                    <Zap className={`h-4 w-4 ${isPickerOpen ? 'fill-accent' : 'fill-none'}`} />
+                    <Zap className={`h-3.5 w-3.5 transition-[fill] duration-200 ${isPickerOpen ? 'fill-accent' : 'fill-none'}`} />
                   )}
-                  <span className="max-w-[120px] truncate text-[11px] font-bold tracking-tight uppercase">
+                  <span className="max-w-[120px] truncate text-[10px] font-bold tracking-widest uppercase">
                     {isLoadingProviders ? '...' : (propSelectedModelId ?? selectedProviderLabel)}
                   </span>
                   <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform duration-300 ${isPickerOpen ? 'rotate-180' : ''}`}
+                    className={`h-3 w-3 motion-safe:transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`}
                   />
                 </button>
 
@@ -297,7 +303,7 @@ export function CommandBar({
                   />
                 )}
 
-                <div className="bg-border/20 mx-1 h-4 w-px" />
+                <div className="bg-border/30 mx-1.5 h-3.5 w-px" />
 
                 <MagicBar
                   files={reviewData.files}
@@ -305,24 +311,23 @@ export function CommandBar({
                     onSend(action);
                   }}
                 />
-
               </div>
 
               <button
                 type="submit"
                 onClick={handleSubmit}
                 aria-label="Execute command"
-                className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300 ${input.trim() && !disabled ? 'bg-accent text-background shadow-[0_0_20px_rgba(203,166,247,0.4)] hover:scale-105 active:scale-95' : 'bg-surface-quaternary text-text-muted/40 cursor-not-allowed'}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-full transition-[background-color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-safe:hover:scale-105 motion-safe:active:scale-95 ${input.trim() && !disabled ? 'bg-accent text-background shadow-[0_0_16px_rgba(203,166,247,0.35)]' : 'bg-surface-quaternary text-text-muted/40 cursor-not-allowed opacity-50'}`}
                 disabled={!input.trim() || disabled}
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
         </form>
         {sessionData?.session && (
-          <div className="text-text-muted/40 mt-4 flex items-center justify-between px-4 text-[10px] font-bold tracking-widest">
-            <div className="flex items-center gap-4">
+          <div className="text-text-muted/35 mt-2 flex items-center justify-between px-1 text-[10px] font-bold tracking-widest">
+            <div className="flex items-center">
               <CustomDropdown
                 value={sessionData.session.mode}
                 disabled={isSwitchingMode}
