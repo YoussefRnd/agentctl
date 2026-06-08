@@ -112,6 +112,20 @@ export class ACPSession {
     if (resolve) {
       resolve(response);
       this.pendingApprovals.delete(permissionId);
+
+      const eventId = Number(permissionId);
+      if (!isNaN(eventId)) {
+        void this.eventStore.getEvent(eventId).then(async (event) => {
+          if (event) {
+            const currentData = event.data as Record<string, unknown>;
+            const outcome = response.outcome.outcome;
+            await this.eventStore.update(eventId, {
+              ...currentData,
+              status: outcome === 'selected' ? 'approved' : 'denied',
+            });
+          }
+        });
+      }
     }
   }
 
@@ -322,6 +336,7 @@ export class ACPSession {
         toolCallId: permissionId,
         requiresApproval: true,
         request,
+        status: 'pending',
       });
 
       const approvalPromise = new Promise<RequestPermissionResponse>((resolve) => {

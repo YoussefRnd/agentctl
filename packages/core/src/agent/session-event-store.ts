@@ -44,6 +44,27 @@ export class SessionEventStore {
     });
   }
 
+  async getEvent(eventId: number): Promise<{ id: number; type: string; data: unknown } | null> {
+    const rows = await this.db
+      .select()
+      .from(acpEvents)
+      .where(eq(acpEvents.id, eventId))
+      .limit(1);
+
+    if (rows.length === 0) return null;
+    const first = rows[0];
+
+    const parsedData = (
+      typeof first.data === 'string' ? JSON.parse(first.data) : first.data
+    ) as unknown;
+
+    return {
+      id: first.id,
+      type: first.type,
+      data: parsedData,
+    };
+  }
+
   async findLastEventByType(
     sessionId: string,
     type: ACPEvent['type'],
