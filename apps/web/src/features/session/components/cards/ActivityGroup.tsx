@@ -4,7 +4,7 @@ import { TextCard } from './TextCard';
 import { ToolCallCard } from './ToolCallCard';
 import type { ACPEventRow } from '@agentctl/shared';
 
-const TOOL_LABELS: Record<string, (args: Record<string, unknown>) => string> = {
+const TOOL_LABELS: Partial<Record<string, (args: Record<string, unknown>) => string>> = {
   read_file: (args) =>
     `Reading ${typeof args.path === 'string' ? (args.path.split('/').pop() ?? 'file') : 'file'}`,
   write_file: (args) =>
@@ -21,7 +21,7 @@ const TOOL_LABELS: Record<string, (args: Record<string, unknown>) => string> = {
 
 function getToolLabel(name: string, args: Record<string, unknown>) {
   const formatter = TOOL_LABELS[name];
-  return formatter(args);
+  return formatter ? formatter(args) : `Executing ${name}`;
 }
 
 interface ActivityGroupProps {
