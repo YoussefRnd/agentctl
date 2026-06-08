@@ -24,6 +24,8 @@ export function Workbench({ isOpen, tab, onTabChange }: WorkbenchProps) {
     isDiscardingSession,
   } = useSession();
 
+
+
   return (
     <aside
       className={`terminal-glass border-border cubic-bezier(0.16, 1, 0.3, 1) bg-surface/30 h-full shrink-0 overflow-hidden rounded-3xl border shadow-2xl transition-[width,opacity] duration-500 will-change-[width] ${

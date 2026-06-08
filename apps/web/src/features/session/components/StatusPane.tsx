@@ -1,13 +1,15 @@
-import { useSession } from '../../../contexts/SessionContext';
+import { useSessionStream } from '../../../contexts/SessionContext';
 import type { ReviewFile } from './ReviewView';
 import { CheckSquare, Square, FileText } from 'lucide-react';
+
 
 interface StatusPaneProps {
   files: ReviewFile[];
 }
 
 export function StatusPane({ files }: StatusPaneProps) {
-  const { planItems } = useSession();
+  const { planItems } = useSessionStream();
+
 
   return (
     <div className="flex h-full min-h-0 flex-col">

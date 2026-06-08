@@ -3,14 +3,16 @@ import { Brain } from 'lucide-react';
 import { TextCard } from './cards/TextCard';
 import { AgentResponse } from './cards/AgentResponse';
 import type { ACPEventRow } from '@agentctl/shared';
-import { useSession } from '../../../contexts/SessionContext';
+import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 
 export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[]; isConnected?: boolean }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const { streamingEventId, sessionData } = useSession();
+  const { sessionData } = useSession();
+  const { streamingEventId } = useSessionStream();
   const isSessionError = sessionData?.session.status === 'error';
+
 
   // Auto-scroll to bottom when new events arrive
   useEffect(() => {

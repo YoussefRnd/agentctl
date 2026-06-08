@@ -1,7 +1,8 @@
-import { useSession } from '../contexts/SessionContext';
+import { useSession, useSessionStream } from '../contexts/SessionContext';
 
 export function useSessionActions() {
-  const { sessionId, sendMessage } = useSession();
+  const { sessionId } = useSession();
+  const { sendMessage } = useSessionStream();
 
   const handleSend = (text: string) => {
     if (!text.trim()) return;
@@ -22,3 +23,4 @@ export function useSessionActions() {
     handleDeny,
   };
 }
+

@@ -21,18 +21,15 @@ interface PlanItem {
   completed: boolean;
 }
 
-interface SessionContextValue {
+// ==========================================
+// 1. SESSION CONFIG CONTEXT
+// ==========================================
+interface SessionConfigContextValue {
   sessionId: string;
   sessionData: SessionWithCapabilities | null;
   isLoadingSession: boolean;
-  events: ACPEventRow[];
-  isLoadingEvents: boolean;
-  isConnected: boolean;
-  streamingEventId: number | null;
-  sendMessage: (payload: unknown) => void;
   reviewData: ReviewResponse;
   isLoadingReview: boolean;
-  planItems: PlanItem[];
   stageFile: (filePath: string) => Promise<void>;
   revertFile: (filePath: string) => Promise<void>;
   refetchReview: () => void;
@@ -47,7 +44,7 @@ interface SessionContextValue {
   isDiscardingSession: boolean;
 }
 
-const SessionContext = createContext<SessionContextValue | null>(null);
+const SessionConfigContext = createContext<SessionConfigContextValue | null>(null);
 
 const fetchSession = async (sessionId: string): Promise<SessionWithCapabilities> => {
   return apiClient.fetch<SessionWithCapabilities>(`/api/sessions/${sessionId}`);
@@ -57,21 +54,13 @@ const fetchReview = async (sessionId: string): Promise<ReviewResponse> => {
   return apiClient.fetch<ReviewResponse>(`/api/sessions/${sessionId}/review`);
 };
 
-export function SessionProvider({
+export function SessionConfigProvider({
   sessionId,
   children,
 }: {
   sessionId: string;
   children: ReactNode;
 }) {
-  const {
-    events,
-    isLoading: isLoadingEvents,
-    sendMessage,
-    isConnected,
-    streamingEventId,
-  } = useSessionEvents(sessionId);
-
   const { data: sessionData = null, isLoading: isLoadingSession } = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => fetchSession(sessionId),
@@ -187,15 +176,95 @@ export function SessionProvider({
     [discardMutation],
   );
 
+  const value = useMemo(
+    () => ({
+      sessionId,
+      sessionData,
+      isLoadingSession,
+      reviewData,
+      isLoadingReview,
+      stageFile,
+      revertFile,
+      refetchReview,
+      branches,
+      switchBranch,
+      isSwitchingBranch: switchBranchMutation.isPending,
+      switchMode,
+      isSwitchingMode: switchModeMutation.isPending,
+      mergeSession: mergeSessionFn,
+      isMergingSession: mergeMutation.isPending,
+      discardSession: discardSessionFn,
+      isDiscardingSession: discardMutation.isPending,
+    }),
+    [
+      sessionId,
+      sessionData,
+      isLoadingSession,
+      reviewData,
+      isLoadingReview,
+      stageFile,
+      revertFile,
+      refetchReview,
+      branches,
+      switchBranch,
+      switchBranchMutation.isPending,
+      switchMode,
+      switchModeMutation.isPending,
+      mergeSessionFn,
+      mergeMutation.isPending,
+      discardSessionFn,
+      discardMutation.isPending,
+    ],
+  );
+
+  return <SessionConfigContext.Provider value={value}>{children}</SessionConfigContext.Provider>;
+}
+
+export function useSession() {
+  const context = useContext(SessionConfigContext);
+  if (!context) {
+    throw new Error('useSession must be used within a SessionConfigProvider');
+  }
+  return context;
+}
+
+// ==========================================
+// 2. SESSION STREAM CONTEXT
+// ==========================================
+interface SessionStreamContextValue {
+  events: ACPEventRow[];
+  isLoadingEvents: boolean;
+  isConnected: boolean;
+  streamingEventId: number | null;
+  sendMessage: (payload: unknown) => void;
+  planItems: PlanItem[];
+}
+
+const SessionStreamContext = createContext<SessionStreamContextValue | null>(null);
+
+export function SessionStreamProvider({
+  sessionId,
+  children,
+}: {
+  sessionId: string;
+  children: ReactNode;
+}) {
+  const {
+    events,
+    isLoading: isLoadingEvents,
+    sendMessage,
+    isConnected,
+    streamingEventId,
+  } = useSessionEvents(sessionId);
+
   const planItems = useMemo(() => {
     const planMap = new Map<string, boolean>();
 
-    // Single pass over events
     for (const e of events) {
       if (e.type !== 'text') continue;
 
       const content = e.data.content;
-      if (!content.includes('- [')) continue; // Quick skip
+      if (!content.includes('- [')) continue;
 
       const lines = content.split('\n');
       for (const line of lines) {
@@ -216,64 +285,24 @@ export function SessionProvider({
 
   const value = useMemo(
     () => ({
-      sessionId,
-      sessionData,
-      isLoadingSession,
       events,
       isLoadingEvents,
       isConnected,
       streamingEventId,
       sendMessage,
-      reviewData,
-      isLoadingReview,
       planItems,
-      stageFile,
-      revertFile,
-      refetchReview,
-      branches,
-      switchBranch,
-      isSwitchingBranch: switchBranchMutation.isPending,
-      switchMode,
-      isSwitchingMode: switchModeMutation.isPending,
-      mergeSession: mergeSessionFn,
-      isMergingSession: mergeMutation.isPending,
-      discardSession: discardSessionFn,
-      isDiscardingSession: discardMutation.isPending,
     }),
-    [
-      sessionId,
-      sessionData,
-      isLoadingSession,
-      events,
-      isLoadingEvents,
-      isConnected,
-      streamingEventId,
-      sendMessage,
-      reviewData,
-      isLoadingReview,
-      planItems,
-      stageFile,
-      revertFile,
-      refetchReview,
-      branches,
-      switchBranch,
-      switchBranchMutation.isPending,
-      switchMode,
-      switchModeMutation.isPending,
-      mergeSessionFn,
-      mergeMutation.isPending,
-      discardSessionFn,
-      discardMutation.isPending,
-    ],
+    [events, isLoadingEvents, isConnected, streamingEventId, sendMessage, planItems],
   );
 
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  return <SessionStreamContext.Provider value={value}>{children}</SessionStreamContext.Provider>;
 }
 
-export function useSession() {
-  const context = useContext(SessionContext);
+export function useSessionStream() {
+  const context = useContext(SessionStreamContext);
   if (!context) {
-    throw new Error('useSession must be used within a SessionProvider');
+    throw new Error('useSessionStream must be used within a SessionStreamProvider');
   }
   return context;
 }
+

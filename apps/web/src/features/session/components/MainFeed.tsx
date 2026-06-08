@@ -3,13 +3,13 @@ import type { ACPEventRow } from '@agentctl/shared';
 import { EventFeed } from './EventFeed';
 import { CommandBar } from './CommandBar';
 import { ApprovalCard } from './cards/ApprovalCard';
-import { useSession } from '../../../contexts/SessionContext';
+import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import { useProviders } from '../../../hooks/useProviders';
 
 export function MainFeed() {
-  const { sessionId, sessionData, events, isLoadingEvents, isConnected, isLoadingSession } =
-    useSession();
+  const { sessionId, sessionData, isLoadingSession } = useSession();
+  const { events, isLoadingEvents, isConnected } = useSessionStream();
 
   const { handleSend, handleApprove, handleDeny } = useSessionActions();
   const { switchProvider, isSwitching } = useProviders(sessionId);
