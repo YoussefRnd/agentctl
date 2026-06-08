@@ -110,6 +110,7 @@ export interface RuntimeOptions {
   supportsDynamicModel?: boolean;
   supportsDynamicConfig?: boolean;
   resolvedThinkingConfigId?: string;
+  existingAgentSessionId?: string | null;
 }
 
 export interface SessionCallbacks {
@@ -334,7 +335,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
     };
 
     try {
-      await withTimeout(
+      const initResult = (await withTimeout(
         connection.initialize({
           protocolVersion: 1,
           clientCapabilities: {
@@ -348,18 +349,53 @@ export class DefaultAgentRuntime implements AgentRuntime {
         }),
         60_000,
         'initializing ACP connection',
-      );
+      )) as {
+        capabilities?: {
+          loadSession?: boolean;
+          [key: string]: unknown;
+        };
+      };
 
+      const supportsLoadSession = !!initResult.capabilities?.loadSession;
       let newSessionResult;
+      let acpSessionId: string | null = null;
+
       try {
-        newSessionResult = await withTimeout(
-          connection.newSession({
-            cwd: options.cwd,
-            mcpServers: [],
-          }),
-          60_000,
-          'creating ACP session',
-        );
+        if (options.existingAgentSessionId && supportsLoadSession) {
+          try {
+            newSessionResult = await withTimeout(
+              connection.loadSession({
+                sessionId: options.existingAgentSessionId,
+                cwd: options.cwd,
+                mcpServers: [],
+              }),
+              60_000,
+              'loading ACP session',
+            );
+            acpSessionId = options.existingAgentSessionId;
+          } catch (loadErr) {
+            this.logger.warn(loadErr, `Failed to load existing session ${options.existingAgentSessionId}, falling back to new session`);
+            newSessionResult = await withTimeout(
+              connection.newSession({
+                cwd: options.cwd,
+                mcpServers: [],
+              }),
+              60_000,
+              'creating ACP session',
+            );
+            acpSessionId = newSessionResult.sessionId;
+          }
+        } else {
+          newSessionResult = await withTimeout(
+            connection.newSession({
+              cwd: options.cwd,
+              mcpServers: [],
+            }),
+            60_000,
+            'creating ACP session',
+          );
+          acpSessionId = newSessionResult.sessionId;
+        }
       } catch (err: unknown) {
         const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
         if (error.code === 'auth_required') {
@@ -373,7 +409,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
         throw err;
       }
 
-      handle.acpSessionId = newSessionResult.sessionId;
+      handle.acpSessionId = acpSessionId;
 
       const dynConn = connection as unknown as {
         unstable_setSessionModel?: (p: { sessionId: string; modelId: string }) => Promise<unknown>;
@@ -384,32 +420,35 @@ export class DefaultAgentRuntime implements AgentRuntime {
         }) => Promise<unknown>;
       };
 
-      if (options.supportsDynamicModel && options.selectedModel && options.selectedModel !== 'default') {
-        if (typeof dynConn.unstable_setSessionModel === 'function') {
-          await dynConn.unstable_setSessionModel({
-            sessionId: handle.acpSessionId,
-            modelId: options.selectedModel,
-          });
-        }
-      }
-
-      if (
-        options.supportsDynamicConfig &&
-        options.selectedThinkingEffort &&
-        options.resolvedThinkingConfigId
-      ) {
-        if (typeof dynConn.setSessionConfigOption === 'function') {
-          try {
-            await dynConn.setSessionConfigOption({
-              sessionId: handle.acpSessionId,
-              configId: options.resolvedThinkingConfigId,
-              value: options.selectedThinkingEffort,
+      const finalSessionId = handle.acpSessionId;
+      if (finalSessionId) {
+        if (options.supportsDynamicModel && options.selectedModel && options.selectedModel !== 'default') {
+          if (typeof dynConn.unstable_setSessionModel === 'function') {
+            await dynConn.unstable_setSessionModel({
+              sessionId: finalSessionId,
+              modelId: options.selectedModel,
             });
-          } catch (configErr) {
-            this.logger.warn(
-              configErr,
-              `Failed to dynamically set thinking effort on init (configId: ${options.resolvedThinkingConfigId})`
-            );
+          }
+        }
+
+        if (
+          options.supportsDynamicConfig &&
+          options.selectedThinkingEffort &&
+          options.resolvedThinkingConfigId
+        ) {
+          if (typeof dynConn.setSessionConfigOption === 'function') {
+            try {
+              await dynConn.setSessionConfigOption({
+                sessionId: finalSessionId,
+                configId: options.resolvedThinkingConfigId,
+                value: options.selectedThinkingEffort,
+              });
+            } catch (configErr) {
+              this.logger.warn(
+                configErr,
+                `Failed to dynamically set thinking effort on init (configId: ${options.resolvedThinkingConfigId})`
+              );
+            }
           }
         }
       }
