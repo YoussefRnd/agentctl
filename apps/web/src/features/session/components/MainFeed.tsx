@@ -6,10 +6,14 @@ import { ApprovalCard } from './cards/ApprovalCard';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import { useProviders } from '../../../hooks/useProviders';
+import { useQueryClient } from '@tanstack/react-query';
+import { restoreSession } from '@agentctl/api-client';
+import { toast } from 'sonner';
 
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
   const { events, isLoadingEvents, isConnected } = useSessionStream();
+  const queryClient = useQueryClient();
 
   const { handleSend, handleApprove, handleDeny } = useSessionActions();
   const { switchProvider, isSwitching } = useProviders(sessionId);
@@ -68,6 +72,31 @@ export function MainFeed() {
       </div>
 
       <div className="relative z-10 flex h-full min-w-0 flex-col">
+        {sessionData?.session.status === 'archived' && (
+          <div className="border-warning/30 bg-warning/5 flex shrink-0 items-center justify-between border-b px-4 py-3 font-mono text-[11px] text-warning backdrop-blur-md">
+            <span className="tracking-tight uppercase">
+              ::WARNING: THIS SESSION IS ARCHIVED. WORKSPACE FILES ARE CLEARED FROM DISK.
+            </span>
+            <button
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await restoreSession(sessionId);
+                    toast.success('Session restored successfully');
+                    void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+                    void queryClient.invalidateQueries({ queryKey: ['projects'] });
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Failed to restore session');
+                  }
+                })();
+              }}
+              className="bg-warning/20 hover:bg-warning/30 border-warning/40 hover:border-warning/60 rounded border px-3 py-1 font-extrabold uppercase transition-all"
+            >
+              RESTORE_SESSION
+            </button>
+          </div>
+        )}
+
         <main className="relative flex min-h-0 flex-1 flex-col">
           {isLoadingEvents ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 font-mono">

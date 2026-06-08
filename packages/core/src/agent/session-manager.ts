@@ -250,6 +250,22 @@ export class SessionManager {
       throw new Error(`Session or associated project not found: ${sessionId}`);
     }
 
+    if (sessionRecord.status === 'archived') {
+      if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
+        await this.workspaceManager.create(
+          sessionRecord.project.repoRoot,
+          sessionRecord.id,
+          sessionRecord.taskSlug,
+          'main',
+          sessionRecord.project.subdir,
+        );
+      }
+      await this.db
+        .update(sessions)
+        .set({ status: 'idle' })
+        .where(eq(sessions.id, sessionId));
+    }
+
     const provider = await this.providerRegistry.ensureProviderReady(
       sessionRecord.selectedProvider,
       { force: false },
@@ -444,6 +460,93 @@ export class SessionManager {
     const stopPromises = Array.from(this.sessions.values()).map((session) => session.stop());
     await Promise.all(stopPromises);
     this.sessions.clear();
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    this.stopSession(sessionId);
+
+    if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
+      try {
+        await this.workspaceManager.cleanup(
+          sessionRecord.project.repoRoot,
+          sessionRecord.worktreePath,
+          sessionRecord.branch,
+        );
+      } catch (err: unknown) {
+        this.logger.error({ err, sessionId }, 'Failed to cleanup worktree on deleteSession');
+      }
+    }
+
+    await this.db.delete(sessions).where(eq(sessions.id, sessionId));
+  }
+
+  async archiveSession(sessionId: string): Promise<void> {
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    this.stopSession(sessionId);
+
+    if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
+      try {
+        await this.workspaceManager.removeWorktreeOnly(
+          sessionRecord.project.repoRoot,
+          sessionRecord.worktreePath,
+        );
+      } catch (err: unknown) {
+        this.logger.error({ err, sessionId }, 'Failed to remove worktree on archiveSession');
+      }
+    }
+
+    await this.db
+      .update(sessions)
+      .set({
+        status: 'archived',
+        closedAt: new Date(),
+      })
+      .where(eq(sessions.id, sessionId));
+  }
+
+  async deleteProject(projectId: string): Promise<void> {
+    const projectRecord = await this.db.query.projects.findFirst({
+      where: eq(projects.id, projectId),
+      with: { sessions: true },
+    });
+
+    if (!projectRecord) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    for (const session of projectRecord.sessions) {
+      this.stopSession(session.id);
+      if (session.mode === 'worktree' && projectRecord.repoRoot) {
+        try {
+          await this.workspaceManager.cleanup(
+            projectRecord.repoRoot,
+            session.worktreePath,
+            session.branch,
+          );
+        } catch (err: unknown) {
+          this.logger.error({ err, sessionId: session.id }, 'Failed to cleanup worktree on deleteProject');
+        }
+      }
+    }
+
+    await this.db.delete(projects).where(eq(projects.id, projectId));
   }
 
   async handleClientMessage(

@@ -128,17 +128,93 @@ export const projectsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     },
   );
 
-  fastify.get('/projects', async () => {
-    const allProjects = await fastify.db.select().from(projects);
-    const allSessions = await fastify.db.select().from(sessions);
+  fastify.withTypeProvider<ZodTypeProvider>().get(
+    '/projects',
+    {
+      schema: {
+        querystring: z.object({
+          search: z.string().optional(),
+          gitOnly: z.enum(['true', 'false']).optional(),
+          sortBy: z.enum(['name', 'lastActive', 'createdAt']).optional(),
+          sortOrder: z.enum(['asc', 'desc']).optional(),
+        }),
+      },
+    },
+    async (request) => {
+      const { search, gitOnly, sortBy = 'lastActive', sortOrder = 'desc' } = request.query;
 
-    // All projects are visible; isGitRepo flag is derived from repoRoot presence
-    return allProjects.map((p) => ({
-      ...p,
-      isGitRepo: p.repoRoot !== null,
-      sessions: allSessions.filter((s) => s.projectId === p.id),
-    }));
-  });
+      const allProjects = await fastify.db.select().from(projects);
+      const allSessions = await fastify.db.select().from(sessions);
+
+      let mapped = allProjects.map((p) => {
+        const projSessions = allSessions.filter((s) => s.projectId === p.id);
+        const lastSessionUpdate = projSessions.reduce(
+          (max, s) => (s.updatedAt.getTime() > max ? s.updatedAt.getTime() : max),
+          p.updatedAt.getTime(),
+        );
+
+        return {
+          ...p,
+          isGitRepo: p.repoRoot !== null,
+          sessions: projSessions,
+          lastActiveTime: lastSessionUpdate,
+        };
+      });
+
+      if (search) {
+        const query = search.toLowerCase();
+        mapped = mapped.filter(
+          (p) =>
+            p.name.toLowerCase().includes(query) ||
+            p.path.toLowerCase().includes(query) ||
+            p.sessions.some((s) =>
+              (s.title || s.taskSlug || s.branch || '').toLowerCase().includes(query),
+            ),
+        );
+      }
+
+      if (gitOnly === 'true') {
+        mapped = mapped.filter((p) => p.isGitRepo);
+      }
+
+      mapped.sort((a, b) => {
+        let valA: string | number;
+        let valB: string | number;
+
+        if (sortBy === 'name') {
+          valA = a.name.toLowerCase();
+          valB = b.name.toLowerCase();
+        } else if (sortBy === 'createdAt') {
+          valA = a.createdAt.getTime();
+          valB = b.createdAt.getTime();
+        } else {
+          valA = a.lastActiveTime;
+          valB = b.lastActiveTime;
+        }
+
+        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      return mapped;
+    },
+  );
+
+  fastify.withTypeProvider<ZodTypeProvider>().delete(
+    '/projects/:id',
+    {
+      schema: {
+        params: z.object({
+          id: z.uuid(),
+        }),
+      },
+    },
+    async (request) => {
+      await fastify.sessionManager.deleteProject(request.params.id);
+      return { success: true };
+    },
+  );
 
   done();
 };
