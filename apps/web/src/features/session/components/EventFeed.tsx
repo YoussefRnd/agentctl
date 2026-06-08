@@ -149,6 +149,18 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
                   content={(e.data as { content: string }).content}
                   variant="user"
                   isStreaming={isStreaming}
+                  attachments={
+                    (
+                      e.data as {
+                        attachments?: {
+                          attachmentId: string;
+                          mimeType: string;
+                          filename: string;
+                          sizeBytes: number;
+                        }[];
+                      }
+                    ).attachments
+                  }
                 />
               </div>
             );

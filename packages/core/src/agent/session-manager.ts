@@ -487,6 +487,19 @@ export class SessionManager {
     }
 
     await this.db.delete(sessions).where(eq(sessions.id, sessionId));
+
+    // Clean up temporary attachments
+    try {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const os = await import('node:os');
+      const attachmentsDir = path.join(os.tmpdir(), 'agentctl-attachments', sessionId);
+      if (fs.existsSync(attachmentsDir)) {
+        fs.rmSync(attachmentsDir, { recursive: true, force: true });
+      }
+    } catch (err: unknown) {
+      this.logger.error({ err, sessionId }, 'Failed to cleanup attachments on deleteSession');
+    }
   }
 
   async archiveSession(sessionId: string): Promise<void> {
@@ -552,7 +565,7 @@ export class SessionManager {
   async handleClientMessage(
     sessionId: string,
     action: 'approve' | 'deny' | 'session.input',
-    payload: { eventId?: string | number; input?: string },
+    payload: { eventId?: string | number; input?: string; attachmentIds?: string[] },
   ) {
     let session = this.sessions.get(sessionId);
 
@@ -583,8 +596,8 @@ export class SessionManager {
       session.resolvePermission(String(payload.eventId), {
         outcome: { outcome: 'cancelled' },
       });
-    } else if (payload.input) {
-      await session.prompt(payload.input);
+    } else if (payload.input !== undefined) {
+      await session.prompt(payload.input, payload.attachmentIds);
     }
   }
 }

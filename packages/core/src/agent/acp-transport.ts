@@ -1,11 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
+import fs from 'node:fs';
 import { Readable, Writable } from 'node:stream';
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type {
   RequestPermissionResponse,
   RequestPermissionRequest,
   SessionNotification,
+  ContentBlock,
 } from '@agentclientprotocol/sdk';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AuthMethod, ThinkingEffort, ACPConfigOption } from '@agentctl/shared';
@@ -93,7 +95,7 @@ export interface AgentRuntimeHandle {
   connection: ClientSideConnection;
   child: ChildProcess;
   closed: Promise<void>;
-  prompt(text: string): Promise<void>;
+  prompt(text: string, attachments?: { filePath: string; mimeType: string }[]): Promise<void>;
   respondToPermission(permissionId: string, response: RequestPermissionResponse): void;
   stop(): Promise<void>;
   updateModel?(modelId: string): Promise<void>;
@@ -272,10 +274,22 @@ export class DefaultAgentRuntime implements AgentRuntime {
       connection,
       child,
       closed: Promise.race([connection.closed, transport.closed]),
-      async prompt(text: string): Promise<void> {
+      async prompt(text: string, attachments?: { filePath: string; mimeType: string }[]): Promise<void> {
+        const promptParts: ContentBlock[] = [];
+        if (text) {
+          promptParts.push({ type: 'text', text });
+        }
+        for (const att of attachments ?? []) {
+          const data = fs.readFileSync(att.filePath).toString('base64');
+          promptParts.push({
+            type: 'image',
+            data,
+            mimeType: att.mimeType,
+          });
+        }
         await (connection.prompt({
           sessionId: this.acpSessionId ?? '',
-          prompt: [{ type: 'text', text }],
+          prompt: promptParts,
         }) as Promise<unknown>);
       },
       respondToPermission(permissionId: string, response: RequestPermissionResponse): void {

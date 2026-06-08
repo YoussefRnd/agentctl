@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { sessions, projects } from '@agentctl/core';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
@@ -457,6 +461,89 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       await fastify.sessionManager.restartSession(request.params.id);
       return { success: true };
     },
+  );
+
+  // Register raw body parser for standard image types to facilitate direct binary uploads.
+  fastify.addContentTypeParser(
+    ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+    { parseAs: 'buffer' },
+    (req, body, done) => {
+      done(null, body);
+    }
+  );
+
+  const attachmentParamsSchema = z.object({
+    id: z.uuid(),
+    attachmentId: z.uuid(),
+  });
+
+  fastify.withTypeProvider<ZodTypeProvider>().post(
+    '/sessions/:id/attachments',
+    {
+      schema: {
+        params: sessionParamsSchema,
+      },
+      bodyLimit: 20 * 1024 * 1024, // 20 MB limit
+    },
+    async (request) => {
+      const sessionId = request.params.id;
+      const buffer = request.body as Buffer;
+      if (!Buffer.isBuffer(buffer)) {
+        throw new AppError('Expected raw binary body', 400);
+      }
+
+      const mimeType = request.headers['content-type'] ?? 'application/octet-stream';
+      const rawFilename = request.headers['x-filename'] as string;
+      const filename = rawFilename ? decodeURIComponent(rawFilename) : 'attachment';
+
+      const attachmentId = crypto.randomUUID();
+
+      const sessionAttachmentsDir = path.join(os.tmpdir(), 'agentctl-attachments', sessionId);
+      await fs.promises.mkdir(sessionAttachmentsDir, { recursive: true });
+
+      const binPath = path.join(sessionAttachmentsDir, `${attachmentId}.bin`);
+      const jsonPath = path.join(sessionAttachmentsDir, `${attachmentId}.json`);
+
+      const meta = {
+        attachmentId,
+        mimeType,
+        filename,
+        sizeBytes: buffer.length,
+      };
+
+      await fs.promises.writeFile(binPath, buffer);
+      await fs.promises.writeFile(jsonPath, JSON.stringify(meta), 'utf8');
+
+      return meta;
+    }
+  );
+
+  fastify.withTypeProvider<ZodTypeProvider>().get(
+    '/sessions/:id/attachments/:attachmentId',
+    {
+      schema: {
+        params: attachmentParamsSchema,
+      },
+    },
+    async (request, reply) => {
+      const { id: sessionId, attachmentId } = request.params;
+      const sessionAttachmentsDir = path.join(os.tmpdir(), 'agentctl-attachments', sessionId);
+      const binPath = path.join(sessionAttachmentsDir, `${attachmentId}.bin`);
+      const jsonPath = path.join(sessionAttachmentsDir, `${attachmentId}.json`);
+
+      if (!fs.existsSync(binPath) || !fs.existsSync(jsonPath)) {
+        throw new AppError('Attachment not found', 404);
+      }
+
+      try {
+        const meta = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as { mimeType: string };
+        const fileBuffer = fs.readFileSync(binPath);
+        reply.type(meta.mimeType);
+        return fileBuffer;
+      } catch {
+        throw new AppError('Failed to read attachment', 500);
+      }
+    }
   );
 
   done();

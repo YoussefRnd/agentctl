@@ -28,6 +28,7 @@ export const wsMessageSchema = z.discriminatedUnion('action', [
     action: z.literal('session.input'),
     sessionId: z.uuid(),
     input: z.string(),
+    attachmentIds: z.array(z.string()).optional(),
   }),
 ]);
 

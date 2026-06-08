@@ -4,6 +4,9 @@ import type {
   SessionNotification,
   RequestPermissionResponse,
 } from '@agentclientprotocol/sdk';
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
 import { sessions } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { createDatabase } from '../db/index.js';
@@ -65,7 +68,7 @@ export class ACPSession {
       });
   }
 
-  async prompt(text: string): Promise<void> {
+  async prompt(text: string, attachmentIds?: string[]): Promise<void> {
     try {
       this.currentMessage = '';
       this.currentThought = '';
@@ -92,10 +95,45 @@ export class ACPSession {
 
       await this.db.update(sessions).set(updateFields).where(eq(sessions.id, this.sessionId));
 
-      // Persist user message immediately so it shows up in history
-      await this.eventStore.append(this.sessionId, 'text', { content: text, role: 'user' });
+      interface AttachmentMeta {
+        attachmentId: string;
+        mimeType: string;
+        filename: string;
+        sizeBytes: number;
+      }
 
-      await this.runtimeHandle.prompt(text);
+      // Resolve attachments metadata & paths from disk
+      const resolvedAttachmentsMeta: AttachmentMeta[] = [];
+      const resolvedAttachmentFiles: { filePath: string; mimeType: string }[] = [];
+
+      if (attachmentIds && attachmentIds.length > 0) {
+        const sessionAttachmentsDir = path.join(os.tmpdir(), 'agentctl-attachments', this.sessionId);
+        for (const id of attachmentIds) {
+          const jsonPath = path.join(sessionAttachmentsDir, `${id}.json`);
+          const binPath = path.join(sessionAttachmentsDir, `${id}.bin`);
+          if (fs.existsSync(jsonPath) && fs.existsSync(binPath)) {
+            try {
+              const meta = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as AttachmentMeta;
+              resolvedAttachmentsMeta.push(meta);
+              resolvedAttachmentFiles.push({
+                filePath: binPath,
+                mimeType: meta.mimeType,
+              });
+            } catch (err) {
+              this.logger.error(err, `Failed to read attachment metadata for ${id}`);
+            }
+          }
+        }
+      }
+
+      // Persist user message immediately so it shows up in history
+      await this.eventStore.append(this.sessionId, 'text', {
+        content: text,
+        role: 'user',
+        attachments: resolvedAttachmentsMeta.length > 0 ? resolvedAttachmentsMeta : undefined,
+      });
+
+      await this.runtimeHandle.prompt(text, resolvedAttachmentFiles);
 
       await this.db
         .update(sessions)
