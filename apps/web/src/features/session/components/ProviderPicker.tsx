@@ -3,6 +3,8 @@ import { Search, Bot, Cpu, Zap, RefreshCw } from 'lucide-react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { PROVIDER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { useProviders } from '../../../hooks/useProviders';
+import { toast } from 'sonner';
+
 
 interface ProviderPickerProps {
   sessionId: string | null;
@@ -119,22 +121,34 @@ export function ProviderPicker({
           { providerId: activeProvider.id, enabled: true },
           {
             onSuccess: () => {
+              toast.success('Provider selection updated successfully.');
               if (activeProvider.status !== 'ready' && activeProvider.status !== 'needs_auth') {
                 activate(activeProvider.id, {
                   onSuccess: () => {
+                    toast.success('Agent activated successfully!');
                     onSelect(activeProvider.id);
+                  },
+                  onError: (err) => {
+                    toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
                   },
                 });
               } else {
                 onSelect(activeProvider.id);
               }
             },
+            onError: (err) => {
+              toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            },
           },
         );
       } else if (activeProvider.status !== 'ready' && activeProvider.status !== 'needs_auth') {
         activate(activeProvider.id, {
           onSuccess: () => {
+            toast.success('Agent activated successfully!');
             onSelect(activeProvider.id);
+          },
+          onError: (err) => {
+            toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
           },
         });
       } else {
@@ -147,7 +161,11 @@ export function ProviderPicker({
         { providerId: activeProvider.id, customEnv: keysValues },
         {
           onSuccess: () => {
+            toast.success('Provider configuration updated.');
             proceedWithEnable();
+          },
+          onError: (err) => {
+            toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
           },
         },
       );
@@ -212,7 +230,11 @@ export function ProviderPicker({
           </div>
           <button
             onClick={() => {
-              refreshProvider(activeProvider.id);
+              refreshProvider(activeProvider.id, {
+                onError: (err) => {
+                  toast.error(`Refresh failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                },
+              });
             }}
             disabled={isRefreshing}
             className="text-text-muted p-1 transition-colors hover:text-white disabled:opacity-30"
@@ -274,7 +296,17 @@ export function ProviderPicker({
                         key={method.id}
                         type="button"
                         onClick={() => {
-                          login({ providerId: activeProvider.id, methodId: method.id });
+                          login(
+                            { providerId: activeProvider.id, methodId: method.id },
+                            {
+                              onSuccess: () => {
+                                toast.success('Login initiated. Please check your browser or terminal.');
+                              },
+                              onError: (err) => {
+                                toast.error(`Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                              },
+                            }
+                          );
                         }}
                         disabled={isPending}
                         className="terminal-button w-full border border-white/10 py-1 text-center text-[10px] uppercase transition-all hover:border-white/20"

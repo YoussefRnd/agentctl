@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import { apiClient } from '@agentctl/api-client';
 import type {
   ProviderDiscovery,
@@ -31,9 +30,6 @@ export function useProviders(sessionId: string | null) {
       if (sessionId) {
         queryClient.setQueryData<SessionResponse>(['session', sessionId], data);
       }
-    },
-    onError: (error: unknown) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to switch provider');
     },
   });
 
@@ -78,10 +74,6 @@ export function useProviders(sessionId: string | null) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      toast.success('Login initiated. Please check your browser or terminal.');
-    },
-    onError: (err) => {
-      toast.error(`Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     },
   });
 
@@ -93,10 +85,6 @@ export function useProviders(sessionId: string | null) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      toast.success('Agent activated successfully!');
-    },
-    onError: (err) => {
-      toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     },
   });
 
@@ -108,10 +96,6 @@ export function useProviders(sessionId: string | null) {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(['providers'], data);
-      toast.success('Agents synced successfully!');
-    },
-    onError: (err) => {
-      toast.error(`Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     },
   });
 
@@ -124,10 +108,6 @@ export function useProviders(sessionId: string | null) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      toast.success('Provider selection updated successfully.');
-    },
-    onError: (err) => {
-      toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     },
   });
 
@@ -141,9 +121,6 @@ export function useProviders(sessionId: string | null) {
       queryClient.setQueryData<ProviderDiscovery[]>(['providers'], (current = []) =>
         current.map((p) => (p.id === updatedProvider.id ? updatedProvider : p)),
       );
-    },
-    onError: (err) => {
-      toast.error(`Refresh failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     },
   });
 
@@ -165,10 +142,6 @@ export function useProviders(sessionId: string | null) {
         current.map((p) => (p.id === updatedProvider.id ? updatedProvider : p)),
       );
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      toast.success('Provider configuration updated.');
-    },
-    onError: (err) => {
-      toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     },
   });
 
@@ -191,3 +164,4 @@ export function useProviders(sessionId: string | null) {
     isUpdatingConfig: updateProviderConfigMutation.isPending,
   };
 }
+

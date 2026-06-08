@@ -1,6 +1,7 @@
 import { ProviderCard } from './ProviderCard';
 import { useProviders } from '../../../hooks/useProviders';
 import { Loader2, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function SettingsPage() {
   const {
@@ -27,7 +28,14 @@ export function SettingsPage() {
         </div>
         <button
           onClick={() => {
-            syncProviders();
+            syncProviders(undefined, {
+              onSuccess: () => {
+                toast.success('Agents synced successfully!');
+              },
+              onError: (err) => {
+                toast.error(`Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+              },
+            });
           }}
           disabled={isSyncing}
           className="terminal-button group flex items-center gap-2"
@@ -54,15 +62,51 @@ export function SettingsPage() {
               <ProviderCard
                 key={provider.id}
                 provider={provider}
-                onActivate={activate}
+                onActivate={(id) => {
+                  activate(id, {
+                    onSuccess: () => {
+                      toast.success('Agent activated successfully!');
+                    },
+                    onError: (err) => {
+                      toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                    },
+                  });
+                }}
                 onToggle={(id, enabled) => {
-                  toggleProvider({ providerId: id, enabled });
+                  toggleProvider(
+                    { providerId: id, enabled },
+                    {
+                      onSuccess: () => {
+                        toast.success('Provider selection updated successfully.');
+                      },
+                      onError: (err) => {
+                        toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                      },
+                    }
+                  );
                 }}
                 onResync={() => {
-                  syncProviders();
+                  syncProviders(undefined, {
+                    onSuccess: () => {
+                      toast.success('Agents synced successfully!');
+                    },
+                    onError: (err) => {
+                      toast.error(`Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                    },
+                  });
                 }}
                 onUpdateConfig={(id, customEnv) => {
-                  updateProviderConfig({ providerId: id, customEnv });
+                  updateProviderConfig(
+                    { providerId: id, customEnv },
+                    {
+                      onSuccess: () => {
+                        toast.success('Provider configuration updated.');
+                      },
+                      onError: (err) => {
+                        toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                      },
+                    }
+                  );
                 }}
                 isUpdatingConfig={isUpdatingConfig}
               />
@@ -78,3 +122,4 @@ export function SettingsPage() {
     </div>
   );
 }
+

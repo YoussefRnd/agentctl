@@ -3,6 +3,8 @@ import { useSetupWizard } from '../hooks/useSetupWizard';
 import { useProviders } from '../../../hooks/useProviders';
 import { PROVIDER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { Bot, Terminal } from 'lucide-react';
+import { toast } from 'sonner';
+
 
 export function SetupWizard() {
   const { showWizard, markDone } = useSetupWizard();
@@ -105,9 +107,26 @@ export function SetupWizard() {
                       aria-checked={isActive}
                       onClick={() => {
                         const nextEnabled = !provider.enabled;
-                        toggleProvider({ providerId: provider.id, enabled: nextEnabled });
+                        toggleProvider(
+                          { providerId: provider.id, enabled: nextEnabled },
+                          {
+                            onSuccess: () => {
+                              toast.success('Provider selection updated successfully.');
+                            },
+                            onError: (err) => {
+                              toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                            },
+                          }
+                        );
                         if (nextEnabled && provider.status === 'inactive') {
-                          activate(provider.id);
+                          activate(provider.id, {
+                            onSuccess: () => {
+                              toast.success('Agent activated successfully!');
+                            },
+                            onError: (err) => {
+                              toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                            },
+                          });
                         }
                       }}
                       className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-md border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-text-main border-text-main' : 'bg-background border-border/20'}`}
@@ -155,10 +174,20 @@ export function SetupWizard() {
                           <div className="flex justify-end pt-1">
                             <button
                               onClick={() => {
-                                updateProviderConfig({
-                                  providerId: provider.id,
-                                  customEnv: keysValues,
-                                });
+                                updateProviderConfig(
+                                  {
+                                    providerId: provider.id,
+                                    customEnv: keysValues,
+                                  },
+                                  {
+                                    onSuccess: () => {
+                                      toast.success('Provider configuration updated.');
+                                    },
+                                    onError: (err) => {
+                                      toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                                    },
+                                  }
+                                );
                               }}
                               disabled={
                                 isUpdatingConfig ||
