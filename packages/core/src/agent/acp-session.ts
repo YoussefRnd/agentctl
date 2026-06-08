@@ -247,8 +247,8 @@ export class ACPSession {
 
       // Handle thought chunks with buffering
       if (typeKey === 'agent_thought_chunk') {
-        const chunk = update as { content?: { type: string; thought?: string } };
-        const thought = chunk.content?.thought;
+        const chunk = update as { content?: { type: string; text?: string; thought?: string } };
+        const thought = chunk.content?.text ?? chunk.content?.thought;
         if (thought !== undefined) {
           this.currentThought += thought;
           if (this.thoughtEventId) {
