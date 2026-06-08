@@ -126,7 +126,7 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
       className="no-scrollbar relative h-full flex-1 overflow-y-auto scroll-smooth"
       onScroll={handleScroll}
     >
-      <div className="mx-auto max-w-[800px] px-6 py-12">
+      <div className="mx-auto max-w-[800px] px-6 pt-12 pb-4">
         <div className="flex flex-col gap-6">
           {groupedEvents.map((group) => {
             if (group.type === 'agent') {
@@ -213,7 +213,7 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
         </div>
 
         {/* Scroll anchor */}
-        <div ref={bottomRef} className="h-24" />
+        <div ref={bottomRef} className="h-6" />
       </div>
 
       {!autoScroll && (
