@@ -47,6 +47,13 @@ export default fp(async (fastify) => {
                 session = await fastify.sessionManager.restartSession(message.sessionId);
               } catch (err) {
                 fastify.log.error(err, `Failed to resuscitate session: ${message.sessionId}`);
+                socket.send(
+                  JSON.stringify({
+                    type: 'error',
+                    error: `Failed to resuscitate session: ${err instanceof Error ? err.message : String(err)}`,
+                  }),
+                );
+                return;
               }
             }
 

@@ -20,6 +20,8 @@ import {
   GitMutex,
   ProviderRegistry,
   SessionManager,
+  projects,
+  sessions,
 } from '@agentctl/core';
 import { EventBus } from './utils/event-bus.js';
 import { AppError } from './errors/app-error.js';
@@ -103,9 +105,26 @@ export async function buildApp(deps: AppDependencies = {}) {
           });
         }, PROVIDER_REGISTRY_SYNC_INTERVAL_MS);
 
-  fastify.addHook('onClose', () => {
+  fastify.addHook('onClose', async () => {
     if (registrySyncInterval) {
       clearInterval(registrySyncInterval);
+    }
+    await fastify.sessionManager.stopAll();
+  });
+
+  fastify.ready(async () => {
+    try {
+      const activeProjects = await db.select().from(projects);
+      const activeSessions = await db.select().from(sessions);
+      const activeSessionIds = activeSessions.map((s) => s.id);
+
+      for (const project of activeProjects) {
+        if (project.repoRoot) {
+          await worktreeManager.sync(project.repoRoot, activeSessionIds);
+        }
+      }
+    } catch (err) {
+      fastify.log.error(err, 'Failed to sync orphaned worktrees on startup');
     }
   });
 

@@ -30,7 +30,7 @@ export class ProcessStreamTransport implements AgentStreamTransport {
 
   constructor(
     public readonly child: ChildProcess,
-    logger: Logger,
+    private logger: Logger,
   ) {
     const stdin = child.stdin;
     const stdout = child.stdout;
@@ -72,9 +72,18 @@ export class ProcessStreamTransport implements AgentStreamTransport {
     });
   }
 
-  kill(signal?: NodeJS.Signals | number): void {
+  kill(signal: NodeJS.Signals | number = 'SIGTERM'): void {
     if (!this.child.killed) {
       this.child.kill(signal);
+
+      if (signal === 'SIGTERM') {
+        setTimeout(() => {
+          if (!this.child.killed && this.child.exitCode === null) {
+            this.logger.warn(`Process did not exit on SIGTERM, sending SIGKILL to PID ${String(this.child.pid)}`);
+            this.child.kill('SIGKILL');
+          }
+        }, 2000).unref();
+      }
     }
   }
 }
