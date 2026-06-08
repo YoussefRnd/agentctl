@@ -326,6 +326,28 @@ export class ACPSession {
     try {
       const permissionId = request.toolCall.toolCallId || Math.random().toString(36).substring(7);
 
+      const sessionRecord = await this.db.query.sessions.findFirst({
+        where: eq(sessions.id, this.sessionId),
+      });
+
+      const toolName = (request.toolCall as { name?: string }).name ?? '';
+      const shouldAutoApprove =
+        sessionRecord?.approvalMode === 'yolo' ||
+        (sessionRecord?.approvalMode === 'auto_approve' && toolName.startsWith('fs/'));
+
+      if (shouldAutoApprove) {
+        await this.eventStore.append(this.sessionId, 'approval_request', {
+          name: 'request_permission',
+          toolCallId: permissionId,
+          requiresApproval: true,
+          request,
+          status: 'approved',
+        });
+        return {
+          outcome: { outcome: 'selected', optionId: 'allow-once' },
+        };
+      }
+
       await this.db
         .update(sessions)
         .set({ status: 'needs_attention', lastHeartbeat: new Date() })

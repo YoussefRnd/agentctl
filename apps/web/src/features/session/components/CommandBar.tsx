@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, ChevronUp, Zap, Paperclip, Monitor, GitBranch, ChevronDown } from 'lucide-react';
+import { Send, Zap, Monitor, GitBranch, ChevronDown, Shield, Plus } from 'lucide-react';
 import { ProviderPicker } from './ProviderPicker';
 import { useProviders } from '../../../hooks/useProviders';
 import { useSession } from '../../../contexts/SessionContext';
@@ -17,6 +17,7 @@ interface CustomDropdownProps<T> {
   disabled?: boolean;
   icon: React.ReactNode;
   align?: 'left' | 'right';
+  variant?: 'default' | 'toolbar';
 }
 
 function CustomDropdown<T extends string>({
@@ -26,6 +27,7 @@ function CustomDropdown<T extends string>({
   disabled,
   icon,
   align = 'left',
+  variant = 'default',
 }: CustomDropdownProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -44,6 +46,18 @@ function CustomDropdown<T extends string>({
 
   const activeOption = options.find((opt) => opt.value === value);
 
+  const buttonClass = variant === 'toolbar'
+    ? `flex h-10 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-300 text-text-muted hover:text-text-main focus:outline-none ${isOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5'}`
+    : "text-text-muted/60 hover:text-text-main flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors focus:outline-none disabled:opacity-50";
+
+  const textClass = variant === 'toolbar'
+    ? "max-w-[150px] truncate text-[11px] font-bold tracking-tight uppercase"
+    : "max-w-[150px] truncate";
+
+  const chevronClass = variant === 'toolbar'
+    ? `text-text-muted/50 h-3.5 w-3.5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`
+    : `text-text-muted/50 h-3 w-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`;
+
   return (
     <div ref={dropdownRef} className="relative inline-block text-left">
       <button
@@ -52,13 +66,11 @@ function CustomDropdown<T extends string>({
         onClick={() => {
           setIsOpen(!isOpen);
         }}
-        className="text-text-muted/60 hover:text-text-main flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors focus:outline-none disabled:opacity-50"
+        className={buttonClass}
       >
         {icon}
-        <span className="max-w-[150px] truncate">{activeOption?.label ?? value}</span>
-        <ChevronDown
-          className={`text-text-muted/50 h-3 w-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-        />
+        <span className={textClass}>{activeOption?.label ?? value}</span>
+        <ChevronDown className={chevronClass} />
       </button>
 
       {isOpen && (
@@ -130,6 +142,8 @@ export function CommandBar({
     isSwitchingBranch,
     switchMode,
     isSwitchingMode,
+    setApprovalMode,
+    isUpdatingApprovalMode,
   } = useSession();
   const { providers, isLoadingProviders } = useProviders(sessionId);
   const [input, setInput] = useState('');
@@ -204,9 +218,17 @@ export function CommandBar({
           }}
         >
           <div
-            className={`glass-card border-border/30 bg-surface/60 flex flex-col overflow-hidden rounded-[32px] border shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-3xl transition-all duration-500 ${disabled ? 'opacity-30' : ''}`}
+            className={`glass-card border-border/30 bg-surface/60 flex flex-col rounded-[32px] border shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-3xl transition-all duration-500 ${disabled ? 'opacity-30' : ''}`}
           >
-            <div className="w-full p-5 pb-2">
+            <div className="flex w-full items-start gap-3 p-5 pb-2">
+              <button
+                type="button"
+                className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all mt-0.5"
+                title="Attach file"
+                aria-label="Attach file"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
               <textarea
                 ref={textareaRef}
                 rows={1}
@@ -228,7 +250,7 @@ export function CommandBar({
                     : placeholder
                 }
                 aria-label="Command input"
-                className="placeholder:text-text-muted/30 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full resize-none border-none bg-transparent p-0 font-sans text-[15px] leading-relaxed focus:ring-0"
+                className="placeholder:text-text-muted/30 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full resize-none border-none bg-transparent p-0 font-sans text-[15px] leading-relaxed focus:ring-0 focus:outline-none outline-none"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 disabled={disabled}
               />
@@ -250,13 +272,30 @@ export function CommandBar({
                   ) : (
                     <Zap className={`h-4 w-4 ${isPickerOpen ? 'fill-accent' : 'fill-none'}`} />
                   )}
-                  <span className="max-w-[120px] truncate text-[12px] font-bold tracking-tight uppercase">
+                  <span className="max-w-[120px] truncate text-[11px] font-bold tracking-tight uppercase">
                     {isLoadingProviders ? '...' : (propSelectedModelId ?? selectedProviderLabel)}
                   </span>
-                  <ChevronUp
-                    className={`h-4 w-4 transition-transform duration-500 ${isPickerOpen ? 'rotate-180' : ''}`}
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform duration-300 ${isPickerOpen ? 'rotate-180' : ''}`}
                   />
                 </button>
+
+                {sessionData?.session && (
+                  <CustomDropdown
+                    value={sessionData.session.approvalMode}
+                    disabled={isUpdatingApprovalMode}
+                    variant="toolbar"
+                    onChange={(val) => {
+                      void setApprovalMode(val);
+                    }}
+                    icon={<Shield className="h-3.5 w-3.5" />}
+                    options={[
+                      { value: 'review', label: 'Review' },
+                      { value: 'auto_approve', label: 'Auto Approve' },
+                      { value: 'yolo', label: 'YOLO' },
+                    ]}
+                  />
+                )}
 
                 <div className="bg-border/20 mx-1 h-4 w-px" />
 
@@ -267,15 +306,6 @@ export function CommandBar({
                   }}
                 />
 
-                <button
-                  type="button"
-                  className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-10 items-center gap-2 rounded-full px-3 transition-all"
-                  title="Attach file"
-                  aria-label="Attach file"
-                >
-                  <Paperclip className="h-4 w-4" />
-                  <span className="text-[11px] font-bold tracking-tight uppercase">Files</span>
-                </button>
               </div>
 
               <button

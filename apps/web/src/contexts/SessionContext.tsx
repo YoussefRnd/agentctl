@@ -8,6 +8,7 @@ import {
   switchSessionMode,
   mergeSession,
   discardSession,
+  setApprovalMode,
 } from '@agentctl/api-client';
 import { useSessionEvents } from '../hooks/useSessionEvents';
 import type { ReviewFile } from '../features/session/components/ReviewView';
@@ -42,6 +43,8 @@ interface SessionConfigContextValue {
   isMergingSession: boolean;
   discardSession: () => Promise<void>;
   isDiscardingSession: boolean;
+  setApprovalMode: (approvalMode: 'review' | 'auto_approve' | 'yolo') => Promise<void>;
+  isUpdatingApprovalMode: boolean;
 }
 
 const SessionConfigContext = createContext<SessionConfigContextValue | null>(null);
@@ -176,6 +179,20 @@ export function SessionConfigProvider({
     [discardMutation],
   );
 
+  const setApprovalModeMutation = useMutation({
+    mutationFn: (approvalMode: 'review' | 'auto_approve' | 'yolo') => setApprovalMode(sessionId, approvalMode),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+    },
+  });
+
+  const handleSetApprovalMode = useCallback(
+    async (approvalMode: 'review' | 'auto_approve' | 'yolo') => {
+      await setApprovalModeMutation.mutateAsync(approvalMode);
+    },
+    [setApprovalModeMutation],
+  );
+
   const value = useMemo(
     () => ({
       sessionId,
@@ -195,6 +212,8 @@ export function SessionConfigProvider({
       isMergingSession: mergeMutation.isPending,
       discardSession: discardSessionFn,
       isDiscardingSession: discardMutation.isPending,
+      setApprovalMode: handleSetApprovalMode,
+      isUpdatingApprovalMode: setApprovalModeMutation.isPending,
     }),
     [
       sessionId,
@@ -214,6 +233,8 @@ export function SessionConfigProvider({
       mergeMutation.isPending,
       discardSessionFn,
       discardMutation.isPending,
+      handleSetApprovalMode,
+      setApprovalModeMutation.isPending,
     ],
   );
 

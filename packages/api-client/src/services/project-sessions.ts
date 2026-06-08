@@ -103,5 +103,12 @@ export async function restoreSession(sessionId: string) {
   });
 }
 
+export async function setApprovalMode(sessionId: string, approvalMode: 'review' | 'auto_approve' | 'yolo') {
+  return apiClient.fetch<SessionRow>(`/api/sessions/${sessionId}/approval-mode`, {
+    method: 'PATCH',
+    body: JSON.stringify({ approvalMode }),
+  });
+}
+
 
 

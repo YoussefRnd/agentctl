@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `approval_mode` text DEFAULT 'review' NOT NULL;
