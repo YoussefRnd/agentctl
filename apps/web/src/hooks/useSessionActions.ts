@@ -4,9 +4,14 @@ export function useSessionActions() {
   const { sessionId } = useSession();
   const { sendMessage } = useSessionStream();
 
-  const handleSend = (text: string) => {
-    if (!text.trim()) return;
-    sendMessage({ action: 'session.input', sessionId, input: text });
+  const handleSend = (text: string, attachmentIds?: string[]) => {
+    if (!text.trim() && (!attachmentIds || attachmentIds.length === 0)) return;
+    sendMessage({
+      action: 'session.input',
+      sessionId,
+      input: text,
+      ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
+    });
   };
 
   const handleApprove = (eventId: number) => {
@@ -23,4 +28,3 @@ export function useSessionActions() {
     handleDeny,
   };
 }
-

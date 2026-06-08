@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Zap, Monitor, GitBranch, ChevronDown, Shield, Plus } from 'lucide-react';
 import { ProviderPicker } from './ProviderPicker';
 import { useProviders } from '../../../hooks/useProviders';
 import { useSession } from '../../../contexts/SessionContext';
 import { MagicBar } from './MagicBar';
+import { AttachmentStrip } from './AttachmentStrip';
+import { useAttachments } from '../../../hooks/useAttachments';
 
 interface DropdownOption<T> {
   value: T;
@@ -103,7 +105,7 @@ function CustomDropdown<T extends string>({
 }
 
 interface ControlBarProps {
-  onSend: (val: string) => void;
+  onSend: (val: string, attachmentIds?: string[]) => void;
   disabled?: boolean;
   selectedProviderId?: string | null;
   selectedModelId?: string | null;
@@ -124,6 +126,8 @@ function formatBranchName(branch: string) {
   }
   return branch;
 }
+
+const ACCEPTED_IMAGE_TYPES = 'image/png,image/jpeg,image/gif,image/webp';
 
 export function CommandBar({
   onSend,
@@ -150,6 +154,10 @@ export function CommandBar({
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [internalSelectedProviderId, setInternalSelectedProviderId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { attachments, addFiles, removeAttachment, clearAll, readyAttachmentIds, isAnyUploading } =
+    useAttachments(sessionId);
 
   const selectedId = propSelectedProviderId ?? internalSelectedProviderId;
 
@@ -159,12 +167,15 @@ export function CommandBar({
   const selectedProviderLabel =
     activeProvider !== undefined ? activeProvider.label : 'Select provider';
 
-  const handleSubmit = () => {
-    if (input.trim() && !disabled) {
-      onSend(input);
-      setInput('');
-    }
-  };
+  const handleSubmit = useCallback(() => {
+    const hasText = input.trim().length > 0;
+    const hasAttachments = readyAttachmentIds.length > 0;
+    if ((!hasText && !hasAttachments) || disabled || isAnyUploading) return;
+
+    onSend(input, readyAttachmentIds.length > 0 ? readyAttachmentIds : undefined);
+    setInput('');
+    clearAll();
+  }, [input, readyAttachmentIds, disabled, isAnyUploading, onSend, clearAll]);
 
   const handleProviderSelect = (id: string, modelId?: string) => {
     if (onProviderSelect) {
@@ -175,6 +186,7 @@ export function CommandBar({
     setIsPickerOpen(false);
   };
 
+  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -182,6 +194,7 @@ export function CommandBar({
     }
   }, [input]);
 
+  // Close picker on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isPickerOpen) {
@@ -193,6 +206,53 @@ export function CommandBar({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isPickerOpen]);
+
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addFiles(e.target.files);
+    }
+    // Reset so the same file can be selected again
+    e.target.value = '';
+  };
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = Array.from(e.clipboardData.items);
+      const imageItems = items.filter((item) => item.type.startsWith('image/'));
+      if (imageItems.length > 0) {
+        e.preventDefault();
+        const files = imageItems
+          .map((item) => item.getAsFile())
+          .filter((f): f is File => f !== null);
+        addFiles(files);
+      }
+    },
+    [addFiles],
+  );
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const files = Array.from(e.dataTransfer.files).filter((f) =>
+        f.type.startsWith('image/'),
+      );
+      if (files.length > 0) addFiles(files);
+    },
+    [addFiles],
+  );
+
+  const canSend =
+    !disabled &&
+    !isAnyUploading &&
+    (input.trim().length > 0 || readyAttachmentIds.length > 0);
 
   return (
     <div className="relative z-40 w-full px-6 pb-4">
@@ -209,6 +269,18 @@ export function CommandBar({
           onSelect={handleProviderSelect}
         />
 
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_IMAGE_TYPES}
+          multiple
+          className="sr-only"
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={handleFileInputChange}
+        />
+
         <form
           className="w-full"
           aria-label="Command interface"
@@ -219,15 +291,18 @@ export function CommandBar({
         >
           <div
             className={`glass-card border-border/30 bg-surface/60 flex flex-col rounded-[2rem] border shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-3xl transition-opacity duration-300 ${disabled ? 'opacity-30' : 'opacity-100'}`}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
           >
-            {/* Input row — generous top padding, tighter bottom leading into the toolbar */}
+            {/* Input row */}
             <div className="flex w-full items-start gap-2.5 px-4 pt-4 pb-3">
               <button
                 type="button"
                 disabled={disabled}
+                onClick={handleAttachClick}
                 className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-[color,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40"
-                title="Attach file"
-                aria-label="Attach file"
+                title="Attach image"
+                aria-label="Attach image"
               >
                 <Plus className="h-3.5 w-3.5" />
               </button>
@@ -244,6 +319,7 @@ export function CommandBar({
                     handleSubmit();
                   }
                 }}
+                onPaste={handlePaste}
                 placeholder={
                   disabled
                     ? sessionData?.session.status === 'running'
@@ -258,10 +334,18 @@ export function CommandBar({
               />
             </div>
 
+            {/* Attachment strip — only visible when there are files */}
+            {attachments.length > 0 && (
+              <>
+                <div className="mx-4 h-px bg-border/20" />
+                <AttachmentStrip attachments={attachments} onRemove={removeAttachment} />
+              </>
+            )}
+
             {/* Hairline separator anchors toolbar below input */}
             <div className="mx-4 h-px bg-border/20" />
 
-            {/* Toolbar row — tighter, clearly secondary density */}
+            {/* Toolbar row */}
             <div className="flex items-center justify-between px-3 py-2">
               <div className="flex items-center gap-1">
                 <button
@@ -317,8 +401,8 @@ export function CommandBar({
                 type="submit"
                 onClick={handleSubmit}
                 aria-label="Execute command"
-                className={`flex h-8 w-8 items-center justify-center rounded-full transition-[background-color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-safe:hover:scale-105 motion-safe:active:scale-95 ${input.trim() && !disabled ? 'bg-accent text-background shadow-[0_0_16px_rgba(203,166,247,0.35)]' : 'bg-surface-quaternary text-text-muted/40 cursor-not-allowed opacity-50'}`}
-                disabled={!input.trim() || disabled}
+                className={`flex h-8 w-8 items-center justify-center rounded-full transition-[background-color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-safe:hover:scale-105 motion-safe:active:scale-95 ${canSend ? 'bg-accent text-background shadow-[0_0_16px_rgba(203,166,247,0.35)]' : 'bg-surface-quaternary text-text-muted/40 cursor-not-allowed opacity-50'}`}
+                disabled={!canSend}
               >
                 <Send className="h-3.5 w-3.5" />
               </button>

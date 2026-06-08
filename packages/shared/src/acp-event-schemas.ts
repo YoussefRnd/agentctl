@@ -3,6 +3,16 @@ import { z } from 'zod';
 export const acpEventTextDataSchema = z.object({
   content: z.string(),
   role: z.enum(['provider', 'user', 'thought']).optional(),
+  attachments: z
+    .array(
+      z.object({
+        attachmentId: z.string(),
+        mimeType: z.string(),
+        filename: z.string(),
+        sizeBytes: z.number(),
+      }),
+    )
+    .optional(),
 });
 
 export const acpEventToolCallDataSchema = z

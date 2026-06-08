@@ -2,6 +2,7 @@ import { memo, useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import { ChevronDown, ChevronRight, Brain, Sparkles } from 'lucide-react';
+import { useSession } from '../../../../contexts/SessionContext';
 
 type Role = 'provider' | 'user' | 'thought';
 
@@ -9,14 +10,22 @@ interface TextCardProps {
   content: string;
   variant?: Role;
   isStreaming?: boolean;
+  attachments?: {
+    attachmentId: string;
+    mimeType: string;
+    filename: string;
+    sizeBytes: number;
+  }[];
 }
 
 export const TextCard = memo(function TextCard({
   content,
   variant = 'provider',
   isStreaming = false,
+  attachments,
 }: TextCardProps) {
   const [thoughtOpen, setThoughtOpen] = useState(true);
+  const { sessionId } = useSession();
 
   // Auto-expand thoughts while streaming, but allow user to toggle after
   useEffect(() => {
@@ -28,11 +37,28 @@ export const TextCard = memo(function TextCard({
   if (variant === 'user') {
     return (
       <div className="flex justify-end py-4">
-        <div className="text-text-main group relative max-w-[85%] rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[14px] leading-relaxed shadow-2xl backdrop-blur-md sm:max-w-[70%]">
-          <div className="text-text-muted/40 absolute -top-6 right-2 text-[10px] font-black tracking-widest uppercase opacity-0 transition-opacity group-hover:opacity-100">
-            USER_STATION
-          </div>
-          {content}
+        <div className="flex flex-col items-end gap-2 max-w-[85%] sm:max-w-[70%]">
+          {attachments && attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 justify-end">
+              {attachments.map((att) => (
+                <div key={att.attachmentId} className="group/img relative overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-md">
+                  <img
+                    src={`/api/sessions/${sessionId}/attachments/${att.attachmentId}`}
+                    alt={att.filename}
+                    className="max-h-60 max-w-full object-contain rounded-xl"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {content && (
+            <div className="text-text-main group relative rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[14px] leading-relaxed shadow-2xl backdrop-blur-md">
+              <div className="text-text-muted/40 absolute -top-6 right-2 text-[10px] font-black tracking-widest uppercase opacity-0 transition-opacity group-hover:opacity-100">
+                USER_STATION
+              </div>
+              {content}
+            </div>
+          )}
         </div>
       </div>
     );
