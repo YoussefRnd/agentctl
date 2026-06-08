@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow } from '@agentctl/shared';
+import { toast } from 'sonner';
 
 import { apiClient } from '@agentctl/api-client';
 
@@ -55,7 +56,12 @@ export function useSessionEvents(sessionId: string | null) {
 
     ws.onmessage = (event) => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-      const msg = JSON.parse(event.data) as { type?: string; payload?: unknown };
+      const msg = JSON.parse(event.data) as { type?: string; payload?: unknown; error?: string };
+      if (msg.type === 'error' || msg.error) {
+        toast.error(msg.error ?? 'A WebSocket stream error occurred');
+        return;
+      }
+
       if (msg.type === 'acp_event') {
         const payload = msg.payload as ACPEventRow;
         bufferRef.current.push(payload);

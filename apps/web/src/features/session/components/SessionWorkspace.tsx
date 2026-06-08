@@ -49,6 +49,7 @@ export function SessionWorkspace() {
           }}
           isWorkbenchOpen={isWorkbenchOpen}
           sessionTitle={sessionData?.session.title ?? null}
+          status={sessionData?.session.status ?? null}
         />
       }
       workbench={
