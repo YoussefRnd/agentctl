@@ -248,6 +248,24 @@ export class WorkspaceManager {
     });
   }
 
+  async removeWorktreeOnly(repoPath: string, worktreePath: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      try {
+        await this.removeWorktree(repoPath, worktreePath);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          !message.includes('not a working tree') &&
+          !message.includes('does not exist') &&
+          !message.includes('is not a worktree')
+        ) {
+          throw error;
+        }
+      }
+    });
+  }
+
+
   private async removeWorktreeAndBranch(
     repoPath: string,
     worktreePath: string,

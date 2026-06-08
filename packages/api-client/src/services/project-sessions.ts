@@ -79,3 +79,29 @@ export async function discardSession(sessionId: string) {
   });
 }
 
+export async function deleteProject(projectId: string) {
+  return apiClient.fetch<{ success: boolean }>(`/api/projects/${projectId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function deleteSession(sessionId: string) {
+  return apiClient.fetch<{ success: boolean }>(`/api/sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function archiveSession(sessionId: string) {
+  return apiClient.fetch<{ success: boolean }>(`/api/sessions/${sessionId}/archive`, {
+    method: 'POST',
+  });
+}
+
+export async function restoreSession(sessionId: string) {
+  return apiClient.fetch<{ success: boolean }>(`/api/sessions/${sessionId}/restore`, {
+    method: 'POST',
+  });
+}
+
+
+

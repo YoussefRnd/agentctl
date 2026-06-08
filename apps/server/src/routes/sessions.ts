@@ -390,6 +390,45 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     }
   );
 
+  fastify.withTypeProvider<ZodTypeProvider>().delete(
+    '/sessions/:id',
+    {
+      schema: {
+        params: sessionParamsSchema,
+      },
+    },
+    async (request) => {
+      await fastify.sessionManager.deleteSession(request.params.id);
+      return { success: true };
+    },
+  );
+
+  fastify.withTypeProvider<ZodTypeProvider>().post(
+    '/sessions/:id/archive',
+    {
+      schema: {
+        params: sessionParamsSchema,
+      },
+    },
+    async (request) => {
+      await fastify.sessionManager.archiveSession(request.params.id);
+      return { success: true };
+    },
+  );
+
+  fastify.withTypeProvider<ZodTypeProvider>().post(
+    '/sessions/:id/restore',
+    {
+      schema: {
+        params: sessionParamsSchema,
+      },
+    },
+    async (request) => {
+      await fastify.sessionManager.restartSession(request.params.id);
+      return { success: true };
+    },
+  );
+
   done();
 };
 

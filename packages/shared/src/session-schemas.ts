@@ -114,7 +114,7 @@ export const sessionRowSchema = sessionSchema.extend({
   id: z.uuid(),
   worktreePath: z.string().min(1),
   agentSessionId: z.string().nullable(),
-  status: z.enum(['running', 'needs_attention', 'idle', 'error', 'merged', 'discarded']),
+  status: z.enum(['running', 'needs_attention', 'idle', 'error', 'merged', 'discarded', 'archived']),
   mode: sessionModeSchema.default('local'),
   totalTokens: z.number(),
   contextLimit: z.number(),
@@ -141,6 +141,7 @@ export const sessionStatusSchema = z.enum([
   'error',
   'merged',
   'discarded',
+  'archived',
 ]);
 
 export type Project = z.infer<typeof projectSchema>;
