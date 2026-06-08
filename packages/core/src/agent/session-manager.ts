@@ -143,8 +143,9 @@ export class SessionManager {
     supportsDynamicModel = false,
     supportsDynamicConfig = false,
     resolvedThinkingConfigId?: string,
+    existingAgentSessionId?: string | null,
   ): Promise<ACPSession> {
-    this.logger.info({ sessionId, command, args, worktreePath }, 'Starting new agent session');
+    this.logger.info({ sessionId, command, args, worktreePath, existingAgentSessionId }, 'Starting new agent session');
 
     let session: ACPSession | undefined;
 
@@ -160,6 +161,7 @@ export class SessionManager {
           supportsDynamicModel,
           supportsDynamicConfig,
           resolvedThinkingConfigId,
+          existingAgentSessionId,
         },
         {
           onUpdate: async (notification) => {
@@ -298,6 +300,7 @@ export class SessionManager {
       selection.supportsDynamicModel,
       selection.supportsDynamicConfig,
       selection.resolvedThinkingConfigId,
+      sessionRecord.agentSessionId,
     );
   }
 
