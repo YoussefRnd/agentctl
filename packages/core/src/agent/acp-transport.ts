@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type {
@@ -103,6 +105,47 @@ export interface DomainPermissionRequest {
 export interface DomainPermissionResponse {
   allowed: boolean;
   optionId?: string;
+}
+
+export interface CacheStorage {
+  get(key: string): Promise<AgentProbeResult | null>;
+  set(key: string, value: AgentProbeResult): Promise<void>;
+}
+
+export class FileCacheStorage implements CacheStorage {
+  constructor(private readonly manifestFilePath: string) {}
+
+  private readManifest(): Record<string, AgentProbeResult> {
+    try {
+      if (fs.existsSync(this.manifestFilePath)) {
+        const content = fs.readFileSync(this.manifestFilePath, 'utf8');
+        return JSON.parse(content) as Record<string, AgentProbeResult>;
+      }
+    } catch {
+      // Ignore reading errors, return empty
+    }
+    return {};
+  }
+
+  async get(key: string): Promise<AgentProbeResult | null> {
+    const manifest = this.readManifest();
+    return Promise.resolve(manifest[key] ?? null);
+  }
+
+  async set(key: string, value: AgentProbeResult): Promise<void> {
+    try {
+      const dir = path.dirname(this.manifestFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const manifest = this.readManifest();
+      manifest[key] = value;
+      fs.writeFileSync(this.manifestFilePath, JSON.stringify(manifest, null, 2), 'utf8');
+    } catch {
+      // Ignore write errors
+    }
+    return Promise.resolve();
+  }
 }
 
 export type DomainAgentEvent =
@@ -289,13 +332,25 @@ function parseNotificationToEvents(notification: SessionNotification): DomainAge
   return events;
 }
 
+function getCacheKey(command: string, args: string[], env: Record<string, string>): string {
+  const data = JSON.stringify({ command, args, env });
+  return crypto.createHash('sha256').update(data).digest('hex');
+}
+
 export class DefaultAgentRuntime implements AgentRuntime {
   constructor(
     private spawnImpl: typeof spawn = spawn,
     private logger: Logger = noopLogger,
     private createTransport: (child: ChildProcess, logger: Logger) => AgentStreamTransport = (child, logger) =>
       new ProcessStreamTransport(child, logger),
+    private cache?: CacheStorage,
   ) {}
+
+  private getCache(): CacheStorage {
+    if (this.cache) return this.cache;
+    const defaultPath = path.join(os.homedir(), '.agentctl', 'capabilities-manifest.json');
+    return new FileCacheStorage(defaultPath);
+  }
 
   async execute(
     command: string,
@@ -558,9 +613,23 @@ export class DefaultAgentRuntime implements AgentRuntime {
     args: string[],
     env?: Record<string, string>,
   ): Promise<AgentProbeResult> {
+    const cleanEnvObj = cleanEnv(env);
+    const cacheKey = getCacheKey(command, args, cleanEnvObj);
+    const cache = this.getCache();
+
+    try {
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        this.logger.debug(`Capabilities manifest cache hit for provider ${command}`);
+        return cached;
+      }
+    } catch (cacheErr) {
+      this.logger.warn(cacheErr, 'Failed to read from capabilities manifest cache');
+    }
+
     const child = this.spawnImpl(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnv(env),
+      env: cleanEnvObj,
       cwd: os.tmpdir(),
     });
 
@@ -644,48 +713,15 @@ export class DefaultAgentRuntime implements AgentRuntime {
               }
             }
 
-            const sessionId = sessionResult.sessionId;
-            if (sessionId) {
-              const dynConn = connection as unknown as {
-                unstable_setSessionModel?: (p: { sessionId: string; modelId: string }) => Promise<unknown>;
-                setSessionConfigOption?: (p: {
-                  sessionId: string;
-                  configId: string;
-                  value: string;
-                }) => Promise<unknown>;
-              };
+            const initRaw = initResult as unknown as Record<string, unknown>;
+            const hasModelsCapability = !!(initRaw.capabilities as Record<string, unknown> | undefined)?.models;
+            const hasAlternateModels = (sessionResult.models?.availableModels ?? []).length > 0;
+            supportsDynamicModel = hasModelsCapability || hasAlternateModels;
 
-              if (typeof dynConn.unstable_setSessionModel === 'function') {
-                try {
-                  await dynConn.unstable_setSessionModel({
-                    sessionId,
-                    modelId: 'probe-test-model-id',
-                  });
-                  supportsDynamicModel = true;
-                } catch (err: unknown) {
-                  const rpcErr = err as { code?: number };
-                  if (rpcErr.code !== -32601) {
-                    supportsDynamicModel = true;
-                  }
-                }
-              }
+            // Inspect if configOptions / settings schema exists and has parameters defined
+            const hasConfigOptions = configOptions.length > 0;
+            supportsDynamicConfig = hasConfigOptions;
 
-              if (typeof dynConn.setSessionConfigOption === 'function') {
-                try {
-                  await dynConn.setSessionConfigOption({
-                    sessionId,
-                    configId: 'probe-test-config-id',
-                    value: 'probe-test-value',
-                  });
-                  supportsDynamicConfig = true;
-                } catch (err: unknown) {
-                  const rpcErr = err as { code?: number };
-                  if (rpcErr.code !== -32601) {
-                    supportsDynamicConfig = true;
-                  }
-                }
-              }
-            }
           } catch (err: unknown) {
             const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
             if (error.code === 'auth_required') {
@@ -698,13 +734,21 @@ export class DefaultAgentRuntime implements AgentRuntime {
             }
           }
 
-          return {
+          const probeResult: AgentProbeResult = {
             status,
             configOptions,
             authMethods: initResult.authMethods ?? [],
             supportsDynamicModel,
             supportsDynamicConfig,
           };
+
+          try {
+            await cache.set(cacheKey, probeResult);
+          } catch (cacheErr) {
+            this.logger.warn(cacheErr, 'Failed to write to capabilities manifest cache');
+          }
+
+          return probeResult;
         })(),
         new Promise<never>((_, reject) => {
           setTimeout(() => {
@@ -739,14 +783,6 @@ interface ExtendedSessionResult {
   modes?: { currentModeId?: string; availableModes?: GeminiModeInfo[] };
 }
 
-interface DynamicCapableConnection {
-  unstable_setSessionModel?: (params: { sessionId: string; modelId: string }) => Promise<unknown>;
-  setSessionConfigOption?: (params: {
-    sessionId: string;
-    configId: string;
-    value: string;
-  }) => Promise<unknown>;
-}
 
 export class LegacyConnectionRuntimeAdapter implements AgentRuntime {
   constructor(
@@ -764,7 +800,6 @@ export class LegacyConnectionRuntimeAdapter implements AgentRuntime {
     env?: Record<string, string>,
   ): Promise<AgentProbeResult> {
     const { child, connection } = this.createConnection(command, args, env ?? {});
-    const dynConnection = connection as typeof connection & DynamicCapableConnection;
 
     try {
       const initResult = await connection.initialize({
@@ -818,39 +853,14 @@ export class LegacyConnectionRuntimeAdapter implements AgentRuntime {
           }
         }
 
-        const sessionId = sessionResult.sessionId;
-        if (sessionId) {
-          if (typeof dynConnection.unstable_setSessionModel === 'function') {
-            try {
-              await dynConnection.unstable_setSessionModel({
-                sessionId,
-                modelId: 'probe-test-model-id',
-              });
-              supportsDynamicModel = true;
-            } catch (err: unknown) {
-              const rpcErr = err as { code?: number };
-              if (rpcErr.code !== -32601) {
-                supportsDynamicModel = true;
-              }
-            }
-          }
+        const initRaw = initResult as unknown as Record<string, unknown>;
+        const hasModelsCapability = !!(initRaw.capabilities as Record<string, unknown> | undefined)?.models;
+        const hasAlternateModels = (sessionResult.models?.availableModels ?? []).length > 0;
+        supportsDynamicModel = hasModelsCapability || hasAlternateModels;
 
-          if (typeof dynConnection.setSessionConfigOption === 'function') {
-            try {
-              await dynConnection.setSessionConfigOption({
-                sessionId,
-                configId: 'probe-test-config-id',
-                value: 'probe-test-value',
-              });
-              supportsDynamicConfig = true;
-            } catch (err: unknown) {
-              const rpcErr = err as { code?: number };
-              if (rpcErr.code !== -32601) {
-                supportsDynamicConfig = true;
-              }
-            }
-          }
-        }
+        // Inspect if configOptions / settings schema exists and has parameters defined
+        const hasConfigOptions = configOptions.length > 0;
+        supportsDynamicConfig = hasConfigOptions;
       } catch (err: unknown) {
         const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
         if (error.code === 'auth_required') {

@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
-import { cleanEnv, createAgentConnection } from './acp-transport.js';
+import { cleanEnv, createAgentConnection, type CacheStorage, type AgentProbeResult } from './acp-transport.js';
 
 test('cleanEnv overlays values and strips npm config variables', () => {
   const previousUserAgent = process.env.npm_config_user_agent;
@@ -103,4 +103,58 @@ test('createAgentConnection throws if stdio is missing', () => {
     createAgentConnection('agent', [], {}, fakeSpawn);
   }, /missing stdin\/stdout/);
   assert.equal(killCount, 1);
+});
+
+test('DefaultAgentRuntime.probe uses cache and skips spawn on cache hit', async () => {
+  const crypto = await import('node:crypto');
+  const { DefaultAgentRuntime } = await import('./acp-transport.js');
+
+  const cacheMap = new Map<string, AgentProbeResult>();
+  const mockCache: CacheStorage = {
+    get: (key: string) => Promise.resolve(cacheMap.get(key) ?? null),
+    set: (key: string, val: AgentProbeResult) => {
+      cacheMap.set(key, val);
+      return Promise.resolve();
+    },
+  };
+
+  let spawnCount = 0;
+  const fakeSpawn = (() => {
+    spawnCount++;
+    return {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: null,
+      on: () => undefined,
+      once: () => undefined,
+      kill: () => true,
+    };
+  }) as unknown as typeof spawnFn;
+
+  const fakeTransport = () => ({
+    stdin: new PassThrough() as unknown as WritableStream<Uint8Array>,
+    stdout: new PassThrough() as unknown as ReadableStream<Uint8Array>,
+    closed: Promise.resolve(),
+    child: {} as unknown as ChildProcess,
+    kill: () => undefined,
+  });
+
+  const runtime = new DefaultAgentRuntime(fakeSpawn, undefined, fakeTransport, mockCache);
+
+  const testResult = {
+    status: 'ready' as const,
+    configOptions: [],
+    authMethods: [],
+    supportsDynamicModel: true,
+    supportsDynamicConfig: false,
+  };
+
+  const cleanEnv = (await import('./acp-transport.js')).cleanEnv;
+  const data = JSON.stringify({ command: 'test-cmd', args: [], env: cleanEnv({}) });
+  const hashKey = crypto.createHash('sha256').update(data).digest('hex');
+  await mockCache.set(hashKey, testResult);
+
+  const result = await runtime.probe('test-cmd', [], {});
+  assert.equal(result.supportsDynamicModel, true);
+  assert.equal(spawnCount, 0); // Verify spawn was bypassed
 });
