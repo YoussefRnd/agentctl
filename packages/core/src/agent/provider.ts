@@ -55,7 +55,8 @@ export class Provider {
       !this.supportsDynamicModel &&
       hasModelOption &&
       selectedModel &&
-      selectedModel !== 'default'
+      selectedModel !== 'default' &&
+      this.id !== 'opencode'
     ) {
       extraArgs.push('--model', selectedModel);
     }

@@ -173,6 +173,7 @@ export interface RuntimeOptions {
   supportsDynamicModel?: boolean;
   supportsDynamicConfig?: boolean;
   resolvedThinkingConfigId?: string;
+  resolvedModelConfigId?: string;
   existingAgentSessionId?: string | null;
 }
 
@@ -573,6 +574,25 @@ export class DefaultAgentRuntime implements AgentRuntime {
               sessionId: finalSessionId,
               modelId: options.selectedModel,
             });
+          }
+        } else if (
+          options.selectedModel &&
+          options.selectedModel !== 'default' &&
+          options.resolvedModelConfigId
+        ) {
+          if (typeof dynConn.setSessionConfigOption === 'function') {
+            try {
+              await dynConn.setSessionConfigOption({
+                sessionId: finalSessionId,
+                configId: options.resolvedModelConfigId,
+                value: options.selectedModel,
+              });
+            } catch (configErr) {
+              this.logger.warn(
+                configErr,
+                `Failed to dynamically set model configuration on init (configId: ${options.resolvedModelConfigId})`
+              );
+            }
           }
         }
 
