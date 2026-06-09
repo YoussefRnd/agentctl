@@ -72,10 +72,10 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
           onClick={() => {
             setIsOpen(!isOpen);
           }}
-          className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-[11px] font-bold tracking-widest uppercase transition-all duration-300 ${
+          className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-[11px] font-bold tracking-widest uppercase transition-all duration-200 ${
             isOpen
-              ? 'text-accent bg-accent/10'
-              : 'text-text-muted/60 hover:text-text-muted hover:bg-white/5'
+              ? 'text-accent bg-accent/10 border border-accent/20'
+              : 'text-text-muted/60 hover:text-text-muted hover:bg-surface-secondary border border-transparent'
           }`}
         >
           <Activity className={`h-3.5 w-3.5 ${isStreaming ? 'animate-pulse text-accent' : 'text-text-muted/60'}`} />
@@ -84,16 +84,21 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
         </button>
 
         {isOpen && (
-          <div className="animate-in fade-in slide-in-from-left-2 mt-3 ml-4 space-y-4 border-l-2 border-white/5 py-1 pl-6 duration-500">
+          <div className="animate-in fade-in slide-in-from-left-2 mt-3 ml-4 space-y-4 border-l border-border/30 py-1 pl-5 duration-300">
             {events.map((e) => {
+              const isLastStreaming = isStreaming && e.id === events[events.length - 1].id;
               if (e.type === 'text' && 'role' in e.data && e.data.role === 'thought') {
                 return (
                   <div key={e.id} className="relative" role="region" aria-label="Agent thought step">
-                    <div className="absolute top-6 -left-[25px] h-2 w-2 rounded-full border border-white/25 bg-white/10" />
+                    <div className={`absolute top-[18px] -left-[24px] h-2 w-2 rounded-full border transition-all duration-300 ${
+                      isLastStreaming
+                        ? 'bg-accent border-accent shadow-[0_0_8px_rgba(203,166,247,0.6)] animate-pulse'
+                        : 'bg-surface-secondary border-border/80'
+                    }`} />
                     <TextCard
                       content={e.data.content}
                       variant="thought"
-                      isStreaming={isStreaming && e.id === events[events.length - 1].id}
+                      isStreaming={isLastStreaming}
                     />
                   </div>
                 );
@@ -101,11 +106,15 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
               if (e.type === 'tool_call') {
                 return (
                   <div key={e.id} className="relative">
-                    <div className="bg-accent/30 border-accent/40 absolute top-6 -left-[25px] h-2 w-2 rounded-full border" />
+                    <div className={`absolute top-[20px] -left-[24px] h-2 w-2 rounded-full border transition-all duration-300 ${
+                      isLastStreaming
+                        ? 'bg-accent border-accent shadow-[0_0_8px_rgba(203,166,247,0.6)] animate-pulse'
+                        : 'bg-surface-secondary border-border/80'
+                    }`} />
                     <ToolCallCard
                       tool={e.data.name}
                       payload={e.data}
-                      isStreaming={isStreaming && e.id === events[events.length - 1].id}
+                      isStreaming={isLastStreaming}
                     />
                   </div>
                 );
@@ -126,19 +135,23 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
           onClick={() => {
             setIsOpen(!isOpen);
           }}
-          className={`flex grow items-center gap-4 rounded-2xl border px-5 py-3 text-left shadow-2xl backdrop-blur-2xl transition-all duration-500 ${
+          className={`flex grow items-center gap-4 rounded-2xl border px-5 py-3 text-left transition-all duration-300 ${
             isOpen
-              ? 'border-white/20 bg-white/10 ring-1 ring-white/10'
-              : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+              ? 'border-border/80 bg-surface-secondary/40 ring-1 ring-border/40'
+              : 'border-border bg-surface hover:border-border/80 hover:bg-surface-secondary/20'
           }`}
         >
           <div
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all duration-500 ${isStreaming ? 'bg-accent text-background shadow-[0_0_15px_rgba(203,166,247,0.4)]' : 'text-text-muted/60 border border-white/10 bg-white/10'}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
+              isStreaming
+                ? 'bg-accent text-background shadow-[0_0_15px_rgba(203,166,247,0.4)]'
+                : 'text-text-muted border border-border bg-surface-secondary'
+            }`}
           >
             {isStreaming ? (
               <Activity className="h-4 w-4 animate-pulse" />
             ) : (
-              <CheckCircle2 className="h-4 w-4" />
+              <CheckCircle2 className="h-4 w-4 text-success" />
             )}
           </div>
 
@@ -149,8 +162,8 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
               >
                 {isStreaming ? 'Agent_Processing' : 'Process_Complete'}
               </span>
-              <span className="h-1 w-1 rounded-full bg-white/20" />
-              <div className="text-text-muted/40 flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase">
+              <span className="h-1 w-1 rounded-full bg-border" />
+              <div className="text-text-muted/50 flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase">
                 <Clock className="h-3 w-3" />
                 <span>{duration}</span>
               </div>
@@ -160,12 +173,14 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
               {breadcrumbs.map((step, i) => (
                 <div key={i} className="flex shrink-0 items-center gap-2">
                   <span
-                    className={`max-w-[200px] truncate text-[12px] font-bold ${i === breadcrumbs.length - 1 && isStreaming ? 'text-text-main' : 'text-text-muted/60'}`}
+                    className={`max-w-[200px] truncate text-[12px] font-semibold ${
+                      i === breadcrumbs.length - 1 && isStreaming ? 'text-text-main' : 'text-text-muted/60'
+                    }`}
                   >
                     {step}
                   </span>
                   {i < breadcrumbs.length - 1 && (
-                    <ChevronRight className="text-text-muted/20 h-3 w-3" />
+                    <ChevronRight className="text-border/60 h-3 w-3" />
                   )}
                 </div>
               ))}
@@ -173,23 +188,28 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
             </div>
           </div>
 
-          <div className="text-text-muted/20 group-hover/activity:text-text-muted/60 shrink-0 transition-colors">
+          <div className="text-text-muted/40 group-hover/activity:text-text-main shrink-0 transition-colors">
             {isOpen ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
           </div>
         </button>
       </div>
 
       {isOpen && (
-        <div className="animate-in fade-in slide-in-from-left-4 mt-4 ml-6 space-y-6 border-l-2 border-white/10 py-2 pl-8 duration-500">
+        <div className="animate-in fade-in slide-in-from-left-4 mt-4 ml-6 space-y-6 border-l border-border/30 py-2 pl-6 duration-300">
           {events.map((e) => {
+            const isLastStreaming = isStreaming && e.id === events[events.length - 1].id;
             if (e.type === 'text' && 'role' in e.data && e.data.role === 'thought') {
               return (
                 <div key={e.id} className="relative" role="region" aria-label="Agent thought step">
-                  <div className="absolute top-6 -left-[35px] h-2.5 w-2.5 rounded-full border border-white/40 bg-white/20" />
+                  <div className={`absolute top-[18px] -left-[29px] h-2.5 w-2.5 rounded-full border transition-all duration-300 ${
+                    isLastStreaming
+                      ? 'bg-accent border-accent shadow-[0_0_8px_rgba(203,166,247,0.6)] animate-pulse'
+                      : 'bg-surface-secondary border-border/80'
+                  }`} />
                   <TextCard
                     content={e.data.content}
                     variant="thought"
-                    isStreaming={isStreaming && e.id === events[events.length - 1].id}
+                    isStreaming={isLastStreaming}
                   />
                 </div>
               );
@@ -197,11 +217,15 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
             if (e.type === 'tool_call') {
               return (
                 <div key={e.id} className="relative">
-                  <div className="bg-accent/40 border-accent/60 absolute top-6 -left-[35px] h-2.5 w-2.5 rounded-full border" />
+                  <div className={`absolute top-[20px] -left-[29px] h-2.5 w-2.5 rounded-full border transition-all duration-300 ${
+                    isLastStreaming
+                      ? 'bg-accent border-accent shadow-[0_0_8px_rgba(203,166,247,0.6)] animate-pulse'
+                      : 'bg-surface-secondary border-border/80'
+                  }`} />
                   <ToolCallCard
                     tool={e.data.name}
                     payload={e.data}
-                    isStreaming={isStreaming && e.id === events[events.length - 1].id}
+                    isStreaming={isLastStreaming}
                   />
                 </div>
               );
@@ -213,3 +237,4 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
     </div>
   );
 }
+

@@ -33,12 +33,12 @@ export const AgentResponse = memo(function AgentResponse({
   const hasActivity = activityEvents.length > 0;
 
   return (
-    <div className="group/agent relative flex flex-col gap-2 py-4">
+    <div className="group/agent relative flex flex-col gap-2 py-3">
       <div className="flex items-start gap-4">
         <div className="mt-1 shrink-0">
           <div
-            className={`flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 transition-all duration-500 ${
-              isStreaming ? 'border-accent/40 bg-accent/5' : 'group-hover/agent:border-white/20'
+            className={`flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-secondary/50 transition-all duration-300 ${
+              isStreaming ? 'border-accent/40 bg-accent/5' : 'group-hover/agent:border-border/80'
             }`}
           >
             <Sparkles
@@ -77,3 +77,4 @@ export const AgentResponse = memo(function AgentResponse({
     </div>
   );
 });
+
