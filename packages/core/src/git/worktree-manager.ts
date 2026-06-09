@@ -302,6 +302,9 @@ export class WorkspaceManager {
   }
 
   async getDiff(repoPath: string, worktreePath: string, baseCommit: string): Promise<string> {
+    if (baseCommit === 'none') {
+      return '';
+    }
     return await this.gitMutex.run(repoPath, async () => {
       const branchSummary = await simpleGit(worktreePath).branch();
       const currentBranch = branchSummary.current;
@@ -314,6 +317,9 @@ export class WorkspaceManager {
     worktreePath: string,
     baseCommit: string,
   ): Promise<ReviewFile[]> {
+    if (baseCommit === 'none') {
+      return [];
+    }
     return await this.gitMutex.run(repoPath, async () => {
       const git = simpleGit(worktreePath);
       const status = await git.status();
