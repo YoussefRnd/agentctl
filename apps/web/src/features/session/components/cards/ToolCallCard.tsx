@@ -102,18 +102,16 @@ export const ToolCallCard = memo(function ToolCallCard({
   const argKeys = Object.keys(args).filter((k) => !['toolCallId', 'name'].includes(k));
 
   return (
-    <div className="group relative py-1.5 pr-4 pl-16">
-      <div className={`absolute top-6 left-10 z-10 h-2 w-2 -translate-x-1/2 rounded-full border-2 transition-all duration-300 group-hover:scale-125 ${isStreaming ? 'bg-accent border-accent animate-pulse' : 'bg-accent/40 border-accent/60 group-hover:bg-accent'}`} />
-
+    <div className="group/tool w-full py-1">
       <div
         className="flex cursor-pointer items-center gap-2 select-none"
         onClick={() => {
           setOpen(!open);
         }}
       >
-        <div className="bg-surface-secondary/40 border-border/30 hover:border-accent/40 hover:bg-surface-secondary/80 flex flex-1 items-center justify-between border rounded-xl px-4 py-2.5 transition-all duration-300 shadow-sm">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+        <div className="bg-surface-secondary/40 border-border/60 hover:border-accent/40 hover:bg-surface-secondary/80 flex flex-1 items-center justify-between border rounded-xl px-4 py-2.5 transition-all duration-200 shadow-sm">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent transition-transform duration-200 ${isStreaming ? 'scale-105' : 'group-hover/tool:scale-105'}`}>
               {tool.includes('command') || tool.includes('shell') || tool.includes('run') ? (
                 <Terminal className="h-3.5 w-3.5" />
               ) : tool.includes('search') || tool.includes('grep') ? (
@@ -125,15 +123,15 @@ export const ToolCallCard = memo(function ToolCallCard({
               )}
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-text-main text-[11px] font-black tracking-[0.1em] uppercase">
+              <span className="text-text-main text-[11px] font-black tracking-wider uppercase">
                 {tool.replace(/_/g, ' ')}
               </span>
-              <span className="text-text-muted/40 truncate text-[10px] font-bold tracking-tight">
+              <span className="text-text-muted/50 truncate text-[10px] font-medium tracking-tight">
                 {argKeys.length > 0 ? `arguments: ${argKeys.join(', ')}` : 'no arguments'}
               </span>
             </div>
           </div>
-          <div className="shrink-0 text-text-muted/40 group-hover:text-text-main transition-colors">
+          <div className="shrink-0 text-text-muted/40 group-hover/tool:text-text-main transition-colors">
             {open ? (
               <ChevronDown className="h-4 w-4" />
             ) : (
@@ -144,10 +142,11 @@ export const ToolCallCard = memo(function ToolCallCard({
       </div>
 
       {open && (
-        <div className="animate-in fade-in slide-in-from-top-1 border-border/30 bg-surface-secondary/20 mt-2 rounded-xl border p-4 shadow-sm duration-200">
+        <div className="animate-in fade-in slide-in-from-top-1 border-border/50 bg-surface-secondary/20 mt-2 rounded-xl border p-4 shadow-sm duration-200">
           <ToolArgumentsViewer name={tool} args={args} />
         </div>
       )}
     </div>
   );
 });
+
