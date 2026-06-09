@@ -384,3 +384,53 @@ test('ProviderRegistry setProviderConfig updates database and triggers dynamic p
   assert.equal(result.status, 'ready');
   assert.deepEqual(result.customEnv, { ANTHROPIC_API_KEY: 'test-key' });
 });
+
+test('ProviderRegistry sync filters by ALLOWED_AGENTS environment variable', async () => {
+  const db = createDatabase(':memory:');
+  const registryAgents: RegistryAgent[] = [
+    {
+      id: 'claude-acp',
+      name: 'Claude',
+      version: '1.0.0',
+      description: 'test',
+      distribution: { npx: { package: 'p1', args: [], env: {} } },
+      authors: [],
+    },
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      version: '1.0.0',
+      description: 'test',
+      distribution: { npx: { package: 'p2', args: [], env: {} } },
+      authors: [],
+    },
+    {
+      id: 'opencode',
+      name: 'OpenCode',
+      version: '1.0.0',
+      description: 'test',
+      distribution: { npx: { package: 'p3', args: [], env: {} } },
+      authors: [],
+    },
+  ];
+
+  const fetchSpy = vi.spyOn(global, 'fetch');
+  fetchSpy.mockResolvedValue(
+    new Response(JSON.stringify({ agents: registryAgents }), { status: 200 }),
+  );
+
+  // Set environment variable
+  process.env.ALLOWED_AGENTS = 'claude-acp, opencode';
+
+  try {
+    const registry = new ProviderRegistry(db, noopLogger);
+    await registry.sync();
+
+    const dbRows = await db.select().from(providers);
+    const ids = dbRows.map(r => r.id);
+    assert.deepEqual(ids.sort(), ['claude-acp', 'opencode'].sort());
+  } finally {
+    delete process.env.ALLOWED_AGENTS;
+  }
+});
+

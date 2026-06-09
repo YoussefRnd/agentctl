@@ -10,7 +10,7 @@ export const ApprovalCard = memo(function ApprovalCard({
 }: {
   eventId: number;
   data: ACPEventApprovalRequestData;
-  onApprove: (eventId: number) => void;
+  onApprove: (eventId: number, optionId?: string) => void;
   onDeny: (eventId: number) => void;
 }) {
   const approveButtonRef = useRef<HTMLButtonElement>(null);
@@ -25,6 +25,11 @@ export const ApprovalCard = memo(function ApprovalCard({
       name: string;
       arguments?: Record<string, unknown>;
     };
+    options?: {
+      optionId: string;
+      label: string;
+      description?: string;
+    }[];
   } | undefined;
 
   const toolCall = request?.toolCall;
@@ -91,7 +96,7 @@ export const ApprovalCard = memo(function ApprovalCard({
           )}
         </div>
       </div>
-      <div className="flex shrink-0 gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <button
           ref={denyButtonRef}
           type="button"
@@ -102,16 +107,33 @@ export const ApprovalCard = memo(function ApprovalCard({
         >
           DENY
         </button>
-        <button
-          ref={approveButtonRef}
-          type="button"
-          onClick={() => {
-            onApprove(eventId);
-          }}
-          className="terminal-button !h-8 !px-4 text-[10px]"
-        >
-          APPROVE_ACTION
-        </button>
+        {request?.options && request.options.length > 0 ? (
+          request.options.map((option, idx) => (
+            <button
+              key={option.optionId}
+              ref={idx === 0 ? approveButtonRef : undefined}
+              type="button"
+              onClick={() => {
+                onApprove(eventId, option.optionId);
+              }}
+              title={option.description}
+              className="terminal-button !h-8 !px-4 text-[10px]"
+            >
+              {option.label.toUpperCase().replace(/\s+/g, '_')}
+            </button>
+          ))
+        ) : (
+          <button
+            ref={approveButtonRef}
+            type="button"
+            onClick={() => {
+              onApprove(eventId);
+            }}
+            className="terminal-button !h-8 !px-4 text-[10px]"
+          >
+            APPROVE_ACTION
+          </button>
+        )}
       </div>
     </div>
   );

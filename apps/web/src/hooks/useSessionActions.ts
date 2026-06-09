@@ -14,8 +14,8 @@ export function useSessionActions() {
     });
   };
 
-  const handleApprove = (eventId: number) => {
-    sendMessage({ action: 'approve', sessionId, eventId });
+  const handleApprove = (eventId: number, optionId?: string) => {
+    sendMessage({ action: 'approve', sessionId, eventId, optionId });
   };
 
   const handleDeny = (eventId: number) => {

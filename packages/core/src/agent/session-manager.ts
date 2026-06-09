@@ -164,16 +164,16 @@ export class SessionManager {
           existingAgentSessionId,
         },
         {
-          onUpdate: async (notification) => {
+          onEvent: async (event) => {
             if (session) {
-              await session.handleNotification(notification);
+              await session.handleDomainEvent(event);
             }
           },
           onRequestPermission: async (req) => {
             if (session) {
               return await session.handleRequestPermission(req);
             }
-            return { outcome: { outcome: 'cancelled' } };
+            return { allowed: false };
           },
         },
       );
@@ -207,9 +207,13 @@ export class SessionManager {
 
         const runtimeHandle: AgentRuntimeHandle = {
           acpSessionId: null,
-          connection: err.connection,
-          child: err.child,
           closed: err.connection.closed,
+          onProcessError(handler) {
+            err.child.on('error', handler);
+          },
+          onProcessExit(handler) {
+            err.child.once('exit', handler);
+          },
           prompt: () => Promise.resolve(),
           respondToPermission: () => undefined,
           stop(): Promise<void> {
@@ -568,7 +572,7 @@ export class SessionManager {
   async handleClientMessage(
     sessionId: string,
     action: 'approve' | 'deny' | 'session.input',
-    payload: { eventId?: string | number; input?: string; attachmentIds?: string[] },
+    payload: { eventId?: string | number; optionId?: string; input?: string; attachmentIds?: string[] },
   ) {
     let session = this.sessions.get(sessionId);
 
@@ -593,11 +597,12 @@ export class SessionManager {
 
     if (action === 'approve') {
       session.resolvePermission(String(payload.eventId), {
-        outcome: { outcome: 'selected', optionId: 'allow-once' },
+        allowed: true,
+        optionId: payload.optionId ?? 'allow-once',
       });
     } else if (action === 'deny') {
       session.resolvePermission(String(payload.eventId), {
-        outcome: { outcome: 'cancelled' },
+        allowed: false,
       });
     } else if (payload.input !== undefined) {
       await session.prompt(payload.input, payload.attachmentIds);

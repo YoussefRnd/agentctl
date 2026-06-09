@@ -5,7 +5,6 @@ import { Readable, Writable } from 'node:stream';
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type {
   RequestPermissionResponse,
-  RequestPermissionRequest,
   SessionNotification,
   ContentBlock,
 } from '@agentclientprotocol/sdk';
@@ -90,13 +89,34 @@ export class ProcessStreamTransport implements AgentStreamTransport {
   }
 }
 
+export interface DomainPermissionRequest {
+  permissionId: string;
+  toolCall: {
+    name: string;
+    arguments?: Record<string, unknown>;
+    toolCallId?: string;
+  };
+  options?: { optionId: string; label?: string }[];
+  description?: string;
+}
+
+export interface DomainPermissionResponse {
+  allowed: boolean;
+  optionId?: string;
+}
+
+export type DomainAgentEvent =
+  | { type: 'text'; text: string }
+  | { type: 'thought'; text: string }
+  | { type: 'tool_call'; call: { name: string; arguments?: Record<string, unknown>; toolCallId?: string }; isUpdate: boolean };
+
 export interface AgentRuntimeHandle {
   acpSessionId: string | null;
-  connection: ClientSideConnection;
-  child: ChildProcess;
   closed: Promise<void>;
+  onProcessError(handler: (err: Error) => void): void;
+  onProcessExit(handler: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   prompt(text: string, attachments?: { filePath: string; mimeType: string }[]): Promise<void>;
-  respondToPermission(permissionId: string, response: RequestPermissionResponse): void;
+  respondToPermission(permissionId: string, response: DomainPermissionResponse): void;
   stop(): Promise<void>;
   updateModel?(modelId: string): Promise<void>;
   updateConfigOption?(configId: string, value: string): Promise<void>;
@@ -114,8 +134,8 @@ export interface RuntimeOptions {
 }
 
 export interface SessionCallbacks {
-  onUpdate: (notification: SessionNotification) => Promise<void> | void;
-  onRequestPermission: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
+  onEvent: (event: DomainAgentEvent) => Promise<void> | void;
+  onRequestPermission: (request: DomainPermissionRequest) => Promise<DomainPermissionResponse>;
 }
 
 export interface AgentProbeResult {
@@ -231,6 +251,44 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
+function parseNotificationToEvents(notification: SessionNotification): DomainAgentEvent[] {
+  const update = notification.update;
+  const typeKey = update.sessionUpdate;
+  const events: DomainAgentEvent[] = [];
+
+  if (typeKey === 'agent_message_chunk') {
+    const chunk = update as { content?: { type: string; text?: string } };
+    const text = chunk.content?.text;
+    if (text !== undefined) {
+      const isThought = chunk.content?.type === 'thought' || chunk.content?.type === 'thinking';
+      if (isThought) {
+        events.push({ type: 'thought', text });
+      } else {
+        events.push({ type: 'text', text });
+      }
+    }
+  } else if (typeKey === 'agent_thought_chunk') {
+    const chunk = update as { content?: { type: string; text?: string; thought?: string } };
+    const thought = chunk.content?.text ?? chunk.content?.thought;
+    if (thought !== undefined) {
+      events.push({ type: 'thought', text: thought });
+    }
+  } else if (typeKey === 'tool_call' || typeKey === 'tool_call_update') {
+    const chunk = update as {
+      toolCall?: { name: string; arguments?: Record<string, unknown>; toolCallId?: string };
+    };
+    if (chunk.toolCall) {
+      events.push({
+        type: 'tool_call',
+        call: chunk.toolCall,
+        isUpdate: typeKey === 'tool_call_update',
+      });
+    }
+  }
+
+  return events;
+}
+
 export class DefaultAgentRuntime implements AgentRuntime {
   constructor(
     private spawnImpl: typeof spawn = spawn,
@@ -261,9 +319,33 @@ export class DefaultAgentRuntime implements AgentRuntime {
     const connection = new ClientSideConnection(
       () => ({
         async sessionUpdate(n) {
-          await callbacks.onUpdate(n);
+          const events = parseNotificationToEvents(n);
+          for (const event of events) {
+            await callbacks.onEvent(event);
+          }
         },
-        requestPermission: (r) => callbacks.onRequestPermission(r),
+        async requestPermission(r) {
+          const toolCallRaw = r.toolCall as unknown as Record<string, unknown>;
+          const domainReq: DomainPermissionRequest = {
+            permissionId: r.toolCall.toolCallId,
+            description: typeof toolCallRaw.title === 'string' ? toolCallRaw.title : '',
+            options: r.options.map(opt => ({
+              optionId: opt.optionId,
+              label: opt.name
+            })),
+            toolCall: {
+              name: typeof toolCallRaw.name === 'string' ? toolCallRaw.name : '',
+              arguments: toolCallRaw.arguments as Record<string, unknown> | undefined,
+              toolCallId: r.toolCall.toolCallId,
+            }
+          };
+          const domainResp = await callbacks.onRequestPermission(domainReq);
+          if (domainResp.allowed) {
+            return { outcome: { outcome: 'selected', optionId: domainResp.optionId ?? 'allow-once' } };
+          } else {
+            return { outcome: { outcome: 'cancelled' } };
+          }
+        },
       }),
       stream,
     );
@@ -272,9 +354,13 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
     const handle: AgentRuntimeHandle = {
       acpSessionId: null,
-      connection,
-      child,
       closed: Promise.race([connection.closed, transport.closed]),
+      onProcessError(handler) {
+        child.on('error', handler);
+      },
+      onProcessExit(handler) {
+        child.once('exit', handler);
+      },
       async prompt(text: string, attachments?: { filePath: string; mimeType: string }[]): Promise<void> {
         const promptParts: ContentBlock[] = [];
         if (text) {
@@ -293,10 +379,14 @@ export class DefaultAgentRuntime implements AgentRuntime {
           prompt: promptParts,
         }) as Promise<unknown>);
       },
-      respondToPermission(permissionId: string, response: RequestPermissionResponse): void {
+      respondToPermission(permissionId: string, response: DomainPermissionResponse): void {
         const resolve = pendingApprovals.get(permissionId);
         if (resolve) {
-          resolve(response);
+          if (response.allowed) {
+            resolve({ outcome: { outcome: 'selected', optionId: response.optionId ?? 'allow-once' } });
+          } else {
+            resolve({ outcome: { outcome: 'cancelled' } });
+          }
           pendingApprovals.delete(permissionId);
         }
       },

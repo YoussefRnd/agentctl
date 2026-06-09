@@ -16,7 +16,6 @@ import type { DbClient } from './acp-session.js';
 import { Provider, type ProviderData } from './provider.js';
 
 const REGISTRY_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
-const SUPPORTED_AGENTS = new Set(['opencode', 'claude-acp', 'codex-acp', 'gemini']);
 
 type RegistrySnapshotRow = typeof registrySnapshots.$inferSelect;
 interface LaunchConfig {
@@ -532,14 +531,26 @@ export class ProviderRegistry {
   private async runSync(): Promise<void> {
     this.logger.info('Starting provider discovery and sync...');
     const { agents: registryAgents } = await this.fetchRegistryWithCache();
-    const supportedRegistry = registryAgents.filter((agent) => SUPPORTED_AGENTS.has(agent.id));
+
+    const allowedAgentsStr = process.env.ALLOWED_AGENTS ?? process.env.AGENTCTL_ALLOWED_AGENTS;
+    if (!allowedAgentsStr) {
+      throw new Error('ALLOWED_AGENTS environment variable is required');
+    }
+    
+    const allowedSet = new Set(
+      allowedAgentsStr
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    const filteredAgents = registryAgents.filter((agent) => allowedSet.has(agent.id));
 
     const existingRows = await this.db.select().from(providers);
-    const warmProviderId = await this.pickWarmProviderId(existingRows, supportedRegistry);
-    const supportedIds = new Set(supportedRegistry.map((agent) => agent.id));
+    const warmProviderId = await this.pickWarmProviderId(existingRows, filteredAgents);
+    const supportedIds = new Set(filteredAgents.map((agent) => agent.id));
     const existingMap = new Map(existingRows.map((row) => [row.id, row]));
 
-    for (const agent of supportedRegistry) {
+    for (const agent of filteredAgents) {
       const existing = existingMap.get(agent.id);
       const launch = resolveLaunchConfig(agent);
       const discovery = buildSyncedDiscovery(agent, launch, existing);
@@ -564,7 +575,7 @@ export class ProviderRegistry {
       await this.updateSetting('defaultProviderId', '');
     }
 
-    this.logger.info(`Sync complete. Persisted ${String(supportedRegistry.length)} providers.`);
+    this.logger.info(`Sync complete. Persisted ${String(filteredAgents.length)} providers.`);
   }
 
   async getProvider(id: string): Promise<Provider | undefined> {

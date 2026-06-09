@@ -52,7 +52,6 @@ export class Provider {
     );
 
     if (
-      this.id !== 'opencode' &&
       !this.supportsDynamicModel &&
       hasModelOption &&
       selectedModel &&
@@ -62,7 +61,6 @@ export class Provider {
     }
 
     if (
-      this.id !== 'opencode' &&
       !this.supportsDynamicConfig &&
       hasThinkingOption &&
       selectedThinkingEffort

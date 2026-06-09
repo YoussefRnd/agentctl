@@ -7,7 +7,8 @@ import { Provider } from './provider.js';
 import { noopLogger } from '../logger.js';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { AgentRuntime, AgentRuntimeHandle } from './acp-transport.js';
+import type { AgentRuntime } from './acp-transport.js';
+import type { ChildProcess } from 'node:child_process';
 
 describe('SessionManager tests', () => {
   const mockDb = {
@@ -30,25 +31,22 @@ describe('SessionManager tests', () => {
       projects: {
         findFirst: () =>
           Promise.resolve({
-            id: 'proj-1',
-            path: '/tmp',
-            repoRoot: '/tmp',
-            subdir: '',
+            id: 'project-1',
+            path: '/tmp/project-1',
           }),
       },
       sessions: {
         findFirst: () =>
           Promise.resolve({
-            id: 'sess-1',
-            projectId: 'proj-1',
+            id: 'session-1',
+            agent: 'provider-1',
+            status: 'idle',
             selectedProvider: 'provider-1',
             selectedModel: 'model-1',
             selectedThinkingEffort: 'medium',
-            mode: 'local' as const,
             project: {
-              id: 'proj-1',
-              path: '/tmp',
-              repoRoot: '/tmp',
+              id: 'project-1',
+              path: '/tmp/project-1',
             },
           }),
       },
@@ -58,11 +56,13 @@ describe('SessionManager tests', () => {
   const mockWorkspaceManager = {
     create: () =>
       Promise.resolve({
-        path: '/tmp/worktree',
-        workspacePath: '/tmp/worktree',
-        branch: 'agentctl/test-branch',
-        baseCommit: 'abc',
+        path: '/tmp/worktree-1',
+        workspacePath: '/tmp/worktree-1',
+        branch: 'branch-1',
+        baseCommit: 'commit-1',
       }),
+    cleanup: () => Promise.resolve(),
+    removeWorktreeOnly: () => Promise.resolve(),
   } as unknown as WorkspaceManager;
 
   const mockProviderRegistry = {
@@ -72,9 +72,9 @@ describe('SessionManager tests', () => {
           id: 'provider-1',
           name: 'Provider 1',
           status: 'ready',
-          command: 'sleep',
+          command: 'node',
           enabled: true,
-          launchArgs: '["10"]',
+          launchArgs: '[]',
           launchEnv: '{}',
           customEnv: '{}',
           configOptions: '[]',
@@ -101,13 +101,17 @@ describe('SessionManager tests', () => {
         stdout: new PassThrough(),
         stderr: new PassThrough(),
         kill: () => true,
-      }) as unknown as NonNullable<AgentRuntimeHandle['child']>;
+      }) as unknown as ChildProcess;
 
       return Promise.resolve({
         acpSessionId: 'session-id-123',
-        connection: {} as unknown as AgentRuntimeHandle['connection'],
-        child: fakeChild,
         closed: new Promise<void>(() => undefined),
+        onProcessError(handler) {
+          fakeChild.on('error', handler);
+        },
+        onProcessExit(handler) {
+          fakeChild.once('exit', handler);
+        },
         prompt: () => Promise.resolve(),
         respondToPermission: () => undefined,
         stop: () => Promise.resolve(),
