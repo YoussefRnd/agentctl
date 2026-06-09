@@ -36,6 +36,10 @@ export const sessionReviewRoutes: FastifyPluginCallbackZod = (fastify, _opts, do
         return { files: [] };
       }
 
+      if (session.baseCommit === 'none') {
+        return { files: [] };
+      }
+
       const files = await fastify.worktreeManager.getReviewFiles(
         project.repoRoot,
         session.worktreePath,
