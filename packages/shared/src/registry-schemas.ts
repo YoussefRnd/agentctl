@@ -36,6 +36,10 @@ export const registryAgentSchema = z.object({
   license: z.string().optional(),
   distribution: registryDistributionSchema,
   icon: z.url().optional(),
+  configOptions: z.array(z.any()).optional(),
+  authMethods: z.array(z.any()).optional(),
+  supportsDynamicModel: z.boolean().optional(),
+  supportsDynamicConfig: z.boolean().optional(),
 });
 
 export const registrySchema = z.object({

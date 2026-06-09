@@ -147,16 +147,16 @@ function buildSyncedDiscovery(
   launch: LaunchConfig | null,
   existing: ProviderData | undefined,
 ): ProviderDiscovery {
-  const existingIsActive = existing?.status === 'ready' || existing?.status === 'needs_auth';
   const command = launch?.command ?? existing?.command ?? agent.id;
   const launchArgs = launch?.args ?? parseJSON(existing?.launchArgs, [] as string[]);
   const launchEnv = launch?.env ?? parseJSON<Record<string, string>>(existing?.launchEnv, {});
   const customEnv = parseJSON<Record<string, string>>(existing?.customEnv, {});
-  const configOptions = parseJSON(existing?.configOptions, [] as ACPConfigOption[]);
-  const authMethods = parseJSON(existing?.authMethods, [] as AuthMethod[]);
+
+  const configOptions = (agent.configOptions as ACPConfigOption[] | undefined) ?? parseJSON(existing?.configOptions, [] as ACPConfigOption[]);
+  const authMethods = (agent.authMethods as AuthMethod[] | undefined) ?? parseJSON(existing?.authMethods, [] as AuthMethod[]);
   const enabled = existing ? existing.enabled : false;
-  const supportsDynamicModel = existing ? existing.supportsDynamicModel : false;
-  const supportsDynamicConfig = existing ? existing.supportsDynamicConfig : false;
+  const supportsDynamicModel = agent.supportsDynamicModel ?? (existing ? existing.supportsDynamicModel : false);
+  const supportsDynamicConfig = agent.supportsDynamicConfig ?? (existing ? existing.supportsDynamicConfig : false);
 
   if (!launch && !existing) {
     return {
@@ -177,10 +177,26 @@ function buildSyncedDiscovery(
     };
   }
 
+  const existingIsActive = existing?.status === 'ready' || existing?.status === 'needs_auth';
+  const hasStaticMetadata = agent.configOptions !== undefined || agent.supportsDynamicModel !== undefined || agent.supportsDynamicConfig !== undefined;
+
+  let status: ProviderDiscovery['status'] = 'not_found';
+  if (existingIsActive) {
+    status = existing.status;
+  } else if (launch) {
+    if (command === 'npx' || command === 'uvx' || isBinaryOnPath(command)) {
+      status = hasStaticMetadata
+        ? (authMethods.length > 0 ? 'needs_auth' : 'ready')
+        : 'inactive';
+    } else {
+      status = 'not_found';
+    }
+  }
+
   return {
     id: agent.id,
     label: agent.name,
-    status: existingIsActive ? existing.status : launch ? 'inactive' : 'not_found',
+    status,
     command,
     enabled,
     launchArgs,
@@ -256,6 +272,33 @@ export class ProcessProviderProber implements ProviderProber {
     agent: RegistryAgent,
     launch: { command: string; args: string[]; env: Record<string, string> },
   ): Promise<ProviderDiscovery> {
+    const hasStaticMetadata = agent.configOptions !== undefined || agent.supportsDynamicModel !== undefined || agent.supportsDynamicConfig !== undefined;
+    const configOptions = (agent.configOptions as ACPConfigOption[] | undefined) ?? [];
+    const authMethods = (agent.authMethods as AuthMethod[] | undefined) ?? [];
+    const supportsDynamicModel = agent.supportsDynamicModel ?? false;
+    const supportsDynamicConfig = agent.supportsDynamicConfig ?? false;
+
+    if (hasStaticMetadata) {
+      const isInstalled = launch.command === 'npx' || launch.command === 'uvx' || isBinaryOnPath(launch.command);
+      return {
+        id: agent.id,
+        label: agent.name,
+        status: isInstalled ? (authMethods.length > 0 ? 'needs_auth' : 'ready') : 'not_found',
+        command: launch.command,
+        enabled: false,
+        launchArgs: launch.args,
+        launchEnv: launch.env,
+        customEnv: {},
+        configOptions,
+        authMethods,
+        version: agent.version,
+        description: agent.description,
+        icon: agent.icon,
+        supportsDynamicModel,
+        supportsDynamicConfig,
+      };
+    }
+
     try {
       const probeResult = await this.runtime.probe(launch.command, launch.args, launch.env);
       return {
