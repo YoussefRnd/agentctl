@@ -201,14 +201,25 @@ function parseRegistryAgents(data: string): RegistryAgent[] {
   return parsed.agents;
 }
 
-export class ProviderRegistry {
-  private syncInFlight: Promise<void> | null = null;
-  private probesInFlight = new Map<string, Promise<Provider>>();
-  private static readonly PROBE_TIMEOUT_MS = 60_000;
+export interface ProviderProber {
+  probeAgent(
+    agent: RegistryAgent,
+    launch: { command: string; args: string[]; env: Record<string, string> },
+  ): Promise<ProviderDiscovery>;
+
+  executeLogin(
+    command: string,
+    args: string[],
+    env: Record<string, string>,
+    methodId: string,
+    params: Record<string, unknown>,
+  ): Promise<void>;
+}
+
+export class ProcessProviderProber implements ProviderProber {
   private runtime: AgentRuntime;
 
   constructor(
-    private db: DbClient,
     private logger: Logger = noopLogger,
     private createConnection = createAgentConnection,
     runtime?: AgentRuntime,
@@ -219,6 +230,105 @@ export class ProviderRegistry {
       this.runtime = new LegacyConnectionRuntimeAdapter(createConnection, logger);
     } else {
       this.runtime = new DefaultAgentRuntime(spawn, logger);
+    }
+  }
+
+  private notFoundEntry(agent: RegistryAgent, enabled = false): ProviderDiscovery {
+    return {
+      id: agent.id,
+      label: agent.name,
+      status: 'not_found',
+      command: agent.id,
+      enabled,
+      launchArgs: [],
+      launchEnv: {},
+      customEnv: {},
+      authMethods: [],
+      version: agent.version,
+      description: agent.description,
+      icon: agent.icon,
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    };
+  }
+
+  async probeAgent(
+    agent: RegistryAgent,
+    launch: { command: string; args: string[]; env: Record<string, string> },
+  ): Promise<ProviderDiscovery> {
+    try {
+      const probeResult = await this.runtime.probe(launch.command, launch.args, launch.env);
+      return {
+        id: agent.id,
+        label: agent.name,
+        status: probeResult.status,
+        command: launch.command,
+        enabled: false,
+        launchArgs: launch.args,
+        launchEnv: launch.env,
+        customEnv: {},
+        configOptions: probeResult.configOptions,
+        authMethods: probeResult.authMethods,
+        version: agent.version,
+        description: agent.description,
+        icon: agent.icon,
+        supportsDynamicModel: probeResult.supportsDynamicModel,
+        supportsDynamicConfig: probeResult.supportsDynamicConfig,
+      };
+    } catch (err) {
+      this.logger.error(err, `Probe failed for ${agent.id}`);
+      return this.notFoundEntry(agent);
+    }
+  }
+
+  async executeLogin(
+    command: string,
+    args: string[],
+    env: Record<string, string>,
+    methodId: string,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    const { child, connection } = this.createConnection(command, args, env);
+
+    try {
+      await connection.initialize({
+        protocolVersion: 1,
+        clientInfo: { name: 'agentctl-login', version: '1.0.0' },
+      });
+
+      await (connection.authenticate({
+        methodId,
+        _meta: params,
+      }) as Promise<unknown>);
+    } finally {
+      child.kill();
+    }
+  }
+}
+
+export class ProviderRegistry {
+  private syncInFlight: Promise<void> | null = null;
+  private probesInFlight = new Map<string, Promise<Provider>>();
+  private static readonly PROBE_TIMEOUT_MS = 60_000;
+  private prober: ProviderProber;
+
+  constructor(
+    private db: DbClient,
+    private logger: Logger = noopLogger,
+    createConnectionOrProber?: typeof createAgentConnection | ProviderProber,
+    runtime?: AgentRuntime,
+  ) {
+    if (
+      createConnectionOrProber &&
+      typeof createConnectionOrProber === 'object' &&
+      'probeAgent' in createConnectionOrProber
+    ) {
+      this.prober = createConnectionOrProber;
+    } else {
+      const createConnection = typeof createConnectionOrProber === 'function'
+        ? createConnectionOrProber
+        : createAgentConnection;
+      this.prober = new ProcessProviderProber(logger, createConnection, runtime);
     }
   }
 
@@ -248,29 +358,7 @@ export class ProviderRegistry {
     launch: { command: string; args: string[]; env: Record<string, string> },
     _options: { timeoutMs?: number } = {},
   ): Promise<ProviderDiscovery> {
-    try {
-      const probeResult = await this.runtime.probe(launch.command, launch.args, launch.env);
-      return {
-        id: agent.id,
-        label: agent.name,
-        status: probeResult.status,
-        command: launch.command,
-        enabled: false,
-        launchArgs: launch.args,
-        launchEnv: launch.env,
-        customEnv: {},
-        configOptions: probeResult.configOptions,
-        authMethods: probeResult.authMethods,
-        version: agent.version,
-        description: agent.description,
-        icon: agent.icon,
-        supportsDynamicModel: probeResult.supportsDynamicModel,
-        supportsDynamicConfig: probeResult.supportsDynamicConfig,
-      };
-    } catch (err) {
-      this.logger.error(err, `Probe failed for ${agent.id}`);
-      return this.notFoundEntry(agent);
-    }
+    return this.prober.probeAgent(agent, launch);
   }
 
   async discover(): Promise<ProviderDiscovery[]> {
@@ -597,29 +685,21 @@ export class ProviderRegistry {
     const provider = await this.ensureProviderReady(providerId, { force: true });
     const discovery = provider.toDiscovery();
 
-    const { child, connection } = this.createConnection(discovery.command, discovery.launchArgs, {
-      ...discovery.launchEnv,
-      ...discovery.customEnv,
-    });
+    await this.prober.executeLogin(
+      discovery.command,
+      discovery.launchArgs,
+      {
+        ...discovery.launchEnv,
+        ...discovery.customEnv,
+      },
+      methodId,
+      params,
+    );
 
-    try {
-      await connection.initialize({
-        protocolVersion: 1,
-        clientInfo: { name: 'agentctl-login', version: '1.0.0' },
-      });
-
-      await (connection.authenticate({
-        methodId,
-        _meta: params,
-      }) as Promise<unknown>);
-
-      await this.db
-        .update(providers)
-        .set({ status: 'ready', enabled: true, updatedAt: new Date() })
-        .where(eq(providers.id, providerId));
-    } finally {
-      child.kill();
-    }
+    await this.db
+      .update(providers)
+      .set({ status: 'ready', enabled: true, updatedAt: new Date() })
+      .where(eq(providers.id, providerId));
   }
 
   async activate(providerId: string): Promise<ProviderDiscovery> {
