@@ -18,6 +18,7 @@ export const wsMessageSchema = z.discriminatedUnion('action', [
     action: z.literal('approve'),
     sessionId: z.uuid(),
     eventId: z.number(),
+    optionId: z.string().optional(),
   }),
   z.object({
     action: z.literal('deny'),
