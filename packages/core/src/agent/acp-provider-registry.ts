@@ -149,8 +149,8 @@ function buildSyncedDiscovery(
 ): ProviderDiscovery {
   const existingIsActive = existing?.status === 'ready' || existing?.status === 'needs_auth';
   const command = launch?.command ?? existing?.command ?? agent.id;
-  const launchArgs = parseJSON(existing?.launchArgs, [] as string[]);
-  const launchEnv = parseJSON<Record<string, string>>(existing?.launchEnv, {});
+  const launchArgs = launch?.args ?? parseJSON(existing?.launchArgs, [] as string[]);
+  const launchEnv = launch?.env ?? parseJSON<Record<string, string>>(existing?.launchEnv, {});
   const customEnv = parseJSON<Record<string, string>>(existing?.customEnv, {});
   const configOptions = parseJSON(existing?.configOptions, [] as ACPConfigOption[]);
   const authMethods = parseJSON(existing?.authMethods, [] as AuthMethod[]);
