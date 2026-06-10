@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { eq } from 'drizzle-orm';
-import { ACPSession, type DbClient } from './acp-session.js';
-import type { AgentRuntime, AgentRuntimeHandle } from './acp-transport.js';
-import { DefaultAgentRuntime, AuthRequiredError } from './acp-transport.js';
+import type { ACPSession, DbClient } from './acp-session.js';
+import type { AgentRuntime } from './acp-transport.js';
+import { DefaultAgentRuntime } from './acp-transport.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import { SessionEventStore } from './session-event-store.js';
@@ -11,6 +11,7 @@ import type { WorkspaceManager } from '../git/worktree-manager.js';
 import { negotiateCapabilities } from './capabilities-negotiator.js';
 import type { ProviderRegistry } from './acp-provider-registry.js';
 import type { ProviderName, SessionMode, ThinkingEffort } from '@agentctl/shared';
+import { SessionStateMachine } from './session-state-machine.js';
 
 export interface IEventBus {
   publish(event: unknown): void;
@@ -24,8 +25,8 @@ export interface CreateSessionParams {
 }
 
 export class SessionManager {
-  private sessions = new Map<string, ACPSession>();
   private eventStore: SessionEventStore;
+  private stateMachine: SessionStateMachine;
 
   constructor(
     private db: DbClient,
@@ -36,6 +37,14 @@ export class SessionManager {
     private runtime: AgentRuntime = new DefaultAgentRuntime(spawn, logger),
   ) {
     this.eventStore = new SessionEventStore(db, eventBus);
+    this.stateMachine = new SessionStateMachine(
+      db,
+      workspaceManager,
+      providerRegistry,
+      this.eventStore,
+      logger,
+      runtime,
+    );
   }
 
   async createSession(params: CreateSessionParams): Promise<ACPSession> {
@@ -148,108 +157,25 @@ export class SessionManager {
     existingAgentSessionId?: string | null,
     resolvedModelConfigId?: string,
   ): Promise<ACPSession> {
-    this.logger.info({ sessionId, command, args, worktreePath, existingAgentSessionId }, 'Starting new agent session');
-
-    let session: ACPSession | undefined;
-
-    try {
-      const runtimeHandle = await this.runtime.execute(
-        command,
-        args,
-        {
-          cwd: worktreePath,
-          env,
-          selectedModel,
-          selectedThinkingEffort,
-          supportsDynamicModel,
-          supportsDynamicConfig,
-          resolvedThinkingConfigId,
-          resolvedModelConfigId,
-          existingAgentSessionId,
-        },
-        {
-          onEvent: async (event) => {
-            if (session) {
-              await session.handleDomainEvent(event);
-            }
-          },
-          onRequestPermission: async (req) => {
-            if (session) {
-              return await session.handleRequestPermission(req);
-            }
-            return { allowed: false };
-          },
-        },
-      );
-
-      session = new ACPSession(
-        sessionId,
-        runtimeHandle,
-        this.db,
-        this.eventStore,
-        worktreePath,
-        this.logger,
-      );
-
-      await this.db
-        .update(sessions)
-        .set({ agentSessionId: runtimeHandle.acpSessionId, status: 'idle' })
-        .where(eq(sessions.id, sessionId));
-
-    } catch (err: unknown) {
-      if (err instanceof AuthRequiredError) {
-        this.logger.warn(`Session ${sessionId} requires authentication`);
-        await this.db
-          .update(sessions)
-          .set({ status: 'needs_attention' })
-          .where(eq(sessions.id, sessionId));
-
-        await this.eventStore.append(sessionId, 'status', {
-          status: 'needs_auth',
-          message: 'Authentication required. Please check your API keys or log in via CLI.',
-        });
-
-        const runtimeHandle: AgentRuntimeHandle = {
-          acpSessionId: null,
-          closed: err.connection.closed,
-          onProcessError(handler) {
-            err.child.on('error', handler);
-          },
-          onProcessExit(handler) {
-            err.child.once('exit', handler);
-          },
-          prompt: () => Promise.resolve(),
-          respondToPermission: () => undefined,
-          stop(): Promise<void> {
-            err.child.kill();
-            return Promise.resolve();
-          },
-        };
-
-        session = new ACPSession(
-          sessionId,
-          runtimeHandle,
-          this.db,
-          this.eventStore,
-          worktreePath,
-          this.logger,
-        );
-      } else {
-        throw err;
-      }
-    }
-
-    this.sessions.set(sessionId, session);
-    return session;
+    return this.stateMachine.startSession(
+      sessionId,
+      worktreePath,
+      command,
+      args,
+      env,
+      selectedModel,
+      selectedThinkingEffort,
+      supportsDynamicModel,
+      supportsDynamicConfig,
+      resolvedThinkingConfigId,
+      existingAgentSessionId,
+      resolvedModelConfigId,
+    );
   }
 
   async restartSession(sessionId: string): Promise<ACPSession> {
     this.logger.info({ sessionId }, 'Restarting session');
-    const existing = this.sessions.get(sessionId);
-    if (existing) {
-      existing.kill();
-      this.sessions.delete(sessionId);
-    }
+    this.stateMachine.stopSession(sessionId);
 
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
@@ -260,31 +186,10 @@ export class SessionManager {
       throw new Error(`Session or associated project not found: ${sessionId}`);
     }
 
-    if (sessionRecord.status === 'archived') {
-      if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
-        await this.workspaceManager.create(
-          sessionRecord.project.repoRoot,
-          sessionRecord.id,
-          sessionRecord.taskSlug,
-          'main',
-          sessionRecord.project.subdir,
-        );
-      }
-      await this.db
-        .update(sessions)
-        .set({ status: 'idle' })
-        .where(eq(sessions.id, sessionId));
-    }
-
     const provider = await this.providerRegistry.ensureProviderReady(
       sessionRecord.selectedProvider,
       { force: false },
     );
-
-    const workspacePath =
-      sessionRecord.mode === 'worktree'
-        ? sessionRecord.worktreePath
-        : sessionRecord.project.path;
 
     const selection = negotiateCapabilities(
       provider,
@@ -296,6 +201,28 @@ export class SessionManager {
       selection.selectedModel,
       selection.selectedThinkingEffort,
     );
+
+    if (sessionRecord.status === 'archived') {
+      await this.stateMachine.transitionTo(sessionId, 'idle', {
+        command: launch.command,
+        args: launch.args,
+        env: launch.env,
+        supportsDynamicModel: selection.supportsDynamicModel,
+        supportsDynamicConfig: selection.supportsDynamicConfig,
+        resolvedThinkingConfigId: selection.resolvedThinkingConfigId,
+        resolvedModelConfigId: selection.resolvedModelConfigId,
+      });
+      const session = this.stateMachine.getSession(sessionId);
+      if (!session) {
+        throw new Error('Session failed to start after resuscitation');
+      }
+      return session;
+    }
+
+    const workspacePath =
+      sessionRecord.mode === 'worktree'
+        ? sessionRecord.worktreePath
+        : sessionRecord.project.path;
 
     return this.startSession(
       sessionId,
@@ -351,7 +278,7 @@ export class SessionManager {
       return null;
     }
 
-    const activeSession = this.sessions.get(sessionId);
+    const activeSession = this.stateMachine.getSession(sessionId);
 
     if (activeSession && !activeSession.isDead && !providerIdChanged) {
       const supportsDynamicModel = provider.supportsDynamicModel;
@@ -410,9 +337,9 @@ export class SessionManager {
       return active ?? null;
     }
 
-    const wasRunning = this.sessions.has(sessionId);
+    const wasRunning = this.stateMachine.hasSession(sessionId);
     if (wasRunning) {
-      this.stopSession(sessionId);
+      this.stateMachine.stopSession(sessionId);
     }
 
     let worktreePath = sessionRecord.worktreePath;
@@ -457,21 +384,15 @@ export class SessionManager {
   }
 
   getSession(sessionId: string): ACPSession | undefined {
-    return this.sessions.get(sessionId);
+    return this.stateMachine.getSession(sessionId);
   }
 
   stopSession(sessionId: string): void {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      session.kill();
-      this.sessions.delete(sessionId);
-    }
+    this.stateMachine.stopSession(sessionId);
   }
 
   async stopAll(): Promise<void> {
-    const stopPromises = Array.from(this.sessions.values()).map((session) => session.stop());
-    await Promise.all(stopPromises);
-    this.sessions.clear();
+    await this.stateMachine.stopAll();
   }
 
   async deleteSession(sessionId: string): Promise<void> {
@@ -484,7 +405,7 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    this.stopSession(sessionId);
+    this.stateMachine.stopSession(sessionId);
 
     if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
       try {
@@ -515,35 +436,7 @@ export class SessionManager {
   }
 
   async archiveSession(sessionId: string): Promise<void> {
-    const sessionRecord = await this.db.query.sessions.findFirst({
-      where: eq(sessions.id, sessionId),
-      with: { project: true },
-    });
-
-    if (!sessionRecord) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    this.stopSession(sessionId);
-
-    if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
-      try {
-        await this.workspaceManager.removeWorktreeOnly(
-          sessionRecord.project.repoRoot,
-          sessionRecord.worktreePath,
-        );
-      } catch (err: unknown) {
-        this.logger.error({ err, sessionId }, 'Failed to remove worktree on archiveSession');
-      }
-    }
-
-    await this.db
-      .update(sessions)
-      .set({
-        status: 'archived',
-        closedAt: new Date(),
-      })
-      .where(eq(sessions.id, sessionId));
+    await this.stateMachine.transitionTo(sessionId, 'archived');
   }
 
   async deleteProject(projectId: string): Promise<void> {
@@ -557,7 +450,7 @@ export class SessionManager {
     }
 
     for (const session of projectRecord.sessions) {
-      this.stopSession(session.id);
+      this.stateMachine.stopSession(session.id);
       if (session.mode === 'worktree' && projectRecord.repoRoot) {
         try {
           await this.workspaceManager.cleanup(
@@ -579,7 +472,7 @@ export class SessionManager {
     action: 'approve' | 'deny' | 'session.input',
     payload: { eventId?: string | number; optionId?: string; input?: string; attachmentIds?: string[] },
   ) {
-    let session = this.sessions.get(sessionId);
+    let session = this.stateMachine.getSession(sessionId);
 
     if (!session || session.isDead) {
       const sessionRecord = await this.db.query.sessions.findFirst({
