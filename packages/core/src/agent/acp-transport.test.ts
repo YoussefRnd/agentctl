@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
-import { cleanEnv, createAgentConnection, type CacheStorage, type AgentProbeResult } from './acp-transport.js';
+import { cleanEnv, createAgentConnection, type CacheStorage, type AgentProbeResult, type DomainAgentEvent } from './acp-transport.js';
 
 test('cleanEnv overlays values and strips npm config variables', () => {
   const previousUserAgent = process.env.npm_config_user_agent;
@@ -157,4 +157,51 @@ test('DefaultAgentRuntime.probe uses cache and skips spawn on cache hit', async 
   const result = await runtime.probe('test-cmd', [], {});
   assert.equal(result.supportsDynamicModel, true);
   assert.equal(spawnCount, 0); // Verify spawn was bypassed
+});
+
+test('parseNotificationToEvents parses tool_call rawInput with nested arguments', async () => {
+  const { parseNotificationToEvents } = await import('./acp-transport.js');
+  const notification = {
+    sessionId: 'sess_123',
+    update: {
+      sessionUpdate: 'tool_call' as const,
+      toolCallId: 'read_file__1',
+      title: 'Reading file',
+      rawInput: {
+        name: 'read_file',
+        arguments: {
+          path: 'test.txt',
+        },
+      },
+    },
+  };
+
+  const events = parseNotificationToEvents(notification);
+  assert.equal(events.length, 1);
+  const event = events[0] as Extract<DomainAgentEvent, { type: 'tool_call' }>;
+  assert.equal(event.type, 'tool_call');
+  assert.equal(event.call.name, 'read_file');
+  assert.deepEqual(event.call.arguments, { path: 'test.txt' });
+});
+
+test('parseNotificationToEvents parses tool_call rawInput as direct arguments object', async () => {
+  const { parseNotificationToEvents } = await import('./acp-transport.js');
+  const notification = {
+    sessionId: 'sess_123',
+    update: {
+      sessionUpdate: 'tool_call' as const,
+      toolCallId: 'run_shell_command__2',
+      title: 'Running command',
+      rawInput: {
+        command: 'echo hello',
+      },
+    },
+  };
+
+  const events = parseNotificationToEvents(notification);
+  assert.equal(events.length, 1);
+  const event = events[0] as Extract<DomainAgentEvent, { type: 'tool_call' }>;
+  assert.equal(event.type, 'tool_call');
+  assert.equal(event.call.name, 'run_shell_command');
+  assert.deepEqual(event.call.arguments, { command: 'echo hello' });
 });

@@ -326,7 +326,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   }
 }
 
-function parseNotificationToEvents(notification: SessionNotification): DomainAgentEvent[] {
+export function parseNotificationToEvents(notification: SessionNotification): DomainAgentEvent[] {
   const update = notification.update;
   const typeKey = update.sessionUpdate;
   const events: DomainAgentEvent[] = [];
@@ -350,21 +350,69 @@ function parseNotificationToEvents(notification: SessionNotification): DomainAge
     }
   } else if (typeKey === 'tool_call' || typeKey === 'tool_call_update') {
     const chunk = update as {
-      toolCall?: {
-        name: string;
-        arguments?: Record<string, unknown>;
-        toolCallId?: string;
-        title?: string;
-        status?: string;
-      };
+      name?: string;
+      arguments?: Record<string, unknown>;
+      toolCallId?: string;
+      title?: string;
+      status?: string;
+      rawInput?: unknown;
+      locations?: { path?: string }[];
+      kind?: string;
     };
-    if (chunk.toolCall) {
-      events.push({
-        type: 'tool_call',
-        call: chunk.toolCall,
-        isUpdate: typeKey === 'tool_call_update',
-      });
+    const rawInput = chunk.rawInput as Record<string, unknown> | undefined;
+    
+    // Parse tool name
+    let parsedName = chunk.name ?? '';
+    if (!parsedName && chunk.toolCallId) {
+      parsedName = chunk.toolCallId.split('__')[0];
     }
+    if (!parsedName) {
+      parsedName = chunk.kind ?? 'tool';
+    }
+
+    // Resolve arguments
+    let parsedArgs = chunk.arguments;
+    if (!parsedArgs) {
+      if (rawInput && typeof rawInput === 'object') {
+        if (rawInput.arguments && typeof rawInput.arguments === 'object') {
+          parsedArgs = rawInput.arguments as Record<string, unknown>;
+        } else {
+          const rest = { ...rawInput };
+          delete rest.name;
+          delete rest.arguments;
+          parsedArgs = rest;
+        }
+        if (!parsedName && typeof rawInput.name === 'string') {
+          parsedName = rawInput.name;
+        }
+      }
+    }
+
+    // Fallback arguments for files/directories
+    if (!parsedArgs) {
+      const primaryPath = chunk.locations?.[0]?.path ?? chunk.title;
+      if (primaryPath) {
+        parsedArgs = {
+          path: primaryPath,
+          TargetFile: primaryPath,
+          AbsolutePath: primaryPath,
+        };
+      } else {
+        parsedArgs = {};
+      }
+    }
+
+    events.push({
+      type: 'tool_call',
+      call: {
+        name: parsedName,
+        arguments: parsedArgs,
+        toolCallId: chunk.toolCallId,
+        title: chunk.title,
+        status: chunk.status,
+      },
+      isUpdate: typeKey === 'tool_call_update',
+    });
   } else if ((typeKey as string) === 'status') {
     const chunk = update as unknown as { status: string; title?: string };
     if (chunk.status) {
@@ -425,6 +473,41 @@ export class DefaultAgentRuntime implements AgentRuntime {
         },
         async requestPermission(r) {
           const toolCallRaw = r.toolCall as unknown as Record<string, unknown>;
+          const rawInput = toolCallRaw.rawInput as Record<string, unknown> | undefined;
+          
+          let parsedName = typeof toolCallRaw.name === 'string' ? toolCallRaw.name : '';
+          if (!parsedName && r.toolCall.toolCallId) {
+            parsedName = r.toolCall.toolCallId.split('__')[0];
+          }
+          if (!parsedName) {
+            parsedName = typeof toolCallRaw.kind === 'string' ? toolCallRaw.kind : 'tool';
+          }
+
+          let parsedArgs = toolCallRaw.arguments as Record<string, unknown> | undefined;
+          if (!parsedArgs) {
+            if (rawInput && typeof rawInput === 'object') {
+              if (rawInput.arguments && typeof rawInput.arguments === 'object') {
+                parsedArgs = rawInput.arguments as Record<string, unknown>;
+              } else {
+                const rest = { ...rawInput };
+                delete rest.name;
+                delete rest.arguments;
+                parsedArgs = rest;
+              }
+            }
+          }
+          if (!parsedArgs) {
+            const locations = toolCallRaw.locations as { path?: string }[] | undefined;
+            const primaryPath = locations?.[0]?.path ?? (typeof toolCallRaw.title === 'string' ? toolCallRaw.title : undefined);
+            if (primaryPath) {
+              parsedArgs = {
+                path: primaryPath,
+                TargetFile: primaryPath,
+                AbsolutePath: primaryPath,
+              };
+            }
+          }
+
           const domainReq: DomainPermissionRequest = {
             permissionId: r.toolCall.toolCallId,
             description: typeof toolCallRaw.title === 'string' ? toolCallRaw.title : '',
@@ -433,8 +516,8 @@ export class DefaultAgentRuntime implements AgentRuntime {
               label: opt.name
             })),
             toolCall: {
-              name: typeof toolCallRaw.name === 'string' ? toolCallRaw.name : '',
-              arguments: toolCallRaw.arguments as Record<string, unknown> | undefined,
+              name: parsedName,
+              arguments: parsedArgs,
               toolCallId: r.toolCall.toolCallId,
             }
           };

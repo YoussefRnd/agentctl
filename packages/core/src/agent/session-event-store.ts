@@ -37,8 +37,13 @@ export class SessionEventStore {
   }
 
   async update(eventId: number, data: unknown, metadata?: unknown): Promise<void> {
+    const existing = await this.getEvent(eventId);
+    let mergedData = data;
+    if (existing && typeof existing.data === 'object' && existing.data !== null && typeof data === 'object' && data !== null) {
+      mergedData = { ...existing.data, ...data };
+    }
     const updateValues: { data: string; metadata?: string | null } = {
-      data: JSON.stringify(data),
+      data: JSON.stringify(mergedData),
     };
     if (metadata !== undefined) {
       updateValues.metadata = metadata ? JSON.stringify(metadata) : null;
