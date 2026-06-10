@@ -23,7 +23,7 @@ export const AgentResponse = memo(function AgentResponse({
         response = e;
       } else if (e.type === 'text' && 'role' in e.data && e.data.role === 'thought') {
         activity.push(e);
-      } else if (e.type === 'tool_call') {
+      } else if (e.type === 'tool_call' || e.type === 'approval_request') {
         activity.push(e);
       }
     }
