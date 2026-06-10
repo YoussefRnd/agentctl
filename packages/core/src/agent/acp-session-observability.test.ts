@@ -125,12 +125,10 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
       return parsed.role === 'thought';
     });
 
-    // One append publish + two update publishes + one final DB flush update = 4 publishes
-    expect(thoughtPublishes.length).toBe(4);
+    // One append publish + one final DB flush update = 2 publishes
+    expect(thoughtPublishes.length).toBe(2);
     expect((JSON.parse(thoughtPublishes[0].data) as Record<string, unknown>).content).toBe('Thinking');
-    expect((JSON.parse(thoughtPublishes[1].data) as Record<string, unknown>).content).toBe('Thinking about');
-    expect((JSON.parse(thoughtPublishes[2].data) as Record<string, unknown>).content).toBe('Thinking about logic');
-    expect((JSON.parse(thoughtPublishes[3].data) as Record<string, unknown>).content).toBe('Thinking about logic');
+    expect((JSON.parse(thoughtPublishes[1].data) as Record<string, unknown>).content).toBe('Thinking about logic');
 
     // Verify metadata presence (timing and token estimates)
     const userMetadata = JSON.parse(userEvent.metadata ?? '{}') as Record<string, unknown>;

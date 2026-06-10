@@ -418,6 +418,8 @@ ${text}`;
           // Flush buffers before starting tool calls!
           await this.flushAll();
 
+          const parentId = this.thoughtEventId ?? this.currentParentEventId;
+
           // Reset buffers on new tool calls
           this.currentMessage = '';
           this.currentThought = '';
@@ -433,7 +435,7 @@ ${text}`;
             this.sessionId,
             'tool_call',
             call,
-            this.currentParentEventId,
+            parentId,
             { durationMs: 0 }
           );
         } else if (this.toolCallEventId) {
@@ -451,19 +453,6 @@ ${text}`;
         this.currentMessage += event.text;
         const completionTokens = Math.ceil(this.currentMessage.length / 4);
         if (this.messageEventId) {
-          const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
-          this.eventStore.eventBus.publish({
-            id: this.messageEventId,
-            sessionId: this.sessionId,
-            parentEventId: this.currentParentEventId,
-            type: 'text',
-            data: JSON.stringify({
-              content: this.currentMessage,
-              role: 'provider',
-            }),
-            metadata: JSON.stringify({ durationMs, completionTokens }),
-            createdAt: new Date(),
-          });
           this.textBuffer.append(event.text);
         } else {
           this.messageStartTime = Date.now();
@@ -484,19 +473,6 @@ ${text}`;
       this.currentThought += event.text;
       const completionTokens = Math.ceil(this.currentThought.length / 4);
       if (this.thoughtEventId) {
-        const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
-        this.eventStore.eventBus.publish({
-          id: this.thoughtEventId,
-          sessionId: this.sessionId,
-          parentEventId: this.currentParentEventId,
-          type: 'text',
-          data: JSON.stringify({
-            content: this.currentThought,
-            role: 'thought',
-          }),
-          metadata: JSON.stringify({ durationMs, completionTokens }),
-          createdAt: new Date(),
-        });
         this.thoughtBuffer.append(event.text);
       } else {
         this.thoughtStartTime = Date.now();
