@@ -1,5 +1,6 @@
 export * from './components/Button.js';
 export * from './components/Card.js';
+export * from './components/GlassPanel.js';
 export * from './components/Input.js';
 export * from './components/Skeleton.js';
 export * from './components/TerminalGlass.js';
