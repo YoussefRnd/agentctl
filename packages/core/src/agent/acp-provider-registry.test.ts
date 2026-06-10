@@ -1,12 +1,13 @@
 import { test, describe, expect } from 'vitest';
 import { ProviderRegistry } from './acp-provider-registry.js';
+import type { ProviderData } from './provider.js';
 import { noopLogger } from '../logger.js';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
 import type { ACPConnectionHandle } from './acp-transport.js';
 import type { RegistryAgent } from '@agentctl/shared';
 import { createDatabase } from '../db/index.js';
-import { providers } from '../db/schema.js';
+import { providers, projects, sessions } from '../db/schema.js';
 
 function createAgent(): RegistryAgent {
   return {
@@ -188,5 +189,58 @@ describe('ProviderRegistry', () => {
     expect(result.status).toBe('needs_auth');
     expect(result.configOptions?.[0]?.id).toBe('thinking');
     expect(killCount()).toBe(1);
+  });
+
+  test('pickWarmProviderId prioritizes last used session provider', async () => {
+    const db = createDatabase(':memory:');
+
+    // Set up project and sessions
+    await db.insert(projects).values({
+      id: 'proj-1',
+      name: 'Test Project',
+      path: '/tmp/proj-1',
+    });
+
+    // Insert an older session using 'opencode'
+    await db.insert(sessions).values({
+      id: 'sess-old',
+      projectId: 'proj-1',
+      branch: 'main',
+      worktreePath: '/tmp/proj-1',
+      taskSlug: 'test-slug',
+      agent: 'opencode',
+      selectedProvider: 'opencode',
+      baseCommit: 'hash',
+      updatedAt: new Date(Date.now() - 10000),
+    });
+
+    // Insert a newer session using 'gemini'
+    await db.insert(sessions).values({
+      id: 'sess-new',
+      projectId: 'proj-1',
+      branch: 'main',
+      worktreePath: '/tmp/proj-1',
+      taskSlug: 'test-slug',
+      agent: 'gemini',
+      selectedProvider: 'gemini',
+      baseCommit: 'hash',
+      updatedAt: new Date(),
+    });
+
+    const registry = new ProviderRegistry(db, noopLogger);
+
+    const existingRows = [
+      { id: 'opencode', enabled: true } as unknown as ProviderData,
+      { id: 'gemini', enabled: true } as unknown as ProviderData,
+    ];
+
+    const supportedRegistry = [
+      { id: 'opencode' } as unknown as RegistryAgent,
+      { id: 'gemini' } as unknown as RegistryAgent,
+    ];
+
+    // @ts-expect-error - testing private method
+    const warmId = await registry.pickWarmProviderId(existingRows, supportedRegistry);
+    expect(warmId).toBe('gemini');
   });
 });
