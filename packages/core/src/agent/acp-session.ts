@@ -13,8 +13,8 @@ import type {
   AgentRuntimeHandle,
 } from './acp-transport.js';
 
-import { StreamBuffer } from './stream-buffer.js';
 import type { SessionStateMachine } from './session-state-machine.js';
+import { EventStreamAdapter } from './event-stream-adapter.js';
 
 export type DbClient = ReturnType<typeof createDatabase>;
 
@@ -26,41 +26,10 @@ export class ACPSession {
   private isStopped = false;
   private stopKind: 'idle' | 'error' | null = null;
 
-  private currentParentEventId: number | null = null;
-  private turnStartTime: number | null = null;
-  private thoughtStartTime: number | null = null;
-  private toolCallStartTime: number | null = null;
-  private messageStartTime: number | null = null;
-
-  private textBuffer = new StreamBuffer(async () => {
-    if (this.messageEventId) {
-      const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
-      const completionTokens = Math.ceil(this.currentMessage.length / 4);
-      await this.eventStore.update(
-        this.messageEventId,
-        { content: this.currentMessage, role: 'provider' },
-        { durationMs, completionTokens }
-      );
-    }
-  });
-
-  private thoughtBuffer = new StreamBuffer(async () => {
-    if (this.thoughtEventId) {
-      const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
-      const completionTokens = Math.ceil(this.currentThought.length / 4);
-      await this.eventStore.update(
-        this.thoughtEventId,
-        { content: this.currentThought, role: 'thought' },
-        { durationMs, completionTokens }
-      );
-    }
-  });
+  private eventStreamAdapter: EventStreamAdapter;
 
   public async flushAll(): Promise<void> {
-    await Promise.all([
-      this.textBuffer.flush(),
-      this.thoughtBuffer.flush(),
-    ]);
+    await this.eventStreamAdapter.flushAll();
   }
 
   get isDead(): boolean {
@@ -77,6 +46,7 @@ export class ACPSession {
     private logger: Logger = noopLogger,
   ) {
     this.acpSessionId = runtimeHandle.acpSessionId;
+    this.eventStreamAdapter = new EventStreamAdapter(sessionId, eventStore, logger);
 
     this.runtimeHandle.onProcessError((err) => {
       this.logger.error(err, `Child process error in session ${this.sessionId}`);
@@ -110,20 +80,6 @@ export class ACPSession {
 
   async prompt(text: string, attachmentIds?: string[]): Promise<void> {
     try {
-      this.currentMessage = '';
-      this.currentThought = '';
-      this.currentUserMessage = '';
-      this.messageEventId = null;
-      this.thoughtEventId = null;
-      this.userMessageEventId = null;
-      this.messageStartTime = null;
-      this.thoughtStartTime = null;
-      this.toolCallStartTime = null;
-      this.textBuffer.reset();
-      this.thoughtBuffer.reset();
-
-      this.turnStartTime = Date.now();
-
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, this.sessionId),
       });
@@ -180,18 +136,7 @@ export class ACPSession {
 
       // Persist user message immediately so it shows up in history
       const promptTokens = Math.ceil(text.length / 4);
-      const userEventId = await this.eventStore.append(
-        this.sessionId,
-        'text',
-        {
-          content: text,
-          role: 'user',
-          attachments: resolvedAttachmentsMeta.length > 0 ? resolvedAttachmentsMeta : undefined,
-        },
-        null,
-        { promptTokens }
-      );
-      this.currentParentEventId = userEventId;
+      await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
 
       let promptText = text;
       if (!this.historyHydrated) {
@@ -402,91 +347,19 @@ ${text}`;
     }
   }
 
-  private currentMessage = '';
-  private currentThought = '';
-  private currentUserMessage = '';
-  private messageEventId: number | null = null;
-  private thoughtEventId: number | null = null;
-  private userMessageEventId: number | null = null;
-  private toolCallEventId: number | null = null;
-
   public async handleDomainEvent(event: DomainAgentEvent): Promise<void> {
     try {
       if (event.type === 'tool_call') {
-        const { call, isUpdate } = event;
-        if (!isUpdate) {
-          // Flush buffers before starting tool calls!
-          await this.flushAll();
-
-          const parentId = this.thoughtEventId ?? this.currentParentEventId;
-
-          // Reset buffers on new tool calls
-          this.currentMessage = '';
-          this.currentThought = '';
-          this.currentUserMessage = '';
-          this.messageEventId = null;
-          this.thoughtEventId = null;
-          this.userMessageEventId = null;
-          this.messageStartTime = null;
-          this.thoughtStartTime = null;
-
-          this.toolCallStartTime = Date.now();
-          this.toolCallEventId = await this.eventStore.append(
-            this.sessionId,
-            'tool_call',
-            call,
-            parentId,
-            { durationMs: 0 }
-          );
-        } else if (this.toolCallEventId) {
-          const durationMs = Date.now() - (this.toolCallStartTime ?? Date.now());
-          await this.eventStore.update(
-            this.toolCallEventId,
-            call,
-            { durationMs }
-          );
-        }
+        await this.eventStreamAdapter.registerToolCall(event.call, event.isUpdate);
         return;
       }
 
       if (event.type === 'text') {
-        this.currentMessage += event.text;
-        const completionTokens = Math.ceil(this.currentMessage.length / 4);
-        if (this.messageEventId) {
-          this.textBuffer.append(event.text);
-        } else {
-          this.messageStartTime = Date.now();
-          this.messageEventId = await this.eventStore.append(
-            this.sessionId,
-            'text',
-            {
-              content: this.currentMessage,
-              role: 'provider',
-            },
-            this.currentParentEventId,
-            { durationMs: 0, completionTokens }
-          );
-        }
+        await this.eventStreamAdapter.appendText(event.text);
         return;
       }
 
-      this.currentThought += event.text;
-      const completionTokens = Math.ceil(this.currentThought.length / 4);
-      if (this.thoughtEventId) {
-        this.thoughtBuffer.append(event.text);
-      } else {
-        this.thoughtStartTime = Date.now();
-        this.thoughtEventId = await this.eventStore.append(
-          this.sessionId,
-          'text',
-          {
-            content: this.currentThought,
-            role: 'thought',
-          },
-          this.currentParentEventId,
-          { durationMs: 0, completionTokens }
-        );
-      }
+      await this.eventStreamAdapter.appendThought(event.text);
       return;
     } catch (error) {
       await this.handleError(error).catch((e: unknown) => {
@@ -510,6 +383,8 @@ ${text}`;
         sessionRecord?.approvalMode === 'yolo' ||
         (sessionRecord?.approvalMode === 'auto_approve' && toolName.startsWith('fs/'));
 
+      const parentId = this.eventStreamAdapter.getCurrentParentEventId();
+
       if (shouldAutoApprove) {
         await this.eventStore.append(
           this.sessionId,
@@ -521,7 +396,7 @@ ${text}`;
             request,
             status: 'approved',
           },
-          this.currentParentEventId
+          parentId
         );
 
         const reqOptions = request.options;
@@ -557,7 +432,7 @@ ${text}`;
           request,
           status: 'pending',
         },
-        this.currentParentEventId
+        parentId
       );
 
       const approvalPromise = new Promise<DomainPermissionResponse>((resolve) => {
