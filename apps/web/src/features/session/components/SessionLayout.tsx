@@ -27,13 +27,13 @@ export function SessionLayout({
       <div className="border-border/50 bg-background/50 z-40 border-b backdrop-blur-xl">
         <div className="flex h-14 items-center gap-3 px-3">
           <div className="hidden w-[240px] shrink-0 items-center lg:flex">
-            <h2 className="text-text-main font-sans text-[12px] font-black tracking-[0.4em] uppercase">
-              AGENTCTL
+            <h2 className="text-text-main font-sans text-[11px] font-bold tracking-[0.2em] uppercase">
+              Agentctl
             </h2>
           </div>
           <div className="flex shrink-0 items-center pl-2 lg:hidden">
-            <h2 className="text-text-main font-sans text-[12px] font-black tracking-[0.4em] uppercase">
-              AGENTCTL
+            <h2 className="text-text-main font-sans text-[11px] font-bold tracking-[0.2em] uppercase">
+              Agentctl
             </h2>
           </div>
           <div className="flex h-full min-w-0 flex-1 items-center">{header}</div>
@@ -43,7 +43,7 @@ export function SessionLayout({
       <div className="flex min-h-0 w-full flex-1 gap-3 overflow-hidden p-3">
         {/* Desktop Sidebar */}
         <div className="z-20 hidden h-full w-[240px] shrink-0 lg:block">
-          <div className="terminal-glass border-border h-full overflow-hidden rounded-3xl border shadow-2xl">
+          <div className="terminal-glass border-border h-full overflow-hidden rounded-xl border">
             {sidebar}
           </div>
         </div>
@@ -65,7 +65,7 @@ export function SessionLayout({
         )}
 
         {/* Main Content Area */}
-        <main className="terminal-glass border-border bg-surface/30 relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border shadow-2xl transition-all duration-500 ease-in-out">
+        <main className="terminal-glass border-border bg-surface/30 relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border transition-all duration-500 ease-in-out">
           <div className="relative flex flex-1 flex-col overflow-hidden">{children}</div>
         </main>
 
@@ -75,47 +75,12 @@ export function SessionLayout({
         </div>
       </div>
 
-      {/* Light Leaks with Refraction */}
-      <div
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-        style={{ filter: 'url(#liquid-distort)' }}
-      >
-        <div
-          className="absolute -top-[10%] -left-[10%] h-[40%] w-[40%] animate-pulse rounded-full opacity-20 blur-[160px]"
-          style={{ backgroundColor: 'var(--color-accent)', willChange: 'transform, filter' }} // Mauve
-        />
-        <div
-          className="absolute top-[20%] -right-[5%] h-[50%] w-[50%] rounded-full opacity-10 blur-[180px]"
-          style={{
-            backgroundColor: '#89b4fa',
-            animation: 'pulse 8s infinite',
-            willChange: 'transform, filter',
-          }} // Blue (Catppuccin Blue #89b4fa)
-        />
-        <div
-          className="absolute -bottom-[10%] left-[20%] h-[45%] w-[45%] rounded-full opacity-15 blur-[160px]"
-          style={{
-            backgroundColor: 'var(--color-accent-secondary)',
-            animation: 'pulse 12s infinite',
-            willChange: 'transform, filter',
-          }} // Lavender
-        />
-      </div>
-
       {isWorkbenchOpen && (
         <div
           className="pointer-events-auto absolute inset-0 z-20 bg-black/10 lg:hidden"
           onClick={onCloseWorkbench}
         />
       )}
-
-      {/* Liquid Refraction Filter */}
-      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-        <filter id="liquid-distort">
-          <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="10" />
-        </filter>
-      </svg>
     </div>
   );
 }

@@ -123,11 +123,11 @@ export const ToolCallCard = memo(function ToolCallCard({
               )}
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-text-main text-[11px] font-black tracking-wider uppercase">
-                {tool.replace(/_/g, ' ')}
+              <span className="text-text-main text-[12px] font-medium tracking-tight">
+                {tool.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
               </span>
-              <span className="text-text-muted/50 truncate text-[10px] font-medium tracking-tight">
-                {argKeys.length > 0 ? `arguments: ${argKeys.join(', ')}` : 'no arguments'}
+              <span className="text-text-muted/50 truncate text-[10px] tracking-tight">
+                {argKeys.length > 0 ? argKeys.join(', ') : 'no arguments'}
               </span>
             </div>
           </div>

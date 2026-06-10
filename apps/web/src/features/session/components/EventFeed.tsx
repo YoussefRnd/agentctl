@@ -92,11 +92,11 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
               <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-text-main text-[12px] font-black tracking-[0.2em] uppercase">
-                Awaiting_Transmission
+              <h3 className="text-text-main text-[12px] font-semibold tracking-[0.1em] uppercase">
+                Connecting...
               </h3>
-              <p className="text-text-muted/40 text-[10px] font-bold tracking-widest uppercase">
-                establishing secure uplink...
+              <p className="text-text-muted/40 text-[10px] tracking-wide">
+                Establishing session uplink
               </p>
             </div>
           </div>
@@ -108,11 +108,11 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
       <div className="flex h-full items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="space-y-2">
-            <h3 className="text-text-main text-[13px] font-black tracking-[0.2em] uppercase">
-              Uplink_Active
+            <h3 className="text-text-main text-[13px] font-semibold tracking-[0.1em] uppercase">
+              Session ready
             </h3>
-            <p className="text-text-muted/50 text-[10px] font-bold tracking-widest uppercase">
-              secure session initialized. awaiting instructions...
+            <p className="text-text-muted/50 text-[11px] tracking-wide">
+              Send a message to begin.
             </p>
           </div>
         </div>
@@ -169,10 +169,10 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
           {/* Fallback Thinking Indicator when nothing has started yet after a user message */}
           {streamingEventId === null && isAwaitingAgent && !isSessionError && (
             <div className="animate-in fade-in slide-in-from-left-2 duration-1000">
-              <div className="flex w-fit items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 shadow-2xl">
+              <div className="flex w-fit items-center gap-3 rounded-lg border border-white/8 bg-white/4 px-4 py-2.5">
                 <Brain className="text-accent h-4 w-4 animate-pulse" />
-                <span className="text-accent/80 animate-pulse text-[11px] font-black tracking-[0.25em] uppercase">
-                  Agent_Thinking...
+                <span className="text-accent/70 text-[11px] font-bold tracking-[0.2em] uppercase">
+                  Agent thinking...
                 </span>
               </div>
             </div>
@@ -181,13 +181,13 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
           {/* Error notification card in the feed */}
           {isSessionError && (
             <div className="animate-in fade-in slide-in-from-left-2 duration-500">
-              <div className="flex flex-col gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-5 shadow-2xl backdrop-blur-md">
+              <div className="flex flex-col gap-3 rounded-xl border border-rose-500/15 bg-rose-500/5 p-5 backdrop-blur-md">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/25 bg-rose-500/8 text-rose-400">
                     <Brain className="h-4 w-4" />
                   </div>
-                  <span className="text-rose-400 text-[11px] font-black tracking-[0.25em] uppercase">
-                    Uplink_Failed / Connection_Crashed
+                  <span className="text-rose-400 text-[11px] font-bold tracking-[0.2em] uppercase">
+                    Connection failed
                   </span>
                 </div>
                 <p className="text-text-muted/80 text-[12px] leading-relaxed">
@@ -219,12 +219,12 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
       {!autoScroll && (
         <button
           type="button"
-          className="group text-text-main hover:bg-accent hover:text-background absolute bottom-12 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[10px] font-black tracking-widest uppercase shadow-2xl backdrop-blur-xl transition-all hover:scale-105 active:scale-95"
+          className="group text-text-main hover:bg-accent hover:text-background absolute bottom-12 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2 text-[10px] font-medium tracking-wide shadow-sm backdrop-blur-xl transition-all hover:scale-105 active:scale-95"
           onClick={() => {
             setAutoScroll(true);
           }}
         >
-          <span className="opacity-60 group-hover:opacity-100">Synchronize_Viewport</span>
+          <span className="opacity-60 group-hover:opacity-100">Scroll to bottom</span>
         </button>
       )}
     </div>

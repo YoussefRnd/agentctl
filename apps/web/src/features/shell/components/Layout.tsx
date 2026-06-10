@@ -9,13 +9,21 @@ interface LayoutProps {
 }
 
 export function Layout({ children, sidebarType = 'none' }: LayoutProps) {
-  // Determine breadcrumb/chip title
-  let pageTitle = null;
-  if (sidebarType === 'projects') {
-    pageTitle = 'projects';
-  } else if (sidebarType === 'settings') {
-    pageTitle = 'settings';
-  }
+  const titles = {
+    projects: 'projects',
+    settings: 'settings',
+    none: null,
+  };
+
+  const pageTitle = titles[sidebarType];
+
+  const sidebars = {
+    projects: <Sidebar />,
+    settings: <SettingsSidebar />,
+    none: null,
+  };
+
+  const sidebarContent = sidebars[sidebarType];
 
   return (
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
@@ -80,17 +88,10 @@ export function Layout({ children, sidebarType = 'none' }: LayoutProps) {
 
       {/* Spaced desktop grid body */}
       <div className="relative z-10 flex min-h-0 w-full flex-1 gap-3 overflow-hidden p-3">
-        {sidebarType === 'projects' && (
+        {sidebarContent && (
           <div className="z-20 hidden h-full w-[240px] shrink-0 lg:block">
             <GlassPanel className="h-full border-none shadow-2xl overflow-hidden rounded-3xl" intensity="high">
-              <Sidebar />
-            </GlassPanel>
-          </div>
-        )}
-        {sidebarType === 'settings' && (
-          <div className="z-20 hidden h-full w-[240px] shrink-0 lg:block">
-            <GlassPanel className="h-full border-none shadow-2xl overflow-hidden rounded-3xl" intensity="high">
-              <SettingsSidebar />
+              {sidebarContent}
             </GlassPanel>
           </div>
         )}

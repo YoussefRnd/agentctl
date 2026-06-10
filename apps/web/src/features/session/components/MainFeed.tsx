@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { ACPEventRow } from '@agentctl/shared';
 import { EventFeed } from './EventFeed';
 import { CommandBar } from './CommandBar';
@@ -30,32 +29,19 @@ export function MainFeed() {
       ? lastEvent
       : undefined;
 
-  const loadingMessages = [
-    'SCANNING_HISTORY_VECTORS...',
-    'RECONCILING_BRANCH_STATES...',
-    'HYDRATING_SESSION_CONTEXT...',
-    'ESTABLISHING_ACP_HANDSHAKE...',
-    'MAPPING_WORKTREE_STRUCTURE...',
-    'SYNCING_PROTOCOL_BUFFERS...',
-  ];
-
-  const [loadingMsg] = useState(
-    () => loadingMessages[Math.floor(Math.random() * loadingMessages.length)],
-  );
-
   if (!sessionId) {
     return (
       <div className="bg-background flex h-full flex-col items-center justify-center p-8 text-center">
         <div className="animate-in fade-in zoom-in w-full max-w-md space-y-8 duration-1000">
           <div className="space-y-4">
-            <div className="text-accent/60 inline-block rounded-full border border-white/5 bg-white/5 px-4 py-1 text-[10px] font-black tracking-[0.3em] uppercase">
-              System_Standby
+            <div className="text-accent/50 inline-block rounded-full border border-white/5 bg-white/4 px-4 py-1 text-[10px] font-medium tracking-widest uppercase">
+              Standby
             </div>
-            <h1 className="text-text-main text-5xl leading-none font-black tracking-tight uppercase">
-              Select_A_Workspace
+            <h1 className="text-text-main text-4xl leading-none font-semibold tracking-tight">
+              Select a workspace
             </h1>
-            <p className="text-text-muted/40 text-[11px] leading-relaxed font-bold tracking-widest uppercase">
-              Choose a project from the sidebar to initialize a new secure agent session.
+            <p className="text-text-muted/50 text-[12px] leading-relaxed">
+              Choose a project from the sidebar to start a new agent session.
             </p>
           </div>
         </div>
@@ -65,12 +51,6 @@ export function MainFeed() {
 
   return (
     <div className="bg-background relative flex h-full flex-col overflow-hidden">
-      {/* Refined Grid Background */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(203,166,247,0.08),transparent_70%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px]" />
-      </div>
-
       <div className="relative z-10 flex h-full min-w-0 flex-col">
         {sessionData?.session.status === 'archived' && (
           <div className="border-warning/30 bg-warning/5 flex shrink-0 items-center justify-between border-b px-4 py-3 font-mono text-[11px] text-warning backdrop-blur-md">
@@ -99,12 +79,14 @@ export function MainFeed() {
 
         <main className="relative flex min-h-0 flex-1 flex-col">
           {isLoadingEvents ? (
-            <div className="flex h-full flex-col items-center justify-center gap-4 font-mono">
-              <div className="via-accent/40 h-px w-24 animate-pulse bg-gradient-to-r from-transparent to-transparent" />
-              <div className="text-accent/60 animate-pulse text-[11px] font-black tracking-[0.3em] uppercase">
-                {loadingMsg}
+            <div className="flex h-full flex-col items-center justify-center gap-3">
+              <div className="relative h-8 w-8">
+                <div className="absolute inset-0 rounded-full border-2 border-white/5" />
+                <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
               </div>
-              <div className="via-accent/40 h-px w-24 animate-pulse bg-gradient-to-r from-transparent to-transparent" />
+              <span className="text-text-muted/50 text-[11px] tracking-wide">
+                Loading session...
+              </span>
             </div>
           ) : (
             <EventFeed events={events} isConnected={isConnected} />

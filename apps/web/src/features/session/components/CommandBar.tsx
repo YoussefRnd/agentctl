@@ -1,5 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Zap, Monitor, GitBranch, ChevronDown, Shield, Plus } from 'lucide-react';
+import {
+  Dropdown,
+  DropdownTrigger,
+  DropdownContent,
+  DropdownItem,
+  Button,
+  cn,
+} from '@agentctl/ui';
 import { ProviderPicker } from './ProviderPicker';
 import { useProviders } from '../../../hooks/useProviders';
 import { useSession } from '../../../contexts/SessionContext';
@@ -12,95 +20,67 @@ interface DropdownOption<T> {
   label: string;
 }
 
-interface CustomDropdownProps<T> {
+interface CommandDropdownProps<T> {
   value: T;
   options: DropdownOption<T>[];
   onChange: (value: T) => void;
   disabled?: boolean;
   icon: React.ReactNode;
-  align?: 'left' | 'right';
+  align?: 'start' | 'end';
   variant?: 'default' | 'toolbar';
 }
 
-function CustomDropdown<T extends string>({
+function CommandDropdown<T extends string>({
   value,
   options,
   onChange,
   disabled,
   icon,
-  align = 'left',
+  align = 'start',
   variant = 'default',
-}: CustomDropdownProps<T>) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
+}: CommandDropdownProps<T>) {
   const activeOption = options.find((opt) => opt.value === value);
 
-  const buttonClass = variant === 'toolbar'
-    ? `flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-[color,background-color,border-color] duration-200 text-text-muted hover:text-text-main focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40 ${isOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5'}`
-    : "text-text-muted/60 hover:text-text-main flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase transition-[color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40";
+  const triggerClass = variant === 'toolbar'
+    ? cn(
+        "flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200",
+        "text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
+        "disabled:pointer-events-none disabled:opacity-40",
+        "data-[state=open]:bg-accent/20 data-[state=open]:text-accent data-[state=open]:border-accent/30"
+      )
+    : cn(
+        "text-text-muted/60 hover:text-text-main flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors duration-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
+        "disabled:pointer-events-none disabled:opacity-40"
+      );
 
   const textClass = variant === 'toolbar'
     ? "max-w-[150px] truncate text-[10px] font-bold tracking-widest uppercase"
     : "max-w-[150px] truncate";
 
-  const chevronClass = variant === 'toolbar'
-    ? `text-text-muted/50 h-3 w-3 motion-safe:transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`
-    : `text-text-muted/50 h-3 w-3 motion-safe:transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`;
-
   return (
-    <div ref={dropdownRef} className="relative inline-block text-left">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => {
-          setIsOpen(!isOpen);
-        }}
-        className={buttonClass}
-      >
-        {icon}
-        <span className={textClass}>{activeOption?.label ?? value}</span>
-        <ChevronDown className={chevronClass} />
-      </button>
-
-      {isOpen && (
-        <div
-          className={`border-border/40 bg-surface-secondary/95 animate-in fade-in slide-in-from-bottom-2 absolute bottom-full z-50 mb-1.5 min-w-[140px] rounded-xl border p-1 shadow-xl shadow-black/40 backdrop-blur-md duration-150 ${align === 'right' ? 'right-0' : 'left-0'}`}
-        >
-          <div className="flex flex-col gap-0.5">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  onChange(opt.value);
-                  setIsOpen(false);
-                }}
-                className={`w-full rounded-lg px-3 py-2 text-left text-[10px] font-bold tracking-widest uppercase transition-[color,background-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
-                  opt.value === value
-                    ? 'bg-accent/15 text-accent hover:bg-accent/20'
-                    : 'text-text-muted/80 hover:text-text-main hover:bg-text-main/5'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    <Dropdown>
+      <DropdownTrigger asChild>
+        <button type="button" disabled={disabled} className={triggerClass}>
+          {icon}
+          <span className={textClass}>{activeOption?.label ?? value}</span>
+          <ChevronDown className="text-text-muted/50 h-3 w-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+        </button>
+      </DropdownTrigger>
+      <DropdownContent align={align} className="min-w-[140px]">
+        {options.map((opt) => (
+          <DropdownItem
+            key={opt.value}
+            active={opt.value === value}
+            onClick={() => {
+              onChange(opt.value);
+            }}
+          >
+            {opt.label}
+          </DropdownItem>
+        ))}
+      </DropdownContent>
+    </Dropdown>
   );
 }
 
@@ -290,21 +270,24 @@ export function CommandBar({
           }}
         >
           <div
-            className={`glass-card border-border/30 bg-surface/60 flex flex-col rounded-[2rem] border shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-3xl transition-opacity duration-300 ${disabled ? 'opacity-30' : 'opacity-100'}`}
+            className={cn(
+              "liquid-glass flex flex-col rounded-xl border border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300",
+              disabled ? 'opacity-30' : 'opacity-100'
+            )}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
           >
             {/* Input row */}
-            <div className="flex w-full items-start gap-2.5 px-4 pt-4 pb-3">
+            <div className="flex w-full items-start gap-3 px-5 pt-5 pb-4">
               <button
                 type="button"
                 disabled={disabled}
                 onClick={handleAttachClick}
-                className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-[color,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40"
+                className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40"
                 title="Attach image"
                 aria-label="Attach image"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
               </button>
               <textarea
                 ref={textareaRef}
@@ -337,17 +320,17 @@ export function CommandBar({
             {/* Attachment strip — only visible when there are files */}
             {attachments.length > 0 && (
               <>
-                <div className="mx-4 h-px bg-border/20" />
+                <div className="mx-5 h-px bg-border/20" />
                 <AttachmentStrip attachments={attachments} onRemove={removeAttachment} />
               </>
             )}
 
             {/* Hairline separator anchors toolbar below input */}
-            <div className="mx-4 h-px bg-border/20" />
+            <div className="mx-5 h-px bg-border/20" />
 
             {/* Toolbar row */}
-            <div className="flex items-center justify-between px-3 py-2">
-              <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -355,23 +338,26 @@ export function CommandBar({
                   }}
                   aria-label="Select AI provider"
                   aria-expanded={isPickerOpen}
-                  className={`flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-[color,background-color,border-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent ${isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main'}`}
+                  className={cn(
+                    "flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
+                    isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main'
+                  )}
                 >
                   {activeProvider?.icon ? (
                     <img src={activeProvider.icon} alt="" className="h-3.5 w-3.5 object-contain" />
                   ) : (
-                    <Zap className={`h-3.5 w-3.5 transition-[fill] duration-200 ${isPickerOpen ? 'fill-accent' : 'fill-none'}`} />
+                    <Zap className={cn("h-3.5 w-3.5 transition-all duration-200", isPickerOpen && "fill-accent")} />
                   )}
                   <span className="max-w-[120px] truncate text-[10px] font-bold tracking-widest uppercase">
                     {isLoadingProviders ? '...' : (propSelectedModelId ?? selectedProviderLabel)}
                   </span>
                   <ChevronDown
-                    className={`h-3 w-3 motion-safe:transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`}
+                    className={cn("h-3 w-3 transition-transform duration-200", isPickerOpen && "rotate-180")}
                   />
                 </button>
 
                 {sessionData?.session && (
-                  <CustomDropdown
+                  <CommandDropdown
                     value={sessionData.session.approvalMode}
                     disabled={isUpdatingApprovalMode}
                     variant="toolbar"
@@ -387,7 +373,7 @@ export function CommandBar({
                   />
                 )}
 
-                <div className="bg-border/30 mx-1.5 h-3.5 w-px" />
+                <div className="bg-border/30 mx-2 h-4 w-px" />
 
                 <MagicBar
                   files={reviewData.files}
@@ -397,22 +383,22 @@ export function CommandBar({
                 />
               </div>
 
-              <button
-                type="submit"
+              <Button
+                size="sm"
+                className="h-8 w-8 rounded-full"
                 onClick={handleSubmit}
-                aria-label="Execute command"
-                className={`flex h-8 w-8 items-center justify-center rounded-full transition-[background-color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent motion-safe:hover:scale-105 motion-safe:active:scale-95 ${canSend ? 'bg-accent text-background shadow-[0_0_16px_rgba(203,166,247,0.35)]' : 'bg-surface-quaternary text-text-muted/40 cursor-not-allowed opacity-50'}`}
                 disabled={!canSend}
+                aria-label="Execute command"
               >
                 <Send className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
           </div>
         </form>
         {sessionData?.session && (
-          <div className="text-text-muted/35 mt-2 flex items-center justify-between px-1 text-[10px] font-bold tracking-widest">
+          <div className="text-text-muted/35 mt-3 flex items-center justify-between px-2 text-[10px] font-bold tracking-widest">
             <div className="flex items-center">
-              <CustomDropdown
+              <CommandDropdown
                 value={sessionData.session.mode}
                 disabled={isSwitchingMode}
                 onChange={(val) => {
@@ -428,14 +414,14 @@ export function CommandBar({
               />
             </div>
 
-            <CustomDropdown
+            <CommandDropdown
               value={sessionData.session.branch}
               disabled={isSwitchingBranch}
               onChange={(val) => {
                 void switchBranch(val);
               }}
               icon={<GitBranch className="h-3.5 w-3.5" />}
-              align="right"
+              align="end"
               options={[
                 ...branches.map((b) => ({
                   value: b,

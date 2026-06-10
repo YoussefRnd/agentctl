@@ -173,7 +173,7 @@ export function Sidebar() {
             ref={searchInputRef}
             placeholder="Search..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); }}
             className="pl-9 text-[13px] h-10 rounded-xl"
           />
           <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-1 opacity-20 transition-opacity group-focus-within:opacity-0">

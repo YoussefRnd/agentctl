@@ -54,7 +54,7 @@ export const ApprovalCard = memo(function ApprovalCard({
           approveButtonRef.current?.focus();
         }
       }}
-      className="glass-card animate-in fade-in zoom-in-95 flex flex-col items-stretch justify-between gap-4 p-4 shadow-2xl duration-300 sm:flex-row sm:items-start"
+      className="glass-card animate-in fade-in zoom-in-95 flex flex-col items-stretch justify-between gap-4 p-4 duration-300 sm:flex-row sm:items-start"
     >
       <div className="flex flex-1 gap-3 min-w-0">
         <div className="bg-surface-secondary/50 border-border flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border">
@@ -63,24 +63,24 @@ export const ApprovalCard = memo(function ApprovalCard({
         <div className="flex-1 min-w-0">
           <div
             id="approval-title"
-            className="text-text-main mb-0.5 text-[12px] font-black tracking-widest uppercase"
+            className="text-text-main mb-0.5 text-[12px] font-semibold tracking-wide"
           >
-            AUTHORIZATION_REQUESTED
+            Approval required
           </div>
-          <div className="text-text-muted text-[11px] font-bold tracking-tight uppercase opacity-60">
-            {data.message ?? 'ACTION_REQUIRES_EXPLICIT_USER_CONSENT.'}
+          <div className="text-text-muted text-[11px] leading-relaxed opacity-80">
+            {data.message ?? 'This action requires your explicit approval before continuing.'}
           </div>
           {toolCall && (
             <div className="mt-3 rounded-lg border border-white/5 bg-white/5 p-3 font-mono text-[11px] leading-relaxed">
               <div className="flex items-center gap-1.5 mb-1.5">
-                <span className="text-accent-muted text-[10px] font-bold opacity-50 uppercase">TOOL:</span>
-                <span className="text-accent font-black">{toolCall.name}</span>
+                <span className="text-accent-muted text-[10px] font-medium opacity-50 uppercase">Tool:</span>
+                <span className="text-accent font-semibold">{toolCall.name}</span>
               </div>
               {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
                 <div className="text-text-muted/80 max-h-[150px] overflow-y-auto whitespace-pre-wrap rounded border border-white/5 bg-black/20 p-2">
                   {Object.entries(toolCall.arguments).map(([key, val]) => (
                     <div key={key} className="flex gap-2">
-                      <span className="text-text-muted/40 font-bold shrink-0">{key}:</span>
+                      <span className="text-text-muted/40 font-medium shrink-0">{key}:</span>
                       <span className="text-text-main/90 break-all">
                         {typeof val === 'string'
                           ? val
@@ -103,9 +103,9 @@ export const ApprovalCard = memo(function ApprovalCard({
           onClick={() => {
             onDeny(eventId);
           }}
-          className="text-text-muted hover:text-danger px-3 py-1 text-[10px] font-black uppercase transition-colors"
+          className="text-text-muted hover:text-danger px-3 py-1 text-[11px] font-medium transition-colors"
         >
-          DENY
+          Deny
         </button>
         {request?.options && request.options.length > 0 ? (
           request.options.map((option, idx) => (
@@ -119,7 +119,7 @@ export const ApprovalCard = memo(function ApprovalCard({
               title={option.description}
               className="terminal-button !h-8 !px-4 text-[10px]"
             >
-              {option.label.toUpperCase().replace(/\s+/g, '_')}
+              {option.label}
             </button>
           ))
         ) : (
@@ -131,7 +131,7 @@ export const ApprovalCard = memo(function ApprovalCard({
             }}
             className="terminal-button !h-8 !px-4 text-[10px]"
           >
-            APPROVE_ACTION
+            Approve
           </button>
         )}
       </div>
