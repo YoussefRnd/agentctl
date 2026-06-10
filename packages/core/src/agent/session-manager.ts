@@ -58,10 +58,7 @@ export class SessionManager {
       throw new Error(`Project not found: ${projectId}`);
     }
 
-    const provider = await this.providerRegistry.ensureProviderReady(providerId, { force: false });
-    if (provider.status !== 'ready' && provider.status !== 'needs_auth') {
-      throw new Error(`Selected agent is not ready: ${providerId}`);
-    }
+    const { launch, selection } = await this.resolveLaunchParameters(providerId);
 
     const sessionId = crypto.randomUUID();
 
@@ -105,7 +102,7 @@ export class SessionManager {
       resolvedMode = 'local';
     }
 
-    const selection = negotiateCapabilities(provider, undefined, undefined);
+
 
     await this.db.insert(sessions).values({
       id: sessionId,
@@ -122,10 +119,7 @@ export class SessionManager {
       selectedThinkingEffort: selection.selectedThinkingEffort,
     });
 
-    const launch = provider.getLaunchConfig(
-      selection.selectedModel,
-      selection.selectedThinkingEffort,
-    );
+
 
     return this.startSession(
       sessionId,
@@ -186,20 +180,10 @@ export class SessionManager {
       throw new Error(`Session or associated project not found: ${sessionId}`);
     }
 
-    const provider = await this.providerRegistry.ensureProviderReady(
+    const { launch, selection } = await this.resolveLaunchParameters(
       sessionRecord.selectedProvider,
-      { force: false },
-    );
-
-    const selection = negotiateCapabilities(
-      provider,
       sessionRecord.selectedModel,
       sessionRecord.selectedThinkingEffort as ThinkingEffort,
-    );
-
-    const launch = provider.getLaunchConfig(
-      selection.selectedModel,
-      selection.selectedThinkingEffort,
     );
 
     if (sessionRecord.status === 'archived') {
@@ -238,6 +222,30 @@ export class SessionManager {
       sessionRecord.agentSessionId,
       selection.resolvedModelConfigId,
     );
+  }
+
+  private async resolveLaunchParameters(
+    providerId: string,
+    requestedModel?: string,
+    requestedThinkingEffort?: ThinkingEffort,
+  ) {
+    const provider = await this.providerRegistry.ensureProviderReady(providerId, { force: false });
+    if (provider.status !== 'ready' && provider.status !== 'needs_auth') {
+      throw new Error(`Selected agent is not ready: ${providerId}`);
+    }
+
+    const selection = negotiateCapabilities(
+      provider,
+      requestedModel,
+      requestedThinkingEffort,
+    );
+
+    const launch = provider.getLaunchConfig(
+      selection.selectedModel,
+      selection.selectedThinkingEffort,
+    );
+
+    return { launch, selection };
   }
 
   async updateSessionConfig(
