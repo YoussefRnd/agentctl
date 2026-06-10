@@ -14,6 +14,7 @@ import type {
 } from './acp-transport.js';
 
 import { StreamBuffer } from './stream-buffer.js';
+import type { SessionStateMachine } from './session-state-machine.js';
 
 export type DbClient = ReturnType<typeof createDatabase>;
 
@@ -72,6 +73,7 @@ export class ACPSession {
     private db: DbClient,
     private eventStore: SessionEventStore,
     private cwd: string,
+    private stateMachine?: SessionStateMachine,
     private logger: Logger = noopLogger,
   ) {
     this.acpSessionId = runtimeHandle.acpSessionId;
@@ -126,19 +128,24 @@ export class ACPSession {
         where: eq(sessions.id, this.sessionId),
       });
 
-      const updateFields: Partial<typeof sessions.$inferInsert> = {
-        status: 'running',
-        updatedAt: new Date(),
-      };
-
       if (sessionRecord?.title === 'new session') {
         const summary = text.trim();
         const firstLine = summary.split('\n')[0] || '';
         const titleVal = firstLine.length > 40 ? firstLine.slice(0, 40) + '...' : firstLine;
-        updateFields.title = titleVal || 'new session';
+        await this.db
+          .update(sessions)
+          .set({ title: titleVal || 'new session' })
+          .where(eq(sessions.id, this.sessionId));
       }
 
-      await this.db.update(sessions).set(updateFields).where(eq(sessions.id, this.sessionId));
+      if (this.stateMachine) {
+        await this.stateMachine.transitionTo(this.sessionId, 'running');
+      } else {
+        await this.db
+          .update(sessions)
+          .set({ status: 'running', updatedAt: new Date() })
+          .where(eq(sessions.id, this.sessionId));
+      }
 
       interface AttachmentMeta {
         attachmentId: string;
@@ -239,10 +246,14 @@ ${text}`;
 
       await this.flushAll();
 
-      await this.db
-        .update(sessions)
-        .set({ status: 'idle', updatedAt: new Date() })
-        .where(eq(sessions.id, this.sessionId));
+      if (this.stateMachine) {
+        await this.stateMachine.transitionTo(this.sessionId, 'idle');
+      } else {
+        await this.db
+          .update(sessions)
+          .set({ status: 'idle', updatedAt: new Date() })
+          .where(eq(sessions.id, this.sessionId));
+      }
     } catch (error: unknown) {
       await this.flushAll();
       await this.handleError(error);
@@ -374,19 +385,21 @@ ${text}`;
 
   private async markSessionStopped(status: 'idle' | 'error'): Promise<void> {
     this.stopKind = status;
-
-    if (status === 'idle') {
-      await this.db
+    if (this.stateMachine) {
+      await this.stateMachine.transitionTo(this.sessionId, status);
+    } else {
+      if (status === 'idle') {
+        await this.db
           .update(sessions)
           .set({ status: 'idle', closedAt: new Date() })
           .where(eq(sessions.id, this.sessionId));
-      return;
+      } else {
+        await this.db
+          .update(sessions)
+          .set({ status: 'error', updatedAt: new Date() })
+          .where(eq(sessions.id, this.sessionId));
+      }
     }
-
-    await this.db
-        .update(sessions)
-        .set({ status: 'error', updatedAt: new Date() })
-        .where(eq(sessions.id, this.sessionId));
   }
 
   private currentMessage = '';
@@ -549,10 +562,14 @@ ${text}`;
         };
       }
 
-      await this.db
-        .update(sessions)
-        .set({ status: 'needs_attention', lastHeartbeat: new Date() })
-        .where(eq(sessions.id, this.sessionId));
+      if (this.stateMachine) {
+        await this.stateMachine.transitionTo(this.sessionId, 'needs_attention');
+      } else {
+        await this.db
+          .update(sessions)
+          .set({ status: 'needs_attention', lastHeartbeat: new Date() })
+          .where(eq(sessions.id, this.sessionId));
+      }
 
       const eventId = await this.eventStore.append(
         this.sessionId,
