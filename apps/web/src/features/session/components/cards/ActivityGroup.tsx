@@ -55,6 +55,11 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
       } else if (e.type === 'tool_call') {
         const args = e.data.arguments ?? {};
         steps.push(getToolLabel(e.data.name, args));
+      } else if (e.type === 'approval_request') {
+        const reqData = e.data as { name?: string; request?: { toolCall?: { name?: string; arguments?: Record<string, unknown> } } };
+        const toolName = reqData.request?.toolCall?.name ?? reqData.name ?? 'tool';
+        const args = reqData.request?.toolCall?.arguments ?? {};
+        steps.push(getToolLabel(toolName, args));
       }
 
       if (e.metadata) {
@@ -125,7 +130,10 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
                   </div>
                 );
               }
-              if (e.type === 'tool_call') {
+              if (e.type === 'tool_call' || e.type === 'approval_request') {
+                const reqData = e.data as { name?: string; request?: { toolCall?: { name?: string; arguments?: Record<string, unknown> } } };
+                const toolName = reqData.request?.toolCall?.name ?? reqData.name ?? 'tool';
+                const payload = (e.type === 'approval_request' ? (reqData.request?.toolCall ?? reqData) : e.data) as { name: string; arguments?: Record<string, unknown> };
                 return (
                   <div key={e.id} className="relative">
                     <div className={`absolute top-[20px] -left-[24px] h-2 w-2 rounded-full border transition-all duration-300 ${
@@ -134,8 +142,8 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
                         : 'bg-surface-secondary border-border/80'
                     }`} />
                     <ToolCallCard
-                      tool={e.data.name}
-                      payload={e.data}
+                      tool={toolName}
+                      payload={payload}
                       isStreaming={isLastStreaming}
                     />
                   </div>
@@ -236,7 +244,10 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
                 </div>
               );
             }
-            if (e.type === 'tool_call') {
+            if (e.type === 'tool_call' || e.type === 'approval_request') {
+              const reqData = e.data as { name?: string; request?: { toolCall?: { name?: string; arguments?: Record<string, unknown> } } };
+              const toolName = reqData.request?.toolCall?.name ?? reqData.name ?? 'tool';
+              const payload = (e.type === 'approval_request' ? (reqData.request?.toolCall ?? reqData) : e.data) as { name: string; arguments?: Record<string, unknown> };
               return (
                 <div key={e.id} className="relative">
                   <div className={`absolute top-[20px] -left-[29px] h-2.5 w-2.5 rounded-full border transition-all duration-300 ${
@@ -245,8 +256,8 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
                       : 'bg-surface-secondary border-border/80'
                   }`} />
                   <ToolCallCard
-                    tool={e.data.name}
-                    payload={e.data}
+                    tool={toolName}
+                    payload={payload}
                     isStreaming={isLastStreaming}
                   />
                 </div>
