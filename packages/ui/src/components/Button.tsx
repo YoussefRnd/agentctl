@@ -1,4 +1,6 @@
+import { memo } from 'react';
 import type { ElementType, ComponentPropsWithoutRef, ReactNode } from 'react';
+import { cn } from '../utils';
 
 type ButtonVariant = 'ghost' | 'outline' | 'solid';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -14,7 +16,7 @@ export type ButtonProps<T extends ElementType> = ButtonBaseProps & {
   as?: T;
 } & Omit<ComponentPropsWithoutRef<T>, keyof ButtonBaseProps | 'as'>;
 
-export const Button = <T extends ElementType = 'button'>({
+const ButtonComponent = <T extends ElementType = 'button'>({
   as,
   variant = 'solid',
   size = 'md',
@@ -25,9 +27,9 @@ export const Button = <T extends ElementType = 'button'>({
   const Component = as ?? 'button';
 
   const variants = {
-    solid: 'bg-accent text-background hover:bg-accent/90',
-    outline: 'bg-transparent border border-accent/20 hover:bg-accent/5 text-accent-secondary',
-    ghost: 'bg-transparent hover:bg-accent/5 text-text-muted hover:text-accent',
+    solid: 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]',
+    outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main',
+    ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main',
   };
 
   const sizes = {
@@ -37,13 +39,16 @@ export const Button = <T extends ElementType = 'button'>({
   };
 
   const baseStyles =
-    'inline-flex items-center justify-center rounded-md font-accent font-bold uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
-
-  const combinedClassName = `${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`.trim();
+    'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
 
   return (
-    <Component className={combinedClassName} {...props}>
+    <Component
+      className={cn(baseStyles, variants[variant], sizes[size], className)}
+      {...props}
+    >
       {children}
     </Component>
   );
 };
+
+export const Button = memo(ButtonComponent) as typeof ButtonComponent;

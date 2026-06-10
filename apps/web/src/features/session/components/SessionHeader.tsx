@@ -21,18 +21,18 @@ export function SessionHeader({
   const statusConfig = (() => {
     switch (status) {
       case 'running':
-        return { color: 'bg-sky-400 shadow-[0_0_12px_#38bdf8]', animate: 'animate-pulse' };
+        return { color: 'bg-brand-blue shadow-[0_0_6px_var(--color-brand-blue)]', animate: 'animate-pulse' };
       case 'needs_attention':
-        return { color: 'bg-amber-400 shadow-[0_0_12px_#fbbf24]', animate: 'animate-bounce' };
+        return { color: 'bg-brand-peach shadow-[0_0_6px_var(--color-brand-peach)]', animate: '' };
       case 'error':
-        return { color: 'bg-rose-500 shadow-[0_0_14px_#f43f5e]', animate: 'animate-ping' };
+        return { color: 'bg-brand-red shadow-[0_0_6px_var(--color-brand-red)]', animate: 'animate-pulse' };
       case 'merged':
-        return { color: 'bg-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]', animate: '' };
+        return { color: 'bg-brand-mauve/60', animate: '' };
       case 'discarded':
-        return { color: 'bg-zinc-600/40', animate: '' };
+        return { color: 'bg-brand-surface0/40', animate: '' };
       case 'idle':
       default:
-        return { color: 'bg-emerald-400 shadow-[0_0_10px_#34d399]', animate: '' };
+        return { color: 'bg-brand-green shadow-[0_0_6px_var(--color-brand-green)]', animate: '' };
     }
   })();
 
@@ -55,9 +55,9 @@ export function SessionHeader({
             )}
             <span className={`relative inline-flex h-2 w-2 rounded-full ${statusConfig.color}`} />
           </div>
-          <span className="text-text-muted max-w-[180px] truncate text-[10px] font-bold tracking-[0.15em] uppercase">
+          <span className="text-text-muted max-w-[180px] truncate text-[11px] font-medium tracking-tight">
             {status === 'error' ? '[crashed] ' : ''}
-            {sessionTitle ?? `session::${sessionId.slice(0, 8)}`}
+            {sessionTitle ?? `session·${sessionId.slice(0, 8)}`}
           </span>
         </div>
       </div>
@@ -68,9 +68,9 @@ export function SessionHeader({
         onClick={onToggleWorkbench}
         aria-label="Toggle Inspector"
         title="Toggle Inspector (⌘\\)"
-        className={`flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-300 ${
+        className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all duration-300 ${
           isWorkbenchOpen
-            ? 'border-accent/30 bg-accent/10 text-accent'
+            ? 'border-accent/30 bg-accent/10 text-accent font-bold'
             : 'border-border/20 bg-surface/30 text-text-muted hover:text-text-main hover:border-border/40 hover:bg-surface/60'
         }`}
       >

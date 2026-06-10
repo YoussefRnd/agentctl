@@ -1,13 +1,15 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSetupWizard } from '../hooks/useSetupWizard';
 import { useProviders } from '../../../hooks/useProviders';
 import { PROVIDER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { Bot, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
-
+import { GlassPanel, Button, Input } from '@agentctl/ui';
 
 export function SetupWizard() {
   const { showWizard, markDone } = useSetupWizard();
+  const navigate = useNavigate();
   const {
     providers,
     activate,
@@ -36,7 +38,7 @@ export function SetupWizard() {
 
   return (
     <div className="bg-background/80 fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4 backdrop-blur-md">
-      <div className="terminal-glass relative z-10 flex w-full max-w-md flex-col rounded-3xl border p-4 shadow-2xl">
+      <GlassPanel intensity="high" className="relative z-10 flex w-full max-w-md flex-col rounded-3xl border-none p-5 shadow-2xl">
         <div className="mb-4 text-center">
           <h1 className="text-text-main text-xl font-black tracking-widest uppercase">
             INITIAL_SETUP::AI_PIPELINE
@@ -46,13 +48,13 @@ export function SetupWizard() {
           </p>
         </div>
 
-        <div className="max-h-[320px] flex-1 space-y-1 overflow-y-auto py-1 pr-1">
+        <div className="max-h-[320px] flex-1 space-y-2 overflow-y-auto py-1 pr-1">
           {isLoadingProviders ? (
-            <div className="animate-pulse space-y-1">
+            <div className="animate-pulse space-y-1.5">
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="bg-surface-secondary/40 border-border/20 h-10 rounded-sm border"
+                  className="bg-surface-secondary/40 border-border/20 h-12 rounded-xl border"
                 />
               ))}
             </div>
@@ -75,11 +77,11 @@ export function SetupWizard() {
               return (
                 <div
                   key={provider.id}
-                  className="bg-surface-secondary/20 border-border/20 hover:border-border/40 flex flex-col gap-2 rounded-md border p-2 transition-colors"
+                  className="bg-surface-secondary/20 border-border/20 hover:border-border/40 flex flex-col gap-2.5 rounded-xl border p-3 transition-colors animate-in fade-in"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <div className="bg-background border-border/20 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border p-1">
+                      <div className="bg-background border-border/20 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border p-1">
                         {provider.icon ? (
                           <img src={provider.icon} alt="" className="h-4 w-4 object-contain" />
                         ) : provider.id.includes('claude') ? (
@@ -92,7 +94,7 @@ export function SetupWizard() {
                         <div className="text-text-main truncate text-[11px] font-black tracking-tight uppercase">
                           {provider.label}
                         </div>
-                        <div className="text-text-muted mt-0.5 text-[8px] font-black tracking-widest uppercase opacity-40">
+                        <div className="text-text-muted mt-0.5 text-[8px] font-black tracking-widest uppercase opacity-45">
                           {!provider.enabled
                             ? 'SUPPORTED'
                             : provider.status === 'ready'
@@ -129,16 +131,16 @@ export function SetupWizard() {
                           });
                         }
                       }}
-                      className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-md border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-text-main border-text-main' : 'bg-background border-border/20'}`}
+                      className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-accent border-accent' : 'bg-background border-border/20'}`}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-3 w-3 transform rounded-md transition duration-200 ease-in-out ${isActive ? 'bg-background translate-x-4' : 'bg-text-main/20 translate-x-0'}`}
+                        className={`pointer-events-none inline-block h-3 w-3 transform rounded-full transition duration-200 ease-in-out ${isActive ? 'bg-brand-crust translate-x-4' : 'bg-text-muted/40 translate-x-0'}`}
                       />
                     </button>
                   </div>
                   {isActive && hasKeys && (
-                    <div className="space-y-2 border-t border-white/5 pt-2">
-                      <div className="space-y-1.5">
+                    <div className="space-y-2 border-t border-border/10 pt-2.5">
+                      <div className="space-y-2">
                         {envKeys.map((key) => {
                           const errorMsg = validateApiKey(key, keysValues[key]);
                           return (
@@ -153,7 +155,7 @@ export function SetupWizard() {
                                   </span>
                                 )}
                               </div>
-                              <input
+                              <Input
                                 type="password"
                                 value={keysValues[key]}
                                 onChange={(e) => {
@@ -165,14 +167,14 @@ export function SetupWizard() {
                                     },
                                   });
                                 }}
-                                className={`terminal-input !h-6 w-full !text-[10px] ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
+                                className={`!h-8 w-full !text-[11px] ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
                               />
                             </div>
                           );
                         })}
                         {hasChanges && (
                           <div className="flex justify-end pt-1">
-                            <button
+                            <Button
                               onClick={() => {
                                 updateProviderConfig(
                                   {
@@ -193,10 +195,10 @@ export function SetupWizard() {
                                 isUpdatingConfig ||
                                 envKeys.some((key) => validateApiKey(key, keysValues[key]) !== null)
                               }
-                              className="terminal-button !h-6 !px-2 text-[9px]"
+                              className="h-7 px-3 text-[9px] font-bold tracking-widest"
                             >
                               {isUpdatingConfig ? 'CONNECTING...' : 'SAVE_CONFIG'}
-                            </button>
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -214,7 +216,7 @@ export function SetupWizard() {
             onClick={(e) => {
               e.preventDefault();
               void markDone(defaultProviderId);
-              window.location.href = '/settings';
+              void navigate('/settings');
             }}
             className="text-text-muted inline-flex items-center gap-1.5 text-[9px] font-black tracking-widest uppercase transition-colors hover:text-white"
           >
@@ -223,26 +225,27 @@ export function SetupWizard() {
           </a>
         </div>
 
-        <div className="mt-4 flex justify-end gap-2 border-t border-white/5 pt-3">
-          <button
+        <div className="mt-5 flex justify-end gap-2 border-t border-border/10 pt-4">
+          <Button
+            variant="ghost"
             onClick={() => {
               void markDone(defaultProviderId);
             }}
-            className="text-text-muted px-3 py-1.5 text-[10px] font-black uppercase transition-colors hover:text-white"
+            className="h-9 px-4 text-[10px] font-bold tracking-widest"
           >
             SKIP
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => {
               void markDone(defaultProviderId);
             }}
             disabled={hasAnyInvalidProvider}
-            className="terminal-button !h-8 !px-4 text-[11px]"
+            className="h-9 px-4 text-[10px] font-bold tracking-widest"
           >
             INITIALIZATION_COMPLETE
-          </button>
+          </Button>
         </div>
-      </div>
+      </GlassPanel>
     </div>
   );
 }

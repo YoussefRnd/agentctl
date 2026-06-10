@@ -177,9 +177,9 @@ export function ProviderPicker({
   return (
     <div
       ref={pickerRef}
-      className="terminal-glass animate-in fade-in zoom-in-95 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2 flex w-[480px] overflow-hidden border shadow-2xl"
+      className="animate-in fade-in zoom-in-95 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2 flex w-[480px] overflow-hidden border border-border/40 bg-surface-secondary/95 text-text-main shadow-xl shadow-black/40 backdrop-blur-md rounded-xl"
     >
-      <div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-white/5 py-2">
+      <div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-border/20 bg-black/10 py-2">
         {providers.map((p) => {
           const isSelected = p.id === internalProviderId;
           const needsAuth = p.status === 'needs_auth';
@@ -192,10 +192,10 @@ export function ProviderPicker({
                 setSearch('');
               }}
               title={p.label}
-              className={`relative flex h-8 w-8 items-center justify-center rounded-sm transition-all ${
+              className={`relative flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
                 isSelected
-                  ? 'bg-white text-black'
-                  : 'text-text-muted hover:bg-white/5 hover:text-white'
+                  ? 'bg-accent text-brand-crust'
+                  : 'text-text-muted hover:bg-text-main/5 hover:text-text-main'
               } ${!p.enabled ? 'opacity-40' : ''}`}
             >
               {p.icon ? (
@@ -213,15 +213,15 @@ export function ProviderPicker({
         })}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-white/5 p-2">
+      <div className="flex min-w-0 flex-1 flex-col bg-transparent">
+        <div className="flex items-center gap-2 border-b border-border/20 p-2">
           <div className="relative flex-1">
-            <Search className="text-text-muted absolute top-1/2 left-2.5 h-3 w-3 -translate-y-1/2" />
+            <Search className="text-text-muted absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="FIND_PROVIDER..."
+              placeholder="Filter models..."
               autoFocus
-              className="terminal-input w-full pl-7"
+              className="h-8 w-full rounded-lg border border-border/30 bg-surface/40 pl-9 pr-3 font-sans text-xs text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-1 focus:ring-accent/40 outline-none transition-all duration-200"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -237,27 +237,27 @@ export function ProviderPicker({
               });
             }}
             disabled={isRefreshing}
-            className="text-text-muted p-1 transition-colors hover:text-white disabled:opacity-30"
+            className="text-text-muted p-1.5 transition-colors hover:text-text-main hover:bg-text-main/5 rounded-lg disabled:opacity-30"
           >
-            <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
-        <div className="h-[280px] space-y-0.5 overflow-y-auto p-1">
+        <div className="h-[280px] space-y-1 overflow-y-auto p-1.5">
           {activeProvider.status === 'needs_auth' || !activeProvider.enabled ? (
             <div className="flex h-full flex-col items-center justify-center p-4 text-center">
-              <h3 className="mb-1 text-[11px] font-black text-white uppercase">
+              <h3 className="mb-1 text-[11px] font-black text-text-main uppercase tracking-wider">
                 {!activeProvider.enabled ? 'Setup Required' : 'Authentication Required'}
               </h3>
               <p className="text-text-muted mb-4 max-w-[240px] text-[10px] font-bold tracking-tight uppercase">
                 Configure and enable {activeProvider.label}.
               </p>
 
-              <div className="flex w-full max-w-[240px] flex-col gap-2 text-left">
+              <div className="flex w-full max-w-[240px] flex-col gap-3 text-left">
                 {envKeys.map((key) => {
                   const errorMsg = validateApiKey(key, keysValues[key] || '');
                   return (
-                    <div key={key} className="space-y-1">
+                    <div key={key} className="space-y-1.5">
                       <div className="flex items-baseline justify-between">
                         <label className="text-text-muted text-[9px] font-black tracking-widest uppercase">
                           {key}
@@ -271,6 +271,7 @@ export function ProviderPicker({
                       <input
                         type="password"
                         value={keysValues[key] || ''}
+                        placeholder={`Enter ${key}...`}
                         onChange={(e) => {
                           setLocalCustomEnvs({
                             ...localCustomEnvs,
@@ -280,14 +281,14 @@ export function ProviderPicker({
                             },
                           });
                         }}
-                        className={`terminal-input w-full ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
+                        className={`h-8 w-full rounded-lg border border-border/30 bg-surface/40 px-2.5 font-sans text-xs text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-1 focus:ring-accent/40 outline-none transition-all duration-200 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
                       />
                     </div>
                   );
                 })}
 
                 {activeProvider.authMethods.length > 0 && (
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-2 space-y-1.5">
                     <span className="text-text-muted text-[9px] font-black tracking-widest uppercase">
                       Auth Methods
                     </span>
@@ -309,7 +310,7 @@ export function ProviderPicker({
                           );
                         }}
                         disabled={isPending}
-                        className="terminal-button w-full border border-white/10 py-1 text-center text-[10px] uppercase transition-all hover:border-white/20"
+                        className="w-full border border-border/30 bg-surface-secondary/30 rounded-lg py-1.5 text-center text-[10px] font-bold tracking-wider uppercase text-text-main transition-all hover:bg-text-main/5 hover:border-border/50 disabled:opacity-30"
                       >
                         {isLoggingIn ? 'AUTHENTICATING...' : `Login via ${method.name}`}
                       </button>
@@ -324,9 +325,9 @@ export function ProviderPicker({
                     isPending ||
                     envKeys.some((key) => validateApiKey(key, keysValues[key] || '') !== null)
                   }
-                  className="terminal-button mt-2 w-full"
+                  className="mt-2 w-full bg-accent text-brand-crust rounded-lg py-1.5 text-center text-[10px] font-bold tracking-wider uppercase hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-30"
                 >
-                  {isPending ? 'CONNECTING...' : 'SAVE_AND_CONNECT'}
+                  {isPending ? 'CONNECTING...' : 'SAVE AND CONNECT'}
                 </button>
               </div>
             </div>
@@ -336,13 +337,13 @@ export function ProviderPicker({
                 onClick={() => {
                   onSelect(activeProvider.id);
                 }}
-                className="flex w-full flex-col rounded-sm border border-white/5 p-2 text-left transition-all hover:bg-white/5"
+                className="flex w-full flex-col rounded-lg border border-border/20 p-3 text-left transition-all hover:bg-text-main/5"
               >
-                <div className="text-[11px] font-black text-white uppercase">
+                <div className="text-[11px] font-black text-text-main uppercase tracking-wider">
                   {activeProvider.label}
                 </div>
                 <div className="text-text-muted text-[9px] font-bold tracking-tight uppercase">
-                  DEFAULT_CONFIG
+                  DEFAULT CONFIG
                 </div>
               </button>
             </div>
@@ -357,21 +358,21 @@ export function ProviderPicker({
                   onClick={() => {
                     onSelect(activeProvider.id, model.value);
                   }}
-                  className={`flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left transition-all ${
-                    isSelected ? 'bg-white/10 text-white' : 'text-text-muted hover:bg-white/5'
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${
+                    isSelected ? 'bg-accent/15 text-accent' : 'text-text-muted hover:bg-text-main/5 hover:text-text-main'
                   }`}
                 >
                   <div className="min-w-0">
                     <div
-                      className={`truncate text-[11px] font-bold uppercase ${isSelected ? 'text-white' : ''}`}
+                      className={`truncate text-[11px] font-bold uppercase tracking-wider ${isSelected ? 'text-accent' : 'text-text-main'}`}
                     >
                       {model.name}
                     </div>
-                    <div className="text-text-muted/40 text-[9px] font-bold tracking-tighter uppercase">
+                    <div className="text-text-muted/50 text-[9px] font-semibold tracking-tighter uppercase">
                       {activeProvider.label}
                     </div>
                   </div>
-                  {isSelected && <Zap className="h-3 w-3 fill-white text-white" />}
+                  {isSelected && <Zap className="h-3 w-3 fill-accent text-accent" />}
                 </button>
               );
             })

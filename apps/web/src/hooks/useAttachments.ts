@@ -156,10 +156,15 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
         for (const attachment of prev) {
           URL.revokeObjectURL(attachment.objectUrl);
         }
-        return prev; // state update is irrelevant during unmount
+        return prev;
       });
     };
   }, []);
+
+  // Clear attachments when switching sessions
+  useEffect(() => {
+    clearAll();
+  }, [sessionId, clearAll]);
 
   // -------------------------------------------------------------------------
   // Derived state

@@ -65,9 +65,9 @@ export const AgentResponse = memo(function AgentResponse({
               </ReactMarkdown>
               {isStreaming && (
                 <span className="ml-1 inline-flex items-center gap-1">
-                  <span className="bg-accent h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.3s]" />
-                  <span className="bg-accent h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.15s]" />
-                  <span className="bg-accent h-1.5 w-1.5 animate-bounce rounded-full" />
+                  <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full [animation-delay:-0.3s]" />
+                  <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full [animation-delay:-0.15s]" />
+                  <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full" />
                 </span>
               )}
             </div>

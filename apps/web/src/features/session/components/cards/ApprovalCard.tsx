@@ -1,6 +1,7 @@
 import { useEffect, useRef, memo } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import type { ACPEventApprovalRequestData } from '@agentctl/shared';
+import { GlassPanel } from '@agentctl/ui';
 
 export const ApprovalCard = memo(function ApprovalCard({
   eventId,
@@ -34,13 +35,18 @@ export const ApprovalCard = memo(function ApprovalCard({
 
   const toolCall = request?.toolCall;
 
+  // Button styles directly extracted from UI library to support TypeScript refs on standard button elements
+  const btnBase = 'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
+  const btnSolid = 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]';
+  const btnGhost = 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main';
+
   return (
     <div
       role="region"
       aria-labelledby="approval-title"
       aria-live="polite"
       tabIndex={-1}
-      onKeyDown={(e) => {
+      onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Escape') {
           e.preventDefault();
           onDeny(eventId);
@@ -54,87 +60,92 @@ export const ApprovalCard = memo(function ApprovalCard({
           approveButtonRef.current?.focus();
         }
       }}
-      className="glass-card animate-in fade-in zoom-in-95 flex flex-col items-stretch justify-between gap-4 p-4 shadow-2xl duration-300 sm:flex-row sm:items-start"
+      className="animate-in fade-in zoom-in-95 duration-300"
     >
-      <div className="flex flex-1 gap-3 min-w-0">
-        <div className="bg-surface-secondary/50 border-border flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border">
-          <ShieldCheck className="text-accent h-4 w-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div
-            id="approval-title"
-            className="text-text-main mb-0.5 text-[12px] font-black tracking-widest uppercase"
-          >
-            AUTHORIZATION_REQUESTED
+      <GlassPanel
+        intensity="high"
+        className="flex flex-col items-stretch justify-between gap-4 p-5 rounded-2xl border border-border/40 shadow-2xl sm:flex-row sm:items-start"
+      >
+        <div className="flex flex-1 gap-3.5 min-w-0">
+          <div className="bg-surface-secondary/50 border-border/60 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border">
+            <ShieldCheck className="text-accent h-4 w-4" />
           </div>
-          <div className="text-text-muted text-[11px] font-bold tracking-tight uppercase opacity-60">
-            {data.message ?? 'ACTION_REQUIRES_EXPLICIT_USER_CONSENT.'}
-          </div>
-          {toolCall && (
-            <div className="mt-3 rounded-lg border border-white/5 bg-white/5 p-3 font-mono text-[11px] leading-relaxed">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <span className="text-accent-muted text-[10px] font-bold opacity-50 uppercase">TOOL:</span>
-                <span className="text-accent font-black">{toolCall.name}</span>
-              </div>
-              {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                <div className="text-text-muted/80 max-h-[150px] overflow-y-auto whitespace-pre-wrap rounded border border-white/5 bg-black/20 p-2">
-                  {Object.entries(toolCall.arguments).map(([key, val]) => (
-                    <div key={key} className="flex gap-2">
-                      <span className="text-text-muted/40 font-bold shrink-0">{key}:</span>
-                      <span className="text-text-main/90 break-all">
-                        {typeof val === 'string'
-                          ? val
-                          : typeof val === 'number' || typeof val === 'boolean'
-                            ? String(val)
-                            : JSON.stringify(val, null, 2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <button
-          ref={denyButtonRef}
-          type="button"
-          onClick={() => {
-            onDeny(eventId);
-          }}
-          className="text-text-muted hover:text-danger px-3 py-1 text-[10px] font-black uppercase transition-colors"
-        >
-          DENY
-        </button>
-        {request?.options && request.options.length > 0 ? (
-          request.options.map((option, idx) => (
-            <button
-              key={option.optionId}
-              ref={idx === 0 ? approveButtonRef : undefined}
-              type="button"
-              onClick={() => {
-                onApprove(eventId, option.optionId);
-              }}
-              title={option.description}
-              className="terminal-button !h-8 !px-4 text-[10px]"
+          <div className="flex-1 min-w-0">
+            <div
+              id="approval-title"
+              className="text-text-main mb-0.5 text-[12px] font-bold tracking-wide uppercase"
             >
-              {option.label.toUpperCase().replace(/\s+/g, '_')}
-            </button>
-          ))
-        ) : (
+              Approval required
+            </div>
+            <div className="text-text-muted text-[11px] leading-relaxed opacity-85">
+              {data.message ?? 'This action requires your explicit approval before continuing.'}
+            </div>
+            {toolCall && (
+              <div className="mt-3 rounded-xl border border-border/30 bg-surface-secondary/40 p-3.5 font-mono text-[11px] leading-relaxed">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-text-muted/40 text-[9px] font-bold uppercase tracking-wider">Tool:</span>
+                  <span className="text-accent font-semibold">{toolCall.name}</span>
+                </div>
+                {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                  <div className="text-text-muted/80 max-h-[150px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/20 bg-background/50 p-2.5">
+                    {Object.entries(toolCall.arguments).map(([key, val]) => (
+                      <div key={key} className="flex gap-2">
+                        <span className="text-text-muted/40 font-medium shrink-0">{key}:</span>
+                        <span className="text-text-main/90 break-all">
+                          {typeof val === 'string'
+                            ? val
+                            : typeof val === 'number' || typeof val === 'boolean'
+                              ? String(val)
+                              : JSON.stringify(val, null, 2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <button
-            ref={approveButtonRef}
+            ref={denyButtonRef}
             type="button"
             onClick={() => {
-              onApprove(eventId);
+              onDeny(eventId);
             }}
-            className="terminal-button !h-8 !px-4 text-[10px]"
+            className={`${btnBase} ${btnGhost} h-8 px-4 text-[10px] font-bold tracking-widest text-text-muted hover:text-danger uppercase`}
           >
-            APPROVE_ACTION
+            Deny
           </button>
-        )}
-      </div>
+          {request?.options && request.options.length > 0 ? (
+            request.options.map((option, idx) => (
+              <button
+                key={option.optionId}
+                ref={idx === 0 ? approveButtonRef : undefined}
+                type="button"
+                onClick={() => {
+                  onApprove(eventId, option.optionId);
+                }}
+                title={option.description}
+                className={`${btnBase} ${btnSolid} h-8 px-4 text-[10px] font-bold tracking-widest uppercase`}
+              >
+                {option.label}
+              </button>
+            ))
+          ) : (
+            <button
+              ref={approveButtonRef}
+              type="button"
+              onClick={() => {
+                onApprove(eventId);
+              }}
+              className={`${btnBase} ${btnSolid} h-8 px-4 text-[10px] font-bold tracking-widest uppercase`}
+            >
+              Approve
+            </button>
+          )}
+        </div>
+      </GlassPanel>
     </div>
   );
 });

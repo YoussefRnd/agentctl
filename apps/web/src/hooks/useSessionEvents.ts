@@ -27,6 +27,12 @@ export function useSessionEvents(sessionId: string | null) {
     enabled: !!sessionId,
   });
 
+  // Keep a ref of history to read inside subscription effect without triggering re-runs
+  const historyRef = useRef<ACPEventRow[]>(history);
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
   // 2. Setup WS Buffer
   const bufferRef = useRef<ACPEventRow[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
@@ -54,6 +60,36 @@ export function useSessionEvents(sessionId: string | null) {
       setStreamingEventId(null);
     };
 
+    let flushScheduled = false;
+    const scheduleFlush = () => {
+      if (flushScheduled) return;
+      flushScheduled = true;
+
+      requestAnimationFrame(() => {
+        flushScheduled = false;
+        if (bufferRef.current.length > 0) {
+          queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
+            const newEvents = [...bufferRef.current];
+            bufferRef.current = [];
+
+            // Upsert: replace in-place for existing IDs (streaming updates), append for new ones
+            const idToIndex = new Map(old.map((e, i) => [e.id, i]));
+            const result = [...old];
+            for (const evt of newEvents) {
+              const idx = idToIndex.get(evt.id);
+              if (idx !== undefined) {
+                result[idx] = evt; // update in-place
+              } else {
+                idToIndex.set(evt.id, result.length);
+                result.push(evt); // append new
+              }
+            }
+            return result;
+          });
+        }
+      });
+    };
+
     ws.onmessage = (event) => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       const msg = JSON.parse(event.data) as { type?: string; payload?: unknown; error?: string };
@@ -65,6 +101,7 @@ export function useSessionEvents(sessionId: string | null) {
       if (msg.type === 'acp_event') {
         const payload = msg.payload as ACPEventRow;
         bufferRef.current.push(payload);
+        scheduleFlush();
 
         // Track streaming state
         if (payload.type === 'text') {
@@ -86,35 +123,7 @@ export function useSessionEvents(sessionId: string | null) {
       }
     };
 
-    // Throttle flush buffer to cache using requestAnimationFrame
-    let rafId: number;
-    const flushBuffer = () => {
-      if (bufferRef.current.length > 0) {
-        queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
-          const newEvents = [...bufferRef.current];
-          bufferRef.current = [];
-
-          // Upsert: replace in-place for existing IDs (streaming updates), append for new ones
-          const idToIndex = new Map(old.map((e, i) => [e.id, i]));
-          const result = [...old];
-          for (const evt of newEvents) {
-            const idx = idToIndex.get(evt.id);
-            if (idx !== undefined) {
-              result[idx] = evt; // update in-place
-            } else {
-              idToIndex.set(evt.id, result.length);
-              result.push(evt); // append new
-            }
-          }
-          return result;
-        });
-      }
-      rafId = requestAnimationFrame(flushBuffer);
-    };
-    rafId = requestAnimationFrame(flushBuffer);
-
     return () => {
-      cancelAnimationFrame(rafId);
       if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current);
       ws.close();
     };
@@ -128,7 +137,8 @@ export function useSessionEvents(sessionId: string | null) {
       // Only subscribe once per sessionId + connection session
       if (subscribedRef.current === sessionId) return;
 
-      const lastEventId = history.length > 0 ? history[history.length - 1].id : 0;
+      const currentHistory = historyRef.current;
+      const lastEventId = currentHistory.length > 0 ? currentHistory[currentHistory.length - 1].id : 0;
 
       wsRef.current.send(
         JSON.stringify({
@@ -139,7 +149,7 @@ export function useSessionEvents(sessionId: string | null) {
       );
       subscribedRef.current = sessionId;
     }
-  }, [isConnected, isLoading, sessionId, history]);
+  }, [isConnected, isLoading, sessionId]);
 
   // Reset subscription ref on disconnect
   useEffect(() => {
