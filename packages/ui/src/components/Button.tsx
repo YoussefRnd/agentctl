@@ -1,4 +1,6 @@
+import { memo } from 'react';
 import type { ElementType, ComponentPropsWithoutRef, ReactNode } from 'react';
+import { cn } from '../utils';
 
 type ButtonVariant = 'ghost' | 'outline' | 'solid';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -14,7 +16,7 @@ export type ButtonProps<T extends ElementType> = ButtonBaseProps & {
   as?: T;
 } & Omit<ComponentPropsWithoutRef<T>, keyof ButtonBaseProps | 'as'>;
 
-export const Button = <T extends ElementType = 'button'>({
+const ButtonComponent = <T extends ElementType = 'button'>({
   as,
   variant = 'solid',
   size = 'md',
@@ -39,11 +41,14 @@ export const Button = <T extends ElementType = 'button'>({
   const baseStyles =
     'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
 
-  const combinedClassName = `${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`.trim();
-
   return (
-    <Component className={combinedClassName} {...props}>
+    <Component
+      className={cn(baseStyles, variants[variant], sizes[size], className)}
+      {...props}
+    >
       {children}
     </Component>
   );
 };
+
+export const Button = memo(ButtonComponent) as typeof ButtonComponent;
