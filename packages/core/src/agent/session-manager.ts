@@ -475,30 +475,46 @@ export class SessionManager {
     await this.db.delete(projects).where(eq(projects.id, projectId));
   }
 
+  async getOrResuscitate(
+    sessionId: string,
+    options?: { allowArchived?: boolean },
+  ): Promise<ACPSession | null> {
+    const session = this.stateMachine.getSession(sessionId);
+    if (session && !session.isDead) {
+      return session;
+    }
+
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+    });
+
+    if (!sessionRecord) {
+      return null;
+    }
+
+    if (sessionRecord.status === 'merged' || sessionRecord.status === 'discarded') {
+      this.logger.warn({ sessionId, status: sessionRecord.status }, 'Cannot resuscitate a merged or discarded session');
+      return null;
+    }
+
+    if (sessionRecord.status === 'archived' && !options?.allowArchived) {
+      return null;
+    }
+
+    this.logger.info({ sessionId }, 'Resuscitating session runtime');
+    return this.restartSession(sessionId);
+  }
+
   async handleClientMessage(
     sessionId: string,
     action: 'approve' | 'deny' | 'session.input',
     payload: { eventId?: string | number; optionId?: string; input?: string; attachmentIds?: string[] },
   ) {
-    let session = this.stateMachine.getSession(sessionId);
+    const session = await this.getOrResuscitate(sessionId, { allowArchived: true });
 
-    if (!session || session.isDead) {
-      const sessionRecord = await this.db.query.sessions.findFirst({
-        where: eq(sessions.id, sessionId),
-      });
-
-      if (!sessionRecord) {
-        this.logger.warn({ sessionId }, 'Received message for unknown session');
-        return;
-      }
-
-      if (sessionRecord.status === 'merged' || sessionRecord.status === 'discarded') {
-        this.logger.warn({ sessionId, status: sessionRecord.status }, 'Cannot resuscitate a merged or discarded session');
-        return;
-      }
-
-      this.logger.info({ sessionId }, 'Resuscitating session runtime');
-      session = await this.restartSession(sessionId);
+    if (!session) {
+      this.logger.warn({ sessionId }, 'Received message for unknown or non-resuscitatable session');
+      return;
     }
 
     if (action === 'approve') {
