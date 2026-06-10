@@ -7,16 +7,24 @@ import type { ACPEvent } from '@agentctl/shared';
 export class SessionEventStore {
   constructor(
     private db: DbClient,
-    private eventBus: IEventBus,
+    public eventBus: IEventBus,
   ) {}
 
-  async append(sessionId: string, type: ACPEvent['type'], data: unknown): Promise<number> {
+  async append(
+    sessionId: string,
+    type: ACPEvent['type'],
+    data: unknown,
+    parentEventId?: number | null,
+    metadata?: unknown,
+  ): Promise<number> {
     const inserted = await this.db
       .insert(acpEvents)
       .values({
         sessionId,
         type,
         data: JSON.stringify(data),
+        parentEventId: parentEventId ?? null,
+        metadata: metadata ? JSON.stringify(metadata) : null,
       })
       .returning();
 
@@ -28,12 +36,16 @@ export class SessionEventStore {
     return first.id;
   }
 
-  async update(eventId: number, data: unknown): Promise<void> {
+  async update(eventId: number, data: unknown, metadata?: unknown): Promise<void> {
+    const updateValues: { data: string; metadata?: string | null } = {
+      data: JSON.stringify(data),
+    };
+    if (metadata !== undefined) {
+      updateValues.metadata = metadata ? JSON.stringify(metadata) : null;
+    }
     const updated = await this.db
       .update(acpEvents)
-      .set({
-        data: JSON.stringify(data),
-      })
+      .set(updateValues)
       .where(eq(acpEvents.id, eventId))
       .returning();
 
