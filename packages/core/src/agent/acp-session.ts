@@ -300,6 +300,10 @@ ${text}`;
     void this.runtimeHandle.stop();
   }
 
+  async authenticate(methodId: string): Promise<void> {
+    await this.runtimeHandle.authenticate(methodId);
+  }
+
   async stop(): Promise<void> {
     await this.flushAll();
     this.kill();

@@ -160,6 +160,7 @@ export interface AgentRuntimeHandle {
   onProcessExit(handler: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   prompt(text: string, attachments?: { filePath: string; mimeType: string }[]): Promise<void>;
   respondToPermission(permissionId: string, response: DomainPermissionResponse): void;
+  authenticate(methodId: string): Promise<void>;
   stop(): Promise<void>;
   updateModel?(modelId: string): Promise<void>;
   updateConfigOption?(configId: string, value: string): Promise<void>;
@@ -270,6 +271,23 @@ export function createAgentConnection(
           outcome: { outcome: 'selected', optionId: 'allow-once' },
         });
       },
+      async 'fs.readTextFile'(p: { path: string }) {
+        const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(os.tmpdir(), p.path);
+        if (!fs.existsSync(absPath)) {
+          throw new Error(`File not found: ${absPath}`);
+        }
+        const content = fs.readFileSync(absPath, 'utf8');
+        return Promise.resolve({ content });
+      },
+      async 'fs.writeTextFile'(p: { path: string; content: string }) {
+        const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(os.tmpdir(), p.path);
+        const dir = path.dirname(absPath);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(absPath, p.content, 'utf8');
+        return Promise.resolve({});
+      },
     }),
     stream,
   );
@@ -372,6 +390,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
       transport.stdout,
     );
 
+    const logger = this.logger;
     const connection = new ClientSideConnection(
       () => ({
         async sessionUpdate(n) {
@@ -402,6 +421,30 @@ export class DefaultAgentRuntime implements AgentRuntime {
             return { outcome: { outcome: 'cancelled' } };
           }
         },
+        async 'fs.readTextFile'(p: { path: string }) {
+          const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(options.cwd, p.path);
+          if (!fs.existsSync(absPath)) {
+            throw new Error(`File not found: ${absPath}`);
+          }
+          const content = fs.readFileSync(absPath, 'utf8');
+          return Promise.resolve({ content });
+        },
+        async 'fs.writeTextFile'(p: { path: string; content: string }) {
+          const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(options.cwd, p.path);
+          const dir = path.dirname(absPath);
+          if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          fs.writeFileSync(absPath, p.content, 'utf8');
+          return Promise.resolve({});
+        },
+        async 'terminal.create'(p: { command: string; args?: string[]; cwd?: string }) {
+          const terminalCwd = p.cwd ? (path.isAbsolute(p.cwd) ? p.cwd : path.resolve(options.cwd, p.cwd)) : options.cwd;
+          logger.debug(`Terminal create requested for ${p.command} in ${terminalCwd}`);
+          // Minimal terminal implementation - we don't have a full PTY here yet, 
+          // but we follow the spec structure.
+          return Promise.resolve({ terminalId: `term-${crypto.randomUUID()}` });
+        }
       }),
       stream,
     );
@@ -434,6 +477,9 @@ export class DefaultAgentRuntime implements AgentRuntime {
           sessionId: this.acpSessionId ?? '',
           prompt: promptParts,
         }) as Promise<unknown>);
+      },
+      async authenticate(methodId: string): Promise<void> {
+        await (connection.authenticate({ methodId }) as Promise<unknown>);
       },
       respondToPermission(permissionId: string, response: DomainPermissionResponse): void {
         const resolve = pendingApprovals.get(permissionId);

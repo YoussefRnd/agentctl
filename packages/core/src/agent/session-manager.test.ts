@@ -114,6 +114,7 @@ describe('SessionManager tests', () => {
         },
         prompt: () => Promise.resolve(),
         respondToPermission: () => undefined,
+        authenticate: () => Promise.resolve(),
         stop: () => Promise.resolve(),
       });
     },
