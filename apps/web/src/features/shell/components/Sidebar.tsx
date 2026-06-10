@@ -23,6 +23,7 @@ import {
 } from '@agentctl/api-client';
 import { useState, useMemo, useEffect, useRef, type MouseEvent } from 'react';
 import type { ProviderDiscovery, SessionStatus } from '@agentctl/shared';
+import { Input, Button, GlassPanel } from '@agentctl/ui';
 
 export function Sidebar() {
   const { sessionId: activeSessionId } = useParams();
@@ -57,7 +58,7 @@ export function Sidebar() {
     onConfirm: () => void;
     confirmText?: string;
     cancelText?: string;
-    type?: 'danger' | 'warning' | 'info';
+    type?: 'brand-red' | 'brand-peach' | 'info';
   } | null>(null);
 
   const { data: projects = [], isLoading } = useQuery({
@@ -151,13 +152,13 @@ export function Sidebar() {
   };
 
   const statusColors: Record<SessionStatus, string> = {
-    running: 'bg-accent shadow-[0_0_8px_rgba(203,166,247,0.4)]',
-    needs_attention: 'bg-warning shadow-[0_0_8px_rgba(250,179,135,0.4)]',
-    idle: 'bg-surface-quaternary',
-    error: 'bg-danger shadow-[0_0_8px_rgba(243,139,168,0.4)]',
-    merged: 'bg-success/50',
-    discarded: 'bg-surface-quaternary/40',
-    archived: 'bg-surface-quaternary/20',
+    running: 'bg-brand-mauve',
+    needs_attention: 'bg-brand-peach',
+    idle: 'bg-brand-surface0',
+    error: 'bg-brand-red',
+    merged: 'bg-brand-green/50',
+    discarded: 'bg-brand-surface0/40',
+    archived: 'bg-brand-surface0/20',
   };
 
   return (
@@ -167,16 +168,13 @@ export function Sidebar() {
     >
       <div className="mt-8 mb-2 space-y-6 px-4">
         <div className="group relative">
-          <Search className="text-text-muted group-focus-within:text-accent absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 transition-colors" />
-          <input
+          <Search className="text-text-muted group-focus-within:text-brand-mauve absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 transition-colors z-10" />
+          <Input
             ref={searchInputRef}
-            type="text"
-            placeholder="SEARCH..."
+            placeholder="Search..."
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-            }}
-            className="terminal-input bg-surface-secondary/30 border-border/40 focus:border-accent/40 !h-9 w-full pl-9 !text-[11px]"
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 text-[13px] h-10 rounded-xl"
           />
           <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-1 opacity-20 transition-opacity group-focus-within:opacity-0">
             <span className="border-text-muted rounded border px-1 font-mono text-[9px]">⌘K</span>
@@ -184,14 +182,14 @@ export function Sidebar() {
         </div>
 
         <div className="flex items-center justify-between">
-          <h3 className="text-text-main text-[9px] font-black tracking-[0.25em] uppercase opacity-30">
-            ::PROJECT_MANIFEST
+          <h3 className="text-text-main text-[9px] font-semibold tracking-[0.15em] uppercase opacity-30">
+            Projects
           </h3>
           <div className="relative flex items-center gap-1.5">
             <div className="group/tooltip relative">
               <button
                 onClick={() => { setIsFilterMenuOpen(!isFilterMenuOpen); }}
-                className={`hover:text-accent rounded-sm p-1 transition-all text-text-muted hover:bg-surface-secondary/40 border border-transparent hover:scale-105 active:scale-95 ${isFilterMenuOpen ? 'text-accent bg-accent/10 border-accent/20' : ''}`}
+                className={`hover:text-brand-mauve rounded-sm p-1 transition-all text-text-muted hover:bg-surface-secondary/40 border border-transparent hover:scale-105 active:scale-95 ${isFilterMenuOpen ? 'text-brand-mauve bg-brand-mauve/10 border-brand-mauve/20' : ''}`}
               >
                 <ListFilter className="h-4 w-4" />
               </button>
@@ -207,8 +205,8 @@ export function Sidebar() {
                   onClick={() => { setIsFilterMenuOpen(false); }}
                 />
                 <div className="absolute top-full right-0 mt-1 z-40 w-48 rounded-xl border border-border/80 bg-surface-secondary/95 p-2.5 shadow-2xl font-mono text-[10px] backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="mb-1.5 px-2 text-[8px] font-black tracking-[0.15em] text-text-muted uppercase opacity-40">
-                    ::SORT_MODE
+                  <div className="mb-1.5 px-2 text-[8px] font-semibold tracking-[0.12em] text-text-muted uppercase opacity-40">
+                    Sort by
                   </div>
                   <div className="space-y-0.5">
                     {(['lastActive', 'name', 'createdAt'] as const).map((opt) => (
@@ -218,44 +216,44 @@ export function Sidebar() {
                           setSortBy(opt);
                           setIsFilterMenuOpen(false);
                         }}
-                        className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${sortBy === opt ? 'text-accent font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
+                        className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${sortBy === opt ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
                       >
                         <span>
                           {opt === 'lastActive' ? 'LAST ACTIVE' : opt === 'name' ? 'NAME (A-Z)' : 'DATE CREATED'}
                         </span>
-                        {sortBy === opt && <span className="text-[9px] text-accent">●</span>}
+                        {sortBy === opt && <span className="text-[9px] text-brand-mauve">●</span>}
                       </button>
                     ))}
                   </div>
 
                   <div className="my-2 border-t border-border/30" />
 
-                  <div className="mb-1.5 px-2 text-[8px] font-black tracking-[0.15em] text-text-muted uppercase opacity-40">
-                    ::FILTER_CONDITIONS
+                  <div className="mb-1.5 px-2 text-[8px] font-semibold tracking-[0.12em] text-text-muted uppercase opacity-40">
+                    Filter
                   </div>
                   <div className="space-y-1">
                     <button
                       onClick={() => { setGitOnly(!gitOnly); }}
-                      className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${gitOnly ? 'text-accent font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
+                      className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${gitOnly ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
                     >
                       <span>GIT REPOS ONLY</span>
                       <input
                         type="checkbox"
                         checked={gitOnly}
                         readOnly
-                        className="accent-accent h-3 w-3 pointer-events-none rounded border-border"
+                        className="accent-brand-mauve h-3 w-3 pointer-events-none rounded border-border"
                       />
                     </button>
                     <button
                       onClick={() => { setShowArchived(!showArchived); }}
-                      className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${showArchived ? 'text-accent font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
+                      className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${showArchived ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
                     >
                       <span>SHOW ARCHIVED SESSIONS</span>
                       <input
                         type="checkbox"
                         checked={showArchived}
                         readOnly
-                        className="accent-accent h-3 w-3 pointer-events-none rounded border-border"
+                        className="accent-brand-mauve h-3 w-3 pointer-events-none rounded border-border"
                       />
                     </button>
                   </div>
@@ -266,7 +264,7 @@ export function Sidebar() {
             <div className="group/tooltip relative">
               <Link
                 to="/"
-                className="hover:text-accent text-text-muted hover:bg-accent/10 rounded-sm p-1 transition-all border border-transparent hover:scale-105 active:scale-95 flex items-center justify-center"
+                className="hover:text-brand-mauve text-text-muted hover:bg-brand-mauve/10 rounded-sm p-1 transition-all border border-transparent hover:scale-105 active:scale-95 flex items-center justify-center"
               >
                 <Plus className="h-4 w-4" />
               </Link>
@@ -278,7 +276,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="mt-2 flex-1 overflow-y-auto px-2 pb-8">
+      <div className="mt-2 flex-1 overflow-y-auto px-3 pb-8">
         {isLoading ? (
           <div className="space-y-3 p-3">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -296,7 +294,7 @@ export function Sidebar() {
               return (
                 <div key={proj.id} className="space-y-1">
                   <div
-                    className={`group flex cursor-pointer items-center justify-between rounded-sm px-2 py-1.5 transition-colors ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-surface-tertiary' : 'hover:bg-surface-secondary'} [@media(pointer:coarse)]:px-3 [@media(pointer:coarse)]:py-3`}
+                    className={`group flex cursor-pointer items-center justify-between rounded-sm px-2 py-2 transition-colors ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-surface-tertiary' : 'hover:bg-surface-secondary'} [@media(pointer:coarse)]:px-3 [@media(pointer:coarse)]:py-3`}
                     onClick={() => {
                       toggleProject(proj.id);
                     }}
@@ -310,7 +308,7 @@ export function Sidebar() {
                         )}
                       </span>
                       <Folder className="text-text-muted mr-2 h-3.5 w-3.5 shrink-0" />
-                      <span className="text-text-main truncate text-[12px] font-extrabold tracking-tight uppercase [@media(pointer:coarse)]:text-[14px]">
+                      <span className="text-text-main truncate text-[13px] font-extrabold tracking-tight uppercase [@media(pointer:coarse)]:text-[14px]">
                         {proj.name}
                       </span>
                     </div>
@@ -318,14 +316,14 @@ export function Sidebar() {
                       <div className="group/tooltip relative">
                         <button
                           type="button"
-                          className="hover:text-danger text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-danger/10 hover:scale-105 active:scale-95"
+                          className="hover:text-brand-red text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95"
                           onClick={(event) => {
                             event.stopPropagation();
                             setConfirmConfig({
                               isOpen: true,
                               title: 'REMOVE PROJECT',
                               message: `Are you sure you want to remove project "${proj.name}"? This will stop and clean up all its sessions, but will not delete your local files.`,
-                              type: 'danger',
+                              type: 'brand-red',
                               confirmText: 'REMOVE_PROJECT',
                               onConfirm: () => {
                                 deleteProjectMutation.mutate(proj.id);
@@ -344,7 +342,7 @@ export function Sidebar() {
                       <div className="group/tooltip relative">
                         <button
                           type="button"
-                          className="hover:text-accent text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-accent/10 hover:scale-105 active:scale-95"
+                          className="hover:text-brand-mauve text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-brand-mauve/10 hover:scale-105 active:scale-95"
                           disabled={isCreatingSession}
                           onClick={(event) => {
                             handleCreateSession(event, proj.id);
@@ -372,7 +370,7 @@ export function Sidebar() {
                         {proj.sessions.map((s) => (
                           <div
                             key={s.id}
-                            className={`group/session border-border/40 ml-8 flex items-center justify-between border-l text-[11px] transition-all hover:bg-surface-secondary/50 ${activeSessionId === s.id ? 'bg-surface-secondary border-accent text-text-main font-bold' : 'text-text-muted hover:text-text-main'} [@media(pointer:coarse)]:text-[13px]`}
+                            className={`group/session border-border/40 ml-8 flex items-center justify-between border-l text-[12px] transition-all hover:bg-surface-secondary/50 ${activeSessionId === s.id ? 'bg-surface-secondary border-brand-mauve text-text-main font-bold' : 'text-text-muted hover:text-text-main'} [@media(pointer:coarse)]:text-[13px]`}
                           >
                             <Link
                               to={`/sessions/${s.id}`}
@@ -381,8 +379,8 @@ export function Sidebar() {
                               <div
                                 className={`mr-2.5 h-1.5 w-1.5 shrink-0 rounded-full ${statusColors[s.status]}`}
                               />
-                              <span className={`truncate tracking-tight uppercase ${s.status === 'archived' ? 'line-through opacity-50' : ''}`}>
-                                {s.title || s.taskSlug || s.branch || 'NEW_SESSION'}
+                              <span className={`truncate tracking-tight ${s.status === 'archived' ? 'line-through opacity-50' : ''}`}>
+                                {s.title || s.taskSlug || s.branch || 'New session'}
                               </span>
                             </Link>
 
@@ -398,7 +396,7 @@ export function Sidebar() {
                                         isOpen: true,
                                         title: 'ARCHIVE SESSION',
                                         message: `Archive session "${s.title || s.taskSlug || 'this session'}"? This will remove its Git worktree on disk to free up space, but keep its history.`,
-                                        type: 'warning',
+                                        type: 'brand-peach',
                                         confirmText: 'ARCHIVE_SESSION',
                                         onConfirm: () => {
                                           archiveSessionMutation.mutate(s.id);
@@ -406,7 +404,7 @@ export function Sidebar() {
                                         },
                                       });
                                     }}
-                                    className="hover:text-warning text-text-muted/60 p-0.5 rounded hover:bg-warning/10 hover:scale-105 active:scale-95"
+                                    className="hover:text-brand-peach text-text-muted/60 p-0.5 rounded hover:bg-brand-peach/10 hover:scale-105 active:scale-95"
                                   >
                                     <Archive className="h-3 w-3" />
                                   </button>
@@ -425,7 +423,7 @@ export function Sidebar() {
                                       isOpen: true,
                                       title: 'DELETE SESSION',
                                       message: `Permanently delete session "${s.title || s.taskSlug || 'this session'}" and all its logs? This cannot be undone.`,
-                                      type: 'danger',
+                                      type: 'brand-red',
                                       confirmText: 'DELETE_SESSION',
                                       onConfirm: () => {
                                         deleteSessionMutation.mutate(s.id);
@@ -433,7 +431,7 @@ export function Sidebar() {
                                       },
                                     });
                                   }}
-                                  className="hover:text-danger text-text-muted/60 p-0.5 rounded hover:bg-danger/10 hover:scale-105 active:scale-95"
+                                  className="hover:text-brand-red text-text-muted/60 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                 </button>
@@ -457,7 +455,7 @@ export function Sidebar() {
       <div className="border-border/50 relative z-10 mt-auto border-t p-2">
         <Link
           to="/settings"
-          className="text-text-muted hover:text-accent hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-bold tracking-tighter uppercase transition-all"
+          className="text-text-muted hover:text-brand-mauve hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-bold tracking-tighter uppercase transition-all"
         >
           <Settings className="h-3 w-3" />
           Settings
@@ -466,34 +464,33 @@ export function Sidebar() {
 
       {confirmConfig && confirmConfig.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="terminal-glass bg-surface-secondary/95 w-full max-w-sm rounded-lg p-5 shadow-2xl font-mono text-[10px] animate-in zoom-in-95 duration-200">
+          <GlassPanel className="w-full max-w-sm rounded-xl p-5 shadow-2xl font-mono text-[11px] animate-in zoom-in-95 duration-200 border-brand-surface1/50">
             <div className="flex items-center gap-2 mb-3">
-              <span className={`text-[11px] font-black tracking-widest uppercase ${confirmConfig.type === 'danger' ? 'text-danger' : confirmConfig.type === 'warning' ? 'text-warning' : 'text-accent'}`}>
+              <span className={`text-[12px] font-black tracking-widest uppercase ${confirmConfig.type === 'brand-red' ? 'text-brand-red' : confirmConfig.type === 'brand-peach' ? 'text-brand-peach' : 'text-brand-mauve'}`}>
                 :: {confirmConfig.title}
               </span>
             </div>
 
-            <p className="text-text-muted leading-relaxed mb-6 font-bold uppercase tracking-tight">
+            <p className="text-text-main/80 leading-relaxed mb-6 font-bold uppercase tracking-tight">
               {confirmConfig.message}
             </p>
 
             <div className="flex justify-end gap-2.5">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 onClick={() => { setConfirmConfig(null); }}
-                className="h-8 px-3.5 border border-border/40 hover:bg-surface-tertiary rounded text-text-muted hover:text-text-main font-black uppercase transition-all tracking-tight cursor-pointer"
+                className="h-9 px-4 rounded-xl text-text-muted hover:text-text-main font-black uppercase transition-all tracking-tight cursor-pointer"
               >
                 {confirmConfig.cancelText ?? 'CANCEL'}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
                 onClick={confirmConfig.onConfirm}
-                className={`h-8 px-3.5 rounded font-black uppercase transition-all tracking-tight cursor-pointer active:scale-95 ${confirmConfig.type === 'danger' ? 'bg-danger text-background hover:bg-danger/90' : confirmConfig.type === 'warning' ? 'bg-warning text-background hover:bg-warning/90' : 'bg-accent text-background hover:bg-accent/90'}`}
+                className={`h-9 px-4 rounded-xl font-black uppercase transition-all tracking-tight cursor-pointer active:scale-95 ${confirmConfig.type === 'brand-red' ? 'bg-brand-red text-white hover:bg-brand-red/90' : confirmConfig.type === 'brand-peach' ? 'bg-brand-peach text-white hover:bg-brand-peach/90' : 'bg-brand-mauve text-white hover:bg-brand-mauve/90'}`}
               >
                 {confirmConfig.confirmText ?? 'PROCEED'}
-              </button>
+              </Button>
             </div>
-          </div>
+          </GlassPanel>
         </div>
       )}
     </aside>
