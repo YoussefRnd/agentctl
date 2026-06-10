@@ -296,7 +296,7 @@ export class SessionStateMachine {
           onProcessExit(handler) {
             err.child.once('exit', handler);
           },
-          prompt: () => Promise.resolve(),
+          prompt: (_text: string, _attachments?: unknown[], _embedded?: string) => Promise.resolve(),
           respondToPermission: () => undefined,
           authenticate: () => Promise.resolve(),
           stop(): Promise<void> {

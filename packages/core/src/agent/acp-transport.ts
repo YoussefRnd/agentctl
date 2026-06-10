@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
-import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
+import { ClientSideConnection, ndJsonStream, type McpServer } from '@agentclientprotocol/sdk';
 import type {
   RequestPermissionResponse,
   SessionNotification,
@@ -158,7 +158,7 @@ export interface AgentRuntimeHandle {
   closed: Promise<void>;
   onProcessError(handler: (err: Error) => void): void;
   onProcessExit(handler: (code: number | null, signal: NodeJS.Signals | null) => void): void;
-  prompt(text: string, attachments?: { filePath: string; mimeType: string }[]): Promise<void>;
+  prompt(text: string, attachments?: { filePath: string; mimeType: string }[], embeddedContext?: string): Promise<void>;
   respondToPermission(permissionId: string, response: DomainPermissionResponse): void;
   authenticate(methodId: string): Promise<void>;
   stop(): Promise<void>;
@@ -176,6 +176,7 @@ export interface RuntimeOptions {
   resolvedThinkingConfigId?: string;
   resolvedModelConfigId?: string;
   existingAgentSessionId?: string | null;
+  mcpServers?: McpServer[];
 }
 
 export interface SessionCallbacks {
@@ -460,10 +461,14 @@ export class DefaultAgentRuntime implements AgentRuntime {
       onProcessExit(handler) {
         child.once('exit', handler);
       },
-      async prompt(text: string, attachments?: { filePath: string; mimeType: string }[]): Promise<void> {
+      async prompt(text: string, attachments?: { filePath: string; mimeType: string }[], embeddedContext?: string): Promise<void> {
         const promptParts: ContentBlock[] = [];
         if (text) {
           promptParts.push({ type: 'text', text });
+        }
+        if (embeddedContext) {
+          // Use unknown cast to support the newer 'embedded_context' type if not in older SDK versions
+          promptParts.push({ type: 'embedded_context', text: embeddedContext } as unknown as ContentBlock);
         }
         for (const att of attachments ?? []) {
           const data = fs.readFileSync(att.filePath).toString('base64');
@@ -559,7 +564,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
               connection.loadSession({
                 sessionId: options.existingAgentSessionId,
                 cwd: options.cwd,
-                mcpServers: [],
+                mcpServers: options.mcpServers ?? [],
               }),
               60_000,
               'loading ACP session',
@@ -570,7 +575,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
             newSessionResult = await withTimeout(
               connection.newSession({
                 cwd: options.cwd,
-                mcpServers: [],
+                mcpServers: options.mcpServers ?? [],
               }),
               60_000,
               'creating ACP session',
@@ -581,7 +586,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
           newSessionResult = await withTimeout(
             connection.newSession({
               cwd: options.cwd,
-              mcpServers: [],
+              mcpServers: options.mcpServers ?? [],
             }),
             60_000,
             'creating ACP session',
