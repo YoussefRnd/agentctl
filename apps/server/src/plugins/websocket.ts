@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import fastifyWebsocket from '@fastify/websocket';
-import { acpEvents, sessions } from '@agentctl/core';
+import { acpEvents } from '@agentctl/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { wsMessageSchema } from '../types.js';
 import type { ACPEventRow } from '@agentctl/shared';
@@ -43,25 +43,17 @@ export default fp(async (fastify) => {
             if (unsubscribe) unsubscribe();
 
             // Lazy resuscitation of session if not running in memory
-            let session = fastify.sessionManager.getSession(message.sessionId);
-            if (!session) {
-              try {
-                const sessionRecord = await fastify.db.query.sessions.findFirst({
-                  where: eq(sessions.id, message.sessionId),
-                });
-                if (sessionRecord && sessionRecord.status !== 'archived') {
-                  session = await fastify.sessionManager.restartSession(message.sessionId);
-                }
-              } catch (err) {
-                fastify.log.error(err, `Failed to resuscitate session: ${message.sessionId}`);
-                socket.send(
-                  JSON.stringify({
-                    type: 'error',
-                    error: `Failed to resuscitate session: ${err instanceof Error ? err.message : String(err)}`,
-                  }),
-                );
-                return;
-              }
+            try {
+              await fastify.sessionManager.getOrResuscitate(message.sessionId, { allowArchived: false });
+            } catch (err) {
+              fastify.log.error(err, `Failed to resuscitate session: ${message.sessionId}`);
+              socket.send(
+                JSON.stringify({
+                  type: 'error',
+                  error: `Failed to resuscitate session: ${err instanceof Error ? err.message : String(err)}`,
+                }),
+              );
+              return;
             }
 
             if (message.lastEventId !== undefined) {
