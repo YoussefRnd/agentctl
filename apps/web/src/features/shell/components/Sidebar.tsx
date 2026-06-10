@@ -174,7 +174,7 @@ export function Sidebar() {
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); }}
-            className="pl-9 text-[13px] h-10 rounded-xl"
+            className="pl-9 text-[13px] h-9 rounded-xl"
           />
           <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-1 opacity-20 transition-opacity group-focus-within:opacity-0">
             <span className="border-text-muted rounded border px-1 font-mono text-[9px]">⌘K</span>
@@ -191,7 +191,7 @@ export function Sidebar() {
                 onClick={() => { setIsFilterMenuOpen(!isFilterMenuOpen); }}
                 className={`hover:text-brand-mauve rounded-sm p-1 transition-all text-text-muted hover:bg-surface-secondary/40 border border-transparent hover:scale-105 active:scale-95 ${isFilterMenuOpen ? 'text-brand-mauve bg-brand-mauve/10 border-brand-mauve/20' : ''}`}
               >
-                <ListFilter className="h-4 w-4" />
+                <ListFilter className="h-3.5 w-3.5" />
               </button>
               <div className="pointer-events-none absolute bottom-full mb-1.5 right-1/2 translate-x-1/2 opacity-0 translate-y-1 scale-95 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 transition-all duration-150 ease-out bg-surface-secondary/95 border border-border/80 text-text-main text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wider whitespace-nowrap z-50 shadow-xl backdrop-blur-sm">
                 Filter and Sort
@@ -266,7 +266,7 @@ export function Sidebar() {
                 to="/"
                 className="hover:text-brand-mauve text-text-muted hover:bg-brand-mauve/10 rounded-sm p-1 transition-all border border-transparent hover:scale-105 active:scale-95 flex items-center justify-center"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
               </Link>
               <div className="pointer-events-none absolute bottom-full mb-1.5 right-1/2 translate-x-1/2 opacity-0 translate-y-1 scale-95 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 transition-all duration-150 ease-out bg-surface-secondary/95 border border-border/80 text-text-main text-[8px] px-1.5 py-0.5 rounded font-mono uppercase tracking-wider whitespace-nowrap z-50 shadow-xl backdrop-blur-sm">
                 Add Project
@@ -299,15 +299,15 @@ export function Sidebar() {
                       toggleProject(proj.id);
                     }}
                   >
-                    <div className="flex min-w-0 items-center">
-                      <span className="mr-1.5 flex w-3 shrink-0 justify-center">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex w-3 shrink-0 justify-center">
                         {isCollapsed ? (
                           <ChevronRight className="h-3 w-3 opacity-30" />
                         ) : (
                           <ChevronDown className="h-3 w-3 opacity-30" />
                         )}
                       </span>
-                      <Folder className="text-text-muted mr-2 h-3.5 w-3.5 shrink-0" />
+                      <Folder className="text-text-muted h-3.5 w-3.5 shrink-0" />
                       <span className="text-text-main truncate text-[13px] font-extrabold tracking-tight uppercase [@media(pointer:coarse)]:text-[14px]">
                         {proj.name}
                       </span>
@@ -349,7 +349,7 @@ export function Sidebar() {
                           }}
                         >
                           {isCreatingSession ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
                             <Plus className="h-3.5 w-3.5" />
                           )}
@@ -374,10 +374,10 @@ export function Sidebar() {
                           >
                             <Link
                               to={`/sessions/${s.id}`}
-                              className="flex-1 flex items-center py-1.5 pr-2 pl-4 min-w-0"
+                              className="flex-1 flex items-center py-1.5 pr-2 pl-4 min-w-0 gap-2"
                             >
                               <div
-                                className={`mr-2.5 h-1.5 w-1.5 shrink-0 rounded-full ${statusColors[s.status]}`}
+                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusColors[s.status]}`}
                               />
                               <span className={`truncate tracking-tight ${s.status === 'archived' ? 'line-through opacity-50' : ''}`}>
                                 {s.title || s.taskSlug || s.branch || 'New session'}
@@ -406,7 +406,7 @@ export function Sidebar() {
                                     }}
                                     className="hover:text-brand-peach text-text-muted/60 p-0.5 rounded hover:bg-brand-peach/10 hover:scale-105 active:scale-95"
                                   >
-                                    <Archive className="h-3 w-3" />
+                                    <Archive className="h-3.5 w-3.5" />
                                   </button>
                                   <div className="pointer-events-none absolute bottom-full mb-1 right-0 opacity-0 translate-y-1 scale-95 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 transition-all duration-150 ease-out bg-surface-secondary/95 border border-border/80 text-text-main text-[7px] px-1 py-0.5 rounded font-mono uppercase tracking-wider whitespace-nowrap z-50 shadow-xl backdrop-blur-sm">
                                     Archive
@@ -433,7 +433,7 @@ export function Sidebar() {
                                   }}
                                   className="hover:text-brand-red text-text-muted/60 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95"
                                 >
-                                  <Trash2 className="h-3 w-3" />
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 </button>
                                 <div className="pointer-events-none absolute bottom-full mb-1 right-0 opacity-0 translate-y-1 scale-95 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 transition-all duration-150 ease-out bg-surface-secondary/95 border border-border/80 text-text-main text-[7px] px-1 py-0.5 rounded font-mono uppercase tracking-wider whitespace-nowrap z-50 shadow-xl backdrop-blur-sm">
                                   Delete
@@ -457,7 +457,7 @@ export function Sidebar() {
           to="/settings"
           className="text-text-muted hover:text-brand-mauve hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-bold tracking-tighter uppercase transition-all"
         >
-          <Settings className="h-3 w-3" />
+          <Settings className="h-3.5 w-3.5" />
           Settings
         </Link>
       </div>
