@@ -299,6 +299,7 @@ export class SessionStateMachine {
           prompt: (_text: string, _attachments?: unknown[], _embedded?: string) => Promise.resolve(),
           respondToPermission: () => undefined,
           authenticate: () => Promise.resolve(),
+          cancel: () => Promise.resolve(),
           stop(): Promise<void> {
             err.child.kill();
             return Promise.resolve();

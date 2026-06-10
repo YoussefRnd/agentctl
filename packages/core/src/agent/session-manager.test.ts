@@ -115,6 +115,7 @@ describe('SessionManager tests', () => {
         prompt: (_text: string, _attachments?: unknown[], _embedded?: string) => Promise.resolve(),
         respondToPermission: () => undefined,
         authenticate: () => Promise.resolve(),
+        cancel: () => Promise.resolve(),
         stop: () => Promise.resolve(),
       });
     },
