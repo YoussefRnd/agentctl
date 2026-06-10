@@ -1,6 +1,7 @@
 import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import { desc, eq, lt } from 'drizzle-orm';
 import type {
   ACPConfigOption,
@@ -10,6 +11,7 @@ import type {
 } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentRuntime } from './acp-transport.js';
+import type { McpServer } from '@agentclientprotocol/sdk';
 import { createAgentConnection, DefaultAgentRuntime, LegacyConnectionRuntimeAdapter } from './acp-transport.js';
 import { providers, registrySnapshots, systemSettings, sessions } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
@@ -40,12 +42,25 @@ export interface ProbeConnectionHandle {
     initialize(params: {
       protocolVersion: number;
       clientInfo: { name: string; version: string };
+      clientCapabilities?: {
+        terminal?: boolean;
+        fs?: {
+          readTextFile?: boolean;
+          writeTextFile?: boolean;
+        };
+      };
     }): Promise<{
-      authMethods?: { id: string; name: string }[];
+      capabilities?: {
+        loadSession?: boolean;
+        [key: string]: unknown;
+      };
+      authMethods?: { id: string; name: string; type?: string; description?: string }[];
     }>;
-    newSession(params: { cwd: string; mcpServers: [] }): Promise<{
+    newSession(params: { cwd: string; mcpServers: McpServer[] }): Promise<{
+      sessionId: string;
       configOptions?: ACPConfigOption[] | null;
     }>;
+    authenticate(params: { methodId: string; _meta?: Record<string, unknown> }): Promise<unknown>;
     closed: Promise<void>;
   };
 }
@@ -463,8 +478,21 @@ export class ProviderRegistry {
 
   private async fetchRegistryWithCache(): Promise<{
     agents: RegistryAgent[];
-    source: 'remote' | 'cache';
+    source: 'remote' | 'cache' | 'mixed' | 'local';
   }> {
+    let localAgents: RegistryAgent[] = [];
+    const localRegistryPath = process.env.AGENTCTL_REGISTRY_PATH ?? path.join(os.homedir(), '.agentctl', 'registry.json');
+    
+    if (fs.existsSync(localRegistryPath)) {
+      try {
+        const localData = JSON.parse(fs.readFileSync(localRegistryPath, 'utf8')) as { agents?: RegistryAgent[] };
+        localAgents = localData.agents ?? [];
+        this.logger.info(`Loaded ${String(localAgents.length)} agents from local registry ${localRegistryPath}`);
+      } catch (err) {
+        this.logger.warn(err, `Failed to parse local registry at ${localRegistryPath}`);
+      }
+    }
+
     const lastSnapshot = await this.loadLatestSnapshot();
 
     const headers: Record<string, string> = {};
@@ -476,7 +504,8 @@ export class ProviderRegistry {
 
       if (response.status === 304 && lastSnapshot) {
         this.logger.info('Registry unchanged (304), using cached snapshot');
-        return { agents: parseRegistryAgents(lastSnapshot.data), source: 'cache' };
+        const remoteAgents = parseRegistryAgents(lastSnapshot.data);
+        return { agents: this.mergeAgents(localAgents, remoteAgents), source: localAgents.length > 0 ? 'mixed' : 'cache' };
       }
 
       if (!response.ok) {
@@ -492,14 +521,22 @@ export class ProviderRegistry {
         lastModified: response.headers.get('last-modified'),
       });
 
-      return { agents: data.agents, source: 'remote' };
+      return { agents: this.mergeAgents(localAgents, data.agents), source: localAgents.length > 0 ? 'mixed' : 'remote' };
     } catch (err) {
       this.logger.warn(err, 'Failed to fetch remote registry, falling back to cache');
       if (lastSnapshot) {
-        return { agents: parseRegistryAgents(lastSnapshot.data), source: 'cache' };
+        const remoteAgents = parseRegistryAgents(lastSnapshot.data);
+        return { agents: this.mergeAgents(localAgents, remoteAgents), source: localAgents.length > 0 ? 'mixed' : 'cache' };
       }
-      return { agents: [], source: 'cache' };
+      return { agents: localAgents, source: 'local' };
     }
+  }
+
+  private mergeAgents(local: RegistryAgent[], remote: RegistryAgent[]): RegistryAgent[] {
+    const map = new Map<string, RegistryAgent>();
+    for (const a of remote) map.set(a.id, a);
+    for (const a of local) map.set(a.id, a); // Local overrides remote with same ID
+    return Array.from(map.values());
   }
 
   private async getProviderRow(id: string): Promise<ProviderData | undefined> {
