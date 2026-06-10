@@ -304,6 +304,10 @@ ${text}`;
     await this.runtimeHandle.authenticate(methodId);
   }
 
+  async cancel(): Promise<void> {
+    await this.runtimeHandle.cancel();
+  }
+
   async stop(): Promise<void> {
     await this.flushAll();
     this.kill();
@@ -353,18 +357,28 @@ ${text}`;
 
   public async handleDomainEvent(event: DomainAgentEvent): Promise<void> {
     try {
-      if (event.type === 'tool_call') {
-        await this.eventStreamAdapter.registerToolCall(event.call, event.isUpdate);
-        return;
+      switch (event.type) {
+        case 'tool_call':
+          await this.eventStreamAdapter.registerToolCall(event.call, event.isUpdate);
+          break;
+        case 'text':
+          await this.eventStreamAdapter.appendText(event.text);
+          break;
+        case 'thought':
+          await this.eventStreamAdapter.appendThought(event.text);
+          break;
+        case 'status':
+          await this.eventStore.append(
+            this.sessionId,
+            'status',
+            {
+              status: event.status,
+              title: event.title,
+            },
+            null
+          );
+          break;
       }
-
-      if (event.type === 'text') {
-        await this.eventStreamAdapter.appendText(event.text);
-        return;
-      }
-
-      await this.eventStreamAdapter.appendThought(event.text);
-      return;
     } catch (error) {
       await this.handleError(error).catch((e: unknown) => {
         this.logger.error(e, 'Failed to handle error in handleDomainEvent');

@@ -151,7 +151,18 @@ export class FileCacheStorage implements CacheStorage {
 export type DomainAgentEvent =
   | { type: 'text'; text: string }
   | { type: 'thought'; text: string }
-  | { type: 'tool_call'; call: { name: string; arguments?: Record<string, unknown>; toolCallId?: string }; isUpdate: boolean };
+  | {
+      type: 'tool_call';
+      call: {
+        name: string;
+        arguments?: Record<string, unknown>;
+        toolCallId?: string;
+        title?: string;
+        status?: string;
+      };
+      isUpdate: boolean;
+    }
+  | { type: 'status'; status: string; title?: string };
 
 export interface AgentRuntimeHandle {
   acpSessionId: string | null;
@@ -161,6 +172,7 @@ export interface AgentRuntimeHandle {
   prompt(text: string, attachments?: { filePath: string; mimeType: string }[], embeddedContext?: string): Promise<void>;
   respondToPermission(permissionId: string, response: DomainPermissionResponse): void;
   authenticate(methodId: string): Promise<void>;
+  cancel(): Promise<void>;
   stop(): Promise<void>;
   updateModel?(modelId: string): Promise<void>;
   updateConfigOption?(configId: string, value: string): Promise<void>;
@@ -338,7 +350,13 @@ function parseNotificationToEvents(notification: SessionNotification): DomainAge
     }
   } else if (typeKey === 'tool_call' || typeKey === 'tool_call_update') {
     const chunk = update as {
-      toolCall?: { name: string; arguments?: Record<string, unknown>; toolCallId?: string };
+      toolCall?: {
+        name: string;
+        arguments?: Record<string, unknown>;
+        toolCallId?: string;
+        title?: string;
+        status?: string;
+      };
     };
     if (chunk.toolCall) {
       events.push({
@@ -346,6 +364,11 @@ function parseNotificationToEvents(notification: SessionNotification): DomainAge
         call: chunk.toolCall,
         isUpdate: typeKey === 'tool_call_update',
       });
+    }
+  } else if ((typeKey as string) === 'status') {
+    const chunk = update as unknown as { status: string; title?: string };
+    if (chunk.status) {
+      events.push({ type: 'status', status: chunk.status, title: chunk.title });
     }
   }
 
@@ -485,6 +508,11 @@ export class DefaultAgentRuntime implements AgentRuntime {
       },
       async authenticate(methodId: string): Promise<void> {
         await (connection.authenticate({ methodId }) as Promise<unknown>);
+      },
+      async cancel(): Promise<void> {
+        if (this.acpSessionId) {
+          await (connection.cancel({ sessionId: this.acpSessionId }) as Promise<unknown>);
+        }
       },
       respondToPermission(permissionId: string, response: DomainPermissionResponse): void {
         const resolve = pendingApprovals.get(permissionId);
