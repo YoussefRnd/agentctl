@@ -13,6 +13,8 @@ import type {
   AgentRuntimeHandle,
 } from './acp-transport.js';
 
+import { StreamBuffer } from './stream-buffer.js';
+
 export type DbClient = ReturnType<typeof createDatabase>;
 
 export class ACPSession {
@@ -22,6 +24,43 @@ export class ACPSession {
   private historyHydrated = false;
   private isStopped = false;
   private stopKind: 'idle' | 'error' | null = null;
+
+  private currentParentEventId: number | null = null;
+  private turnStartTime: number | null = null;
+  private thoughtStartTime: number | null = null;
+  private toolCallStartTime: number | null = null;
+  private messageStartTime: number | null = null;
+
+  private textBuffer = new StreamBuffer(async () => {
+    if (this.messageEventId) {
+      const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
+      const completionTokens = Math.ceil(this.currentMessage.length / 4);
+      await this.eventStore.update(
+        this.messageEventId,
+        { content: this.currentMessage, role: 'provider' },
+        { durationMs, completionTokens }
+      );
+    }
+  });
+
+  private thoughtBuffer = new StreamBuffer(async () => {
+    if (this.thoughtEventId) {
+      const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
+      const completionTokens = Math.ceil(this.currentThought.length / 4);
+      await this.eventStore.update(
+        this.thoughtEventId,
+        { content: this.currentThought, role: 'thought' },
+        { durationMs, completionTokens }
+      );
+    }
+  });
+
+  public async flushAll(): Promise<void> {
+    await Promise.all([
+      this.textBuffer.flush(),
+      this.thoughtBuffer.flush(),
+    ]);
+  }
 
   get isDead(): boolean {
     return this.isStopped;
@@ -75,6 +114,13 @@ export class ACPSession {
       this.messageEventId = null;
       this.thoughtEventId = null;
       this.userMessageEventId = null;
+      this.messageStartTime = null;
+      this.thoughtStartTime = null;
+      this.toolCallStartTime = null;
+      this.textBuffer.reset();
+      this.thoughtBuffer.reset();
+
+      this.turnStartTime = Date.now();
 
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, this.sessionId),
@@ -126,11 +172,19 @@ export class ACPSession {
       }
 
       // Persist user message immediately so it shows up in history
-      await this.eventStore.append(this.sessionId, 'text', {
-        content: text,
-        role: 'user',
-        attachments: resolvedAttachmentsMeta.length > 0 ? resolvedAttachmentsMeta : undefined,
-      });
+      const promptTokens = Math.ceil(text.length / 4);
+      const userEventId = await this.eventStore.append(
+        this.sessionId,
+        'text',
+        {
+          content: text,
+          role: 'user',
+          attachments: resolvedAttachmentsMeta.length > 0 ? resolvedAttachmentsMeta : undefined,
+        },
+        null,
+        { promptTokens }
+      );
+      this.currentParentEventId = userEventId;
 
       let promptText = text;
       if (!this.historyHydrated) {
@@ -183,11 +237,14 @@ ${text}`;
 
       await this.runtimeHandle.prompt(promptText, resolvedAttachmentFiles);
 
+      await this.flushAll();
+
       await this.db
         .update(sessions)
         .set({ status: 'idle', updatedAt: new Date() })
         .where(eq(sessions.id, this.sessionId));
     } catch (error: unknown) {
+      await this.flushAll();
       await this.handleError(error);
       throw error;
     }
@@ -280,10 +337,15 @@ ${text}`;
     this.isStopped = true;
     this.pendingApprovals.clear();
 
+    void this.flushAll().catch((err: unknown) => {
+      this.logger.error(err, 'Failed to flush buffers in kill()');
+    });
+
     void this.runtimeHandle.stop();
   }
 
   async stop(): Promise<void> {
+    await this.flushAll();
     this.kill();
     await this.markSessionStopped('idle');
   }
@@ -305,6 +367,7 @@ ${text}`;
   private async handleError(error: unknown): Promise<void> {
     this.logger.error(error, `Error in ACPSession ${this.sessionId}`);
     this.stopKind = 'error';
+    await this.flushAll();
     this.kill();
     await this.markSessionStopped('error');
   }
@@ -339,6 +402,9 @@ ${text}`;
       if (event.type === 'tool_call') {
         const { call, isUpdate } = event;
         if (!isUpdate) {
+          // Flush buffers before starting tool calls!
+          await this.flushAll();
+
           // Reset buffers on new tool calls
           this.currentMessage = '';
           this.currentThought = '';
@@ -346,46 +412,95 @@ ${text}`;
           this.messageEventId = null;
           this.thoughtEventId = null;
           this.userMessageEventId = null;
+          this.messageStartTime = null;
+          this.thoughtStartTime = null;
 
+          this.toolCallStartTime = Date.now();
           this.toolCallEventId = await this.eventStore.append(
-              this.sessionId,
-              'tool_call',
-              call,
+            this.sessionId,
+            'tool_call',
+            call,
+            this.currentParentEventId,
+            { durationMs: 0 }
           );
         } else if (this.toolCallEventId) {
-          await this.eventStore.update(this.toolCallEventId, call);
+          const durationMs = Date.now() - (this.toolCallStartTime ?? Date.now());
+          await this.eventStore.update(
+            this.toolCallEventId,
+            call,
+            { durationMs }
+          );
         }
         return;
       }
 
       if (event.type === 'text') {
         this.currentMessage += event.text;
+        const completionTokens = Math.ceil(this.currentMessage.length / 4);
         if (this.messageEventId) {
-          await this.eventStore.update(this.messageEventId, {
-            content: this.currentMessage,
-            role: 'provider',
+          const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
+          this.eventStore.eventBus.publish({
+            id: this.messageEventId,
+            sessionId: this.sessionId,
+            parentEventId: this.currentParentEventId,
+            type: 'text',
+            data: JSON.stringify({
+              content: this.currentMessage,
+              role: 'provider',
+            }),
+            metadata: JSON.stringify({ durationMs, completionTokens }),
+            createdAt: new Date(),
           });
+          this.textBuffer.append(event.text);
         } else {
-          this.messageEventId = await this.eventStore.append(this.sessionId, 'text', {
-            content: this.currentMessage,
-            role: 'provider',
-          });
+          this.messageStartTime = Date.now();
+          this.messageEventId = await this.eventStore.append(
+            this.sessionId,
+            'text',
+            {
+              content: this.currentMessage,
+              role: 'provider',
+            },
+            this.currentParentEventId,
+            { durationMs: 0, completionTokens }
+          );
         }
         return;
       }
 
-      // Since it can only be 'thought' at this point
       this.currentThought += event.text;
+      const completionTokens = Math.ceil(this.currentThought.length / 4);
       if (this.thoughtEventId) {
-        await this.eventStore.update(this.thoughtEventId, {
-          content: this.currentThought,
-          role: 'thought',
+        const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
+        this.eventStore.eventBus.publish({
+          id: this.thoughtEventId,
+          sessionId: this.sessionId,
+          parentEventId: this.currentParentEventId,
+          type: 'text',
+          data: JSON.stringify({
+            content: this.currentThought,
+            role: 'thought',
+          }),
+          metadata: JSON.stringify({ durationMs, completionTokens }),
+          createdAt: new Date(),
         });
+        this.thoughtBuffer.append(event.text);
       } else {
-        this.thoughtEventId = await this.eventStore.append(this.sessionId, 'text', {
-          content: this.currentThought,
-          role: 'thought',
-        });
+        this.thoughtStartTime = Date.now();
+        void this.eventStore
+          .append(
+            this.sessionId,
+            'text',
+            {
+              content: this.currentThought,
+              role: 'thought',
+            },
+            this.currentParentEventId,
+            { durationMs: 0, completionTokens }
+          )
+          .then((id) => {
+            this.thoughtEventId = id;
+          });
       }
       return;
     } catch (error) {
@@ -411,13 +526,18 @@ ${text}`;
         (sessionRecord?.approvalMode === 'auto_approve' && toolName.startsWith('fs/'));
 
       if (shouldAutoApprove) {
-        await this.eventStore.append(this.sessionId, 'approval_request', {
-          name: 'request_permission',
-          toolCallId: permissionId,
-          requiresApproval: true,
-          request,
-          status: 'approved',
-        });
+        await this.eventStore.append(
+          this.sessionId,
+          'approval_request',
+          {
+            name: 'request_permission',
+            toolCallId: permissionId,
+            requiresApproval: true,
+            request,
+            status: 'approved',
+          },
+          this.currentParentEventId
+        );
 
         const reqOptions = request.options;
         if (reqOptions && reqOptions.length > 0) {
@@ -438,13 +558,18 @@ ${text}`;
         .set({ status: 'needs_attention', lastHeartbeat: new Date() })
         .where(eq(sessions.id, this.sessionId));
 
-      const eventId = await this.eventStore.append(this.sessionId, 'approval_request', {
-        name: 'request_permission',
-        toolCallId: permissionId,
-        requiresApproval: true,
-        request,
-        status: 'pending',
-      });
+      const eventId = await this.eventStore.append(
+        this.sessionId,
+        'approval_request',
+        {
+          name: 'request_permission',
+          toolCallId: permissionId,
+          requiresApproval: true,
+          request,
+          status: 'pending',
+        },
+        this.currentParentEventId
+      );
 
       const approvalPromise = new Promise<DomainPermissionResponse>((resolve) => {
         this.pendingRequests.set(String(eventId), request);

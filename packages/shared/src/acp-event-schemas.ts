@@ -67,7 +67,17 @@ export type ACPEventTextData = z.infer<typeof acpEventTextDataSchema>;
 export type ACPEventToolCallData = z.infer<typeof acpEventToolCallDataSchema>;
 export type ACPEventApprovalRequestData = z.infer<typeof acpEventApprovalRequestDataSchema>;
 
+export const acpEventMetadataSchema = z.object({
+  durationMs: z.number().optional(),
+  promptTokens: z.number().optional(),
+  completionTokens: z.number().optional(),
+  cost: z.number().optional(),
+}).optional();
+
 export type ACPEventRow = ACPEvent & {
   id: number;
   sessionId: string;
+  parentEventId?: number | null;
+  metadata?: z.infer<typeof acpEventMetadataSchema>;
 };
+

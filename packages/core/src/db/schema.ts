@@ -102,8 +102,12 @@ export const acpEvents = sqliteTable('acp_events', {
   sessionId: text('session_id')
     .notNull()
     .references(() => sessions.id, { onDelete: 'cascade' }),
+  parentEventId: integer('parent_event_id')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .references((): any => acpEvents.id, { onDelete: 'cascade' }),
   type: text('type').$type<ACPEvent['type']>().notNull(),
   data: text('data').notNull(), // JSON string
+  metadata: text('metadata'), // JSON string
   ...eventTimestamps,
 });
 
@@ -119,9 +123,18 @@ export const sessionRelations = relations(sessions, ({ one, many }) => ({
   events: many(acpEvents),
 }));
 
-export const acpEventRelations = relations(acpEvents, ({ one }) => ({
+export const acpEventRelations = relations(acpEvents, ({ one, many }) => ({
   session: one(sessions, {
     fields: [acpEvents.sessionId],
     references: [sessions.id],
   }),
+  parent: one(acpEvents, {
+    fields: [acpEvents.parentEventId],
+    references: [acpEvents.id],
+    relationName: 'event_hierarchy',
+  }),
+  children: many(acpEvents, {
+    relationName: 'event_hierarchy',
+  }),
 }));
+
