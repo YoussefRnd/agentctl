@@ -4,29 +4,45 @@
 @plugin 'tailwindcss-animate';
 
 @theme {
-  /* Brand Colors (Catppuccin Mocha) */
-  --color-brand-crust: #11111b;
-  --color-brand-mantle: #181825;
-  --color-brand-base: #1e1e2e;
-  --color-brand-surface0: #313244;
+  /* Brand Colors (Official Catppuccin Mocha) */
+  --color-brand-rosewater: #f5e0dc;
+  --color-brand-flamingo: #f2cdcd;
+  --color-brand-pink: #f5c2e7;
   --color-brand-mauve: #cba6f7;
-  --color-brand-lavender: #b4befe;
-  --color-brand-blue: #89b4fa;
-  --color-brand-green: #a6e3a1;
-  --color-brand-peach: #fab387;
   --color-brand-red: #f38ba8;
+  --color-brand-maroon: #eba0ac;
+  --color-brand-peach: #fab387;
+  --color-brand-yellow: #f9e2af;
+  --color-brand-green: #a6e3a1;
+  --color-brand-teal: #94e2d5;
+  --color-brand-sky: #89dceb;
+  --color-brand-sapphire: #74c7ec;
+  --color-brand-blue: #89b4fa;
+  --color-brand-lavender: #b4befe;
+  --color-brand-text: #cdd6f4;
+  --color-brand-subtext1: #bac2de;
+  --color-brand-subtext0: #a6adc8;
+  --color-brand-overlay2: #9399b2;
+  --color-brand-overlay1: #7f849c;
+  --color-brand-overlay0: #6c7086;
+  --color-brand-surface2: #585b70;
+  --color-brand-surface1: #45475a;
+  --color-brand-surface0: #313244;
+  --color-brand-base: #1e1e2e;
+  --color-brand-mantle: #181825;
+  --color-brand-crust: #11111b;
 
   /* Semantic Roles */
   --color-background: var(--color-brand-crust);
-  --color-surface: rgba(30, 30, 46, 0.3); /* Base with transparency */
+  --color-surface: color-mix(in srgb, var(--color-brand-base), transparent 70%);
   --color-surface-secondary: var(--color-brand-mantle);
-  --color-surface-accent: rgba(203, 166, 247, 0.05); /* Mauve tint */
+  --color-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
 
-  --color-border: rgba(180, 190, 254, 0.1); /* Lavender tint */
-  --color-border-active: rgba(203, 166, 247, 0.4); /* Mauve tint */
+  --color-border: color-mix(in srgb, var(--color-brand-lavender), transparent 90%);
+  --color-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 60%);
 
-  --color-text-main: #cdd6f4;
-  --color-text-muted: #a6adc8;
+  --color-text-main: var(--color-brand-text);
+  --color-text-muted: var(--color-brand-subtext0);
 
   --color-accent: var(--color-brand-mauve);
   --color-accent-secondary: var(--color-brand-lavender);
@@ -34,10 +50,6 @@
   --color-success: var(--color-brand-green);
   --color-warning: var(--color-brand-peach);
   --color-danger: var(--color-brand-red);
-
-  /* Glass Effects */
-  --glass-blur: 24px;
-  --glass-saturate: 180%;
 
   /* Premium Rounding */
   --radius-sm: 0.375rem;
@@ -64,7 +76,7 @@
 }
 
 @utility liquid-glass {
-  @apply bg-surface border-border rounded-lg border backdrop-blur-[var(--glass-blur)] saturate-[var(--glass-saturate)];
+  @apply bg-surface border-border rounded-lg border backdrop-blur-2xl saturate-150;
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
   position: relative;
   overflow: hidden;
@@ -80,7 +92,7 @@
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(203, 166, 247, 0.3),
+      color-mix(in srgb, var(--color-brand-mauve), transparent 70%),
       transparent
     );
     pointer-events: none;
