@@ -78,7 +78,7 @@ export class ACPSession {
       });
   }
 
-  async prompt(text: string, attachmentIds?: string[]): Promise<void> {
+  async prompt(text: string, attachmentIds?: string[], embeddedContext?: string): Promise<void> {
     try {
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, this.sessionId),
@@ -187,7 +187,7 @@ ${text}`;
         }
       }
 
-      await this.runtimeHandle.prompt(promptText, resolvedAttachmentFiles);
+      await this.runtimeHandle.prompt(promptText, resolvedAttachmentFiles, embeddedContext);
 
       await this.flushAll();
 
