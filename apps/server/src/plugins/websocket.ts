@@ -7,9 +7,11 @@ import type { ACPEventRow } from '@agentctl/shared';
 
 function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
   const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+  const metadata: unknown = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : undefined;
   return {
     ...row,
     data: data as ACPEventRow['data'],
+    metadata: metadata as ACPEventRow['metadata'],
   } as unknown as ACPEventRow;
 }
 

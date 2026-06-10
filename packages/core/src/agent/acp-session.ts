@@ -487,20 +487,16 @@ ${text}`;
         this.thoughtBuffer.append(event.text);
       } else {
         this.thoughtStartTime = Date.now();
-        void this.eventStore
-          .append(
-            this.sessionId,
-            'text',
-            {
-              content: this.currentThought,
-              role: 'thought',
-            },
-            this.currentParentEventId,
-            { durationMs: 0, completionTokens }
-          )
-          .then((id) => {
-            this.thoughtEventId = id;
-          });
+        this.thoughtEventId = await this.eventStore.append(
+          this.sessionId,
+          'text',
+          {
+            content: this.currentThought,
+            role: 'thought',
+          },
+          this.currentParentEventId,
+          { durationMs: 0, completionTokens }
+        );
       }
       return;
     } catch (error) {

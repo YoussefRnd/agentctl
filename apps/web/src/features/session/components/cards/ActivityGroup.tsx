@@ -40,9 +40,11 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
     }
   }, [isStreaming]);
 
-  const { breadcrumbs, duration } = useMemo(() => {
+  const { breadcrumbs, duration, totalTokens } = useMemo(() => {
     const steps: string[] = [];
     let hasThought = false;
+    let computedDurationMs = 0;
+    let tokens = 0;
 
     for (const e of events) {
       if (e.type === 'text' && 'role' in e.data && e.data.role === 'thought') {
@@ -54,14 +56,30 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
         const args = e.data.arguments ?? {};
         steps.push(getToolLabel(e.data.name, args));
       }
+
+      if (e.metadata) {
+        if (e.metadata.durationMs) {
+          computedDurationMs += e.metadata.durationMs;
+        }
+        if (e.metadata.completionTokens) {
+          tokens += e.metadata.completionTokens;
+        }
+      }
     }
 
-    const start = events[0].createdAt;
-    const end = events[events.length - 1].createdAt;
-    const diff = Math.max(0, new Date(end).getTime() - new Date(start).getTime());
-    const duration = diff > 1000 ? `${(diff / 1000).toFixed(1)}s` : `${String(diff)}ms`;
+    let durationStr = '';
+    if (computedDurationMs > 0) {
+      durationStr = computedDurationMs > 1000
+        ? `${(computedDurationMs / 1000).toFixed(1)}s`
+        : `${String(computedDurationMs)}ms`;
+    } else {
+      const start = events[0].createdAt;
+      const end = events[events.length - 1].createdAt;
+      const diff = Math.max(0, new Date(end).getTime() - new Date(start).getTime());
+      durationStr = diff > 1000 ? `${(diff / 1000).toFixed(1)}s` : `${String(diff)}ms`;
+    }
 
-    return { breadcrumbs: steps, duration };
+    return { breadcrumbs: steps, duration: durationStr, totalTokens: tokens };
   }, [events]);
 
   if (layout === 'nested') {
@@ -79,7 +97,11 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
           }`}
         >
           <Activity className={`h-3.5 w-3.5 ${isStreaming ? 'animate-pulse text-accent' : 'text-text-muted/60'}`} />
-          <span>{isStreaming ? 'Executing actions...' : `Actions completed in ${duration}`}</span>
+          <span>
+            {isStreaming
+              ? 'Executing actions...'
+              : `Actions completed in ${duration}${totalTokens > 0 ? ` (${String(totalTokens)} tokens)` : ''}`}
+          </span>
           {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         </button>
 
@@ -165,7 +187,7 @@ export function ActivityGroup({ events, isStreaming = false, layout = 'standalon
               <span className="h-1 w-1 rounded-full bg-border" />
               <div className="text-text-muted/50 flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase">
                 <Clock className="h-3 w-3" />
-                <span>{duration}</span>
+                <span>{duration}{totalTokens > 0 ? ` (${String(totalTokens)} tokens)` : ''}</span>
               </div>
             </div>
 
