@@ -11,7 +11,7 @@ import type {
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentRuntime } from './acp-transport.js';
 import { createAgentConnection, DefaultAgentRuntime, LegacyConnectionRuntimeAdapter } from './acp-transport.js';
-import { providers, registrySnapshots, systemSettings } from '../db/schema.js';
+import { providers, registrySnapshots, systemSettings, sessions } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
 import { Provider, type ProviderData } from './provider.js';
 
@@ -556,8 +556,22 @@ export class ProviderRegistry {
     supportedRegistry: RegistryAgent[],
   ): Promise<string | null> {
     const settings = await this.getSettings();
+
+    let lastUsedProviderId: string | undefined;
+    try {
+      const lastSession = await this.db.query.sessions.findFirst({
+        orderBy: [desc(sessions.updatedAt)],
+      });
+      if (lastSession) {
+        lastUsedProviderId = lastSession.selectedProvider;
+      }
+    } catch (err: unknown) {
+      this.logger.error(err, 'Failed to query last used session provider');
+    }
+
     const preferredIds = [
       settings.defaultProviderId,
+      lastUsedProviderId,
       ...existingRows.filter((row) => row.enabled).map((row) => row.id),
     ].filter((id): id is string => id !== undefined && id !== '');
 
