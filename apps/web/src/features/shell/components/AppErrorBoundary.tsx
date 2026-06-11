@@ -25,7 +25,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     if (this.state.hasError) {
       return (
         <div className="flex h-full w-full items-center justify-center p-4">
-          <div className="terminal-glass w-full max-w-md rounded-sm p-6 text-center shadow-2xl">
+          <div className="liquid-glass w-full max-w-md rounded-sm p-6 text-center shadow-2xl">
             <h1 className="text-xl font-black tracking-widest text-white uppercase">
               CRITICAL_SYSTEM_FAILURE
             </h1>

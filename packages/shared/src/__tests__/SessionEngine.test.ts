@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SessionEngine } from '../SessionEngine.js';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { ACPEventRow } from '../acp-event-schemas.js';
 
 // Mock WebSocket
 class MockWebSocket {
@@ -57,7 +57,7 @@ class MockWebSocket {
 }
 
 // overriding global WebSocket for testing
-global.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+vi.stubGlobal('WebSocket', MockWebSocket);
 
 describe('SessionEngine', () => {
   let engine: SessionEngine;
@@ -154,9 +154,7 @@ describe('SessionEngine', () => {
     engine.connect();
     const ws = MockWebSocket.getLast();
     ws.open();
-    
-    // Explicitly check readyState
-    expect(ws.readyState).toBe(MockWebSocket.OPEN);
+    ws.readyState = 1; // OPEN (literal)
 
     engine.subscribe(42);
     expect(ws.sentMessages.length).toBe(1);

@@ -1,9 +1,7 @@
-'use client';
-
 import * as React from 'react';
-import { Popover as PopoverPrimitive } from 'radix-ui';
+import * as PopoverPrimitive from '@radix-ui/react-popover';
 
-import { cn } from '@/utils';
+import { cn } from '../utils.js';
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
@@ -26,7 +24,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          'terminal-glass data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 z-50 w-64 origin-(--radix-popover-content-transform-origin) rounded-sm p-2 shadow-2xl outline-hidden',
+          'liquid-glass data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 z-[9999] w-64 origin-(--radix-popover-content-transform-origin) rounded-sm p-2 shadow-2xl outline-hidden',
           className,
         )}
         {...props}

@@ -11,8 +11,7 @@ import {
   Archive,
   ListFilter,
 } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   apiClient,
   createProjectSession,
@@ -21,15 +20,23 @@ import {
   deleteSession,
   archiveSession,
 } from '@agentctl/api-client';
-import { useState, useEffect, useRef, type MouseEvent } from 'react';
-import type { ProviderDiscovery, SessionStatus } from '@agentctl/shared';
+import { useState, useEffect, useRef } from 'react';
+import type { SessionStatus, ProviderDiscovery } from '@agentctl/shared';
 import { Input, ConfirmationModal } from '@agentctl/ui';
 import { useFilteredProjects } from '../hooks/useFilteredProjects.js';
+import { useActionDispatcher } from '../../../hooks/useActionDispatcher';
+import { useActionStore } from '../../../hooks/useActionStore';
+import { useProjectStore } from '../../../contexts/ProjectContext';
 
 export function Sidebar() {
   const { sessionId: activeSessionId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { execute } = useActionDispatcher();
+  const pendingActions = useActionStore((state) => state.pendingActions);
+  const { settings, setSettings } = useProjectStore();
+  const { sortBy, gitOnly, showArchived } = settings;
+
   const [collapsedProjects, setCollapsedProjects] = useState<Partial<Record<string, boolean>>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -48,9 +55,6 @@ export function Sidebar() {
     };
   }, []);
 
-  const [sortBy, setSortBy] = useState<'lastActive' | 'name' | 'createdAt'>('lastActive');
-  const [gitOnly, setGitOnly] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -64,12 +68,10 @@ export function Sidebar() {
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', sortBy, gitOnly],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      params.append('sortBy', sortBy);
-      if (gitOnly) params.append('gitOnly', 'true');
-      return apiClient.fetch<SidebarProject[]>(`/api/projects?${params.toString()}`);
-    },
+    queryFn: () =>
+      apiClient.fetch<SidebarProject[]>(
+        `/api/projects?sortBy=${sortBy}&gitOnly=${gitOnly ? 'true' : 'false'}`
+      ),
   });
 
   const { data: providers = [] } = useQuery({
@@ -77,63 +79,75 @@ export function Sidebar() {
     queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/providers'),
   });
 
-  const createSessionMutation = useMutation({
-    mutationFn: (projectId: string) => createProjectSession(projectId, providers),
-    onSuccess: (session) => {
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
-      void navigate(`/sessions/${session.id}`);
-    },
-    onError: (error: unknown) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to create session');
-    },
-  });
+  const handleCreateSession = (projectId: string) => {
+    void execute(
+      `create-session-${projectId}`,
+      () => createProjectSession(projectId, providers),
+      {
+        successMessage: 'Session created',
+        errorMessage: 'Failed to create session',
+      }
+    ).then((session) => {
+      if (session) {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void navigate(`/sessions/${session.id}`);
+      }
+    });
+  };
 
-  const deleteProjectMutation = useMutation({
-    mutationFn: (projectId: string) => deleteProject(projectId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
-      toast.success('Project removed successfully');
-      void navigate('/');
-    },
-    onError: (error: unknown) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to remove project');
-    },
-  });
-
-  const deleteSessionMutation = useMutation({
-    mutationFn: (sessionId: string) => deleteSession(sessionId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
-      toast.success('Session deleted');
-      if (activeSessionId) {
+  const handleDeleteProject = (projectId: string, projectName: string) => {
+    void execute(
+      `delete-project-${projectId}`,
+      () => deleteProject(projectId),
+      {
+        successMessage: `Project "${projectName}" removed successfully`,
+        errorMessage: 'Failed to remove project',
+      }
+    ).then((result) => {
+      if (result) {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
         void navigate('/');
       }
-    },
-    onError: (error: unknown) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to delete session');
-    },
-  });
+    });
+  };
 
-  const archiveSessionMutation = useMutation({
-    mutationFn: (sessionId: string) => archiveSession(sessionId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
-      void queryClient.invalidateQueries({ queryKey: ['session', activeSessionId] });
-      toast.success('Session archived');
-    },
-    onError: (error: unknown) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to archive session');
-    },
-  });
+  const handleDeleteSession = (sessionId: string, title: string) => {
+    void execute(
+      `delete-session-${sessionId}`,
+      () => deleteSession(sessionId),
+      {
+        successMessage: `Session "${title}" deleted`,
+        errorMessage: 'Failed to delete session',
+      }
+    ).then((result) => {
+      if (result) {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        if (activeSessionId === sessionId) {
+          void navigate('/');
+        }
+      }
+    });
+  };
+
+  const handleArchiveSession = (sessionId: string, title: string) => {
+    void execute(
+      `archive-session-${sessionId}`,
+      () => archiveSession(sessionId),
+      {
+        successMessage: `Session "${title}" archived`,
+        errorMessage: 'Failed to archive session',
+      }
+    ).then((result) => {
+      if (result) {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      }
+    });
+  };
 
   const filteredProjects = useFilteredProjects(projects, { searchQuery, showArchived });
   const toggleProject = (id: string) => {
     setCollapsedProjects((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }));
-  };
-
-  const handleCreateSession = (event: MouseEvent, projectId: string) => {
-    event.stopPropagation();
-    createSessionMutation.mutate(projectId);
   };
 
   const statusColors: Record<SessionStatus, string> = {
@@ -198,7 +212,7 @@ export function Sidebar() {
                       <button
                         key={opt}
                         onClick={() => {
-                          setSortBy(opt);
+                          setSettings({ sortBy: opt });
                           setIsFilterMenuOpen(false);
                         }}
                         className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${sortBy === opt ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
@@ -218,7 +232,7 @@ export function Sidebar() {
                   </div>
                   <div className="space-y-1">
                     <button
-                      onClick={() => { setGitOnly(!gitOnly); }}
+                      onClick={() => { setSettings({ gitOnly: !gitOnly }); }}
                       className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${gitOnly ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
                     >
                       <span>GIT REPOS ONLY</span>
@@ -230,7 +244,7 @@ export function Sidebar() {
                       />
                     </button>
                     <button
-                      onClick={() => { setShowArchived(!showArchived); }}
+                      onClick={() => { setSettings({ showArchived: !showArchived }); }}
                       className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-surface-tertiary transition-colors ${showArchived ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
                     >
                       <span>SHOW ARCHIVED SESSIONS</span>
@@ -273,8 +287,7 @@ export function Sidebar() {
             {filteredProjects.map((proj) => {
               const isCollapsed = collapsedProjects[proj.id] ?? true;
               const showSessions = searchQuery ? true : !isCollapsed;
-              const isCreatingSession =
-                createSessionMutation.isPending && createSessionMutation.variables === proj.id;
+              const isCreatingSession = pendingActions.has(`create-session-${proj.id}`);
 
               return (
                 <div key={proj.id} className="space-y-0.5">
@@ -302,6 +315,7 @@ export function Sidebar() {
                         <button
                           type="button"
                           className="hover:text-brand-red text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95 cursor-pointer"
+                          disabled={pendingActions.has(`delete-project-${proj.id}`)}
                           onClick={(event) => {
                             event.stopPropagation();
                             setConfirmConfig({
@@ -311,13 +325,17 @@ export function Sidebar() {
                               type: 'brand-red',
                               confirmText: 'REMOVE_PROJECT',
                               onConfirm: () => {
-                                deleteProjectMutation.mutate(proj.id);
+                                handleDeleteProject(proj.id, proj.name);
                                 setConfirmConfig(null);
                               },
                             });
                           }}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          {pendingActions.has(`delete-project-${proj.id}`) ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
                         </button>
                         <div className="pointer-events-none absolute bottom-full mb-1 right-0 opacity-0 translate-y-1 scale-95 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 transition-all duration-150 ease-out bg-surface-secondary/95 border border-border/80 text-text-main text-[7px] px-1 py-0.5 rounded font-mono uppercase tracking-wider whitespace-nowrap z-50 shadow-xl backdrop-blur-sm">
                           Remove
@@ -330,7 +348,8 @@ export function Sidebar() {
                           className="hover:text-brand-mauve text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-brand-mauve/10 hover:scale-105 active:scale-95 cursor-pointer"
                           disabled={isCreatingSession}
                           onClick={(event) => {
-                            handleCreateSession(event, proj.id);
+                            event.stopPropagation();
+                            handleCreateSession(proj.id);
                           }}
                         >
                           {isCreatingSession ? (
@@ -377,6 +396,7 @@ export function Sidebar() {
                                 <div className="group/tooltip relative">
                                   <button
                                     type="button"
+                                    disabled={pendingActions.has(`archive-session-${s.id}`)}
                                     onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
@@ -387,14 +407,18 @@ export function Sidebar() {
                                         type: 'brand-peach',
                                         confirmText: 'ARCHIVE_SESSION',
                                         onConfirm: () => {
-                                          archiveSessionMutation.mutate(s.id);
+                                          handleArchiveSession(s.id, s.title || s.taskSlug || 'this session');
                                           setConfirmConfig(null);
                                         },
                                       });
                                     }}
-                                    className="hover:text-brand-peach text-text-muted/60 p-0.5 rounded hover:bg-brand-peach/10 hover:scale-105 active:scale-95 cursor-pointer"
+                                    className="hover:text-brand-peach text-text-muted/60 p-0.5 rounded hover:bg-brand-peach/10 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
                                   >
-                                    <Archive className="h-3.5 w-3.5" />
+                                    {pendingActions.has(`archive-session-${s.id}`) ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Archive className="h-3.5 w-3.5" />
+                                    )}
                                   </button>
                                   <div className="pointer-events-none absolute bottom-full mb-1 right-0 opacity-0 translate-y-1 scale-95 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 transition-all duration-150 ease-out bg-surface-secondary/95 border border-border/80 text-text-main text-[7px] px-1 py-0.5 rounded font-mono uppercase tracking-wider whitespace-nowrap z-50 shadow-xl backdrop-blur-sm">
                                     Archive
@@ -404,6 +428,7 @@ export function Sidebar() {
                               <div className="group/tooltip relative">
                                 <button
                                   type="button"
+                                  disabled={pendingActions.has(`delete-session-${s.id}`)}
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -414,14 +439,18 @@ export function Sidebar() {
                                       type: 'brand-red',
                                       confirmText: 'DELETE_SESSION',
                                       onConfirm: () => {
-                                        deleteSessionMutation.mutate(s.id);
+                                        handleDeleteSession(s.id, s.title || s.taskSlug || 'this session');
                                         setConfirmConfig(null);
                                       },
                                     });
                                   }}
-                                  className="hover:text-brand-red text-text-muted/60 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95 cursor-pointer"
+                                  className="hover:text-brand-red text-text-muted/60 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  {pendingActions.has(`delete-session-${s.id}`) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  )}
                                 </button>
                                 <div className="pointer-events-none absolute bottom-full mb-1 right-0 opacity-0 translate-y-1 scale-95 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 transition-all duration-150 ease-out bg-surface-secondary/95 border border-border/80 text-text-main text-[7px] px-1 py-0.5 rounded font-mono uppercase tracking-wider whitespace-nowrap z-50 shadow-xl backdrop-blur-sm">
                                   Delete

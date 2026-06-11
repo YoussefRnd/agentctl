@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { ACPEventRow } from '../types.js';
+import type { ACPEventRow } from '@agentctl/shared';
 
 export class EventBus {
   private readonly emitter = new EventEmitter();

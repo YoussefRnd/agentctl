@@ -9,7 +9,7 @@ export const Dropdown = {
   Content: ({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) => (
     <DropdownMenuPrimitive.Content
       className={cn(
-        'terminal-glass p-1 min-w-40 animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+        'liquid-glass p-1 min-w-40 z-[9999] rounded-md animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
         className
       )}
       {...props}

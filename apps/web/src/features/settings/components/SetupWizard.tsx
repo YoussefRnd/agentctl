@@ -4,8 +4,7 @@ import { useSetupWizard } from '../hooks/useSetupWizard';
 import { useProviders } from '../../../hooks/useProviders';
 import { PROVIDER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { Bot, Terminal } from 'lucide-react';
-import { toast } from 'sonner';
-import { GlassPanel, Button, Input } from '@agentctl/ui';
+import { GlassPanel, Button, Input, Switch } from '@agentctl/ui';
 
 export function SetupWizard() {
   const { showWizard, markDone } = useSetupWizard();
@@ -104,39 +103,16 @@ export function SetupWizard() {
                       </div>
                     </div>
 
-                    <button
-                      role="switch"
-                      aria-checked={isActive}
-                      onClick={() => {
-                        const nextEnabled = !provider.enabled;
-                        toggleProvider(
-                          { providerId: provider.id, enabled: nextEnabled },
-                          {
-                            onSuccess: () => {
-                              toast.success('Provider selection updated successfully.');
-                            },
-                            onError: (err) => {
-                              toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                            },
-                          }
-                        );
+                    <Switch
+                      checked={isActive}
+                      onCheckedChange={(nextEnabled) => {
+                        toggleProvider({ providerId: provider.id, enabled: nextEnabled });
                         if (nextEnabled && provider.status === 'inactive') {
-                          activate(provider.id, {
-                            onSuccess: () => {
-                              toast.success('Agent activated successfully!');
-                            },
-                            onError: (err) => {
-                              toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                            },
-                          });
+                          activate(provider.id);
                         }
                       }}
-                      className={`relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-accent border-accent' : 'bg-background border-border/20'}`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-3 w-3 transform rounded-full transition duration-200 ease-in-out ${isActive ? 'bg-brand-crust translate-x-4' : 'bg-text-muted/40 translate-x-0'}`}
-                      />
-                    </button>
+                      size="sm"
+                    />
                   </div>
                   {isActive && hasKeys && (
                     <div className="space-y-2 border-t border-border/10 pt-2.5">
@@ -176,20 +152,10 @@ export function SetupWizard() {
                           <div className="flex justify-end pt-1">
                             <Button
                               onClick={() => {
-                                updateProviderConfig(
-                                  {
-                                    providerId: provider.id,
-                                    customEnv: keysValues,
-                                  },
-                                  {
-                                    onSuccess: () => {
-                                      toast.success('Provider configuration updated.');
-                                    },
-                                    onError: (err) => {
-                                      toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                                    },
-                                  }
-                                );
+                                updateProviderConfig({
+                                  providerId: provider.id,
+                                  customEnv: keysValues,
+                                });
                               }}
                               disabled={
                                 isUpdatingConfig ||

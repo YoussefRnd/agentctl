@@ -19,6 +19,8 @@
   "dependencies": {
     "@agentctl/shared": "workspace:*",
     "@tanstack/react-query": "^5.100.9",
+    "@ts-rest/core": "^3.52.1",
+    "@ts-rest/react-query": "^3.52.1",
     "sonner": "^2.0.7"
   },
   "peerDependencies": {

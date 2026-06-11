@@ -1,4 +1,5 @@
-import type { ACPEventRow } from '@agentctl/shared';
+import type { ACPEventRow } from './acp-event-schemas.js';
+import { serverEventSchema } from './event-registry.js';
 
 export interface SessionEngineOptions {
   sessionId: string;
@@ -41,20 +42,17 @@ export class SessionEngine {
 
     this.ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data as string) as {
-          type?: string;
-          payload?: unknown;
-          error?: string;
-        };
+        const data: unknown = JSON.parse(event.data as string);
+        const msg = serverEventSchema.parse(data);
 
-        if (msg.type === 'error' || msg.error) {
-          this.options.onError?.(msg.error ?? 'A WebSocket stream error occurred');
+        if (msg.type === 'error') {
+          this.options.onError?.(msg.error);
           return;
         }
 
-        if (msg.type === 'acp_event') {
-          const payload = msg.payload as ACPEventRow;
-          this.handleEvent(payload);
+        // type check for narrowing
+        if ('payload' in msg) {
+          this.handleEvent(msg.payload);
         }
       } catch {
         this.options.onError?.('Failed to parse WebSocket message');

@@ -1,15 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Zap, Monitor, GitBranch, ChevronDown, Shield, Plus } from 'lucide-react';
+import { Zap, Monitor, GitBranch, ChevronDown, Shield, Plus, ArrowUp } from 'lucide-react';
 import {
   Dropdown,
-  DropdownTrigger,
-  DropdownContent,
-  DropdownItem,
   Button,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
   cn,
 } from '@agentctl/ui';
 import { ProviderPicker } from './ProviderPicker';
 import { useProviders } from '../../../hooks/useProviders';
+import { useActionDispatcher } from '../../../hooks/useActionDispatcher';
 import { useSession } from '../../../contexts/SessionContext';
 import { MagicBar } from './MagicBar';
 import { AttachmentStrip } from './AttachmentStrip';
@@ -59,28 +60,30 @@ function CommandDropdown<T extends string>({
     : "max-w-[150px] truncate";
 
   return (
-    <Dropdown>
-      <DropdownTrigger asChild>
+    <Dropdown.Root>
+      <Dropdown.Trigger asChild>
         <button type="button" disabled={disabled} className={triggerClass}>
           {icon}
           <span className={textClass}>{activeOption?.label ?? value}</span>
           <ChevronDown className="text-text-muted/50 h-3 w-3 transition-transform duration-200 group-data-[state=open]:rotate-180" />
         </button>
-      </DropdownTrigger>
-      <DropdownContent align={align} className="min-w-[140px]">
-        {options.map((opt) => (
-          <DropdownItem
-            key={opt.value}
-            active={opt.value === value}
-            onClick={() => {
-              onChange(opt.value);
-            }}
-          >
-            {opt.label}
-          </DropdownItem>
-        ))}
-      </DropdownContent>
-    </Dropdown>
+      </Dropdown.Trigger>
+      <Dropdown.Portal>
+        <Dropdown.Content align={align} className="min-w-[140px]">
+          {options.map((opt) => (
+            <Dropdown.Item
+              key={opt.value}
+              className={cn(opt.value === value && "bg-white/5 text-accent")}
+              onClick={() => {
+                onChange(opt.value);
+              }}
+            >
+              {opt.label}
+            </Dropdown.Item>
+          ))}
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown.Root>
   );
 }
 
@@ -128,18 +131,21 @@ export function CommandBar({
     isSwitchingMode,
     setApprovalMode,
     isUpdatingApprovalMode,
+    updateProvider,
+    isLoadingSession,
   } = useSession();
   const { providers, isLoadingProviders } = useProviders(sessionId);
+  const { execute } = useActionDispatcher();
   const [input, setInput] = useState('');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [internalSelectedProviderId, setInternalSelectedProviderId] = useState<string | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { attachments, addFiles, removeAttachment, clearAll, readyAttachmentIds, isAnyUploading } =
     useAttachments(sessionId);
 
-  const selectedId = propSelectedProviderId ?? internalSelectedProviderId;
+  const selectedId = propSelectedProviderId ?? null;
 
   const firstId = providers[0]?.id ?? null;
   const resolvedId = selectedId ?? firstId;
@@ -161,7 +167,9 @@ export function CommandBar({
     if (onProviderSelect) {
       onProviderSelect(id, modelId);
     } else {
-      setInternalSelectedProviderId(id);
+      void execute('switch-provider', async () => {
+        await updateProvider(id, modelId);
+      }, { successMessage: `Switched to ${id}` });
     }
     setIsPickerOpen(false);
   };
@@ -235,75 +243,82 @@ export function CommandBar({
     (input.trim().length > 0 || readyAttachmentIds.length > 0);
 
   return (
-    <div className="relative z-40 w-full px-6 pb-4">
-      <div className="relative mx-auto max-w-[1000px]">
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_IMAGE_TYPES}
-          multiple
-          className="sr-only"
-          aria-hidden="true"
-          tabIndex={-1}
-          onChange={handleFileInputChange}
-        />
+    <div className="w-full">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_IMAGE_TYPES}
+        multiple
+        className="sr-only"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={handleFileInputChange}
+      />
 
-        <form
-          className="w-full"
-          aria-label="Command interface"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSubmit();
-          }}
+      <form
+        className="w-full"
+        aria-label="Command interface"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSubmit();
+        }}
+      >
+        <div
+          className={cn(
+            "liquid-glass flex flex-col rounded-xl border transition-all duration-300 overflow-visible",
+            disabled ? 'opacity-30' : 'opacity-100',
+            isFocused 
+              ? 'border-accent/50 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1 ring-accent/30' 
+              : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]'
+          )}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
         >
-          <div
-            className={cn(
-              "liquid-glass flex flex-col rounded-xl border border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 overflow-visible",
-              disabled ? 'opacity-30' : 'opacity-100'
-            )}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-          >
-            {/* Input row */}
-            <div className="flex w-full items-start gap-3 px-5 pt-5 pb-4">
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={handleAttachClick}
-                className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40"
-                title="Attach image"
-                aria-label="Attach image"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-                onPaste={handlePaste}
-                placeholder={
-                  disabled
-                    ? sessionData?.session.status === 'running'
-                      ? 'Agent is thinking...'
-                      : 'Processing...'
-                    : placeholder
+          {/* Input row */}
+          <div className="flex w-full items-start gap-3 px-5 pt-5 pb-4">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={handleAttachClick}
+              className="text-text-muted hover:text-accent hover:bg-accent/10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:pointer-events-none disabled:opacity-40"
+              title="Attach image"
+              aria-label="Attach image"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
                 }
-                aria-label="Command input"
-                className="placeholder:text-text-muted/30 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full resize-none border-none bg-transparent p-0 font-sans text-[15px] leading-relaxed focus:ring-0 focus:outline-none outline-none"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                disabled={disabled}
-              />
-            </div>
+              }}
+              onFocus={() => {
+                setIsFocused(true);
+              }}
+              onBlur={() => {
+                setIsFocused(false);
+              }}
+              onPaste={handlePaste}
+              placeholder={
+                disabled
+                  ? sessionData?.session.status === 'running'
+                    ? 'Agent is thinking...'
+                    : 'Processing...'
+                  : placeholder
+              }
+              aria-label="Command input"
+              className="placeholder:text-text-muted/30 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full resize-none border-none bg-transparent pt-[3px] p-0 font-sans text-[15px] leading-relaxed focus:ring-0 focus:outline-none outline-none"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              disabled={disabled}
+            />
+          </div>
 
             {/* Attachment strip — only visible when there are files */}
             {attachments.length > 0 && (
@@ -320,60 +335,78 @@ export function CommandBar({
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-1.5">
                 <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsPickerOpen(!isPickerOpen);
-                    }}
-                    aria-label="Select AI provider"
-                    aria-expanded={isPickerOpen}
-                    className={cn(
-                      "flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
-                      isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main'
-                    )}
-                  >
-                    {activeProvider?.icon ? (
-                      <img src={activeProvider.icon} alt="" className="h-3.5 w-3.5 object-contain" />
-                    ) : (
-                      <Zap className={cn("h-3.5 w-3.5 transition-all duration-200", isPickerOpen && "fill-accent")} />
-                    )}
-                    <span className="max-w-[120px] truncate text-[10px] font-bold tracking-widest uppercase">
-                      {isLoadingProviders ? '...' : (propSelectedModelId ?? selectedProviderLabel)}
-                    </span>
-                    <ChevronDown
-                      className={cn("h-3 w-3 transition-transform duration-200", isPickerOpen && "rotate-180")}
-                    />
-                  </button>
-
-                  <ProviderPicker
-                    sessionId={sessionId}
-                    isOpen={isPickerOpen}
-                    onClose={() => {
-                      setIsPickerOpen(false);
-                    }}
-                    providers={providers}
-                    selectedId={resolvedId}
-                    selectedModelId={propSelectedModelId ?? null}
-                    onSelect={handleProviderSelect}
-                  />
+                  <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={isLoadingSession}
+                        aria-label="Select AI provider"
+                        aria-expanded={isPickerOpen}
+                        className={cn(
+                          "flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
+                          isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main',
+                          isLoadingSession && "opacity-50 pointer-events-none"
+                        )}
+                      >
+                        {isLoadingSession ? (
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
+                        ) : activeProvider?.icon ? (
+                          <img src={activeProvider.icon} alt="" className="h-3.5 w-3.5 object-contain" />
+                        ) : (
+                          <Zap className={cn("h-3.5 w-3.5 transition-all duration-200", isPickerOpen && "fill-accent")} />
+                        )}
+                        <span className="max-w-[120px] truncate text-[10px] font-bold tracking-widest uppercase">
+                          {isLoadingSession || isLoadingProviders ? '...' : (propSelectedModelId ?? selectedProviderLabel)}
+                        </span>
+                        <ChevronDown
+                          className={cn("h-3 w-3 transition-transform duration-200", isPickerOpen && "rotate-180")}
+                        />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="start"
+                      side="top"
+                      sideOffset={8}
+                      className="w-[480px] p-0 overflow-hidden rounded-xl border-border/30"
+                    >
+                      <ProviderPicker
+                        sessionId={sessionId}
+                        isOpen={isPickerOpen}
+                        onClose={() => {
+                          setIsPickerOpen(false);
+                        }}
+                        providers={providers}
+                        selectedId={resolvedId}
+                        selectedModelId={propSelectedModelId ?? null}
+                        onSelect={handleProviderSelect}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
-                {sessionData?.session && (
-                  <CommandDropdown
-                    value={sessionData.session.approvalMode}
-                    disabled={isUpdatingApprovalMode}
-                    variant="toolbar"
-                    onChange={(val) => {
-                      void setApprovalMode(val);
-                    }}
-                    icon={<Shield className="h-3.5 w-3.5" />}
-                    options={[
-                      { value: 'review', label: 'Review' },
-                      { value: 'auto_approve', label: 'Auto Approve' },
-                      { value: 'yolo', label: 'YOLO' },
-                    ]}
-                  />
-                )}
+                 {isLoadingSession ? (
+                   <div className="flex h-8 items-center gap-1.5 rounded-full border border-transparent px-3 text-text-muted/30">
+                     <Shield className="h-3.5 w-3.5" />
+                     <span className="text-[10px] font-bold tracking-widest uppercase">...</span>
+                   </div>
+                 ) : (
+                   sessionData?.session && (
+                     <CommandDropdown
+                       value={sessionData.session.approvalMode}
+                       disabled={isUpdatingApprovalMode}
+                       variant="toolbar"
+                       onChange={(val) => {
+                         void setApprovalMode(val);
+                       }}
+                       icon={<Shield className="h-3.5 w-3.5" />}
+                       options={[
+                         { value: 'review', label: 'Review' },
+                         { value: 'auto_approve', label: 'Auto Approve' },
+                         { value: 'yolo', label: 'YOLO' },
+                       ]}
+                     />
+                   )
+                 )}
 
                 <div className="bg-border/30 mx-2 h-4 w-px" />
 
@@ -387,61 +420,74 @@ export function CommandBar({
 
               <Button
                 size="sm"
-                className="h-8 w-8 rounded-full"
+                className={cn(
+                  "group/send h-8 w-8 rounded-lg p-0 flex items-center justify-center transition-all duration-300 border-none",
+                  canSend 
+                    ? "visible opacity-100 translate-x-0 scale-100 bg-accent text-brand-crust hover:opacity-90 shadow-[0_0_20px_rgba(203,166,247,0.25)]" 
+                    : "invisible opacity-0 translate-x-2 scale-90 pointer-events-none"
+                )}
                 onClick={handleSubmit}
                 disabled={!canSend}
                 aria-label="Execute command"
               >
-                <Send className="h-3.5 w-3.5" />
+                <ArrowUp className="h-4 w-4 stroke-[3]" />
               </Button>
             </div>
           </div>
         </form>
-        {sessionData?.session && (
-          <div className="text-text-muted/35 mt-3 flex items-center justify-between px-2 text-[10px] font-bold tracking-widest">
-            <div className="flex items-center">
+        {(isLoadingSession || sessionData?.session) && (
+          <div className="text-text-muted mt-3 flex items-center justify-between px-2 text-[10px] font-bold tracking-widest opacity-60">
+            {isLoadingSession ? (
+              <div className="flex items-center gap-1.5 py-1 text-text-muted/30">
+                <Monitor className="h-3.5 w-3.5" />
+                <span>...</span>
+              </div>
+            ) : (
+              <div className="flex items-center">
+                <CommandDropdown
+                  value={sessionData?.session.mode ?? 'local'}
+                  disabled={isSwitchingMode}
+                  onChange={(val) => {
+                    void switchMode(val as 'local' | 'worktree');
+                  }}
+                  icon={<Monitor className="h-3.5 w-3.5" />}
+                  options={[
+                    { value: 'local', label: 'Local' },
+                    ...(sessionData?.session.project?.repoRoot
+                      ? [{ value: 'worktree', label: 'Worktree' }]
+                      : []),
+                  ]}
+                />
+              </div>
+            )}
+
+            {isLoadingSession ? (
+              <div className="flex items-center gap-1.5 py-1 text-text-muted/30">
+                <GitBranch className="h-3.5 w-3.5" />
+                <span>...</span>
+              </div>
+            ) : (
               <CommandDropdown
-                value={sessionData.session.mode}
-                disabled={isSwitchingMode}
+                value={sessionData?.session.branch ?? ''}
+                disabled={isSwitchingBranch}
                 onChange={(val) => {
-                  void switchMode(val as 'local' | 'worktree');
+                  void switchBranch(val);
                 }}
-                icon={<Monitor className="h-3.5 w-3.5" />}
+                icon={<GitBranch className="h-3.5 w-3.5" />}
+                align="end"
                 options={[
-                  { value: 'local', label: 'Local' },
-                  ...(sessionData.session.project?.repoRoot
-                    ? [{ value: 'worktree', label: 'Worktree' }]
+                  ...branches.map((b) => ({
+                    value: b,
+                    label: formatBranchName(b),
+                  })),
+                  ...(sessionData?.session.branch && (branches.length === 0 || !branches.includes(sessionData.session.branch))
+                    ? [{ value: sessionData.session.branch, label: formatBranchName(sessionData.session.branch) }]
                     : []),
                 ]}
               />
-            </div>
-
-            <CommandDropdown
-              value={sessionData.session.branch}
-              disabled={isSwitchingBranch}
-              onChange={(val) => {
-                void switchBranch(val);
-              }}
-              icon={<GitBranch className="h-3.5 w-3.5" />}
-              align="end"
-              options={[
-                ...branches.map((b) => ({
-                  value: b,
-                  label: formatBranchName(b),
-                })),
-                ...(branches.length === 0 || !branches.includes(sessionData.session.branch)
-                  ? [
-                      {
-                        value: sessionData.session.branch,
-                        label: formatBranchName(sessionData.session.branch),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
+            )}
           </div>
         )}
       </div>
-    </div>
   );
 }

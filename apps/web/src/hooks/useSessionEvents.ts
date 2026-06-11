@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow } from '@agentctl/shared';
-import { SessionEngine } from '@agentctl/core';
+import { SessionEngine } from '@agentctl/shared';
 
 import { apiClient } from '@agentctl/api-client';
 

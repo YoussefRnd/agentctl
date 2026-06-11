@@ -110,5 +110,12 @@ export async function setApprovalMode(sessionId: string, approvalMode: 'review' 
   });
 }
 
+export async function updateSessionProvider(sessionId: string, providerId: string, modelId?: string) {
+  return apiClient.fetch<{ success: boolean }>(`/api/sessions/${sessionId}/provider`, {
+    method: 'PATCH',
+    body: JSON.stringify({ providerId, modelId }),
+  });
+}
+
 
 

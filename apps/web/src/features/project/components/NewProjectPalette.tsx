@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DirectoryExplorer } from './DirectoryExplorer';
 import { AlertCircle, Loader2 } from 'lucide-react';
-import type { ProviderDiscovery } from '@agentctl/shared';
 import { apiClient, openProjectSession, type SidebarProject } from '@agentctl/api-client';
 import { Button } from '@agentctl/ui';
+import type { ProviderDiscovery } from '@agentctl/shared';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();

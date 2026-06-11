@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useCallback, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
+import { sessionStore } from '@agentctl/shared';
 import {
   apiClient,
   stageReviewFile,
@@ -27,7 +28,6 @@ interface PlanItem {
 // ==========================================
 interface SessionConfigContextValue {
   sessionId: string;
-  sessionData: SessionWithCapabilities | null;
   isLoadingSession: boolean;
   reviewData: ReviewResponse;
   isLoadingReview: boolean;
@@ -45,6 +45,8 @@ interface SessionConfigContextValue {
   isDiscardingSession: boolean;
   setApprovalMode: (approvalMode: 'review' | 'auto_approve' | 'yolo') => Promise<void>;
   isUpdatingApprovalMode: boolean;
+  updateProvider: (providerId: string, modelId?: string) => Promise<void>;
+  isUpdatingProvider: boolean;
 }
 
 const SessionConfigContext = createContext<SessionConfigContextValue | null>(null);
@@ -70,6 +72,14 @@ export function SessionConfigProvider({
     enabled: !!sessionId,
   });
 
+  useEffect(() => {
+    sessionStore.setSession(sessionData);
+  }, [sessionData]);
+
+  useEffect(() => {
+    sessionStore.setLoading(isLoadingSession);
+  }, [isLoadingSession]);
+
   const {
     data: reviewData = { files: [] },
     isLoading: isLoadingReview,
@@ -87,6 +97,24 @@ export function SessionConfigProvider({
     queryFn: () => apiClient.fetch<string[]>(`/api/sessions/${sessionId}/branches`),
     enabled: !!sessionId,
   });
+
+  const updateProviderMutation = useMutation({
+    mutationFn: ({ providerId, modelId }: { providerId: string; modelId?: string }) =>
+      apiClient.fetch(`/api/sessions/${sessionId}/provider`, {
+        method: 'PATCH',
+        body: JSON.stringify({ providerId, modelId }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+    },
+  });
+
+  const updateProvider = useCallback(
+    async (providerId: string, modelId?: string) => {
+      await updateProviderMutation.mutateAsync({ providerId, modelId });
+    },
+    [updateProviderMutation],
+  );
 
   const switchBranchMutation = useMutation({
     mutationFn: (branch: string) =>
@@ -196,7 +224,6 @@ export function SessionConfigProvider({
   const value = useMemo(
     () => ({
       sessionId,
-      sessionData,
       isLoadingSession,
       reviewData,
       isLoadingReview,
@@ -214,10 +241,11 @@ export function SessionConfigProvider({
       isDiscardingSession: discardMutation.isPending,
       setApprovalMode: handleSetApprovalMode,
       isUpdatingApprovalMode: setApprovalModeMutation.isPending,
+      updateProvider,
+      isUpdatingProvider: updateProviderMutation.isPending,
     }),
     [
       sessionId,
-      sessionData,
       isLoadingSession,
       reviewData,
       isLoadingReview,
@@ -235,6 +263,8 @@ export function SessionConfigProvider({
       discardMutation.isPending,
       handleSetApprovalMode,
       setApprovalModeMutation.isPending,
+      updateProvider,
+      updateProviderMutation.isPending,
     ],
   );
 
@@ -246,7 +276,23 @@ export function useSession() {
   if (!context) {
     throw new Error('useSession must be used within a SessionConfigProvider');
   }
-  return context;
+
+  const sessionState = useSyncExternalStore(
+    (listener) => sessionStore.subscribe(listener),
+    () => sessionStore.getState(),
+  );
+
+  const capabilities = useMemo(() => sessionStore.resolveCapabilities(), [sessionState.currentSession]);
+
+  return useMemo(
+    () => ({
+      ...context,
+      sessionData: sessionState.currentSession,
+      isLoadingSession: context.isLoadingSession,
+      capabilities,
+    }),
+    [context, sessionState.currentSession, capabilities],
+  );
 }
 
 // ==========================================
@@ -326,4 +372,3 @@ export function useSessionStream() {
   }
   return context;
 }
-

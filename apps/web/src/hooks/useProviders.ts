@@ -1,34 +1,35 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type MutateOptions, type MutationFunctionContext } from '@tanstack/react-query';
 import { apiClient } from '@agentctl/api-client';
 import type {
   ProviderDiscovery,
-  ProviderName,
-  SessionProviderSelection,
   SessionWithCapabilities,
-  ThinkingEffort,
 } from '@agentctl/shared';
+import { useActionDispatcher } from './useActionDispatcher';
 
 type SessionResponse = SessionWithCapabilities;
 
 export function useProviders(sessionId: string | null) {
   const queryClient = useQueryClient();
+  const { execute } = useActionDispatcher();
 
   const { data: providers = [], isLoading: isLoadingProviders } = useQuery({
     queryKey: ['providers'],
     queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/providers'),
   });
 
-  const providerMutation = useMutation({
-    mutationFn: (payload: SessionProviderSelection) => {
-      if (!sessionId) throw new Error('No active session');
-      return apiClient.fetch<SessionResponse>(`/api/sessions/${sessionId}/provider`, {
+  const updateProviderMutation = useMutation({
+    mutationFn: ({ providerId, modelId }: { providerId: string; modelId?: string }) => {
+      if (!sessionId) {
+        throw new Error('No active session ID');
+      }
+      return apiClient.fetch(`/api/sessions/${sessionId}/provider`, {
         method: 'PATCH',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ providerId, modelId }),
       });
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       if (sessionId) {
-        queryClient.setQueryData<SessionResponse>(['session', sessionId], data);
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
       }
     },
   });
@@ -38,6 +39,8 @@ export function useProviders(sessionId: string | null) {
     modelId?: string,
     sessionData?: SessionResponse | null,
   ) => {
+    if (!sessionId) return;
+
     const capability = sessionData?.capabilities.find((item) => item.id === providerId);
 
     // If a model is explicitly passed, use it. Otherwise, fallback to the current/default.
@@ -49,20 +52,12 @@ export function useProviders(sessionId: string | null) {
       selectedModel = modelOption?.currentValue ?? modelOption?.options[0]?.value ?? 'default';
     }
 
-    const thinkingOption = capability?.configOptions?.find(
-      (option) =>
-        option.id === 'thinking' ||
-        option.id === 'thinking_effort' ||
-        option.id === 'selectedThinkingEffort',
+    void execute(`switch-provider-${providerId}`, () => 
+      updateProviderMutation.mutateAsync({
+        providerId,
+        modelId: selectedModel,
+      })
     );
-
-    providerMutation.mutate({
-      selectedProvider: providerId as ProviderName,
-      selectedModel: selectedModel,
-      selectedThinkingEffort: (thinkingOption?.currentValue ??
-        thinkingOption?.options[0]?.value ??
-        'medium') as ThinkingEffort,
-    });
   };
 
   const loginMutation = useMutation({
@@ -145,23 +140,42 @@ export function useProviders(sessionId: string | null) {
     },
   });
 
+  const wrapMutate = <TParams, TResult>(
+    actionName: string,
+    mutation: ReturnType<typeof useMutation<TResult, Error, TParams>>,
+    options: { successMessage?: string } = {},
+  ) => {
+    return (params: TParams, mutateOptions?: MutateOptions<TResult, Error, TParams>) => {
+      void execute(actionName, () => mutation.mutateAsync(params), {
+        successMessage: options.successMessage,
+      }).then((result) => {
+        if (result !== undefined) {
+          mutateOptions?.onSuccess?.(result, params, undefined, {} as unknown as MutationFunctionContext);
+        } else {
+          mutateOptions?.onError?.(new Error('Mutation failed'), params, undefined, {} as unknown as MutationFunctionContext);
+        }
+      });
+    };
+  };
+
   return {
     providers,
     isLoadingProviders,
     switchProvider,
-    login: loginMutation.mutate,
+    login: wrapMutate('login', loginMutation, { successMessage: 'Login successful' }),
     isLoggingIn: loginMutation.isPending,
-    isSwitching: providerMutation.isPending,
-    activate: activateMutation.mutate,
+    isSwitching: updateProviderMutation.isPending,
+    activate: wrapMutate('activate', activateMutation, { successMessage: 'Provider activated' }),
     isActivating: activateMutation.isPending,
-    syncProviders: syncMutation.mutate,
+    syncProviders: wrapMutate('sync', syncMutation, { successMessage: 'Providers synced' }),
     isSyncing: syncMutation.isPending,
-    toggleProvider: toggleMutation.mutate,
+    toggleProvider: wrapMutate('toggle', toggleMutation),
     isToggling: toggleMutation.isPending,
-    refreshProvider: refreshMutation.mutate,
+    refreshProvider: wrapMutate('refresh', refreshMutation, { successMessage: 'Provider refreshed' }),
     isRefreshing: refreshMutation.isPending,
-    updateProviderConfig: updateProviderConfigMutation.mutate,
+    updateProviderConfig: wrapMutate('config', updateProviderConfigMutation, {
+      successMessage: 'Configuration updated',
+    }),
     isUpdatingConfig: updateProviderConfigMutation.isPending,
   };
 }
-

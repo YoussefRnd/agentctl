@@ -17,6 +17,8 @@
     "@fastify/secure-session": "^8.3.0",
     "@fastify/type-provider-zod": "^1.0.0",
     "@fastify/websocket": "^11.2.0",
+    "@ts-rest/core": "^3.52.1",
+    "@ts-rest/fastify": "^3.52.1",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.8.5",
     "fastify-plugin": "^5.1.0",

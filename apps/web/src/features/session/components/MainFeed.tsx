@@ -108,7 +108,7 @@ export function MainFeed() {
             </div>
           )}
 
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto mx-auto w-full max-w-[800px] px-6 pb-6">
             <CommandBar
               onSend={handleSend}
               disabled={

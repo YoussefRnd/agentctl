@@ -72,12 +72,17 @@ export const acpEventMetadataSchema = z.object({
   promptTokens: z.number().optional(),
   completionTokens: z.number().optional(),
   cost: z.number().optional(),
-}).optional();
+});
 
-export type ACPEventRow = ACPEvent & {
-  id: number;
-  sessionId: string;
-  parentEventId?: number | null;
-  metadata?: z.infer<typeof acpEventMetadataSchema>;
-};
+export const acpEventRowSchema = z.intersection(
+  acpEventSchema,
+  z.object({
+    id: z.number(),
+    sessionId: z.uuid(),
+    parentEventId: z.number().nullable().optional(),
+    metadata: acpEventMetadataSchema.optional(),
+  })
+);
+
+export type ACPEventRow = z.infer<typeof acpEventRowSchema>;
 
