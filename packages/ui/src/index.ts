@@ -6,4 +6,6 @@ export * from './components/Input.js';
 export * from './components/Skeleton.js';
 export * from './components/TerminalGlass.js';
 export * from './components/ConfirmationModal.js';
+export * from './components/Dialog.js';
+export * from './components/Popover.js';
 export * from './utils.js';

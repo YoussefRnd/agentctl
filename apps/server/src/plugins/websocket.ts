@@ -2,7 +2,7 @@ import fp from 'fastify-plugin';
 import fastifyWebsocket from '@fastify/websocket';
 import { acpEvents } from '@agentctl/core';
 import { and, asc, eq, gt } from 'drizzle-orm';
-import { wsMessageSchema } from '../types.js';
+import { clientActionSchema, createEvent } from '@agentctl/shared';
 import type { ACPEventRow } from '@agentctl/shared';
 
 function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
@@ -37,7 +37,7 @@ export default fp(async (fastify) => {
                 ? Buffer.from(rawMessage).toString()
                 : String(rawMessage);
 
-          const message = wsMessageSchema.parse(JSON.parse(messageText));
+          const message = clientActionSchema.parse(JSON.parse(messageText));
 
           if (message.action === 'subscribe') {
             if (unsubscribe) unsubscribe();
@@ -48,8 +48,7 @@ export default fp(async (fastify) => {
             } catch (err) {
               fastify.log.error(err, `Failed to resuscitate session: ${message.sessionId}`);
               socket.send(
-                JSON.stringify({
-                  type: 'error',
+                createEvent('error', {
                   error: `Failed to resuscitate session: ${err instanceof Error ? err.message : String(err)}`,
                 }),
               );
@@ -69,14 +68,14 @@ export default fp(async (fastify) => {
                 .orderBy(asc(acpEvents.id));
 
               for (const event of missedEvents) {
-                socket.send(JSON.stringify({ type: 'acp_event', payload: parseEventRow(event) }));
+                socket.send(createEvent('acp_event', parseEventRow(event)));
               }
             }
 
             unsubscribe = fastify.eventBus.subscribe(message.sessionId, (event) => {
               // Event from ACPSession also has string data, parse it
               const parsed = event as unknown as typeof acpEvents.$inferSelect;
-              socket.send(JSON.stringify({ type: 'acp_event', payload: parseEventRow(parsed) }));
+              socket.send(createEvent('acp_event', parseEventRow(parsed)));
             });
           } else {
             await req.server.sessionManager.handleClientMessage(
@@ -87,7 +86,7 @@ export default fp(async (fastify) => {
           }
         } catch (error) {
           req.log.error(error, 'WebSocket message error');
-          socket.send(JSON.stringify({ error: 'Invalid message' }));
+          socket.send(createEvent('error', { error: 'Invalid message' }));
         }
       };
 

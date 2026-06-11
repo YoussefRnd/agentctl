@@ -157,6 +157,7 @@ export type ProviderCapability = z.infer<typeof providerCapabilitySchema>;
 export type ThinkingEffort = z.infer<typeof thinkingEffortSchema>;
 export type SessionWithCapabilities = z.infer<typeof sessionWithCapabilitiesSchema>;
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
+export type ApprovalMode = z.infer<typeof approvalModeSchema>;
 export type ProviderStatus = z.infer<typeof providerStatusSchema>;
 export type ACPConfigOption = z.infer<typeof acpConfigOptionSchema>;
 export type ProviderDiscovery = z.infer<typeof providerDiscoverySchema>;
