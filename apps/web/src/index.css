@@ -4,179 +4,207 @@
 @plugin 'tailwindcss-animate';
 
 :root, [data-theme="mocha"] {
-  /* Brand Colors (Official Catppuccin Mocha) */
+  /* REFERENCE TOKENS - Base Colors */
+  --ref-mauve: #cba6f7;
+  --ref-red: #f38ba8;
+  --ref-peach: #fab387;
+  --ref-green: #a6e3a1;
+  --ref-base: #1e1e2e;
+  --ref-mantle: #181825;
+  --ref-crust: #11111b;
+  --ref-text: #cdd6f4;
+  --ref-subtext0: #a6adc8;
+  --ref-lavender: #b4befe;
+  --ref-surface0: #313244;
+  --ref-surface1: #45475a;
+
+  /* SYSTEM TOKENS - UI Functional Roles */
+  --sys-color-accent: var(--ref-mauve);
+  --sys-color-accent-secondary: var(--ref-lavender);
+  --sys-color-danger: var(--ref-red);
+  --sys-color-warning: var(--ref-peach);
+  --sys-color-success: var(--ref-green);
+  --sys-bg-app: var(--ref-crust);
+  --sys-bg-panel: var(--ref-base);
+  --sys-bg-mantle: var(--ref-mantle);
+  --sys-bg-surface0: var(--ref-surface0);
+  --sys-bg-surface1: var(--ref-surface1);
+  --sys-text-primary: var(--ref-text);
+  --sys-text-secondary: var(--ref-subtext0);
+
+  /* SEMANTIC TOKENS - High-level UI Roles */
+  --theme-background: var(--sys-bg-app);
+  --theme-surface: color-mix(in srgb, var(--sys-bg-panel), transparent 70%);
+  --theme-surface-secondary: var(--sys-bg-mantle);
+  --theme-surface-tertiary: var(--sys-bg-surface0);
+  --theme-surface-quaternary: var(--sys-bg-surface1);
+  --theme-surface-accent: color-mix(in srgb, var(--sys-color-accent), transparent 95%);
+  --theme-border: color-mix(in srgb, var(--sys-color-accent-secondary), transparent 90%);
+  --theme-border-active: color-mix(in srgb, var(--sys-color-accent), transparent 60%);
+  --theme-text-main: var(--sys-text-primary);
+  --theme-text-muted: var(--sys-text-secondary);
+  --theme-accent: var(--sys-color-accent);
+  --theme-accent-secondary: var(--sys-color-accent-secondary);
+
+  /* Legacy compatibility for remaining brand tokens if needed elsewhere */
   --color-brand-rosewater: #f5e0dc;
   --color-brand-flamingo: #f2cdcd;
   --color-brand-pink: #f5c2e7;
-  --color-brand-mauve: #cba6f7;
-  --color-brand-red: #f38ba8;
+  --color-brand-mauve: var(--ref-mauve);
+  --color-brand-red: var(--ref-red);
   --color-brand-maroon: #eba0ac;
-  --color-brand-peach: #fab387;
+  --color-brand-peach: var(--ref-peach);
   --color-brand-yellow: #f9e2af;
-  --color-brand-green: #a6e3a1;
+  --color-brand-green: var(--ref-green);
   --color-brand-teal: #94e2d5;
   --color-brand-sky: #89dceb;
   --color-brand-sapphire: #74c7ec;
   --color-brand-blue: #89b4fa;
-  --color-brand-lavender: #b4befe;
-  --color-brand-text: #cdd6f4;
+  --color-brand-lavender: var(--ref-lavender);
+  --color-brand-text: var(--ref-text);
   --color-brand-subtext1: #bac2de;
-  --color-brand-subtext0: #a6adc8;
+  --color-brand-subtext0: var(--ref-subtext0);
   --color-brand-overlay2: #9399b2;
   --color-brand-overlay1: #7f849c;
   --color-brand-overlay0: #6c7086;
   --color-brand-surface2: #585b70;
-  --color-brand-surface1: #45475a;
-  --color-brand-surface0: #313244;
-  --color-brand-base: #1e1e2e;
-  --color-brand-mantle: #181825;
-  --color-brand-crust: #11111b;
-
-  /* Semantic Roles */
-  --theme-background: var(--color-brand-crust);
-  --theme-surface: color-mix(in srgb, var(--color-brand-base), transparent 70%);
-  --theme-surface-secondary: var(--color-brand-mantle);
-  --theme-surface-tertiary: var(--color-brand-surface0);
-  --theme-surface-quaternary: var(--color-brand-surface1);
-  --theme-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
-  --theme-border: color-mix(in srgb, var(--color-brand-lavender), transparent 90%);
-  --theme-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 60%);
-  --theme-text-main: var(--color-brand-text);
-  --theme-text-muted: var(--color-brand-subtext0);
-  --theme-accent: var(--color-brand-mauve);
-  --theme-accent-secondary: var(--color-brand-lavender);
+  --color-brand-surface1: var(--ref-surface1);
+  --color-brand-surface0: var(--ref-surface0);
+  --color-brand-base: var(--ref-base);
+  --color-brand-mantle: var(--ref-mantle);
+  --color-brand-crust: var(--ref-crust);
 }
 
 [data-theme="latte"] {
-  /* Brand Colors (Official Catppuccin Latte) */
-  --color-brand-rosewater: #dc8a78;
-  --color-brand-flamingo: #dd7878;
-  --color-brand-pink: #ea76cb;
-  --color-brand-mauve: #8839ef;
-  --color-brand-red: #d20f39;
-  --color-brand-maroon: #e64553;
-  --color-brand-peach: #fe640b;
-  --color-brand-yellow: #df8e1d;
-  --color-brand-green: #40a02b;
-  --color-brand-teal: #179287;
-  --color-brand-sky: #04a5e5;
-  --color-brand-sapphire: #209fb5;
-  --color-brand-blue: #1e66f5;
-  --color-brand-lavender: #7287fd;
-  --color-brand-text: #4c4f69;
-  --color-brand-subtext1: #5c5f77;
-  --color-brand-subtext0: #6c6f85;
-  --color-brand-overlay2: #7c7f93;
-  --color-brand-overlay1: #8c8fa1;
-  --color-brand-overlay0: #9ca0b0;
-  --color-brand-surface2: #acb0be;
-  --color-brand-surface1: #bcc0cc;
-  --color-brand-surface0: #ccd0da;
-  --color-brand-base: #eff1f5;
-  --color-brand-mantle: #e6e9ef;
-  --color-brand-crust: #dce0e8;
+  /* REFERENCE TOKENS - Base Colors */
+  --ref-mauve: #8839ef;
+  --ref-red: #d20f39;
+  --ref-peach: #fe640b;
+  --ref-green: #40a02b;
+  --ref-base: #eff1f5;
+  --ref-mantle: #e6e9ef;
+  --ref-crust: #dce0e8;
+  --ref-text: #4c4f69;
+  --ref-subtext0: #6c6f85;
+  --ref-lavender: #7287fd;
+  --ref-surface0: #ccd0da;
+  --ref-surface1: #bcc0cc;
 
-  /* Semantic Roles */
-  --theme-background: var(--color-brand-crust);
-  --theme-surface: color-mix(in srgb, var(--color-brand-base), transparent 50%);
-  --theme-surface-secondary: var(--color-brand-mantle);
-  --theme-surface-tertiary: var(--color-brand-surface0);
-  --theme-surface-quaternary: var(--color-brand-surface1);
-  --theme-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
-  --theme-border: color-mix(in srgb, var(--color-brand-lavender), transparent 85%);
-  --theme-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 50%);
-  --theme-text-main: var(--color-brand-text);
-  --theme-text-muted: var(--color-brand-subtext0);
-  --theme-accent: var(--color-brand-mauve);
-  --theme-accent-secondary: var(--color-brand-lavender);
+  /* SYSTEM TOKENS - UI Functional Roles */
+  --sys-color-accent: var(--ref-mauve);
+  --sys-color-accent-secondary: var(--ref-lavender);
+  --sys-color-danger: var(--ref-red);
+  --sys-color-warning: var(--ref-peach);
+  --sys-color-success: var(--ref-green);
+  --sys-bg-app: var(--ref-crust);
+  --sys-bg-panel: var(--ref-base);
+  --sys-bg-mantle: var(--ref-mantle);
+  --sys-bg-surface0: var(--ref-surface0);
+  --sys-bg-surface1: var(--ref-surface1);
+  --sys-text-primary: var(--ref-text);
+  --sys-text-secondary: var(--ref-subtext0);
+
+  /* SEMANTIC TOKENS - High-level UI Roles */
+  --theme-background: var(--sys-bg-app);
+  --theme-surface: color-mix(in srgb, var(--sys-bg-panel), transparent 50%);
+  --theme-surface-secondary: var(--sys-bg-mantle);
+  --theme-surface-tertiary: var(--sys-bg-surface0);
+  --theme-surface-quaternary: var(--sys-bg-surface1);
+  --theme-surface-accent: color-mix(in srgb, var(--sys-color-accent), transparent 95%);
+  --theme-border: color-mix(in srgb, var(--sys-color-accent-secondary), transparent 85%);
+  --theme-border-active: color-mix(in srgb, var(--sys-color-accent), transparent 50%);
+  --theme-text-main: var(--sys-text-primary);
+  --theme-text-muted: var(--sys-text-secondary);
+  --theme-accent: var(--sys-color-accent);
+  --theme-accent-secondary: var(--sys-color-accent-secondary);
 }
 
 [data-theme="macchiato"] {
-  /* Brand Colors (Official Catppuccin Macchiato) */
-  --color-brand-rosewater: #f4dbd6;
-  --color-brand-flamingo: #f0c6c6;
-  --color-brand-pink: #f5bde6;
-  --color-brand-mauve: #c6a0f6;
-  --color-brand-red: #ed8796;
-  --color-brand-maroon: #ee99a0;
-  --color-brand-peach: #f5a97f;
-  --color-brand-yellow: #eed49f;
-  --color-brand-green: #a6da95;
-  --color-brand-teal: #8bd5ca;
-  --color-brand-sky: #91d7e3;
-  --color-brand-sapphire: #7dc4e4;
-  --color-brand-blue: #8aadf4;
-  --color-brand-lavender: #b7bdf8;
-  --color-brand-text: #cad3f5;
-  --color-brand-subtext1: #b8c0e0;
-  --color-brand-subtext0: #a5adcb;
-  --color-brand-overlay2: #939ab7;
-  --color-brand-overlay1: #8087a2;
-  --color-brand-overlay0: #6e738d;
-  --color-brand-surface2: #5b6078;
-  --color-brand-surface1: #494d64;
-  --color-brand-surface0: #363a4f;
-  --color-brand-base: #24273a;
-  --color-brand-mantle: #1e2030;
-  --color-brand-crust: #181926;
+  /* REFERENCE TOKENS - Base Colors */
+  --ref-mauve: #c6a0f6;
+  --ref-red: #ed8796;
+  --ref-peach: #f5a97f;
+  --ref-green: #a6da95;
+  --ref-base: #24273a;
+  --ref-mantle: #1e2030;
+  --ref-crust: #181926;
+  --ref-text: #cad3f5;
+  --ref-subtext0: #a5adcb;
+  --ref-lavender: #b7bdf8;
+  --ref-surface0: #363a4f;
+  --ref-surface1: #494d64;
 
-  /* Semantic Roles */
-  --theme-background: var(--color-brand-crust);
-  --theme-surface: color-mix(in srgb, var(--color-brand-base), transparent 70%);
-  --theme-surface-secondary: var(--color-brand-mantle);
-  --theme-surface-tertiary: var(--color-brand-surface0);
-  --theme-surface-quaternary: var(--color-brand-surface1);
-  --theme-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
-  --theme-border: color-mix(in srgb, var(--color-brand-lavender), transparent 90%);
-  --theme-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 60%);
-  --theme-text-main: var(--color-brand-text);
-  --theme-text-muted: var(--color-brand-subtext0);
-  --theme-accent: var(--color-brand-mauve);
-  --theme-accent-secondary: var(--color-brand-lavender);
+  /* SYSTEM TOKENS - UI Functional Roles */
+  --sys-color-accent: var(--ref-mauve);
+  --sys-color-accent-secondary: var(--ref-lavender);
+  --sys-color-danger: var(--ref-red);
+  --sys-color-warning: var(--ref-peach);
+  --sys-color-success: var(--ref-green);
+  --sys-bg-app: var(--ref-crust);
+  --sys-bg-panel: var(--ref-base);
+  --sys-bg-mantle: var(--ref-mantle);
+  --sys-bg-surface0: var(--ref-surface0);
+  --sys-bg-surface1: var(--ref-surface1);
+  --sys-text-primary: var(--ref-text);
+  --sys-text-secondary: var(--ref-subtext0);
+
+  /* SEMANTIC TOKENS - High-level UI Roles */
+  --theme-background: var(--sys-bg-app);
+  --theme-surface: color-mix(in srgb, var(--sys-bg-panel), transparent 70%);
+  --theme-surface-secondary: var(--sys-bg-mantle);
+  --theme-surface-tertiary: var(--sys-bg-surface0);
+  --theme-surface-quaternary: var(--sys-bg-surface1);
+  --theme-surface-accent: color-mix(in srgb, var(--sys-color-accent), transparent 95%);
+  --theme-border: color-mix(in srgb, var(--sys-color-accent-secondary), transparent 90%);
+  --theme-border-active: color-mix(in srgb, var(--sys-color-accent), transparent 60%);
+  --theme-text-main: var(--sys-text-primary);
+  --theme-text-muted: var(--sys-text-secondary);
+  --theme-accent: var(--sys-color-accent);
+  --theme-accent-secondary: var(--sys-color-accent-secondary);
 }
 
 [data-theme="frappe"] {
-  /* Brand Colors (Official Catppuccin Frappé) */
-  --color-brand-rosewater: #f2d5cf;
-  --color-brand-flamingo: #eebebe;
-  --color-brand-pink: #f4b8e4;
-  --color-brand-mauve: #ca9ee6;
-  --color-brand-red: #e78284;
-  --color-brand-maroon: #ea999c;
-  --color-brand-peach: #ef9f76;
-  --color-brand-yellow: #e5c890;
-  --color-brand-green: #a6d189;
-  --color-brand-teal: #81c8be;
-  --color-brand-sky: #99d1db;
-  --color-brand-sapphire: #85c1dc;
-  --color-brand-blue: #8caaee;
-  --color-brand-lavender: #babbf1;
-  --color-brand-text: #c6d0f5;
-  --color-brand-subtext1: #b5bfe2;
-  --color-brand-subtext0: #a5adce;
-  --color-brand-overlay2: #949cbb;
-  --color-brand-overlay1: #838ba7;
-  --color-brand-overlay0: #737994;
-  --color-brand-surface2: #626880;
-  --color-brand-surface1: #51576d;
-  --color-brand-surface0: #414559;
-  --color-brand-base: #303446;
-  --color-brand-mantle: #292c3c;
-  --color-brand-crust: #232634;
+  /* REFERENCE TOKENS - Base Colors */
+  --ref-mauve: #ca9ee6;
+  --ref-red: #e78284;
+  --ref-peach: #ef9f76;
+  --ref-green: #a6d189;
+  --ref-base: #303446;
+  --ref-mantle: #292c3c;
+  --ref-crust: #232634;
+  --ref-text: #c6d0f5;
+  --ref-subtext0: #a5adce;
+  --ref-lavender: #babbf1;
+  --ref-surface0: #414559;
+  --ref-surface1: #51576d;
 
-  /* Semantic Roles */
-  --theme-background: var(--color-brand-crust);
-  --theme-surface: color-mix(in srgb, var(--color-brand-base), transparent 70%);
-  --theme-surface-secondary: var(--color-brand-mantle);
-  --theme-surface-tertiary: var(--color-brand-surface0);
-  --theme-surface-quaternary: var(--color-brand-surface1);
-  --theme-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
-  --theme-border: color-mix(in srgb, var(--color-brand-lavender), transparent 90%);
-  --theme-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 60%);
-  --theme-text-main: var(--color-brand-text);
-  --theme-text-muted: var(--color-brand-subtext0);
-  --theme-accent: var(--color-brand-mauve);
-  --theme-accent-secondary: var(--color-brand-lavender);
+  /* SYSTEM TOKENS - UI Functional Roles */
+  --sys-color-accent: var(--ref-mauve);
+  --sys-color-accent-secondary: var(--ref-lavender);
+  --sys-color-danger: var(--ref-red);
+  --sys-color-warning: var(--ref-peach);
+  --sys-color-success: var(--ref-green);
+  --sys-bg-app: var(--ref-crust);
+  --sys-bg-panel: var(--ref-base);
+  --sys-bg-mantle: var(--ref-mantle);
+  --sys-bg-surface0: var(--ref-surface0);
+  --sys-bg-surface1: var(--ref-surface1);
+  --sys-text-primary: var(--ref-text);
+  --sys-text-secondary: var(--ref-subtext0);
+
+  /* SEMANTIC TOKENS - High-level UI Roles */
+  --theme-background: var(--sys-bg-app);
+  --theme-surface: color-mix(in srgb, var(--sys-bg-panel), transparent 70%);
+  --theme-surface-secondary: var(--sys-bg-mantle);
+  --theme-surface-tertiary: var(--sys-bg-surface0);
+  --theme-surface-quaternary: var(--sys-bg-surface1);
+  --theme-surface-accent: color-mix(in srgb, var(--sys-color-accent), transparent 95%);
+  --theme-border: color-mix(in srgb, var(--sys-color-accent-secondary), transparent 90%);
+  --theme-border-active: color-mix(in srgb, var(--sys-color-accent), transparent 60%);
+  --theme-text-main: var(--sys-text-primary);
+  --theme-text-muted: var(--sys-text-secondary);
+  --theme-accent: var(--sys-color-accent);
+  --theme-accent-secondary: var(--sys-color-accent-secondary);
 }
 
 @theme {
@@ -197,13 +225,13 @@
   --color-accent: var(--theme-accent);
   --color-accent-secondary: var(--theme-accent-secondary);
 
-  --color-success: var(--color-brand-green);
-  --color-warning: var(--color-brand-peach);
-  --color-danger: var(--color-brand-red);
+  --color-success: var(--sys-color-success);
+  --color-warning: var(--sys-color-warning);
+  --color-danger: var(--sys-color-danger);
 
   /* Brand Colors mapping to enable Tailwind compilation */
   --color-brand-rosewater: var(--color-brand-rosewater);
-  --color-brand-flamingo: var(--color-brand-flamingo);
+...  --color-brand-flamingo: var(--color-brand-flamingo);
   --color-brand-pink: var(--color-brand-pink);
   --color-brand-mauve: var(--color-brand-mauve);
   --color-brand-red: var(--color-brand-red);
