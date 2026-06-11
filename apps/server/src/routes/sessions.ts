@@ -3,8 +3,6 @@ import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { sessions, projects } from '@agentctl/core';
-import { eq } from 'drizzle-orm';
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { AppError } from '../errors/app-error.js';
@@ -38,24 +36,12 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     },
     async (request) => {
       try {
-        const session = await fastify.sessionManager.createSession({
+        return await fastify.sessionService.createSession({
           projectId: request.body.projectId,
           providerId: request.body.agent,
           taskSlug: request.body.taskSlug,
           mode: request.body.mode,
         });
-
-        // Return the created session record from the database
-        const sessionRecord = await fastify.db.query.sessions.findFirst({
-          where: eq(sessions.id, session.sessionId),
-          with: { project: true },
-        });
-
-        if (!sessionRecord) {
-          throw new AppError('Failed to retrieve created session', 500);
-        }
-
-        return sessionRecord;
       } catch (err) {
         if (err instanceof Error) {
           if (err.message.includes('not found')) {
@@ -78,17 +64,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-        with: { project: true },
-      });
-
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
-
-      const providersList = await fastify.providerRegistry.discover();
-      return { session, capabilities: providersList };
+      return await fastify.sessionService.getSessionWithCapabilities(request.params.id);
     },
   );
 
@@ -101,31 +77,11 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-        with: { project: true },
-      });
-
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
-
-      await fastify.sessionManager.updateSessionConfig(request.params.id, {
+      return await fastify.sessionService.updateSessionProvider(request.params.id, {
         selectedProvider: request.body.selectedProvider,
         selectedModel: request.body.selectedModel,
         selectedThinkingEffort: request.body.selectedThinkingEffort,
       });
-
-      const updatedSession = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-      });
-
-      if (!updatedSession) {
-        throw new AppError('Session not found', 404);
-      }
-
-      const providersList = await fastify.providerRegistry.discover();
-      return { session: updatedSession, capabilities: providersList };
     },
   );
 
@@ -137,25 +93,8 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-        with: { project: true },
-      });
-
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
-
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-
-      if (!project?.repoRoot) {
-        return [];
-      }
-
       try {
-        return await fastify.worktreeManager.listBranches(project.repoRoot);
+        return await fastify.sessionService.listBranches(request.params.id);
       } catch (err) {
         throw new AppError(err instanceof Error ? err.message : 'Failed to list branches', 500);
       }
@@ -173,43 +112,8 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-        with: { project: true },
-      });
-
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
-
       try {
-        // Checkout the branch in the worktree
-        await fastify.worktreeManager.checkout(session.worktreePath, request.body.branch);
-
-        // Update database
-        const [updatedSession] = await fastify.db
-          .update(sessions)
-          .set({
-            branch: request.body.branch,
-          })
-          .where(eq(sessions.id, request.params.id))
-          .returning();
-
-        // If session is running, restart the connection to reload new state
-        const activeSession = fastify.sessionManager.getSession(request.params.id);
-        if (activeSession) {
-          const provider = await fastify.providerRegistry.ensureProviderReady(
-            updatedSession.selectedProvider,
-            {
-              force: false,
-            },
-          );
-          if (provider.status === 'ready' || provider.status === 'needs_auth') {
-            await fastify.sessionManager.restartSession(request.params.id);
-          }
-        }
-
-        return updatedSession;
+        return await fastify.sessionService.checkoutBranch(request.params.id, request.body.branch);
       } catch (err) {
         throw new AppError(err instanceof Error ? err.message : 'Failed to change branch', 500);
       }
@@ -225,38 +129,8 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-        with: { project: true },
-      });
-
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
-
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-
-      if (!project) {
-        throw new AppError('Project not found', 404);
-      }
-
-      const newMode = request.body.mode;
-
       try {
-        await fastify.sessionManager.switchMode(request.params.id, newMode);
-
-        const updatedSession = await fastify.db.query.sessions.findFirst({
-          where: eq(sessions.id, request.params.id),
-          with: { project: true },
-        });
-
-        if (!updatedSession) {
-          throw new AppError('Session not found', 404);
-        }
-
-        return updatedSession;
+        return await fastify.sessionService.switchMode(request.params.id, request.body.mode);
       } catch (err) {
         request.log.error(err, 'Failed to switch session mode');
         throw new AppError(
@@ -265,9 +139,9 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
         );
       }
     },
-  );
+    );
 
-  fastify.withTypeProvider<ZodTypeProvider>().patch(
+    fastify.withTypeProvider<ZodTypeProvider>().patch(
     '/sessions/:id/approval-mode',
     {
       schema: {
@@ -276,26 +150,9 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-      });
-
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
-
-      await fastify.db
-        .update(sessions)
-        .set({ approvalMode: request.body.approvalMode })
-        .where(eq(sessions.id, request.params.id));
-
-      const updatedSession = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, request.params.id),
-      });
-
-      return updatedSession;
+      return await fastify.sessionService.updateApprovalMode(request.params.id, request.body.approvalMode);
     },
-  );
+    );
 
   fastify.withTypeProvider<ZodTypeProvider>().post(
     '/sessions/:id/merge',
@@ -310,56 +167,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     async (request) => {
       const { id } = request.params;
       const { commitMessage } = request.body;
-
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, id),
-        with: { project: true },
-      });
-
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
-
-      const project = session.project;
-
-
-      if (session.mode === 'worktree') {
-        if (!project.repoRoot) {
-          throw new AppError('Project repo root not set. Cannot merge.', 400);
-        }
-
-        // Stop session process
-        fastify.sessionManager.stopSession(id);
-
-        try {
-          await fastify.worktreeManager.finalize(
-            project.repoRoot,
-            session.worktreePath,
-            session.branch,
-            'main', // default to main
-            'merge',
-            session.taskSlug,
-            commitMessage,
-          );
-        } catch (err) {
-          throw new AppError(err instanceof Error ? err.message : 'Merge failed', 500);
-        }
-      } else {
-        // Stop session process
-        fastify.sessionManager.stopSession(id);
-      }
-
-      // Update session status in DB
-      const [updatedSession] = await fastify.db
-        .update(sessions)
-        .set({
-          status: 'merged',
-          closedAt: new Date(),
-        })
-        .where(eq(sessions.id, id))
-        .returning();
-
-      return updatedSession;
+      return await fastify.sessionService.finalizeSession(id, 'merge', commitMessage);
     }
   );
 
@@ -372,55 +180,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
     },
     async (request) => {
       const { id } = request.params;
-
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, id),
-        with: { project: true },
-      });
-
-      if (!session) {
-        throw new AppError('Session not found', 404);
-      }
-
-      const project = session.project;
-
-
-      if (session.mode === 'worktree') {
-        if (!project.repoRoot) {
-          throw new AppError('Project repo root not set. Cannot discard.', 400);
-        }
-
-        // Stop session process
-        fastify.sessionManager.stopSession(id);
-
-        try {
-          await fastify.worktreeManager.finalize(
-            project.repoRoot,
-            session.worktreePath,
-            session.branch,
-            'main',
-            'discard',
-            session.taskSlug,
-          );
-        } catch (err) {
-          throw new AppError(err instanceof Error ? err.message : 'Discard failed', 500);
-        }
-      } else {
-        // Stop session process
-        fastify.sessionManager.stopSession(id);
-      }
-
-      // Update session status in DB
-      const [updatedSession] = await fastify.db
-        .update(sessions)
-        .set({
-          status: 'discarded',
-          closedAt: new Date(),
-        })
-        .where(eq(sessions.id, id))
-        .returning();
-
-      return updatedSession;
+      return await fastify.sessionService.finalizeSession(id, 'discard');
     }
   );
 
@@ -432,7 +192,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      await fastify.sessionManager.deleteSession(request.params.id);
+      await fastify.sessionService.deleteSession(request.params.id);
       return { success: true };
     },
   );
@@ -445,7 +205,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      await fastify.sessionManager.archiveSession(request.params.id);
+      await fastify.sessionService.archiveSession(request.params.id);
       return { success: true };
     },
   );
@@ -458,7 +218,7 @@ export const sessionsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) =
       },
     },
     async (request) => {
-      await fastify.sessionManager.restartSession(request.params.id);
+      await fastify.sessionService.restartSession(request.params.id);
       return { success: true };
     },
   );

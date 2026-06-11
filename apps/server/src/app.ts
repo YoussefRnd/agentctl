@@ -27,6 +27,7 @@ import { EventBus } from './utils/event-bus.js';
 import { AppError } from './errors/app-error.js';
 import type { FastifyError } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
+import { SessionService } from './services/session-service.js';
 
 export interface AppDependencies {
   db?: typeof defaultDb;
@@ -43,6 +44,7 @@ declare module 'fastify' {
     gitMutex: GitMutex;
     providerRegistry: ProviderRegistry;
     sessionManager: SessionManager;
+    sessionService: SessionService;
     eventBus: EventBus;
     config: ReturnType<typeof parseServerEnv>;
   }
@@ -78,11 +80,20 @@ export async function buildApp(deps: AppDependencies = {}) {
     deps.sessionManager ??
     new SessionManager(db, worktreeManager, providerRegistry, eventBus, fastify.log);
 
+  const sessionService = new SessionService(
+    db,
+    sessionManager,
+    worktreeManager,
+    providerRegistry,
+    fastify.log,
+  );
+
   fastify.decorate('db', db);
   fastify.decorate('gitMutex', gitMutex);
   fastify.decorate('worktreeManager', worktreeManager);
   fastify.decorate('providerRegistry', providerRegistry);
   fastify.decorate('sessionManager', sessionManager);
+  fastify.decorate('sessionService', sessionService);
   fastify.decorate('eventBus', eventBus);
   fastify.decorate('config', config);
 
