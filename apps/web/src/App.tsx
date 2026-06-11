@@ -5,6 +5,9 @@ import { LoginView } from './routes/LoginView';
 import { NewProjectPalette } from './features/project/components/NewProjectPalette';
 import { SetupWizard } from './features/settings/components/SetupWizard';
 import { SettingsPage } from './features/settings/components/SettingsPage';
+import { Sidebar } from './features/shell/components/Sidebar';
+import { SettingsSidebar } from './features/shell/components/SettingsSidebar';
+import { GlobalNav } from './features/shell/components/GlobalNav';
 
 export function App() {
   return (
@@ -15,7 +18,7 @@ export function App() {
         <Route
           path="/"
           element={
-            <Layout sidebarType="projects">
+            <Layout sidebar={<Sidebar />} nav={<GlobalNav title="projects" />}>
               <NewProjectPalette />
             </Layout>
           }
@@ -23,7 +26,7 @@ export function App() {
         <Route
           path="/settings"
           element={
-            <Layout sidebarType="settings">
+            <Layout sidebar={<SettingsSidebar />} nav={<GlobalNav title="settings" />}>
               <SettingsPage />
             </Layout>
           }
