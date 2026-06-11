@@ -14,7 +14,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  apiClient,
+  api,
   createProjectSession,
   type SidebarProject,
   deleteProject,
@@ -22,7 +22,7 @@ import {
   archiveSession,
 } from '@agentctl/api-client';
 import { useState, useEffect, useRef, type MouseEvent } from 'react';
-import type { ProviderDiscovery, SessionStatus } from '@agentctl/shared';
+import type { SessionStatus } from '@agentctl/shared';
 import { Input, ConfirmationModal } from '@agentctl/ui';
 import { useFilteredProjects } from '../hooks/useFilteredProjects.js';
 
@@ -62,20 +62,19 @@ export function Sidebar() {
     type?: 'brand-red' | 'brand-peach' | 'info';
   } | null>(null);
 
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: projectsResponse, isLoading } = api.getProjects.useQuery({
     queryKey: ['projects', sortBy, gitOnly],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      params.append('sortBy', sortBy);
-      if (gitOnly) params.append('gitOnly', 'true');
-      return apiClient.fetch<SidebarProject[]>(`/api/projects?${params.toString()}`);
+    query: {
+      sortBy,
+      gitOnly: gitOnly ? 'true' : 'false',
     },
   });
+  const projects = (projectsResponse?.body as SidebarProject[]) ?? [];
 
-  const { data: providers = [] } = useQuery({
+  const { data: providersResponse } = api.getProviders.useQuery({
     queryKey: ['providers'],
-    queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/providers'),
   });
+  const providers = providersResponse?.body ?? [];
 
   const createSessionMutation = useMutation({
     mutationFn: (projectId: string) => createProjectSession(projectId, providers),
