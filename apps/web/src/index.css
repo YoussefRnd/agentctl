@@ -287,7 +287,6 @@
   position: relative;
   overflow: hidden;
 
-  /* Top Highlight Edge */
   &::before {
     content: '';
     position: absolute;
@@ -303,6 +302,14 @@
     );
     pointer-events: none;
   }
+}
+
+@utility click-press {
+  @apply transition-all active:scale-95 active:opacity-80;
+}
+
+@utility hover-glow {
+  @apply transition-all hover:shadow-[0_0_15px_rgba(203,166,247,0.2)] hover:border-accent/40;
 }
 
 @utility glass-card {
