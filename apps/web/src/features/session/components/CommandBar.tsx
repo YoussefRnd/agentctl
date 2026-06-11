@@ -237,18 +237,6 @@ export function CommandBar({
   return (
     <div className="relative z-40 w-full px-6 pb-4">
       <div className="relative mx-auto max-w-[1000px]">
-        <ProviderPicker
-          sessionId={sessionId}
-          isOpen={isPickerOpen}
-          onClose={() => {
-            setIsPickerOpen(false);
-          }}
-          providers={providers}
-          selectedId={resolvedId}
-          selectedModelId={propSelectedModelId ?? null}
-          onSelect={handleProviderSelect}
-        />
-
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -271,7 +259,7 @@ export function CommandBar({
         >
           <div
             className={cn(
-              "liquid-glass flex flex-col rounded-xl border border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300",
+              "liquid-glass flex flex-col rounded-xl border border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300 overflow-visible",
               disabled ? 'opacity-30' : 'opacity-100'
             )}
             onDragOver={handleDragOver}
@@ -331,30 +319,44 @@ export function CommandBar({
             {/* Toolbar row */}
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPickerOpen(!isPickerOpen);
-                  }}
-                  aria-label="Select AI provider"
-                  aria-expanded={isPickerOpen}
-                  className={cn(
-                    "flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
-                    isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main'
-                  )}
-                >
-                  {activeProvider?.icon ? (
-                    <img src={activeProvider.icon} alt="" className="h-3.5 w-3.5 object-contain" />
-                  ) : (
-                    <Zap className={cn("h-3.5 w-3.5 transition-all duration-200", isPickerOpen && "fill-accent")} />
-                  )}
-                  <span className="max-w-[120px] truncate text-[10px] font-bold tracking-widest uppercase">
-                    {isLoadingProviders ? '...' : (propSelectedModelId ?? selectedProviderLabel)}
-                  </span>
-                  <ChevronDown
-                    className={cn("h-3 w-3 transition-transform duration-200", isPickerOpen && "rotate-180")}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPickerOpen(!isPickerOpen);
+                    }}
+                    aria-label="Select AI provider"
+                    aria-expanded={isPickerOpen}
+                    className={cn(
+                      "flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent",
+                      isPickerOpen ? 'bg-accent/20 text-accent border-accent/30' : 'hover:bg-text-main/5 text-text-muted hover:text-text-main'
+                    )}
+                  >
+                    {activeProvider?.icon ? (
+                      <img src={activeProvider.icon} alt="" className="h-3.5 w-3.5 object-contain" />
+                    ) : (
+                      <Zap className={cn("h-3.5 w-3.5 transition-all duration-200", isPickerOpen && "fill-accent")} />
+                    )}
+                    <span className="max-w-[120px] truncate text-[10px] font-bold tracking-widest uppercase">
+                      {isLoadingProviders ? '...' : (propSelectedModelId ?? selectedProviderLabel)}
+                    </span>
+                    <ChevronDown
+                      className={cn("h-3 w-3 transition-transform duration-200", isPickerOpen && "rotate-180")}
+                    />
+                  </button>
+
+                  <ProviderPicker
+                    sessionId={sessionId}
+                    isOpen={isPickerOpen}
+                    onClose={() => {
+                      setIsPickerOpen(false);
+                    }}
+                    providers={providers}
+                    selectedId={resolvedId}
+                    selectedModelId={propSelectedModelId ?? null}
+                    onSelect={handleProviderSelect}
                   />
-                </button>
+                </div>
 
                 {sessionData?.session && (
                   <CommandDropdown

@@ -1,8 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Sparkles, ShieldCheck } from 'lucide-react';
+import { Sparkles, ShieldCheck, Palette } from 'lucide-react';
 
 export function SettingsSidebar() {
   const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const activeTab = searchParams.get('tab') ?? 'providers';
 
   return (
     <aside
@@ -18,18 +20,31 @@ export function SettingsSidebar() {
           </div>
           <Link
             to="/settings"
-            className={`flex items-center gap-2 rounded-sm px-2 py-1.5 text-[11px] font-bold uppercase transition-all ${
-              location.pathname === '/settings'
-                ? 'bg-surface-tertiary text-accent shadow-[0_0_10px_rgba(203,166,247,0.1)]'
-                : 'text-text-muted hover:text-accent hover:bg-surface-secondary'
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-all ${
+              activeTab === 'providers'
+                ? 'bg-surface-accent text-accent border border-border-active'
+                : 'text-text-muted hover:text-accent hover:bg-surface-secondary/50 border border-transparent'
             }`}
           >
             <Sparkles
-              className={`h-3.5 w-3.5 ${location.pathname === '/settings' ? 'text-accent' : ''}`}
+              className={`h-3.5 w-3.5 ${activeTab === 'providers' ? 'text-accent' : ''}`}
             />
             Providers
           </Link>
-          <div className="text-text-muted/30 flex cursor-not-allowed items-center gap-2 rounded-sm px-2 py-1.5 text-[11px] font-bold uppercase grayscale">
+          <Link
+            to="/settings?tab=theme"
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-all ${
+              activeTab === 'theme'
+                ? 'bg-surface-accent text-accent border border-border-active'
+                : 'text-text-muted hover:text-accent hover:bg-surface-secondary/50 border border-transparent'
+            }`}
+          >
+            <Palette
+              className={`h-3.5 w-3.5 ${activeTab === 'theme' ? 'text-accent' : ''}`}
+            />
+            Theme
+          </Link>
+          <div className="text-text-muted/30 flex cursor-not-allowed items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase grayscale border border-transparent">
             <ShieldCheck className="h-3.5 w-3.5" />
             Security
           </div>
@@ -41,3 +56,4 @@ export function SettingsSidebar() {
     </aside>
   );
 }
+

@@ -68,9 +68,9 @@ export function SessionHeader({
         onClick={onToggleWorkbench}
         aria-label="Toggle Inspector"
         title="Toggle Inspector (⌘\\)"
-        className={`flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-300 ${
+        className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all duration-300 ${
           isWorkbenchOpen
-            ? 'border-accent/30 bg-accent/10 text-accent'
+            ? 'border-accent/30 bg-accent/10 text-accent font-bold'
             : 'border-border/20 bg-surface/30 text-text-muted hover:text-text-main hover:border-border/40 hover:bg-surface/60'
         }`}
       >

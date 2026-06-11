@@ -3,7 +3,7 @@
 @plugin '@tailwindcss/typography';
 @plugin 'tailwindcss-animate';
 
-@theme {
+:root, [data-theme="mocha"] {
   /* Brand Colors (Official Catppuccin Mocha) */
   --color-brand-rosewater: #f5e0dc;
   --color-brand-flamingo: #f2cdcd;
@@ -33,23 +33,201 @@
   --color-brand-crust: #11111b;
 
   /* Semantic Roles */
-  --color-background: var(--color-brand-crust);
-  --color-surface: color-mix(in srgb, var(--color-brand-base), transparent 70%);
-  --color-surface-secondary: var(--color-brand-mantle);
-  --color-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
+  --theme-background: var(--color-brand-crust);
+  --theme-surface: color-mix(in srgb, var(--color-brand-base), transparent 70%);
+  --theme-surface-secondary: var(--color-brand-mantle);
+  --theme-surface-tertiary: var(--color-brand-surface0);
+  --theme-surface-quaternary: var(--color-brand-surface1);
+  --theme-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
+  --theme-border: color-mix(in srgb, var(--color-brand-lavender), transparent 90%);
+  --theme-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 60%);
+  --theme-text-main: var(--color-brand-text);
+  --theme-text-muted: var(--color-brand-subtext0);
+  --theme-accent: var(--color-brand-mauve);
+  --theme-accent-secondary: var(--color-brand-lavender);
+}
 
-  --color-border: color-mix(in srgb, var(--color-brand-lavender), transparent 90%);
-  --color-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 60%);
+[data-theme="latte"] {
+  /* Brand Colors (Official Catppuccin Latte) */
+  --color-brand-rosewater: #dc8a78;
+  --color-brand-flamingo: #dd7878;
+  --color-brand-pink: #ea76cb;
+  --color-brand-mauve: #8839ef;
+  --color-brand-red: #d20f39;
+  --color-brand-maroon: #e64553;
+  --color-brand-peach: #fe640b;
+  --color-brand-yellow: #df8e1d;
+  --color-brand-green: #40a02b;
+  --color-brand-teal: #179287;
+  --color-brand-sky: #04a5e5;
+  --color-brand-sapphire: #209fb5;
+  --color-brand-blue: #1e66f5;
+  --color-brand-lavender: #7287fd;
+  --color-brand-text: #4c4f69;
+  --color-brand-subtext1: #5c5f77;
+  --color-brand-subtext0: #6c6f85;
+  --color-brand-overlay2: #7c7f93;
+  --color-brand-overlay1: #8c8fa1;
+  --color-brand-overlay0: #9ca0b0;
+  --color-brand-surface2: #acb0be;
+  --color-brand-surface1: #bcc0cc;
+  --color-brand-surface0: #ccd0da;
+  --color-brand-base: #eff1f5;
+  --color-brand-mantle: #e6e9ef;
+  --color-brand-crust: #dce0e8;
 
-  --color-text-main: var(--color-brand-text);
-  --color-text-muted: var(--color-brand-subtext0);
+  /* Semantic Roles */
+  --theme-background: var(--color-brand-crust);
+  --theme-surface: color-mix(in srgb, var(--color-brand-base), transparent 50%);
+  --theme-surface-secondary: var(--color-brand-mantle);
+  --theme-surface-tertiary: var(--color-brand-surface0);
+  --theme-surface-quaternary: var(--color-brand-surface1);
+  --theme-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
+  --theme-border: color-mix(in srgb, var(--color-brand-lavender), transparent 85%);
+  --theme-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 50%);
+  --theme-text-main: var(--color-brand-text);
+  --theme-text-muted: var(--color-brand-subtext0);
+  --theme-accent: var(--color-brand-mauve);
+  --theme-accent-secondary: var(--color-brand-lavender);
+}
 
-  --color-accent: var(--color-brand-mauve);
-  --color-accent-secondary: var(--color-brand-lavender);
+[data-theme="macchiato"] {
+  /* Brand Colors (Official Catppuccin Macchiato) */
+  --color-brand-rosewater: #f4dbd6;
+  --color-brand-flamingo: #f0c6c6;
+  --color-brand-pink: #f5bde6;
+  --color-brand-mauve: #c6a0f6;
+  --color-brand-red: #ed8796;
+  --color-brand-maroon: #ee99a0;
+  --color-brand-peach: #f5a97f;
+  --color-brand-yellow: #eed49f;
+  --color-brand-green: #a6da95;
+  --color-brand-teal: #8bd5ca;
+  --color-brand-sky: #91d7e3;
+  --color-brand-sapphire: #7dc4e4;
+  --color-brand-blue: #8aadf4;
+  --color-brand-lavender: #b7bdf8;
+  --color-brand-text: #cad3f5;
+  --color-brand-subtext1: #b8c0e0;
+  --color-brand-subtext0: #a5adcb;
+  --color-brand-overlay2: #939ab7;
+  --color-brand-overlay1: #8087a2;
+  --color-brand-overlay0: #6e738d;
+  --color-brand-surface2: #5b6078;
+  --color-brand-surface1: #494d64;
+  --color-brand-surface0: #363a4f;
+  --color-brand-base: #24273a;
+  --color-brand-mantle: #1e2030;
+  --color-brand-crust: #181926;
+
+  /* Semantic Roles */
+  --theme-background: var(--color-brand-crust);
+  --theme-surface: color-mix(in srgb, var(--color-brand-base), transparent 70%);
+  --theme-surface-secondary: var(--color-brand-mantle);
+  --theme-surface-tertiary: var(--color-brand-surface0);
+  --theme-surface-quaternary: var(--color-brand-surface1);
+  --theme-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
+  --theme-border: color-mix(in srgb, var(--color-brand-lavender), transparent 90%);
+  --theme-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 60%);
+  --theme-text-main: var(--color-brand-text);
+  --theme-text-muted: var(--color-brand-subtext0);
+  --theme-accent: var(--color-brand-mauve);
+  --theme-accent-secondary: var(--color-brand-lavender);
+}
+
+[data-theme="frappe"] {
+  /* Brand Colors (Official Catppuccin Frappé) */
+  --color-brand-rosewater: #f2d5cf;
+  --color-brand-flamingo: #eebebe;
+  --color-brand-pink: #f4b8e4;
+  --color-brand-mauve: #ca9ee6;
+  --color-brand-red: #e78284;
+  --color-brand-maroon: #ea999c;
+  --color-brand-peach: #ef9f76;
+  --color-brand-yellow: #e5c890;
+  --color-brand-green: #a6d189;
+  --color-brand-teal: #81c8be;
+  --color-brand-sky: #99d1db;
+  --color-brand-sapphire: #85c1dc;
+  --color-brand-blue: #8caaee;
+  --color-brand-lavender: #babbf1;
+  --color-brand-text: #c6d0f5;
+  --color-brand-subtext1: #b5bfe2;
+  --color-brand-subtext0: #a5adce;
+  --color-brand-overlay2: #949cbb;
+  --color-brand-overlay1: #838ba7;
+  --color-brand-overlay0: #737994;
+  --color-brand-surface2: #626880;
+  --color-brand-surface1: #51576d;
+  --color-brand-surface0: #414559;
+  --color-brand-base: #303446;
+  --color-brand-mantle: #292c3c;
+  --color-brand-crust: #232634;
+
+  /* Semantic Roles */
+  --theme-background: var(--color-brand-crust);
+  --theme-surface: color-mix(in srgb, var(--color-brand-base), transparent 70%);
+  --theme-surface-secondary: var(--color-brand-mantle);
+  --theme-surface-tertiary: var(--color-brand-surface0);
+  --theme-surface-quaternary: var(--color-brand-surface1);
+  --theme-surface-accent: color-mix(in srgb, var(--color-brand-mauve), transparent 95%);
+  --theme-border: color-mix(in srgb, var(--color-brand-lavender), transparent 90%);
+  --theme-border-active: color-mix(in srgb, var(--color-brand-mauve), transparent 60%);
+  --theme-text-main: var(--color-brand-text);
+  --theme-text-muted: var(--color-brand-subtext0);
+  --theme-accent: var(--color-brand-mauve);
+  --theme-accent-secondary: var(--color-brand-lavender);
+}
+
+@theme {
+  /* Semantic Roles mapping to theme properties */
+  --color-background: var(--theme-background);
+  --color-surface: var(--theme-surface);
+  --color-surface-secondary: var(--theme-surface-secondary);
+  --color-surface-tertiary: var(--theme-surface-tertiary);
+  --color-surface-quaternary: var(--theme-surface-quaternary);
+  --color-surface-accent: var(--theme-surface-accent);
+
+  --color-border: var(--theme-border);
+  --color-border-active: var(--theme-border-active);
+
+  --color-text-main: var(--theme-text-main);
+  --color-text-muted: var(--theme-text-muted);
+
+  --color-accent: var(--theme-accent);
+  --color-accent-secondary: var(--theme-accent-secondary);
 
   --color-success: var(--color-brand-green);
   --color-warning: var(--color-brand-peach);
   --color-danger: var(--color-brand-red);
+
+  /* Brand Colors mapping to enable Tailwind compilation */
+  --color-brand-rosewater: var(--color-brand-rosewater);
+  --color-brand-flamingo: var(--color-brand-flamingo);
+  --color-brand-pink: var(--color-brand-pink);
+  --color-brand-mauve: var(--color-brand-mauve);
+  --color-brand-red: var(--color-brand-red);
+  --color-brand-maroon: var(--color-brand-maroon);
+  --color-brand-peach: var(--color-brand-peach);
+  --color-brand-yellow: var(--color-brand-yellow);
+  --color-brand-green: var(--color-brand-green);
+  --color-brand-teal: var(--color-brand-teal);
+  --color-brand-sky: var(--color-brand-sky);
+  --color-brand-sapphire: var(--color-brand-sapphire);
+  --color-brand-blue: var(--color-brand-blue);
+  --color-brand-lavender: var(--color-brand-lavender);
+  --color-brand-text: var(--color-brand-text);
+  --color-brand-subtext1: var(--color-brand-subtext1);
+  --color-brand-subtext0: var(--color-brand-subtext0);
+  --color-brand-overlay2: var(--color-brand-overlay2);
+  --color-brand-overlay1: var(--color-brand-overlay1);
+  --color-brand-overlay0: var(--color-brand-overlay0);
+  --color-brand-surface2: var(--color-brand-surface2);
+  --color-brand-surface1: var(--color-brand-surface1);
+  --color-brand-surface0: var(--color-brand-surface0);
+  --color-brand-base: var(--color-brand-base);
+  --color-brand-mantle: var(--color-brand-mantle);
+  --color-brand-crust: var(--color-brand-crust);
 
   /* Premium Rounding */
   --radius-sm: 0.375rem;
@@ -92,7 +270,7 @@
     background: linear-gradient(
       90deg,
       transparent,
-      color-mix(in srgb, var(--color-brand-mauve), transparent 70%),
+      color-mix(in srgb, var(--color-accent), transparent 70%),
       transparent
     );
     pointer-events: none;
@@ -100,8 +278,8 @@
 }
 
 @utility glass-card {
-  @apply bg-surface border-border rounded-lg border saturate-150 backdrop-blur-2xl;
-  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.25);
+  @apply bg-surface border-border rounded-xl border saturate-150 backdrop-blur-2xl;
+  box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.3);
 }
 
 @layer base {

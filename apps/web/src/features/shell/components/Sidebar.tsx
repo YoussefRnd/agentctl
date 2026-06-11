@@ -21,9 +21,10 @@ import {
   deleteSession,
   archiveSession,
 } from '@agentctl/api-client';
-import { useState, useMemo, useEffect, useRef, type MouseEvent } from 'react';
+import { useState, useEffect, useRef, type MouseEvent } from 'react';
 import type { ProviderDiscovery, SessionStatus } from '@agentctl/shared';
-import { Input, Button, GlassPanel } from '@agentctl/ui';
+import { Input, ConfirmationModal } from '@agentctl/ui';
+import { useFilteredProjects } from '../hooks/useFilteredProjects.js';
 
 export function Sidebar() {
   const { sessionId: activeSessionId } = useParams();
@@ -125,23 +126,7 @@ export function Sidebar() {
     },
   });
 
-  const filteredProjects = useMemo(() => {
-    const visibleProjects = projects.map((p) => ({
-      ...p,
-      sessions: p.sessions.filter((s) => showArchived || s.status !== 'archived'),
-    }));
-
-    if (!searchQuery) return visibleProjects;
-    const lowQuery = searchQuery.toLowerCase();
-    return visibleProjects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(lowQuery) ||
-        p.sessions.some((s) =>
-          (s.title || s.taskSlug || s.branch || '').toLowerCase().includes(lowQuery),
-        ),
-    );
-  }, [projects, searchQuery, showArchived]);
-
+  const filteredProjects = useFilteredProjects(projects, { searchQuery, showArchived });
   const toggleProject = (id: string) => {
     setCollapsedProjects((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }));
   };
@@ -168,16 +153,16 @@ export function Sidebar() {
     >
       <div className="mt-8 mb-2 space-y-6 px-4">
         <div className="group relative">
-          <Search className="text-text-muted group-focus-within:text-brand-mauve absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 transition-colors z-10" />
+          <Search className="text-text-muted/50 group-focus-within:text-brand-mauve absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 transition-colors z-10" />
           <Input
             ref={searchInputRef}
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); }}
-            className="pl-9 text-[13px] h-9 rounded-xl"
+            className="pl-9 pr-12 text-[12px] h-9 rounded-lg border-border/30 bg-surface-secondary/35 focus:bg-surface-secondary/60 focus:border-brand-mauve/50 w-full transition-all"
           />
-          <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-1 opacity-20 transition-opacity group-focus-within:opacity-0">
-            <span className="border-text-muted rounded border px-1 font-mono text-[9px]">⌘K</span>
+          <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center opacity-60 transition-opacity group-focus-within:opacity-0">
+            <kbd className="bg-surface-secondary/80 border-border/50 text-text-muted rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold">⌘K</kbd>
           </div>
         </div>
 
@@ -292,9 +277,9 @@ export function Sidebar() {
                 createSessionMutation.isPending && createSessionMutation.variables === proj.id;
 
               return (
-                <div key={proj.id} className="space-y-1">
+                <div key={proj.id} className="space-y-0.5">
                   <div
-                    className={`group flex cursor-pointer items-center justify-between rounded-sm px-2 py-2 transition-colors ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-surface-tertiary' : 'hover:bg-surface-secondary'} [@media(pointer:coarse)]:px-3 [@media(pointer:coarse)]:py-3`}
+                    className={`group flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 transition-all duration-150 ${!isCollapsed && proj.sessions.some((s) => s.id === activeSessionId) ? 'bg-surface-secondary/60' : 'hover:bg-surface-secondary/30'} [@media(pointer:coarse)]:px-3 [@media(pointer:coarse)]:py-2.5`}
                     onClick={() => {
                       toggleProject(proj.id);
                     }}
@@ -302,21 +287,21 @@ export function Sidebar() {
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="flex w-3 shrink-0 justify-center">
                         {isCollapsed ? (
-                          <ChevronRight className="h-3 w-3 opacity-30" />
+                          <ChevronRight className="h-3.5 w-3.5 opacity-55 text-text-muted hover:text-text-main transition-colors" />
                         ) : (
-                          <ChevronDown className="h-3 w-3 opacity-30" />
+                          <ChevronDown className="h-3.5 w-3.5 opacity-55 text-text-muted hover:text-text-main transition-colors" />
                         )}
                       </span>
-                      <Folder className="text-text-muted h-3.5 w-3.5 shrink-0" />
-                      <span className="text-text-main truncate text-[13px] font-extrabold tracking-tight uppercase [@media(pointer:coarse)]:text-[14px]">
+                      <Folder className="text-brand-mauve h-3.5 w-3.5 shrink-0 opacity-80" />
+                      <span className="text-text-main truncate text-[12px] font-bold tracking-wider uppercase opacity-90 [@media(pointer:coarse)]:text-[13px]">
                         {proj.name}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity pr-1">
                       <div className="group/tooltip relative">
                         <button
                           type="button"
-                          className="hover:text-brand-red text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95"
+                          className="hover:text-brand-red text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95 cursor-pointer"
                           onClick={(event) => {
                             event.stopPropagation();
                             setConfirmConfig({
@@ -342,7 +327,7 @@ export function Sidebar() {
                       <div className="group/tooltip relative">
                         <button
                           type="button"
-                          className="hover:text-brand-mauve text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-brand-mauve/10 hover:scale-105 active:scale-95"
+                          className="hover:text-brand-mauve text-text-muted/60 disabled:opacity-50 p-0.5 rounded hover:bg-brand-mauve/10 hover:scale-105 active:scale-95 cursor-pointer"
                           disabled={isCreatingSession}
                           onClick={(event) => {
                             handleCreateSession(event, proj.id);
@@ -366,15 +351,18 @@ export function Sidebar() {
                       className="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
                       style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}
                     >
-                      <div className="min-h-0 space-y-px">
+                      <div className="min-h-0 relative pl-6 pr-2.5 space-y-0.5 min-w-0">
+                        {/* Vertical nesting line connector */}
+                        <div className="absolute left-[15px] top-0 bottom-3 w-[1px] bg-border/15" />
+                        
                         {proj.sessions.map((s) => (
                           <div
                             key={s.id}
-                            className={`group/session border-border/40 ml-8 flex items-center justify-between border-l text-[12px] transition-all hover:bg-surface-secondary/50 ${activeSessionId === s.id ? 'bg-surface-secondary border-brand-mauve text-text-main font-bold' : 'text-text-muted hover:text-text-main'} [@media(pointer:coarse)]:text-[13px]`}
+                            className={`group/session relative flex items-center justify-between rounded-lg text-[12px] transition-all hover:bg-surface-secondary/40 ${activeSessionId === s.id ? 'bg-surface-secondary text-brand-mauve font-bold' : 'text-text-muted hover:text-text-main'} [@media(pointer:coarse)]:text-[13px] min-w-0`}
                           >
                             <Link
                               to={`/sessions/${s.id}`}
-                              className="flex-1 flex items-center py-1.5 pr-2 pl-4 min-w-0 gap-2"
+                              className="flex-1 flex items-center py-1.5 pr-2 pl-3 min-w-0 gap-2"
                             >
                               <div
                                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusColors[s.status]}`}
@@ -384,7 +372,7 @@ export function Sidebar() {
                               </span>
                             </Link>
 
-                            <div className="flex items-center gap-1 pr-2 opacity-0 group-hover/session:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-1 pr-2 shrink-0 opacity-0 group-hover/session:opacity-100 transition-opacity">
                               {s.status !== 'archived' && (
                                 <div className="group/tooltip relative">
                                   <button
@@ -404,7 +392,7 @@ export function Sidebar() {
                                         },
                                       });
                                     }}
-                                    className="hover:text-brand-peach text-text-muted/60 p-0.5 rounded hover:bg-brand-peach/10 hover:scale-105 active:scale-95"
+                                    className="hover:text-brand-peach text-text-muted/60 p-0.5 rounded hover:bg-brand-peach/10 hover:scale-105 active:scale-95 cursor-pointer"
                                   >
                                     <Archive className="h-3.5 w-3.5" />
                                   </button>
@@ -431,7 +419,7 @@ export function Sidebar() {
                                       },
                                     });
                                   }}
-                                  className="hover:text-brand-red text-text-muted/60 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95"
+                                  className="hover:text-brand-red text-text-muted/60 p-0.5 rounded hover:bg-brand-red/10 hover:scale-105 active:scale-95 cursor-pointer"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </button>
@@ -462,37 +450,16 @@ export function Sidebar() {
         </Link>
       </div>
 
-      {confirmConfig && confirmConfig.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-          <GlassPanel className="w-full max-w-sm rounded-xl p-5 shadow-2xl font-mono text-[11px] animate-in zoom-in-95 duration-200 border-brand-surface1/50">
-            <div className="flex items-center gap-2 mb-3">
-              <span className={`text-[12px] font-black tracking-widest uppercase ${confirmConfig.type === 'brand-red' ? 'text-brand-red' : confirmConfig.type === 'brand-peach' ? 'text-brand-peach' : 'text-brand-mauve'}`}>
-                :: {confirmConfig.title}
-              </span>
-            </div>
-
-            <p className="text-text-main/80 leading-relaxed mb-6 font-bold uppercase tracking-tight">
-              {confirmConfig.message}
-            </p>
-
-            <div className="flex justify-end gap-2.5">
-              <Button
-                variant="ghost"
-                onClick={() => { setConfirmConfig(null); }}
-                className="h-9 px-4 rounded-xl text-text-muted hover:text-text-main font-black uppercase transition-all tracking-tight cursor-pointer"
-              >
-                {confirmConfig.cancelText ?? 'CANCEL'}
-              </Button>
-              <Button
-                onClick={confirmConfig.onConfirm}
-                className={`h-9 px-4 rounded-xl font-black uppercase transition-all tracking-tight cursor-pointer active:scale-95 ${confirmConfig.type === 'brand-red' ? 'bg-brand-red text-white hover:bg-brand-red/90' : confirmConfig.type === 'brand-peach' ? 'bg-brand-peach text-white hover:bg-brand-peach/90' : 'bg-brand-mauve text-white hover:bg-brand-mauve/90'}`}
-              >
-                {confirmConfig.confirmText ?? 'PROCEED'}
-              </Button>
-            </div>
-          </GlassPanel>
-        </div>
-      )}
+      <ConfirmationModal
+        isOpen={!!confirmConfig?.isOpen}
+        title={confirmConfig?.title ?? ''}
+        message={confirmConfig?.message ?? ''}
+        onConfirm={confirmConfig?.onConfirm ?? (() => { /* noop */ })}
+        onCancel={() => { setConfirmConfig(null); }}
+        confirmText={confirmConfig?.confirmText}
+        cancelText={confirmConfig?.cancelText}
+        type={confirmConfig?.type}
+      />
     </aside>
   );
 }

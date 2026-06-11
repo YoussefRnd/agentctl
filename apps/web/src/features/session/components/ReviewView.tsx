@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { DiffBlock } from './diff/DiffBlock';
 import { parseDiff } from '../../../utils/diff-parser';
+import { Button } from '@agentctl/ui';
 
 type FileState = 'untracked' | 'staged' | 'modified' | 'deleted' | 'committed';
 
@@ -9,7 +10,6 @@ export interface ReviewFile {
   state: FileState;
   diff: string;
 }
-
 
 export function ReviewView({
   files,
@@ -53,12 +53,12 @@ export function ReviewView({
   if (isClosed) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <div className="rounded-full bg-white/5 p-4 mb-4 border border-white/10">
+        <div className="rounded-full bg-surface-secondary/50 p-4 mb-4 border border-border/40">
           <span className="text-[24px]">
             {sessionStatus === 'merged' ? '✅' : '🗑️'}
           </span>
         </div>
-        <h3 className="text-[12px] font-black tracking-widest text-white uppercase mb-1">
+        <h3 className="text-[12px] font-black tracking-widest text-text-main uppercase mb-1">
           SESSION_{sessionStatus.toUpperCase()}
         </h3>
         <p className="text-[10px] text-text-muted max-w-[240px] leading-relaxed uppercase">
@@ -70,7 +70,7 @@ export function ReviewView({
 
   if (isLoading) {
     return (
-      <div className="text-text-muted animate-pulse p-2 text-[10px] font-bold uppercase">
+      <div className="text-text-muted animate-pulse p-4 text-[10px] font-bold uppercase">
         Scanning changes...
       </div>
     );
@@ -79,13 +79,13 @@ export function ReviewView({
   if (error) {
     return (
       <div className="flex-1 p-2">
-        <div className="rounded-sm border border-white/20 bg-white/5 p-2 text-[11px]">
-          <div className="font-bold text-white uppercase">Critical Error</div>
-          <div className="text-text-muted mt-1 tracking-tighter uppercase">{error.message}</div>
+        <div className="rounded-xl border border-danger/30 bg-danger/5 p-3 text-[11px]">
+          <div className="font-bold text-danger uppercase">Critical Error</div>
+          <div className="text-danger/80 mt-1 tracking-tighter uppercase">{error.message}</div>
           {onRetry && (
-            <button type="button" onClick={onRetry} className="terminal-button mt-4">
+            <Button type="button" onClick={onRetry} className="mt-4 h-8 px-4 text-[10px] tracking-widest font-bold">
               RETRY_SCAN
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -98,14 +98,13 @@ export function ReviewView({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-border shrink-0 border-b p-2">
+      <div className="border-border/50 shrink-0 border-b p-3 bg-surface-secondary/10">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[12px] font-black tracking-[0.2em] text-white uppercase">
+          <h2 className="text-[11px] font-black tracking-[0.2em] text-text-main uppercase">
             CODE_REVIEW_MANIFEST
           </h2>
-          <div className="flex gap-1">
-            <button
-              type="button"
+          <div className="flex gap-1.5">
+            <Button
               disabled={!!isMerging || !!isDiscarding}
               onClick={() => {
                 const msg = window.prompt('Enter commit message (optional):', taskSlug ?? '');
@@ -113,12 +112,11 @@ export function ReviewView({
                   onMerge(msg);
                 }
               }}
-              className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:bg-white/5 disabled:text-white/20 text-[9px] font-black tracking-wider text-white uppercase rounded transition-colors"
+              className="h-7 px-3 bg-brand-green text-brand-crust hover:opacity-90 disabled:opacity-30 text-[9px] font-bold tracking-widest uppercase rounded-lg cursor-pointer"
             >
               {isMerging ? 'MERGING...' : 'MERGE'}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               disabled={!!isMerging || !!isDiscarding}
               onClick={() => {
                 if (
@@ -130,20 +128,20 @@ export function ReviewView({
                   onDiscard();
                 }
               }}
-              className="px-2 py-1 bg-red-600 hover:bg-red-700 disabled:bg-white/5 disabled:text-white/20 text-[9px] font-black tracking-wider text-white uppercase rounded transition-colors"
+              className="h-7 px-3 bg-brand-red text-brand-crust hover:opacity-90 disabled:opacity-30 text-[9px] font-bold tracking-widest uppercase rounded-lg cursor-pointer"
             >
               {isDiscarding ? 'DISCARDING...' : 'DISCARD'}
-            </button>
+            </Button>
           </div>
         </div>
         {files.length > 0 && (
-          <div className="flex flex-wrap gap-x-6 gap-y-2 col">
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
             {activeStates.map((state) => (
               <div key={state} className="flex items-baseline gap-2">
-                <span className="text-[9px] font-black tracking-widest text-white/30 uppercase">
+                <span className="text-[9px] font-black tracking-widest text-text-muted/40 uppercase">
                   {state}
                 </span>
-                <span className="text-[16px] font-black text-white tabular-nums">
+                <span className="text-[16px] font-black text-text-main tabular-nums">
                   {grouped[state].length}
                 </span>
               </div>
@@ -158,7 +156,7 @@ export function ReviewView({
           </div>
         </div>
       ) : (
-        <div className="flex-1 space-y-6 overflow-y-auto p-2">
+        <div className="flex-1 space-y-6 overflow-y-auto p-3">
           {activeStates.map((state) => {
             const entries = grouped[state];
 
@@ -168,11 +166,11 @@ export function ReviewView({
                 className="content-visibility-auto contain-intrinsic-size-[auto_400px] space-y-3"
               >
                 <div className="flex items-center gap-3">
-                  <h3 className="text-[10px] font-black tracking-[0.3em] text-white/20 uppercase">
+                  <h3 className="text-[10px] font-black tracking-[0.3em] text-text-muted/20 uppercase">
                     {state}
                   </h3>
-                  <div className="h-px flex-1 bg-white/5" />
-                  <span className="text-[9px] font-bold tracking-tight text-white/40 uppercase tabular-nums">
+                  <div className="h-px flex-1 bg-border/10" />
+                  <span className="text-[9px] font-bold tracking-tight text-text-muted/45 uppercase tabular-nums">
                     {entries.length} UNIT(S)
                   </span>
                 </div>

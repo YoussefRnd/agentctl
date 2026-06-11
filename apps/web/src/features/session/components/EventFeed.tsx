@@ -121,105 +121,107 @@ export function EventFeed({ events, isConnected = true }: { events: ACPEventRow[
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="no-scrollbar relative h-full flex-1 overflow-y-auto scroll-smooth"
-      onScroll={handleScroll}
-    >
-      <div className="mx-auto max-w-[800px] px-6 pt-12 pb-4">
-        <div className="flex flex-col gap-6">
-          {groupedEvents.map((group) => {
-            if (group.type === 'agent') {
+    <div className="relative flex h-full flex-grow flex-col overflow-hidden">
+      <div
+        ref={containerRef}
+        className="no-scrollbar h-full w-full flex-grow overflow-y-auto scroll-smooth"
+        onScroll={handleScroll}
+      >
+        <div className="mx-auto max-w-[800px] px-6 pt-12 pb-4">
+          <div className="flex flex-col gap-6">
+            {groupedEvents.map((group) => {
+              if (group.type === 'agent') {
+                return (
+                  <AgentResponse
+                    key={group.id}
+                    events={group.events}
+                    isStreaming={group.isStreaming}
+                  />
+                );
+              }
+
+              const { event: e, isStreaming } = group;
               return (
-                <AgentResponse
-                  key={group.id}
-                  events={group.events}
-                  isStreaming={group.isStreaming}
-                />
+                <div
+                  key={e.id}
+                  className="animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out"
+                >
+                  <TextCard
+                    content={(e.data as { content: string }).content}
+                    variant="user"
+                    isStreaming={isStreaming}
+                    attachments={
+                      (
+                        e.data as {
+                          attachments?: {
+                            attachmentId: string;
+                            mimeType: string;
+                            filename: string;
+                            sizeBytes: number;
+                          }[];
+                        }
+                      ).attachments
+                    }
+                  />
+                </div>
               );
-            }
+            })}
 
-            const { event: e, isStreaming } = group;
-            return (
-              <div
-                key={e.id}
-                className="animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out"
-              >
-                <TextCard
-                  content={(e.data as { content: string }).content}
-                  variant="user"
-                  isStreaming={isStreaming}
-                  attachments={
-                    (
-                      e.data as {
-                        attachments?: {
-                          attachmentId: string;
-                          mimeType: string;
-                          filename: string;
-                          sizeBytes: number;
-                        }[];
-                      }
-                    ).attachments
-                  }
-                />
+            {/* Fallback Thinking Indicator when nothing has started yet after a user message */}
+            {streamingEventId === null && isAwaitingAgent && !isSessionError && (
+              <div className="animate-in fade-in slide-in-from-left-2 duration-1000">
+                <div className="flex w-fit items-center gap-3 rounded-lg border border-white/8 bg-white/4 px-4 py-2.5">
+                  <Brain className="text-accent h-4 w-4 animate-pulse" />
+                  <span className="text-accent/70 text-[11px] font-bold tracking-[0.2em] uppercase">
+                    Agent thinking...
+                  </span>
+                </div>
               </div>
-            );
-          })}
+            )}
 
-          {/* Fallback Thinking Indicator when nothing has started yet after a user message */}
-          {streamingEventId === null && isAwaitingAgent && !isSessionError && (
-            <div className="animate-in fade-in slide-in-from-left-2 duration-1000">
-              <div className="flex w-fit items-center gap-3 rounded-lg border border-white/8 bg-white/4 px-4 py-2.5">
-                <Brain className="text-accent h-4 w-4 animate-pulse" />
-                <span className="text-accent/70 text-[11px] font-bold tracking-[0.2em] uppercase">
-                  Agent thinking...
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Error notification card in the feed */}
-          {isSessionError && (
-            <div className="animate-in fade-in slide-in-from-left-2 duration-500">
-              <div className="flex flex-col gap-3 rounded-xl border border-rose-500/15 bg-rose-500/5 p-5 backdrop-blur-md">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/25 bg-rose-500/8 text-rose-400">
-                    <Brain className="h-4 w-4" />
+            {/* Error notification card in the feed */}
+            {isSessionError && (
+              <div className="animate-in fade-in slide-in-from-left-2 duration-500">
+                <div className="flex flex-col gap-3 rounded-xl border border-rose-500/15 bg-rose-500/5 p-5 backdrop-blur-md">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/25 bg-rose-500/8 text-rose-400">
+                      <Brain className="h-4 w-4" />
+                    </div>
+                    <span className="text-rose-400 text-[11px] font-bold tracking-[0.2em] uppercase">
+                      Connection failed
+                    </span>
                   </div>
-                  <span className="text-rose-400 text-[11px] font-bold tracking-[0.2em] uppercase">
-                    Connection failed
-                  </span>
-                </div>
-                <p className="text-text-muted/80 text-[12px] leading-relaxed">
-                  The agent runtime process crashed or failed to resuscitate. This typically happens when the agent binary is not found, launch credentials/API keys are missing or invalid, or the process exited unexpectedly.
-                </p>
-                <div className="mt-1 flex items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.reload();
-                    }}
-                    className="border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded-lg border px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-all"
-                  >
-                    Retry Connection
-                  </button>
-                  <span className="text-text-muted/40 text-[10px] font-medium">
-                    (Or type a message to attempt resuscitation)
-                  </span>
+                  <p className="text-text-muted/80 text-[12px] leading-relaxed">
+                    The agent runtime process crashed or failed to resuscitate. This typically happens when the agent binary is not found, launch credentials/API keys are missing or invalid, or the process exited unexpectedly.
+                  </p>
+                  <div className="mt-1 flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.reload();
+                      }}
+                      className="border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded-lg border px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-all"
+                    >
+                      Retry Connection
+                    </button>
+                    <span className="text-text-muted/40 text-[10px] font-medium">
+                      (Or type a message to attempt resuscitation)
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Scroll anchor */}
-        <div ref={bottomRef} className="h-6" />
+          {/* Scroll anchor */}
+          <div ref={bottomRef} className="h-6" />
+        </div>
       </div>
 
       {!autoScroll && (
         <button
           type="button"
-          className="group text-text-main hover:bg-accent hover:text-background absolute bottom-12 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2 text-[10px] font-medium tracking-wide shadow-sm backdrop-blur-xl transition-all hover:scale-105 active:scale-95"
+          className="group text-text-main hover:bg-accent hover:text-background absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2 text-[10px] font-medium tracking-wide shadow-sm backdrop-blur-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
           onClick={() => {
             setAutoScroll(true);
           }}

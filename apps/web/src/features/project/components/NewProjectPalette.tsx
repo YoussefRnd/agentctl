@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DirectoryExplorer } from './DirectoryExplorer';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { apiClient, openProjectSession, type SidebarProject } from '@agentctl/api-client';
+import { Button } from '@agentctl/ui';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();
@@ -41,7 +42,7 @@ export function NewProjectPalette() {
       <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-6">
         {mutation.isPending ? (
           <div className="flex flex-col items-center gap-4">
-            <div className="border-accent h-8 w-8 animate-spin border-4 border-t-transparent" />
+            <Loader2 className="h-8 w-8 animate-spin text-accent" />
             <p className="text-text-main text-xl font-black tracking-widest uppercase">
               INITIALIZING_WORKSPACE...
             </p>
@@ -75,14 +76,14 @@ export function NewProjectPalette() {
             {shouldShowExplorer ? (
               <DirectoryExplorer onSelect={handleFolderSelect} />
             ) : (
-              <button
+              <Button
                 onClick={() => {
                   setShowExplorer(true);
                 }}
-                className="terminal-button !h-12 !px-8 text-[14px]"
+                className="h-12 px-8 text-[13px] tracking-widest uppercase font-bold"
               >
                 OPEN_NEW_PROJECT
-              </button>
+              </Button>
             )}
           </>
         )}

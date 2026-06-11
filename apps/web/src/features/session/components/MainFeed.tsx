@@ -31,7 +31,7 @@ export function MainFeed() {
 
   if (!sessionId) {
     return (
-      <div className="bg-background flex h-full flex-col items-center justify-center p-8 text-center">
+      <div className="bg-transparent flex h-full flex-col items-center justify-center p-8 text-center">
         <div className="animate-in fade-in zoom-in w-full max-w-md space-y-8 duration-1000">
           <div className="space-y-4">
             <div className="text-accent/50 inline-block rounded-full border border-white/5 bg-white/4 px-4 py-1 text-[10px] font-medium tracking-widest uppercase">
@@ -50,7 +50,7 @@ export function MainFeed() {
   }
 
   return (
-    <div className="bg-background relative flex h-full flex-col overflow-hidden">
+    <div className="bg-transparent relative flex h-full flex-col overflow-hidden">
       <div className="relative z-10 flex h-full min-w-0 flex-col">
         {sessionData?.session.status === 'archived' && (
           <div className="border-warning/30 bg-warning/5 flex shrink-0 items-center justify-between border-b px-4 py-3 font-mono text-[11px] text-warning backdrop-blur-md">

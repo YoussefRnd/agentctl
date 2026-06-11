@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Folder, ChevronLeft, Home, GitBranch, AlertCircle } from 'lucide-react';
+import { Folder, ChevronLeft, Home, GitBranch, AlertCircle, Loader2 } from 'lucide-react';
 import { apiClient } from '@agentctl/api-client';
+import { Button, GlassPanel } from '@agentctl/ui';
 
 interface FolderEntry {
   name: string;
@@ -48,18 +49,18 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
   }, []);
 
   return (
-    <div className="glass-card animate-in fade-in zoom-in-95 flex w-full max-w-xl flex-col overflow-hidden shadow-2xl">
-      <div className="border-border flex items-center justify-between border-b px-3 py-2">
+    <GlassPanel intensity="default" className="w-full max-w-xl shadow-2xl rounded-2xl overflow-hidden animate-in fade-in zoom-in-95">
+      <div className="border-border/40 flex items-center justify-between border-b px-4 py-3 bg-surface-secondary/20">
         <div className="text-text-muted flex items-center gap-2 truncate text-[11px] font-bold tracking-tight uppercase">
-          <Folder className="h-3.5 w-3.5" />
+          <Folder className="h-4 w-4" />
           <span className="truncate">{currentPath ?? 'SCANNING_FS...'}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => {
               void explore();
             }}
-            className="hover:text-accent text-text-muted p-1 transition-colors"
+            className="hover:text-accent text-text-muted p-1 transition-colors hover:scale-105 active:scale-95 cursor-pointer"
             title="Home"
           >
             <Home className="h-3.5 w-3.5" />
@@ -69,7 +70,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
               onClick={() => {
                 void explore(parentPath);
               }}
-              className="hover:text-accent text-text-muted p-1 transition-colors"
+              className="hover:text-accent text-text-muted p-1 transition-colors hover:scale-105 active:scale-95 cursor-pointer"
               title="Go Up"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -78,23 +79,24 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         </div>
       </div>
 
-      <div className="h-72 overflow-y-auto p-1">
+      <div className="h-72 overflow-y-auto p-1.5">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
-            <div className="border-accent h-4 w-4 animate-spin border-2 border-t-transparent" />
+            <Loader2 className="h-6 w-6 animate-spin text-accent" />
           </div>
         ) : error ? (
           <div className="flex h-full flex-col items-center justify-center p-4 text-center">
             <AlertCircle className="text-danger mb-2 h-6 w-6 opacity-30" />
             <p className="text-text-main text-[11px] font-black uppercase">{error}</p>
-            <button
+            <Button
               onClick={() => {
                 void explore(currentPath ?? undefined);
               }}
-              className="terminal-button mt-4"
+              variant="outline"
+              className="mt-4"
             >
               RETRY_SCAN
-            </button>
+            </Button>
           </div>
         ) : folders.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-4 text-center opacity-30">
@@ -102,17 +104,17 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
             <p className="text-[10px] font-bold tracking-widest uppercase">DIRECTORY_EMPTY</p>
           </div>
         ) : (
-          <div className="space-y-px">
+          <div className="space-y-0.5">
             {folders.map((f) => (
               <div
                 key={f.path}
-                className="group hover:bg-surface-secondary/60 flex cursor-pointer items-center justify-between rounded-sm px-2 py-1.5 transition-all"
+                className="group hover:bg-surface-secondary/60 flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 transition-all"
                 onClick={() => {
                   void explore(f.path);
                 }}
               >
-                <div className="flex items-center gap-2.5">
-                  <div className={`p-1 ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-1.5 rounded-lg bg-surface-secondary/40 ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}>
                     {f.isRepo ? (
                       <GitBranch className="h-3.5 w-3.5" />
                     ) : (
@@ -124,30 +126,31 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                       {f.name}
                     </span>
                     {f.isRepo && (
-                      <span className="text-accent/40 text-[8px] font-black tracking-widest uppercase">
+                      <span className="text-accent/60 text-[8px] font-black tracking-widest uppercase mt-0.5">
                         REPO
                       </span>
                     )}
                   </div>
                 </div>
-                <button
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelect(f.path);
                   }}
-                  className="terminal-button !h-6 px-2 text-[9px] opacity-0 group-hover:opacity-100"
+                  size="sm"
+                  className="h-7 px-3 text-[9px] opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   MOUNT
-                </button>
+                </Button>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <div className="border-border text-text-muted flex items-center justify-between border-t px-3 py-2 text-[9px] font-black tracking-widest uppercase">
-        <span className="">CLICK_FOLDER_TO_EXPLORE_/_CLICK_MOUNT_TO_SELECT</span>
+      <div className="border-border/40 text-text-muted bg-surface-secondary/10 flex items-center justify-between border-t px-4 py-2.5 text-[9px] font-black tracking-widest uppercase">
+        <span className="opacity-50">CLICK_FOLDER_TO_EXPLORE_/_CLICK_MOUNT_TO_SELECT</span>
       </div>
-    </div>
+    </GlassPanel>
   );
 }
