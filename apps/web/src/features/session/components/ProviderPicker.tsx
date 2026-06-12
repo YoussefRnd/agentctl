@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Bot, Cpu, Zap, RefreshCw } from 'lucide-react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { PROVIDER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
@@ -13,7 +13,7 @@ interface ProviderPickerProps {
   onSelect: (providerId: string, modelId?: string) => void;
   providers: ProviderDiscovery[];
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 export function ProviderPicker({
@@ -23,7 +23,7 @@ export function ProviderPicker({
   onSelect,
   providers,
   isOpen,
-  onClose,
+  onClose: _onClose,
 }: ProviderPickerProps) {
   const {
     updateProviderConfig,
@@ -42,27 +42,6 @@ export function ProviderPicker({
   const [localCustomEnvs, setLocalCustomEnvs] = useState<
     Record<string, Record<string, string> | undefined>
   >({});
-  const pickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (isOpen && pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
-        const target = event.target as HTMLElement;
-        if (target.closest('[aria-label="Select AI provider"]')) {
-          return;
-        }
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [isOpen, onClose]);
-
   useEffect(() => {
     if (isOpen) {
       setInternalProviderId(selectedId);
@@ -121,34 +100,22 @@ export function ProviderPicker({
           { providerId: activeProvider.id, enabled: true },
           {
             onSuccess: () => {
-              toast.success('Provider selection updated successfully.');
               if (activeProvider.status !== 'ready' && activeProvider.status !== 'needs_auth') {
                 activate(activeProvider.id, {
                   onSuccess: () => {
-                    toast.success('Agent activated successfully!');
                     onSelect(activeProvider.id);
-                  },
-                  onError: (err) => {
-                    toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
                   },
                 });
               } else {
                 onSelect(activeProvider.id);
               }
             },
-            onError: (err) => {
-              toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-            },
           },
         );
       } else if (activeProvider.status !== 'ready' && activeProvider.status !== 'needs_auth') {
         activate(activeProvider.id, {
           onSuccess: () => {
-            toast.success('Agent activated successfully!');
             onSelect(activeProvider.id);
-          },
-          onError: (err) => {
-            toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
           },
         });
       } else {
@@ -161,11 +128,7 @@ export function ProviderPicker({
         { providerId: activeProvider.id, customEnv: keysValues },
         {
           onSuccess: () => {
-            toast.success('Provider configuration updated.');
             proceedWithEnable();
-          },
-          onError: (err) => {
-            toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
           },
         },
       );
@@ -176,27 +139,31 @@ export function ProviderPicker({
 
   return (
     <div
-      ref={pickerRef}
-      className="animate-in fade-in zoom-in-95 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2 flex w-[480px] overflow-hidden border border-border/40 bg-surface-secondary/95 text-text-main shadow-xl shadow-black/40 backdrop-blur-md rounded-xl"
+      className="flex w-full overflow-hidden text-text-main"
     >
-      <div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-border/20 bg-black/10 py-2">
+      <div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-border/30 bg-surface-secondary/20 py-2">
         {providers.map((p) => {
           const isSelected = p.id === internalProviderId;
           const needsAuth = p.status === 'needs_auth';
+          const isDisabled = !p.enabled;
 
           return (
             <button
               key={p.id}
               onClick={() => {
+                if (isDisabled) {
+                  toast.error(`${p.label} is disabled in settings`);
+                  return;
+                }
                 setInternalProviderId(p.id);
                 setSearch('');
               }}
               title={p.label}
-              className={`relative flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+              className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
                 isSelected
-                  ? 'bg-accent text-brand-crust'
-                  : 'text-text-muted hover:bg-text-main/5 hover:text-text-main'
-              } ${!p.enabled ? 'opacity-40' : ''}`}
+                  ? 'bg-accent/15 border-accent/30 text-accent'
+                  : 'border-transparent text-text-muted hover:bg-text-main/5 hover:text-text-main'
+              } ${isDisabled ? 'opacity-20 grayscale' : ''}`}
             >
               {p.icon ? (
                 <img src={p.icon} alt="" className="h-4 w-4 object-contain" />
@@ -230,11 +197,7 @@ export function ProviderPicker({
           </div>
           <button
             onClick={() => {
-              refreshProvider(activeProvider.id, {
-                onError: (err) => {
-                  toast.error(`Refresh failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                },
-              });
+              refreshProvider(activeProvider.id);
             }}
             disabled={isRefreshing}
             className="text-text-muted p-1.5 transition-colors hover:text-text-main hover:bg-text-main/5 rounded-lg disabled:opacity-30"
@@ -297,17 +260,7 @@ export function ProviderPicker({
                         key={method.id}
                         type="button"
                         onClick={() => {
-                          login(
-                            { providerId: activeProvider.id, methodId: method.id },
-                            {
-                              onSuccess: () => {
-                                toast.success('Login initiated. Please check your browser or terminal.');
-                              },
-                              onError: (err) => {
-                                toast.error(`Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                              },
-                            }
-                          );
+                          login({ providerId: activeProvider.id, methodId: method.id });
                         }}
                         disabled={isPending}
                         className="w-full border border-border/30 bg-surface-secondary/30 rounded-lg py-1.5 text-center text-[10px] font-bold tracking-wider uppercase text-text-main transition-all hover:bg-text-main/5 hover:border-border/50 disabled:opacity-30"

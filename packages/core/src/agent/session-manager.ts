@@ -273,6 +273,7 @@ export class SessionManager {
         selectedProvider: params.selectedProvider,
         selectedModel: params.selectedModel,
         selectedThinkingEffort: params.selectedThinkingEffort,
+        agent: params.selectedProvider,
       })
       .where(eq(sessions.id, sessionId))
       .returning();

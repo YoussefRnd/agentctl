@@ -5,3 +5,7 @@ export * from './acp-event-schemas.js';
 export * from './registry-schemas.js';
 export * from './event-registry.js';
 export * from './utils.js';
+export * from './api-contract.js';
+export * from './stores/ProjectStore.js';
+export * from './stores/SessionStore.js';
+export * from './SessionEngine.js';

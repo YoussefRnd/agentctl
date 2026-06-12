@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { PROVIDER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
 import { ChevronDown, Terminal, Eye } from 'lucide-react';
-import { GlassPanel, Button, Input } from '@agentctl/ui';
+import { GlassPanel, Button, Input, Switch } from '@agentctl/ui';
 
 interface ProviderCardProps {
   provider: ProviderDiscovery;
@@ -69,12 +69,10 @@ export function ProviderCard({
 
   const isActive = provider.enabled;
 
-  const handleToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const nextEnabled = !provider.enabled;
-    onToggle(provider.id, nextEnabled);
+  const handleToggle = (checked: boolean) => {
+    onToggle(provider.id, checked);
 
-    if (nextEnabled) {
+    if (checked) {
       if (provider.status === 'inactive') {
         onActivate(provider.id);
       } else if (provider.status === 'needs_auth') {
@@ -121,16 +119,10 @@ export function ProviderCard({
               e.stopPropagation();
             }}
           >
-            <button
-              role="switch"
-              aria-checked={isActive}
-              onClick={handleToggle}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? 'bg-accent border-accent' : 'bg-background border-border/40'}`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full transition duration-200 ease-in-out ${isActive ? 'bg-brand-crust translate-x-4' : 'bg-text-muted/20 translate-x-0'}`}
-              />
-            </button>
+            <Switch
+              checked={isActive}
+              onCheckedChange={handleToggle}
+            />
           </div>
 
           <ChevronDown

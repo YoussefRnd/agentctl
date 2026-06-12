@@ -1,5 +1,5 @@
-import type { ACPEventRow } from '@agentctl/shared';
-import { serverEventSchema } from '@agentctl/shared';
+import type { ACPEventRow } from './acp-event-schemas.js';
+import { serverEventSchema } from './event-registry.js';
 
 export interface SessionEngineOptions {
   sessionId: string;

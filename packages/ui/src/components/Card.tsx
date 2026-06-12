@@ -9,7 +9,7 @@ interface CardProps {
 export const Card = ({ children, className = '' }: CardProps) => {
   return (
     <div
-      className={`glass-card hover:border-accent/20 overflow-hidden transition-all duration-200 ${className}`}
+      className={`liquid-glass hover:border-accent/20 overflow-hidden transition-all duration-200 ${className}`}
     >
       {children}
     </div>

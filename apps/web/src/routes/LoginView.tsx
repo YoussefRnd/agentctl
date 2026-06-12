@@ -30,7 +30,7 @@ export function LoginView() {
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <div className="terminal-glass animate-in fade-in zoom-in w-full max-w-sm rounded-3xl p-6 shadow-2xl duration-300">
+      <div className="liquid-glass animate-in fade-in zoom-in w-full max-w-sm rounded-3xl p-6 shadow-2xl duration-300">
         <div className="mb-6 text-center">
           <h1 className="mb-1 text-2xl font-black tracking-widest text-white uppercase">
             AGENTCTL::AUTH

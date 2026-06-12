@@ -5,13 +5,8 @@ import authPlugin from './plugins/auth.js';
 import worktreePlugin from './plugins/worktree.js';
 import sessionManagerPlugin from './plugins/session-manager.js';
 import websocketPlugin from './plugins/websocket.js';
-import { sessionReviewRoutes } from './routes/session-review.js';
+import tsRestPlugin from './plugins/ts-rest.js';
 import { eventsRoutes } from './routes/events.js';
-import { projectsRoutes } from './routes/projects.js';
-import { sessionsRoutes } from './routes/sessions.js';
-import { providersRoutes } from './routes/providers.js';
-import { settingsRoutes } from './routes/settings.js';
-import { fsRoutes } from './routes/fs.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
 import {
@@ -183,15 +178,10 @@ export async function buildApp(deps: AppDependencies = {}) {
   await fastify.register(worktreePlugin);
   await fastify.register(websocketPlugin);
   await fastify.register(sessionManagerPlugin);
+  await fastify.register(tsRestPlugin);
 
   // Register routes
   await fastify.register(authRoutes, { prefix: '/api' });
-  await fastify.register(projectsRoutes, { prefix: '/api' });
-  await fastify.register(sessionsRoutes, { prefix: '/api' });
-  await fastify.register(sessionReviewRoutes, { prefix: '/api' });
-  await fastify.register(providersRoutes, { prefix: '/api' });
-  await fastify.register(settingsRoutes, { prefix: '/api' });
-  await fastify.register(fsRoutes, { prefix: '/api' });
   await fastify.register(eventsRoutes, { prefix: '/api' });
 
   // Basic route to verify server is up

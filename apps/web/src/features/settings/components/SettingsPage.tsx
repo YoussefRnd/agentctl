@@ -164,14 +164,7 @@ export function SettingsPage() {
         <Button
           variant="outline"
           onClick={() => {
-            syncProviders(undefined, {
-              onSuccess: () => {
-                toast.success('Agents synced successfully!');
-              },
-              onError: (err) => {
-                toast.error(`Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-              },
-            });
+            syncProviders();
           }}
           disabled={isSyncing}
           className="group flex items-center gap-2 h-9 px-4 rounded-xl text-[11px] font-bold tracking-widest uppercase"
@@ -199,50 +192,16 @@ export function SettingsPage() {
                 key={provider.id}
                 provider={provider}
                 onActivate={(id) => {
-                  activate(id, {
-                    onSuccess: () => {
-                      toast.success('Agent activated successfully!');
-                    },
-                    onError: (err) => {
-                      toast.error(`Activation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                    },
-                  });
+                  activate(id);
                 }}
                 onToggle={(id, enabled) => {
-                  toggleProvider(
-                    { providerId: id, enabled },
-                    {
-                      onSuccess: () => {
-                        toast.success('Provider selection updated successfully.');
-                      },
-                      onError: (err) => {
-                        toast.error(`Toggle failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                      },
-                    }
-                  );
+                  toggleProvider({ providerId: id, enabled });
                 }}
                 onResync={() => {
-                  syncProviders(undefined, {
-                    onSuccess: () => {
-                      toast.success('Agents synced successfully!');
-                    },
-                    onError: (err) => {
-                      toast.error(`Sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                    },
-                  });
+                  syncProviders();
                 }}
                 onUpdateConfig={(id, customEnv) => {
-                  updateProviderConfig(
-                    { providerId: id, customEnv },
-                    {
-                      onSuccess: () => {
-                        toast.success('Provider configuration updated.');
-                      },
-                      onError: (err) => {
-                        toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-                      },
-                    }
-                  );
+                  updateProviderConfig({ providerId: id, customEnv });
                 }}
                 isUpdatingConfig={isUpdatingConfig}
               />

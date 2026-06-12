@@ -1,4 +1,5 @@
 import { GlassPanel } from '@agentctl/ui';
+import { ProgressBar } from './ProgressBar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,6 +10,7 @@ interface LayoutProps {
 export function Layout({ children, nav, sidebar }: LayoutProps) {
   return (
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
+      <ProgressBar />
       {nav}
 
       <div className="relative z-10 flex min-h-0 w-full flex-1 gap-3 overflow-hidden p-3">
