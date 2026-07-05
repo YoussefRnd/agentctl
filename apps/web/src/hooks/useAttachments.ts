@@ -30,12 +30,7 @@ export interface UseAttachmentsReturn {
 // Constants
 // ---------------------------------------------------------------------------
 
-const ALLOWED_MIME_TYPES = new Set<string>([
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-]);
+const ALLOWED_MIME_TYPES = new Set<string>(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 
@@ -51,14 +46,9 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
   // -------------------------------------------------------------------------
 
   /** Immutably patch a single attachment by localId. */
-  const patchAttachment = useCallback(
-    (localId: string, patch: Partial<PendingAttachment>) => {
-      setAttachments((prev) =>
-        prev.map((a) => (a.localId === localId ? { ...a, ...patch } : a)),
-      );
-    },
-    [],
-  );
+  const patchAttachment = useCallback((localId: string, patch: Partial<PendingAttachment>) => {
+    setAttachments((prev) => prev.map((a) => (a.localId === localId ? { ...a, ...patch } : a)));
+  }, []);
 
   // -------------------------------------------------------------------------
   // addFiles
@@ -110,8 +100,7 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
             });
           })
           .catch((err: unknown) => {
-            const errorMessage =
-              err instanceof Error ? err.message : 'Upload failed';
+            const errorMessage = err instanceof Error ? err.message : 'Upload failed';
             patchAttachment(localId, { state: 'error', errorMessage });
           });
       }
@@ -147,6 +136,17 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
   }, []);
 
   // -------------------------------------------------------------------------
+  const [prevSessionId, setPrevSessionId] = useState(sessionId);
+
+  if (sessionId !== prevSessionId) {
+    setPrevSessionId(sessionId);
+    // Revoke old URLs
+    for (const attachment of attachments) {
+      URL.revokeObjectURL(attachment.objectUrl);
+    }
+    setAttachments([]);
+  }
+
   // Cleanup — revoke remaining objectUrls on unmount.
   // -------------------------------------------------------------------------
 
@@ -160,11 +160,6 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
       });
     };
   }, []);
-
-  // Clear attachments when switching sessions
-  useEffect(() => {
-    clearAll();
-  }, [sessionId, clearAll]);
 
   // -------------------------------------------------------------------------
   // Derived state

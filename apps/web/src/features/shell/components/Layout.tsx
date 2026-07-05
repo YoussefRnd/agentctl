@@ -16,14 +16,20 @@ export function Layout({ children, nav, sidebar }: LayoutProps) {
       <div className="relative z-10 flex min-h-0 w-full flex-1 gap-3 overflow-hidden p-3">
         {sidebar && (
           <div className="z-20 hidden h-full w-[240px] shrink-0 lg:block">
-            <GlassPanel className="h-full border-none shadow-2xl overflow-hidden rounded-3xl" intensity="high">
+            <GlassPanel
+              className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
+              intensity="high"
+            >
               {sidebar}
             </GlassPanel>
           </div>
         )}
 
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-all duration-500 ease-in-out">
-          <GlassPanel className="h-full border-none shadow-2xl overflow-hidden rounded-3xl" intensity="high">
+          <GlassPanel
+            className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
+            intensity="high"
+          >
             <div className="relative flex flex-grow flex-col overflow-hidden">{children}</div>
           </GlassPanel>
         </main>

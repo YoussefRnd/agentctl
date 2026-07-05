@@ -27,12 +27,26 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
       baseCommit: 'hash',
     });
 
-    const publishedEvents: { id: number; sessionId: string; type: string; data: string; createdAt: Date }[] = [];
+    const publishedEvents: {
+      id: number;
+      sessionId: string;
+      type: string;
+      data: string;
+      createdAt: Date;
+    }[] = [];
     const eventBus = {
-      publish: (evt: { id: number; sessionId: string; type: string; data: string; createdAt: Date }) => {
+      publish: (evt: {
+        id: number;
+        sessionId: string;
+        type: string;
+        data: string;
+        createdAt: Date;
+      }) => {
         publishedEvents.push(evt);
       },
-      subscribe: () => () => { /* noop */ },
+      subscribe: () => () => {
+        /* noop */
+      },
     };
 
     const eventStore = new SessionEventStore(db, eventBus);
@@ -41,27 +55,34 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
     let promptCallback: (() => Promise<void>) | null = null;
     const fakeRuntimeHandle = {
       acpSessionId: 'acp-obs-123',
-      closed: new Promise<void>(() => { /* noop */ }),
-      onProcessError: () => { /* noop */ },
-      onProcessExit: () => { /* noop */ },
+      closed: new Promise<void>(() => {
+        /* noop */
+      }),
+      onProcessError: () => {
+        /* noop */
+      },
+      onProcessExit: () => {
+        /* noop */
+      },
       prompt: async () => {
         if (promptCallback) {
           await promptCallback();
         }
+        return { stopReason: 'end_turn' };
       },
-      respondToPermission: () => { /* noop */ },
-      stop: async () => { /* noop */ },
-      updateModel: async () => { /* noop */ },
-      updateConfigOption: async () => { /* noop */ },
+      respondToPermission: () => {
+        /* noop */
+      },
+      stop: async () => {
+        /* noop */
+      },
+      updateModel: async () => {
+        /* noop */
+      },
+      updateConfigOption: () => [],
     } as unknown as AgentRuntimeHandle;
 
-    const session = new ACPSession(
-      'sess-obs',
-      fakeRuntimeHandle,
-      db,
-      eventStore,
-      '/tmp/proj-obs',
-    );
+    const session = new ACPSession('sess-obs', fakeRuntimeHandle, db, eventStore, '/tmp/proj-obs');
 
     // Set up what happens during runtime handle prompt
     promptCallback = async () => {
@@ -81,21 +102,22 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
     // Retrieve events from DB to assert their state
     const dbEvents = await db.select().from(acpEvents).where(eq(acpEvents.sessionId, 'sess-obs'));
 
-    // We expect 3 distinct events recorded in DB:
+    // We expect 3 distinct text events recorded in DB:
     // 1. User prompt (type: 'text', role: 'user')
     // 2. Thought event (type: 'text', role: 'thought')
     // 3. Response event (type: 'text', role: 'provider')
-    expect(dbEvents.length).toBe(3);
+    const textEvents = dbEvents.filter((e) => e.type === 'text');
+    expect(textEvents.length).toBe(3);
 
-    const userEvent = dbEvents.find(e => {
+    const userEvent = textEvents.find((e) => {
       const parsed = JSON.parse(e.data) as Record<string, unknown>;
       return parsed.role === 'user';
     });
-    const thoughtEvent = dbEvents.find(e => {
+    const thoughtEvent = textEvents.find((e) => {
       const parsed = JSON.parse(e.data) as Record<string, unknown>;
       return parsed.role === 'thought';
     });
-    const providerEvent = dbEvents.find(e => {
+    const providerEvent = textEvents.find((e) => {
       const parsed = JSON.parse(e.data) as Record<string, unknown>;
       return parsed.role === 'provider';
     });
@@ -114,21 +136,27 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
     expect(providerEvent.parentEventId).toBe(userEvent.id);
 
     // Verify buffered content in DB (flushed at end of turn)
-    expect((JSON.parse(thoughtEvent.data) as Record<string, unknown>).content).toBe('Thinking about logic');
+    expect((JSON.parse(thoughtEvent.data) as Record<string, unknown>).content).toBe(
+      'Thinking about logic',
+    );
     expect((JSON.parse(providerEvent.data) as Record<string, unknown>).content).toBe('Hello world');
 
     // Verify instant publishing via eventBus
     // We should see published events on the eventBus for each chunk addition!
     // Event bus should show the growth:
-    const thoughtPublishes = publishedEvents.filter(e => {
+    const thoughtPublishes = publishedEvents.filter((e) => {
       const parsed = JSON.parse(e.data) as Record<string, unknown>;
       return parsed.role === 'thought';
     });
 
     // One append publish + one final DB flush update = 2 publishes
     expect(thoughtPublishes.length).toBe(2);
-    expect((JSON.parse(thoughtPublishes[0].data) as Record<string, unknown>).content).toBe('Thinking');
-    expect((JSON.parse(thoughtPublishes[1].data) as Record<string, unknown>).content).toBe('Thinking about logic');
+    expect((JSON.parse(thoughtPublishes[0].data) as Record<string, unknown>).content).toBe(
+      'Thinking',
+    );
+    expect((JSON.parse(thoughtPublishes[1].data) as Record<string, unknown>).content).toBe(
+      'Thinking about logic',
+    );
 
     // Verify metadata presence (timing and token estimates)
     const userMetadata = JSON.parse(userEvent.metadata ?? '{}') as Record<string, unknown>;

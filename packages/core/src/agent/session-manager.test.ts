@@ -12,6 +12,16 @@ import type { ChildProcess } from 'node:child_process';
 
 describe('SessionManager tests', () => {
   const mockDb = {
+    select: () => ({
+      from: () => ({
+        where: () => {
+          const p = Promise.resolve([]);
+          return Object.assign(p, {
+            orderBy: () => Promise.resolve([]),
+          });
+        },
+      }),
+    }),
     update: () => ({
       set: () => ({
         where: () => {
@@ -49,6 +59,14 @@ describe('SessionManager tests', () => {
               path: '/tmp/project-1',
             },
           }),
+        findMany: () => Promise.resolve([]),
+      },
+      providers: {
+        findFirst: () =>
+          Promise.resolve({
+            id: 'provider-1',
+            nativelyLoadsSkills: false,
+          }),
       },
     },
   } as unknown as DbClient;
@@ -81,6 +99,9 @@ describe('SessionManager tests', () => {
           authMethods: '[]',
           supportsDynamicModel: false,
           supportsDynamicConfig: false,
+          supportsLogout: false,
+          nativelyLoadsSkills: false,
+          modes: '[]',
           version: '1.0.0',
           description: 'test',
           icon: '',
@@ -88,6 +109,7 @@ describe('SessionManager tests', () => {
           updatedAt: new Date(),
         }),
       ),
+    getSettings: () => Promise.resolve({ defaultProviderId: 'provider-1' }),
   } as unknown as ProviderRegistry;
 
   const eventBus = {
@@ -112,7 +134,8 @@ describe('SessionManager tests', () => {
         onProcessExit(handler) {
           fakeChild.once('exit', handler);
         },
-        prompt: (_text: string, _attachments?: unknown[], _embedded?: string) => Promise.resolve(),
+        prompt: (_text: string, _attachments?: unknown[], _embedded?: string) =>
+          Promise.resolve({ stopReason: 'end_turn' }),
         respondToPermission: () => undefined,
         authenticate: () => Promise.resolve(),
         cancel: () => Promise.resolve(),
@@ -121,17 +144,25 @@ describe('SessionManager tests', () => {
     },
     probe() {
       return Promise.resolve({
-        status: 'ready',
+        status: 'ready' as const,
         configOptions: [],
         authMethods: [],
         supportsDynamicModel: false,
         supportsDynamicConfig: false,
+        modes: [],
       });
     },
   };
 
   test('SessionManager startSession creates and initializes a session', async () => {
-    const manager = new SessionManager(mockDb, mockWorkspaceManager, mockProviderRegistry, eventBus, noopLogger, fakeRuntime);
+    const manager = new SessionManager(
+      mockDb,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
     const session = await manager.startSession('session-1', '/tmp', 'sleep', ['10'], {});
 
     expect(session).toBeDefined();
@@ -141,7 +172,14 @@ describe('SessionManager tests', () => {
   });
 
   test('SessionManager createSession orchestrates dependencies and starts session', async () => {
-    const manager = new SessionManager(mockDb, mockWorkspaceManager, mockProviderRegistry, eventBus, noopLogger, fakeRuntime);
+    const manager = new SessionManager(
+      mockDb,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
     const session = await manager.createSession({
       projectId: 'proj-1',
       providerId: 'provider-1',
@@ -151,12 +189,177 @@ describe('SessionManager tests', () => {
 
     expect(session).toBeDefined();
     expect(session.sessionId).toBeDefined();
-    session.kill();
+  });
+
+  test('SessionManager createSession defaults Git projects to worktree mode', async () => {
+    let insertedSession: Record<string, unknown> | null = null;
+    let createCalled = false;
+
+    const db = {
+      select: () => mockDb.select(),
+      update: () => ({
+        set: () => ({
+          where: () => Promise.resolve([{ id: 1, selectedProvider: 'provider-1' }]),
+        }),
+      }),
+      insert: () => ({
+        values: (values: Record<string, unknown>) => {
+          insertedSession = values;
+          return {
+            returning: () => Promise.resolve([{ id: values.id, createdAt: new Date() }]),
+          };
+        },
+      }),
+      query: {
+        projects: {
+          findFirst: () =>
+            Promise.resolve({
+              id: 'git-project',
+              path: '/tmp/repo/packages/app',
+              repoRoot: '/tmp/repo',
+              subdir: 'packages/app',
+            }),
+        },
+        sessions: mockDb.query.sessions,
+        providers: mockDb.query.providers,
+      },
+    } as unknown as DbClient;
+
+    const workspaceManager = {
+      resolveBaseRef: (repoPath: string, preferredRef: string) => {
+        expect(repoPath).toBe('/tmp/repo');
+        expect(preferredRef).toBe('main');
+        return Promise.resolve({ ref: 'trunk', commit: 'base-commit', isEmpty: false });
+      },
+      create: (
+        repoPath: string,
+        _sessionId: string,
+        taskSlug: string,
+        baseBranch: string,
+        subdir: string,
+      ) => {
+        expect(repoPath).toBe('/tmp/repo');
+        expect(taskSlug).toBe('parallel-task');
+        expect(baseBranch).toBe('trunk');
+        expect(subdir).toBe('packages/app');
+        createCalled = true;
+        return Promise.resolve({
+          path: '/tmp/worktrees/git-project/session-1',
+          workspacePath: '/tmp/worktrees/git-project/session-1/packages/app',
+          branch: 'agentctl/session-1/parallel-task',
+          baseCommit: 'base-commit',
+        });
+      },
+      cleanup: () => Promise.resolve(),
+      removeWorktreeOnly: () => Promise.resolve(),
+    } as unknown as WorkspaceManager;
+
+    const manager = new SessionManager(
+      db,
+      workspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
+    const session = await manager.createSession({
+      projectId: 'git-project',
+      providerId: 'provider-1',
+      taskSlug: 'parallel-task',
+    });
+
+    expect(session.sessionId).toBeDefined();
+    expect(createCalled).toBe(true);
+    expect(insertedSession).toMatchObject({
+      mode: 'worktree',
+      worktreePath: '/tmp/worktrees/git-project/session-1/packages/app',
+      branch: 'agentctl/session-1/parallel-task',
+      baseCommit: 'base-commit',
+    });
+  });
+
+  test('SessionManager createSession defaults non-Git projects to local mode', async () => {
+    let insertedSession: Record<string, unknown> | null = null;
+    let createCalled = false;
+
+    const db = {
+      select: () => mockDb.select(),
+      update: () => ({
+        set: () => ({
+          where: () => Promise.resolve([{ id: 1, selectedProvider: 'provider-1' }]),
+        }),
+      }),
+      insert: () => ({
+        values: (values: Record<string, unknown>) => {
+          insertedSession = values;
+          return {
+            returning: () => Promise.resolve([{ id: values.id, createdAt: new Date() }]),
+          };
+        },
+      }),
+      query: {
+        projects: {
+          findFirst: () =>
+            Promise.resolve({
+              id: 'plain-project',
+              path: '/tmp/plain-project',
+              repoRoot: null,
+              subdir: '',
+            }),
+        },
+        sessions: mockDb.query.sessions,
+        providers: mockDb.query.providers,
+      },
+    } as unknown as DbClient;
+
+    const workspaceManager = {
+      create: () => {
+        createCalled = true;
+        return Promise.resolve({
+          path: '/tmp/should-not-be-used',
+          workspacePath: '/tmp/should-not-be-used',
+          branch: 'should-not-be-used',
+          baseCommit: 'should-not-be-used',
+        });
+      },
+      cleanup: () => Promise.resolve(),
+      removeWorktreeOnly: () => Promise.resolve(),
+    } as unknown as WorkspaceManager;
+
+    const manager = new SessionManager(
+      db,
+      workspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
+    const session = await manager.createSession({
+      projectId: 'plain-project',
+      providerId: 'provider-1',
+      taskSlug: 'local-task',
+    });
+
+    expect(session.sessionId).toBeDefined();
+    expect(createCalled).toBe(false);
+    expect(insertedSession).toMatchObject({
+      mode: 'local',
+      worktreePath: '/tmp/plain-project',
+      branch: 'main',
+      baseCommit: 'none',
+    });
   });
 
   test('SessionManager resuscitates a dead session or a session not in memory on client message input', async () => {
-    const manager = new SessionManager(mockDb, mockWorkspaceManager, mockProviderRegistry, eventBus, noopLogger, fakeRuntime);
-    
+    const manager = new SessionManager(
+      mockDb,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
+
     // 1. Session is not in memory. Send message, it should resuscitate (load from DB and startSession)
     expect(manager.getSession('sess-1')).toBeUndefined();
 
@@ -201,10 +404,14 @@ describe('SessionManager tests', () => {
       launchArgs: '["10"]',
       launchEnv: '{}',
       customEnv: '{}',
-      configOptions: '[{"id": "thinking_effort", "name": "Thinking Effort", "description": "", "type": "string", "options": [{"value": "medium"}, {"value": "high"}]}]',
+      configOptions:
+        '[{"id": "thinking_effort", "name": "Thinking Effort", "description": "", "type": "string", "options": [{"value": "medium"}, {"value": "high"}]}]',
       authMethods: '[]',
       supportsDynamicModel: true,
       supportsDynamicConfig: true,
+      supportsLogout: false,
+      nativelyLoadsSkills: false,
+      modes: '[]',
       version: '1.0.0',
       description: 'test',
       icon: '',
@@ -219,6 +426,7 @@ describe('SessionManager tests', () => {
         }
         return mockProviderRegistry.ensureProviderReady(id, { force: false });
       },
+      getSettings: () => mockProviderRegistry.getSettings(),
     } as unknown as ProviderRegistry;
 
     const sessionRecordVal = {
@@ -236,6 +444,7 @@ describe('SessionManager tests', () => {
     };
 
     const localDb = {
+      select: () => mockDb.select(),
       insert: (table: Parameters<typeof mockDb.insert>[0]) => mockDb.insert(table),
       update: () => ({
         set: (fields: Record<string, unknown>) => {
@@ -254,15 +463,33 @@ describe('SessionManager tests', () => {
         projects: mockDb.query.projects,
         sessions: {
           findFirst: () => Promise.resolve({ ...sessionRecordVal }),
+          findMany: () => Promise.resolve([]),
         },
       },
     } as unknown as DbClient;
 
-    const manager = new SessionManager(localDb, mockWorkspaceManager, registry, eventBus, noopLogger, fakeRuntime);
+    const manager = new SessionManager(
+      localDb,
+      mockWorkspaceManager,
+      registry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
 
     // Initial start to populate the manager's active sessions map
-    const session = await manager.startSession('sess-1', '/tmp', 'sleep', ['10'], {}, 'model-1', 'medium', true, true);
-    
+    const session = await manager.startSession(
+      'sess-1',
+      '/tmp',
+      'sleep',
+      ['10'],
+      {},
+      'model-1',
+      'medium',
+      true,
+      true,
+    );
+
     let modelUpdated = '';
     let configUpdated: [string, string] | null = null;
 
@@ -315,5 +542,60 @@ describe('SessionManager tests', () => {
     expect(restarted).toBe(true);
 
     session.kill();
+  });
+
+  test('SessionManager deleteSession calls runtime deleteAgentSession if agentSessionId is present', async () => {
+    let deletedAgentSessionId = '';
+    /* eslint-disable @typescript-eslint/require-await */
+    const spyRuntime: AgentRuntime = {
+      ...fakeRuntime,
+      async deleteAgentSession(_cmd, _args, _env, acpSessionId) {
+        deletedAgentSessionId = acpSessionId;
+      },
+    };
+    /* eslint-enable @typescript-eslint/require-await */
+
+    /* eslint-disable @typescript-eslint/no-misused-spread */
+    const localDb = {
+      ...mockDb,
+      query: {
+        ...mockDb.query,
+        sessions: {
+          findFirst: () =>
+            Promise.resolve({
+              id: 'session-to-delete',
+              agent: 'provider-1',
+              status: 'idle',
+              selectedProvider: 'provider-1',
+              selectedModel: 'model-1',
+              selectedThinkingEffort: 'medium',
+              agentSessionId: 'agent-session-abc',
+              project: {
+                id: 'project-1',
+                path: '/tmp/project-1',
+              },
+            }),
+          findMany: () => Promise.resolve([]),
+        },
+      },
+      delete: () => ({
+        where: () => Promise.resolve(),
+      }),
+    } as unknown as DbClient;
+    /* eslint-enable @typescript-eslint/no-misused-spread */
+
+    const manager = new SessionManager(
+      mockDb,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      spyRuntime,
+    );
+    // Replace with local db mock
+    Object.defineProperty(manager, 'db', { value: localDb });
+
+    await manager.deleteSession('session-to-delete');
+    expect(deletedAgentSessionId).toBe('agent-session-abc');
   });
 });

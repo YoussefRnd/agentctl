@@ -1,17 +1,25 @@
 import { spawn } from 'node:child_process';
-import { eq } from 'drizzle-orm';
+import { eq, asc, inArray } from 'drizzle-orm';
+import { simpleGit } from 'simple-git';
 import type { ACPSession, DbClient } from './acp-session.js';
 import type { AgentRuntime } from './acp-transport.js';
 import { DefaultAgentRuntime } from './acp-transport.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import { SessionEventStore } from './session-event-store.js';
-import { sessions, projects } from '../db/schema.js';
+import { sessions, projects, acpEvents } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
+import { SessionWorkspace } from '../git/session-workspace.js';
 import { negotiateCapabilities } from './capabilities-negotiator.js';
 import type { ProviderRegistry } from './acp-provider-registry.js';
-import type { ProviderName, SessionMode, ThinkingEffort } from '@agentctl/shared';
+import {
+  type ACPConfigOption,
+  type SessionMode,
+  type ThinkingEffort,
+  type ACPEvent,
+} from '@agentctl/shared';
 import { SessionStateMachine } from './session-state-machine.js';
+import type { McpGateway } from './mcp-gateway.js';
 
 export interface IEventBus {
   publish(event: unknown): void;
@@ -19,7 +27,7 @@ export interface IEventBus {
 
 export interface CreateSessionParams {
   projectId: string;
-  providerId: string;
+  providerId?: string;
   taskSlug: string;
   mode?: SessionMode;
 }
@@ -27,6 +35,7 @@ export interface CreateSessionParams {
 export class SessionManager {
   private eventStore: SessionEventStore;
   private stateMachine: SessionStateMachine;
+  private sessionWorkspace: SessionWorkspace;
 
   constructor(
     private db: DbClient,
@@ -35,6 +44,7 @@ export class SessionManager {
     eventBus: IEventBus,
     private logger: Logger = noopLogger,
     private runtime: AgentRuntime = new DefaultAgentRuntime(spawn, logger),
+    private mcpGateway?: McpGateway,
   ) {
     this.eventStore = new SessionEventStore(db, eventBus);
     this.stateMachine = new SessionStateMachine(
@@ -44,97 +54,67 @@ export class SessionManager {
       this.eventStore,
       logger,
       runtime,
+      mcpGateway,
+    );
+    this.sessionWorkspace = new SessionWorkspace(
+      db,
+      workspaceManager,
+      (sessionId) => {
+        this.stateMachine.stopSession(sessionId);
+      },
+      () => this.stateMachine.getSnapshotService(),
+      (event, payload) => {
+        this.logger.info({ event, ...payload }, `Git Workspace Event: ${event}`);
+        eventBus.publish({ type: event, ...payload });
+      },
     );
   }
 
-  async createSession(params: CreateSessionParams): Promise<ACPSession> {
+  async syncOrphans(): Promise<void> {
+    const activeSessions = await this.db.query.sessions.findMany({
+      where: inArray(sessions.status, ['idle', 'running', 'needs_attention', 'error']),
+    });
+    const activeIds = activeSessions.map((s) => s.id);
+    await this.sessionWorkspace.syncOrphans(activeIds);
+  }
+
+  writeTerminalInput(sessionId: string, terminalId: string, data: string): boolean {
+    const session = this.stateMachine.getSession(sessionId);
+    if (!session) {
+      this.logger.error(`Session not found for writeTerminalInput: ${sessionId}`);
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    this.logger.info(
+      `SessionManager writing terminal input: terminalId=${terminalId}, dataLength=${String(data.length)}`,
+    );
+    return session.writeTerminalInput(terminalId, data);
+  }
+
+  async createSession(params: CreateSessionParams): Promise<{ sessionId: string }> {
     const { projectId, providerId, taskSlug, mode } = params;
 
-    const project = await this.db.query.projects.findFirst({
-      where: eq(projects.id, projectId),
-    });
+    const settings = await this.providerRegistry.getSettings();
+    const resolvedProviderId = providerId ?? settings.defaultProviderId;
 
-    if (!project) {
-      throw new Error(`Project not found: ${projectId}`);
+    if (!resolvedProviderId) {
+      throw new Error(
+        'No agent provider specified, and no default provider is configured in settings.',
+      );
     }
 
-    const { launch, selection } = await this.resolveLaunchParameters(providerId);
+    const { selection, configOptions } = await this.resolveLaunchParameters(resolvedProviderId);
 
-    const sessionId = crypto.randomUUID();
-
-    let branch = 'main';
-    let worktreePath = project.path;
-    let workspacePath = project.path;
-    let baseCommit = 'none';
-    let resolvedMode: SessionMode = mode ?? (project.repoRoot ? 'worktree' : 'local');
-
-    if (project.repoRoot && resolvedMode === 'worktree') {
-      try {
-        const worktree = await this.workspaceManager.create(
-          project.repoRoot,
-          sessionId,
-          taskSlug,
-          'main',
-          project.subdir,
-        );
-        branch = worktree.branch;
-        worktreePath = worktree.path;
-        workspacePath = worktree.workspacePath;
-        baseCommit = worktree.baseCommit;
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('empty repository')) {
-          resolvedMode = 'local';
-          worktreePath = project.path;
-          workspacePath = project.path;
-          baseCommit = 'none';
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    if (resolvedMode === 'local') {
-      branch = 'main';
-      worktreePath = project.path;
-      workspacePath = project.path;
-      baseCommit = 'none';
-      resolvedMode = 'local';
-    }
-
-
-
-    await this.db.insert(sessions).values({
-      id: sessionId,
-      projectId,
-      branch,
-      worktreePath,
-      agent: providerId,
-      status: 'idle',
-      taskSlug,
-      baseCommit,
-      mode: resolvedMode,
-      selectedProvider: providerId as ProviderName,
+    const context = await this.sessionWorkspace.establish(projectId, taskSlug, {
+      mode,
+      agent: resolvedProviderId,
+      selectedProvider: resolvedProviderId,
       selectedModel: selection.selectedModel,
       selectedThinkingEffort: selection.selectedThinkingEffort,
+      contextLimit: 0,
+      sessionConfigOptions: JSON.stringify(configOptions),
     });
 
-
-
-    return this.startSession(
-      sessionId,
-      workspacePath,
-      launch.command,
-      launch.args,
-      launch.env,
-      selection.selectedModel,
-      selection.selectedThinkingEffort,
-      selection.supportsDynamicModel,
-      selection.supportsDynamicConfig,
-      selection.resolvedThinkingConfigId,
-      undefined,
-      selection.resolvedModelConfigId,
-    );
+    return { sessionId: context.sessionId };
   }
 
   async startSession(
@@ -171,6 +151,8 @@ export class SessionManager {
     this.logger.info({ sessionId }, 'Restarting session');
     this.stateMachine.stopSession(sessionId);
 
+    await this.db.update(sessions).set({ updatedAt: new Date() }).where(eq(sessions.id, sessionId));
+
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
@@ -180,33 +162,44 @@ export class SessionManager {
       throw new Error(`Session or associated project not found: ${sessionId}`);
     }
 
-    const { launch, selection } = await this.resolveLaunchParameters(
+    const { launch, selection, configOptions } = await this.resolveLaunchParameters(
       sessionRecord.selectedProvider,
       sessionRecord.selectedModel,
       sessionRecord.selectedThinkingEffort as ThinkingEffort,
     );
 
+    await this.db
+      .update(sessions)
+      .set({
+        sessionConfigOptions: JSON.stringify(configOptions),
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, sessionId));
+
+    let workspacePath =
+      sessionRecord.mode === 'worktree' ? sessionRecord.worktreePath : sessionRecord.project.path;
+
     if (sessionRecord.status === 'archived') {
-      await this.stateMachine.transitionTo(sessionId, 'idle', {
-        command: launch.command,
-        args: launch.args,
-        env: launch.env,
-        supportsDynamicModel: selection.supportsDynamicModel,
-        supportsDynamicConfig: selection.supportsDynamicConfig,
-        resolvedThinkingConfigId: selection.resolvedThinkingConfigId,
-        resolvedModelConfigId: selection.resolvedModelConfigId,
+      const context = await this.sessionWorkspace.activate(sessionId, {
+        baseBranch: sessionRecord.baseBranch ?? 'main',
       });
-      const session = this.stateMachine.getSession(sessionId);
-      if (!session) {
-        throw new Error('Session failed to start after resuscitation');
-      }
-      return session;
+      workspacePath = context.worktreePath;
     }
 
-    const workspacePath =
-      sessionRecord.mode === 'worktree'
-        ? sessionRecord.worktreePath
-        : sessionRecord.project.path;
+    let resolvedAgentSessionId: string | null = null;
+    if (sessionRecord.agentSessionId) {
+      try {
+        const parsed = JSON.parse(sessionRecord.agentSessionId) as unknown;
+        if (parsed && typeof parsed === 'object') {
+          resolvedAgentSessionId =
+            ((parsed as Record<string, unknown>)[sessionRecord.selectedProvider] as
+              | string
+              | undefined) ?? null;
+        }
+      } catch {
+        resolvedAgentSessionId = sessionRecord.agentSessionId;
+      }
+    }
 
     return this.startSession(
       sessionId,
@@ -219,9 +212,114 @@ export class SessionManager {
       selection.supportsDynamicModel,
       selection.supportsDynamicConfig,
       selection.resolvedThinkingConfigId,
-      sessionRecord.agentSessionId,
+      resolvedAgentSessionId,
       selection.resolvedModelConfigId,
     );
+  }
+
+  private async createForkSession(
+    sourceRecord: {
+      id: string;
+      projectId: string;
+      taskSlug: string;
+      mode: string;
+      selectedProvider: string;
+      selectedModel: string;
+      selectedThinkingEffort: string;
+      project: { path: string; repoRoot: string | null; subdir: string };
+    },
+    eventsToCopy: {
+      type: string;
+      data: unknown;
+      parentEventId: number | null;
+      metadata: string | null;
+    }[],
+  ): Promise<string> {
+    const context = await this.sessionWorkspace.establish(
+      sourceRecord.projectId,
+      `${sourceRecord.taskSlug}-fork`,
+      {
+        mode: sourceRecord.mode as SessionMode,
+        agent: sourceRecord.selectedProvider,
+        selectedProvider: sourceRecord.selectedProvider,
+        selectedModel: sourceRecord.selectedModel,
+        selectedThinkingEffort: sourceRecord.selectedThinkingEffort,
+        contextLimit: 0,
+        title: `${sourceRecord.taskSlug}-fork`,
+      },
+    );
+
+    const forkSessionId = context.sessionId;
+    const worktreePath = context.worktreePath;
+
+    for (const evt of eventsToCopy) {
+      let parsedData: unknown = evt.data;
+      if (typeof evt.data === 'string') {
+        try {
+          parsedData = JSON.parse(evt.data);
+        } catch {
+          parsedData = evt.data;
+        }
+      }
+      let parsedMetadata: unknown = evt.metadata;
+      if (typeof evt.metadata === 'string') {
+        try {
+          parsedMetadata = JSON.parse(evt.metadata);
+        } catch {
+          parsedMetadata = evt.metadata;
+        }
+      }
+      await this.eventStore.append(
+        forkSessionId,
+        evt.type as ACPEvent['type'],
+        parsedData,
+        evt.parentEventId,
+        parsedMetadata ?? undefined,
+      );
+    }
+
+    const { launch, selection } = await this.resolveLaunchParameters(
+      sourceRecord.selectedProvider,
+      sourceRecord.selectedModel,
+      sourceRecord.selectedThinkingEffort as ThinkingEffort,
+    );
+
+    await this.startSession(
+      forkSessionId,
+      worktreePath,
+      launch.command,
+      launch.args,
+      launch.env,
+      selection.selectedModel,
+      selection.selectedThinkingEffort,
+      selection.supportsDynamicModel,
+      selection.supportsDynamicConfig,
+      selection.resolvedThinkingConfigId,
+      undefined,
+      selection.resolvedModelConfigId,
+    );
+
+    return forkSessionId;
+  }
+
+  private buildInitialConfigOptions(
+    providerConfigOptions: ACPConfigOption[],
+    selectedModel: string,
+    selectedThinkingEffort: ThinkingEffort,
+  ): ACPConfigOption[] {
+    return providerConfigOptions.map((opt) => {
+      if (opt.id === 'model' || opt.id === 'selectedModel') {
+        return { ...opt, currentValue: selectedModel };
+      }
+      if (
+        opt.id === 'thinking' ||
+        opt.id === 'thinking_effort' ||
+        opt.id === 'selectedThinkingEffort'
+      ) {
+        return { ...opt, currentValue: selectedThinkingEffort };
+      }
+      return opt;
+    });
   }
 
   private async resolveLaunchParameters(
@@ -234,18 +332,22 @@ export class SessionManager {
       throw new Error(`Selected agent is not ready: ${providerId}`);
     }
 
-    const selection = negotiateCapabilities(
-      provider,
-      requestedModel,
-      requestedThinkingEffort,
-    );
+    const selection = negotiateCapabilities(provider, requestedModel, requestedThinkingEffort);
 
     const launch = provider.getLaunchConfig(
       selection.selectedModel,
       selection.selectedThinkingEffort,
     );
 
-    return { launch, selection };
+    return {
+      launch,
+      selection,
+      configOptions: this.buildInitialConfigOptions(
+        provider.toDiscovery().configOptions ?? [],
+        selection.selectedModel,
+        selection.selectedThinkingEffort,
+      ),
+    };
   }
 
   async updateSessionConfig(
@@ -267,21 +369,28 @@ export class SessionManager {
 
     const providerIdChanged = sessionRecord.selectedProvider !== params.selectedProvider;
 
-    const [updatedSession] = await this.db
+    const provider = await this.providerRegistry.ensureProviderReady(params.selectedProvider, {
+      force: false,
+    });
+
+    const newConfigOptions = this.buildInitialConfigOptions(
+      provider.toDiscovery().configOptions ?? [],
+      params.selectedModel,
+      params.selectedThinkingEffort,
+    );
+
+    await this.db
       .update(sessions)
       .set({
         selectedProvider: params.selectedProvider,
         selectedModel: params.selectedModel,
         selectedThinkingEffort: params.selectedThinkingEffort,
         agent: params.selectedProvider,
+        contextLimit: 0,
+        availableCommands: '[]',
+        sessionConfigOptions: JSON.stringify(newConfigOptions),
       })
-      .where(eq(sessions.id, sessionId))
-      .returning();
-
-    const provider = await this.providerRegistry.ensureProviderReady(
-      updatedSession.selectedProvider,
-      { force: false },
-    );
+      .where(eq(sessions.id, sessionId));
 
     if (provider.status !== 'ready' && provider.status !== 'needs_auth') {
       return null;
@@ -303,15 +412,21 @@ export class SessionManager {
       ) {
         const configOptions = provider.toDiscovery().configOptions ?? [];
         const thinkingOption = configOptions.find(
-          (opt) => opt.id === 'thinking' || opt.id === 'thinking_effort' || opt.id === 'selectedThinkingEffort',
+          (opt) =>
+            opt.id === 'thinking' ||
+            opt.id === 'thinking_effort' ||
+            opt.id === 'selectedThinkingEffort',
         );
         if (thinkingOption) {
           try {
-            await activeSession.updateConfigOption(thinkingOption.id, params.selectedThinkingEffort);
+            await activeSession.updateConfigOption(
+              thinkingOption.id,
+              params.selectedThinkingEffort,
+            );
           } catch (configErr) {
             this.logger.warn(
               configErr,
-              `Failed to dynamically update thinking effort (configId: ${thinkingOption.id})`
+              `Failed to dynamically update thinking effort (configId: ${thinkingOption.id})`,
             );
           }
         }
@@ -334,11 +449,10 @@ export class SessionManager {
   async switchMode(sessionId: string, newMode: SessionMode): Promise<ACPSession | null> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
-      with: { project: true },
     });
 
     if (!sessionRecord) {
-      throw new Error(`Session or associated project not found: ${sessionId}`);
+      throw new Error(`Session not found: ${sessionId}`);
     }
 
     if (sessionRecord.mode === newMode) {
@@ -347,43 +461,10 @@ export class SessionManager {
     }
 
     const wasRunning = this.stateMachine.hasSession(sessionId);
-    if (wasRunning) {
-      this.stateMachine.stopSession(sessionId);
-    }
-
-    let worktreePath = sessionRecord.worktreePath;
-    let branch = sessionRecord.branch;
-    let baseCommit = sessionRecord.baseCommit;
-
-    if (newMode === 'worktree') {
-      if (!sessionRecord.project.repoRoot) {
-        throw new Error('Project repo root not set. Cannot create worktree.');
-      }
-      const result = await this.workspaceManager.create(
-        sessionRecord.project.repoRoot,
-        sessionRecord.id,
-        sessionRecord.taskSlug,
-        sessionRecord.branch || 'main',
-      );
-      worktreePath = result.path;
-      branch = result.branch;
-      baseCommit = result.baseCommit;
-    } else {
-      if (!sessionRecord.project.repoRoot) {
-        throw new Error('Project repo root not set. Cannot switch to local mode.');
-      }
-      worktreePath = sessionRecord.project.repoRoot;
-    }
-
-    await this.db
-      .update(sessions)
-      .set({
-        mode: newMode,
-        worktreePath,
-        branch,
-        baseCommit,
-      })
-      .where(eq(sessions.id, sessionId));
+    await this.sessionWorkspace.activate(sessionId, {
+      mode: newMode,
+      baseBranch: sessionRecord.branch || 'main',
+    });
 
     if (wasRunning) {
       return this.restartSession(sessionId);
@@ -394,6 +475,10 @@ export class SessionManager {
 
   getSession(sessionId: string): ACPSession | undefined {
     return this.stateMachine.getSession(sessionId);
+  }
+
+  getSnapshotService() {
+    return this.stateMachine.getSnapshotService();
   }
 
   stopSession(sessionId: string): void {
@@ -407,7 +492,6 @@ export class SessionManager {
   async deleteSession(sessionId: string): Promise<void> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
-      with: { project: true },
     });
 
     if (!sessionRecord) {
@@ -416,19 +500,43 @@ export class SessionManager {
 
     this.stateMachine.stopSession(sessionId);
 
-    if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
+    if (sessionRecord.agentSessionId) {
       try {
-        await this.workspaceManager.cleanup(
-          sessionRecord.project.repoRoot,
-          sessionRecord.worktreePath,
-          sessionRecord.branch,
-        );
+        let providerSessions: Record<string, string> = {};
+        try {
+          const parsed = JSON.parse(sessionRecord.agentSessionId) as unknown;
+          if (parsed && typeof parsed === 'object') {
+            providerSessions = parsed as Record<string, string>;
+          }
+        } catch {
+          providerSessions = { [sessionRecord.selectedProvider]: sessionRecord.agentSessionId };
+        }
+
+        if (typeof this.runtime.deleteAgentSession === 'function') {
+          for (const [providerId, sId] of Object.entries(providerSessions)) {
+            try {
+              const { launch } = await this.resolveLaunchParameters(
+                providerId,
+                sessionRecord.selectedModel,
+                sessionRecord.selectedThinkingEffort as ThinkingEffort,
+              );
+              await this.runtime.deleteAgentSession(launch.command, launch.args, launch.env, sId);
+            } catch (delErr) {
+              this.logger.warn(
+                { delErr, providerId },
+                `Failed to delete agent session for provider ${providerId}`,
+              );
+            }
+          }
+        }
       } catch (err: unknown) {
-        this.logger.error({ err, sessionId }, 'Failed to cleanup worktree on deleteSession');
+        this.logger.error({ err, sessionId }, 'Failed to delete session on agent');
       }
     }
 
-    await this.db.delete(sessions).where(eq(sessions.id, sessionId));
+    await this.sessionWorkspace.teardown(sessionId).catch((err: unknown) => {
+      this.logger.error({ err, sessionId }, 'Failed to teardown workspace on deleteSession');
+    });
 
     // Clean up temporary attachments
     try {
@@ -445,7 +553,17 @@ export class SessionManager {
   }
 
   async archiveSession(sessionId: string): Promise<void> {
-    await this.stateMachine.transitionTo(sessionId, 'archived');
+    await this.sessionWorkspace.archive(sessionId);
+  }
+
+  async finalizeSession(
+    sessionId: string,
+    action: 'merge' | 'discard',
+    commitMessage?: string,
+  ): Promise<void> {
+    await this.sessionWorkspace.finalize(sessionId, action === 'merge' ? 'merged' : 'discarded', {
+      commitMessage,
+    });
   }
 
   async deleteProject(projectId: string): Promise<void> {
@@ -459,18 +577,12 @@ export class SessionManager {
     }
 
     for (const session of projectRecord.sessions) {
-      this.stateMachine.stopSession(session.id);
-      if (session.mode === 'worktree' && projectRecord.repoRoot) {
-        try {
-          await this.workspaceManager.cleanup(
-            projectRecord.repoRoot,
-            session.worktreePath,
-            session.branch,
-          );
-        } catch (err: unknown) {
-          this.logger.error({ err, sessionId: session.id }, 'Failed to cleanup worktree on deleteProject');
-        }
-      }
+      await this.sessionWorkspace.teardown(session.id).catch((err: unknown) => {
+        this.logger.error(
+          { err, sessionId: session.id },
+          'Failed to teardown workspace on deleteProject',
+        );
+      });
     }
 
     await this.db.delete(projects).where(eq(projects.id, projectId));
@@ -494,7 +606,10 @@ export class SessionManager {
     }
 
     if (sessionRecord.status === 'merged' || sessionRecord.status === 'discarded') {
-      this.logger.warn({ sessionId, status: sessionRecord.status }, 'Cannot resuscitate a merged or discarded session');
+      this.logger.warn(
+        { sessionId, status: sessionRecord.status },
+        'Cannot resuscitate a merged or discarded session',
+      );
       return null;
     }
 
@@ -506,10 +621,34 @@ export class SessionManager {
     return this.restartSession(sessionId);
   }
 
+  async setConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
+    const session = this.stateMachine.getSession(sessionId);
+    if (session && !session.isDead) {
+      await session.updateConfigOption(configId, value);
+    }
+  }
+
   async handleClientMessage(
     sessionId: string,
-    action: 'approve' | 'deny' | 'session.input',
-    payload: { eventId?: string | number; optionId?: string; input?: string; attachmentIds?: string[] },
+    action:
+      | 'approve'
+      | 'deny'
+      | 'cancel'
+      | 'set_mode'
+      | 'set_persona'
+      | 'session.input'
+      | 'set_config_option'
+      | 'session.rewind',
+    payload: {
+      eventId?: string | number;
+      optionId?: string;
+      input?: string;
+      attachmentIds?: string[];
+      mode?: string;
+      persona?: string;
+      configId?: string;
+      value?: string;
+    },
   ) {
     const session = await this.getOrResuscitate(sessionId, { allowArchived: true });
 
@@ -527,8 +666,151 @@ export class SessionManager {
       session.resolvePermission(String(payload.eventId), {
         allowed: false,
       });
+    } else if (action === 'cancel') {
+      await session.cancel();
+    } else if (action === 'set_mode') {
+      if (payload.mode) {
+        if (payload.mode === 'local' || payload.mode === 'worktree') {
+          await this.switchMode(sessionId, payload.mode);
+        } else {
+          await this.updateApprovalMode(sessionId, payload.mode);
+        }
+      }
+    } else if (action === 'set_persona') {
+      if (payload.persona) {
+        await this.setAgentPersona(sessionId, payload.persona);
+      }
+    } else if (action === 'set_config_option') {
+      if (payload.configId && payload.value !== undefined) {
+        await this.setConfigOption(sessionId, payload.configId, payload.value);
+      }
+    } else if (action === 'session.rewind') {
+      const rewindMode = (payload.mode ?? 'conversation') as 'conversation' | 'files' | 'fork';
+      const evtId = Number(payload.eventId);
+      if (!evtId) {
+        this.logger.warn({ sessionId }, 'Rewind called without eventId');
+        return;
+      }
+      await this.rewindSession(sessionId, evtId, rewindMode);
     } else if (payload.input !== undefined) {
       await session.prompt(payload.input, payload.attachmentIds);
     }
+  }
+
+  async setAgentPersona(sessionId: string, persona: string) {
+    // Update DB
+    await this.db
+      .update(sessions)
+      .set({
+        agentPersona: persona,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, sessionId));
+
+    // Notify agent if running
+    const session = this.stateMachine.getSession(sessionId);
+    if (session && !session.isDead) {
+      await session.setMode(persona);
+    }
+  }
+
+  async updateApprovalMode(sessionId: string, approvalMode: string) {
+    const validMode = (
+      ['review', 'auto_approve', 'yolo'].includes(approvalMode) ? approvalMode : 'review'
+    ) as 'review' | 'auto_approve' | 'yolo';
+
+    // Update DB
+    await this.db
+      .update(sessions)
+      .set({
+        approvalMode: validMode,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, sessionId));
+
+    // Notify agent if running
+    const session = this.stateMachine.getSession(sessionId);
+    if (session && !session.isDead) {
+      await session.setMode(validMode);
+    }
+  }
+
+  async rewindSession(
+    sessionId: string,
+    eventId: number,
+    mode: 'conversation' | 'files' | 'fork',
+  ): Promise<{ forkSessionId?: string }> {
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    if (sessionRecord.status === 'running') {
+      throw new Error('Cannot rewind a running session. Wait for the agent to finish.');
+    }
+
+    const event = await this.eventStore.getEventWithMetadata(eventId);
+    if (!event) {
+      throw new Error(`Event not found: ${String(eventId)}`);
+    }
+
+    const metadata = event.metadata as { snapshotHash?: string } | undefined;
+
+    if (mode === 'files') {
+      if (!metadata?.snapshotHash) {
+        throw new Error(
+          'No snapshot hash available for file rewind. This project may not be a git repo.',
+        );
+      }
+
+      const snapshotService = this.stateMachine.getSnapshotService();
+      const projectPath =
+        sessionRecord.mode === 'worktree' ? sessionRecord.worktreePath : sessionRecord.project.path;
+
+      const patches = await snapshotService.diff(projectPath, metadata.snapshotHash);
+
+      const modifiedPatches = patches.filter(
+        (p) => p.status === 'modified' || p.status === 'added',
+      );
+      if (modifiedPatches.length > 0) {
+        const git = simpleGit(projectPath);
+        const changedFiles = modifiedPatches.map((p) => p.path);
+        try {
+          await git.raw(['stash', 'push', '--', ...changedFiles]);
+        } catch {
+          // If stash fails (no changes to stash), continue
+        }
+      }
+
+      await snapshotService.revertFiles(projectPath, metadata.snapshotHash, patches);
+    }
+
+    if (mode === 'fork') {
+      const events = await this.db
+        .select()
+        .from(acpEvents)
+        .where(eq(acpEvents.sessionId, sessionId))
+        .orderBy(asc(acpEvents.id));
+
+      const eventsToCopy = events.filter((e) => e.id <= eventId);
+
+      const forkSessionId = await this.createForkSession(sessionRecord, eventsToCopy);
+
+      return { forkSessionId };
+    }
+
+    // conversation mode (default)
+    await this.eventStore.deleteEventsAfter(sessionId, eventId);
+    this.stateMachine.stopSession(sessionId);
+
+    void this.restartSession(sessionId).catch((err: unknown) => {
+      this.logger.error({ err, sessionId }, 'Failed to restart session after rewind');
+    });
+
+    return {};
   }
 }

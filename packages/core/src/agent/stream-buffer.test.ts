@@ -8,7 +8,7 @@ test('StreamBuffer debounces and flushes correct content', async () => {
   buffer.append('Hello');
   expect(onFlush).not.toHaveBeenCalled();
 
-  await new Promise(r => setTimeout(r, 60));
+  await new Promise((r) => setTimeout(r, 60));
   expect(onFlush).toHaveBeenCalledWith('Hello');
 });
 

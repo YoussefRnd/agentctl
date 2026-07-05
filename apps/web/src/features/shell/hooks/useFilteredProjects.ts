@@ -6,10 +6,7 @@ export interface FilterOptions {
   showArchived: boolean;
 }
 
-export function filterProjects(
-  projects: SidebarProject[],
-  options: FilterOptions
-): SidebarProject[] {
+function filterProjects(projects: SidebarProject[], options: FilterOptions): SidebarProject[] {
   const { searchQuery, showArchived } = options;
 
   const visibleProjects = projects.map((p) => ({
@@ -34,7 +31,7 @@ export function filterProjects(
 
 export function useFilteredProjects(
   projects: SidebarProject[],
-  options: FilterOptions
+  options: FilterOptions,
 ): SidebarProject[] {
   const { searchQuery, showArchived } = options;
 

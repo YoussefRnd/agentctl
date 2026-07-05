@@ -7,11 +7,10 @@ export function SessionView() {
   if (!sessionId) return null;
 
   return (
-    <SessionConfigProvider sessionId={sessionId}>
-      <SessionStreamProvider sessionId={sessionId}>
+    <SessionConfigProvider key={`config-${sessionId}`} sessionId={sessionId}>
+      <SessionStreamProvider key={`stream-${sessionId}`} sessionId={sessionId}>
         <SessionWorkspace />
       </SessionStreamProvider>
     </SessionConfigProvider>
   );
 }
-

@@ -28,12 +28,18 @@ export class ProjectStore {
   }
 
   setActiveId(id: string | null): void {
-    this.state.activeId = id;
+    this.state = {
+      ...this.state,
+      activeId: id,
+    };
     this.notify();
   }
 
   setSettings(settings: Partial<ProjectSettings>): void {
-    this.state.settings = { ...this.state.settings, ...settings };
+    this.state = {
+      ...this.state,
+      settings: { ...this.state.settings, ...settings },
+    };
     this.notify();
   }
 
@@ -44,7 +50,9 @@ export class ProjectStore {
 
   private notify(): void {
     const currentState = this.getState();
-    this.listeners.forEach((listener) => { listener(currentState); });
+    this.listeners.forEach((listener) => {
+      listener(currentState);
+    });
   }
 }
 

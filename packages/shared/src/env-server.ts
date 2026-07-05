@@ -6,7 +6,7 @@ export const serverEnvSchema = z.object({
   AGENTCTL_SESSION_SALT: z.string().length(16).default('dev-session-salt'),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().optional().default('sqlite.db'),
-  ALLOWED_AGENTS: z.string().min(1),
+  ALLOWED_AGENTS: z.string().optional(),
 });
 
 export const parseServerEnv = (env: Record<string, string | undefined>) =>

@@ -1,9 +1,3 @@
-import type { ProviderDiscovery } from './session-schemas.js';
-
-export function getReadyProviderId(providers: ProviderDiscovery[]) {
-  return providers.find((provider) => provider.status === 'ready')?.id ?? 'opencode';
-}
-
 export function createTaskSlug(prefix = 'new-session') {
   const now = new Date();
   const date = now.toISOString().split('T')[0].slice(2).replace(/-/g, '');

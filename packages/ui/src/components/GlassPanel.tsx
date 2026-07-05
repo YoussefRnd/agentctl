@@ -7,17 +7,17 @@ interface GlassPanelProps {
   intensity?: 'default' | 'high';
 }
 
-export const GlassPanel = memo(function GlassPanel({ 
-  children, 
-  className, 
-  intensity = 'default' 
+export const GlassPanel = memo(function GlassPanel({
+  children,
+  className,
+  intensity = 'default',
 }: GlassPanelProps) {
   return (
-    <div 
+    <div
       className={cn(
-        'liquid-glass flex flex-col',
+        'liquid-glass flex flex-col rounded-lg',
         intensity === 'high' && 'bg-surface/40 backdrop-blur-[32px]',
-        className
+        className,
       )}
     >
       {children}

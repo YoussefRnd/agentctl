@@ -10,11 +10,21 @@ export default fp((fastify) => {
       return Promise.resolve();
     }
 
-    if (!request.session.get('authenticated')) {
-      return reply.code(401).send({ error: 'Unauthorized' });
+    // 1. Check session cookie auth
+    if (request.session.get('authenticated')) {
+      return Promise.resolve();
     }
 
-    return Promise.resolve();
+    // 2. Check Authorization Bearer token auth
+    const authHeader = request.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      if (token === fastify.config.AGENTCTL_SECRET) {
+        return Promise.resolve();
+      }
+    }
+
+    return reply.code(401).send({ error: 'Unauthorized' });
   });
   return Promise.resolve();
 });

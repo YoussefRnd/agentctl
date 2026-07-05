@@ -4,7 +4,6 @@ import secureSession from '@fastify/secure-session';
 import authPlugin from './plugins/auth.js';
 import worktreePlugin from './plugins/worktree.js';
 import sessionManagerPlugin from './plugins/session-manager.js';
-import websocketPlugin from './plugins/websocket.js';
 import tsRestPlugin from './plugins/ts-rest.js';
 import { eventsRoutes } from './routes/events.js';
 import { authRoutes } from './routes/auth.js';
@@ -17,6 +16,7 @@ import {
   SessionManager,
   projects,
   sessions,
+  McpGateway,
 } from '@agentctl/core';
 import { EventBus } from './utils/event-bus.js';
 import { AppError } from './errors/app-error.js';
@@ -30,6 +30,7 @@ export interface AppDependencies {
   providerRegistry?: ProviderRegistry;
   sessionManager?: SessionManager;
   env?: ReturnType<typeof parseServerEnv>;
+  embedded?: boolean;
 }
 
 declare module 'fastify' {
@@ -42,6 +43,7 @@ declare module 'fastify' {
     sessionService: SessionService;
     eventBus: EventBus;
     config: ReturnType<typeof parseServerEnv>;
+    mcpGateway: McpGateway;
   }
 }
 
@@ -50,8 +52,6 @@ declare module '@fastify/secure-session' {
     authenticated: boolean;
   }
 }
-
-const PROVIDER_REGISTRY_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 export async function buildApp(deps: AppDependencies = {}) {
   const fastify = Fastify({
@@ -71,9 +71,19 @@ export async function buildApp(deps: AppDependencies = {}) {
   const config = deps.env ?? parseServerEnv(process.env);
   const eventBus = new EventBus();
 
+  const mcpGateway = new McpGateway(db, fastify.log);
+
   const sessionManager =
     deps.sessionManager ??
-    new SessionManager(db, worktreeManager, providerRegistry, eventBus, fastify.log);
+    new SessionManager(
+      db,
+      worktreeManager,
+      providerRegistry,
+      eventBus,
+      fastify.log,
+      undefined,
+      mcpGateway,
+    );
 
   const sessionService = new SessionService(
     db,
@@ -91,31 +101,23 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.decorate('sessionService', sessionService);
   fastify.decorate('eventBus', eventBus);
   fastify.decorate('config', config);
+  fastify.decorate('mcpGateway', mcpGateway);
 
   // Sync providers in the background on startup
-  void providerRegistry
-    .sync()
-    .then(() => {
-      providerRegistry.startBackgroundWarmup();
-    })
-    .catch((err: unknown) => {
-      fastify.log.error(err, 'Failed to sync provider registry on startup');
-    });
+  void providerRegistry.sync().catch((err: unknown) => {
+    fastify.log.error(err, 'Failed to sync provider registry on startup');
+  });
 
-  const registrySyncInterval =
-    process.env.NODE_ENV === 'test'
-      ? null
-      : setInterval(() => {
-          void providerRegistry.sync().catch((err: unknown) => {
-            fastify.log.error(err, 'Failed to sync provider registry in background');
-          });
-        }, PROVIDER_REGISTRY_SYNC_INTERVAL_MS);
+  // Prune orphaned worktrees on startup
+  if (typeof sessionManager.syncOrphans === 'function') {
+    void sessionManager.syncOrphans().catch((err: unknown) => {
+      fastify.log.error(err, 'Failed to sync orphaned worktrees on startup');
+    });
+  }
 
   fastify.addHook('onClose', async () => {
-    if (registrySyncInterval) {
-      clearInterval(registrySyncInterval);
-    }
     await fastify.sessionManager.stopAll();
+    await mcpGateway.stop();
   });
 
   fastify.ready(async () => {
@@ -131,6 +133,12 @@ export async function buildApp(deps: AppDependencies = {}) {
       }
     } catch (err) {
       fastify.log.error(err, 'Failed to sync orphaned worktrees on startup');
+    }
+
+    try {
+      await mcpGateway.start();
+    } catch (err) {
+      fastify.log.error(err, 'Failed to start MCP Gateway');
     }
   });
 
@@ -165,7 +173,7 @@ export async function buildApp(deps: AppDependencies = {}) {
     cookie: {
       path: '/',
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' && !deps.embedded,
       maxAge: 24 * 60 * 60,
       sameSite: 'lax',
     },
@@ -176,7 +184,6 @@ export async function buildApp(deps: AppDependencies = {}) {
 
   // Register other plugins
   await fastify.register(worktreePlugin);
-  await fastify.register(websocketPlugin);
   await fastify.register(sessionManagerPlugin);
   await fastify.register(tsRestPlugin);
 

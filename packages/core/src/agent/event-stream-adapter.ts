@@ -2,6 +2,7 @@ import { StreamBuffer } from './stream-buffer.js';
 import type { SessionEventStore } from './session-event-store.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
+import type { SnapshotService } from '../git/snapshot-service.js';
 
 export interface LaunchContext {
   command?: string;
@@ -31,6 +32,8 @@ export class EventStreamAdapter {
     private sessionId: string,
     private eventStore: SessionEventStore,
     private logger: Logger = noopLogger,
+    private cwd?: string,
+    private snapshotService?: SnapshotService,
   ) {
     this.textBuffer = new StreamBuffer(async () => {
       if (this.messageEventId) {
@@ -39,7 +42,7 @@ export class EventStreamAdapter {
         await this.eventStore.update(
           this.messageEventId,
           { content: this.currentMessage, role: 'provider' },
-          { durationMs, completionTokens }
+          { durationMs, completionTokens },
         );
       }
     });
@@ -51,7 +54,7 @@ export class EventStreamAdapter {
         await this.eventStore.update(
           this.thoughtEventId,
           { content: this.currentThought, role: 'thought' },
-          { durationMs, completionTokens }
+          { durationMs, completionTokens },
         );
       }
     });
@@ -69,6 +72,18 @@ export class EventStreamAdapter {
     this.textBuffer.reset();
     this.thoughtBuffer.reset();
 
+    const metadata: Record<string, unknown> = {};
+    if (promptTokens) {
+      metadata.promptTokens = promptTokens;
+    }
+
+    if (this.cwd && this.snapshotService) {
+      const snapshotHash = await this.snapshotService.track(this.cwd);
+      if (snapshotHash) {
+        metadata.snapshotHash = snapshotHash;
+      }
+    }
+
     const eventId = await this.eventStore.append(
       this.sessionId,
       'text',
@@ -78,7 +93,7 @@ export class EventStreamAdapter {
         attachments: attachments && attachments.length > 0 ? attachments : undefined,
       },
       null,
-      promptTokens ? { promptTokens } : undefined
+      Object.keys(metadata).length > 0 ? metadata : undefined,
     );
     this.currentParentEventId = eventId;
     return eventId;
@@ -99,7 +114,7 @@ export class EventStreamAdapter {
           role: 'provider',
         },
         this.currentParentEventId,
-        { durationMs: 0, completionTokens }
+        { durationMs: 0, completionTokens },
       );
     }
   }
@@ -119,7 +134,7 @@ export class EventStreamAdapter {
           role: 'thought',
         },
         this.currentParentEventId,
-        { durationMs: 0, completionTokens }
+        { durationMs: 0, completionTokens },
       );
     }
   }
@@ -142,23 +157,16 @@ export class EventStreamAdapter {
         'tool_call',
         call,
         parentId,
-        { durationMs: 0 }
+        { durationMs: 0 },
       );
     } else if (this.toolCallEventId) {
       const durationMs = Date.now() - (this.toolCallStartTime ?? Date.now());
-      await this.eventStore.update(
-        this.toolCallEventId,
-        call,
-        { durationMs }
-      );
+      await this.eventStore.update(this.toolCallEventId, call, { durationMs });
     }
   }
 
   async flushAll(): Promise<void> {
-    await Promise.all([
-      this.textBuffer.flush(),
-      this.thoughtBuffer.flush(),
-    ]);
+    await Promise.all([this.textBuffer.flush(), this.thoughtBuffer.flush()]);
   }
 
   getCurrentParentEventId(): number | null {

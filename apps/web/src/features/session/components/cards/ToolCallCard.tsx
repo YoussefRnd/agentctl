@@ -1,29 +1,60 @@
 import { useState, memo, useEffect } from 'react';
-import { Terminal, ChevronRight, ChevronDown, FileText, Search, Settings } from 'lucide-react';
+import {
+  Terminal,
+  ChevronRight,
+  FileText,
+  Search,
+  Settings,
+  AlertCircle,
+  Trash2,
+} from 'lucide-react';
 import type { ACPEventToolCallData } from '@agentctl/shared';
+import { Card } from '@agentctl/ui';
 
 function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string, unknown> }) {
-  if (name.includes('file') || name.includes('view') || name.includes('read') || name.includes('write')) {
-    const filePath = typeof args.AbsolutePath === 'string' ? args.AbsolutePath : (typeof args.TargetFile === 'string' ? args.TargetFile : (typeof args.path === 'string' ? args.path : ''));
-    const content = typeof args.CodeContent === 'string' ? args.CodeContent : (typeof args.ReplacementContent === 'string' ? args.ReplacementContent : '');
+  if (
+    name.includes('file') ||
+    name.includes('view') ||
+    name.includes('read') ||
+    name.includes('write')
+  ) {
+    const filePath =
+      typeof args.AbsolutePath === 'string'
+        ? args.AbsolutePath
+        : typeof args.TargetFile === 'string'
+          ? args.TargetFile
+          : typeof args.path === 'string'
+            ? args.path
+            : '';
+    const content =
+      typeof args.CodeContent === 'string'
+        ? args.CodeContent
+        : typeof args.ReplacementContent === 'string'
+          ? args.ReplacementContent
+          : '';
 
     return (
       <div className="space-y-2">
         {filePath && (
-          <div className="flex flex-wrap items-center gap-2 text-[12px]">
-            <FileText className="h-3.5 w-3.5 text-accent/80" />
-            <span className="text-text-muted">Target Path:</span>
-            <code className="bg-surface-secondary text-text-main rounded-md px-1.5 py-0.5 font-mono text-[11px] border border-border/40 break-all">
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <FileText className="text-brand-green/80 h-3.5 w-3.5" />
+            <span className="text-text-muted/80">Target Path:</span>
+            <code className="bg-surface-secondary/70 text-text-main border-border/30 rounded-md border px-2 py-0.5 font-mono text-[10.5px] break-all select-all">
               {filePath}
             </code>
           </div>
         )}
         {content && (
-          <div className="border border-border/30 bg-surface-secondary/40 rounded-lg overflow-hidden mt-1">
-            <div className="bg-surface-secondary border-b border-border/20 px-3 py-1 flex items-center justify-between text-[10px] font-bold text-text-muted uppercase tracking-wider">
-              <span>Code Content</span>
+          <div className="border-border/25 bg-surface-secondary/20 mt-2 overflow-hidden rounded-xl border shadow-sm">
+            <div className="bg-surface-secondary/60 border-border/20 text-text-muted flex items-center justify-between border-b px-3 py-1.5 text-[9px] font-bold tracking-wider uppercase">
+              <div className="flex items-center gap-1 select-none">
+                <span className="h-2 w-2 rounded-full bg-red-500/60" />
+                <span className="h-2 w-2 rounded-full bg-yellow-500/60" />
+                <span className="h-2 w-2 rounded-full bg-green-500/60" />
+              </div>
+              <span className="font-mono">Code Buffer</span>
             </div>
-            <pre className="p-3 text-[11px] font-mono leading-relaxed text-text-main/90 overflow-x-auto whitespace-pre-wrap max-h-60 no-scrollbar">
+            <pre className="text-text-main/90 no-scrollbar max-h-60 overflow-x-auto bg-black/10 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
               {content}
             </pre>
           </div>
@@ -33,24 +64,31 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
   }
 
   if (name.includes('search') || name.includes('grep')) {
-    const query = typeof args.Query === 'string' ? args.Query : (typeof args.query === 'string' ? args.query : '');
+    const query =
+      typeof args.Query === 'string'
+        ? args.Query
+        : typeof args.query === 'string'
+          ? args.query
+          : '';
     const path = typeof args.SearchPath === 'string' ? args.SearchPath : '';
 
     return (
       <div className="space-y-2">
         {query && (
-          <div className="flex flex-wrap items-center gap-2 text-[12px]">
-            <Search className="h-3.5 w-3.5 text-accent/80" />
-            <span className="text-text-muted">Search Query:</span>
-            <code className="bg-surface-secondary text-text-main rounded-md px-1.5 py-0.5 font-mono text-[11px] border border-border/40">
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <Search className="text-brand-blue/80 h-3.5 w-3.5" />
+            <span className="text-text-muted/80">Search Query:</span>
+            <code className="bg-surface-secondary/70 text-text-main border-border/30 rounded-md border px-2 py-0.5 font-mono text-[10.5px] select-all">
               {query}
             </code>
           </div>
         )}
         {path && (
-          <div className="flex flex-wrap items-center gap-2 text-[12px]">
-            <span className="text-text-muted ml-5">Within Path:</span>
-            <span className="text-text-main font-mono text-[11px] break-all">{path}</span>
+          <div className="flex flex-wrap items-center gap-2 pl-5.5 text-[11px]">
+            <span className="text-text-muted/80">Within Path:</span>
+            <span className="text-text-main font-mono text-[10.5px] break-all select-all">
+              {path}
+            </span>
           </div>
         )}
       </div>
@@ -58,26 +96,147 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
   }
 
   if (name.includes('command') || name.includes('shell') || name.includes('run')) {
-    const cmd = typeof args.CommandLine === 'string' ? args.CommandLine : (typeof args.command === 'string' ? args.command : '');
+    const cmd =
+      typeof args.CommandLine === 'string'
+        ? args.CommandLine
+        : typeof args.command === 'string'
+          ? args.command
+          : '';
     return (
-      <div className="bg-surface-secondary/80 border border-border/40 rounded-lg p-3 font-mono text-[11px] leading-relaxed shadow-inner">
-        <div className="flex items-center gap-2 text-accent/80 border-b border-border/20 pb-1.5 mb-2 font-sans text-[10px] font-bold uppercase tracking-wider">
-          <Terminal className="h-3.5 w-3.5" />
-          <span>Terminal Command</span>
+      <div className="bg-surface-secondary/35 border-border/25 overflow-hidden rounded-xl border font-mono text-[11px] leading-relaxed shadow-sm">
+        <div className="bg-surface-secondary/70 border-border/20 flex items-center justify-between border-b px-3.5 py-2">
+          <div className="flex items-center gap-1 select-none">
+            <span className="h-2 w-2 rounded-full bg-red-500/60" />
+            <span className="h-2 w-2 rounded-full bg-yellow-500/60" />
+            <span className="h-2 w-2 rounded-full bg-green-500/60" />
+          </div>
+          <div className="text-text-muted/80 flex items-center gap-1.5 font-sans text-[9px] font-bold tracking-wider uppercase">
+            <Terminal className="text-brand-peach/90 h-3 w-3" />
+            <span>Terminal</span>
+          </div>
         </div>
-        <div className="flex items-start gap-1.5">
-          <span className="text-accent/60 select-none">$</span>
-          <span className="text-text-main/90 font-mono break-all">{cmd}</span>
+        <div className="flex items-start gap-1.5 bg-black/10 p-3.5 select-text">
+          <span className="text-brand-peach/60 font-bold select-none">$</span>
+          <span className="text-text-main/90 font-mono break-all whitespace-pre-wrap">{cmd}</span>
         </div>
       </div>
     );
   }
 
-  return (
-    <pre className="text-text-muted border border-border/40 bg-surface-secondary/40 rounded-lg p-3 text-[11px] leading-tight overflow-x-auto">
-      {JSON.stringify(args, null, 2)}
-    </pre>
-  );
+  const keys = Object.keys(args).filter((k) => k !== 'toolCallId' && k !== 'name');
+  if (keys.length > 0) {
+    return (
+      <div className="space-y-3.5 text-[11px] leading-relaxed">
+        {keys.map((key) => {
+          const val = args[key];
+          const isLongValue = typeof val === 'string' && (val.length > 60 || val.includes('\n'));
+          const keyLabel = key
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/_/g, ' ')
+            .trim()
+            .toUpperCase();
+
+          if (isLongValue) {
+            return (
+              <div key={key} className="space-y-1">
+                <span className="text-text-muted/65 text-[9.5px] font-bold tracking-wider uppercase select-none">
+                  {keyLabel}
+                </span>
+                <div className="border-border/20 overflow-hidden rounded-xl border bg-black/15 shadow-sm">
+                  <pre className="text-text-main/90 overflow-x-auto p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
+                    {val}
+                  </pre>
+                </div>
+              </div>
+            );
+          }
+
+          const displayVal =
+            typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val);
+          return (
+            <div key={key} className="flex flex-wrap items-baseline gap-2">
+              <span className="text-text-muted/65 inline-block min-w-[100px] text-[9.5px] font-bold tracking-wider uppercase select-none">
+                {keyLabel}:
+              </span>
+              <span className="bg-surface-secondary/40 text-text-main border-border/10 rounded border px-1.5 py-0.5 font-mono text-[10.5px] break-all select-all">
+                {displayVal}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return <div className="text-text-muted/50 py-1 text-[11px] italic">No arguments provided</div>;
+}
+
+function getToolMeta(kind?: string, name?: string) {
+  const k = kind ?? '';
+  const n = name ?? '';
+
+  if (
+    k === 'read' ||
+    k === 'edit' ||
+    k === 'move' ||
+    n.includes('file') ||
+    n.includes('view') ||
+    n.includes('read') ||
+    n.includes('write')
+  ) {
+    return {
+      color: 'text-brand-green',
+      icon: 'file',
+      bgColor: 'bg-brand-green/10',
+      borderColor: 'border-brand-green/20',
+    };
+  }
+  if (k === 'delete' || n.includes('delete') || n.includes('remove') || n.includes('kill')) {
+    return {
+      color: 'text-rose-500',
+      icon: 'trash',
+      bgColor: 'bg-rose-500/10',
+      borderColor: 'border-rose-500/20',
+    };
+  }
+  if (k === 'search' || k === 'fetch' || n.includes('search') || n.includes('grep')) {
+    return {
+      color: 'text-brand-blue',
+      icon: 'search',
+      bgColor: 'bg-brand-blue/10',
+      borderColor: 'border-brand-blue/20',
+    };
+  }
+  if (k === 'execute' || n.includes('command') || n.includes('shell') || n.includes('run')) {
+    return {
+      color: 'text-brand-peach',
+      icon: 'terminal',
+      bgColor: 'bg-brand-peach/10',
+      borderColor: 'border-brand-peach/20',
+    };
+  }
+  if (k === 'think') {
+    return {
+      color: 'text-accent',
+      icon: 'think',
+      bgColor: 'bg-accent/10',
+      borderColor: 'border-accent/20',
+    };
+  }
+  return {
+    color: 'text-text-muted',
+    icon: 'settings',
+    bgColor: 'bg-text-muted/10',
+    borderColor: 'border-text-muted/20',
+  };
+}
+
+function renderToolIcon(iconName: string, className: string) {
+  if (iconName === 'file') return <FileText className={className} />;
+  if (iconName === 'trash') return <Trash2 className={className} />;
+  if (iconName === 'search') return <Search className={className} />;
+  if (iconName === 'terminal') return <Terminal className={className} />;
+  return <Settings className={className} />;
 }
 
 export const ToolCallCard = memo(function ToolCallCard({
@@ -99,54 +258,67 @@ export const ToolCallCard = memo(function ToolCallCard({
   }, [isStreaming]);
 
   const args = payload.arguments ?? {};
-  const argKeys = Object.keys(args).filter((k) => !['toolCallId', 'name'].includes(k));
+
+  const status = payload.status;
+  const isFailed = status === 'failed';
+  const isPending = status === 'pending';
+
+  const toolMeta = getToolMeta(payload.kind, tool);
+
+  let iconBgBorder = `${toolMeta.bgColor} ${toolMeta.borderColor} ${toolMeta.color}`;
+  if (isFailed) {
+    iconBgBorder = 'bg-rose-500/10 border-rose-500/20 text-rose-500';
+  }
+
+  const titleText =
+    payload.title ??
+    (tool.startsWith('call_') ? tool.substring(5) : tool)
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <div className="group/tool w-full py-1">
-      <div
-        className="flex cursor-pointer items-center gap-2 select-none"
+    <div className="group/tool w-full py-0.5">
+      <button
+        type="button"
+        className="focus-visible:ring-accent/40 focus-visible:ring-offset-background flex w-full cursor-pointer items-center rounded-lg border-none bg-transparent text-left outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1"
         onClick={() => {
           setOpen(!open);
         }}
       >
-        <div className="bg-surface-secondary/40 border-border/60 hover:border-accent/40 hover:bg-surface-secondary/80 flex flex-1 items-center justify-between border rounded-xl px-4 py-2.5 transition-all duration-200 shadow-sm">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent transition-transform duration-200 ${isStreaming ? 'scale-105' : 'group-hover/tool:scale-105'}`}>
-              {tool.includes('command') || tool.includes('shell') || tool.includes('run') ? (
-                <Terminal className="h-3.5 w-3.5" />
-              ) : tool.includes('search') || tool.includes('grep') ? (
-                <Search className="h-3.5 w-3.5" />
-              ) : tool.includes('file') || tool.includes('view') || tool.includes('read') || tool.includes('write') ? (
-                <FileText className="h-3.5 w-3.5" />
+        <Card
+          status={isFailed ? 'error' : isPending ? 'pending' : 'default'}
+          className="flex-1 flex-row items-center justify-between px-2.5 py-1.5 backdrop-blur-[1px]"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <div
+              className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ${isStreaming ? 'scale-105' : 'group-hover/tool:scale-105'} ${iconBgBorder}`}
+            >
+              {isFailed ? (
+                <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
               ) : (
-                <Settings className="h-3.5 w-3.5" />
+                renderToolIcon(toolMeta.icon, `h-3 w-3 ${toolMeta.color}`)
               )}
             </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-text-main text-[12px] font-medium tracking-tight">
-                {tool.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-              </span>
-              <span className="text-text-muted/50 truncate text-[10px] tracking-tight">
-                {argKeys.length > 0 ? argKeys.join(', ') : 'no arguments'}
-              </span>
-            </div>
+            <span className="text-text-main truncate text-[11px] font-medium tracking-tight">
+              {titleText}
+            </span>
           </div>
-          <div className="shrink-0 text-text-muted/40 group-hover/tool:text-text-main transition-colors">
-            {open ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
+          <div className="text-text-muted/40 group-hover/tool:text-text-main ml-2 shrink-0 transition-colors">
+            <ChevronRight
+              className={`h-3 w-3 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
+            />
           </div>
-        </div>
-      </div>
+        </Card>
+      </button>
 
       {open && (
-        <div className="animate-in fade-in slide-in-from-top-1 border-border/50 bg-surface-secondary/20 mt-2 rounded-xl border p-4 shadow-sm duration-200">
+        <Card
+          status={isFailed ? 'error' : 'default'}
+          className="animate-in fade-in slide-in-from-top-1 hover:border-border/20 mt-1.5 p-2.5 duration-200"
+        >
           <ToolArgumentsViewer name={tool} args={args} />
-        </div>
+        </Card>
       )}
     </div>
   );
 });
-

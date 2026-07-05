@@ -21,28 +21,31 @@ export const ApprovalCard = memo(function ApprovalCard({
     approveButtonRef.current?.focus();
   }, []);
 
-  const request = data.request as {
-    toolCall?: {
-      name: string;
-      arguments?: Record<string, unknown>;
-    };
-    options?: {
-      optionId: string;
-      label: string;
-      description?: string;
-    }[];
-  } | undefined;
+  const request = data.request as
+    | {
+        toolCall?: {
+          name: string;
+          arguments?: Record<string, unknown>;
+        };
+        options?: {
+          optionId: string;
+          label: string;
+          description?: string;
+        }[];
+      }
+    | undefined;
 
   const toolCall = request?.toolCall;
 
   // Button styles directly extracted from UI library to support TypeScript refs on standard button elements
-  const btnBase = 'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
+  const btnBase =
+    'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
   const btnSolid = 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]';
   const btnGhost = 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main';
 
   return (
     <div
-      role="region"
+      role="presentation"
       aria-labelledby="approval-title"
       aria-live="polite"
       tabIndex={-1}
@@ -64,13 +67,13 @@ export const ApprovalCard = memo(function ApprovalCard({
     >
       <GlassPanel
         intensity="high"
-        className="flex flex-col items-stretch justify-between gap-4 p-5 rounded-2xl border border-border/40 shadow-2xl sm:flex-row sm:items-start"
+        className="border-border/40 flex flex-col items-stretch justify-between gap-4 rounded-2xl border p-5 shadow-2xl sm:flex-row sm:items-start"
       >
-        <div className="flex flex-1 gap-3.5 min-w-0">
+        <div className="flex min-w-0 flex-1 gap-3.5">
           <div className="bg-surface-secondary/50 border-border/60 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border">
             <ShieldCheck className="text-accent h-4 w-4" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <div
               id="approval-title"
               className="text-text-main mb-0.5 text-[12px] font-bold tracking-wide uppercase"
@@ -81,16 +84,18 @@ export const ApprovalCard = memo(function ApprovalCard({
               {data.message ?? 'This action requires your explicit approval before continuing.'}
             </div>
             {toolCall && (
-              <div className="mt-3 rounded-xl border border-border/30 bg-surface-secondary/40 p-3.5 font-mono text-[11px] leading-relaxed">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <span className="text-text-muted/40 text-[9px] font-bold uppercase tracking-wider">Tool:</span>
+              <div className="border-border/30 bg-surface-secondary/40 mt-3 rounded-xl border p-3.5 font-mono text-[11px] leading-relaxed">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <span className="text-text-muted/40 text-[9px] font-bold tracking-wider uppercase">
+                    Tool:
+                  </span>
                   <span className="text-accent font-semibold">{toolCall.name}</span>
                 </div>
                 {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                  <div className="text-text-muted/80 max-h-[150px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/20 bg-background/50 p-2.5">
+                  <div className="text-text-muted/80 border-border/20 bg-background/50 max-h-[150px] overflow-y-auto rounded-lg border p-2.5 whitespace-pre-wrap">
                     {Object.entries(toolCall.arguments).map(([key, val]) => (
                       <div key={key} className="flex gap-2">
-                        <span className="text-text-muted/40 font-medium shrink-0">{key}:</span>
+                        <span className="text-text-muted/40 shrink-0 font-medium">{key}:</span>
                         <span className="text-text-main/90 break-all">
                           {typeof val === 'string'
                             ? val
@@ -113,7 +118,7 @@ export const ApprovalCard = memo(function ApprovalCard({
             onClick={() => {
               onDeny(eventId);
             }}
-            className={`${btnBase} ${btnGhost} h-8 px-4 text-[10px] font-bold tracking-widest text-text-muted hover:text-danger uppercase`}
+            className={`${btnBase} ${btnGhost} text-text-muted hover:text-danger h-8 px-4 text-[10px] font-bold tracking-widest uppercase`}
           >
             Deny
           </button>

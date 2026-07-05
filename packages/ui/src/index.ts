@@ -8,4 +8,6 @@ export * from './components/Switch.js';
 export * from './components/ConfirmationModal.js';
 export * from './components/Dialog.js';
 export * from './components/Popover.js';
+export * from './components/SearchBar.js';
+export * from './components/Select.js';
 export * from './utils.js';

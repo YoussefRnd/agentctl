@@ -21,11 +21,17 @@ export function SessionHeader({
   const statusConfig = (() => {
     switch (status) {
       case 'running':
-        return { color: 'bg-brand-blue shadow-[0_0_6px_var(--color-brand-blue)]', animate: 'animate-pulse' };
+        return {
+          color: 'bg-brand-blue shadow-[0_0_6px_var(--color-brand-blue)]',
+          animate: 'animate-pulse',
+        };
       case 'needs_attention':
         return { color: 'bg-brand-peach shadow-[0_0_6px_var(--color-brand-peach)]', animate: '' };
       case 'error':
-        return { color: 'bg-brand-red shadow-[0_0_6px_var(--color-brand-red)]', animate: 'animate-pulse' };
+        return {
+          color: 'bg-brand-red shadow-[0_0_6px_var(--color-brand-red)]',
+          animate: 'animate-pulse',
+        };
       case 'merged':
         return { color: 'bg-brand-mauve/60', animate: '' };
       case 'discarded':
@@ -51,7 +57,9 @@ export function SessionHeader({
         <div className="border-border/20 bg-surface/40 flex items-center gap-2 rounded-full border px-3.5 py-1">
           <div className="relative flex h-2 w-2">
             {statusConfig.animate && (
-              <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${statusConfig.color} ${statusConfig.animate}`} />
+              <span
+                className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${statusConfig.color} ${statusConfig.animate}`}
+              />
             )}
             <span className={`relative inline-flex h-2 w-2 rounded-full ${statusConfig.color}`} />
           </div>
