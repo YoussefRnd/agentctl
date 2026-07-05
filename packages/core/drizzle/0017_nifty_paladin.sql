@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `session_metrics` text DEFAULT '{}' NOT NULL;

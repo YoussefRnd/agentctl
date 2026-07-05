@@ -1,0 +1,1 @@
+ALTER TABLE `providers` ADD `natively_loads_skills` integer DEFAULT false NOT NULL;

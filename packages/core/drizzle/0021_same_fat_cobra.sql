@@ -1,0 +1,1 @@
+ALTER TABLE `mcp_servers` ADD `auto_approve` integer DEFAULT false NOT NULL;

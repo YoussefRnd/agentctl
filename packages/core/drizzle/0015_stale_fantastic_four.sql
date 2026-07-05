@@ -1,0 +1,1 @@
+ALTER TABLE `providers` ADD `supports_logout` integer DEFAULT false NOT NULL;
