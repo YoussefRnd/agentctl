@@ -12,7 +12,11 @@ import type {
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentRuntime } from './acp-transport.js';
 import type { McpServer } from '@agentclientprotocol/sdk';
-import { createAgentConnection, DefaultAgentRuntime, LegacyConnectionRuntimeAdapter } from './acp-transport.js';
+import {
+  createAgentConnection,
+  DefaultAgentRuntime,
+  LegacyConnectionRuntimeAdapter,
+} from './acp-transport.js';
 import { providers, registrySnapshots, systemSettings, sessions } from '../db/schema.js';
 import type { DbClient } from './acp-session.js';
 import { Provider, type ProviderData } from './provider.js';
@@ -31,6 +35,8 @@ interface ProviderSettings {
   onboardingVersion?: string;
   setupStep?: string;
   defaultProviderId?: string;
+  showThinking?: string;
+  registrySyncError?: string;
 }
 
 export interface ProbeConnectionHandle {
@@ -167,11 +173,16 @@ function buildSyncedDiscovery(
   const launchEnv = launch?.env ?? parseJSON<Record<string, string>>(existing?.launchEnv, {});
   const customEnv = parseJSON<Record<string, string>>(existing?.customEnv, {});
 
-  const configOptions = (agent.configOptions as ACPConfigOption[] | undefined) ?? parseJSON(existing?.configOptions, [] as ACPConfigOption[]);
-  const authMethods = (agent.authMethods as AuthMethod[] | undefined) ?? parseJSON(existing?.authMethods, [] as AuthMethod[]);
+  const configOptions =
+    agent.configOptions ?? parseJSON(existing?.configOptions, [] as ACPConfigOption[]);
+  const authMethods = agent.authMethods ?? parseJSON(existing?.authMethods, [] as AuthMethod[]);
   const enabled = existing ? existing.enabled : false;
-  const supportsDynamicModel = agent.supportsDynamicModel ?? (existing ? existing.supportsDynamicModel : false);
-  const supportsDynamicConfig = agent.supportsDynamicConfig ?? (existing ? existing.supportsDynamicConfig : false);
+  const supportsDynamicModel =
+    agent.supportsDynamicModel ?? (existing ? existing.supportsDynamicModel : false);
+  const supportsDynamicConfig =
+    agent.supportsDynamicConfig ?? (existing ? existing.supportsDynamicConfig : false);
+  const supportsLogout = agent.supportsLogout ?? (existing ? existing.supportsLogout : false);
+  const nativelyLoadsSkills = existing ? existing.nativelyLoadsSkills : false;
 
   if (!launch && !existing) {
     return {
@@ -189,20 +200,23 @@ function buildSyncedDiscovery(
       icon: agent.icon,
       supportsDynamicModel: false,
       supportsDynamicConfig: false,
+      supportsLogout: false,
+      nativelyLoadsSkills: false,
     };
   }
 
   const existingIsActive = existing?.status === 'ready' || existing?.status === 'needs_auth';
-  const hasStaticMetadata = agent.configOptions !== undefined || agent.supportsDynamicModel !== undefined || agent.supportsDynamicConfig !== undefined;
+  const hasStaticMetadata =
+    agent.configOptions !== undefined ||
+    agent.supportsDynamicModel !== undefined ||
+    agent.supportsDynamicConfig !== undefined;
 
   let status: ProviderDiscovery['status'] = 'not_found';
   if (existingIsActive) {
     status = existing.status;
   } else if (launch) {
     if (command === 'npx' || command === 'uvx' || isBinaryOnPath(command)) {
-      status = hasStaticMetadata
-        ? (authMethods.length > 0 ? 'needs_auth' : 'ready')
-        : 'inactive';
+      status = hasStaticMetadata ? (authMethods.length > 0 ? 'needs_auth' : 'ready') : 'inactive';
     } else {
       status = 'not_found';
     }
@@ -224,6 +238,8 @@ function buildSyncedDiscovery(
     icon: agent.icon,
     supportsDynamicModel,
     supportsDynamicConfig,
+    supportsLogout,
+    nativelyLoadsSkills,
   };
 }
 
@@ -245,6 +261,8 @@ export interface ProviderProber {
     methodId: string,
     params: Record<string, unknown>,
   ): Promise<void>;
+
+  executeLogout(command: string, args: string[], env: Record<string, string>): Promise<void>;
 }
 
 export class ProcessProviderProber implements ProviderProber {
@@ -280,6 +298,8 @@ export class ProcessProviderProber implements ProviderProber {
       icon: agent.icon,
       supportsDynamicModel: false,
       supportsDynamicConfig: false,
+      supportsLogout: false,
+      nativelyLoadsSkills: false,
     };
   }
 
@@ -287,14 +307,19 @@ export class ProcessProviderProber implements ProviderProber {
     agent: RegistryAgent,
     launch: { command: string; args: string[]; env: Record<string, string> },
   ): Promise<ProviderDiscovery> {
-    const hasStaticMetadata = agent.configOptions !== undefined || agent.supportsDynamicModel !== undefined || agent.supportsDynamicConfig !== undefined;
-    const configOptions = (agent.configOptions as ACPConfigOption[] | undefined) ?? [];
-    const authMethods = (agent.authMethods as AuthMethod[] | undefined) ?? [];
+    const hasStaticMetadata =
+      agent.configOptions !== undefined ||
+      agent.supportsDynamicModel !== undefined ||
+      agent.supportsDynamicConfig !== undefined;
+    const configOptions = agent.configOptions ?? [];
+    const authMethods = agent.authMethods ?? [];
     const supportsDynamicModel = agent.supportsDynamicModel ?? false;
     const supportsDynamicConfig = agent.supportsDynamicConfig ?? false;
+    const supportsLogout = agent.supportsLogout ?? false;
 
     if (hasStaticMetadata) {
-      const isInstalled = launch.command === 'npx' || launch.command === 'uvx' || isBinaryOnPath(launch.command);
+      const isInstalled =
+        launch.command === 'npx' || launch.command === 'uvx' || isBinaryOnPath(launch.command);
       return {
         id: agent.id,
         label: agent.name,
@@ -311,6 +336,8 @@ export class ProcessProviderProber implements ProviderProber {
         icon: agent.icon,
         supportsDynamicModel,
         supportsDynamicConfig,
+        supportsLogout,
+        nativelyLoadsSkills: false,
       };
     }
 
@@ -332,6 +359,8 @@ export class ProcessProviderProber implements ProviderProber {
         icon: agent.icon,
         supportsDynamicModel: probeResult.supportsDynamicModel,
         supportsDynamicConfig: probeResult.supportsDynamicConfig,
+        supportsLogout: probeResult.supportsLogout ?? false,
+        nativelyLoadsSkills: false,
       };
     } catch (err) {
       this.logger.error(err, `Probe failed for ${agent.id}`);
@@ -351,13 +380,36 @@ export class ProcessProviderProber implements ProviderProber {
     try {
       await connection.initialize({
         protocolVersion: 1,
-        clientInfo: { name: 'agentctl-login', version: '1.0.0' },
+        clientInfo: { name: 'agentctl-login', title: 'Agentctl', version: '1.0.0' },
       });
 
       await (connection.authenticate({
         methodId,
         _meta: params,
       }) as Promise<unknown>);
+    } finally {
+      child.kill();
+    }
+  }
+
+  async executeLogout(command: string, args: string[], env: Record<string, string>): Promise<void> {
+    const { child, connection } = this.createConnection(command, args, env);
+
+    try {
+      await connection.initialize({
+        protocolVersion: 1,
+        clientInfo: { name: 'agentctl-logout', title: 'Agentctl', version: '1.0.0' },
+      });
+
+      const conn = connection as {
+        logout?: (params: Record<string, unknown>) => Promise<unknown>;
+        sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
+      };
+      if (typeof conn.logout === 'function') {
+        await conn.logout({});
+      } else if (typeof conn.sendRequest === 'function') {
+        await conn.sendRequest('logout', {});
+      }
     } finally {
       child.kill();
     }
@@ -383,9 +435,10 @@ export class ProviderRegistry {
     ) {
       this.prober = createConnectionOrProber;
     } else {
-      const createConnection = typeof createConnectionOrProber === 'function'
-        ? createConnectionOrProber
-        : createAgentConnection;
+      const createConnection =
+        typeof createConnectionOrProber === 'function'
+          ? createConnectionOrProber
+          : createAgentConnection;
       this.prober = new ProcessProviderProber(logger, createConnection, runtime);
     }
   }
@@ -408,6 +461,8 @@ export class ProviderRegistry {
       icon: agent.icon,
       supportsDynamicModel: false,
       supportsDynamicConfig: false,
+      supportsLogout: false,
+      nativelyLoadsSkills: false,
     };
   }
 
@@ -481,13 +536,18 @@ export class ProviderRegistry {
     source: 'remote' | 'cache' | 'mixed' | 'local';
   }> {
     let localAgents: RegistryAgent[] = [];
-    const localRegistryPath = process.env.AGENTCTL_REGISTRY_PATH ?? path.join(os.homedir(), '.agentctl', 'registry.json');
-    
+    const localRegistryPath =
+      process.env.AGENTCTL_REGISTRY_PATH ?? path.join(os.homedir(), '.agentctl', 'registry.json');
+
     if (fs.existsSync(localRegistryPath)) {
       try {
-        const localData = JSON.parse(fs.readFileSync(localRegistryPath, 'utf8')) as { agents?: RegistryAgent[] };
+        const localData = JSON.parse(fs.readFileSync(localRegistryPath, 'utf8')) as {
+          agents?: RegistryAgent[];
+        };
         localAgents = localData.agents ?? [];
-        this.logger.info(`Loaded ${String(localAgents.length)} agents from local registry ${localRegistryPath}`);
+        this.logger.info(
+          `Loaded ${String(localAgents.length)} agents from local registry ${localRegistryPath}`,
+        );
       } catch (err) {
         this.logger.warn(err, `Failed to parse local registry at ${localRegistryPath}`);
       }
@@ -505,7 +565,10 @@ export class ProviderRegistry {
       if (response.status === 304 && lastSnapshot) {
         this.logger.info('Registry unchanged (304), using cached snapshot');
         const remoteAgents = parseRegistryAgents(lastSnapshot.data);
-        return { agents: this.mergeAgents(localAgents, remoteAgents), source: localAgents.length > 0 ? 'mixed' : 'cache' };
+        return {
+          agents: this.mergeAgents(localAgents, remoteAgents),
+          source: localAgents.length > 0 ? 'mixed' : 'cache',
+        };
       }
 
       if (!response.ok) {
@@ -521,12 +584,18 @@ export class ProviderRegistry {
         lastModified: response.headers.get('last-modified'),
       });
 
-      return { agents: this.mergeAgents(localAgents, data.agents), source: localAgents.length > 0 ? 'mixed' : 'remote' };
+      return {
+        agents: this.mergeAgents(localAgents, data.agents),
+        source: localAgents.length > 0 ? 'mixed' : 'remote',
+      };
     } catch (err) {
       this.logger.warn(err, 'Failed to fetch remote registry, falling back to cache');
       if (lastSnapshot) {
         const remoteAgents = parseRegistryAgents(lastSnapshot.data);
-        return { agents: this.mergeAgents(localAgents, remoteAgents), source: localAgents.length > 0 ? 'mixed' : 'cache' };
+        return {
+          agents: this.mergeAgents(localAgents, remoteAgents),
+          source: localAgents.length > 0 ? 'mixed' : 'cache',
+        };
       }
       return { agents: localAgents, source: 'local' };
     }
@@ -565,6 +634,7 @@ export class ProviderRegistry {
         icon: provider.icon,
         supportsDynamicModel: provider.supportsDynamicModel,
         supportsDynamicConfig: provider.supportsDynamicConfig,
+        supportsLogout: provider.supportsLogout,
       })
       .onConflictDoUpdate({
         target: providers.id,
@@ -583,6 +653,7 @@ export class ProviderRegistry {
           icon: provider.icon,
           supportsDynamicModel: provider.supportsDynamicModel,
           supportsDynamicConfig: provider.supportsDynamicConfig,
+          supportsLogout: provider.supportsLogout,
           updatedAt: new Date(),
         },
       });
@@ -606,11 +677,15 @@ export class ProviderRegistry {
       this.logger.error(err, 'Failed to query last used session provider');
     }
 
+    const enabledIds = new Set(existingRows.filter((row) => row.enabled).map((row) => row.id));
+
     const preferredIds = [
       settings.defaultProviderId,
       lastUsedProviderId,
       ...existingRows.filter((row) => row.enabled).map((row) => row.id),
-    ].filter((id): id is string => id !== undefined && id !== '');
+    ]
+      .filter((id): id is string => id !== undefined && id !== '')
+      .filter((id) => enabledIds.has(id));
 
     for (const providerId of preferredIds) {
       if (supportedRegistry.some((agent) => agent.id === providerId)) {
@@ -711,53 +786,65 @@ export class ProviderRegistry {
   }
 
   private async runSync(): Promise<void> {
-    this.logger.info('Starting provider discovery and sync...');
-    const { agents: registryAgents } = await this.fetchRegistryWithCache();
+    try {
+      this.logger.info('Starting provider discovery and sync...');
+      const { agents: registryAgents } = await this.fetchRegistryWithCache();
 
-    const allowedAgentsStr = process.env.ALLOWED_AGENTS ?? process.env.AGENTCTL_ALLOWED_AGENTS;
-    if (!allowedAgentsStr) {
-      throw new Error('ALLOWED_AGENTS environment variable is required');
-    }
-    
-    const allowedSet = new Set(
-      allowedAgentsStr
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-    );
-    const filteredAgents = registryAgents.filter((agent) => allowedSet.has(agent.id));
-
-    const existingRows = await this.db.select().from(providers);
-    const warmProviderId = await this.pickWarmProviderId(existingRows, filteredAgents);
-    const supportedIds = new Set(filteredAgents.map((agent) => agent.id));
-    const existingMap = new Map(existingRows.map((row) => [row.id, row]));
-
-    for (const agent of filteredAgents) {
-      const existing = existingMap.get(agent.id);
-      const launch = resolveLaunchConfig(agent);
-      const discovery = buildSyncedDiscovery(agent, launch, existing);
-
-      await this.persistProvider(discovery);
-
-      if (warmProviderId === agent.id && discovery.status !== 'not_found') {
-        this.logger.info(`Hydrating selected provider asynchronously: ${agent.id}`);
-        void this.ensureProviderReady(agent.id).catch((err: unknown) => {
-          this.logger.error(err, `Failed to hydrate provider ${agent.id}`);
-        });
+      const allowedAgentsStr = process.env.ALLOWED_AGENTS ?? process.env.AGENTCTL_ALLOWED_AGENTS;
+      if (!allowedAgentsStr) {
+        throw new Error('ALLOWED_AGENTS environment variable is required');
       }
-    }
 
-    const obsoleteRows = existingRows.filter((row) => !supportedIds.has(row.id));
-    for (const row of obsoleteRows) {
-      await this.db.delete(providers).where(eq(providers.id, row.id));
-    }
+      const allowedSet = new Set(
+        allowedAgentsStr
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      );
+      const filteredAgents = registryAgents.filter((agent) => allowedSet.has(agent.id));
 
-    const settings = await this.getSettings();
-    if (settings.defaultProviderId && !supportedIds.has(settings.defaultProviderId)) {
-      await this.updateSetting('defaultProviderId', '');
-    }
+      const existingRows = await this.db.select().from(providers);
+      const warmProviderId = await this.pickWarmProviderId(existingRows, filteredAgents);
+      const supportedIds = new Set(filteredAgents.map((agent) => agent.id));
+      const existingMap = new Map(existingRows.map((row) => [row.id, row]));
 
-    this.logger.info(`Sync complete. Persisted ${String(filteredAgents.length)} providers.`);
+      for (const agent of filteredAgents) {
+        const existing = existingMap.get(agent.id);
+        const launch = resolveLaunchConfig(agent);
+        const discovery = buildSyncedDiscovery(agent, launch, existing);
+
+        await this.persistProvider(discovery);
+
+        if (warmProviderId === agent.id && discovery.status !== 'not_found') {
+          this.logger.info(`Hydrating selected provider asynchronously: ${agent.id}`);
+          void this.ensureProviderReady(agent.id).catch((err: unknown) => {
+            this.logger.error(err, `Failed to hydrate provider ${agent.id}`);
+          });
+        }
+      }
+
+      const obsoleteRows = existingRows.filter((row) => !supportedIds.has(row.id));
+      for (const row of obsoleteRows) {
+        await this.db.delete(providers).where(eq(providers.id, row.id));
+      }
+
+      const updatedRows = await this.db.select().from(providers);
+      const settings = await this.getSettings();
+      if (settings.defaultProviderId) {
+        const defaultRow = updatedRows.find((r) => r.id === settings.defaultProviderId);
+        if (!defaultRow?.enabled) {
+          const nextDefault = updatedRows.find((r) => r.enabled)?.id ?? '';
+          await this.updateSetting('defaultProviderId', nextDefault);
+        }
+      }
+
+      this.logger.info(`Sync complete. Persisted ${String(filteredAgents.length)} providers.`);
+      await this.updateSetting('registrySyncError', '');
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      await this.updateSetting('registrySyncError', errMsg);
+      throw err;
+    }
   }
 
   async getProvider(id: string): Promise<Provider | undefined> {
@@ -796,6 +883,21 @@ export class ProviderRegistry {
       .where(eq(providers.id, providerId));
   }
 
+  async logout(providerId: string): Promise<void> {
+    const provider = await this.ensureProviderReady(providerId, { force: true });
+    const discovery = provider.toDiscovery();
+
+    await this.prober.executeLogout(discovery.command, discovery.launchArgs, {
+      ...discovery.launchEnv,
+      ...discovery.customEnv,
+    });
+
+    await this.db
+      .update(providers)
+      .set({ status: 'needs_auth', updatedAt: new Date() })
+      .where(eq(providers.id, providerId));
+  }
+
   async activate(providerId: string): Promise<ProviderDiscovery> {
     const provider = await this.ensureProviderReady(providerId, { force: true });
     if (!provider.enabled) {
@@ -820,6 +922,12 @@ export class ProviderRegistry {
           break;
         case 'defaultProviderId':
           settings.defaultProviderId = row.value;
+          break;
+        case 'showThinking':
+          settings.showThinking = row.value;
+          break;
+        case 'registrySyncError':
+          settings.registrySyncError = row.value;
           break;
       }
     }
@@ -853,51 +961,48 @@ export class ProviderRegistry {
       .set({ enabled, updatedAt: new Date() })
       .where(eq(providers.id, providerId));
 
+    if (!enabled) {
+      const settings = await this.getSettings();
+      if (settings.defaultProviderId === providerId) {
+        const allProviders = await this.db.select().from(providers);
+        const nextDefault = allProviders.find((p) => p.enabled && p.id !== providerId)?.id ?? '';
+        await this.updateSetting('defaultProviderId', nextDefault);
+      }
+    } else {
+      const settings = await this.getSettings();
+      if (!settings.defaultProviderId) {
+        await this.updateSetting('defaultProviderId', providerId);
+      }
+    }
+
     return new Provider({ ...row, enabled }).toDiscovery();
   }
 
   async setProviderConfig(
     providerId: string,
-    customEnv: Record<string, string>,
+    updates: {
+      customEnv?: Record<string, string>;
+      nativelyLoadsSkills?: boolean;
+    },
   ): Promise<ProviderDiscovery> {
     const row = await this.getProviderRow(providerId);
     if (!row) {
       throw new Error(`Provider ${providerId} not found`);
     }
 
-    await this.db
-      .update(providers)
-      .set({
-        customEnv: JSON.stringify(customEnv),
-        updatedAt: new Date(),
-      })
-      .where(eq(providers.id, providerId));
+    const setFields: Partial<typeof providers.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (updates.customEnv !== undefined) {
+      setFields.customEnv = JSON.stringify(updates.customEnv);
+    }
+    if (updates.nativelyLoadsSkills !== undefined) {
+      setFields.nativelyLoadsSkills = updates.nativelyLoadsSkills;
+    }
+
+    await this.db.update(providers).set(setFields).where(eq(providers.id, providerId));
 
     const provider = await this.ensureProviderReady(providerId, { force: true });
     return provider.toDiscovery();
-  }
-
-  startBackgroundWarmup(): void {
-    this.logger.info('Starting background provider warmup...');
-    void (async () => {
-      try {
-        const allProviders = await this.db.select().from(providers);
-        const settings = await this.getSettings();
-        const targets = allProviders.filter(
-          (p) => p.status === 'inactive' && (p.enabled || p.id === settings.defaultProviderId),
-        );
-
-        for (const p of targets) {
-          this.logger.info(`Background probing provider: ${p.id}`);
-          try {
-            await this.ensureProviderReady(p.id, { force: true });
-          } catch (err) {
-            this.logger.error(err, `Failed background warmup for provider ${p.id}`);
-          }
-        }
-      } catch (err) {
-        this.logger.error(err, 'Failed background provider warmup scan');
-      }
-    })();
   }
 }

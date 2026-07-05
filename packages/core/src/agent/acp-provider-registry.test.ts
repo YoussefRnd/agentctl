@@ -7,7 +7,7 @@ import type { ChildProcess } from 'node:child_process';
 import type { ACPConnectionHandle } from './acp-transport.js';
 import type { RegistryAgent } from '@agentctl/shared';
 import { createDatabase } from '../db/index.js';
-import { providers, projects, sessions } from '../db/schema.js';
+import { providers, projects, sessions, systemSettings } from '../db/schema.js';
 
 function createAgent(): RegistryAgent {
   return {
@@ -107,38 +107,40 @@ describe('ProviderRegistry', () => {
     const initCalls: unknown[] = [];
     const sessionCalls: unknown[] = [];
 
-    const mockCreateConnection = () => ({
-      child,
-      connection: {
-        initialize: (params: unknown) => {
-          initCalls.push(params);
-          return Promise.resolve({ authMethods: [{ id: 'login', name: 'Login' }] });
+    const mockCreateConnection = () =>
+      ({
+        child,
+        connection: {
+          initialize: (params: unknown) => {
+            initCalls.push(params);
+            return Promise.resolve({ authMethods: [{ id: 'login', name: 'Login' }] });
+          },
+          newSession: (params: unknown) => {
+            sessionCalls.push(params);
+            return Promise.resolve({
+              sessionId: 'session-1',
+              configOptions: [
+                {
+                  id: 'model',
+                  name: 'Model',
+                  type: 'select',
+                  currentValue: 'sonnet',
+                  options: [{ value: 'sonnet', name: 'Sonnet' }],
+                },
+              ],
+            });
+          },
+          closed: Promise.resolve(),
         },
-        newSession: (params: unknown) => {
-          sessionCalls.push(params);
-          return Promise.resolve({
-            sessionId: 'session-1',
-            configOptions: [
-              {
-                id: 'model',
-                name: 'Model',
-                type: 'select',
-                currentValue: 'sonnet',
-                options: [{ value: 'sonnet', name: 'Sonnet' }],
-              },
-            ],
-          });
-        },
-        closed: Promise.resolve(),
-      },
-    } as unknown as ACPConnectionHandle);
+      }) as unknown as ACPConnectionHandle;
 
     const registry = new ProviderRegistry(db, noopLogger, mockCreateConnection);
 
-    const result = await registry.probeAgent(
-      agent,
-      { command: 'agent', args: ['--probe'], env: { AGENTCTL_TEST_FLAG: '1' } },
-    );
+    const result = await registry.probeAgent(agent, {
+      command: 'agent',
+      args: ['--probe'],
+      env: { AGENTCTL_TEST_FLAG: '1' },
+    });
 
     expect(result.status).toBe('ready');
     expect(result.id).toBe(agent.id);
@@ -154,37 +156,35 @@ describe('ProviderRegistry', () => {
     const agent = createAgent();
     const { child, killCount } = createChild();
 
-    const mockCreateConnection = () => ({
-      child,
-      connection: {
-        initialize: () => Promise.resolve({ authMethods: [] }),
-        newSession: () => {
-          const err = Object.assign(new Error('auth_required'), {
-            code: 'auth_required',
-            data: {
-              configOptions: [
-                {
-                  id: 'thinking',
-                  name: 'Thinking',
-                  type: 'select',
-                  currentValue: 'medium',
-                  options: [{ value: 'medium', name: 'Medium' }],
-                },
-              ],
-            },
-          });
-          return Promise.reject(err);
+    const mockCreateConnection = () =>
+      ({
+        child,
+        connection: {
+          initialize: () => Promise.resolve({ authMethods: [] }),
+          newSession: () => {
+            const err = Object.assign(new Error('auth_required'), {
+              code: 'auth_required',
+              data: {
+                configOptions: [
+                  {
+                    id: 'thinking',
+                    name: 'Thinking',
+                    type: 'select',
+                    currentValue: 'medium',
+                    options: [{ value: 'medium', name: 'Medium' }],
+                  },
+                ],
+              },
+            });
+            return Promise.reject(err);
+          },
+          closed: Promise.resolve(),
         },
-        closed: Promise.resolve(),
-      },
-    } as unknown as ACPConnectionHandle);
+      }) as unknown as ACPConnectionHandle;
 
     const registry = new ProviderRegistry(db, noopLogger, mockCreateConnection);
 
-    const result = await registry.probeAgent(
-      agent,
-      { command: 'agent', args: [], env: {} },
-    );
+    const result = await registry.probeAgent(agent, { command: 'agent', args: [], env: {} });
 
     expect(result.status).toBe('needs_auth');
     expect(result.configOptions?.[0]?.id).toBe('thinking');
@@ -242,5 +242,79 @@ describe('ProviderRegistry', () => {
     // @ts-expect-error - testing private method
     const warmId = await registry.pickWarmProviderId(existingRows, supportedRegistry);
     expect(warmId).toBe('gemini');
+  });
+
+  test('pickWarmProviderId ignores disabled providers', async () => {
+    const db = createDatabase(':memory:');
+    const registry = new ProviderRegistry(db, noopLogger);
+
+    const existingRows = [
+      { id: 'opencode', enabled: false } as unknown as ProviderData,
+      { id: 'gemini', enabled: true } as unknown as ProviderData,
+    ];
+
+    const supportedRegistry = [
+      { id: 'opencode' } as unknown as RegistryAgent,
+      { id: 'gemini' } as unknown as RegistryAgent,
+    ];
+
+    await db.insert(systemSettings).values({
+      key: 'defaultProviderId',
+      value: 'opencode',
+    });
+
+    // @ts-expect-error - testing private method
+    const warmId = await registry.pickWarmProviderId(existingRows, supportedRegistry);
+    expect(warmId).toBe('gemini');
+  });
+
+  test('setProviderEnabled cascades defaultProviderId setting changes', async () => {
+    const db = createDatabase(':memory:');
+    const registry = new ProviderRegistry(db, noopLogger);
+
+    await db.insert(providers).values([
+      {
+        id: 'opencode',
+        name: 'OpenCode',
+        status: 'ready',
+        command: 'opencode',
+        enabled: true,
+        launchArgs: '[]',
+        launchEnv: '{}',
+        customEnv: '{}',
+        configOptions: '[]',
+        authMethods: '[]',
+      },
+      {
+        id: 'gemini',
+        name: 'Gemini',
+        status: 'ready',
+        command: 'gemini',
+        enabled: true,
+        launchArgs: '[]',
+        launchEnv: '{}',
+        customEnv: '{}',
+        configOptions: '[]',
+        authMethods: '[]',
+      },
+    ]);
+
+    await db.insert(systemSettings).values({
+      key: 'defaultProviderId',
+      value: 'opencode',
+    });
+
+    await registry.setProviderEnabled('opencode', false);
+
+    const settings = await registry.getSettings();
+    expect(settings.defaultProviderId).toBe('gemini');
+
+    await registry.setProviderEnabled('gemini', false);
+    const settingsEmpty = await registry.getSettings();
+    expect(settingsEmpty.defaultProviderId).toBe('');
+
+    await registry.setProviderEnabled('opencode', true);
+    const settingsRestored = await registry.getSettings();
+    expect(settingsRestored.defaultProviderId).toBe('opencode');
   });
 });

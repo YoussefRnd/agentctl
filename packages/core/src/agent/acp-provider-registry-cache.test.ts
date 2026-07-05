@@ -27,7 +27,7 @@ test('ProviderRegistry sync handles 304 Not Modified', async () => {
       authors: [],
     },
   ];
-  
+
   await db.insert(registrySnapshots).values({
     data: JSON.stringify({ agents: mockAgents }),
     etag: 'W/"123"',
@@ -81,7 +81,7 @@ test('ProviderRegistry sync falls back to cache on fetch error', async () => {
 test('ProviderRegistry discover does not recurse forever when sync yields no providers', async () => {
   const db = createDatabase(':memory:');
   const registry = new ProviderRegistry(db, noopLogger);
-  
+
   // mock sync to do nothing
   registry.sync = vi.fn().mockResolvedValue(undefined);
 
@@ -178,6 +178,8 @@ test('ProviderRegistry sync does not hydrate any providers on startup', async ()
     icon: undefined,
     supportsDynamicModel: false,
     supportsDynamicConfig: false,
+    supportsLogout: false,
+    nativelyLoadsSkills: false,
   });
 
   const registry = new ProviderRegistry(db, noopLogger);
@@ -251,6 +253,8 @@ test('ProviderRegistry sync hydrates the saved default provider on startup', asy
     icon: undefined,
     supportsDynamicModel: false,
     supportsDynamicConfig: false,
+    supportsLogout: false,
+    nativelyLoadsSkills: false,
   });
 
   const registry = new ProviderRegistry(db, noopLogger);
@@ -350,6 +354,8 @@ test('ProviderRegistry setProviderConfig updates database and triggers dynamic p
     description: 'test',
     supportsDynamicModel: false,
     supportsDynamicConfig: false,
+    supportsLogout: false,
+    nativelyLoadsSkills: false,
   };
 
   await db.insert(providers).values(providerRow);
@@ -370,15 +376,19 @@ test('ProviderRegistry setProviderConfig updates database and triggers dynamic p
     icon: undefined,
     supportsDynamicModel: false,
     supportsDynamicConfig: false,
+    supportsLogout: false,
+    nativelyLoadsSkills: false,
   });
 
   const registry = new ProviderRegistry(db, noopLogger);
-  const result = await registry.setProviderConfig('claude-acp', { ANTHROPIC_API_KEY: 'test-key' });
+  const result = await registry.setProviderConfig('claude-acp', {
+    customEnv: { ANTHROPIC_API_KEY: 'test-key' },
+  });
 
   // Verify database has customEnv updated
   const updatedRow = await db.select().from(providers).where(eq(providers.id, 'claude-acp'));
   assert.deepEqual(JSON.parse(updatedRow[0].customEnv || '{}'), { ANTHROPIC_API_KEY: 'test-key' });
-  
+
   assert.equal(probeSpy.mock.calls.length, 1);
   assert.deepEqual(probeSpy.mock.calls[0][1].env, { ANTHROPIC_API_KEY: 'test-key' });
   assert.equal(result.status, 'ready');
@@ -427,10 +437,9 @@ test('ProviderRegistry sync filters by ALLOWED_AGENTS environment variable', asy
     await registry.sync();
 
     const dbRows = await db.select().from(providers);
-    const ids = dbRows.map(r => r.id);
+    const ids = dbRows.map((r) => r.id);
     assert.deepEqual(ids.sort(), ['claude-acp', 'opencode'].sort());
   } finally {
     delete process.env.ALLOWED_AGENTS;
   }
 });
-
