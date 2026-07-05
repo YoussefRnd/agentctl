@@ -7,12 +7,7 @@ export interface UploadAttachmentResult {
   sizeBytes: number;
 }
 
-const ALLOWED_TYPES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-]);
+const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 

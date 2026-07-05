@@ -1,6 +1,6 @@
 {
   "name": "agentctl",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -11,7 +11,8 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "clean": "find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name dist -type d -exec rm -rf {} + 2>/dev/null; find packages apps -name .turbo -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name 'tsconfig.tsbuildinfo' -type f -delete 2>/dev/null; rm -rf .turbo",
-    "prepare": "husky"
+    "prepare": "husky",
+    "doctor": "npx react-doctor@latest"
   },
   "keywords": [],
   "author": "",

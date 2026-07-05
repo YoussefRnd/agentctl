@@ -1,0 +1,8 @@
+{
+  "extends": "@agentctl/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "./out",
+    "types": ["electron-vite/node"]
+  },
+  "include": ["src/main/**/*", "src/preload/**/*", "electron.vite.config.ts"]
+}

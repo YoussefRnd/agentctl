@@ -1,0 +1,50 @@
+appId: com.agentctl.desktop
+productName: AgentCtl
+executableName: agentctl
+directories:
+  buildResources: resources
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  - drizzle/**/*
+  - "!node_modules/**/{test,tests,__tests__}/**"
+  - "!node_modules/**/*.d.ts"
+
+# Rebuild native modules for Electron
+npmRebuild: true
+
+publish:
+  provider: github
+  owner: YoussefRnd
+  repo: agentctl
+  releaseType: release
+
+# ─── Windows ───
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "${productName}-${version}-Windows-Setup.${ext}"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+# ─── macOS ───
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  artifactName: "${productName}-${version}-Mac-${arch}.${ext}"
+
+# ─── Linux ───
+linux:
+  target:
+    - target: AppImage
+  artifactName: "${productName}-${version}-Linux-${arch}.${ext}"
+  category: Development
