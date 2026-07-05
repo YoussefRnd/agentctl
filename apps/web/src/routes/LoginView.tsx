@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@agentctl/api-client';
+import { GlassPanel, Input, Button } from '@agentctl/ui';
 
 export function LoginView() {
   const [key, setKey] = React.useState('');
@@ -19,6 +20,7 @@ export function LoginView() {
           method: 'POST',
           body: JSON.stringify({ secret: key }),
         });
+        localStorage.setItem('agentctl_token', key);
         void navigate('/');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Invalid login key');
@@ -30,7 +32,7 @@ export function LoginView() {
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <div className="liquid-glass animate-in fade-in zoom-in w-full max-w-sm rounded-3xl p-6 shadow-2xl duration-300">
+      <GlassPanel className="animate-in fade-in zoom-in w-full max-w-sm p-6 shadow-2xl duration-300">
         <div className="mb-6 text-center">
           <h1 className="mb-1 text-2xl font-black tracking-widest text-white uppercase">
             AGENTCTL::AUTH
@@ -48,7 +50,7 @@ export function LoginView() {
             >
               SECRET_ACCESS_KEY
             </label>
-            <input
+            <Input
               id="login-key"
               type="password"
               value={key}
@@ -56,9 +58,8 @@ export function LoginView() {
                 setKey(e.target.value);
               }}
               placeholder="••••••••••••••••"
-              className="terminal-input !h-10 w-full text-center tracking-[0.5em]"
+              className="!h-10 w-full text-center tracking-[0.5em]"
               required
-              autoFocus
             />
           </div>
 
@@ -68,19 +69,19 @@ export function LoginView() {
             </div>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={isLoading || !key.trim()}
-            className="terminal-button !h-10 w-full text-[12px] font-black"
+            className="!h-10 w-full text-[12px] font-black"
           >
             {isLoading ? 'VERIFYING...' : 'UNLOCK_WORKSPACE'}
-          </button>
+          </Button>
         </form>
 
         <p className="text-text-muted/40 mt-6 text-center text-[9px] font-bold tracking-tighter uppercase">
           Check server stdout for the one-time access key.
         </p>
-      </div>
+      </GlassPanel>
     </div>
   );
 }

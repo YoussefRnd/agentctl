@@ -9,6 +9,11 @@ import { Sidebar } from './features/shell/components/Sidebar';
 import { SettingsSidebar } from './features/shell/components/SettingsSidebar';
 import { GlobalNav } from './features/shell/components/GlobalNav';
 
+const projectsSidebar = <Sidebar />;
+const settingsSidebar = <SettingsSidebar />;
+const projectsNav = <GlobalNav title="projects" />;
+const settingsNav = <GlobalNav title="settings" />;
+
 export function App() {
   return (
     <>
@@ -18,7 +23,7 @@ export function App() {
         <Route
           path="/"
           element={
-            <Layout sidebar={<Sidebar />} nav={<GlobalNav title="projects" />}>
+            <Layout sidebar={projectsSidebar} nav={projectsNav}>
               <NewProjectPalette />
             </Layout>
           }
@@ -26,7 +31,7 @@ export function App() {
         <Route
           path="/settings"
           element={
-            <Layout sidebar={<SettingsSidebar />} nav={<GlobalNav title="settings" />}>
+            <Layout sidebar={settingsSidebar} nav={settingsNav}>
               <SettingsPage />
             </Layout>
           }

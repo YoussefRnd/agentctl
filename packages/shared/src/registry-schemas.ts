@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { acpConfigOptionSchema, authMethodSchema } from './session-schemas.js';
 
 export const registryDistributionNpxSchema = z.object({
   package: z.string().min(1),
@@ -36,10 +37,11 @@ export const registryAgentSchema = z.object({
   license: z.string().optional(),
   distribution: registryDistributionSchema,
   icon: z.url().optional(),
-  configOptions: z.array(z.any()).optional(),
-  authMethods: z.array(z.any()).optional(),
+  configOptions: z.array(acpConfigOptionSchema).optional(),
+  authMethods: z.array(authMethodSchema).optional(),
   supportsDynamicModel: z.boolean().optional(),
   supportsDynamicConfig: z.boolean().optional(),
+  supportsLogout: z.boolean().optional(),
 });
 
 export const registrySchema = z.object({

@@ -1,4 +1,4 @@
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, use, useSyncExternalStore, type ReactNode } from 'react';
 import { projectStore, type ProjectSettings } from '@agentctl/shared';
 
 interface ProjectContextValue {
@@ -31,7 +31,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 }
 
 export function useProjectStore() {
-  const context = useContext(ProjectContext);
+  const context = use(ProjectContext);
   if (!context) {
     throw new Error('useProjectStore must be used within a ProjectProvider');
   }

@@ -1,44 +1,36 @@
 import * as React from 'react';
+import * as SwitchPrimitive from '@radix-ui/react-switch';
 import { cn } from '../utils.js';
 
-interface SwitchProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
-  checked: boolean;
-  onCheckedChange?: (checked: boolean) => void;
+interface SwitchProps extends React.ComponentPropsWithRef<typeof SwitchPrimitive.Root> {
   size?: 'sm' | 'md';
 }
 
-export const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
-  ({ className, checked, onCheckedChange, size = 'md', ...props }, ref) => {
-    return (
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        ref={ref}
-        onClick={(e) => {
-          props.onClick?.(e);
-          onCheckedChange?.(!checked);
-        }}
+export const Switch = ({ className, size = 'md', ref, ...props }: SwitchProps) => {
+  const isSm = size === 'sm';
+
+  return (
+    <SwitchPrimitive.Root
+      ref={ref}
+      className={cn(
+        'focus-visible:ring-accent/40 relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 transition-all duration-300 ease-out select-none focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40',
+        isSm ? 'h-4 w-8' : 'h-5 w-9',
+        'data-[state=checked]:bg-accent data-[state=checked]:border-accent',
+        'data-[state=unchecked]:bg-surface-secondary/40 data-[state=unchecked]:border-border/30 data-[state=unchecked]:hover:bg-surface-secondary/60 data-[state=unchecked]:hover:border-border/40',
+        className,
+      )}
+      {...props}
+    >
+      <SwitchPrimitive.Thumb
         className={cn(
-          'relative inline-flex shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-accent/40',
-          checked ? 'bg-accent border-accent' : 'bg-background border-border/30',
-          size === 'sm' ? 'h-4 w-8' : 'h-5 w-9',
-          className
+          'pointer-events-none block rounded-full bg-white shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform data-[state=unchecked]:translate-x-0',
+          isSm
+            ? 'h-3 w-3 data-[state=checked]:translate-x-4'
+            : 'h-4 w-4 data-[state=checked]:translate-x-4',
         )}
-        {...props}
-      >
-        <span
-          className={cn(
-            'pointer-events-none inline-block transform rounded-full transition duration-200 ease-in-out',
-            checked ? 'bg-brand-crust' : 'bg-text-muted/30',
-            size === 'sm'
-              ? cn('h-3 w-3', checked ? 'translate-x-4' : 'translate-x-0')
-              : cn('h-4 w-4', checked ? 'translate-x-4' : 'translate-x-0')
-          )}
-        />
-      </button>
-    );
-  }
-);
+      />
+    </SwitchPrimitive.Root>
+  );
+};
 
 Switch.displayName = 'Switch';

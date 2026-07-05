@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { sessions, acpEvents } from '../db/schema.js';
+import { sessions, acpEvents, providers, mcpServers } from '../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
 import type { createDatabase } from '../db/index.js';
 import { type Logger, noopLogger } from '../logger.js';
@@ -15,6 +15,7 @@ import type {
 
 import type { SessionStateMachine } from './session-state-machine.js';
 import { EventStreamAdapter } from './event-stream-adapter.js';
+import type { McpGateway } from './mcp-gateway.js';
 
 export type DbClient = ReturnType<typeof createDatabase>;
 
@@ -44,9 +45,29 @@ export class ACPSession {
     private cwd: string,
     private stateMachine?: SessionStateMachine,
     private logger: Logger = noopLogger,
+    private mcpGateway?: McpGateway,
   ) {
     this.acpSessionId = runtimeHandle.acpSessionId;
-    this.eventStreamAdapter = new EventStreamAdapter(sessionId, eventStore, logger);
+    this.eventStreamAdapter = new EventStreamAdapter(
+      sessionId,
+      eventStore,
+      logger,
+      cwd,
+      stateMachine?.getSnapshotService(),
+    );
+
+    // Persist available agent personas from initialization
+    if (runtimeHandle.availableModes && runtimeHandle.availableModes.length > 0) {
+      void this.db
+        .update(sessions)
+        .set({
+          availableAgentPersonas: JSON.stringify(runtimeHandle.availableModes),
+        })
+        .where(eq(sessions.id, sessionId))
+        .catch((err: unknown) => {
+          this.logger.error(err, 'Failed to update availableAgentPersonas on init');
+        });
+    }
 
     this.runtimeHandle.onProcessError((err) => {
       this.logger.error(err, `Child process error in session ${this.sessionId}`);
@@ -76,6 +97,105 @@ export class ACPSession {
         this.logger.error(error, 'Connection closed with error');
         await this.handleError(error);
       });
+  }
+
+  private loadSkills(cwd: string): string {
+    const skills: string[] = [];
+
+    const readSkillsFromBase = (basePath: string) => {
+      try {
+        const skillsDir = path.join(basePath, 'skills');
+        if (fs.existsSync(skillsDir)) {
+          const dirs = fs.readdirSync(skillsDir, { withFileTypes: true });
+          for (const dir of dirs) {
+            if (dir.isDirectory()) {
+              const skillMdPath = path.join(skillsDir, dir.name, 'SKILL.md');
+              if (fs.existsSync(skillMdPath)) {
+                const content = fs.readFileSync(skillMdPath, 'utf8');
+                skills.push(`### Skill: ${dir.name}\n\n${content}`);
+              }
+            }
+          }
+        }
+      } catch (err: unknown) {
+        this.logger.error(err, `Failed to load skills from ${basePath}`);
+      }
+    };
+
+    // 1. Read global skills
+    const globalPath = path.join(os.homedir(), '.gemini', 'config');
+    readSkillsFromBase(globalPath);
+
+    // 2. Read workspace skills
+    const workspacePath = path.join(cwd, '.agents');
+    readSkillsFromBase(workspacePath);
+
+    return skills.join('\n\n---\n\n');
+  }
+
+  private async parseAndExecuteMcpCommand(
+    text: string,
+  ): Promise<{ result: string; toolName: string; args: string } | null> {
+    const match = /^\/([a-zA-Z0-9_-]+):([a-zA-Z0-9_:-]+)(.*)$/.exec(text);
+    if (!match) return null;
+
+    const [, serverId, shortToolName, rawArgs] = match;
+    const toolName = `${serverId}__${shortToolName}`;
+    const argsText = rawArgs.trim();
+
+    this.logger.info({ serverId, toolName, argsText }, 'Intercepted manual MCP tool call command');
+
+    if (!this.mcpGateway) {
+      throw new Error('MCP gateway not available');
+    }
+
+    // Fetch tool definition to determine argument schema
+    const tools = await this.mcpGateway.getTools();
+    const toolDef = tools.find((t) => t.name === toolName || t.name === shortToolName);
+
+    let parsedArgs: Record<string, unknown> = {};
+    if (argsText) {
+      try {
+        if (argsText.startsWith('{')) {
+          parsedArgs = JSON.parse(argsText) as Record<string, unknown>;
+        } else {
+          // Map plain text to the first required string parameter in the schema if possible
+          const schema = toolDef?.inputSchema;
+          const properties = schema?.properties as Record<string, { type?: string }> | undefined;
+          const required = schema?.required as string[] | undefined;
+          const stringParam = Object.entries(properties ?? {}).find(
+            ([name, prop]) => prop.type === 'string' && (required ? required.includes(name) : true),
+          )?.[0];
+
+          if (stringParam) {
+            parsedArgs[stringParam] = argsText;
+          } else {
+            parsedArgs.query = argsText;
+          }
+        }
+      } catch {
+        parsedArgs = { query: argsText };
+      }
+    }
+
+    try {
+      const output = await this.mcpGateway.callTool(serverId, shortToolName, parsedArgs);
+      return {
+        result: typeof output === 'string' ? output : JSON.stringify(output, null, 2),
+        toolName,
+        args: JSON.stringify(parsedArgs),
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`MCP tool call failed: ${msg}`);
+    }
+  }
+
+  writeTerminalInput(terminalId: string, data: string): boolean {
+    if (this.runtimeHandle.writeTerminalInput) {
+      return this.runtimeHandle.writeTerminalInput(terminalId, data);
+    }
+    return false;
   }
 
   async prompt(text: string, attachmentIds?: string[], embeddedContext?: string): Promise<void> {
@@ -115,46 +235,110 @@ export class ACPSession {
       const resolvedAttachmentFiles: { filePath: string; mimeType: string }[] = [];
 
       if (attachmentIds && attachmentIds.length > 0) {
-        const sessionAttachmentsDir = path.join(os.tmpdir(), 'agentctl-attachments', this.sessionId);
+        const sessionAttachmentsDir = path.join(
+          os.tmpdir(),
+          'agentctl-attachments',
+          this.sessionId,
+        );
         for (const id of attachmentIds) {
           const jsonPath = path.join(sessionAttachmentsDir, `${id}.json`);
           const binPath = path.join(sessionAttachmentsDir, `${id}.bin`);
           if (fs.existsSync(jsonPath) && fs.existsSync(binPath)) {
             try {
-              const meta = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as AttachmentMeta;
-              resolvedAttachmentsMeta.push(meta);
-              resolvedAttachmentFiles.push({
-                filePath: binPath,
-                mimeType: meta.mimeType,
-              });
+              const content = fs.readFileSync(jsonPath, 'utf8');
+              const meta = JSON.parse(content) as AttachmentMeta;
+
+              if (meta.attachmentId && meta.mimeType) {
+                resolvedAttachmentsMeta.push(meta);
+                resolvedAttachmentFiles.push({
+                  filePath: binPath,
+                  mimeType: meta.mimeType,
+                });
+              } else {
+                this.logger.warn(`Malformed attachment metadata at ${jsonPath}`);
+              }
             } catch (err) {
-              this.logger.error(err, `Failed to read attachment metadata for ${id}`);
+              this.logger.error(err, `Failed to read/parse attachment metadata for ${id}`);
             }
           }
         }
       }
 
-      // Persist user message immediately so it shows up in history
-      const promptTokens = Math.ceil(text.length / 4);
-      await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
-
       let promptText = text;
+      let isManualMcp = false;
+      const promptTokens = Math.ceil(text.length / 4);
+
+      if (text.startsWith('/')) {
+        try {
+          const executed = await this.parseAndExecuteMcpCommand(text);
+          if (executed) {
+            isManualMcp = true;
+            // Wrap for agent context
+            promptText = `[System Notification: The user manually executed the tool "${executed.toolName}" with args: "${executed.args}". Result:\n---\n${executed.result}\n---\nAnalyze this output and answer the user's request.]`;
+
+            // Persist user command
+            await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+            // Yield result to user timeline feed
+            await this.eventStreamAdapter.appendText(
+              `\n\n*Manual Tool Execution Result [${executed.toolName}]:*\n\`\`\`json\n${executed.result}\n\`\`\`\n`,
+            );
+            await this.flushAll();
+          }
+        } catch (err: unknown) {
+          isManualMcp = true;
+          const msg = err instanceof Error ? err.message : String(err);
+          // Persist user command
+          await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+          // Stream execution error to UI
+          await this.eventStreamAdapter.appendText(
+            `\n\n*Manual Tool Execution Error:*\n> ${msg}\n`,
+          );
+          await this.flushAll();
+
+          // Emit turn_end status event
+          await this.eventStore.append(
+            this.sessionId,
+            'status',
+            { status: 'turn_end', stopReason: 'error' },
+            null,
+          );
+
+          if (this.stateMachine) {
+            await this.stateMachine.transitionTo(this.sessionId, 'idle');
+          } else {
+            await this.db
+              .update(sessions)
+              .set({ status: 'idle', updatedAt: new Date() })
+              .where(eq(sessions.id, this.sessionId));
+          }
+          return; // Do not call the model if direct execution failed
+        }
+      }
+
+      if (!isManualMcp) {
+        // Persist user message immediately so it shows up in history
+        await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+      }
       if (!this.historyHydrated) {
         this.historyHydrated = true;
 
-        const pastEvents = typeof this.db.select === 'function'
-          ? await this.db
-              .select()
-              .from(acpEvents)
-              .where(eq(acpEvents.sessionId, this.sessionId))
-              .orderBy(asc(acpEvents.id))
-          : [];
+        const pastEvents =
+          typeof this.db.select === 'function'
+            ? await this.db
+                .select()
+                .from(acpEvents)
+                .where(eq(acpEvents.sessionId, this.sessionId))
+                .orderBy(asc(acpEvents.id))
+            : [];
 
         const textEvents: { content: string; role?: string }[] = [];
         for (const e of pastEvents) {
           if (e.type === 'text') {
             try {
-              const parsed = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as Record<string, unknown> | null | undefined;
+              const parsed = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as
+                | Record<string, unknown>
+                | null
+                | undefined;
               if (parsed && typeof parsed.content === 'string') {
                 textEvents.push({
                   content: parsed.content,
@@ -183,13 +367,45 @@ export class ACPSession {
 ${formattedHistory}
 
 ## User's New Prompt:
-${text}`;
+${promptText}`;
         }
       }
 
-      await this.runtimeHandle.prompt(promptText, resolvedAttachmentFiles, embeddedContext);
+      let nativelyLoadsSkills = false;
+      if (sessionRecord?.selectedProvider) {
+        const providerRecord = await this.db.query.providers.findFirst({
+          where: eq(providers.id, sessionRecord.selectedProvider),
+        });
+        if (providerRecord) {
+          nativelyLoadsSkills = providerRecord.nativelyLoadsSkills;
+        }
+      }
+
+      const skillsContext = nativelyLoadsSkills ? '' : this.loadSkills(this.cwd);
+      const finalEmbeddedContext = [embeddedContext, skillsContext]
+        .filter(Boolean)
+        .join('\n\n---\n\n');
+
+      const promptResult = await this.runtimeHandle.prompt(
+        promptText,
+        resolvedAttachmentFiles,
+        finalEmbeddedContext || undefined,
+      );
 
       await this.flushAll();
+
+      // Store turn end with stopReason and per-turn usage
+      const turnData: Record<string, unknown> = {
+        status: 'turn_end',
+        stopReason: promptResult.stopReason,
+      };
+      if (promptResult.usage) {
+        turnData.usage = promptResult.usage;
+      }
+      if (promptResult.userMessageId) {
+        turnData.userMessageId = promptResult.userMessageId;
+      }
+      await this.eventStore.append(this.sessionId, 'status', turnData, null);
 
       if (this.stateMachine) {
         await this.stateMachine.transitionTo(this.sessionId, 'idle');
@@ -246,10 +462,7 @@ ${text}`;
       this.pendingRequests.delete(permissionId);
 
       let finalResponse = response;
-      if (
-        response.allowed &&
-        request
-      ) {
+      if (response.allowed && request) {
         const reqOptions = request.options;
         if (reqOptions && reqOptions.length > 0) {
           const hasOption = reqOptions.some((o) => o.optionId === response.optionId);
@@ -324,7 +537,32 @@ ${text}`;
   async updateConfigOption(configId: string, value: string): Promise<void> {
     if (this.isStopped) return;
     if (typeof this.runtimeHandle.updateConfigOption === 'function') {
-      await this.runtimeHandle.updateConfigOption(configId, value);
+      const configOptions = await this.runtimeHandle.updateConfigOption(configId, value);
+      if (configOptions.length > 0) {
+        await this.db
+          .update(sessions)
+          .set({
+            sessionConfigOptions: JSON.stringify(configOptions),
+            updatedAt: new Date(),
+          })
+          .where(eq(sessions.id, this.sessionId));
+        await this.eventStore.append(
+          this.sessionId,
+          'status',
+          {
+            status: 'config_option_update',
+            configOptions,
+          },
+          null,
+        );
+      }
+    }
+  }
+
+  async setMode(modeId: string): Promise<void> {
+    if (this.isStopped) return;
+    if (typeof this.runtimeHandle.setMode === 'function') {
+      await this.runtimeHandle.setMode(modeId);
     }
   }
 
@@ -375,9 +613,183 @@ ${text}`;
               status: event.status,
               title: event.title,
             },
-            null
+            null,
           );
           break;
+        case 'usage_update':
+          await this.db
+            .update(sessions)
+            .set({
+              totalTokens: event.used,
+              contextLimit: event.size,
+              estimatedCost: event.cost ? event.cost.amount : 0.0,
+              updatedAt: new Date(),
+            })
+            .where(eq(sessions.id, this.sessionId));
+
+          await this.eventStore.append(
+            this.sessionId,
+            'status',
+            {
+              status: 'usage_update',
+              totalTokens: event.used,
+              contextLimit: event.size,
+            },
+            null,
+          );
+          break;
+        case 'available_commands_update':
+          await this.db
+            .update(sessions)
+            .set({
+              availableCommands: JSON.stringify(event.commands),
+              updatedAt: new Date(),
+            })
+            .where(eq(sessions.id, this.sessionId));
+
+          await this.eventStore.append(
+            this.sessionId,
+            'status',
+            {
+              status: 'available_commands_update',
+              availableCommands: event.commands,
+            },
+            null,
+          );
+          break;
+        case 'plan_update': {
+          const sanitizedPlan = Array.isArray(event.plan)
+            ? event.plan.map((item) => ({
+                name: item.name || 'unnamed task',
+                status: ['pending', 'in_progress', 'completed'].includes(item.status)
+                  ? item.status
+                  : 'pending',
+                isCompleted: item.isCompleted,
+              }))
+            : [];
+
+          await this.db
+            .update(sessions)
+            .set({
+              plan: JSON.stringify(sanitizedPlan),
+              updatedAt: new Date(),
+            })
+            .where(eq(sessions.id, this.sessionId));
+
+          await this.eventStore.append(
+            this.sessionId,
+            'plan_update',
+            {
+              plan: sanitizedPlan,
+            },
+            null,
+          );
+          break;
+        }
+        case 'metrics_update':
+          await this.db
+            .update(sessions)
+            .set({
+              sessionMetrics: JSON.stringify(event.metrics),
+              updatedAt: new Date(),
+            })
+            .where(eq(sessions.id, this.sessionId));
+          break;
+        case 'config_option_update':
+          await this.db
+            .update(sessions)
+            .set({
+              sessionConfigOptions: JSON.stringify(event.configOptions),
+              updatedAt: new Date(),
+            })
+            .where(eq(sessions.id, this.sessionId));
+
+          await this.eventStore.append(
+            this.sessionId,
+            'status',
+            {
+              status: 'config_option_update',
+              configOptions: event.configOptions,
+            },
+            null,
+          );
+          break;
+        case 'terminal_created':
+          await this.eventStore.append(
+            this.sessionId,
+            'terminal_created',
+            {
+              terminalId: event.terminalId,
+              command: event.command,
+            },
+            null,
+          );
+          break;
+        case 'terminal_output':
+          await this.eventStore.append(
+            this.sessionId,
+            'terminal_output',
+            {
+              terminalId: event.terminalId,
+              data: event.data,
+            },
+            null,
+          );
+          break;
+        case 'terminal_exit':
+          await this.eventStore.append(
+            this.sessionId,
+            'terminal_exit',
+            {
+              terminalId: event.terminalId,
+              code: event.code,
+            },
+            null,
+          );
+          break;
+        case 'mode_update': {
+          const acpMode = event.modeId;
+
+          await this.db
+            .update(sessions)
+            .set({
+              agentPersona: acpMode,
+              updatedAt: new Date(),
+            })
+            .where(eq(sessions.id, this.sessionId));
+
+          await this.eventStore.append(
+            this.sessionId,
+            'status',
+            {
+              status: 'mode_update',
+              modeId: event.modeId,
+            },
+            null,
+          );
+          break;
+        }
+        case 'session_info_update': {
+          const updateObj: Record<string, unknown> = {
+            updatedAt: new Date(),
+          };
+          if (typeof event.title === 'string') {
+            updateObj.title = event.title;
+          }
+          await this.db.update(sessions).set(updateObj).where(eq(sessions.id, this.sessionId));
+
+          await this.eventStore.append(
+            this.sessionId,
+            'status',
+            {
+              status: 'session_info_update',
+              title: event.title,
+              updatedAt: event.updatedAt,
+            },
+            null,
+          );
+          break;
+        }
       }
     } catch (error) {
       await this.handleError(error).catch((e: unknown) => {
@@ -397,9 +809,24 @@ ${text}`;
       });
 
       const toolName = request.toolCall.name;
-      const shouldAutoApprove =
+      let shouldAutoApprove =
         sessionRecord?.approvalMode === 'yolo' ||
         (sessionRecord?.approvalMode === 'auto_approve' && toolName.startsWith('fs/'));
+
+      // If in auto_approve mode and it's an MCP tool call, check if the server is auto-approved
+      if (
+        !shouldAutoApprove &&
+        sessionRecord?.approvalMode === 'auto_approve' &&
+        toolName.includes('__')
+      ) {
+        const serverId = toolName.split('__')[0];
+        const mcpServer = await this.db.query.mcpServers.findFirst({
+          where: eq(mcpServers.id, serverId),
+        });
+        if (mcpServer?.autoApprove) {
+          shouldAutoApprove = true;
+        }
+      }
 
       const parentId = this.eventStreamAdapter.getCurrentParentEventId();
 
@@ -414,7 +841,7 @@ ${text}`;
             request,
             status: 'approved',
           },
-          parentId
+          parentId,
         );
 
         const reqOptions = request.options;
@@ -450,7 +877,7 @@ ${text}`;
           request,
           status: 'pending',
         },
-        parentId
+        parentId,
       );
 
       const approvalPromise = new Promise<DomainPermissionResponse>((resolve) => {

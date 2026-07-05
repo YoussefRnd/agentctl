@@ -1,0 +1,1 @@
+CREATE INDEX `acp_events_session_id_idx` ON `acp_events` (`session_id`);

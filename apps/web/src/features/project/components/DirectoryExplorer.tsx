@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useReducer, useEffect } from 'react';
 import { Folder, ChevronLeft, Home, GitBranch, AlertCircle, Loader2 } from 'lucide-react';
 import { apiClient } from '@agentctl/api-client';
 import { Button, GlassPanel } from '@agentctl/ui';
@@ -16,31 +16,61 @@ interface ExploreResponse {
   error?: string;
 }
 
+interface State {
+  currentPath: string | null;
+  parentPath: string | null;
+  folders: FolderEntry[];
+  error: string | null;
+  isLoading: boolean;
+}
+
+type Action =
+  | { type: 'EXPLORE_START' }
+  | { type: 'EXPLORE_SUCCESS'; payload: ExploreResponse }
+  | { type: 'EXPLORE_FAILURE'; payload: string };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'EXPLORE_START':
+      return { ...state, isLoading: true, error: null };
+    case 'EXPLORE_SUCCESS':
+      return {
+        ...state,
+        isLoading: false,
+        currentPath: action.payload.currentPath,
+        parentPath: action.payload.parentPath,
+        folders: action.payload.folders,
+        error: action.payload.error ?? null,
+      };
+    case 'EXPLORE_FAILURE':
+      return { ...state, isLoading: false, error: action.payload };
+    default:
+      return state;
+  }
+}
+
+const initialState: State = {
+  currentPath: null,
+  parentPath: null,
+  folders: [],
+  error: null,
+  isLoading: false,
+};
+
 export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => void }) {
-  const [currentPath, setCurrentPath] = useState<string | null>(null);
-  const [parentPath, setParentPath] = useState<string | null>(null);
-  const [folders, setFolders] = useState<FolderEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const { currentPath, parentPath, folders, error, isLoading } = state;
 
   const explore = async (path?: string) => {
-    setIsLoading(true);
-    setError(null);
+    dispatch({ type: 'EXPLORE_START' });
     try {
       const data = await apiClient.fetch<ExploreResponse>('/api/fs/explore', {
         method: 'POST',
         body: JSON.stringify({ path }),
       });
-      setCurrentPath(data.currentPath);
-      setParentPath(data.parentPath);
-      setFolders(data.folders);
-      if (data.error) {
-        setError(data.error);
-      }
+      dispatch({ type: 'EXPLORE_SUCCESS', payload: data });
     } catch {
-      setError('Connection failed. Is the server running?');
-    } finally {
-      setIsLoading(false);
+      dispatch({ type: 'EXPLORE_FAILURE', payload: 'Connection failed. Is the server running?' });
     }
   };
 
@@ -49,28 +79,33 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
   }, []);
 
   return (
-    <GlassPanel intensity="default" className="w-full max-w-xl shadow-2xl rounded-2xl overflow-hidden animate-in fade-in zoom-in-95">
-      <div className="border-border/40 flex items-center justify-between border-b px-4 py-3 bg-surface-secondary/20">
+    <GlassPanel
+      intensity="default"
+      className="animate-in fade-in zoom-in-95 w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl"
+    >
+      <div className="border-border/40 bg-surface-secondary/20 flex items-center justify-between border-b px-4 py-3">
         <div className="text-text-muted flex items-center gap-2 truncate text-[11px] font-bold tracking-tight uppercase">
           <Folder className="h-4 w-4" />
           <span className="truncate">{currentPath ?? 'SCANNING_FS...'}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <button
+            type="button"
             onClick={() => {
               void explore();
             }}
-            className="hover:text-accent text-text-muted p-1 transition-colors hover:scale-105 active:scale-95 cursor-pointer"
+            className="hover:text-accent text-text-muted cursor-pointer p-1 transition-colors hover:scale-105 active:scale-95"
             title="Home"
           >
             <Home className="h-3.5 w-3.5" />
           </button>
           {parentPath && parentPath !== currentPath && (
             <button
+              type="button"
               onClick={() => {
                 void explore(parentPath);
               }}
-              className="hover:text-accent text-text-muted p-1 transition-colors hover:scale-105 active:scale-95 cursor-pointer"
+              className="hover:text-accent text-text-muted cursor-pointer p-1 transition-colors hover:scale-105 active:scale-95"
               title="Go Up"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -82,7 +117,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
       <div className="h-72 overflow-y-auto p-1.5">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-accent" />
+            <Loader2 className="text-accent h-6 w-6 animate-spin" />
           </div>
         ) : error ? (
           <div className="flex h-full flex-col items-center justify-center p-4 text-center">
@@ -106,15 +141,18 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         ) : (
           <div className="space-y-0.5">
             {folders.map((f) => (
-              <div
+              <button
                 key={f.path}
-                className="group hover:bg-surface-secondary/60 flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 transition-all"
+                type="button"
+                className="group hover:bg-surface-secondary/60 flex w-full cursor-pointer items-center justify-between rounded-xl border-none bg-transparent px-3 py-2 text-left transition-all"
                 onClick={() => {
                   void explore(f.path);
                 }}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`p-1.5 rounded-lg bg-surface-secondary/40 ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}>
+                  <div
+                    className={`bg-surface-secondary/40 rounded-lg p-1.5 ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}
+                  >
                     {f.isRepo ? (
                       <GitBranch className="h-3.5 w-3.5" />
                     ) : (
@@ -126,7 +164,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                       {f.name}
                     </span>
                     {f.isRepo && (
-                      <span className="text-accent/60 text-[8px] font-black tracking-widest uppercase mt-0.5">
+                      <span className="text-accent/60 mt-0.5 text-[8px] font-black tracking-widest uppercase">
                         REPO
                       </span>
                     )}
@@ -138,11 +176,11 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                     onSelect(f.path);
                   }}
                   size="sm"
-                  className="h-7 px-3 text-[9px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-7 px-3 text-[9px] opacity-0 transition-opacity group-hover:opacity-100"
                 >
                   MOUNT
                 </Button>
-              </div>
+              </button>
             ))}
           </div>
         )}

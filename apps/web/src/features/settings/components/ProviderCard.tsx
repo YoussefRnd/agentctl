@@ -1,15 +1,21 @@
 import { useState } from 'react';
 import type { ProviderDiscovery } from '@agentctl/shared';
-import { PROVIDER_ENV_KEYS, validateApiKey } from '@agentctl/shared';
+import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
 import { ChevronDown, Terminal, Eye } from 'lucide-react';
-import { GlassPanel, Button, Input, Switch } from '@agentctl/ui';
+import { Card, Button, Input, Switch } from '@agentctl/ui';
 
 interface ProviderCardProps {
   provider: ProviderDiscovery;
   onActivate: (id: string) => void;
   onToggle: (id: string, enabled: boolean) => void;
   onResync: () => void;
-  onUpdateConfig?: (id: string, customEnv: Record<string, string>) => void;
+  onUpdateConfig?: (
+    id: string,
+    updates: {
+      customEnv?: Record<string, string>;
+      nativelyLoadsSkills?: boolean;
+    },
+  ) => void;
   isUpdatingConfig?: boolean;
 }
 
@@ -23,7 +29,7 @@ export function ProviderCard({
 }: ProviderCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const envKeys = PROVIDER_ENV_KEYS[provider.id] ?? [];
+  const envKeys = getProviderEnvKeys(provider);
   const [customEnv, setCustomEnv] = useState<Record<string, string>>(() => {
     const state: Record<string, string> = {};
     for (const key of envKeys) {
@@ -37,7 +43,7 @@ export function ProviderCard({
 
   const handleSaveConfig = () => {
     if (onUpdateConfig) {
-      onUpdateConfig(provider.id, customEnv);
+      onUpdateConfig(provider.id, { customEnv });
     }
   };
 
@@ -47,17 +53,27 @@ export function ProviderCard({
 
     if (!provider.enabled) {
       return (
-        <span className={`${baseStyles} text-text-muted border-border/40 opacity-50`}>DISABLED</span>
+        <span className={`${baseStyles} text-text-muted border-border/40 opacity-50`}>
+          DISABLED
+        </span>
       );
     }
 
     switch (provider.status) {
       case 'ready':
-        return <span className={`${baseStyles} border-accent/30 bg-accent/5 text-accent`}>READY</span>;
+        return (
+          <span className={`${baseStyles} border-accent/30 bg-accent/5 text-accent`}>READY</span>
+        );
       case 'needs_auth':
-        return <span className={`${baseStyles} border-warning/30 bg-warning/5 text-warning`}>AUTH_REQ</span>;
+        return (
+          <span className={`${baseStyles} border-warning/30 bg-warning/5 text-warning`}>
+            AUTH_REQ
+          </span>
+        );
       case 'not_found':
-        return <span className={`${baseStyles} border-danger/30 bg-danger/5 text-danger`}>MISSING</span>;
+        return (
+          <span className={`${baseStyles} border-danger/30 bg-danger/5 text-danger`}>MISSING</span>
+        );
       default:
         return (
           <span className={`${baseStyles} border-border/20 text-text-muted uppercase`}>
@@ -84,25 +100,26 @@ export function ProviderCard({
   };
 
   return (
-    <GlassPanel intensity="default" className="group overflow-hidden rounded-2xl border transition-all duration-200 hover:border-accent/20">
-      <div
+    <Card className="group hover:border-accent/20 overflow-hidden rounded-2xl">
+      <button
+        type="button"
         onClick={() => {
           setIsExpanded(!isExpanded);
         }}
-        className="flex cursor-pointer items-center justify-between p-4 select-none"
+        className="flex w-full cursor-pointer items-center justify-between border-none bg-transparent p-4 text-left select-none"
       >
         <div className="flex min-w-0 items-center gap-3.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/30 bg-surface-secondary/40 p-1.5 transition-all group-hover:bg-surface-secondary/60">
+          <div className="border-border/30 bg-surface-secondary/40 group-hover:bg-surface-secondary/60 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border p-1.5 transition-all">
             {provider.icon ? (
               <img src={provider.icon} alt="" className="h-5 w-5 object-contain" />
             ) : provider.id.includes('claude') ? (
-              <span className="text-lg font-bold text-text-main">C</span>
+              <span className="text-text-main text-lg font-bold">C</span>
             ) : (
-              <Terminal className="h-4 w-4 text-text-main" />
+              <Terminal className="text-text-main h-4 w-4" />
             )}
           </div>
           <div className="min-w-0">
-            <h3 className="flex items-center gap-3 text-[13px] font-black tracking-tighter text-text-main uppercase">
+            <h3 className="text-text-main flex items-center gap-3 text-[13px] font-black tracking-tighter uppercase">
               {provider.label}
               {getStatusBadge()}
             </h3>
@@ -119,17 +136,14 @@ export function ProviderCard({
               e.stopPropagation();
             }}
           >
-            <Switch
-              checked={isActive}
-              onCheckedChange={handleToggle}
-            />
+            <Switch checked={isActive} onCheckedChange={handleToggle} />
           </div>
 
           <ChevronDown
             className={`text-text-muted h-3.5 w-3.5 transition-transform duration-300 ${isExpanded ? 'text-text-main rotate-180' : ''}`}
           />
         </div>
-      </div>
+      </button>
 
       {isExpanded && (
         <div className="animate-in fade-in slide-in-from-top-1 border-border/20 space-y-4 border-t p-4">
@@ -137,14 +151,14 @@ export function ProviderCard({
             <strong className="text-text-muted text-[10px] font-black tracking-widest uppercase opacity-45">
               DESCRIPTION
             </strong>
-            <p className="text-text-main text-[11px] font-bold tracking-tight uppercase leading-relaxed">
+            <p className="text-text-main text-[11px] leading-relaxed font-bold tracking-tight uppercase">
               {provider.description ?? 'NO_DESCRIPTION_AVAILABLE'}
             </p>
           </div>
 
           {provider.status === 'not_found' && (
-            <div className="border-danger/20 bg-danger/5 flex items-center justify-between rounded-xl border px-3 py-2 animate-in fade-in">
-              <span className="text-danger text-[10px] font-bold uppercase tracking-tight">
+            <div className="border-danger/20 bg-danger/5 animate-in fade-in flex items-center justify-between rounded-xl border px-3 py-2">
+              <span className="text-danger text-[10px] font-bold tracking-tight uppercase">
                 BINARY_NOT_DETECTED_IN_PATH
               </span>
               <Button
@@ -169,15 +183,37 @@ export function ProviderCard({
               {provider.launchArgs.length > 0 && (
                 <div className="mt-1">
                   ARGS:{' '}
-                  <span className="text-text-main font-semibold">{JSON.stringify(provider.launchArgs)}</span>
+                  <span className="text-text-main font-semibold">
+                    {JSON.stringify(provider.launchArgs)}
+                  </span>
                 </div>
               )}
             </div>
           </div>
+
+          <div className="border-border/55 bg-surface-secondary/20 flex items-center justify-between rounded-xl border px-4 py-3 select-none">
+            <div>
+              <p className="text-text-main text-[11px] font-bold tracking-tight">
+                NATIVELY_LOADS_SKILLS
+              </p>
+              <p className="text-text-muted mt-0.5 text-[9px] leading-normal font-bold tracking-tight uppercase opacity-65">
+                Bypass client-side prompt injection, letting this agent manage skills natively from
+                workspace.
+              </p>
+            </div>
+            <Switch
+              checked={provider.nativelyLoadsSkills}
+              onCheckedChange={(checked) => {
+                if (onUpdateConfig) {
+                  onUpdateConfig(provider.id, { nativelyLoadsSkills: checked });
+                }
+              }}
+            />
+          </div>
           {envKeys.length > 0 && (
-            <div className="space-y-3 border-t border-border/10 pt-3.5">
-              <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-text-main uppercase">
-                <Eye className="h-3.5 w-3.5 text-accent" />
+            <div className="border-border/10 space-y-3 border-t pt-3.5">
+              <div className="text-text-main flex items-center gap-1.5 text-[10px] font-black tracking-widest uppercase">
+                <Eye className="text-accent h-3.5 w-3.5" />
                 CREDENTIALS
               </div>
               <div className="space-y-2">
@@ -201,7 +237,7 @@ export function ProviderCard({
                         onChange={(e) => {
                           setCustomEnv({ ...customEnv, [key]: e.target.value });
                         }}
-                        className={`w-full h-8 !text-[11px] ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
+                        className={`h-8 w-full !text-[11px] ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
                       />
                     </div>
                   );
@@ -222,6 +258,6 @@ export function ProviderCard({
           )}
         </div>
       )}
-    </GlassPanel>
+    </Card>
   );
 }

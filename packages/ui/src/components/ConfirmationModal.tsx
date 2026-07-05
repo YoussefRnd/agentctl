@@ -42,15 +42,15 @@ export const ConfirmationModal = memo(function ConfirmationModal({
         : 'bg-brand-mauve text-white hover:bg-brand-mauve/90';
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <GlassPanel className="w-full max-w-sm rounded-xl p-5 shadow-2xl font-mono text-[11px] animate-in zoom-in-95 duration-200 border-brand-surface1/50">
-        <div className="flex items-center gap-2 mb-3">
+    <div className="z-modal animate-in fade-in fixed inset-0 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md duration-200">
+      <GlassPanel className="animate-in zoom-in-95 border-brand-surface1/50 w-full max-w-sm p-5 font-mono text-[11px] shadow-2xl duration-200">
+        <div className="mb-3 flex items-center gap-2">
           <span className={`text-[12px] font-black tracking-widest uppercase ${typeColorClass}`}>
             :: {title}
           </span>
         </div>
 
-        <p className="text-text-main/80 leading-relaxed mb-6 font-bold uppercase tracking-tight">
+        <p className="text-text-main/80 mb-6 leading-relaxed font-bold tracking-tight uppercase">
           {message}
         </p>
 
@@ -58,19 +58,19 @@ export const ConfirmationModal = memo(function ConfirmationModal({
           <Button
             variant="ghost"
             onClick={onCancel}
-            className="h-9 px-4 rounded-xl text-text-muted hover:text-text-main font-black uppercase transition-all tracking-tight cursor-pointer"
+            className="text-text-muted hover:text-text-main h-9 cursor-pointer px-4 font-black tracking-tight uppercase transition-all"
           >
             {cancelText}
           </Button>
           <Button
             onClick={onConfirm}
-            className={`h-9 px-4 rounded-xl font-black uppercase transition-all tracking-tight cursor-pointer active:scale-95 ${confirmButtonClass}`}
+            className={`h-9 cursor-pointer px-4 font-black tracking-tight uppercase transition-all active:scale-95 ${confirmButtonClass}`}
           >
             {confirmText}
           </Button>
         </div>
       </GlassPanel>
     </div>,
-    document.body
+    document.body,
   );
 });

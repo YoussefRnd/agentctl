@@ -20,12 +20,18 @@ export class SessionStore {
   }
 
   setSession(session: SessionWithCapabilities | null): void {
-    this.state.currentSession = session;
+    this.state = {
+      ...this.state,
+      currentSession: session,
+    };
     this.notify();
   }
 
   setLoading(isLoading: boolean): void {
-    this.state.isLoading = isLoading;
+    this.state = {
+      ...this.state,
+      isLoading,
+    };
     this.notify();
   }
 
@@ -36,7 +42,9 @@ export class SessionStore {
 
   private notify(): void {
     const currentState = this.getState();
-    this.listeners.forEach((listener) => { listener(currentState); });
+    this.listeners.forEach((listener) => {
+      listener(currentState);
+    });
   }
 
   /**

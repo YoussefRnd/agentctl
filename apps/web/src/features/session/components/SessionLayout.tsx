@@ -25,8 +25,6 @@ export function SessionLayout({
 }: SessionLayoutProps) {
   return (
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
-
-
       {/* Unified Top Navbar */}
       <div className="border-border/50 bg-background/50 relative z-40 border-b backdrop-blur-xl">
         <div className="flex h-14 items-center gap-3 px-3">
@@ -53,14 +51,17 @@ export function SessionLayout({
       <div className="relative z-10 flex min-h-0 w-full flex-1 gap-3 overflow-hidden p-3">
         {/* Desktop Sidebar */}
         <div className="z-20 hidden h-full w-[240px] shrink-0 lg:block">
-          <GlassPanel className="h-full border-none shadow-2xl overflow-hidden rounded-3xl" intensity="high">
+          <GlassPanel
+            className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
+            intensity="high"
+          >
             {sidebar}
           </GlassPanel>
         </div>
 
         {/* Mobile Sidebar */}
         <aside
-          className={`bg-background/95 border-border ease-[cubic-bezier(0.16,1,0.3,1)] fixed inset-y-0 left-0 z-50 w-[300px] border-r backdrop-blur-2xl transition-transform duration-500 lg:hidden ${
+          className={`bg-background/95 border-border fixed inset-y-0 left-0 z-50 w-[300px] border-r backdrop-blur-2xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] lg:hidden ${
             isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -68,32 +69,38 @@ export function SessionLayout({
         </aside>
 
         {isMobileSidebarOpen && (
-          <div
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-md transition-opacity duration-500 lg:hidden"
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            className="fixed inset-0 z-40 border-none bg-black/60 backdrop-blur-md transition-opacity duration-500 outline-none lg:hidden"
             onClick={onCloseMobileSidebar}
           />
         )}
 
         {/* Main Content Area */}
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-all duration-500 ease-in-out">
-          <GlassPanel className="h-full border-none shadow-2xl overflow-hidden rounded-3xl" intensity="high">
+          <GlassPanel
+            className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
+            intensity="high"
+          >
             <div className="relative flex flex-1 flex-col overflow-hidden">{children}</div>
           </GlassPanel>
         </main>
 
         {/* Workbench (Inspector) */}
-        <div className="ease-[cubic-bezier(0.16,1,0.3,1)] flex h-full shrink-0 transition-all duration-500">
+        <div className="flex h-full shrink-0 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
           {workbench}
         </div>
       </div>
 
       {isWorkbenchOpen && (
-        <div
-          className="pointer-events-auto absolute inset-0 z-20 bg-black/10 lg:hidden"
+        <button
+          type="button"
+          aria-label="Close workbench"
+          className="pointer-events-auto absolute inset-0 z-20 border-none bg-black/10 outline-none lg:hidden"
           onClick={onCloseWorkbench}
         />
       )}
-
     </div>
   );
 }

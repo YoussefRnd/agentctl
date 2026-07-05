@@ -1,10 +1,13 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
-import { ChevronDown, ChevronRight, Brain, Sparkles } from 'lucide-react';
+import { Sparkles, RotateCcw } from 'lucide-react';
+import { RewindMenu } from '../RewindMenu';
+import type { RewindMode } from '../RewindMenu';
 import { useSession } from '../../../../contexts/SessionContext';
+import { Popover, PopoverTrigger, PopoverContent, Card } from '@agentctl/ui';
 
-type Role = 'provider' | 'user' | 'thought';
+type Role = 'provider' | 'user';
 
 interface TextCardProps {
   content: string;
@@ -16,6 +19,10 @@ interface TextCardProps {
     filename: string;
     sizeBytes: number;
   }[];
+  eventId?: number;
+  hasGitRepo?: boolean;
+  isSessionRunning?: boolean;
+  onRewind?: (eventId: number, mode: RewindMode) => void;
 }
 
 export const TextCard = memo(function TextCard({
@@ -23,77 +30,72 @@ export const TextCard = memo(function TextCard({
   variant = 'provider',
   isStreaming = false,
   attachments,
+  eventId,
+  hasGitRepo,
+  isSessionRunning,
+  onRewind,
 }: TextCardProps) {
-  const [thoughtOpen, setThoughtOpen] = useState(true);
+  const [showMenu, setShowMenu] = useState(false);
   const { sessionId } = useSession();
-
-  // Auto-expand thoughts while streaming, but allow user to toggle after
-  useEffect(() => {
-    if (isStreaming && variant === 'thought') {
-      setThoughtOpen(true);
-    }
-  }, [isStreaming, variant]);
 
   if (variant === 'user') {
     return (
-      <div className="flex justify-end py-3">
-        <div className="flex flex-col items-end gap-2 max-w-[85%] sm:max-w-[75%]">
+      <div className="group/rewind flex justify-end py-3">
+        <div className="flex max-w-[85%] flex-col items-end gap-2 sm:max-w-[75%]">
           {attachments && attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
               {attachments.map((att) => (
-                <div key={att.attachmentId} className="group/img relative overflow-hidden rounded-lg border border-border bg-surface-secondary transition-all duration-200 hover:border-accent/30">
+                <div
+                  key={att.attachmentId}
+                  className="group/img border-border bg-surface-secondary hover:border-accent/30 relative overflow-hidden rounded-lg border transition-all duration-200"
+                >
                   <img
                     src={`/api/sessions/${sessionId}/attachments/${att.attachmentId}`}
                     alt={att.filename}
-                    className="max-h-60 max-w-full object-contain rounded-lg"
+                    className="max-h-60 max-w-full rounded-lg object-contain"
                   />
                 </div>
               ))}
             </div>
           )}
-          {content && (
-            <div className="text-text-main rounded-xl border border-border/60 bg-surface-secondary/50 px-4 py-3 text-[14px] leading-relaxed backdrop-blur-md">
-              {content}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (variant === 'thought') {
-    return (
-      <div className="group/thought relative mb-1 py-1">
-        <button
-          type="button"
-          className={`flex items-center gap-2 rounded-md px-2.5 py-1 text-[11px] font-medium tracking-wide transition-all duration-200 ${
-            isStreaming
-              ? 'text-accent bg-accent/8 border border-accent/20'
-              : 'text-text-muted/60 hover:text-text-muted hover:bg-surface-secondary border border-transparent'
-          }`}
-          onClick={() => {
-            setThoughtOpen((v) => !v);
-          }}
-        >
-          <Brain className={`h-3.5 w-3.5 ${isStreaming ? 'animate-pulse text-accent' : ''}`} />
-          <span>{isStreaming ? 'Analyzing context...' : 'Thinking process'}</span>
-          {thoughtOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </button>
-
-        {thoughtOpen && (
-          <div
-            role="region"
-            aria-label="Thought details"
-            className="animate-in fade-in slide-in-from-left-1 mt-2 ml-2 rounded-md bg-surface-secondary/15 px-3 py-2 duration-200"
-          >
-            <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-muted/70 max-w-none font-mono text-[12px] leading-relaxed tracking-tight italic select-text">
-              <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>
-              {isStreaming && (
-                <span className="bg-accent/40 ml-1 inline-block h-3.5 w-1.5 animate-pulse align-middle" />
-              )}
-            </div>
+          <div className="relative">
+            {content && (
+              <Card className="text-text-main px-4 py-3 text-[14px] leading-relaxed">
+                {content}
+              </Card>
+            )}
+            {eventId && onRewind && (
+              <Popover open={showMenu} onOpenChange={setShowMenu}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="border-border bg-surface-primary hover:bg-surface-secondary focus-visible:ring-accent/40 absolute top-1/2 -left-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md border opacity-0 shadow-sm transition-opacity group-hover/rewind:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
+                    aria-label="Rewind options"
+                    title="Rewind options"
+                  >
+                    <RotateCcw className="text-text-muted h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  side="bottom"
+                  sideOffset={4}
+                  className="w-[260px] overflow-hidden p-0"
+                >
+                  <RewindMenu
+                    eventId={eventId}
+                    hasGitRepo={hasGitRepo ?? false}
+                    isSessionRunning={isSessionRunning ?? false}
+                    onRewind={onRewind}
+                    onClose={() => {
+                      setShowMenu(false);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -104,8 +106,10 @@ export const TextCard = memo(function TextCard({
       <div className="flex items-start gap-4">
         <div className="mt-1 shrink-0">
           <div
-            className={`flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface-secondary/50 transition-all duration-300 ${
-              isStreaming ? 'border-accent/40 bg-accent/5' : 'group-hover/provider:border-border-hover'
+            className={`border-border bg-surface-secondary/50 flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 ${
+              isStreaming
+                ? 'border-accent/40 bg-accent/5'
+                : 'group-hover/provider:border-border-hover'
             }`}
           >
             <Sparkles
@@ -130,4 +134,3 @@ export const TextCard = memo(function TextCard({
     </div>
   );
 });
-

@@ -5,16 +5,10 @@ import { DirectoryExplorer } from './DirectoryExplorer';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { apiClient, openProjectSession, type SidebarProject } from '@agentctl/api-client';
 import { Button } from '@agentctl/ui';
-import type { ProviderDiscovery } from '@agentctl/shared';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-
-  const { data: providers = [] } = useQuery({
-    queryKey: ['providers'],
-    queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/providers'),
-  });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -22,7 +16,7 @@ export function NewProjectPalette() {
   });
 
   const mutation = useMutation({
-    mutationFn: (path: string) => openProjectSession(path, providers),
+    mutationFn: (path: string) => openProjectSession(path),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['projects'] });
       void navigate(`/sessions/${data.session.id}`);
@@ -42,7 +36,7 @@ export function NewProjectPalette() {
       <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-6">
         {mutation.isPending ? (
           <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-accent" />
+            <Loader2 className="text-accent h-8 w-8 animate-spin" />
             <p className="text-text-main text-xl font-black tracking-widest uppercase">
               INITIALIZING_WORKSPACE...
             </p>
@@ -80,7 +74,7 @@ export function NewProjectPalette() {
                 onClick={() => {
                   setShowExplorer(true);
                 }}
-                className="h-12 px-8 text-[13px] tracking-widest uppercase font-bold"
+                className="h-12 px-8 text-[13px] font-bold tracking-widest uppercase"
               >
                 OPEN_NEW_PROJECT
               </Button>

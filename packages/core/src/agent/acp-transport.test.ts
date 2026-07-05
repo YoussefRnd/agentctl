@@ -2,7 +2,14 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
-import { cleanEnv, createAgentConnection, type CacheStorage, type AgentProbeResult, type DomainAgentEvent } from './acp-transport.js';
+import type { SessionNotification } from '@agentclientprotocol/sdk';
+import {
+  cleanEnv,
+  createAgentConnection,
+  type CacheStorage,
+  type AgentProbeResult,
+  type DomainAgentEvent,
+} from './acp-transport.js';
 
 test('cleanEnv overlays values and strips npm config variables', () => {
   const previousUserAgent = process.env.npm_config_user_agent;
@@ -204,4 +211,52 @@ test('parseNotificationToEvents parses tool_call rawInput as direct arguments ob
   assert.equal(event.type, 'tool_call');
   assert.equal(event.call.name, 'run_shell_command');
   assert.deepEqual(event.call.arguments, { command: 'echo hello' });
+});
+
+test('parseNotificationToEvents parses usage_update notification', async () => {
+  const { parseNotificationToEvents } = await import('./acp-transport.js');
+  const notification = {
+    sessionId: 'sess_123',
+    update: {
+      sessionUpdate: 'usage_update' as const,
+      used: 53000,
+      size: 200000,
+      cost: {
+        amount: 0.045,
+        currency: 'USD',
+      },
+    },
+  };
+
+  const events = parseNotificationToEvents(notification);
+  assert.equal(events.length, 1);
+  const event = events[0] as Extract<DomainAgentEvent, { type: 'usage_update' }>;
+  assert.equal(event.type, 'usage_update');
+  assert.equal(event.used, 53000);
+  assert.equal(event.size, 200000);
+  assert.deepEqual(event.cost, { amount: 0.045, currency: 'USD' });
+});
+
+test('parseNotificationToEvents normalizes usage_update values from provider metadata', async () => {
+  const { parseNotificationToEvents } = await import('./acp-transport.js');
+  const notification = {
+    sessionId: 'sess_123',
+    update: {
+      sessionUpdate: 'usage_update' as const,
+      used: '53000',
+      size: '200000',
+      cost: {
+        amount: '0.045',
+        currency: 'USD',
+      },
+    },
+  };
+
+  const events = parseNotificationToEvents(notification as unknown as SessionNotification);
+  assert.equal(events.length, 1);
+  const event = events[0] as Extract<DomainAgentEvent, { type: 'usage_update' }>;
+  assert.equal(event.type, 'usage_update');
+  assert.equal(event.used, 53000);
+  assert.equal(event.size, 200000);
+  assert.deepEqual(event.cost, { amount: 0.045, currency: 'USD' });
 });

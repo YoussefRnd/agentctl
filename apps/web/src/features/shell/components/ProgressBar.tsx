@@ -3,26 +3,26 @@ import { useEffect, useState } from 'react';
 
 export function ProgressBar() {
   const isAnyPending = useActionStore((state) => state.isAnyPending());
-  const [visible, setVisible] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [{ visible, progress }, setState] = useState({ visible: false, progress: 0 });
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
     if (isAnyPending) {
-      setVisible(true);
-      setProgress(0);
+      setState({ visible: true, progress: 0 });
       interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 90) return prev;
-          return prev + (100 - prev) * 0.1;
+        setState((prev) => {
+          if (prev.progress >= 90) return prev;
+          return {
+            ...prev,
+            progress: prev.progress + (100 - prev.progress) * 0.1,
+          };
         });
       }, 200);
     } else {
-      setProgress(100);
+      setState((prev) => ({ ...prev, progress: 100 }));
       const timeout = setTimeout(() => {
-        setVisible(false);
-        setProgress(0);
+        setState({ visible: false, progress: 0 });
       }, 300);
       return () => {
         clearTimeout(timeout);
@@ -37,9 +37,9 @@ export function ProgressBar() {
   if (!visible) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[9999] h-[2px] w-full bg-transparent overflow-hidden">
+    <div className="fixed top-0 right-0 left-0 z-[9999] h-[2px] w-full overflow-hidden bg-transparent">
       <div
-        className="h-full bg-accent transition-all duration-300 ease-out shadow-[0_0_10px_rgba(202,158,230,0.5)]"
+        className="bg-accent h-full shadow-[0_0_10px_rgba(202,158,230,0.5)] transition-all duration-300 ease-out"
         style={{ width: `${progress.toString()}%` }}
       />
     </div>

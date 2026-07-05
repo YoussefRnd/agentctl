@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeAll, afterAll } from 'vitest';
 import { WorkspaceManager } from './worktree-manager.js';
-import { GitMutex } from '../utils/git-mutex.js';
+import { GitMutex } from './git-mutex.js';
 import { simpleGit } from 'simple-git';
 import fs from 'node:fs/promises';
 import path from 'node:path';

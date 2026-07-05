@@ -16,6 +16,21 @@ export type ButtonProps<T extends ElementType> = ButtonBaseProps & {
   as?: T;
 } & Omit<ComponentPropsWithoutRef<T>, keyof ButtonBaseProps | 'as'>;
 
+const variants = {
+  solid: 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]',
+  outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main',
+  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main',
+};
+
+const sizes = {
+  sm: 'px-3 py-1 text-[11px]',
+  md: 'px-4 py-1.5 text-[12px]',
+  lg: 'px-6 py-2.5 text-[14px]',
+};
+
+const baseStyles =
+  'inline-flex items-center justify-center rounded-md font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
+
 const ButtonComponent = <T extends ElementType = 'button'>({
   as,
   variant = 'solid',
@@ -26,26 +41,8 @@ const ButtonComponent = <T extends ElementType = 'button'>({
 }: ButtonProps<T>) => {
   const Component = as ?? 'button';
 
-  const variants = {
-    solid: 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]',
-    outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main',
-    ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main',
-  };
-
-  const sizes = {
-    sm: 'px-3 py-1 text-[11px]',
-    md: 'px-4 py-1.5 text-[12px]',
-    lg: 'px-6 py-2.5 text-[14px]',
-  };
-
-  const baseStyles =
-    'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
-
   return (
-    <Component
-      className={cn(baseStyles, variants[variant], sizes[size], className)}
-      {...props}
-    >
+    <Component className={cn(baseStyles, variants[variant], sizes[size], className)} {...props}>
       {children}
     </Component>
   );

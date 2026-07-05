@@ -20,6 +20,11 @@ export const acpEventToolCallDataSchema = z
     name: z.string(),
     arguments: z.record(z.string(), z.unknown()).optional(),
     toolCallId: z.string().optional(),
+    title: z.string().optional(),
+    status: z.enum(['pending', 'in_progress', 'completed', 'failed']).optional(),
+    kind: z
+      .enum(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other'])
+      .optional(),
   })
   .loose();
 
@@ -27,6 +32,20 @@ export const acpEventApprovalRequestDataSchema = z.object({
   message: z.string().optional(),
   toolCallId: z.string().optional(),
   request: z.unknown().optional(),
+});
+
+export const acpEventPlanDataSchema = z.object({
+  plan: z.array(
+    z.object({
+      name: z.string(),
+      status: z.string(),
+      isCompleted: z.boolean(),
+    }),
+  ),
+});
+
+export const acpEventModeDataSchema = z.object({
+  mode: z.string(),
 });
 
 export const acpEventSchema = z.discriminatedUnion('type', [
@@ -43,6 +62,40 @@ export const acpEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('approval_request'),
     data: acpEventApprovalRequestDataSchema,
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('plan_update'),
+    data: acpEventPlanDataSchema,
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('mode_update'),
+    data: acpEventModeDataSchema,
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('terminal_created'),
+    data: z.object({
+      terminalId: z.string(),
+      command: z.string(),
+    }),
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('terminal_output'),
+    data: z.object({
+      terminalId: z.string(),
+      data: z.string(),
+    }),
+    createdAt: z.coerce.date(),
+  }),
+  z.object({
+    type: z.literal('terminal_exit'),
+    data: z.object({
+      terminalId: z.string(),
+      code: z.number().nullable(),
+    }),
     createdAt: z.coerce.date(),
   }),
   z.object({
@@ -72,6 +125,7 @@ export const acpEventMetadataSchema = z.object({
   promptTokens: z.number().optional(),
   completionTokens: z.number().optional(),
   cost: z.number().optional(),
+  snapshotHash: z.string().optional(),
 });
 
 export const acpEventRowSchema = z.intersection(
@@ -81,8 +135,7 @@ export const acpEventRowSchema = z.intersection(
     sessionId: z.uuid(),
     parentEventId: z.number().nullable().optional(),
     metadata: acpEventMetadataSchema.optional(),
-  })
+  }),
 );
 
 export type ACPEventRow = z.infer<typeof acpEventRowSchema>;
-

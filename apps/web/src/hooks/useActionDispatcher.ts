@@ -16,7 +16,7 @@ export const useActionDispatcher = () => {
     async <T>(
       actionName: string,
       actionFn: () => Promise<T>,
-      options?: ActionOptions
+      options?: ActionOptions,
     ): Promise<T | undefined> => {
       const { silent = false, successMessage, errorMessage } = options ?? {};
 
@@ -29,7 +29,8 @@ export const useActionDispatcher = () => {
         return result;
       } catch (error) {
         if (!silent) {
-          const message = errorMessage ?? (error instanceof Error ? error.message : 'Action failed');
+          const message =
+            errorMessage ?? (error instanceof Error ? error.message : 'Action failed');
           toast.error(message);
         }
         // eslint-disable-next-line no-console
@@ -39,7 +40,7 @@ export const useActionDispatcher = () => {
         removePending(actionName);
       }
     },
-    [addPending, removePending]
+    [addPending, removePending],
   );
 
   return { execute };

@@ -1,6 +1,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
 @import 'tailwindcss';
+@import '@agentctl/ui/src/theme.css';
+
+@source '../../../packages/ui/src/**/*.tsx';
 @plugin '@tailwindcss/typography';
 @plugin 'tailwindcss-animate';
 
-@import '@agentctl/ui/src/theme.css';
+/* Premium Syntax Highlighting & Code Block styling overrides */
+.hljs {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.prose pre {
+  margin-top: 1rem !important;
+  margin-bottom: 1rem !important;
+  padding: 1rem !important;
+  overflow-x: auto;
+  border-radius: var(--radius-md) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 13px !important;
+  line-height: 1.625 !important;
+}
+
+.prose code {
+  font-family: var(--font-mono) !important;
+  font-weight: 500 !important;
+}

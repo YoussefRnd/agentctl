@@ -7,6 +7,8 @@ export interface SystemSettings {
   onboardingVersion: string | number;
   setupStep: string | null;
   defaultProviderId: string | null;
+  showThinking: boolean;
+  registrySyncError: string | null;
 }
 
 export function useSettings() {

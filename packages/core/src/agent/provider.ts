@@ -40,6 +40,10 @@ export class Provider {
     return this.data.supportsDynamicConfig;
   }
 
+  get supportsLogout(): boolean {
+    return this.data.supportsLogout;
+  }
+
   getLaunchConfig(selectedModel: string, selectedThinkingEffort: string): ProviderLaunchConfig {
     const extraArgs: string[] = [];
     const configOptions = this.parseConfigOptions();
@@ -61,11 +65,7 @@ export class Provider {
       extraArgs.push('--model', selectedModel);
     }
 
-    if (
-      !this.supportsDynamicConfig &&
-      hasThinkingOption &&
-      selectedThinkingEffort
-    ) {
+    if (!this.supportsDynamicConfig && hasThinkingOption && selectedThinkingEffort) {
       extraArgs.push('--thinking-effort', selectedThinkingEffort);
     }
 
@@ -116,6 +116,8 @@ export class Provider {
       icon: this.data.icon ?? undefined,
       supportsDynamicModel: this.data.supportsDynamicModel,
       supportsDynamicConfig: this.data.supportsDynamicConfig,
+      supportsLogout: this.data.supportsLogout,
+      nativelyLoadsSkills: this.data.nativelyLoadsSkills,
     };
   }
 

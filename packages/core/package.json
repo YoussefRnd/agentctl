@@ -1,6 +1,6 @@
 {
   "name": "@agentctl/core",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,7 +9,10 @@
     "dev": "tsc -b --watch",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "keywords": [],
   "author": "",
@@ -22,7 +25,8 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.1",
     "@agentctl/shared": "workspace:*",
-    "better-sqlite3": "^12.9.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^12.11.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",

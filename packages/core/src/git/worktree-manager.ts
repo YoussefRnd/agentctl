@@ -1,8 +1,9 @@
-import type { GitMutex } from '../utils/git-mutex.js';
+import type { GitMutex } from './git-mutex.js';
 import { simpleGit } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import { type ReviewFile, parseMultiFileDiff } from './git-utils.js';
 
 export interface RepositoryInfo {
   selectedPath: string;
@@ -27,12 +28,6 @@ export interface WorktreeResult {
   workspacePath: string;
   branch: string;
   baseCommit: string;
-}
-
-export interface ReviewFile {
-  path: string;
-  state: 'untracked' | 'staged' | 'modified' | 'deleted' | 'committed';
-  diff: string;
 }
 
 export interface Workspace {
@@ -100,6 +95,10 @@ export class WorkspaceManager {
 
   async resolveBaseRef(repoPath: string, preferredRef = 'main'): Promise<BaseRefInfo> {
     const git = simpleGit(repoPath);
+    const branchSummary = await git.branchLocal();
+    const currentBranch = branchSummary.current || 'HEAD';
+
+    // If preferredRef is not found in the local repository, fallback to current active branch
     let ref = preferredRef;
     let commit: string;
 
@@ -111,8 +110,7 @@ export class WorkspaceManager {
         isEmpty: false,
       };
     } catch {
-      const branchSummary = await git.branchLocal();
-      ref = branchSummary.current || 'HEAD';
+      ref = currentBranch;
       try {
         commit = await git.revparse([ref]);
         return {
@@ -130,36 +128,66 @@ export class WorkspaceManager {
     }
   }
 
+  async getCurrentBranch(repoPath: string): Promise<string> {
+    const branchSummary = await simpleGit(repoPath).branchLocal();
+    return branchSummary.current || 'HEAD';
+  }
+
   async listBranches(repoPath: string): Promise<string[]> {
     const branchSummary = await simpleGit(repoPath).branchLocal();
     return branchSummary.all;
   }
 
   async checkout(repoPath: string, ref: string): Promise<void> {
-    await simpleGit(repoPath).checkout(ref);
+    await this.gitMutex.run(repoPath, async () => {
+      await simpleGit(repoPath).checkout(ref);
+    });
   }
 
-  private async addWorktree(repoPath: string, branchName: string, storagePath: string, baseRef: string): Promise<void> {
+  private async addWorktree(
+    repoPath: string,
+    branchName: string,
+    storagePath: string,
+    baseRef: string,
+  ): Promise<void> {
     const git = simpleGit(repoPath);
 
-    // Remove if already registered
     const worktrees = await this.listWorktrees(repoPath);
     const worktreeExists = worktrees.some((w) => w.path === storagePath);
+
     if (worktreeExists) {
-      await this.removeWorktree(repoPath, storagePath);
-    }
+      // Reusing slot!
+      const wtGit = simpleGit(storagePath);
+      const currentBranch = (await wtGit.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
 
-    // Clear directory from disk
-    await fs.rm(storagePath, { recursive: true, force: true }).catch(() => undefined);
+      // Force clean it
+      await wtGit.raw(['reset', '--hard']).catch(() => undefined);
+      await wtGit.raw(['clean', '-ffdx']).catch(() => undefined);
+      // Checkout and reset to target ref
+      await wtGit.raw(['checkout', '-B', branchName, baseRef]);
 
-    const branches = await git.branchLocal();
-    const branchExists = branches.all.includes(branchName);
-
-    if (branchExists) {
-      await git.raw(['worktree', 'add', storagePath, branchName]);
+      // Delete the old branch if it was an agentctl branch and is not the current branch
+      if (currentBranch !== branchName && currentBranch.startsWith('agentctl/')) {
+        await git.raw(['branch', '-D', currentBranch]).catch(() => undefined);
+      }
     } else {
-      await git.raw(['worktree', 'add', '-b', branchName, storagePath, baseRef]);
+      // Clear directory from disk
+      await fs.rm(storagePath, { recursive: true, force: true }).catch(() => undefined);
+
+      const branches = await git.branchLocal();
+      const branchExists = branches.all.includes(branchName);
+
+      if (branchExists) {
+        await git.raw(['worktree', 'add', storagePath, branchName]);
+      } else {
+        await git.raw(['worktree', 'add', '-b', branchName, storagePath, baseRef]);
+      }
     }
+  }
+
+  async getActiveBranchesInWorktrees(repoPath: string): Promise<string[]> {
+    const list = await this.listWorktrees(repoPath);
+    return list.map((w) => w.branch);
   }
 
   private async listWorktrees(repoPath: string): Promise<ListedWorktree[]> {
@@ -182,7 +210,17 @@ export class WorkspaceManager {
   }
 
   private async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
-    await simpleGit(repoPath).raw(['worktree', 'remove', '--force', worktreePath]);
+    let rootPath = worktreePath;
+    try {
+      const git = simpleGit(worktreePath);
+      const resolved = await git.revparse(['--show-toplevel']);
+      if (resolved.trim()) {
+        rootPath = resolved.trim();
+      }
+    } catch {
+      // ignore, fallback to worktreePath
+    }
+    await simpleGit(repoPath).raw(['worktree', 'remove', '--force', rootPath]);
   }
 
   private async deleteBranch(repoPath: string, branchName: string): Promise<void> {
@@ -197,13 +235,35 @@ export class WorkspaceManager {
     taskSlug: string,
     baseBranch = 'main',
     workdirPrefix = '',
+    activeSessionIds: string[] = [],
   ): Promise<WorktreeResult> {
     const projectName = this.sanitize(path.basename(repoPath));
     const cleanSessionId = this.sanitize(sessionId);
     const cleanTaskSlug = this.sanitize(taskSlug).slice(0, 30);
-
-    const storagePath = path.join(this.baseDir, projectName, cleanSessionId);
     const branchName = `agentctl/${cleanSessionId}/${cleanTaskSlug}`;
+
+    const list = await this.listWorktrees(repoPath).catch(() => []);
+    const activeCleanIds = new Set(activeSessionIds.map((id) => this.sanitize(id)));
+
+    let storagePath = '';
+    for (let slotIndex = 0; slotIndex < 1000; slotIndex++) {
+      const candidatePath = path.join(this.baseDir, projectName, `slot-${slotIndex.toString()}`);
+      const matchingWorktree = list.find((w) => w.path === candidatePath);
+      let isSlotActive = false;
+      if (matchingWorktree) {
+        const parts = matchingWorktree.branch.split('/');
+        if (parts.length >= 2 && parts[0] === 'agentctl') {
+          const slotSessionId = parts[1];
+          if (activeCleanIds.has(slotSessionId)) {
+            isSlotActive = true;
+          }
+        }
+      }
+      if (!isSlotActive) {
+        storagePath = candidatePath;
+        break;
+      }
+    }
 
     await fs.mkdir(path.dirname(storagePath), { recursive: true });
 
@@ -214,6 +274,55 @@ export class WorkspaceManager {
       }
 
       await this.addWorktree(repoPath, branchName, storagePath, base.ref);
+
+      // 1. Copy env files matching .env*
+      try {
+        const files = await fs.readdir(repoPath);
+        for (const file of files) {
+          if (file.startsWith('.env')) {
+            const src = path.join(repoPath, file);
+            const dest = path.join(storagePath, file);
+            await fs.copyFile(src, dest).catch(() => undefined);
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+
+      // 2. Read and apply .worktreeinclude if it exists (for custom files/dirs)
+      try {
+        const includePath = path.join(repoPath, '.worktreeinclude');
+        const includeExists = await fs
+          .access(includePath)
+          .then(() => true)
+          .catch(() => false);
+        if (includeExists) {
+          const content = await fs.readFile(includePath, 'utf8');
+          const lines = content
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line && !line.startsWith('#'));
+
+          for (const line of lines) {
+            const src = path.join(repoPath, line);
+            const dest = path.join(storagePath, line);
+            const stat = await fs.stat(src).catch(() => null);
+
+            if (stat) {
+              await fs.mkdir(path.dirname(dest), { recursive: true }).catch(() => undefined);
+              if (stat.isDirectory()) {
+                // Symlink directories to share dependencies or target directories
+                await fs.symlink(src, dest, 'dir').catch(() => undefined);
+              } else {
+                // Copy individual files
+                await fs.copyFile(src, dest).catch(() => undefined);
+              }
+            }
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
 
       return {
         path: storagePath,
@@ -242,6 +351,39 @@ export class WorkspaceManager {
     });
   }
 
+  async addBranchWorktree(
+    repoPath: string,
+    sessionId: string,
+    branchName: string,
+    workdirPrefix = '',
+  ): Promise<{ path: string; workspacePath: string }> {
+    const projectName = this.sanitize(path.basename(repoPath));
+    const cleanSessionId = this.sanitize(sessionId);
+    const storagePath = path.join(this.baseDir, projectName, `checkout-${cleanSessionId}`);
+
+    await fs.mkdir(path.dirname(storagePath), { recursive: true });
+
+    return await this.gitMutex.run(repoPath, async () => {
+      // Remove existing worktree at this path if any
+      const worktrees = await this.listWorktrees(repoPath);
+      const worktreeExists = worktrees.some((w) => w.path === storagePath);
+      if (worktreeExists) {
+        await this.removeWorktree(repoPath, storagePath);
+      }
+      await fs.rm(storagePath, { recursive: true, force: true }).catch(() => undefined);
+
+      // Use --force so the worktree can be created even if the branch is
+      // currently active in the main project directory. Git allows this —
+      // commits from either location go to the same branch.
+      await simpleGit(repoPath).raw(['worktree', 'add', '--force', storagePath, branchName]);
+
+      return {
+        path: storagePath,
+        workspacePath: workdirPrefix ? path.join(storagePath, workdirPrefix) : storagePath,
+      };
+    });
+  }
+
   async cleanup(repoPath: string, worktreePath: string, branchName: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
       await this.removeWorktreeAndBranch(repoPath, worktreePath, branchName);
@@ -265,7 +407,6 @@ export class WorkspaceManager {
     });
   }
 
-
   private async removeWorktreeAndBranch(
     repoPath: string,
     worktreePath: string,
@@ -284,12 +425,15 @@ export class WorkspaceManager {
       }
     }
 
-    try {
-      await this.deleteBranch(repoPath, branchName);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('not found')) {
-        throw error;
+    // Only delete branches we created (agentctl/*), never touch user's real branches
+    if (branchName.startsWith('agentctl/')) {
+      try {
+        await this.deleteBranch(repoPath, branchName);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('not found')) {
+          throw error;
+        }
       }
     }
   }
@@ -325,14 +469,53 @@ export class WorkspaceManager {
       const status = await git.status();
       const files = new Map<string, ReviewFile>();
 
+      const [stagedDiffsRaw, unstagedDiffsRaw, committedDiffsRaw] = await Promise.all([
+        git.diff(['--cached']).catch(() => ''),
+        git.diff([]).catch(() => ''),
+        git.diff([`${baseCommit}...HEAD`]).catch(() => ''),
+      ]);
+
+      const stagedDiffs = parseMultiFileDiff(stagedDiffsRaw);
+      const unstagedDiffs = parseMultiFileDiff(unstagedDiffsRaw);
+      const committedDiffs = parseMultiFileDiff(committedDiffsRaw);
+      const conflictedSet = new Set(status.conflicted);
+
       for (const file of status.files) {
+        if (conflictedSet.has(file.path)) {
+          files.set(file.path, {
+            path: file.path,
+            state: 'conflicted',
+            diff:
+              unstagedDiffs.get(file.path) ??
+              stagedDiffs.get(file.path) ??
+              `diff --git a/${file.path} b/${file.path}`,
+          });
+          continue;
+        }
+
         if (file.index === '?') {
+          const fullPath = path.join(worktreePath, file.path);
+          let content = '';
+          try {
+            content = await fs.readFile(fullPath, 'utf8');
+          } catch {
+            // ignore
+          }
+          const lines = content.split('\n');
+          const header = [
+            `diff --git a/${file.path} b/${file.path}`,
+            `new file mode 100644`,
+            `--- /dev/null`,
+            `+++ b/${file.path}`,
+            `@@ -0,0 +1,${String(lines.length)} @@`,
+          ];
+          const diffLines = lines.map((line) => `+${line}`);
+          const diff = [...header, ...diffLines].join('\n');
+
           files.set(file.path, {
             path: file.path,
             state: 'untracked',
-            diff: await git
-              .raw(['diff', '--no-index', '--', '/dev/null', file.path])
-              .catch(() => `diff --git a/${file.path} b/${file.path}`),
+            diff,
           });
           continue;
         }
@@ -341,7 +524,7 @@ export class WorkspaceManager {
           files.set(file.path, {
             path: file.path,
             state: 'staged',
-            diff: await git.diff(['--cached', '--', file.path]),
+            diff: stagedDiffs.get(file.path) ?? `diff --git a/${file.path} b/${file.path}`,
           });
           continue;
         }
@@ -350,7 +533,7 @@ export class WorkspaceManager {
           files.set(file.path, {
             path: file.path,
             state: 'deleted',
-            diff: await git.diff(['--', file.path]),
+            diff: unstagedDiffs.get(file.path) ?? `diff --git a/${file.path} b/${file.path}`,
           });
           continue;
         }
@@ -359,23 +542,21 @@ export class WorkspaceManager {
           files.set(file.path, {
             path: file.path,
             state: 'modified',
-            diff: await git.diff(['--', file.path]),
+            diff: unstagedDiffs.get(file.path) ?? `diff --git a/${file.path} b/${file.path}`,
           });
         }
       }
 
-      const committedFiles = await git.raw([
-        'diff',
-        '--name-only',
-        `${baseCommit}...HEAD`,
-      ]);
+      const committedFiles = await git
+        .raw(['diff', '--name-only', `${baseCommit}...HEAD`])
+        .catch(() => '');
       for (const filePath of committedFiles.split('\n').filter(Boolean)) {
         if (files.has(filePath)) continue;
 
         files.set(filePath, {
           path: filePath,
           state: 'committed',
-          diff: await git.diff([`${baseCommit}...HEAD`, '--', filePath]),
+          diff: committedDiffs.get(filePath) ?? `diff --git a/${filePath} b/${filePath}`,
         });
       }
 
@@ -394,11 +575,69 @@ export class WorkspaceManager {
   ): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
       if (action === 'merge') {
-        const status = await simpleGit(repoPath).status();
-        if (!status.isClean()) {
-          throw new Error('Working tree is not clean. Cannot merge.');
+        const gitWorktree = simpleGit(worktreePath);
+
+        // Check if there is already a merge in progress (MERGE_HEAD exists)
+        let hasMergeHead = false;
+        try {
+          const mergeHeadPath = (
+            await gitWorktree.raw(['rev-parse', '--git-path', 'MERGE_HEAD'])
+          ).trim();
+          const absMergeHeadPath = path.isAbsolute(mergeHeadPath)
+            ? mergeHeadPath
+            : path.resolve(worktreePath, mergeHeadPath);
+          hasMergeHead = await fs
+            .access(absMergeHeadPath)
+            .then(() => true)
+            .catch(() => false);
+        } catch {
+          // ignore
         }
 
+        const worktreeStatus = await gitWorktree.status();
+        if (worktreeStatus.conflicted.length > 0) {
+          throw new Error(
+            'Merge conflict occurred. Please resolve conflicts in the sandbox first.',
+          );
+        }
+
+        if (hasMergeHead) {
+          // Conflicts are resolved and staged. We can commit the merge in the worktree.
+          try {
+            await gitWorktree.commit(`Merge branch '${baseBranch}' into ${branchName}`);
+          } catch (commitErr) {
+            const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
+            if (!msg.includes('nothing to commit') && !msg.includes('no changes added to commit')) {
+              throw commitErr;
+            }
+          }
+        } else {
+          // 1. Test merge baseBranch into worktree first to detect conflicts in sandbox
+          try {
+            await gitWorktree.merge([baseBranch]);
+          } catch (mergeErr) {
+            const statusAfterMerge = await gitWorktree.status();
+            if (statusAfterMerge.conflicted.length > 0) {
+              throw new Error(
+                'Merge conflict occurred. Please resolve conflicts in the sandbox first.',
+              );
+            }
+            throw mergeErr;
+          }
+        }
+
+        // 2. Check if the host working tree is clean before applying changes
+        const status = await simpleGit(repoPath).status();
+        if (!status.isClean()) {
+          throw new Error(
+            'Working tree is not clean. Please commit or stash your changes before applying.',
+          );
+        }
+
+        // Save original branch
+        const originalBranch = await this.getCurrentBranch(repoPath);
+
+        // 3. Checkout baseBranch in host and apply the clean merge
         await simpleGit(repoPath).checkout(baseBranch);
 
         try {
@@ -414,8 +653,22 @@ export class WorkspaceManager {
               throw error;
             }
           }
-        } catch {
-          throw new Error('Merge conflict occurred');
+        } catch (err: unknown) {
+          // Revert host merge state
+          await simpleGit(repoPath)
+            .merge(['--abort'])
+            .catch(() => undefined);
+          if (originalBranch && originalBranch !== baseBranch) {
+            await simpleGit(repoPath)
+              .checkout(originalBranch)
+              .catch(() => undefined);
+          }
+          throw err;
+        }
+
+        // Restore original branch
+        if (originalBranch && originalBranch !== baseBranch) {
+          await simpleGit(repoPath).checkout(originalBranch);
         }
       }
 
@@ -437,6 +690,78 @@ export class WorkspaceManager {
         // Not staged
       }
       await simpleGit(worktreePath).raw(['checkout', '--', filePath]);
+    });
+  }
+
+  async stageAll(repoPath: string, worktreePath: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      await simpleGit(worktreePath).raw(['add', '.']);
+    });
+  }
+
+  async unstageFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      await simpleGit(worktreePath).raw(['reset', 'HEAD', filePath]);
+    });
+  }
+
+  async unstageAll(repoPath: string, worktreePath: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      await simpleGit(worktreePath).raw(['reset', 'HEAD']);
+    });
+  }
+
+  async commit(repoPath: string, worktreePath: string, message: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      await simpleGit(worktreePath).commit(message);
+    });
+  }
+
+  async push(
+    repoPath: string,
+    worktreePath: string,
+  ): Promise<{ success: boolean; output: string }> {
+    return await this.gitMutex.run(repoPath, async () => {
+      try {
+        const git = simpleGit(worktreePath);
+        const remotes = await git.getRemotes();
+        if (remotes.length === 0) {
+          throw new Error('No git remotes configured for this repository');
+        }
+        const branchSummary = await git.branchLocal();
+        const currentBranch = branchSummary.current;
+        const result = await git.push(['-u', remotes[0].name, currentBranch]);
+        return { success: true, output: JSON.stringify(result) };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`Git push failed: ${message}`);
+      }
+    });
+  }
+
+  async pull(
+    repoPath: string,
+    worktreePath: string,
+  ): Promise<{ success: boolean; output: string }> {
+    return await this.gitMutex.run(repoPath, async () => {
+      try {
+        const git = simpleGit(worktreePath);
+        const remotes = await git.getRemotes();
+        if (remotes.length === 0) {
+          throw new Error('No git remotes configured for this repository');
+        }
+        const result = await git.pull();
+        return { success: true, output: JSON.stringify(result) };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`Git pull failed: ${message}`);
+      }
+    });
+  }
+
+  async merge(repoPath: string, worktreePath: string, branchName: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      await simpleGit(worktreePath).merge([branchName]);
     });
   }
 
@@ -471,3 +796,4 @@ export class WorkspaceManager {
 
 // Keep export alias for backward compatibility
 export { WorkspaceManager as WorktreeManager };
+export type { Workspace as WorkspaceHandle };

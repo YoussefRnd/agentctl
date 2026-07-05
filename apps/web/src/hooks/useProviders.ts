@@ -1,9 +1,12 @@
-import { useMutation, useQuery, useQueryClient, type MutateOptions, type MutationFunctionContext } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type MutateOptions,
+  type MutationFunctionContext,
+} from '@tanstack/react-query';
 import { apiClient } from '@agentctl/api-client';
-import type {
-  ProviderDiscovery,
-  SessionWithCapabilities,
-} from '@agentctl/shared';
+import type { ProviderDiscovery, SessionWithCapabilities } from '@agentctl/shared';
 import { useActionDispatcher } from './useActionDispatcher';
 
 type SessionResponse = SessionWithCapabilities;
@@ -52,11 +55,11 @@ export function useProviders(sessionId: string | null) {
       selectedModel = modelOption?.currentValue ?? modelOption?.options[0]?.value ?? 'default';
     }
 
-    void execute(`switch-provider-${providerId}`, () => 
+    void execute(`switch-provider-${providerId}`, () =>
       updateProviderMutation.mutateAsync({
         providerId,
         modelId: selectedModel,
-      })
+      }),
     );
   };
 
@@ -123,13 +126,15 @@ export function useProviders(sessionId: string | null) {
     mutationFn: async ({
       providerId,
       customEnv,
+      nativelyLoadsSkills,
     }: {
       providerId: string;
-      customEnv: Record<string, string>;
+      customEnv?: Record<string, string>;
+      nativelyLoadsSkills?: boolean;
     }) => {
       return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/config`, {
         method: 'POST',
-        body: JSON.stringify({ customEnv }),
+        body: JSON.stringify({ customEnv, nativelyLoadsSkills }),
       });
     },
     onSuccess: (updatedProvider) => {
@@ -150,9 +155,19 @@ export function useProviders(sessionId: string | null) {
         successMessage: options.successMessage,
       }).then((result) => {
         if (result !== undefined) {
-          mutateOptions?.onSuccess?.(result, params, undefined, {} as unknown as MutationFunctionContext);
+          mutateOptions?.onSuccess?.(
+            result,
+            params,
+            undefined,
+            {} as unknown as MutationFunctionContext,
+          );
         } else {
-          mutateOptions?.onError?.(new Error('Mutation failed'), params, undefined, {} as unknown as MutationFunctionContext);
+          mutateOptions?.onError?.(
+            new Error('Mutation failed'),
+            params,
+            undefined,
+            {} as unknown as MutationFunctionContext,
+          );
         }
       });
     };
@@ -171,7 +186,9 @@ export function useProviders(sessionId: string | null) {
     isSyncing: syncMutation.isPending,
     toggleProvider: wrapMutate('toggle', toggleMutation),
     isToggling: toggleMutation.isPending,
-    refreshProvider: wrapMutate('refresh', refreshMutation, { successMessage: 'Provider refreshed' }),
+    refreshProvider: wrapMutate('refresh', refreshMutation, {
+      successMessage: 'Provider refreshed',
+    }),
     isRefreshing: refreshMutation.isPending,
     updateProviderConfig: wrapMutate('config', updateProviderConfigMutation, {
       successMessage: 'Configuration updated',

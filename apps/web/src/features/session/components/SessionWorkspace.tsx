@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 
 import { Sidebar } from '../../shell/components/Sidebar';
 import { useSession } from '../../../contexts/SessionContext';
@@ -6,6 +6,8 @@ import { SessionHeader } from './SessionHeader';
 import { Workbench, type WorkbenchTab } from './Workbench';
 import { MainFeed } from './MainFeed';
 import { SessionLayout } from './SessionLayout';
+
+const sidebarElement = <Sidebar />;
 
 export function SessionWorkspace() {
   const { sessionId, sessionData } = useSession();
@@ -27,6 +29,29 @@ export function SessionWorkspace() {
     };
   }, []);
 
+  const headerElement = useMemo(
+    () => (
+      <SessionHeader
+        sessionId={sessionId}
+        onOpenMobileSidebar={() => {
+          setIsMobileSidebarOpen(true);
+        }}
+        onToggleWorkbench={() => {
+          setIsWorkbenchOpen((prev) => !prev);
+        }}
+        isWorkbenchOpen={isWorkbenchOpen}
+        sessionTitle={sessionData?.session.title ?? null}
+        status={sessionData?.session.status ?? null}
+      />
+    ),
+    [sessionId, isWorkbenchOpen, sessionData?.session.title, sessionData?.session.status],
+  );
+
+  const workbenchElement = useMemo(
+    () => <Workbench isOpen={isWorkbenchOpen} tab={workbenchTab} onTabChange={setWorkbenchTab} />,
+    [isWorkbenchOpen, workbenchTab],
+  );
+
   return (
     <SessionLayout
       isMobileSidebarOpen={isMobileSidebarOpen}
@@ -37,28 +62,11 @@ export function SessionWorkspace() {
       onCloseWorkbench={() => {
         setIsWorkbenchOpen(false);
       }}
-      sidebar={<Sidebar />}
-      header={
-        <SessionHeader
-          sessionId={sessionId}
-          onOpenMobileSidebar={() => {
-            setIsMobileSidebarOpen(true);
-          }}
-          onToggleWorkbench={() => {
-            setIsWorkbenchOpen((prev) => !prev);
-          }}
-          isWorkbenchOpen={isWorkbenchOpen}
-          sessionTitle={sessionData?.session.title ?? null}
-          status={sessionData?.session.status ?? null}
-        />
-      }
-      workbench={
-        <Workbench isOpen={isWorkbenchOpen} tab={workbenchTab} onTabChange={setWorkbenchTab} />
-      }
+      sidebar={sidebarElement}
+      header={headerElement}
+      workbench={workbenchElement}
     >
       <MainFeed />
     </SessionLayout>
   );
 }
-
-

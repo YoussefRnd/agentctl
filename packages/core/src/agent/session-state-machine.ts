@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { sessions } from '../db/schema.js';
+import { sessions, mcpServers } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from './acp-provider-registry.js';
 import type { SessionStatus, ThinkingEffort } from '@agentctl/shared';
@@ -9,6 +9,8 @@ import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import type { AgentRuntime, AgentRuntimeHandle } from './acp-transport.js';
 import { AuthRequiredError } from './acp-transport.js';
+import { SnapshotService } from '../git/snapshot-service.js';
+import type { McpGateway } from './mcp-gateway.js';
 
 export interface SessionRecord {
   id: string;
@@ -56,6 +58,7 @@ export interface LaunchContext {
 
 export class SessionStateMachine {
   private sessions = new Map<string, ACPSession>();
+  private snapshotService: SnapshotService;
 
   constructor(
     private db: DbClient,
@@ -64,7 +67,14 @@ export class SessionStateMachine {
     private eventStore: SessionEventStore,
     private logger: Logger = noopLogger,
     private runtime: AgentRuntime,
-  ) {}
+    private mcpGateway?: McpGateway,
+  ) {
+    this.snapshotService = new SnapshotService();
+  }
+
+  getSnapshotService(): SnapshotService {
+    return this.snapshotService;
+  }
 
   getSession(sessionId: string): ACPSession | undefined {
     return this.sessions.get(sessionId);
@@ -96,7 +106,11 @@ export class SessionStateMachine {
     this.sessions.clear();
   }
 
-  async transitionTo(sessionId: string, targetState: SessionStatus, context?: LaunchContext): Promise<void> {
+  async transitionTo(
+    sessionId: string,
+    targetState: SessionStatus,
+    context?: LaunchContext,
+  ): Promise<void> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
@@ -113,7 +127,10 @@ export class SessionStateMachine {
 
     this.validateTransition(currentState, targetState);
 
-    this.logger.info({ sessionId, from: currentState, to: targetState }, 'Transitioning session state');
+    this.logger.info(
+      { sessionId, from: currentState, to: targetState },
+      'Transitioning session state',
+    );
 
     await this.executeTransitionEffects(sessionRecord, currentState, targetState, context);
 
@@ -129,10 +146,7 @@ export class SessionStateMachine {
       updateFields.lastHeartbeat = new Date();
     }
 
-    await this.db
-      .update(sessions)
-      .set(updateFields)
-      .where(eq(sessions.id, sessionId));
+    await this.db.update(sessions).set(updateFields).where(eq(sessions.id, sessionId));
   }
 
   private validateTransition(from: SessionStatus, to: SessionStatus) {
@@ -155,60 +169,18 @@ export class SessionStateMachine {
     }
   }
 
-  private async executeTransitionEffects(
+  private executeTransitionEffects(
     sessionRecord: SessionRecord,
     from: SessionStatus,
     to: SessionStatus,
-    context?: LaunchContext,
-  ) {
+    _context?: LaunchContext,
+  ): Promise<void> {
     const sessionId = sessionRecord.id;
 
-    if (to === 'archived') {
-      this.stopSession(sessionId);
-      if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
-        try {
-          await this.workspaceManager.removeWorktreeOnly(
-            sessionRecord.project.repoRoot,
-            sessionRecord.worktreePath,
-          );
-        } catch (err: unknown) {
-          this.logger.error({ err, sessionId }, 'Failed to remove worktree on archiveSession');
-        }
-      }
-    }
-
-    if (from === 'archived' && to === 'idle') {
-      if (sessionRecord.mode === 'worktree' && sessionRecord.project.repoRoot) {
-        await this.workspaceManager.create(
-          sessionRecord.project.repoRoot,
-          sessionRecord.id,
-          sessionRecord.taskSlug,
-          'main',
-          sessionRecord.project.subdir,
-        );
-      }
-      if (!context?.command || !context.args) {
-        throw new Error('Cannot revive session from archived state without launch command and args');
-      }
-      await this.startSession(
-        sessionId,
-        sessionRecord.mode === 'worktree' ? sessionRecord.worktreePath : sessionRecord.project.path,
-        context.command,
-        context.args,
-        context.env,
-        sessionRecord.selectedModel,
-        sessionRecord.selectedThinkingEffort as ThinkingEffort,
-        context.supportsDynamicModel,
-        context.supportsDynamicConfig,
-        context.resolvedThinkingConfigId,
-        sessionRecord.agentSessionId,
-        context.resolvedModelConfigId,
-      );
-    }
-
-    if (to === 'error' || to === 'merged' || to === 'discarded') {
+    if (to === 'archived' || to === 'error' || to === 'merged' || to === 'discarded') {
       this.stopSession(sessionId);
     }
+    return Promise.resolve();
   }
 
   async startSession(
@@ -225,11 +197,47 @@ export class SessionStateMachine {
     existingAgentSessionId?: string | null,
     resolvedModelConfigId?: string,
   ): Promise<ACPSession> {
-    this.logger.info({ sessionId, command, args, worktreePath, existingAgentSessionId }, 'Starting new agent session via state machine');
+    this.logger.info(
+      { sessionId, command, args, worktreePath, existingAgentSessionId },
+      'Starting new agent session via state machine',
+    );
 
     let session: ACPSession | undefined;
 
     try {
+      const activeMcpConfigs = await this.db
+        .select()
+        .from(mcpServers)
+        .where(eq(mcpServers.enabled, true));
+
+      const mcpServersPayload = activeMcpConfigs.map((row) => {
+        if (row.type === 'remote') {
+          const headersRecord = this.parseStringRecord(row.headers);
+          const headersArray = Object.entries(headersRecord).map(([name, value]) => ({
+            name,
+            value,
+          }));
+          return {
+            type: 'sse' as const,
+            name: row.name,
+            url: row.url ?? '',
+            headers: headersArray,
+          };
+        } else {
+          const envRecord = this.parseStringRecord(row.launchEnv);
+          const envArray = Object.entries(envRecord).map(([name, value]) => ({
+            name,
+            value,
+          }));
+          return {
+            name: row.name,
+            command: row.command ?? '',
+            args: this.parseStringArray(row.launchArgs),
+            env: envArray,
+          };
+        }
+      });
+
       const runtimeHandle = await this.runtime.execute(
         command,
         args,
@@ -243,6 +251,8 @@ export class SessionStateMachine {
           resolvedThinkingConfigId,
           resolvedModelConfigId,
           existingAgentSessionId,
+          mcpServers: mcpServersPayload,
+          mcpGateway: this.mcpGateway,
         },
         {
           onEvent: async (event) => {
@@ -267,13 +277,42 @@ export class SessionStateMachine {
         worktreePath,
         this,
         this.logger,
+        this.mcpGateway,
       );
+
+      // Synchronize initial mode from DB
+      const sessionRecord = await this.db.query.sessions.findFirst({
+        where: eq(sessions.id, sessionId),
+      });
+      if (sessionRecord?.approvalMode) {
+        await session.setMode(sessionRecord.approvalMode);
+      }
+
+      const providerId = sessionRecord?.selectedProvider ?? 'default';
+      let currentMapping: Record<string, string> = {};
+      if (sessionRecord?.agentSessionId) {
+        try {
+          const parsed = JSON.parse(sessionRecord.agentSessionId) as unknown;
+          if (parsed && typeof parsed === 'object') {
+            currentMapping = parsed as Record<string, string>;
+          }
+        } catch {
+          if (sessionRecord.selectedProvider) {
+            currentMapping[sessionRecord.selectedProvider] = sessionRecord.agentSessionId;
+          }
+        }
+      }
+
+      if (runtimeHandle.acpSessionId) {
+        currentMapping[providerId] = runtimeHandle.acpSessionId;
+      }
+
+      const newAgentSessionIdValue = JSON.stringify(currentMapping);
 
       await this.db
         .update(sessions)
-        .set({ agentSessionId: runtimeHandle.acpSessionId, status: 'idle' })
+        .set({ agentSessionId: newAgentSessionIdValue, status: 'idle' })
         .where(eq(sessions.id, sessionId));
-
     } catch (err: unknown) {
       if (err instanceof AuthRequiredError) {
         this.logger.warn(`Session ${sessionId} requires authentication`);
@@ -296,7 +335,8 @@ export class SessionStateMachine {
           onProcessExit(handler) {
             err.child.once('exit', handler);
           },
-          prompt: (_text: string, _attachments?: unknown[], _embedded?: string) => Promise.resolve(),
+          prompt: (_text: string, _attachments?: unknown[], _embedded?: string) =>
+            Promise.resolve({ stopReason: 'end_turn' }),
           respondToPermission: () => undefined,
           authenticate: () => Promise.resolve(),
           cancel: () => Promise.resolve(),
@@ -314,6 +354,7 @@ export class SessionStateMachine {
           worktreePath,
           this,
           this.logger,
+          this.mcpGateway,
         );
       } else {
         throw err;
@@ -322,5 +363,23 @@ export class SessionStateMachine {
 
     this.sessions.set(sessionId, session);
     return session;
+  }
+
+  private parseStringArray(value: string | null | undefined): string[] {
+    if (!value) return [];
+    try {
+      return JSON.parse(value) as string[];
+    } catch {
+      return [];
+    }
+  }
+
+  private parseStringRecord(value: string | null | undefined): Record<string, string> {
+    if (!value) return {};
+    try {
+      return JSON.parse(value) as Record<string, string>;
+    } catch {
+      return {};
+    }
   }
 }

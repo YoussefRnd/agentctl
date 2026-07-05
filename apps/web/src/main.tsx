@@ -1,15 +1,19 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, HashRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient } from '@agentctl/api-client';
+import { queryClient, setApiBaseUrl } from '@agentctl/api-client';
 import { ThemeProvider } from './contexts/ThemeProvider';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { App } from './App';
 import { AppErrorBoundary } from './features/shell/components/AppErrorBoundary';
 import './index.css';
 import 'highlight.js/styles/github-dark.css';
+import { initApiBaseUrl } from './lib/api-base-url';
+
+const isElectron = !!window.electronAPI;
+const Router = isElectron ? HashRouter : BrowserRouter;
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
@@ -25,11 +29,11 @@ if (rootElement) {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <ProjectProvider>
-            <BrowserRouter>
+            <Router>
               <AppErrorBoundary key={appKey} onRetry={handleRetry}>
                 <App />
               </AppErrorBoundary>
-            </BrowserRouter>
+            </Router>
           </ProjectProvider>
         </ThemeProvider>
         {/* Toaster lives outside the error boundary so toasts survive crashes */}
@@ -59,9 +63,34 @@ if (rootElement) {
     );
   }
 
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <Root />
-    </React.StrictMode>,
-  );
+  async function bootstrap(element: HTMLElement) {
+    const baseUrl = await initApiBaseUrl();
+    setApiBaseUrl(baseUrl);
+
+    // Auto-login for Electron desktop app
+    if (isElectron && window.electronAPI?.getServerSecret) {
+      try {
+        const secret = await window.electronAPI.getServerSecret();
+        const res = await fetch(`${baseUrl}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ secret }),
+          credentials: 'include',
+        });
+        if (res.ok) {
+          localStorage.setItem('agentctl_token', secret);
+        }
+      } catch {
+        // Auto-login failed — user lands on login page
+      }
+    }
+
+    ReactDOM.createRoot(element).render(
+      <React.StrictMode>
+        <Root />
+      </React.StrictMode>,
+    );
+  }
+
+  void bootstrap(rootElement);
 }

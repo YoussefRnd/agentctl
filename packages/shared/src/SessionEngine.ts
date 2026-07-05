@@ -1,9 +1,10 @@
+import { acpEventRowSchema } from './acp-event-schemas.js';
 import type { ACPEventRow } from './acp-event-schemas.js';
-import { serverEventSchema } from './event-registry.js';
 
 export interface SessionEngineOptions {
   sessionId: string;
-  wsUrl: string;
+  sseUrl: string;
+  token?: string;
   onEventsUpdate: (events: ACPEventRow[]) => void;
   onStatusChange: (isConnected: boolean) => void;
   onStreamingChange: (streamingEventId: number | null) => void;
@@ -11,87 +12,67 @@ export interface SessionEngineOptions {
 }
 
 export class SessionEngine {
-  private ws: WebSocket | null = null;
+  private active = false;
+  private isConnected = false;
+  private lastEventId: number | null = null;
+  private abortController: AbortController | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
   private buffer: ACPEventRow[] = [];
   private flushTimeout: ReturnType<typeof setTimeout> | null = null;
   private streamingTimeout: ReturnType<typeof setTimeout> | null = null;
-  private isConnected = false;
-  private lastSubscribedSessionId: string | null = null;
+
+  // SSE fields accumulator
+  private currentEventId: string | null = null;
+  private currentEventName: string | null = null;
+  private currentEventData = '';
 
   constructor(private options: SessionEngineOptions) {}
 
-  public connect() {
-    if (this.ws) {
+  public connect(lastEventId?: number) {
+    if (lastEventId !== undefined) {
+      this.lastEventId = lastEventId;
+    }
+
+    if (this.active) {
       this.disconnect();
     }
 
-    this.ws = new WebSocket(this.options.wsUrl);
-
-    this.ws.onopen = () => {
-      this.isConnected = true;
-      this.options.onStatusChange(true);
-    };
-
-    this.ws.onclose = () => {
-      this.handleDisconnect();
-    };
-
-    this.ws.onerror = () => {
-      this.options.onError?.('WebSocket error occurred');
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const data: unknown = JSON.parse(event.data as string);
-        const msg = serverEventSchema.parse(data);
-
-        if (msg.type === 'error') {
-          this.options.onError?.(msg.error);
-          return;
-        }
-
-        // type check for narrowing
-        if ('payload' in msg) {
-          this.handleEvent(msg.payload);
-        }
-      } catch {
-        this.options.onError?.('Failed to parse WebSocket message');
-      }
-    };
+    this.active = true;
+    this.isConnected = false;
+    this.clearReconnectTimeout();
+    void this.startStreaming();
   }
 
   public disconnect() {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    this.active = false;
+    this.isConnected = false;
+    this.clearReconnectTimeout();
+
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
     }
+
     this.handleDisconnect();
   }
 
-  public subscribe(lastEventId: number) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(
-        JSON.stringify({
-          action: 'subscribe',
-          sessionId: this.options.sessionId,
-          lastEventId,
-        }),
-      );
-      this.lastSubscribedSessionId = this.options.sessionId;
-    }
+  public getIsConnected() {
+    return this.isConnected;
   }
 
-  public sendMessage(payload: unknown) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(payload));
+  private clearReconnectTimeout() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
     }
   }
 
   private handleDisconnect() {
     this.isConnected = false;
-    this.lastSubscribedSessionId = null;
     this.options.onStatusChange(false);
     this.options.onStreamingChange(null);
+
     if (this.streamingTimeout) {
       clearTimeout(this.streamingTimeout);
       this.streamingTimeout = null;
@@ -99,6 +80,177 @@ export class SessionEngine {
     if (this.flushTimeout) {
       clearTimeout(this.flushTimeout);
       this.flushTimeout = null;
+    }
+  }
+
+  private async startStreaming() {
+    while (this.active) {
+      this.abortController = new AbortController();
+
+      try {
+        let url = this.options.sseUrl;
+        if (this.lastEventId !== null) {
+          const separator = url.includes('?') ? '&' : '?';
+          url = `${url}${separator}lastEventId=${encodeURIComponent(String(this.lastEventId))}`;
+        }
+
+        const headers: Record<string, string> = {
+          Accept: 'text/event-stream',
+        };
+
+        if (this.options.token) {
+          headers.Authorization = `Bearer ${this.options.token}`;
+        }
+
+        if (this.lastEventId !== null) {
+          headers['Last-Event-ID'] = String(this.lastEventId);
+        }
+
+        const response = await fetch(url, {
+          headers,
+          signal: this.abortController.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${String(response.status)}`);
+        }
+
+        this.isConnected = true;
+        this.options.onStatusChange(true);
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('No readable stream reader in response body');
+        }
+
+        const decoder = new TextDecoder();
+        let leftover = '';
+
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- this.active is mutated by disconnect() across await boundaries
+        while (this.active) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          const text = leftover + chunk;
+          const lines = text.split(/\r\n|\r|\n/);
+          leftover = lines.pop() ?? '';
+
+          for (const line of lines) {
+            this.processLine(line);
+          }
+        }
+
+        if (leftover) {
+          this.processLine(leftover);
+        }
+      } catch (error: unknown) {
+        const err = error as { name?: string; message?: string };
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- this.active is mutated by disconnect() across await boundaries
+        if (err.name === 'AbortError' || !this.active) {
+          // Normal abort/disconnect, stop reconnect loop
+          break;
+        }
+
+        this.options.onError?.(err.message ?? 'SSE connection error');
+      } finally {
+        if (this.isConnected) {
+          this.isConnected = false;
+          this.options.onStatusChange(false);
+          this.options.onStreamingChange(null);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- abortController may be nulled by disconnect() during async operations
+        if (this.abortController) {
+          this.abortController.abort();
+          this.abortController = null;
+        }
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- this.active is mutated by disconnect() across await boundaries
+      if (this.active) {
+        await new Promise<void>((resolve) => {
+          this.reconnectTimeout = setTimeout(() => {
+            this.reconnectTimeout = null;
+            resolve();
+          }, 2000);
+        });
+      }
+    }
+  }
+
+  private processLine(line: string) {
+    if (line.startsWith(':')) {
+      return;
+    }
+
+    if (line.trim() === '') {
+      this.dispatchEvent();
+      return;
+    }
+
+    const colonIndex = line.indexOf(':');
+    let field = line;
+    let value = '';
+
+    if (colonIndex !== -1) {
+      field = line.substring(0, colonIndex);
+      value = line.substring(colonIndex + 1);
+      if (value.startsWith(' ')) {
+        value = value.substring(1);
+      }
+    }
+
+    switch (field) {
+      case 'id':
+        this.currentEventId = value;
+        break;
+      case 'event':
+        this.currentEventName = value;
+        break;
+      case 'data':
+        this.currentEventData = this.currentEventData
+          ? `${this.currentEventData}\n${value}`
+          : value;
+        break;
+      default:
+        break;
+    }
+  }
+
+  private dispatchEvent() {
+    if (this.currentEventId) {
+      const parsedId = parseInt(this.currentEventId, 10);
+      if (!isNaN(parsedId)) {
+        this.lastEventId = parsedId;
+      }
+    }
+
+    const eventName = this.currentEventName ?? 'message';
+    const dataStr = this.currentEventData;
+
+    this.currentEventId = null;
+    this.currentEventName = null;
+    this.currentEventData = '';
+
+    if (!dataStr) {
+      return;
+    }
+
+    try {
+      if (eventName === 'error') {
+        const errorData = JSON.parse(dataStr) as { error?: string };
+        this.options.onError?.(errorData.error ?? 'Unknown error');
+        return;
+      }
+
+      if (eventName === 'acp_event') {
+        const parsed = acpEventRowSchema.parse(JSON.parse(dataStr));
+        this.handleEvent(parsed);
+      }
+    } catch {
+      this.options.onError?.('Failed to parse SSE message');
     }
   }
 
@@ -135,10 +287,6 @@ export class SessionEngine {
         this.buffer = [];
         this.options.onEventsUpdate(eventsToFlush);
       }
-    }, 16); // ~60fps equivalent to requestAnimationFrame
-  }
-
-  public getIsConnected() {
-    return this.isConnected;
+    }, 16);
   }
 }

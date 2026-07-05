@@ -2,76 +2,58 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SessionEngine } from '../SessionEngine.js';
 import type { ACPEventRow } from '../acp-event-schemas.js';
 
-// Mock WebSocket
-class MockWebSocket {
-  public static instances: MockWebSocket[] = [];
-  
-  // WebSocket constants
-  public static readonly CONNECTING = 0;
-  public static readonly OPEN = 1;
-  public static readonly CLOSING = 2;
-  public static readonly CLOSED = 3;
+// Helper class to mock ReadableStream
+class MockStreamController {
+  private controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+  public stream: ReadableStream<Uint8Array>;
 
-  public readonly CONNECTING = 0;
-  public readonly OPEN = 1;
-  public readonly CLOSING = 2;
-  public readonly CLOSED = 3;
-
-  public onopen: (() => void) | null = null;
-  public onclose: (() => void) | null = null;
-  public onmessage: ((event: { data: string }) => void) | null = null;
-  public onerror: (() => void) | null = null;
-  public readyState: number = MockWebSocket.CONNECTING;
-  public sentMessages: string[] = [];
-
-  constructor(public url: string) {
-    MockWebSocket.instances.push(this);
-    this.readyState = MockWebSocket.CONNECTING;
+  constructor() {
+    this.stream = new ReadableStream({
+      start: (c) => {
+        this.controller = c;
+      },
+    });
   }
 
-  public send(data: string) {
-    this.sentMessages.push(data);
+  public enqueue(text: string) {
+    const encoder = new TextEncoder();
+    this.controller?.enqueue(encoder.encode(text));
   }
 
   public close() {
-    this.readyState = MockWebSocket.CLOSED;
-    if (this.onclose) this.onclose();
+    this.controller?.close();
   }
 
-  public open() {
-    this.readyState = MockWebSocket.OPEN;
-    if (this.onopen) this.onopen();
-  }
-
-  public emit(data: unknown) {
-    if (this.onmessage) this.onmessage({ data: JSON.stringify(data) });
-  }
-
-  public static getLast() {
-    return MockWebSocket.instances[MockWebSocket.instances.length - 1];
-  }
-
-  public static clear() {
-    MockWebSocket.instances = [];
+  public error(err: Error) {
+    this.controller?.error(err);
   }
 }
 
-// overriding global WebSocket for testing
-vi.stubGlobal('WebSocket', MockWebSocket);
-
 describe('SessionEngine', () => {
   let engine: SessionEngine;
+  let mockController: MockStreamController;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
   const onEventsUpdate = vi.fn();
   const onStatusChange = vi.fn();
   const onStreamingChange = vi.fn();
   const onError = vi.fn();
 
   beforeEach(() => {
-    MockWebSocket.clear();
     vi.useFakeTimers();
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    mockController = new MockStreamController();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: mockController.stream,
+    });
+
     engine = new SessionEngine({
       sessionId: 'test-session',
-      wsUrl: 'ws://localhost/ws',
+      sseUrl: 'http://localhost/api/sessions/test-session/events/stream',
       onEventsUpdate,
       onStatusChange,
       onStreamingChange,
@@ -80,88 +62,204 @@ describe('SessionEngine', () => {
   });
 
   afterEach(() => {
+    engine.disconnect();
     vi.clearAllMocks();
     vi.useRealTimers();
   });
 
-  it('should connect and update status', () => {
+  it('should connect and update status', async () => {
     engine.connect();
-    const ws = MockWebSocket.getLast();
-    expect(ws.url).toBe('ws://localhost/ws');
-    
-    ws.open();
+    // Wait for the async connection logic to resolve fetch
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('http://localhost/api/sessions/test-session/events/stream'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'text/event-stream',
+        }) as Record<string, string>,
+      }),
+    );
+
     expect(onStatusChange).toHaveBeenCalledWith(true);
     expect(engine.getIsConnected()).toBe(true);
   });
 
-  it('should handle disconnect', () => {
+  it('should handle disconnect', async () => {
     engine.connect();
-    const ws = MockWebSocket.getLast();
-    ws.open();
-    
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(engine.getIsConnected()).toBe(true);
+
     engine.disconnect();
     expect(onStatusChange).toHaveBeenCalledWith(false);
     expect(engine.getIsConnected()).toBe(false);
   });
 
-  it('should buffer and batch events', () => {
+  it('should buffer and batch events', async () => {
     engine.connect();
-    const ws = MockWebSocket.getLast();
-    ws.open();
+    await vi.advanceTimersByTimeAsync(0);
 
-    const event1 = { id: 1, type: 'status' } as ACPEventRow;
-    const event2 = { id: 2, type: 'status' } as ACPEventRow;
+    const event1 = {
+      id: 1,
+      type: 'status',
+      sessionId: '00000000-0000-0000-0000-000000000000',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      data: {},
+    } as ACPEventRow;
 
-    ws.emit({ type: 'acp_event', payload: event1 });
-    ws.emit({ type: 'acp_event', payload: event2 });
+    const event2 = {
+      id: 2,
+      type: 'status',
+      sessionId: '00000000-0000-0000-0000-000000000000',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      data: {},
+    } as ACPEventRow;
+
+    mockController.enqueue(
+      `id: 1\nevent: acp_event\ndata: ${JSON.stringify(event1)}\n\nid: 2\nevent: acp_event\ndata: ${JSON.stringify(event2)}\n\n`,
+    );
+
+    // Yield to let the reader loop parse
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(onEventsUpdate).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(16);
+    // Advance 16ms to flush buffer
+    await vi.advanceTimersByTimeAsync(16);
     expect(onEventsUpdate).toHaveBeenCalledWith([event1, event2]);
   });
 
-  it('should detect streaming state from text events', () => {
+  it('should detect streaming state from text events', async () => {
     engine.connect();
-    const ws = MockWebSocket.getLast();
-    ws.open();
+    await vi.advanceTimersByTimeAsync(0);
 
-    const textEvent = { id: 1, type: 'text' } as ACPEventRow;
-    ws.emit({ type: 'acp_event', payload: textEvent });
+    const textEvent = {
+      id: 1,
+      type: 'text',
+      sessionId: '00000000-0000-0000-0000-000000000000',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      data: { content: 'hello' },
+    } as ACPEventRow;
+
+    mockController.enqueue(`id: 1\nevent: acp_event\ndata: ${JSON.stringify(textEvent)}\n\n`);
+
+    await vi.advanceTimersByTimeAsync(16);
 
     expect(onStreamingChange).toHaveBeenCalledWith(1);
 
     // After 2s of silence, streaming should stop
-    vi.advanceTimersByTime(2000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(onStreamingChange).toHaveBeenCalledWith(null);
   });
 
-  it('should stop streaming when a non-text event arrives', () => {
+  it('should stop streaming when a non-text event arrives', async () => {
     engine.connect();
-    const ws = MockWebSocket.getLast();
-    ws.open();
+    await vi.advanceTimersByTimeAsync(0);
 
-    const textEvent = { id: 1, type: 'text' } as ACPEventRow;
-    ws.emit({ type: 'acp_event', payload: textEvent });
+    const textEvent = {
+      id: 1,
+      type: 'text',
+      sessionId: '00000000-0000-0000-0000-000000000000',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      data: { content: 'hello' },
+    } as ACPEventRow;
+
+    mockController.enqueue(`id: 1\nevent: acp_event\ndata: ${JSON.stringify(textEvent)}\n\n`);
+
+    await vi.advanceTimersByTimeAsync(16);
     expect(onStreamingChange).toHaveBeenCalledWith(1);
 
-    const statusEvent = { id: 2, type: 'status' } as ACPEventRow;
-    ws.emit({ type: 'acp_event', payload: statusEvent });
+    const statusEvent = {
+      id: 2,
+      type: 'status',
+      sessionId: '00000000-0000-0000-0000-000000000000',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      data: {},
+    } as ACPEventRow;
+
+    mockController.enqueue(`id: 2\nevent: acp_event\ndata: ${JSON.stringify(statusEvent)}\n\n`);
+
+    await vi.advanceTimersByTimeAsync(16);
     expect(onStreamingChange).toHaveBeenCalledWith(null);
   });
 
-  it('should handle subscription', () => {
-    engine.connect();
-    const ws = MockWebSocket.getLast();
-    ws.open();
-    ws.readyState = 1; // OPEN (literal)
-
-    engine.subscribe(42);
-    expect(ws.sentMessages.length).toBe(1);
-    expect(ws.sentMessages[0]).toBe(JSON.stringify({
-      action: 'subscribe',
+  it('should send auth token if provided', async () => {
+    engine = new SessionEngine({
       sessionId: 'test-session',
-      lastEventId: 42
-    }));
+      sseUrl: 'http://localhost/api/sessions/test-session/events/stream',
+      token: 'secret-token',
+      onEventsUpdate,
+      onStatusChange,
+      onStreamingChange,
+      onError,
+    });
+
+    engine.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String) as string,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer secret-token',
+        }) as Record<string, string>,
+      }),
+    );
+  });
+
+  it('should reconnect on stream end/error using Last-Event-ID', async () => {
+    engine.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const event1 = {
+      id: 5,
+      type: 'status',
+      sessionId: '00000000-0000-0000-0000-000000000000',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      data: {},
+    } as ACPEventRow;
+
+    mockController.enqueue(`id: 5\nevent: acp_event\ndata: ${JSON.stringify(event1)}\n\n`);
+
+    await vi.advanceTimersByTimeAsync(16);
+
+    // Reset fetchMock to count next calls
+    fetchMock.mockClear();
+
+    // Prepare response for the reconnect attempt
+    const newController = new MockStreamController();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: newController.stream,
+    });
+
+    // Close the current stream
+    mockController.close();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Wait 2000ms for reconnect delay
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('lastEventId=5'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Last-Event-ID': '5',
+        }) as Record<string, string>,
+      }),
+    );
+    newController.close();
+  });
+
+  it('should handle parsing error and report via onError', async () => {
+    engine.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    mockController.enqueue(`id: 1\nevent: acp_event\ndata: {invalid-json}\n\n`);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onError).toHaveBeenCalledWith('Failed to parse SSE message');
   });
 });

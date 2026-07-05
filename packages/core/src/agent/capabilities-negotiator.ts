@@ -37,12 +37,15 @@ export function negotiateCapabilities(
 
   // 2. Validate / Negotiate Thinking Effort
   const thinkingOption = configOptions.find(
-    (opt) => opt.id === 'thinking' || opt.id === 'thinking_effort' || opt.id === 'selectedThinkingEffort',
+    (opt) =>
+      opt.id === 'thinking' || opt.id === 'thinking_effort' || opt.id === 'selectedThinkingEffort',
   );
   let resolvedThinkingConfigId: string | undefined = undefined;
   if (thinkingOption) {
     resolvedThinkingConfigId = thinkingOption.id;
-    const isEffortAvailable = thinkingOption.options.some((opt) => opt.value === selectedThinkingEffort);
+    const isEffortAvailable = thinkingOption.options.some(
+      (opt) => opt.value === selectedThinkingEffort,
+    );
     if (!isEffortAvailable && thinkingOption.options.length > 0) {
       selectedThinkingEffort = (thinkingOption.options[0]?.value ??
         defaultSelection.selectedThinkingEffort) as ThinkingEffort;

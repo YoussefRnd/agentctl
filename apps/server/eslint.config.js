@@ -8,7 +8,7 @@ export default [
   ...baseConfig,
   ...vitestConfig,
   {
-    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    files: ['src/**/*.ts', 'src/**/*.tsx', 'tests/**/*.ts'],
     languageOptions: {
       parserOptions: {
         projectService: true,
