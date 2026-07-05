@@ -1,6 +1,7 @@
 .agents
 .worktrees
 .superpowers
+.claude/
 node_modules
 dist
 .turbo

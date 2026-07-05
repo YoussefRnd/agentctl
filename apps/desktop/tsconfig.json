@@ -1,10 +1,4 @@
 {
-  "extends": "@agentctl/tsconfig/base.json",
-
-  "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "."
-  },
-  "include": ["src/**/*"],
-  "references": [{ "path": "../../packages/shared" }]
+  "files": [],
+  "references": [{ "path": "./tsconfig.node.json" }]
 }

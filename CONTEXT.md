@@ -24,3 +24,6 @@ _Avoid_: Restart, revive, reconnect
 The state of a session where its physical workspace (Git worktree) is deleted from disk to reclaim resources, while keeping its database record and event history intact for read-only viewing.
 _Avoid_: Deleting, destroying, clearing history.
 
+**Session Workspace**:
+The module encapsulating all physical workspace operations (creation, mode switching, archiving, and finalization) along with database synchronization and agent runtime process termination under a single transaction-safe interface.
+_Avoid_: Workspace service, workspace coordinator.
