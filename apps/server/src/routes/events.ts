@@ -85,6 +85,10 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       await reply.hijack();
 
       // 3. Set headers
+      if (request.headers.origin) {
+        reply.raw.setHeader('Access-Control-Allow-Origin', request.headers.origin);
+        reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
       reply.raw.setHeader('Content-Type', 'text/event-stream');
       reply.raw.setHeader('Cache-Control', 'no-cache');
       reply.raw.setHeader('Connection', 'keep-alive');

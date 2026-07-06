@@ -7,6 +7,7 @@ export const serverEnvSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().optional().default('sqlite.db'),
   ALLOWED_AGENTS: z.string().optional(),
+  CORS_ALLOWED_ORIGINS: z.string().optional(),
 });
 
 export const parseServerEnv = (env: Record<string, string | undefined>) =>

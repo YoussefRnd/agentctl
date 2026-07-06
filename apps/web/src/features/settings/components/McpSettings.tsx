@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMcpServers, useMcpTools } from '../../../hooks/useMcpServers';
 import type { McpServerData } from '../../../hooks/useMcpServers';
-import { Card, Button, Input, Switch } from '@agentctl/ui';
+import { Card, Button, Input, Switch, Select } from '@agentctl/ui';
 import { Cpu, Plus, Trash2, Edit2, Settings, X, Check, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -82,6 +82,58 @@ function formatKeyValuesJson(jsonStr: string | null | undefined): string {
   return jsonStr || '';
 }
 
+export function getToolOverride(
+  toolPermissionsJson: string | null | undefined,
+  toolName: string
+): 'always_prompt' | 'auto_approve' | 'deny' | 'inherit' {
+  if (!toolPermissionsJson) return 'inherit';
+  try {
+    const overrides = JSON.parse(toolPermissionsJson) as Record<string, unknown>;
+    const val = overrides[toolName];
+    if (val === 'always_prompt' || val === 'auto_approve' || val === 'deny' || val === 'inherit') {
+      return val;
+    }
+  } catch {
+    // ignore
+  }
+  return 'inherit';
+}
+
+export function updateToolOverride(
+  toolPermissionsJson: string | null | undefined,
+  toolName: string,
+  val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit'
+): string {
+  let overridesMap: Record<string, string> = {};
+  if (toolPermissionsJson) {
+    try {
+      const parsed = JSON.parse(toolPermissionsJson) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        overridesMap = parsed as Record<string, string>;
+      } else {
+        overridesMap = {};
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (val === 'inherit') {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { [toolName]: _, ...rest } = overridesMap;
+    overridesMap = rest;
+  } else {
+    overridesMap[toolName] = val;
+  }
+
+  return JSON.stringify(overridesMap);
+}
+const approvalPolicyOptions = [
+  { value: 'always_prompt', label: 'PROMPT USER' },
+  { value: 'auto_approve_all', label: 'AUTO-APPROVE ALL' },
+  { value: 'deny_all', label: 'DENY ALL' },
+];
+
 export function McpSettings() {
   const { mcpServers, isLoading, addMcpServer, updateMcpServer, deleteMcpServer } = useMcpServers();
   const { tools: mcpTools } = useMcpTools();
@@ -97,7 +149,7 @@ export function McpSettings() {
   const [formEnv, setFormEnv] = useState('');
   const [formUrl, setFormUrl] = useState('');
   const [formHeaders, setFormHeaders] = useState('');
-  const [formAutoApprove, setFormAutoApprove] = useState(false);
+  const [formApprovalPolicy, setFormApprovalPolicy] = useState<'always_prompt' | 'auto_approve_all' | 'deny_all'>('always_prompt');
 
   const toggleServerExpanded = (id: string) => {
     setExpandedServers((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -111,7 +163,7 @@ export function McpSettings() {
     setFormEnv('');
     setFormUrl('');
     setFormHeaders('');
-    setFormAutoApprove(false);
+    setFormApprovalPolicy('always_prompt');
     setIsAddingNew(false);
     setEditingId(null);
   };
@@ -149,7 +201,7 @@ export function McpSettings() {
       url: formType === 'remote' ? formUrl.trim() : null,
       headers: formType === 'remote' ? parseKeyValuesText(formHeaders) : '{}',
       enabled: true,
-      autoApprove: formAutoApprove,
+      approvalPolicy: formApprovalPolicy,
     });
     handleResetForm();
   };
@@ -163,7 +215,7 @@ export function McpSettings() {
     setFormEnv(formatKeyValuesJson(server.launchEnv));
     setFormUrl(server.url ?? '');
     setFormHeaders(formatKeyValuesJson(server.headers));
-    setFormAutoApprove(server.autoApprove);
+    setFormApprovalPolicy(server.approvalPolicy);
     setIsAddingNew(false);
   };
 
@@ -193,7 +245,7 @@ export function McpSettings() {
       launchEnv: formType === 'local' ? parseKeyValuesText(formEnv) : '{}',
       url: formType === 'remote' ? formUrl.trim() : null,
       headers: formType === 'remote' ? parseKeyValuesText(formHeaders) : '{}',
-      autoApprove: formAutoApprove,
+      approvalPolicy: formApprovalPolicy,
     });
     handleResetForm();
   };
@@ -395,11 +447,21 @@ export function McpSettings() {
             </div>
 
             <div className="border-border/10 flex items-center justify-between border-t pt-4">
-              <div className="flex items-center gap-2 select-none">
-                <span className="text-text-muted text-[10px] font-bold tracking-wider uppercase">
-                  Auto-Approve Tools
-                </span>
-                <Switch checked={formAutoApprove} onCheckedChange={setFormAutoApprove} size="sm" />
+              <div className="flex items-center gap-3 select-none">
+                <label
+                  htmlFor="mcp-form-approval-policy"
+                  className="text-text-muted text-[10px] font-bold tracking-wider uppercase"
+                >
+                  Approval Policy
+                </label>
+                <Select
+                  value={formApprovalPolicy}
+                  onChange={(val) => {
+                    setFormApprovalPolicy(val as 'always_prompt' | 'auto_approve_all' | 'deny_all');
+                  }}
+                  options={approvalPolicyOptions}
+                  className="w-48"
+                />
               </div>
 
               <div className="flex items-center gap-2">
@@ -530,25 +592,29 @@ export function McpSettings() {
                   {/* Expanded Body section matching ProviderCard layout */}
                   {isExpanded && (
                     <div className="animate-in fade-in slide-in-from-top-1 border-border/10 bg-surface-secondary/5 space-y-4 border-t p-4">
-                      {/* Auto Approve Toggle row */}
-                      <div className="border-border/55 bg-surface-secondary/20 flex items-center justify-between rounded-xl border px-4 py-3 select-none">
-                        <div>
-                          <p className="text-text-main text-[11px] font-bold tracking-tight">
-                            AUTO_APPROVE_TOOLS
-                          </p>
-                          <p className="text-text-muted mt-0.5 text-[9px] leading-normal font-bold tracking-tight uppercase opacity-65">
-                            Automatically approve tool calls from this server in auto-approve mode.
-                          </p>
+                      {/* Default Policy Selector */}
+                      <div className="border-border/55 bg-surface-secondary/20 flex flex-col gap-3 rounded-xl border p-4 select-none">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-text-main text-[11px] font-black tracking-widest uppercase">
+                              DEFAULT_APPROVAL_POLICY
+                            </p>
+                            <p className="text-text-muted mt-0.5 text-[9.5px] font-bold tracking-tight uppercase opacity-65">
+                              Default action for new or unconfigured tools from this server in auto-approve mode.
+                            </p>
+                          </div>
+                          <Select
+                            value={server.approvalPolicy}
+                            onChange={(val) => {
+                              updateMcpServer({
+                                id: server.id,
+                                approvalPolicy: val as 'always_prompt' | 'auto_approve_all' | 'deny_all',
+                              });
+                            }}
+                            options={approvalPolicyOptions}
+                            className="w-48"
+                          />
                         </div>
-                        <Switch
-                          checked={server.autoApprove}
-                          onCheckedChange={(checked) => {
-                            updateMcpServer({
-                              id: server.id,
-                              autoApprove: checked,
-                            });
-                          }}
-                        />
                       </div>
 
                       {/* Connection details (URL / Command) */}
@@ -587,22 +653,65 @@ export function McpSettings() {
                         )}
                       </div>
 
-                      {/* Active discovered tools list */}
+                      {/* Active discovered tools list with individual permissions */}
                       {server.enabled && serverTools.length > 0 && (
-                        <div className="border-border/5 space-y-2 border-t pt-3.5">
+                        <div className="border-border/5 space-y-3 border-t pt-4">
                           <strong className="text-text-muted text-[9px] font-black tracking-widest uppercase opacity-45">
-                            ACTIVE TOOLS ({serverTools.length})
+                            DISCOVERED TOOLS & PERMISSIONS ({serverTools.length})
                           </strong>
-                          <div className="flex flex-wrap gap-1.5">
-                            {serverTools.map((t) => (
-                              <span
-                                key={t.name}
-                                title={t.description ?? 'No description'}
-                                className="bg-accent/5 text-accent border-accent/15 cursor-help rounded-md border px-2 py-0.5 font-mono text-[9.5px] font-extrabold tracking-tight"
-                              >
-                                {t.name.split('__')[1] ?? t.name}
-                              </span>
-                            ))}
+                          <div className="space-y-2">
+                            {serverTools.map((t) => {
+                              const shortName = t.name.split('__')[1] ?? t.name;
+                              const currentOverride = getToolOverride(server.toolPermissions, shortName);
+
+                              const handleUpdateOverride = (val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit') => {
+                                const updatedJson = updateToolOverride(server.toolPermissions, shortName, val);
+                                updateMcpServer({
+                                  id: server.id,
+                                  toolPermissions: updatedJson,
+                                });
+                              };
+
+                              return (
+                                <div key={t.name} className="bg-surface/20 border-border/10 flex items-center justify-between gap-4 rounded-xl border px-3.5 py-2.5">
+                                  <div className="min-w-0">
+                                    <span className="text-accent font-mono text-[11px] font-black tracking-tight">
+                                      {shortName}
+                                    </span>
+                                    {t.description && (
+                                      <p className="text-text-muted mt-0.5 line-clamp-1 text-[10px] opacity-70">
+                                        {t.description}
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div className="bg-surface-secondary/85 border-border/20 flex gap-1 rounded-xl border p-1 select-none">
+                                    {([
+                                      { label: 'Inherit', value: 'inherit' },
+                                      { label: 'Allow', value: 'auto_approve' },
+                                      { label: 'Prompt', value: 'always_prompt' },
+                                      { label: 'Deny', value: 'deny' }
+                                    ] as const).map((opt) => (
+                                      <button
+                                        key={opt.value}
+                                        id={`mcp-tool-override-${server.id}-${shortName}-${opt.value}`}
+                                        type="button"
+                                        onClick={() => {
+                                          handleUpdateOverride(opt.value);
+                                        }}
+                                        className={`cursor-pointer rounded-lg px-2.5 py-1 text-[9px] font-black tracking-widest uppercase transition-all ${
+                                          currentOverride === opt.value
+                                            ? 'bg-accent text-brand-crust shadow-sm'
+                                            : 'text-text-muted hover:text-text-main hover:bg-white/5'
+                                        }`}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

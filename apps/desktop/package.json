@@ -9,28 +9,32 @@
   "homepage": "https://github.com/YoussefRnd/agentctl",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "rebuild:native": "node ../../scripts/sqlite-switcher.js electron",
+    "dev": "pnpm exec install-electron && pnpm run rebuild:native && electron-vite dev",
+    "build": "pnpm exec install-electron && pnpm run rebuild:native && electron-vite build",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder --config electron-builder.yml --publish never",
-    "package:linux": "electron-vite build && electron-builder --linux --config electron-builder.yml --publish never",
-    "package:mac": "electron-vite build && electron-builder --mac --config electron-builder.yml --publish never",
-    "package:win": "electron-vite build && electron-builder --win --config electron-builder.yml --publish never",
+    "package": "pnpm exec install-electron && pnpm run rebuild:native && electron-vite build && electron-builder --config electron-builder.yml --publish never",
+    "package:linux": "pnpm exec install-electron && pnpm run rebuild:native && electron-vite build && electron-builder --linux --config electron-builder.yml --publish never",
+    "package:mac": "pnpm exec install-electron && pnpm run rebuild:native && electron-vite build && electron-builder --mac --config electron-builder.yml --publish never",
+    "package:win": "pnpm exec install-electron && pnpm run rebuild:native && electron-vite build && electron-builder --win --config electron-builder.yml --publish never",
     "lint": "eslint .",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc --noEmit"
   },
   "type": "commonjs",
   "dependencies": {
     "@agentctl/core": "workspace:*",
     "@agentctl/server": "workspace:*",
     "@agentctl/shared": "workspace:*",
-    "electron-updater": "^6.8.9"
+    "better-sqlite3": "^12.11.1",
+    "electron-updater": "^6.8.9",
+    "sodium-native": "^5.1.0"
   },
   "devDependencies": {
     "@agentctl/eslint-config": "workspace:*",
     "@agentctl/tsconfig": "workspace:*",
     "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "@electron/rebuild": "^4.1.0",
     "electron": "^43.0.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",

@@ -6,8 +6,9 @@
       "outputs": ["dist/**"]
     },
     "typecheck": {
-      "dependsOn": ["^build"],
-      "outputs": ["tsconfig.tsbuildinfo", "dist/tsconfig.tsbuildinfo"]
+      "dependsOn": ["^typecheck"],
+      "outputs": [],
+      "inputs": ["src/**", "tsconfig.json", "tsconfig.*.json"]
     },
     "dev": {
       "cache": false,

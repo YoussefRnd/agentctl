@@ -7,7 +7,7 @@
     "dev": "vite",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc --noEmit"
   },
   "type": "module",
   "dependencies": {

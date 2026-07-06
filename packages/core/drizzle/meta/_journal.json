@@ -169,6 +169,13 @@
       "when": 1782697356809,
       "tag": "0023_thankful_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1783219103127,
+      "tag": "0024_dapper_microchip",
+      "breakpoints": true
     }
   ]
 }

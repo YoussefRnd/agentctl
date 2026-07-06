@@ -28,11 +28,98 @@ function handleDeepLink(url: string) {
   }
 }
 
+function formatJsonLog(line: string): string {
+  try {
+    const parsed = JSON.parse(line) as {
+      level?: number;
+      time?: number;
+      msg?: string;
+      err?: { message?: string; stack?: string };
+      [key: string]: unknown;
+    };
+
+    if (typeof parsed.level === 'number' && parsed.msg) {
+      let levelLabel = 'INFO';
+      let color = '\x1b[32m'; // Green
+      if (parsed.level === 20) {
+        levelLabel = 'DEBUG';
+        color = '\x1b[36m'; // Cyan
+      } else if (parsed.level === 40) {
+        levelLabel = 'WARN';
+        color = '\x1b[33m'; // Yellow
+      } else if (parsed.level >= 50) {
+        levelLabel = 'ERROR';
+        color = '\x1b[31m'; // Red
+      }
+
+      const reset = '\x1b[0m';
+      const timeStr = parsed.time ? new Date(parsed.time).toLocaleTimeString() : '';
+      const timePart = timeStr ? `[${timeStr}] ` : '';
+
+      let logLine = `${timePart}${color}${levelLabel}${reset}: ${parsed.msg}`;
+
+      // Extract all extra keys (like req, res, responseTime) to print them
+      const extra = { ...parsed };
+      delete extra.level;
+      delete extra.time;
+      delete extra.msg;
+      delete extra.err;
+
+      if (Object.keys(extra).length > 0) {
+        const extraLines = JSON.stringify(extra, null, 2)
+          .split('\n')
+          .map((l) => `    ${l}`)
+          .join('\n');
+        logLine += `\n${extraLines}\n`;
+      } else {
+        logLine += '\n';
+      }
+
+      if (parsed.err) {
+        if (parsed.err.message) {
+          logLine += `  ${color}Error:${reset} ${parsed.err.message}\n`;
+        }
+        if (parsed.err.stack) {
+          logLine += `  ${parsed.err.stack}\n`;
+        }
+      }
+      return logLine;
+    }
+  } catch {
+    // not JSON
+  }
+  return line + '\n';
+}
+
 // ─── Server Lifecycle ───────────────────────────────────────────────
 function startServer(): Promise<number> {
   return new Promise((resolve, reject) => {
     const serverEntry = path.join(__dirname, 'server-process.js');
-    serverProcess = utilityProcess.fork(serverEntry);
+    serverProcess = utilityProcess.fork(serverEntry, [], { stdio: 'pipe' });
+
+    let stdoutBuffer = '';
+    serverProcess.stdout?.on('data', (chunk: Buffer) => {
+      stdoutBuffer += chunk.toString();
+      const lines = stdoutBuffer.split('\n');
+      stdoutBuffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.trim()) {
+          process.stdout.write(formatJsonLog(line));
+        }
+      }
+    });
+
+    let stderrBuffer = '';
+    serverProcess.stderr?.on('data', (chunk: Buffer) => {
+      stderrBuffer += chunk.toString();
+      const lines = stderrBuffer.split('\n');
+      stderrBuffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.trim()) {
+          process.stderr.write(formatJsonLog(line));
+        }
+      }
+    });
 
     const timeout = setTimeout(() => {
       reject(new Error('Server failed to start within 15 seconds'));
@@ -74,6 +161,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'AgentCtl',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

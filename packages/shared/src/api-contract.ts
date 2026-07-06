@@ -18,6 +18,10 @@ export const mcpServerSchema = z.object({
   launchEnv: z.string().nullable().optional(),
   enabled: z.boolean(),
   autoApprove: z.boolean(),
+  approvalPolicy: z
+    .enum(['always_prompt', 'auto_approve_all', 'deny_all'])
+    .default('always_prompt'),
+  toolPermissions: z.string().nullable().optional().default('{}'),
   type: z.enum(['local', 'remote']).default('local'),
   url: z.string().nullable().optional(),
   headers: z.string().nullable().optional(),

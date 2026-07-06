@@ -15,6 +15,8 @@ export interface McpServerData {
   headers?: string | null;
   status?: 'connected' | 'disconnected' | 'disabled';
   error?: string | null;
+  approvalPolicy: 'always_prompt' | 'auto_approve_all' | 'deny_all';
+  toolPermissions: string;
 }
 
 export function useMcpServers() {

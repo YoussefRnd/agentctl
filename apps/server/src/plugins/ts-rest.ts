@@ -692,6 +692,8 @@ export default fp(async (fastify) => {
             launchEnv: s.launchEnv,
             enabled: s.enabled,
             autoApprove: s.autoApprove,
+            approvalPolicy: s.approvalPolicy,
+            toolPermissions: s.toolPermissions,
             type: s.type as 'local' | 'remote',
             url: s.url,
             headers: s.headers,
@@ -701,7 +703,20 @@ export default fp(async (fastify) => {
         }),
       };
     },
-    createMcpServer: async ({ body }) => {
+    createMcpServer: async ({ body, request }) => {
+      const rawBody = (request as unknown as { body?: Record<string, unknown> }).body;
+      const approvalPolicySent = rawBody?.approvalPolicy !== undefined;
+      const autoApproveSent = rawBody?.autoApprove !== undefined;
+
+      let approvalPolicy = body.approvalPolicy;
+      let autoApprove = body.autoApprove;
+
+      if (!approvalPolicySent && autoApproveSent) {
+        approvalPolicy = autoApprove ? 'auto_approve_all' : 'always_prompt';
+      } else if (approvalPolicySent) {
+        autoApprove = approvalPolicy === 'auto_approve_all';
+      }
+
       const [created] = await fastify.db
         .insert(mcpServers)
         .values({
@@ -711,7 +726,9 @@ export default fp(async (fastify) => {
           launchArgs: body.launchArgs ?? '[]',
           launchEnv: body.launchEnv ?? '{}',
           enabled: body.enabled,
-          autoApprove: body.autoApprove,
+          autoApprove,
+          approvalPolicy,
+          toolPermissions: body.toolPermissions ?? '{}',
           type: body.type,
           url: body.url ?? null,
           headers: body.headers ?? null,
@@ -733,6 +750,8 @@ export default fp(async (fastify) => {
           launchEnv: created.launchEnv,
           enabled: created.enabled,
           autoApprove: created.autoApprove,
+          approvalPolicy: created.approvalPolicy,
+          toolPermissions: created.toolPermissions,
           type: created.type as 'local' | 'remote',
           url: created.url,
           headers: created.headers,
@@ -740,8 +759,21 @@ export default fp(async (fastify) => {
         },
       };
     },
-    updateMcpServer: async ({ params, body }) => {
+    updateMcpServer: async ({ params, body, request }) => {
       const { id } = params;
+      const rawBody = (request as unknown as { body?: Record<string, unknown> }).body;
+      const approvalPolicySent = rawBody?.approvalPolicy !== undefined;
+      const autoApproveSent = rawBody?.autoApprove !== undefined;
+
+      let approvalPolicy = body.approvalPolicy;
+      let autoApprove = body.autoApprove;
+
+      if (!approvalPolicySent && autoApproveSent) {
+        approvalPolicy = autoApprove ? 'auto_approve_all' : 'always_prompt';
+      } else if (approvalPolicySent) {
+        autoApprove = approvalPolicy === 'auto_approve_all';
+      }
+
       const results = await fastify.db
         .update(mcpServers)
         .set({
@@ -750,7 +782,9 @@ export default fp(async (fastify) => {
           launchArgs: body.launchArgs === null ? undefined : body.launchArgs,
           launchEnv: body.launchEnv === null ? undefined : body.launchEnv,
           enabled: body.enabled,
-          autoApprove: body.autoApprove,
+          autoApprove,
+          approvalPolicy,
+          toolPermissions: body.toolPermissions === null ? '{}' : body.toolPermissions,
           type: body.type,
           url: body.url === undefined ? undefined : (body.url ?? null),
           headers: body.headers === undefined ? undefined : (body.headers ?? null),
@@ -778,6 +812,8 @@ export default fp(async (fastify) => {
           launchEnv: updated.launchEnv,
           enabled: updated.enabled,
           autoApprove: updated.autoApprove,
+          approvalPolicy: updated.approvalPolicy,
+          toolPermissions: updated.toolPermissions,
           type: updated.type as 'local' | 'remote',
           url: updated.url,
           headers: updated.headers,

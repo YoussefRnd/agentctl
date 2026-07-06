@@ -10,7 +10,7 @@
     "dev": "tsc -b --watch",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "dist",

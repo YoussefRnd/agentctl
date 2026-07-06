@@ -158,11 +158,28 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 
+  const isProd = process.env.NODE_ENV === 'production';
+  const allowedOrigins = config.CORS_ALLOWED_ORIGINS
+    ? config.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+    : ['http://localhost:5173', 'http://localhost:5174'];
+
   await fastify.register(cors, {
-    origin: true, // Allow all origins in development or set explicitly based on VITE_API_URL
+    origin: isProd
+      ? (origin, cb) => {
+          if (!origin) {
+            cb(null, true);
+            return;
+          }
+          if (allowedOrigins.includes(origin)) {
+            cb(null, true);
+            return;
+          }
+          cb(new Error('Not allowed by CORS'), false);
+        }
+      : true,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept', 'Last-Event-Id', 'Last-Event-ID'],
   });
 
   // Register Secure Session

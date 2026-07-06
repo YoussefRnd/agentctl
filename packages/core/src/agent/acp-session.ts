@@ -803,6 +803,7 @@ ${promptText}`;
   ): Promise<DomainPermissionResponse> {
     try {
       const permissionId = request.toolCall.toolCallId ?? Math.random().toString(36).substring(7);
+      const parentId = this.eventStreamAdapter.getCurrentParentEventId();
 
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, this.sessionId),
@@ -813,22 +814,70 @@ ${promptText}`;
         sessionRecord?.approvalMode === 'yolo' ||
         (sessionRecord?.approvalMode === 'auto_approve' && toolName.startsWith('fs/'));
 
-      // If in auto_approve mode and it's an MCP tool call, check if the server is auto-approved
       if (
         !shouldAutoApprove &&
         sessionRecord?.approvalMode === 'auto_approve' &&
         toolName.includes('__')
       ) {
         const serverId = toolName.split('__')[0];
+        const shortToolName = toolName.split('__').slice(1).join('__');
         const mcpServer = await this.db.query.mcpServers.findFirst({
           where: eq(mcpServers.id, serverId),
         });
-        if (mcpServer?.autoApprove) {
-          shouldAutoApprove = true;
+
+        if (mcpServer) {
+          let override: 'always_prompt' | 'auto_approve' | 'deny' | undefined = undefined;
+          if (mcpServer.toolPermissions) {
+            try {
+              const overridesMap = JSON.parse(mcpServer.toolPermissions) as Record<string, string>;
+              override = overridesMap[shortToolName] as 'always_prompt' | 'auto_approve' | 'deny';
+            } catch {
+              // ignore
+            }
+          }
+
+          if (override === 'auto_approve') {
+            shouldAutoApprove = true;
+          } else if (override === 'always_prompt') {
+            shouldAutoApprove = false;
+          } else if (override === 'deny') {
+            await this.eventStore.append(
+              this.sessionId,
+              'approval_request',
+              {
+                name: 'request_permission',
+                toolCallId: permissionId,
+                requiresApproval: true,
+                request,
+                status: 'denied',
+              },
+              parentId,
+            );
+            return { allowed: false };
+          } else {
+            // Fall back to server default policy
+            if (mcpServer.approvalPolicy === 'auto_approve_all') {
+              shouldAutoApprove = true;
+            } else if (mcpServer.approvalPolicy === 'deny_all') {
+              await this.eventStore.append(
+                this.sessionId,
+                'approval_request',
+                {
+                  name: 'request_permission',
+                  toolCallId: permissionId,
+                  requiresApproval: true,
+                  request,
+                  status: 'denied',
+                },
+                parentId,
+              );
+              return { allowed: false };
+            } else {
+              shouldAutoApprove = false;
+            }
+          }
         }
       }
-
-      const parentId = this.eventStreamAdapter.getCurrentParentEventId();
 
       if (shouldAutoApprove) {
         await this.eventStore.append(

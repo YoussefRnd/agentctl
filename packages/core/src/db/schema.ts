@@ -164,9 +164,20 @@ export const mcpServers = sqliteTable('mcp_servers', {
   launchArgs: text('launch_args').notNull().default('[]'), // JSON string array
   launchEnv: text('launch_env').notNull().default('{}'), // JSON string object (can contain secrets)
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-  autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
+  
+  // Server-level default policy
+  approvalPolicy: text('approval_policy')
+    .$type<'always_prompt' | 'auto_approve_all' | 'deny_all'>()
+    .notNull()
+    .default('always_prompt'),
+
+  // JSON string for per-tool overrides
+  toolPermissions: text('tool_permissions').notNull().default('{}'),
+  
   type: text('type').notNull().default('local'), // 'local' or 'remote'
   url: text('url'),
   headers: text('headers'), // JSON string for HTTP headers
   ...timestamps,
+  autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
 });
+
