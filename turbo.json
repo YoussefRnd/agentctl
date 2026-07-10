@@ -5,6 +5,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@agentctl/desktop#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["out/**", "release/**"]
+    },
     "typecheck": {
       "dependsOn": ["^typecheck"],
       "outputs": [],

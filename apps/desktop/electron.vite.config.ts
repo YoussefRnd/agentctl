@@ -61,6 +61,21 @@ export default defineConfig({
         input: {
           index: path.resolve(__dirname, '../web/index.html'),
         },
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/react')) return 'vendor-react';
+            if (id.includes('node_modules/lucide-react')) return 'vendor-icons';
+            if (id.includes('node_modules/@tanstack/react-query')) return 'vendor-query';
+            if (id.includes('node_modules/highlight.js')) return 'vendor-markdown';
+            if (id.includes('node_modules/react-markdown')) return 'vendor-markdown';
+            if (id.includes('node_modules/rehype-highlight')) return 'vendor-markdown';
+            if (id.includes('node_modules/remark-gfm')) return 'vendor-markdown';
+            if (id.includes('node_modules/react-virtuoso')) return 'vendor-list';
+            if (id.includes('node_modules/react-resizable-panels')) return 'vendor-ui';
+            if (id.includes('node_modules/sonner')) return 'vendor-ui';
+            if (id.includes('node_modules/zustand')) return 'vendor-state';
+          },
+        },
       },
     },
     plugins: [react({}), tailwindcss()],
