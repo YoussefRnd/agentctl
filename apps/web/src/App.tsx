@@ -1,20 +1,20 @@
 import { Routes, Route } from 'react-router-dom';
-import { Layout } from './features/shell/components/Layout';
+import { Shell } from './features/shell/components/Shell';
+import { Sidebar } from './features/shell/components/Sidebar';
+import { SettingsSidebar } from './features/shell/components/SettingsSidebar';
+import { GlobalNav } from './features/shell/components/GlobalNav';
 import { SessionView } from './routes/SessionView';
 import { LoginView } from './routes/LoginView';
 import { NewProjectPalette } from './features/project/components/NewProjectPalette';
 import { SetupWizard } from './features/settings/components/SetupWizard';
 import { SettingsPage } from './features/settings/components/SettingsPage';
-import { Sidebar } from './features/shell/components/Sidebar';
-import { SettingsSidebar } from './features/shell/components/SettingsSidebar';
-import { GlobalNav } from './features/shell/components/GlobalNav';
-
-const projectsSidebar = <Sidebar />;
-const settingsSidebar = <SettingsSidebar />;
-const projectsNav = <GlobalNav title="projects" />;
-const settingsNav = <GlobalNav title="settings" />;
+import { useSettings } from './hooks/useSettings';
+import { useTempFontZoom } from './hooks/useTempFontZoom';
 
 export function App() {
+  const { settings } = useSettings();
+  useTempFontZoom(settings?.fontConfig);
+
   return (
     <>
       <SetupWizard />
@@ -23,17 +23,17 @@ export function App() {
         <Route
           path="/"
           element={
-            <Layout sidebar={projectsSidebar} nav={projectsNav}>
+            <Shell nav={<GlobalNav title="projects" />} sidebar={<Sidebar />}>
               <NewProjectPalette />
-            </Layout>
+            </Shell>
           }
         />
         <Route
           path="/settings"
           element={
-            <Layout sidebar={settingsSidebar} nav={settingsNav}>
+            <Shell nav={<GlobalNav title="settings" />} sidebar={<SettingsSidebar />}>
               <SettingsPage />
-            </Layout>
+            </Shell>
           }
         />
         <Route path="/sessions/:sessionId" element={<SessionView />} />

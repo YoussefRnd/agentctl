@@ -37,7 +37,7 @@ export function LoginView() {
           <h1 className="mb-1 text-2xl font-black tracking-widest text-white uppercase">
             AGENTCTL::AUTH
           </h1>
-          <p className="text-text-muted text-[10px] font-bold tracking-tight uppercase">
+          <p className="text-text-muted caption-2xs">
             ENTER_DECRYPT_KEY_TO_ACCESS_WORKSPACE
           </p>
         </div>
@@ -46,7 +46,7 @@ export function LoginView() {
           <div>
             <label
               htmlFor="login-key"
-              className="text-text-muted mb-1.5 block text-[9px] font-black tracking-widest uppercase"
+              className="text-text-muted mb-1.5 block label-3xs"
             >
               SECRET_ACCESS_KEY
             </label>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { uploadAttachment } from '@agentctl/api-client';
 
 // ---------------------------------------------------------------------------
@@ -135,20 +135,19 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
     });
   }, []);
 
-  // -------------------------------------------------------------------------
-  const [prevSessionId, setPrevSessionId] = useState(sessionId);
+  const prevSessionIdRef = useRef(sessionId);
 
-  if (sessionId !== prevSessionId) {
-    setPrevSessionId(sessionId);
-    // Revoke old URLs
-    for (const attachment of attachments) {
-      URL.revokeObjectURL(attachment.objectUrl);
+  useEffect(() => {
+    if (sessionId !== prevSessionIdRef.current) {
+      prevSessionIdRef.current = sessionId;
+      setAttachments((prev) => {
+        for (const attachment of prev) {
+          URL.revokeObjectURL(attachment.objectUrl);
+        }
+        return [];
+      });
     }
-    setAttachments([]);
-  }
-
-  // Cleanup — revoke remaining objectUrls on unmount.
-  // -------------------------------------------------------------------------
+  }, [sessionId]);
 
   useEffect(() => {
     return () => {

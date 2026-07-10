@@ -10,7 +10,7 @@ import {
   archiveSession,
 } from '@agentctl/api-client';
 import { useState, useEffect, useRef } from 'react';
-import { ConfirmationModal, SearchBar, Switch } from '@agentctl/ui';
+import { ConfirmationModal, SearchBar, Switch, Tooltip } from '@agentctl/ui';
 import { useFilteredProjects } from '../hooks/useFilteredProjects.js';
 import { useActionDispatcher } from '../../../hooks/useActionDispatcher';
 import { useActionStore } from '../../../hooks/useActionStore';
@@ -150,7 +150,7 @@ export function Sidebar() {
             Projects
           </h3>
           <div className="relative flex items-center gap-1.5">
-            <div className="group/tooltip relative">
+            <Tooltip content="Filter and Sort">
               <button
                 type="button"
                 onClick={() => {
@@ -160,10 +160,7 @@ export function Sidebar() {
               >
                 <ListFilter className="h-3.5 w-3.5" />
               </button>
-              <div className="bg-surface-secondary/95 border-border/80 text-text-main pointer-events-none absolute right-1/2 bottom-full z-50 mb-1.5 translate-x-1/2 translate-y-1 scale-95 rounded border px-1.5 py-0.5 font-mono text-[8px] tracking-wider whitespace-nowrap uppercase opacity-0 shadow-xl backdrop-blur-sm transition-all duration-150 ease-out group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 group-hover/tooltip:opacity-100">
-                Filter and Sort
-              </div>
-            </div>
+            </Tooltip>
 
             {isFilterMenuOpen && (
               <>
@@ -243,17 +240,14 @@ export function Sidebar() {
               </>
             )}
 
-            <div className="group/tooltip relative">
+            <Tooltip content="Add Project">
               <Link
                 to="/"
                 className="hover:text-brand-mauve text-text-muted hover:bg-brand-mauve/10 flex items-center justify-center rounded-sm border border-transparent p-1 transition-all hover:scale-105 active:scale-95"
               >
                 <Plus className="h-3.5 w-3.5" />
               </Link>
-              <div className="bg-surface-secondary/95 border-border/80 text-text-main pointer-events-none absolute right-1/2 bottom-full z-50 mb-1.5 translate-x-1/2 translate-y-1 scale-95 rounded border px-1.5 py-0.5 font-mono text-[8px] tracking-wider whitespace-nowrap uppercase opacity-0 shadow-xl backdrop-blur-sm transition-all duration-150 ease-out group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 group-hover/tooltip:opacity-100">
-                Add Project
-              </div>
-            </div>
+            </Tooltip>
           </div>
         </div>
       </div>

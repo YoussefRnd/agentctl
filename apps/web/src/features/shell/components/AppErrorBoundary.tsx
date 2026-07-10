@@ -29,7 +29,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
             <h1 className="text-xl font-black tracking-widest text-white uppercase">
               CRITICAL_SYSTEM_FAILURE
             </h1>
-            <p className="text-text-muted mt-2 text-[11px] font-bold tracking-tight uppercase opacity-60">
+            <p className="text-text-muted mt-2 caption-xs opacity-60">
               A_RENDERING_EXCEPTION_HAS_OCCURRED_IN_THE_WORKSPACE_CORE.
             </p>
             <button

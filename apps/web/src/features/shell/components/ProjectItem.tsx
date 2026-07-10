@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Folder, Plus, ChevronRight, ChevronDown, Loader2, Trash2, Archive } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import type { SessionStatus } from '@agentctl/shared';
+import { Tooltip } from '@agentctl/ui';
 
 const statusColors: Record<SessionStatus, string> = {
   running: 'bg-brand-mauve',
@@ -80,7 +81,7 @@ export function ProjectItem({
           </span>
         </button>
         <div className="flex items-center gap-1.5 pr-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <div className="group/tooltip relative">
+          <Tooltip content="Remove">
             <button
               type="button"
               className="hover:text-brand-red text-text-muted/60 hover:bg-brand-red/10 cursor-pointer rounded p-0.5 hover:scale-105 active:scale-95 disabled:opacity-50"
@@ -106,12 +107,9 @@ export function ProjectItem({
                 <Trash2 className="h-3.5 w-3.5" />
               )}
             </button>
-            <div className="bg-surface-secondary/95 border-border/80 text-text-main pointer-events-none absolute right-0 bottom-full z-50 mb-1 translate-y-1 scale-95 rounded border px-1 py-0.5 font-mono text-[7px] tracking-wider whitespace-nowrap uppercase opacity-0 shadow-xl backdrop-blur-sm transition-all duration-150 ease-out group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 group-hover/tooltip:opacity-100">
-              Remove
-            </div>
-          </div>
+          </Tooltip>
 
-          <div className="group/tooltip relative">
+          <Tooltip content="New Session">
             <button
               type="button"
               className="hover:text-brand-mauve text-text-muted/60 hover:bg-brand-mauve/10 cursor-pointer rounded p-0.5 hover:scale-105 active:scale-95 disabled:opacity-50"
@@ -127,10 +125,7 @@ export function ProjectItem({
                 <Plus className="h-3.5 w-3.5" />
               )}
             </button>
-            <div className="bg-surface-secondary/95 border-border/80 text-text-main pointer-events-none absolute right-0 bottom-full z-50 mb-1 translate-y-1 scale-95 rounded border px-1 py-0.5 font-mono text-[7px] tracking-wider whitespace-nowrap uppercase opacity-0 shadow-xl backdrop-blur-sm transition-all duration-150 ease-out group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 group-hover/tooltip:opacity-100">
-              New Session
-            </div>
-          </div>
+          </Tooltip>
         </div>
       </div>
 
@@ -162,7 +157,7 @@ export function ProjectItem({
 
                 <div className="flex shrink-0 items-center gap-1 pr-2 opacity-0 transition-opacity group-hover/session:opacity-100">
                   {s.status !== 'archived' && (
-                    <div className="group/tooltip relative">
+                    <Tooltip content="Archive">
                       <button
                         type="button"
                         disabled={pendingActions.has(`archive-session-${s.id}`)}
@@ -189,12 +184,9 @@ export function ProjectItem({
                           <Archive className="h-3.5 w-3.5" />
                         )}
                       </button>
-                      <div className="bg-surface-secondary/95 border-border/80 text-text-main pointer-events-none absolute right-0 bottom-full z-50 mb-1 translate-y-1 scale-95 rounded border px-1 py-0.5 font-mono text-[7px] tracking-wider whitespace-nowrap uppercase opacity-0 shadow-xl backdrop-blur-sm transition-all duration-150 ease-out group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 group-hover/tooltip:opacity-100">
-                        Archive
-                      </div>
-                    </div>
+                    </Tooltip>
                   )}
-                  <div className="group/tooltip relative">
+                  <Tooltip content="Delete">
                     <button
                       type="button"
                       disabled={pendingActions.has(`delete-session-${s.id}`)}
@@ -221,10 +213,7 @@ export function ProjectItem({
                         <Trash2 className="h-3.5 w-3.5" />
                       )}
                     </button>
-                    <div className="bg-surface-secondary/95 border-border/80 text-text-main pointer-events-none absolute right-0 bottom-full z-50 mb-1 translate-y-1 scale-95 rounded border px-1 py-0.5 font-mono text-[7px] tracking-wider whitespace-nowrap uppercase opacity-0 shadow-xl backdrop-blur-sm transition-all duration-150 ease-out group-hover/tooltip:translate-y-0 group-hover/tooltip:scale-100 group-hover/tooltip:opacity-100">
-                      Delete
-                    </div>
-                  </div>
+                  </Tooltip>
                 </div>
               </div>
             ))}
