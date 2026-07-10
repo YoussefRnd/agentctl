@@ -4,10 +4,12 @@ import { useProviders } from '../../../hooks/useProviders';
 import { useTheme } from '../../../contexts/ThemeProvider';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { Button, Switch, Select, Card } from '@agentctl/ui';
+import { type FontConfig } from '@agentctl/shared';
 import { useSettings } from '../../../hooks/useSettings';
 import { McpSettings } from './McpSettings';
 import { getLightThemes, getDarkThemes } from '../../../data/theme-registry';
 import { ThemeSelect } from './ThemeSelect';
+import { FontSettingsPanel } from './FontSettingsPanel';
 
 export function SettingsPage() {
   const [searchParams] = useSearchParams();
@@ -40,7 +42,7 @@ export function SettingsPage() {
           <h1 className="text-text-main text-2xl font-black tracking-widest uppercase">
             SETTINGS::GENERAL
           </h1>
-          <p className="text-text-muted mt-1 text-[11px] font-bold tracking-tight uppercase opacity-60">
+          <p className="text-text-muted mt-1 caption-xs opacity-60">
             CONFIGURE_GENERAL_APPLICATION_PREFERENCES
           </p>
         </div>
@@ -147,6 +149,24 @@ export function SettingsPage() {
               size="md"
             />
           </Card>
+
+          {/* Font settings */}
+          <div className="pt-6">
+            <h2 className="text-text-main mb-3 text-lg font-black tracking-widest uppercase">
+              FONTS
+            </h2>
+            <p className="text-text-muted mt-1 mb-4 caption-xs opacity-60">
+              PER_CONTEXT_FONT_FAMILY_AND_SIZE
+            </p>
+            <FontSettingsPanel
+              fontConfig={settings?.fontConfig}
+              onUpdate={(fontPartial) => {
+                void updateSettings({
+                  fontConfig: fontPartial as FontConfig,
+                });
+              }}
+            />
+          </div>
         </div>
       </div>
     );
@@ -159,7 +179,7 @@ export function SettingsPage() {
           <h1 className="text-text-main text-2xl font-black tracking-widest uppercase">
             SETTINGS::PROVIDERS
           </h1>
-          <p className="text-text-muted mt-1 text-[11px] font-bold tracking-tight uppercase opacity-60">
+          <p className="text-text-muted mt-1 caption-xs opacity-60">
             CONFIGURE_ACTIVE_AI_PROVIDER_PIPELINES
           </p>
         </div>

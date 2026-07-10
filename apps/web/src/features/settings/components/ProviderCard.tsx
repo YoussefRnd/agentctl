@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
 import { ChevronDown, Terminal, Eye } from 'lucide-react';
+import { ProviderIcon } from '@/shared/ProviderIcon';
 import { Card, Button, Input, Switch } from '@agentctl/ui';
 
 interface ProviderCardProps {
@@ -109,21 +110,13 @@ export function ProviderCard({
         className="flex w-full cursor-pointer items-center justify-between border-none bg-transparent p-4 text-left select-none"
       >
         <div className="flex min-w-0 items-center gap-3.5">
-          <div className="border-border/30 bg-surface-secondary/40 group-hover:bg-surface-secondary/60 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border p-1.5 transition-all">
-            {provider.icon ? (
-              <img src={provider.icon} alt="" className="h-5 w-5 object-contain" />
-            ) : provider.id.includes('claude') ? (
-              <span className="text-text-main text-lg font-bold">C</span>
-            ) : (
-              <Terminal className="text-text-main h-4 w-4" />
-            )}
-          </div>
+          <ProviderIcon provider={provider} size="md" />
           <div className="min-w-0">
             <h3 className="text-text-main flex items-center gap-3 text-[13px] font-black tracking-tighter uppercase">
               {provider.label}
               {getStatusBadge()}
             </h3>
-            <p className="text-text-muted mt-0.5 max-w-md truncate text-[10px] font-bold tracking-tight uppercase opacity-50">
+            <p className="text-text-muted mt-0.5 max-w-md truncate caption-2xs opacity-50">
               {provider.description ?? 'NO_DESCRIPTION'}
             </p>
           </div>
@@ -148,7 +141,7 @@ export function ProviderCard({
       {isExpanded && (
         <div className="animate-in fade-in slide-in-from-top-1 border-border/20 space-y-4 border-t p-4">
           <div className="space-y-1">
-            <strong className="text-text-muted text-[10px] font-black tracking-widest uppercase opacity-45">
+            <strong className="text-text-muted label-2xs opacity-45">
               DESCRIPTION
             </strong>
             <p className="text-text-main text-[11px] leading-relaxed font-bold tracking-tight uppercase">
@@ -158,7 +151,7 @@ export function ProviderCard({
 
           {provider.status === 'not_found' && (
             <div className="border-danger/20 bg-danger/5 animate-in fade-in flex items-center justify-between rounded-xl border px-3 py-2">
-              <span className="text-danger text-[10px] font-bold tracking-tight uppercase">
+              <span className="text-danger caption-2xs">
                 BINARY_NOT_DETECTED_IN_PATH
               </span>
               <Button
@@ -172,7 +165,7 @@ export function ProviderCard({
           )}
 
           <div className="space-y-2">
-            <div className="text-text-muted flex items-center gap-1.5 text-[10px] font-black tracking-widest uppercase opacity-45">
+            <div className="text-text-muted flex items-center gap-1.5 label-2xs opacity-45">
               <Terminal className="h-3.5 w-3.5" />
               LAUNCH_CONFIG
             </div>
@@ -212,7 +205,7 @@ export function ProviderCard({
           </div>
           {envKeys.length > 0 && (
             <div className="border-border/10 space-y-3 border-t pt-3.5">
-              <div className="text-text-main flex items-center gap-1.5 text-[10px] font-black tracking-widest uppercase">
+              <div className="text-text-main flex items-center gap-1.5 label-2xs">
                 <Eye className="text-accent h-3.5 w-3.5" />
                 CREDENTIALS
               </div>
@@ -222,11 +215,11 @@ export function ProviderCard({
                   return (
                     <div key={key} className="space-y-1">
                       <div className="flex items-baseline justify-between">
-                        <label className="text-text-muted text-[9px] font-black tracking-widest uppercase">
+                        <label className="text-text-muted label-3xs">
                           {key}
                         </label>
                         {errorMsg && (
-                          <span className="text-danger text-[9px] font-bold tracking-tight uppercase">
+                          <span className="text-danger caption-3xs">
                             {errorMsg}
                           </span>
                         )}

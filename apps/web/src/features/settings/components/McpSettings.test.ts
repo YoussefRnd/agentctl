@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getToolOverride, updateToolOverride } from './McpSettings';
+import { getToolOverride, updateToolOverride } from './McpUtils';
 
 describe('MCP tool overrides helper logic', () => {
   describe('getToolOverride', () => {
