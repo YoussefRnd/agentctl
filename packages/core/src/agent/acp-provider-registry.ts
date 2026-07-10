@@ -37,6 +37,7 @@ interface ProviderSettings {
   defaultProviderId?: string;
   showThinking?: string;
   registrySyncError?: string;
+  fontConfig?: string;
 }
 
 export interface ProbeConnectionHandle {
@@ -928,6 +929,9 @@ export class ProviderRegistry {
           break;
         case 'registrySyncError':
           settings.registrySyncError = row.value;
+          break;
+        case 'fontConfig':
+          settings.fontConfig = row.value;
           break;
       }
     }

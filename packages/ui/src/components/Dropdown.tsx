@@ -8,9 +8,11 @@ export const Dropdown = {
   Portal: DropdownMenuPrimitive.Portal,
   Content: ({
     className,
+    sideOffset = 4,
     ...props
   }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) => (
     <DropdownMenuPrimitive.Content
+      sideOffset={sideOffset}
       className={cn(
         'liquid-glass z-dropdown animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 min-w-40 rounded-md p-1',
         className,

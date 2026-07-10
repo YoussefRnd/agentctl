@@ -1,7 +1,6 @@
-import { memo } from 'react';
-import { createPortal } from 'react-dom';
+import { memo, useRef } from 'react';
 import { Button } from './Button.js';
-import { GlassPanel } from './GlassPanel.js';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './Dialog.js';
 
 export interface ConfirmationModalProps {
   isOpen: boolean;
@@ -24,8 +23,7 @@ export const ConfirmationModal = memo(function ConfirmationModal({
   cancelText = 'CANCEL',
   type = 'info',
 }: ConfirmationModalProps) {
-  if (!isOpen) return null;
-  if (typeof document === 'undefined') return null;
+  const confirmedRef = useRef(false);
 
   const typeColorClass =
     type === 'brand-red'
@@ -41,14 +39,14 @@ export const ConfirmationModal = memo(function ConfirmationModal({
         ? 'bg-brand-peach text-white hover:bg-brand-peach/90'
         : 'bg-brand-mauve text-white hover:bg-brand-mauve/90';
 
-  return createPortal(
-    <div className="z-modal animate-in fade-in fixed inset-0 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md duration-200">
-      <GlassPanel className="animate-in zoom-in-95 border-brand-surface1/50 w-full max-w-sm p-5 font-mono text-[11px] shadow-2xl duration-200">
-        <div className="mb-3 flex items-center gap-2">
-          <span className={`text-[12px] font-black tracking-widest uppercase ${typeColorClass}`}>
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !confirmedRef.current) onCancel(); confirmedRef.current = false; }}>
+      <DialogContent showCloseButton={false} className="max-w-sm p-5 font-mono text-[11px]">
+        <DialogHeader>
+          <DialogTitle className={typeColorClass}>
             :: {title}
-          </span>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         <p className="text-text-main/80 mb-6 leading-relaxed font-bold tracking-tight uppercase">
           {message}
@@ -63,14 +61,13 @@ export const ConfirmationModal = memo(function ConfirmationModal({
             {cancelText}
           </Button>
           <Button
-            onClick={onConfirm}
+            onClick={() => { confirmedRef.current = true; onConfirm(); }}
             className={`h-9 cursor-pointer px-4 font-black tracking-tight uppercase transition-all active:scale-95 ${confirmButtonClass}`}
           >
             {confirmText}
           </Button>
         </div>
-      </GlassPanel>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 });

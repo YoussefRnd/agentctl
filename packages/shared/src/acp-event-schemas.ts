@@ -34,6 +34,19 @@ export const acpEventApprovalRequestDataSchema = z.object({
   request: z.unknown().optional(),
 });
 
+export const acpEventSubagentUpdateDataSchema = z.object({
+  subagentId: z.string(),
+  name: z.string(),
+  scope: z.string(),
+  status: z.enum(['spawning', 'running', 'completed', 'failed']),
+  result: z
+    .object({
+      summary: z.string().optional(),
+      tokensUsed: z.number().optional(),
+    })
+    .optional(),
+});
+
 export const acpEventPlanDataSchema = z.object({
   plan: z.array(
     z.object({
@@ -113,12 +126,18 @@ export const acpEventSchema = z.discriminatedUnion('type', [
     data: z.record(z.string(), z.unknown()),
     createdAt: z.coerce.date(),
   }),
+  z.object({
+    type: z.literal('subagent_update'),
+    data: acpEventSubagentUpdateDataSchema,
+    createdAt: z.coerce.date(),
+  }),
 ]);
 
 export type ACPEvent = z.infer<typeof acpEventSchema>;
 export type ACPEventTextData = z.infer<typeof acpEventTextDataSchema>;
 export type ACPEventToolCallData = z.infer<typeof acpEventToolCallDataSchema>;
 export type ACPEventApprovalRequestData = z.infer<typeof acpEventApprovalRequestDataSchema>;
+export type ACPEventSubagentUpdateData = z.infer<typeof acpEventSubagentUpdateDataSchema>;
 
 export const acpEventMetadataSchema = z.object({
   durationMs: z.number().optional(),

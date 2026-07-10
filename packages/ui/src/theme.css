@@ -83,10 +83,10 @@
   --radius-xl: 1rem;
 
   /* Typography */
-  --font-display: 'Geist', sans-serif;
-  --font-accent: 'Geist', sans-serif;
-  --font-sans: 'Geist', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-display: var(--font-ui-family, 'Geist'), sans-serif;
+  --font-accent: var(--font-ui-family, 'Geist'), sans-serif;
+  --font-sans: var(--font-ui-family, 'Geist'), sans-serif;
+  --font-mono: var(--font-buffer-family, 'JetBrains Mono'), monospace;
 
   --animate-pulse-block: pulse-block 1s steps(1) infinite;
 
@@ -280,6 +280,23 @@
 
   .terminal-cursor {
     @apply animate-pulse-block ml-0.5 inline-block h-[1.1em] w-[0.6em] bg-current align-middle;
+  }
+
+  .font-context-ui {
+    font-family: var(--font-ui-family, 'Geist');
+    font-size: var(--font-ui-size, 14px);
+  }
+  .font-context-buffer {
+    font-family: var(--font-buffer-family, 'JetBrains Mono');
+    font-size: var(--font-buffer-size, 13px);
+  }
+  .font-context-terminal {
+    font-family: var(--font-terminal-family, 'JetBrains Mono');
+    font-size: var(--font-terminal-size, 12px);
+  }
+  .font-context-chat {
+    font-family: var(--font-chat-family, 'JetBrains Mono');
+    font-size: var(--font-chat-size, 13px);
   }
 }
 

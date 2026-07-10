@@ -29,6 +29,18 @@ export const mcpServerSchema = z.object({
   error: z.string().nullable().optional(),
 });
 
+const fontContextSchema = z.object({
+  family: z.string(),
+  size: z.number().int().min(8).max(72),
+});
+
+const fontConfigSchema = z.object({
+  ui: fontContextSchema.optional(),
+  buffer: fontContextSchema.optional(),
+  terminal: fontContextSchema.optional(),
+  chat: fontContextSchema.optional(),
+});
+
 const patchSettingsSchema = z.object({
   onboardingCompleted: z.boolean().optional(),
   onboardingVersion: z.union([z.string(), z.number()]).optional(),
@@ -36,6 +48,7 @@ const patchSettingsSchema = z.object({
   defaultProviderId: z.string().nullable().optional(),
   showThinking: z.boolean().optional(),
   registrySyncError: z.string().nullable().optional(),
+  fontConfig: fontConfigSchema.optional(),
 });
 
 const settingsResponseSchema = z.object({
@@ -45,6 +58,12 @@ const settingsResponseSchema = z.object({
   defaultProviderId: z.string().nullable(),
   showThinking: z.boolean(),
   registrySyncError: z.string().nullable().optional(),
+  fontConfig: z.object({
+    ui: fontContextSchema,
+    buffer: fontContextSchema,
+    terminal: fontContextSchema,
+    chat: fontContextSchema,
+  }),
 });
 
 const exploreResponseSchema = z.object({
