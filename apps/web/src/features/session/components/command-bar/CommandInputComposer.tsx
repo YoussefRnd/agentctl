@@ -163,6 +163,7 @@ export function CommandInputComposer({
       <CommandInputHint showSlashMenu={showSlashMenu} matchingCommand={matchingCommand} />
 
       <div
+        data-font-ctx="buffer"
         className={cn(
           'liquid-glass flex flex-col overflow-visible rounded-xl border transition-all duration-300',
           disabled ? 'opacity-30' : 'opacity-100',

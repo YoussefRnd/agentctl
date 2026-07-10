@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { ChevronRight } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
@@ -7,33 +8,13 @@ import { useSettings } from '@/hooks/useSettings';
 import { useSession } from '@/contexts/SessionContext';
 import { ToolCallCard } from './ToolCallCard';
 import { TimelineEvent } from './TimelineEvent';
+import { getToolMeta } from '@/utils/toolColors';
 import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
 
 interface ThinkingBlockProps {
   events: ACPEventRow[];
   isStreaming?: boolean;
   isActive?: boolean;
-}
-
-function dotColorForTool(name: string, kind?: string): string {
-  if (kind) {
-    if (kind === 'read' || kind === 'edit' || kind === 'move') return 'bg-brand-green';
-    if (kind === 'delete') return 'bg-rose-500';
-    if (kind === 'search' || kind === 'fetch') return 'bg-brand-blue';
-    if (kind === 'execute') return 'bg-brand-peach';
-    if (kind === 'think') return 'bg-accent';
-  }
-  if (
-    name.includes('file') ||
-    name.includes('view') ||
-    name.includes('read') ||
-    name.includes('write')
-  )
-    return 'bg-brand-green';
-  if (name.includes('search') || name.includes('grep')) return 'bg-brand-blue';
-  if (name.includes('command') || name.includes('shell') || name.includes('run'))
-    return 'bg-brand-peach';
-  return 'bg-text-muted/40';
 }
 
 export function ThinkingBlock({
@@ -50,18 +31,20 @@ export function ThinkingBlock({
   const isCompleted = !isActive || !isSessionActive;
 
   const [isOpen, setIsOpen] = useState(() => !isCompleted && showThinking);
-  const [prevIsCompleted, setPrevIsCompleted] = useState(isCompleted);
-  const [prevShowThinking, setPrevShowThinking] = useState(showThinking);
+  const prevIsCompletedRef = useRef(isCompleted);
+  const prevShowThinkingRef = useRef(showThinking);
 
-  if (isCompleted !== prevIsCompleted || showThinking !== prevShowThinking) {
-    setPrevIsCompleted(isCompleted);
-    setPrevShowThinking(showThinking);
-    if (!showThinking) {
-      setIsOpen(false);
-    } else {
-      setIsOpen(!isCompleted);
+  useEffect(() => {
+    if (isCompleted !== prevIsCompletedRef.current || showThinking !== prevShowThinkingRef.current) {
+      prevIsCompletedRef.current = isCompleted;
+      prevShowThinkingRef.current = showThinking;
+      if (!showThinking) {
+        setIsOpen(false);
+      } else {
+        setIsOpen(!isCompleted);
+      }
     }
-  }
+  }, [isCompleted, showThinking]);
 
   const { totalDurationMs, totalTokens } = useMemo(() => {
     let durMs = 0;
@@ -129,7 +112,7 @@ export function ThinkingBlock({
                     index={i}
                   >
                     <div className="text-text-muted/95 prose prose-invert prose-p:my-1.5 prose-pre:bg-surface-secondary/40 prose-pre:border prose-pre:border-border/30 prose-pre:rounded-md max-w-none text-[13.5px] leading-relaxed tracking-tight select-text">
-                      <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
                         {(e.data as { content: string }).content}
                       </ReactMarkdown>
                       {isLastStreaming && (
@@ -153,7 +136,7 @@ export function ThinkingBlock({
                 const isFailed = payload.status === 'failed';
                 const dynamicDotColor = isFailed
                   ? 'bg-rose-500'
-                  : dotColorForTool(toolName, payload.kind);
+                  : getToolMeta(payload.kind, toolName).dotColor;
 
                 return (
                   <TimelineEvent

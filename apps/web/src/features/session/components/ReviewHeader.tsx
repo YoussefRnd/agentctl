@@ -112,7 +112,7 @@ export function ReviewHeader({
             type="button"
             disabled={files.length === 0 || !!isMerging || !!isDiscarding}
             onClick={onOpenDiscardModal}
-            className="border-danger/20 bg-danger/5 text-danger hover:bg-danger/10 flex h-7 cursor-pointer items-center rounded-md border px-2.5 text-[9px] font-black tracking-widest uppercase transition-all disabled:cursor-default disabled:opacity-20"
+            className="border-danger/20 bg-danger/5 text-danger hover:bg-danger/10 flex h-7 cursor-pointer items-center rounded-md border px-2.5 text-[9px] font-black tracking-[0.15em] uppercase transition-all disabled:cursor-default disabled:opacity-20"
           >
             Discard
           </button>
@@ -120,7 +120,7 @@ export function ReviewHeader({
             type="button"
             disabled={files.length === 0 || !!isMerging || !!isDiscarding}
             onClick={onOpenMergeDialog}
-            className="bg-accent text-brand-crust flex h-7 cursor-pointer items-center rounded-md px-3 text-[9px] font-black tracking-widest uppercase shadow-[0_0_15px_rgba(203,166,247,0.25)] transition-all hover:opacity-90 disabled:cursor-default disabled:opacity-20"
+            className="bg-accent text-brand-crust flex h-7 cursor-pointer items-center rounded-md px-3 text-[9px] font-black tracking-[0.15em] uppercase transition-all hover:opacity-90 disabled:cursor-default disabled:opacity-20"
           >
             Apply
           </button>

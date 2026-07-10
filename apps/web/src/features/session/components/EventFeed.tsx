@@ -93,7 +93,7 @@ export function EventFeed({
       return (
         <div className="flex h-full items-center justify-center py-20">
           <div className="flex flex-col items-center gap-4 text-center">
-            <div className="relative h-12 w-12">
+            <div className="relative h-8 w-8">
               <div className="absolute inset-0 rounded-full border-2 border-white/5" />
               <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
             </div>
@@ -125,7 +125,7 @@ export function EventFeed({
   }
 
   return (
-    <div className="relative flex h-full flex-grow flex-col overflow-hidden">
+    <div className="relative flex h-full flex-grow flex-col overflow-hidden" role="log" aria-live="polite" aria-label="Session event feed">
       <Virtuoso
         ref={virtuosoRef}
         className="no-scrollbar h-full w-full flex-grow"

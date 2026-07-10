@@ -78,7 +78,7 @@ export function WorktreesPane() {
     return (
       <div className="text-text-muted flex h-full flex-col items-center justify-center gap-2 p-5 select-none">
         <RefreshCw className="text-accent h-5 w-5 animate-spin" />
-        <span className="text-[10px] font-black tracking-widest uppercase opacity-45">
+        <span className="label-2xs opacity-45">
           Loading worktrees...
         </span>
       </div>
@@ -283,7 +283,7 @@ export function WorktreesPane() {
           <div className="border-border/20 bg-surface/10 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed p-8 text-center select-none">
             <AlertCircle className="text-text-muted/30 h-6 w-6" />
             <div>
-              <h4 className="text-text-muted/60 text-[10px] font-black tracking-widest uppercase">
+              <h4 className="text-text-muted/60 label-2xs">
                 No Parallel Workspaces
               </h4>
               <p className="text-text-muted/40 mt-1 max-w-[240px] text-[9.5px] leading-relaxed">

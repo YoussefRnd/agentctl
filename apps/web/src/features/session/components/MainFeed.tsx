@@ -36,11 +36,21 @@ export function MainFeed() {
   const [rewindError, setRewindError] = useState<string | null>(null);
   const isRewindingRef = useRef(false);
 
+  const [rewindInput, setRewindInput] = useState('');
+
   const handleRewindRequest = useCallback(
     (eventId: number, mode: RewindMode) => {
       const eventIndex = events.findIndex((e) => e.id === eventId);
       if (eventIndex === -1) return;
       const messageCount = mode === 'fork' ? eventIndex + 1 : events.length - eventIndex;
+
+      const event = events[eventIndex];
+      const content =
+        event.type === 'text' && 'content' in event.data
+          ? (event.data as { content: string }).content
+          : '';
+      setRewindInput(content);
+
       setConfirmRewind({ eventId, mode, messageCount });
       setRewindError(null);
     },
@@ -84,9 +94,9 @@ export function MainFeed() {
 
   if (!sessionId) {
     return (
-      <div className="flex h-full flex-col items-center justify-center bg-transparent p-8 text-center">
-        <div className="animate-in fade-in zoom-in w-full max-w-md space-y-8 duration-1000">
-          <div className="space-y-4">
+      <div className="flex h-full flex-col items-center justify-center bg-transparent p-6 text-center">
+        <div className="animate-in fade-in zoom-in w-full max-w-md space-y-4 duration-1000">
+          <div className="space-y-2.5">
             <div className="text-accent/50 inline-block rounded-full border border-white/5 bg-white/4 px-4 py-1 text-[10px] font-medium tracking-widest uppercase">
               Standby
             </div>
@@ -148,10 +158,8 @@ export function MainFeed() {
             <EventFeed
               events={events}
               isConnected={isConnected}
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-              hasGitRepo={sessionData?.session?.project?.repoRoot != null}
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-              isSessionRunning={sessionData?.session?.status === 'running'}
+              hasGitRepo={sessionData?.session.project?.repoRoot != null}
+              isSessionRunning={sessionData?.session.status === 'running'}
               onRewind={handleRewindRequest}
             />
           )}
@@ -198,6 +206,7 @@ export function MainFeed() {
               selectedProviderId={sessionData?.session.selectedProvider}
               selectedModelId={sessionData?.session.selectedModel}
               onProviderSelect={handleProviderSelect}
+              initialInput={rewindInput}
             />
           </div>
         </footer>

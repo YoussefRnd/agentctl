@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Bot, Cpu, Zap, RefreshCw } from 'lucide-react';
+import { Search, Zap, RefreshCw } from 'lucide-react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
+import { ProviderIcon } from '@/shared/ProviderIcon';
 import { useProviders } from '../../../hooks/useProviders';
-import { toast } from 'sonner';
 
 interface ProviderPickerProps {
   sessionId: string | null;
@@ -155,7 +155,7 @@ export function ProviderPicker({
               type="text"
               aria-label="Filter models"
               placeholder="Filter models..."
-              className="border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border pr-3 pl-9 font-sans text-xs transition-all duration-200 outline-none focus:ring-1"
+              className="border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border pr-3 pl-9 font-sans text-[11px] transition-all duration-200 outline-none focus:ring-1"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -199,7 +199,7 @@ export function ProviderPicker({
                 <div className="text-text-main text-[11px] font-black tracking-wider uppercase">
                   {activeProvider.label}
                 </div>
-                <div className="text-text-muted text-[9px] font-bold tracking-tight uppercase">
+                <div className="text-text-muted caption-3xs">
                   DEFAULT CONFIG
                 </div>
               </button>
@@ -228,7 +228,7 @@ export function ProviderPicker({
                     >
                       {model.name}
                     </div>
-                    <div className="text-text-muted/50 text-[9px] font-semibold tracking-tighter uppercase">
+                    <div className="text-text-muted/50 text-[9px] font-bold tracking-tighter uppercase">
                       {activeProvider.label}
                     </div>
                   </div>
@@ -258,20 +258,15 @@ function ProviderSidebar({
 }: ProviderSidebarProps) {
   return (
     <div className="border-border/30 bg-surface-secondary/20 flex w-12 shrink-0 flex-col items-center gap-2 border-r py-2">
-      {providers.map((p) => {
+      {providers.filter((p) => p.enabled).map((p) => {
         const isSelected = p.id === internalProviderId;
         const needsAuth = p.status === 'needs_auth';
-        const isDisabled = !p.enabled;
 
         return (
           <button
             key={p.id}
             type="button"
             onClick={() => {
-              if (isDisabled) {
-                toast.error(`${p.label} is disabled in settings`);
-                return;
-              }
               setInternalProviderIdOverride(p.id);
               setSearch('');
             }}
@@ -281,15 +276,9 @@ function ProviderSidebar({
               isSelected
                 ? 'bg-accent/15 border-accent/30 text-accent'
                 : 'text-text-muted hover:bg-text-main/5 hover:text-text-main border-transparent'
-            } ${isDisabled ? 'opacity-20 grayscale' : ''}`}
+            }`}
           >
-            {p.icon ? (
-              <img src={p.icon} alt="" className="h-4 w-4 object-contain" />
-            ) : p.id.includes('claude') ? (
-              <Bot className="h-4 w-4" />
-            ) : (
-              <Cpu className="h-4 w-4" />
-            )}
+            <ProviderIcon provider={p} size="sm" className="bg-transparent border-none" />
             {needsAuth && !isSelected && (
               <div className="bg-warning status-glow absolute top-0 right-0 h-1.5 w-1.5 rounded-full" />
             )}
@@ -330,7 +319,7 @@ function ProviderSetupPanel({
       <h3 className="text-text-main mb-1 text-[11px] font-black tracking-wider uppercase">
         {!activeProvider.enabled ? 'Setup Required' : 'Authentication Required'}
       </h3>
-      <p className="text-text-muted mb-4 max-w-[240px] text-[10px] font-bold tracking-tight uppercase">
+      <p className="text-text-muted mb-4 max-w-[240px] caption-2xs">
         Configure and enable {activeProvider.label}.
       </p>
 
@@ -342,12 +331,12 @@ function ProviderSetupPanel({
               <div className="flex items-baseline justify-between">
                 <label
                   htmlFor={key}
-                  className="text-text-muted text-[9px] font-black tracking-widest uppercase"
+                  className="text-text-muted label-3xs"
                 >
                   {key}
                 </label>
                 {errorMsg && (
-                  <span className="text-danger text-[9px] font-bold tracking-tight uppercase">
+                  <span className="text-danger caption-3xs">
                     {errorMsg}
                   </span>
                 )}
@@ -366,7 +355,7 @@ function ProviderSetupPanel({
                     },
                   });
                 }}
-                className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-sans text-xs transition-all duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
+                className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-sans text-[11px] transition-all duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
               />
             </div>
           );
@@ -374,7 +363,7 @@ function ProviderSetupPanel({
 
         {activeProvider.authMethods.length > 0 && (
           <div className="mt-2 space-y-1.5">
-            <span className="text-text-muted text-[9px] font-black tracking-widest uppercase">
+            <span className="text-text-muted label-3xs">
               Auth Methods
             </span>
             {activeProvider.authMethods.map((method) => (
@@ -385,7 +374,7 @@ function ProviderSetupPanel({
                   login({ providerId: activeProvider.id, methodId: method.id });
                 }}
                 disabled={isPending}
-                className="border-border/30 bg-surface-secondary/30 text-text-main hover:bg-text-main/5 hover:border-border/50 w-full rounded-lg border py-1.5 text-center text-[10px] font-bold tracking-wider uppercase transition-all disabled:opacity-30"
+                className="border-border/30 bg-surface-secondary/30 text-text-main hover:bg-text-main/5 hover:border-border/50 flex h-8 w-full items-center justify-center rounded-lg border text-center text-[10px] font-bold tracking-wider uppercase transition-all disabled:opacity-30"
               >
                 {isLoggingIn ? 'AUTHENTICATING...' : `Login via ${method.name}`}
               </button>
@@ -399,7 +388,7 @@ function ProviderSetupPanel({
           disabled={
             isPending || envKeys.some((key) => validateApiKey(key, keysValues[key] || '') !== null)
           }
-          className="bg-accent text-brand-crust mt-2 w-full rounded-lg py-1.5 text-center text-[10px] font-bold tracking-wider uppercase transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
+          className="bg-accent text-brand-crust mt-2 flex h-8 w-full items-center justify-center rounded-lg text-center text-[10px] font-bold tracking-wider uppercase transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
         >
           {isPending ? 'CONNECTING...' : 'SAVE AND CONNECT'}
         </button>

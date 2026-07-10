@@ -80,11 +80,11 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
 
   return (
     <GlassPanel
-      intensity="default"
+
       className="animate-in fade-in zoom-in-95 w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl"
     >
       <div className="border-border/40 bg-surface-secondary/20 flex items-center justify-between border-b px-4 py-3">
-        <div className="text-text-muted flex items-center gap-2 truncate text-[11px] font-bold tracking-tight uppercase">
+        <div className="text-text-muted flex items-center gap-2 truncate caption-xs">
           <Folder className="h-4 w-4" />
           <span className="truncate">{currentPath ?? 'SCANNING_FS...'}</span>
         </div>
@@ -186,7 +186,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         )}
       </div>
 
-      <div className="border-border/40 text-text-muted bg-surface-secondary/10 flex items-center justify-between border-t px-4 py-2.5 text-[9px] font-black tracking-widest uppercase">
+      <div className="border-border/40 text-text-muted bg-surface-secondary/10 flex items-center justify-between border-t px-4 py-2.5 label-3xs">
         <span className="opacity-50">CLICK_FOLDER_TO_EXPLORE_/_CLICK_MOUNT_TO_SELECT</span>
       </div>
     </GlassPanel>

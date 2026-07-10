@@ -1,4 +1,6 @@
-import { CommandBarToolbar, CommandBarFooter, useCommandBarState } from './CommandBarSubComponents';
+import { CommandBarToolbar } from './CommandBarToolbar';
+import { CommandBarFooter } from './command-bar/WorkspaceStateReviewer';
+import { useCommandBarState } from './useCommandBarState';
 import { CommandInputComposer } from './command-bar/CommandInputComposer';
 
 interface ControlBarProps {
@@ -8,6 +10,7 @@ interface ControlBarProps {
   selectedModelId?: string | null;
   onProviderSelect?: (id: string, modelId?: string) => void;
   placeholder?: string;
+  initialInput?: string;
 }
 
 const ACCEPTED_IMAGE_TYPES = 'image/png,image/jpeg,image/gif,image/webp';
@@ -19,6 +22,7 @@ export function CommandBar({
   selectedModelId: propSelectedModelId,
   onProviderSelect,
   placeholder = 'Ask for follow-up changes or attach images',
+  initialInput,
 }: ControlBarProps) {
   const {
     sessionId,
@@ -71,6 +75,7 @@ export function CommandBar({
     disabled,
     propSelectedProviderId,
     onProviderSelect,
+    initialInput,
   });
 
   return (

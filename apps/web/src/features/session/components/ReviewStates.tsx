@@ -4,9 +4,9 @@ import { ReviewCleanState } from '../components/ReviewCleanState';
 export function ReviewEmptyState({ searchQuery }: { searchQuery: string }) {
   if (searchQuery) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center p-8 text-center opacity-20">
-        <Search className="mb-4 h-10 w-10" />
-        <p className="text-[10px] font-black tracking-widest uppercase">
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center opacity-20">
+        <Search className="mb-3 h-8 w-8" />
+        <p className="text-[10px] font-black tracking-[0.15em] uppercase">
           No matching changes found
         </p>
       </div>
@@ -18,7 +18,7 @@ export function ReviewEmptyState({ searchQuery }: { searchQuery: string }) {
 export function ReviewErrorState({ error, onRetry }: { error: Error; onRetry?: () => void }) {
   return (
     <div className="bg-surface-secondary/5 flex-1 p-5">
-      <div className="border-danger/20 bg-danger/5 relative overflow-hidden rounded-xl border p-6 shadow-2xl">
+      <div className="border-danger/20 bg-danger/5 relative overflow-hidden rounded-xl border p-4 shadow-2xl">
         <div className="absolute top-0 right-0 p-4 opacity-5">
           <AlertCircle className="text-danger h-24 w-24" />
         </div>
@@ -33,7 +33,7 @@ export function ReviewErrorState({ error, onRetry }: { error: Error; onRetry?: (
           <button
             type="button"
             onClick={onRetry}
-            className="bg-danger mt-6 flex h-9 cursor-pointer items-center rounded-lg px-5 text-[10px] font-black tracking-widest text-white uppercase shadow-[0_0_15px_rgba(243,139,168,0.3)] transition-all hover:opacity-90"
+            className="bg-danger mt-6 flex h-8 cursor-pointer items-center rounded-lg px-5 text-[10px] font-black tracking-widest text-white uppercase transition-all hover:opacity-90"
           >
             Retry Scan
           </button>
@@ -45,7 +45,7 @@ export function ReviewErrorState({ error, onRetry }: { error: Error; onRetry?: (
 
 export function ReviewLoadingState() {
   return (
-    <div className="text-text-muted/40 bg-surface-secondary/5 flex h-full flex-col items-center justify-center p-12">
+    <div className="text-text-muted/40 bg-surface-secondary/5 flex h-full flex-col items-center justify-center p-8">
       <div className="relative mb-6">
         <div className="border-accent/20 border-t-accent h-8 w-8 animate-spin rounded-full border-2" />
         <div className="bg-accent/20 absolute inset-0 animate-pulse rounded-full blur-lg" />
@@ -59,8 +59,8 @@ export function ReviewLoadingState() {
 
 export function ReviewClosedState({ sessionStatus }: { sessionStatus?: string }) {
   return (
-    <div className="bg-surface-secondary/5 flex h-full flex-col items-center justify-center p-8 text-center">
-      <div className="bg-surface-secondary/20 border-border/10 ring-surface-secondary/5 mb-6 rounded-2xl border p-6 shadow-2xl ring-8">
+    <div className="bg-surface-secondary/5 flex h-full flex-col items-center justify-center p-6 text-center">
+      <div className="bg-surface-secondary/20 border-border/10 ring-surface-secondary/5 mb-4 rounded-xl border p-4 shadow-2xl ring-1">
         <span className="text-[40px] leading-none drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] filter">
           {sessionStatus === 'merged' ? '✨' : '扫'}
         </span>

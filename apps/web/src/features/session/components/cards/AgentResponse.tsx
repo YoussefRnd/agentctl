@@ -1,38 +1,107 @@
 import { memo, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Sparkles } from 'lucide-react';
+import { StreamingDots } from '@/shared/StreamingDots';
+import { ProviderIconUrl } from '@/shared/ProviderIcon';
+import { SubagentBlock } from './SubagentBlock';
 import { ThinkingBlock } from './ThinkingBlock';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SubagentGroup } from './subagentBlockUtils';
+import type {
+  ACPEventRow,
+  ACPEventToolCallData,
+} from '@agentctl/shared';
 import { useSession } from '../../../../contexts/SessionContext';
 import { useProviders } from '../../../../hooks/useProviders';
+
+const SUBAGENT_ARG_KEYS = new Set(['description', 'prompt', 'subagent_type']);
+
+function hasSubagentArgs(data: ACPEventToolCallData): boolean {
+  const args = data.arguments;
+  if (!args) return false;
+  for (const key of SUBAGENT_ARG_KEYS) {
+    if (typeof args[key] === 'string') return true;
+  }
+  return false;
+}
+
+function getSubagentScope(data: ACPEventToolCallData): string {
+  const args = data.arguments;
+  if (args) {
+    if (typeof args.description === 'string') return args.description;
+    if (typeof args.prompt === 'string') return args.prompt;
+  }
+  return data.name;
+}
 
 interface AgentResponseProps {
   events: ACPEventRow[];
   isStreaming?: boolean;
   isActive?: boolean;
+  selectedProviderId?: string | null;
 }
 
-const REHYPE_PLUGINS = [rehypeHighlight];
+const REHYPE_PLUGINS = [remarkGfm, rehypeHighlight];
 
 const AgentResponseComponent = function AgentResponse({
   events,
   isStreaming = false,
   isActive = false,
+  selectedProviderId,
 }: AgentResponseProps) {
-  const { sessionId, sessionData } = useSession();
+  const { sessionId } = useSession();
   const { providers } = useProviders(sessionId);
 
   const providerIcon = useMemo(() => {
-    const activeProviderId = sessionData?.session.selectedProvider;
-    if (!activeProviderId) return null;
-    return providers.find((p) => p.id === activeProviderId)?.icon ?? null;
-  }, [providers, sessionData?.session.selectedProvider]);
-  const { activityEvents, responseEvent } = useMemo(() => {
+    if (!selectedProviderId) return null;
+    return providers.find((p) => p.id === selectedProviderId)?.icon ?? null;
+  }, [providers, selectedProviderId]);
+  const { activityEvents, responseEvent, subagentGroups } = useMemo(() => {
     const activity: ACPEventRow[] = [];
-    let response: ACPEventRow | undefined = undefined;
+    let response: ACPEventRow | undefined;
+
+    const toolCallGroups = new Map<string, ACPEventRow[]>();
+    const nativelyEmitted = new Map<string, ACPEventRow[]>();
 
     for (const e of events) {
+      if (e.type === 'tool_call') {
+        const tcData = e.data;
+        if (tcData.toolCallId && hasSubagentArgs(tcData)) {
+          const group = toolCallGroups.get(tcData.toolCallId);
+          if (group) {
+            group.push(e);
+          } else {
+            toolCallGroups.set(tcData.toolCallId, [e]);
+          }
+        }
+      }
+
+      if (e.type === 'subagent_update') {
+        const data = e.data as { subagentId: string };
+        if (!nativelyEmitted.has(data.subagentId)) {
+          nativelyEmitted.set(data.subagentId, []);
+        }
+      } else if (e.parentEventId != null) {
+        const parentData = events.find(
+          (pe) => pe.id === e.parentEventId && pe.type === 'subagent_update',
+        );
+        if (parentData) {
+          const data = parentData.data as { subagentId: string };
+          const children = nativelyEmitted.get(data.subagentId);
+          if (children) {
+            children.push(e);
+            continue;
+          }
+        }
+      }
+
+      if (e.type === 'tool_call') {
+        const tcData = e.data;
+        if (tcData.toolCallId && toolCallGroups.has(tcData.toolCallId)) {
+          continue;
+        }
+      }
+
       if (e.type === 'text' && 'role' in e.data && e.data.role === 'provider') {
         response = e;
       } else if (
@@ -44,27 +113,77 @@ const AgentResponseComponent = function AgentResponse({
       }
     }
 
-    return { activityEvents: activity, responseEvent: response };
+    const groups: SubagentGroup[] = [];
+
+    for (const [, tcEvents] of toolCallGroups) {
+      const first = tcEvents[0];
+      const last = tcEvents[tcEvents.length - 1];
+      const firstData = first.data as ACPEventToolCallData;
+      const lastData = last.data as ACPEventToolCallData;
+
+      const lastTcIndex = events.indexOf(last);
+      const hasFollowingActivity = events.slice(lastTcIndex + 1).some((e) => {
+        if (e.type === 'tool_call') {
+          const ed = e.data;
+          if (ed.toolCallId && toolCallGroups.has(ed.toolCallId)) return false;
+        }
+        return true;
+      });
+
+      const status =
+        lastData.status === 'completed' || lastData.status === 'failed'
+          ? lastData.status
+          : hasFollowingActivity
+            ? 'completed'
+            : 'running';
+
+      groups.push({
+        subagentEvent: {
+          ...first,
+          type: 'subagent_update' as const,
+          data: {
+            subagentId: `tool-${firstData.toolCallId ?? 'unknown'}`,
+            name: firstData.name,
+            scope: getSubagentScope(firstData),
+            status,
+            result: status === 'completed' ? { summary: 'Task completed' } : undefined,
+          },
+          parentEventId: undefined,
+        },
+        childEvents: tcEvents.slice(1).map((e) => ({
+          ...e,
+          parentEventId: first.id,
+        })),
+      });
+    }
+
+    for (const e of events) {
+      if (e.type !== 'subagent_update') continue;
+      const data = e.data as { subagentId: string };
+      groups.push({
+        subagentEvent: e,
+        childEvents: nativelyEmitted.get(data.subagentId) ?? [],
+      });
+    }
+
+    return { activityEvents: activity, responseEvent: response, subagentGroups: groups };
   }, [events]);
 
   const hasActivity = activityEvents.length > 0;
 
   return (
-    <div className="group/agent relative flex flex-col gap-2 py-3">
-      <div className="flex items-start gap-4">
+    <div data-font-ctx="chat" className="group/agent relative flex flex-col gap-2 py-3">
+      <div className="flex items-start gap-3">
         <div className="mt-1 shrink-0">
           <div
             className={`border-border bg-surface-secondary/50 flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 ${
               isStreaming ? 'border-accent/40 bg-accent/5' : 'group-hover/agent:border-border/80'
             }`}
           >
-            {providerIcon ? (
-              <img src={providerIcon} alt="" className="h-5 w-5 object-contain" />
-            ) : (
-              <Sparkles
-                className={`h-4 w-4 ${isStreaming ? 'text-accent animate-pulse' : 'text-text-muted'}`}
-              />
-            )}
+            <ProviderIconUrl
+              url={providerIcon}
+              className={isStreaming ? 'text-accent animate-pulse' : 'text-text-muted'}
+            />
           </div>
         </div>
 
@@ -79,18 +198,22 @@ const AgentResponseComponent = function AgentResponse({
             </div>
           )}
 
+          {subagentGroups.length > 0 && (
+            <div className="mb-4">
+              <SubagentBlock
+                subagentGroups={subagentGroups}
+                isStreaming={isStreaming}
+                isActive={isActive}
+              />
+            </div>
+          )}
+
           {responseEvent && (
             <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 animate-in fade-in slide-in-from-top-1 max-w-none text-[15px] leading-7 tracking-normal duration-300">
               <ReactMarkdown rehypePlugins={REHYPE_PLUGINS}>
                 {(responseEvent.data as { content: string }).content}
               </ReactMarkdown>
-              {isStreaming && (
-                <span className="ml-1 inline-flex items-center gap-1">
-                  <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full [animation-delay:-0.3s]" />
-                  <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full [animation-delay:-0.15s]" />
-                  <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full" />
-                </span>
-              )}
+              {isStreaming && <StreamingDots />}
             </div>
           )}
         </div>
@@ -100,6 +223,7 @@ const AgentResponseComponent = function AgentResponse({
 };
 
 export const AgentResponse = memo(AgentResponseComponent, (prevProps, nextProps) => {
+  if (prevProps.selectedProviderId !== nextProps.selectedProviderId) return false;
   if (prevProps.isActive !== nextProps.isActive) return false;
   if (prevProps.isStreaming !== nextProps.isStreaming) return false;
   if (prevProps.events.length !== nextProps.events.length) return false;

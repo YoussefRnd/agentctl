@@ -126,7 +126,7 @@ export function RewindMenu({
       aria-label="Rewind options"
       className="w-full"
     >
-      <div className="py-1">
+      <div className="space-y-0.5 p-1.5">
         {options.map((opt, index) => {
           const ItemIcon = opt.icon;
           const isFocused = index === focusedIndex;
@@ -139,12 +139,12 @@ export function RewindMenu({
               tabIndex={isFocused ? 0 : -1}
               disabled={opt.disabled}
               aria-disabled={opt.disabled}
-              className={`flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors ${
+              className={`flex w-full items-start gap-2.5 rounded-md border p-2 text-left transition-all ${
                 opt.disabled
-                  ? 'cursor-not-allowed opacity-40'
+                  ? 'cursor-not-allowed border-transparent opacity-35'
                   : isFocused
-                    ? 'cursor-pointer bg-white/5'
-                    : 'cursor-pointer hover:bg-white/5 focus-visible:bg-white/5'
+                    ? 'border-border/40 bg-surface-secondary/30 cursor-pointer'
+                    : 'border-border/10 bg-surface-secondary/[0.02] cursor-pointer hover:border-border/30 hover:bg-surface-secondary/20'
               }`}
               onClick={() => {
                 if (!opt.disabled) handleItemClick(opt.mode);
@@ -158,10 +158,16 @@ export function RewindMenu({
                   : undefined
               }
             >
-              <ItemIcon className="text-text-muted mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <div>
-                <div className="text-text-main text-[13px] font-medium">{opt.label}</div>
-                <div className="text-text-muted text-[11px]">{opt.description}</div>
+              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-white/5 ring-1 ring-white/5">
+                <ItemIcon className="text-text-muted h-3 w-3" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-text-main truncate text-[12px] font-medium leading-snug">
+                  {opt.label}
+                </div>
+                <div className="text-text-muted truncate text-[10px] leading-tight">
+                  {opt.description}
+                </div>
               </div>
             </button>
           );

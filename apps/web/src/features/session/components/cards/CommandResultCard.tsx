@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react';
-import { Terminal, ChevronRight, ChevronDown, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Terminal, ChevronRight, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn, Card } from '@agentctl/ui';
 
 interface CommandResultCardProps {
@@ -28,7 +28,7 @@ export const CommandResultCard = memo(function CommandResultCard({
   const isPending = status === 'pending' || isStreaming;
 
   return (
-    <div className="group/command w-full py-1">
+    <div data-font-ctx="terminal" className="group/command w-full py-1">
       <button
         type="button"
         className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent text-left select-none"
@@ -43,7 +43,7 @@ export const CommandResultCard = memo(function CommandResultCard({
           <div className="flex min-w-0 items-center gap-3">
             <div
               className={cn(
-                'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-transform duration-200',
+                'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-transform duration-200',
                 isError ? 'bg-rose-500/10 text-rose-400' : 'bg-accent/10 text-accent',
                 (isStreaming || !isError) && 'group-hover/command:scale-105',
               )}
@@ -69,7 +69,12 @@ export const CommandResultCard = memo(function CommandResultCard({
             </div>
           </div>
           <div className="text-text-muted/40 group-hover/command:text-text-main shrink-0 transition-colors">
-            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <ChevronRight
+              className={cn(
+                'h-3 w-3 transition-transform duration-150',
+                open && 'rotate-90',
+              )}
+            />
           </div>
         </Card>
       </button>

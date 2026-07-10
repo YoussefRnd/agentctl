@@ -1,11 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
 
+import { Shell } from '../../shell/components/Shell';
 import { Sidebar } from '../../shell/components/Sidebar';
 import { useSession } from '../../../contexts/SessionContext';
 import { SessionHeader } from './SessionHeader';
 import { Workbench, type WorkbenchTab } from './Workbench';
 import { MainFeed } from './MainFeed';
-import { SessionLayout } from './SessionLayout';
 
 const sidebarElement = <Sidebar />;
 
@@ -53,20 +53,23 @@ export function SessionWorkspace() {
   );
 
   return (
-    <SessionLayout
+    <Shell
+      nav={headerElement}
+      sidebar={sidebarElement}
+      aside={workbenchElement}
+      isAsideOpen={isWorkbenchOpen}
+      onCloseAside={() => {
+        setIsWorkbenchOpen(false);
+      }}
+      onExpandAside={() => {
+        setIsWorkbenchOpen(true);
+      }}
       isMobileSidebarOpen={isMobileSidebarOpen}
       onCloseMobileSidebar={() => {
         setIsMobileSidebarOpen(false);
       }}
-      isWorkbenchOpen={isWorkbenchOpen}
-      onCloseWorkbench={() => {
-        setIsWorkbenchOpen(false);
-      }}
-      sidebar={sidebarElement}
-      header={headerElement}
-      workbench={workbenchElement}
     >
       <MainFeed />
-    </SessionLayout>
+    </Shell>
   );
 }

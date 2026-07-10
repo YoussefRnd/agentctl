@@ -69,7 +69,6 @@ export function ProviderPickerTrigger({
         <PopoverContent
           align="start"
           side="top"
-          sideOffset={8}
           avoidCollisions={false}
           className="border-border w-[480px] overflow-hidden rounded-md p-0"
         >
@@ -198,11 +197,10 @@ export function AdvancedSettingsPopover({ isLoading }: { isLoading: boolean }) {
           <Settings2 size={14} />
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="top"
-        sideOffset={12}
-        className="w-[320px] rounded-xl p-4 shadow-2xl"
+        <PopoverContent
+          align="end"
+          side="top"
+          className="w-[320px] rounded-xl p-4 shadow-2xl"
       >
         <div className="custom-scrollbar max-h-[400px] overflow-y-auto pr-1">
           <ConfigOptionsPanel filterCategories={[...PRIMARY_CONFIG_CATEGORIES]} />

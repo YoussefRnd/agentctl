@@ -1,10 +1,12 @@
 import { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Sparkles, RotateCcw } from 'lucide-react';
 import { RewindMenu } from '../RewindMenu';
 import type { RewindMode } from '../RewindMenu';
 import { useSession } from '../../../../contexts/SessionContext';
+import { StreamingDots } from '@/shared/StreamingDots';
 import { Popover, PopoverTrigger, PopoverContent, Card } from '@agentctl/ui';
 
 type Role = 'provider' | 'user';
@@ -40,7 +42,7 @@ export const TextCard = memo(function TextCard({
 
   if (variant === 'user') {
     return (
-      <div className="group/rewind flex justify-end py-3">
+      <div data-font-ctx="chat" className="group/rewind flex justify-end py-3">
         <div className="flex max-w-[85%] flex-col items-end gap-2 sm:max-w-[75%]">
           {attachments && attachments.length > 0 && (
             <div className="flex flex-wrap justify-end gap-2">
@@ -102,8 +104,8 @@ export const TextCard = memo(function TextCard({
 
   // provider (default)
   return (
-    <div className="group/provider relative py-3">
-      <div className="flex items-start gap-4">
+    <div data-font-ctx="chat" className="group/provider relative py-3">
+      <div className="flex items-start gap-3">
         <div className="mt-1 shrink-0">
           <div
             className={`border-border bg-surface-secondary/50 flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 ${
@@ -120,14 +122,8 @@ export const TextCard = memo(function TextCard({
 
         <div className="min-w-0 flex-1">
           <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 max-w-none text-[15px] leading-7 tracking-normal">
-            <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>
-            {isStreaming && (
-              <span className="ml-1 inline-flex items-center gap-1">
-                <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full [animation-delay:-0.3s]" />
-                <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full [animation-delay:-0.15s]" />
-                <span className="bg-accent/70 h-1 w-1 animate-pulse rounded-full" />
-              </span>
-            )}
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>
+            {isStreaming && <StreamingDots />}
           </div>
         </div>
       </div>

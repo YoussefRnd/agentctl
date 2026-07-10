@@ -62,10 +62,9 @@ export function ContextWindowPopover({
           <button
             type="button"
             className={cn(
-              'border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 items-center justify-center overflow-hidden rounded-full border text-[10px] font-bold tracking-wider transition-all duration-300 focus-visible:ring-2 focus-visible:outline-none',
-              isHovered
-                ? 'bg-accent/10 text-accent border-accent/40 w-16 gap-1.5 px-3'
-                : 'w-8 gap-0 px-0',
+              'group border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 items-center justify-center overflow-hidden rounded-full border text-[10px] font-bold tracking-wider transition-all duration-300 focus-visible:ring-2 focus-visible:outline-none',
+              'w-8 gap-0 px-0',
+              'data-[state=open]:bg-accent/10 data-[state=open]:text-accent data-[state=open]:border-accent/40 data-[state=open]:w-16 data-[state=open]:gap-1.5 data-[state=open]:px-3',
             )}
           >
             <svg className="h-3.5 w-3.5 shrink-0 -rotate-90" viewBox="0 0 16 16">
@@ -97,18 +96,18 @@ export function ContextWindowPopover({
             <span
               className={cn(
                 'shrink-0 transition-all duration-300',
-                isHovered ? 'scale-100 opacity-100' : 'h-0 w-0 scale-90 overflow-hidden opacity-0',
+                'opacity-0',
+                'group-data-[state=open]:opacity-100',
               )}
             >
               {Math.round(usagePercent)}%
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          side="top"
-          sideOffset={8}
-          className="w-[280px] rounded-xl p-4 shadow-2xl"
+          <PopoverContent
+            align="end"
+            side="top"
+            className="w-[320px] rounded-xl p-4 shadow-2xl"
         >
           <div className="flex flex-col gap-3 font-sans text-xs">
             <div className="flex flex-col gap-1">

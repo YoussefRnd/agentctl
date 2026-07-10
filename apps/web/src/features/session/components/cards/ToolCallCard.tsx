@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Trash2,
 } from 'lucide-react';
+import { getToolMeta } from '@/utils/toolColors';
 import type { ACPEventToolCallData } from '@agentctl/shared';
 import { Card } from '@agentctl/ui';
 
@@ -139,7 +140,7 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
           if (isLongValue) {
             return (
               <div key={key} className="space-y-1">
-                <span className="text-text-muted/65 text-[9.5px] font-bold tracking-wider uppercase select-none">
+                <span className="text-text-muted/65 text-[9px] font-bold tracking-wider uppercase select-none">
                   {keyLabel}
                 </span>
                 <div className="border-border/20 overflow-hidden rounded-xl border bg-black/15 shadow-sm">
@@ -155,7 +156,7 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
             typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val);
           return (
             <div key={key} className="flex flex-wrap items-baseline gap-2">
-              <span className="text-text-muted/65 inline-block min-w-[100px] text-[9.5px] font-bold tracking-wider uppercase select-none">
+              <span className="text-text-muted/65 inline-block min-w-[100px] text-[9px] font-bold tracking-wider uppercase select-none">
                 {keyLabel}:
               </span>
               <span className="bg-surface-secondary/40 text-text-main border-border/10 rounded border px-1.5 py-0.5 font-mono text-[10.5px] break-all select-all">
@@ -171,71 +172,11 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
   return <div className="text-text-muted/50 py-1 text-[11px] italic">No arguments provided</div>;
 }
 
-function getToolMeta(kind?: string, name?: string) {
-  const k = kind ?? '';
-  const n = name ?? '';
-
-  if (
-    k === 'read' ||
-    k === 'edit' ||
-    k === 'move' ||
-    n.includes('file') ||
-    n.includes('view') ||
-    n.includes('read') ||
-    n.includes('write')
-  ) {
-    return {
-      color: 'text-brand-green',
-      icon: 'file',
-      bgColor: 'bg-brand-green/10',
-      borderColor: 'border-brand-green/20',
-    };
-  }
-  if (k === 'delete' || n.includes('delete') || n.includes('remove') || n.includes('kill')) {
-    return {
-      color: 'text-rose-500',
-      icon: 'trash',
-      bgColor: 'bg-rose-500/10',
-      borderColor: 'border-rose-500/20',
-    };
-  }
-  if (k === 'search' || k === 'fetch' || n.includes('search') || n.includes('grep')) {
-    return {
-      color: 'text-brand-blue',
-      icon: 'search',
-      bgColor: 'bg-brand-blue/10',
-      borderColor: 'border-brand-blue/20',
-    };
-  }
-  if (k === 'execute' || n.includes('command') || n.includes('shell') || n.includes('run')) {
-    return {
-      color: 'text-brand-peach',
-      icon: 'terminal',
-      bgColor: 'bg-brand-peach/10',
-      borderColor: 'border-brand-peach/20',
-    };
-  }
-  if (k === 'think') {
-    return {
-      color: 'text-accent',
-      icon: 'think',
-      bgColor: 'bg-accent/10',
-      borderColor: 'border-accent/20',
-    };
-  }
-  return {
-    color: 'text-text-muted',
-    icon: 'settings',
-    bgColor: 'bg-text-muted/10',
-    borderColor: 'border-text-muted/20',
-  };
-}
-
-function renderToolIcon(iconName: string, className: string) {
-  if (iconName === 'file') return <FileText className={className} />;
-  if (iconName === 'trash') return <Trash2 className={className} />;
-  if (iconName === 'search') return <Search className={className} />;
-  if (iconName === 'terminal') return <Terminal className={className} />;
+function ToolIcon({ icon, className }: { icon: string; className: string }) {
+  if (icon === 'file') return <FileText className={className} />;
+  if (icon === 'trash') return <Trash2 className={className} />;
+  if (icon === 'search') return <Search className={className} />;
+  if (icon === 'terminal') return <Terminal className={className} />;
   return <Settings className={className} />;
 }
 
@@ -277,7 +218,7 @@ export const ToolCallCard = memo(function ToolCallCard({
       .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <div className="group/tool w-full py-0.5">
+    <div data-font-ctx="terminal" className="group/tool w-full py-0.5">
       <button
         type="button"
         className="focus-visible:ring-accent/40 focus-visible:ring-offset-background flex w-full cursor-pointer items-center rounded-lg border-none bg-transparent text-left outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1"
@@ -291,15 +232,15 @@ export const ToolCallCard = memo(function ToolCallCard({
         >
           <div className="flex min-w-0 items-center gap-2">
             <div
-              className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ${isStreaming ? 'scale-105' : 'group-hover/tool:scale-105'} ${iconBgBorder}`}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ${isStreaming ? 'scale-105' : 'group-hover/tool:scale-105'} ${iconBgBorder}`}
             >
               {isFailed ? (
-                <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
+                <AlertCircle className="h-3 w-3 text-rose-500" />
               ) : (
-                renderToolIcon(toolMeta.icon, `h-3 w-3 ${toolMeta.color}`)
+                <ToolIcon icon={toolMeta.icon} className={`h-3 w-3 ${toolMeta.color}`} />
               )}
             </div>
-            <span className="text-text-main truncate text-[11px] font-medium tracking-tight">
+            <span className="text-text-main truncate text-[11px] font-bold tracking-tight">
               {titleText}
             </span>
           </div>

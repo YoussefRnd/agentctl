@@ -33,7 +33,7 @@ export function NewProjectPalette() {
 
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-transparent p-4">
-      <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-6">
+      <div className="relative z-10 flex w-full max-w-2xl flex-col items-center space-y-4">
         {mutation.isPending ? (
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="text-accent h-8 w-8 animate-spin" />
@@ -74,7 +74,7 @@ export function NewProjectPalette() {
                 onClick={() => {
                   setShowExplorer(true);
                 }}
-                className="h-12 px-8 text-[13px] font-bold tracking-widest uppercase"
+                className="h-10 px-6 text-[13px] font-bold tracking-widest uppercase"
               >
                 OPEN_NEW_PROJECT
               </Button>
