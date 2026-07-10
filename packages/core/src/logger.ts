@@ -25,8 +25,7 @@ export interface Logger {
   debug: LogFn;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-const noop = () => {};
+const noop = () => { return; };
 
 /** Silent logger — used as the default when no logger is injected. */
 export const noopLogger: Logger = {

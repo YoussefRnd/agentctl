@@ -33,8 +33,6 @@ export const useActionDispatcher = () => {
             errorMessage ?? (error instanceof Error ? error.message : 'Action failed');
           toast.error(message);
         }
-        // eslint-disable-next-line no-console
-        console.error(`Action "${actionName}" failed:`, error);
         return undefined;
       } finally {
         removePending(actionName);

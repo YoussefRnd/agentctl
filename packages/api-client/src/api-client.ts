@@ -72,12 +72,10 @@ export const apiClient = {
         throw new ApiError(detail, response.status);
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let data: any = null;
+      let data: unknown = null;
       if (response.status !== 204) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          data = await response.json();
+          data = await response.json() as unknown;
         } catch {
           // Response body is empty or not JSON
         }

@@ -1,5 +1,5 @@
 import { initServer } from '@ts-rest/fastify';
-import { apiContract, sessionRowSchema, providerCapabilitySchema } from '@agentctl/shared';
+import { apiContract, sessionRowSchema, providerCapabilitySchema, DEFAULT_FONT_CONFIG, type McpToolResult, type FontConfig } from '@agentctl/shared';
 import fp from 'fastify-plugin';
 import { projects, sessions, mcpServers } from '@agentctl/core';
 import { eq, desc } from 'drizzle-orm';
@@ -7,7 +7,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { AppError } from '../errors/app-error.js';
-import type { McpToolResult } from '@agentctl/shared';
 
 export default fp(async (fastify) => {
   const s = initServer();
@@ -381,6 +380,14 @@ export default fp(async (fastify) => {
     },
     getSettings: async () => {
       const raw = await fastify.providerRegistry.getSettings();
+      let fontConfig: FontConfig = DEFAULT_FONT_CONFIG;
+      if (raw.fontConfig) {
+        try {
+          fontConfig = JSON.parse(raw.fontConfig) as FontConfig;
+        } catch {
+          /* use default */
+        }
+      }
       return {
         status: 200 as const,
         body: {
@@ -390,6 +397,7 @@ export default fp(async (fastify) => {
           defaultProviderId: raw.defaultProviderId ?? null,
           showThinking: raw.showThinking === 'true',
           registrySyncError: raw.registrySyncError ?? null,
+          fontConfig,
         },
       };
     },
@@ -424,7 +432,21 @@ export default fp(async (fastify) => {
           body.registrySyncError ?? '',
         );
       }
+      if (body.fontConfig !== undefined) {
+        const existing = await fastify.providerRegistry.getSettings();
+        const prev = existing.fontConfig ? JSON.parse(existing.fontConfig) as Partial<FontConfig> : {};
+        const merged: FontConfig = { ...DEFAULT_FONT_CONFIG, ...prev, ...body.fontConfig };
+        await fastify.providerRegistry.updateSetting('fontConfig', JSON.stringify(merged));
+      }
       const raw = await fastify.providerRegistry.getSettings();
+      let fontConfig: FontConfig = DEFAULT_FONT_CONFIG;
+      if (raw.fontConfig) {
+        try {
+          fontConfig = JSON.parse(raw.fontConfig) as FontConfig;
+        } catch {
+          /* use default */
+        }
+      }
       return {
         status: 200 as const,
         body: {
@@ -434,6 +456,7 @@ export default fp(async (fastify) => {
           defaultProviderId: raw.defaultProviderId ?? null,
           showThinking: raw.showThinking === 'true',
           registrySyncError: raw.registrySyncError ?? null,
+          fontConfig,
         },
       };
     },
@@ -839,8 +862,7 @@ export default fp(async (fastify) => {
         body: tools.map((t) => ({
           name: t.name,
           description: t.description,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          inputSchema: t.inputSchema as Record<string, any>,
+          inputSchema: t.inputSchema,
           serverId: t.serverId,
         })),
       };

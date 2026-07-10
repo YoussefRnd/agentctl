@@ -368,11 +368,9 @@ if (!app.requestSingleInstanceLock()) {
 
     try {
       serverPort = await startServer();
-      // eslint-disable-next-line no-console
-      console.log(`Server started on port ${serverPort.toString()}`);
+      process.stdout.write(`Server started on port ${serverPort.toString()}\n`);
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to start server:', err);
+      process.stderr.write(`Failed to start server: ${String(err)}\n`);
       app.quit();
       return;
     }

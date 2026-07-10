@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
 import type { SessionStatus, ACPEvent, ProviderStatus, SessionMode } from '@agentctl/shared';
 
@@ -120,8 +120,7 @@ export const acpEvents = sqliteTable(
       .notNull()
       .references(() => sessions.id, { onDelete: 'cascade' }),
     parentEventId: integer('parent_event_id')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .references((): any => acpEvents.id, { onDelete: 'cascade' }),
+      .references((): AnySQLiteColumn => acpEvents.id, { onDelete: 'cascade' }),
     type: text('type').$type<ACPEvent['type']>().notNull(),
     data: text('data').notNull(), // JSON string
     metadata: text('metadata'), // JSON string

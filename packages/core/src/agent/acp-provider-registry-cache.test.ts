@@ -88,8 +88,7 @@ test('ProviderRegistry discover does not recurse forever when sync yields no pro
   const providersList = await registry.discover();
 
   assert.deepEqual(providersList, []);
-  // eslint-disable-next-line @typescript-eslint/unbound-method
-  assert.equal(vi.mocked(registry.sync).mock.calls.length, 1);
+  assert.equal(vi.mocked(registry).sync.mock.calls.length, 1);
 });
 
 test('ProviderRegistry sync prunes older registry snapshots after a refresh', async () => {

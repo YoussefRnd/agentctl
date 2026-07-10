@@ -39,7 +39,6 @@ async function startServer() {
 }
 
 startServer().catch((err: unknown) => {
-  // eslint-disable-next-line no-console
-  console.error('Failed to start embedded server:', err);
+  process.stderr.write(`Failed to start embedded server: ${String(err)}\n`);
   process.exit(1);
 });
