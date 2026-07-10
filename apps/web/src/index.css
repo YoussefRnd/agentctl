@@ -59,3 +59,14 @@ html {
 .caption-3xs { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .caption-2xs { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .caption-xs  { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+
+@layer utilities {
+  .app-region-drag {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+  .app-region-no-drag {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+}

@@ -155,13 +155,21 @@ function startServer(): Promise<number> {
 }
 
 function createWindow() {
+  const isMac = process.platform === 'darwin';
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 800,
     minHeight: 600,
     title: 'AgentCtl',
-    autoHideMenuBar: true,
+    ...(isMac
+      ? {
+          titleBarStyle: 'hidden' as const,
+          trafficLightPosition: { x: 16, y: 18 },
+        }
+      : {
+          frame: false,
+        }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -179,99 +187,14 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-}
 
-// ─── App Menu ────────────────────────────────────────────────────────
-function buildAppMenu() {
-  const isMac = process.platform === 'darwin';
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send('win:maximized-changed', true);
+  });
 
-  const template: Electron.MenuItemConstructorOptions[] = [
-    ...(isMac
-      ? [
-          {
-            label: app.name,
-            submenu: [
-              { role: 'about' as const },
-              { type: 'separator' as const },
-              { role: 'services' as const },
-              { type: 'separator' as const },
-              { role: 'hide' as const },
-              { role: 'hideOthers' as const },
-              { role: 'unhide' as const },
-              { type: 'separator' as const },
-              { role: 'quit' as const },
-            ],
-          },
-        ]
-      : []),
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'Settings',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => mainWindow?.webContents.send('navigate', '/settings'),
-        },
-        { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' },
-      ],
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-      ],
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        ...(isMac
-          ? [
-              { type: 'separator' as const },
-              { role: 'front' as const },
-              { type: 'separator' as const },
-              { role: 'window' as const },
-            ]
-          : [{ role: 'close' as const }]),
-      ],
-    },
-    {
-      role: 'help',
-      submenu: [
-        {
-          label: 'AgentCtl on GitHub',
-          click: () => {
-            void shell.openExternal('https://github.com/YoussefRnd/agentctl');
-          },
-        },
-      ],
-    },
-  ];
-
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send('win:maximized-changed', false);
+  });
 }
 
 // ─── System Tray ─────────────────────────────────────────────────────
@@ -331,6 +254,48 @@ function registerIpcHandlers() {
   ipcMain.handle('app:get-version', () => app.getVersion());
 }
 
+function registerWindowIpcHandlers() {
+  ipcMain.on('win:minimize', () => {
+    mainWindow?.minimize();
+  });
+
+  ipcMain.on('win:maximize', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  });
+
+  ipcMain.on('win:close', () => {
+    mainWindow?.close();
+  });
+
+  ipcMain.handle('win:is-maximized', () => {
+    return mainWindow ? mainWindow.isMaximized() : false;
+  });
+
+  ipcMain.on('win:open-external', (_event, url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:') {
+        void shell.openExternal(url);
+      }
+    } catch {
+      // ignore invalid URLs
+    }
+  });
+
+  ipcMain.on('win:toggle-devtools', () => {
+    mainWindow?.webContents.toggleDevTools();
+  });
+
+  ipcMain.on('win:reload', () => {
+    mainWindow?.reload();
+  });
+}
+
 // ─── App Lifecycle ───────────────────────────────────────────────────
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -365,6 +330,8 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     registerIpcHandlers();
+    registerWindowIpcHandlers();
+    Menu.setApplicationMenu(null);
 
     try {
       serverPort = await startServer();
@@ -375,7 +342,6 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
 
-    buildAppMenu();
     createWindow();
     createTray();
 

@@ -1,5 +1,4 @@
 import { type ReactNode, useRef, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Group,
   Panel,
@@ -10,6 +9,7 @@ import {
 } from 'react-resizable-panels';
 import { GlassPanel } from '@agentctl/ui';
 import { ProgressBar } from './ProgressBar';
+import { TitleBar } from './TitleBar';
 
 interface ShellProps {
   children: ReactNode;
@@ -71,27 +71,7 @@ export function Shell({
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
       <ProgressBar />
 
-      <div className="border-border/50 bg-background/50 relative z-40 border-b backdrop-blur-xl">
-        <div className="flex h-14 items-center gap-3 px-3">
-          <div className="hidden w-[240px] shrink-0 items-center lg:flex">
-            <Link
-              to="/"
-              className="text-text-main font-sans text-[12px] font-black tracking-[0.4em] uppercase transition-opacity hover:opacity-80"
-            >
-              AGENTCTL
-            </Link>
-          </div>
-          <div className="flex shrink-0 items-center pl-2 lg:hidden">
-            <Link
-              to="/"
-              className="text-text-main font-sans text-[12px] font-black tracking-[0.4em] uppercase transition-opacity hover:opacity-80"
-            >
-              AGENTCTL
-            </Link>
-          </div>
-          <div className="flex h-full min-w-0 flex-1 items-center">{nav}</div>
-        </div>
-      </div>
+      <TitleBar nav={nav} />
 
       <div className="relative z-10 min-h-0 w-full flex-1 overflow-hidden p-3">
         <Group defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged}>
