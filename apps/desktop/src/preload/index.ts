@@ -7,6 +7,7 @@ export interface ElectronAPI {
   onNavigate: (callback: (path: string) => void) => void;
   onDeepLink: (callback: (url: string) => void) => void;
   platform: string;
+  getWindowControls: () => Promise<{ minimize: boolean; maximize: boolean; close: boolean }>;
   win: {
     minimize: () => void;
     maximize: () => void;
@@ -15,9 +16,39 @@ export interface ElectronAPI {
     onMaximizeChange: (callback: (isMaximized: boolean) => void) => () => void;
     openExternal: (url: string) => void;
     toggleDevTools: () => void;
+    toggleFullscreen: () => void;
+    quit: () => void;
     reload: () => void;
   };
+  edit: {
+    undo: () => void;
+    redo: () => void;
+    cut: () => void;
+    copy: () => void;
+    paste: () => void;
+    selectAll: () => void;
+  };
+  view: {
+    zoomIn: () => void;
+    zoomOut: () => void;
+    zoomReset: () => void;
+  };
+  update: {
+    getState: () => Promise<UpdateState>;
+    onUpdate: (callback: (state: UpdateState) => void) => () => void;
+    check: () => void;
+    install: () => void;
+  };
 }
+
+export type UpdateState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'available'; version: string }
+  | { status: 'downloading'; version: string; percent: number }
+  | { status: 'downloaded'; version: string }
+  | { status: 'up-to-date' }
+  | { status: 'error'; message: string };
 
 const api: ElectronAPI = {
   getServerPort: () => ipcRenderer.invoke('server:get-port'),
@@ -34,6 +65,7 @@ const api: ElectronAPI = {
     });
   },
   platform: process.platform,
+  getWindowControls: () => ipcRenderer.invoke('win:get-controls'),
   win: {
     minimize: () => {
       ipcRenderer.send('win:minimize');
@@ -60,8 +92,63 @@ const api: ElectronAPI = {
     toggleDevTools: () => {
       ipcRenderer.send('win:toggle-devtools');
     },
+    toggleFullscreen: () => {
+      ipcRenderer.send('win:toggle-fullscreen');
+    },
+    quit: () => {
+      ipcRenderer.send('app:quit');
+    },
     reload: () => {
       ipcRenderer.send('win:reload');
+    },
+  },
+  edit: {
+    undo: () => {
+      ipcRenderer.send('edit:undo');
+    },
+    redo: () => {
+      ipcRenderer.send('edit:redo');
+    },
+    cut: () => {
+      ipcRenderer.send('edit:cut');
+    },
+    copy: () => {
+      ipcRenderer.send('edit:copy');
+    },
+    paste: () => {
+      ipcRenderer.send('edit:paste');
+    },
+    selectAll: () => {
+      ipcRenderer.send('edit:select-all');
+    },
+  },
+  view: {
+    zoomIn: () => {
+      ipcRenderer.send('view:zoom-in');
+    },
+    zoomOut: () => {
+      ipcRenderer.send('view:zoom-out');
+    },
+    zoomReset: () => {
+      ipcRenderer.send('view:zoom-reset');
+    },
+  },
+  update: {
+    getState: () => ipcRenderer.invoke('update:get-state'),
+    onUpdate: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: UpdateState) => {
+        callback(state);
+      };
+      ipcRenderer.on('update:state', listener);
+      return () => {
+        ipcRenderer.removeListener('update:state', listener);
+      };
+    },
+    check: () => {
+      ipcRenderer.send('update:check');
+    },
+    install: () => {
+      ipcRenderer.send('update:install');
     },
   },
 };

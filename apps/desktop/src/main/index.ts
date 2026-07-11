@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, utilityProcess, Menu, Tray, nativeImage, s
 import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 import fs from 'node:fs';
+import { resolveWindowControls } from './windowControls';
 
 interface ReadyMessage {
   type: 'ready';
@@ -222,6 +223,8 @@ function createTray() {
           if (mainWindow) {
             mainWindow.show();
             mainWindow.focus();
+          } else {
+            createWindow();
           }
         },
       },
@@ -240,6 +243,8 @@ function createTray() {
       if (mainWindow) {
         mainWindow.show();
         mainWindow.focus();
+      } else {
+        createWindow();
       }
     });
   } catch {
@@ -253,6 +258,10 @@ function registerIpcHandlers() {
   ipcMain.handle('server:get-secret', () => serverSecret);
   ipcMain.handle('app:get-version', () => app.getVersion());
 }
+
+// Registered at module load so the renderer can query it the moment it
+// connects, regardless of whenReady() timing / dev restarts.
+ipcMain.handle('win:get-controls', () => resolveWindowControls(mainWindow));
 
 function registerWindowIpcHandlers() {
   ipcMain.on('win:minimize', () => {
@@ -294,12 +303,142 @@ function registerWindowIpcHandlers() {
   ipcMain.on('win:reload', () => {
     mainWindow?.reload();
   });
+
+  ipcMain.on('win:toggle-fullscreen', () => {
+    if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+  });
+
+  ipcMain.on('edit:undo', () => {
+    mainWindow?.webContents.undo();
+  });
+  ipcMain.on('edit:redo', () => {
+    mainWindow?.webContents.redo();
+  });
+  ipcMain.on('edit:cut', () => {
+    mainWindow?.webContents.cut();
+  });
+  ipcMain.on('edit:copy', () => {
+    mainWindow?.webContents.copy();
+  });
+  ipcMain.on('edit:paste', () => {
+    mainWindow?.webContents.paste();
+  });
+  ipcMain.on('edit:select-all', () => {
+    mainWindow?.webContents.selectAll();
+  });
+
+  const ZOOM_STEP = 0.5;
+  const ZOOM_MIN = -3;
+  const ZOOM_MAX = 3;
+  ipcMain.on('view:zoom-in', () => {
+    if (!mainWindow) return;
+    const next = Math.min(ZOOM_MAX, mainWindow.webContents.getZoomLevel() + ZOOM_STEP);
+    mainWindow.webContents.setZoomLevel(next);
+  });
+  ipcMain.on('view:zoom-out', () => {
+    if (!mainWindow) return;
+    const next = Math.max(ZOOM_MIN, mainWindow.webContents.getZoomLevel() - ZOOM_STEP);
+    mainWindow.webContents.setZoomLevel(next);
+  });
+  ipcMain.on('view:zoom-reset', () => {
+    mainWindow?.webContents.setZoomLevel(0);
+  });
+
+  ipcMain.on('app:quit', () => {
+    app.quit();
+  });
+}
+
+// ─── Auto Updater ────────────────────────────────────────────────────
+type UpdateState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'available'; version: string }
+  | { status: 'downloading'; version: string; percent: number }
+  | { status: 'downloaded'; version: string }
+  | { status: 'up-to-date' }
+  | { status: 'error'; message: string };
+
+let updateState: UpdateState = { status: 'idle' };
+
+function emitUpdateState() {
+  mainWindow?.webContents.send('update:state', updateState);
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    updateState = { status: 'checking' };
+    emitUpdateState();
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    updateState = { status: 'available', version: info.version };
+    emitUpdateState();
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    updateState = { status: 'up-to-date' };
+    emitUpdateState();
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    if (updateState.status === 'downloaded') return;
+    const version = 'version' in updateState ? updateState.version : '';
+    updateState = {
+      status: 'downloading',
+      version,
+      percent: progress.percent,
+    };
+    emitUpdateState();
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    updateState = { status: 'downloaded', version: info.version };
+    emitUpdateState();
+  });
+
+  autoUpdater.on('error', (err) => {
+    updateState = { status: 'error', message: err instanceof Error ? err.message : String(err) };
+    emitUpdateState();
+  });
+
+  if (app.isPackaged) {
+    void autoUpdater.checkForUpdates().catch(() => undefined);
+  }
+}
+
+function registerUpdateIpc() {
+  ipcMain.handle('update:get-state', () => updateState);
+
+  ipcMain.on('update:check', () => {
+    if (!app.isPackaged) {
+      // Mock update state for development mode to avoid dev-updater.yml errors
+      updateState = { status: 'checking' };
+      emitUpdateState();
+      setTimeout(() => {
+        updateState = { status: 'up-to-date' };
+        emitUpdateState();
+      }, 1000);
+      return;
+    }
+    void autoUpdater.checkForUpdates().catch(() => undefined);
+  });
+
+  ipcMain.on('update:install', () => {
+    autoUpdater.quitAndInstall();
+  });
 }
 
 // ─── App Lifecycle ───────────────────────────────────────────────────
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  if (process.platform === 'linux') {
+    app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+  }
+
   // Handle second-instance (deep links on Windows/Linux)
   app.on('second-instance', (_event, argv) => {
     const deeplink = argv.find((a) => a.startsWith(`${PROTOCOL}:`));
@@ -331,7 +470,61 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(async () => {
     registerIpcHandlers();
     registerWindowIpcHandlers();
-    Menu.setApplicationMenu(null);
+    const template: Electron.MenuItemConstructorOptions[] = [];
+    if (process.platform === 'darwin') {
+      template.push({
+        label: app.name,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' },
+        ],
+      });
+    }
+    template.push(
+      {
+        label: 'File',
+        submenu: [{ role: 'close' }],
+      },
+      {
+        label: 'Edit',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' },
+        ],
+      },
+      {
+        label: 'View',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forceReload' },
+          { role: 'toggleDevTools' },
+          { type: 'separator' },
+          { role: 'zoomIn' },
+          { role: 'zoomOut' },
+          { role: 'resetZoom' },
+          { type: 'separator' },
+          { role: 'togglefullscreen' },
+        ],
+      },
+      {
+        label: 'Window',
+        submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close' }],
+      },
+    );
+    const menu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(menu);
 
     try {
       serverPort = await startServer();
@@ -345,12 +538,9 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     createTray();
 
-    // Auto-updater — only in production builds
-    if (app.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify().catch(() => {
-        // Silent fail — updates are optional
-      });
-    }
+    // Auto-updater — listeners always active; initial check only in production builds
+    registerUpdateIpc();
+    setupAutoUpdater();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

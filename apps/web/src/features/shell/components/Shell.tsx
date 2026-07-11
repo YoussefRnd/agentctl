@@ -10,6 +10,7 @@ import {
 import { GlassPanel } from '@agentctl/ui';
 import { ProgressBar } from './ProgressBar';
 import { TitleBar } from './TitleBar';
+import { UpdateToast } from './UpdateToast';
 
 interface ShellProps {
   children: ReactNode;
@@ -160,6 +161,8 @@ export function Shell({
           onClick={onCloseAside}
         />
       )}
+
+      <UpdateToast />
     </div>
   );
 }
