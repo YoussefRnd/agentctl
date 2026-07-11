@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from 'react';
 
 import { Shell } from '../../shell/components/Shell';
 import { Sidebar } from '../../shell/components/Sidebar';
-import { useSession } from '../../../contexts/SessionContext';
 import { SessionHeader } from './SessionHeader';
 import { Workbench, type WorkbenchTab } from './Workbench';
 import { MainFeed } from './MainFeed';
@@ -10,8 +9,6 @@ import { MainFeed } from './MainFeed';
 const sidebarElement = <Sidebar />;
 
 export function SessionWorkspace() {
-  const { sessionId, sessionData } = useSession();
-
   const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>('status');
   const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -32,7 +29,6 @@ export function SessionWorkspace() {
   const headerElement = useMemo(
     () => (
       <SessionHeader
-        sessionId={sessionId}
         onOpenMobileSidebar={() => {
           setIsMobileSidebarOpen(true);
         }}
@@ -40,11 +36,9 @@ export function SessionWorkspace() {
           setIsWorkbenchOpen((prev) => !prev);
         }}
         isWorkbenchOpen={isWorkbenchOpen}
-        sessionTitle={sessionData?.session.title ?? null}
-        status={sessionData?.session.status ?? null}
       />
     ),
-    [sessionId, isWorkbenchOpen, sessionData?.session.title, sessionData?.session.status],
+    [isWorkbenchOpen],
   );
 
   const workbenchElement = useMemo(

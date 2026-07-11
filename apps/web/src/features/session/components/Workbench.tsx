@@ -25,7 +25,7 @@ export function Workbench({ isOpen: _isOpen, tab, onTabChange }: WorkbenchProps)
       >
         <div className="flex h-full min-w-0 flex-col">
           {/* Enhanced Tab Navigation */}
-          <div className="border-border/20 bg-surface-secondary/10 flex h-10 shrink-0 items-center gap-1 border-b px-2">
+          <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center gap-1 border-b px-2">
             {(['status', 'changes', 'worktrees'] as const).map((t) => (
               <button
                 key={t}

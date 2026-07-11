@@ -2,7 +2,6 @@ import { Routes, Route } from 'react-router-dom';
 import { Shell } from './features/shell/components/Shell';
 import { Sidebar } from './features/shell/components/Sidebar';
 import { SettingsSidebar } from './features/shell/components/SettingsSidebar';
-import { GlobalNav } from './features/shell/components/GlobalNav';
 import { SessionView } from './routes/SessionView';
 import { LoginView } from './routes/LoginView';
 import { NewProjectPalette } from './features/project/components/NewProjectPalette';
@@ -23,7 +22,7 @@ export function App() {
         <Route
           path="/"
           element={
-            <Shell nav={<GlobalNav title="projects" />} sidebar={<Sidebar />}>
+            <Shell nav={null} sidebar={<Sidebar />}>
               <NewProjectPalette />
             </Shell>
           }
@@ -31,7 +30,7 @@ export function App() {
         <Route
           path="/settings"
           element={
-            <Shell nav={<GlobalNav title="settings" />} sidebar={<SettingsSidebar />}>
+            <Shell nav={null} sidebar={<SettingsSidebar />}>
               <SettingsPage />
             </Shell>
           }

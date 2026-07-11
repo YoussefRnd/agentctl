@@ -123,7 +123,13 @@ export function Sidebar() {
       aria-label="Main Sidebar"
       className="relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent"
     >
-      <div className="mt-8 mb-2 space-y-6 px-4">
+      <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center border-b px-4">
+        <span className="text-text-main text-[10px] font-black tracking-[0.2em] uppercase opacity-45 select-none">
+          WORKSPACE
+        </span>
+      </div>
+
+      <div className="mt-4 mb-2 space-y-6 px-4">
         <div className="relative">
           <SearchBar
             ref={searchInputRef}

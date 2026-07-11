@@ -1,47 +1,16 @@
 import { Menu, PanelRight } from 'lucide-react';
 
 interface SessionHeaderProps {
-  sessionId: string;
   onOpenMobileSidebar: () => void;
   onToggleWorkbench: () => void;
   isWorkbenchOpen: boolean;
-  sessionTitle?: string | null;
-  status?: string | null;
 }
 
 export function SessionHeader({
-  sessionId,
   onOpenMobileSidebar,
   onToggleWorkbench,
   isWorkbenchOpen,
-  sessionTitle,
-  status,
 }: SessionHeaderProps) {
-  // Rich, curated statuses with distinct colored glows and animations
-  const statusConfig = (() => {
-    switch (status) {
-      case 'running':
-        return {
-          color: 'bg-brand-blue shadow-[0_0_6px_var(--color-brand-blue)]',
-          animate: 'animate-pulse',
-        };
-      case 'needs_attention':
-        return { color: 'bg-brand-peach shadow-[0_0_6px_var(--color-brand-peach)]', animate: '' };
-      case 'error':
-        return {
-          color: 'bg-brand-red shadow-[0_0_6px_var(--color-brand-red)]',
-          animate: 'animate-pulse',
-        };
-      case 'merged':
-        return { color: 'bg-brand-mauve/60', animate: '' };
-      case 'discarded':
-        return { color: 'bg-brand-surface0/40', animate: '' };
-      case 'idle':
-      default:
-        return { color: 'bg-brand-green shadow-[0_0_6px_var(--color-brand-green)]', animate: '' };
-    }
-  })();
-
   return (
     <div className="flex h-full w-full min-w-0 items-center justify-between">
       <div className="flex min-w-0 items-center gap-3">
@@ -53,21 +22,6 @@ export function SessionHeader({
         >
           <Menu className="h-5 w-5" />
         </button>
-        {/* Session chip */}
-        <div className="border-border/20 bg-surface/40 flex items-center gap-2 rounded-full border px-3.5 py-1">
-          <div className="relative flex h-2 w-2">
-            {statusConfig.animate && (
-              <span
-                className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${statusConfig.color} ${statusConfig.animate}`}
-              />
-            )}
-            <span className={`relative inline-flex h-2 w-2 rounded-full ${statusConfig.color}`} />
-          </div>
-          <span className="text-text-muted max-w-[180px] truncate text-[11px] font-medium tracking-tight">
-            {status === 'error' ? '[crashed] ' : ''}
-            {sessionTitle ?? `session·${sessionId.slice(0, 8)}`}
-          </span>
-        </div>
       </div>
 
       {/* Workbench toggle — always visible in navbar */}
