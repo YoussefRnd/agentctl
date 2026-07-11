@@ -6,6 +6,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient, setApiBaseUrl } from '@agentctl/api-client';
 import { ThemeProvider } from './contexts/ThemeProvider';
 import { ProjectProvider } from './contexts/ProjectContext';
+import { UpdateProvider } from './contexts/UpdateContext';
 import { App } from './App';
 import { AppErrorBoundary } from './features/shell/components/AppErrorBoundary';
 import './index.css';
@@ -29,11 +30,13 @@ if (rootElement) {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <ProjectProvider>
-            <Router>
-              <AppErrorBoundary key={appKey} onRetry={handleRetry}>
-                <App />
-              </AppErrorBoundary>
-            </Router>
+            <UpdateProvider>
+              <Router>
+                <AppErrorBoundary key={appKey} onRetry={handleRetry}>
+                  <App />
+                </AppErrorBoundary>
+              </Router>
+            </UpdateProvider>
           </ProjectProvider>
         </ThemeProvider>
         {/* Toaster lives outside the error boundary so toasts survive crashes */}
