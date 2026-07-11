@@ -10,6 +10,7 @@ import { McpSettings } from './McpSettings';
 import { getLightThemes, getDarkThemes } from '../../../data/theme-registry';
 import { ThemeSelect } from './ThemeSelect';
 import { FontSettingsPanel } from './FontSettingsPanel';
+import { UpdateSettingsCard } from './UpdateSettingsCard';
 
 export function SettingsPage() {
   const [searchParams] = useSearchParams();
@@ -166,6 +167,17 @@ export function SettingsPage() {
                 });
               }}
             />
+          </div>
+
+          {/* Updates */}
+          <div className="pt-6">
+            <h2 className="text-text-main mb-3 text-lg font-black tracking-widest uppercase">
+              UPDATES
+            </h2>
+            <p className="text-text-muted mt-1 mb-4 caption-xs opacity-60">
+              APPLICATION_UPDATE_STATUS_AND_CONTROLS
+            </p>
+            <UpdateSettingsCard />
           </div>
         </div>
       </div>

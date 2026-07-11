@@ -95,7 +95,10 @@ export function useTempFontZoom(fontConfig: FontConfig | undefined) {
       const keys = Object.keys(offsets) as (keyof FontConfig)[];
       for (const key of keys) {
         offsets[key] = 0;
-        document.documentElement.style.removeProperty(`--font-${key}-size`);
+        document.documentElement.style.setProperty(
+          `--font-${key}-size`,
+          `${String(fontConfig[key].size)}px`,
+        );
       }
     };
 
