@@ -382,6 +382,20 @@ export const apiContract = {
     },
     summary: 'Delete session permanently',
   },
+  renameSession: {
+    method: 'PATCH',
+    path: '/api/sessions/:id/title',
+    pathParams: z.object({
+      id: z.string().uuid(),
+    }),
+    body: z.object({
+      title: z.string(),
+    }),
+    responses: {
+      200: z.object({ success: z.boolean() }),
+    },
+    summary: 'Rename session title',
+  },
   archiveSession: {
     method: 'POST',
     path: '/api/sessions/:id/archive',

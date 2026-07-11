@@ -354,6 +354,18 @@ export default fp(async (fastify) => {
         body: { success: true },
       };
     },
+    renameSession: async ({ params, body }) => {
+      const { id } = params;
+      const { title } = body;
+      await fastify.db
+        .update(sessions)
+        .set({ title })
+        .where(eq(sessions.id, id));
+      return {
+        status: 200 as const,
+        body: { success: true },
+      };
+    },
     archiveSession: async ({ params }) => {
       const { id } = params;
       await fastify.sessionService.archiveSession(id);

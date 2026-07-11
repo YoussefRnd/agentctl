@@ -9,9 +9,12 @@ import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import { useProviders } from '../../../hooks/useProviders';
 import { useQueryClient } from '@tanstack/react-query';
-import { restoreSession, rewindSession } from '@agentctl/api-client';
+import { restoreSession, rewindSession, archiveSession, deleteSession, renameSession } from '@agentctl/api-client';
 import { toast } from 'sonner';
 import type { RewindMode } from './RewindMenu';
+import { MoreHorizontal, Pencil, Archive, Trash2, Check } from 'lucide-react';
+import { useActionDispatcher } from '../../../hooks/useActionDispatcher';
+import { Dropdown } from '@agentctl/ui';
 
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
@@ -21,6 +24,51 @@ export function MainFeed() {
 
   const { handleSend, handleApprove, handleDeny } = useSessionActions();
   const { switchProvider, isSwitching } = useProviders(sessionId);
+
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState('');
+  const { execute } = useActionDispatcher();
+
+  const handleRenameSubmit = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!editTitleValue.trim()) return;
+    void execute(`rename-session-${sessionId}`, () => renameSession(sessionId, editTitleValue.trim()), {
+      successMessage: 'Session renamed',
+      errorMessage: 'Failed to rename session',
+    }).then((result) => {
+      if (result) {
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        setIsEditingTitle(false);
+      }
+    });
+  };
+
+  const handleArchiveClick = () => {
+    void execute(`archive-session-${sessionId}`, () => archiveSession(sessionId), {
+      successMessage: 'Session archived',
+      errorMessage: 'Failed to archive session',
+    }).then((result) => {
+      if (result) {
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      }
+    });
+  };
+
+  const handleDeleteClick = () => {
+    if (!window.confirm('Are you sure you want to permanently delete this session?')) return;
+
+    void execute(`delete-session-${sessionId}`, () => deleteSession(sessionId), {
+      successMessage: 'Session deleted',
+      errorMessage: 'Failed to delete session',
+    }).then((result) => {
+      if (result) {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void navigate('/');
+      }
+    });
+  };
 
   const handleProviderSelect = (providerId: string, modelId?: string) => {
     switchProvider(providerId, modelId, sessionData);
@@ -112,9 +160,113 @@ export function MainFeed() {
     );
   }
 
+  const status = sessionData?.session.status ?? null;
+  const statusConfig = (() => {
+    switch (status) {
+      case 'running':
+        return {
+          color: 'bg-brand-blue shadow-[0_0_6px_var(--color-brand-blue)]',
+          animate: 'animate-pulse',
+        };
+      case 'needs_attention':
+        return { color: 'bg-brand-peach shadow-[0_0_6px_var(--color-brand-peach)]', animate: '' };
+      case 'error':
+        return {
+          color: 'bg-brand-red shadow-[0_0_6px_var(--color-brand-red)]',
+          animate: 'animate-pulse',
+        };
+      case 'merged':
+        return { color: 'bg-brand-mauve/60', animate: '' };
+      case 'discarded':
+        return { color: 'bg-brand-surface0/40', animate: '' };
+      case 'idle':
+      default:
+        return { color: 'bg-brand-green shadow-[0_0_6px_var(--color-brand-green)]', animate: '' };
+    }
+  })();
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-transparent">
       <div className="relative z-10 flex h-full min-w-0 flex-col">
+        {/* Session Header */}
+        <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center justify-between border-b px-6 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-2 w-2">
+              {statusConfig.animate && (
+                <span
+                  className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${statusConfig.color} ${statusConfig.animate}`}
+                />
+              )}
+              <span className={`relative inline-flex h-2 w-2 rounded-full ${statusConfig.color}`} />
+            </div>
+            {isEditingTitle ? (
+              <form onSubmit={handleRenameSubmit} className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  className="bg-surface/50 border-border/40 text-text-main focus:border-accent text-[12px] font-bold rounded border px-2 py-0.5 outline-none"
+                  value={editTitleValue}
+                  onChange={(e) => { setEditTitleValue(e.target.value); }}
+                  autoFocus
+                  onBlur={() => { setTimeout(() => { setIsEditingTitle(false); }, 200); }}
+                />
+                <button type="submit" className="text-accent hover:text-accent/80 p-0.5 transition-colors">
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+              </form>
+            ) : (
+              <span className="text-text-main text-[13px] font-bold tracking-tight">
+                {status === 'error' ? '[crashed] ' : ''}
+                {sessionData?.session.title ?? `session·${sessionId.slice(0, 8)}`}
+              </span>
+            )}
+          </div>
+
+          {/* More actions dropdown */}
+          <Dropdown.Root>
+            <Dropdown.Trigger asChild>
+              <button
+                type="button"
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary/40 rounded-lg p-1.5 transition-all outline-none"
+                aria-label="Session options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </Dropdown.Trigger>
+            <Dropdown.Portal>
+              <Dropdown.Content align="end" className="w-36">
+                <Dropdown.Item
+                  className="hover:bg-surface-tertiary text-text-main flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[10px] font-black tracking-tight uppercase transition-colors"
+                  onSelect={() => {
+                    setIsEditingTitle(true);
+                    setEditTitleValue(sessionData?.session.title ?? '');
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5 opacity-60" />
+                  RENAME
+                </Dropdown.Item>
+                <Dropdown.Item
+                  className="hover:bg-surface-tertiary text-text-main flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[10px] font-black tracking-tight uppercase transition-colors"
+                  onSelect={() => {
+                    handleArchiveClick();
+                  }}
+                >
+                  <Archive className="h-3.5 w-3.5 opacity-60" />
+                  ARCHIVE
+                </Dropdown.Item>
+                <Dropdown.Item
+                  className="hover:bg-brand-red/10 text-brand-red flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[10px] font-black tracking-tight uppercase transition-colors"
+                  onSelect={() => {
+                    handleDeleteClick();
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 opacity-65" />
+                  DELETE
+                </Dropdown.Item>
+              </Dropdown.Content>
+            </Dropdown.Portal>
+          </Dropdown.Root>
+        </div>
+
         {sessionData?.session.status === 'archived' && (
           <div className="border-warning/30 bg-warning/5 text-warning flex shrink-0 items-center justify-between border-b px-4 py-3 font-mono text-[11px] backdrop-blur-md">
             <span className="tracking-tight uppercase">

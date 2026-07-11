@@ -237,6 +237,20 @@ export async function deleteSession(sessionId: string): Promise<{ success: boole
   return res.body;
 }
 
+export async function renameSession(
+  sessionId: string,
+  title: string,
+): Promise<{ success: boolean }> {
+  const res = await api.renameSession({
+    params: { id: sessionId },
+    body: { title },
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to rename session: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
 export async function archiveSession(sessionId: string): Promise<{ success: boolean }> {
   const res = await api.archiveSession({
     params: { id: sessionId },
