@@ -2,6 +2,8 @@
   "name": "@agentctl/desktop",
   "version": "0.1.0",
   "private": true,
+  "description": "AgentCtl Desktop Client",
+  "desktopName": "agentctl",
   "author": {
     "name": "Youssef Boumlaki",
     "email": "boumlaki2002@gmail.com"
@@ -34,7 +36,6 @@
     "@agentctl/tsconfig": "workspace:*",
     "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-react": "^6.0.1",
-    "@electron/rebuild": "^4.1.0",
     "electron": "^43.0.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",

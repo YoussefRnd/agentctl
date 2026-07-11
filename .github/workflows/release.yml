@@ -37,7 +37,9 @@ jobs:
       - name: Create GitHub Release and Upload AppImage
         uses: softprops/action-gh-release@v2
         with:
-          files: apps/desktop/release/AgentCtl-*.AppImage
+          files: |
+            apps/desktop/release/AgentCtl-*.AppImage
+            apps/desktop/release/latest*.yml
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}

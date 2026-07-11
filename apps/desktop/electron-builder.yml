@@ -48,3 +48,4 @@ linux:
     - target: AppImage
   artifactName: "${productName}-${version}-Linux-${arch}.${ext}"
   category: Development
+  syncDesktopName: true

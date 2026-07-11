@@ -16,7 +16,21 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "XCURSOR_THEME",
+        "XCURSOR_SIZE",
+        "XDG_DATA_DIRS",
+        "XDG_CONFIG_DIRS",
+        "XDG_SESSION_TYPE",
+        "XDG_CURRENT_DESKTOP",
+        "DESKTOP_SESSION",
+        "GNOME_DESKTOP_SESSION_ID",
+        "KDE_FULL_SESSION",
+        "WAYLAND_DISPLAY",
+        "DISPLAY",
+        "XAUTHORITY"
+      ]
     },
     "test": {
       "dependsOn": ["^build"]
@@ -24,7 +38,6 @@
     "lint": {
       "dependsOn": ["^build"]
     },
-
     "clean": {
       "cache": false
     },
