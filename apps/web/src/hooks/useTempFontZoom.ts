@@ -1,153 +1,141 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FontConfig } from '@agentctl/shared';
+import {
+  DELTA_THRESHOLD,
+  ALL_CONTEXT_KEYS,
+  createEmptyOffsets,
+  normalizeDelta,
+  consumeDeltaSteps,
+  applySteps,
+  resolveContextKey,
+  type FontContextKey,
+  type Offsets,
+} from './fontZoomLogic';
 
-const SIZE_MIN = 8;
-const SIZE_MAX = 72;
-const DELTA_THRESHOLD = 50;
 const INDICATOR_DURATION = 1500;
 
-const LABELS: Record<keyof FontConfig, string> = {
-  ui: 'UI',
-  buffer: 'Buffer',
-  terminal: 'Terminal',
-  chat: 'Chat',
-};
+type Sizes = Record<FontContextKey, number>;
 
-let hideTimerId: ReturnType<typeof setTimeout> | undefined;
-
-function createIndicator() {
-  let el = document.getElementById('font-zoom-indicator');
-  if (el) return el;
-  el = document.createElement('div');
-  el.id = 'font-zoom-indicator';
-  Object.assign(el.style, {
-    position: 'fixed',
-    bottom: '80px',
-    left: '50%',
-    transform: 'translateX(-50%) translateY(0)',
-    zIndex: '9999',
-    borderRadius: '9999px',
-    background: 'rgba(30,30,46,0.85)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    padding: '6px 14px',
-    fontFamily: 'Geist, ui-sans-serif, system-ui, sans-serif',
-    fontSize: '11px',
-    fontWeight: '800',
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.85)',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-    backdropFilter: 'blur(12px)',
-    WebkitBackdropFilter: 'blur(12px)',
-    pointerEvents: 'none',
-    transition: 'opacity 0.15s ease, transform 0.15s ease',
-    opacity: '0',
-  });
-  document.body.appendChild(el);
-  return el;
+export interface ZoomIndicatorState {
+  context: FontContextKey;
+  size: number;
+  visible: boolean;
 }
 
-function showIndicator(label: string, size: number) {
-  const el = createIndicator();
-  el.textContent = `${label} ${String(size)}px`;
-  el.style.opacity = '1';
-  el.style.transform = 'translateX(-50%) translateY(0)';
-  clearTimeout(hideTimerId);
-  hideTimerId = setTimeout(() => {
-    el.style.opacity = '0';
-    el.style.transform = 'translateX(-50%) translateY(-4px)';
-  }, INDICATOR_DURATION);
-}
+const HIDDEN_INDICATOR: ZoomIndicatorState = { context: 'ui', size: 0, visible: false };
 
-export function useTempFontZoom(fontConfig: FontConfig | undefined) {
-  const offsetsRef = useRef<Record<keyof FontConfig, number>>({
-    ui: 0, buffer: 0, terminal: 0, chat: 0,
-  });
-  const accumulatedDelta = useRef(0);
-  const rafId = useRef(0);
+/**
+ * Ctrl/Cmd + wheel temporary font zoom. Applies per-context size offsets on top
+ * of the persisted base sizes by writing `--font-<ctx>-size` CSS variables.
+ *
+ * CSS variable writes are RAF-batched (imperative, off the React render path)
+ * for smoothness. Only the on-screen indicator is driven by React state, so
+ * rendering it stays idiomatic (lucide icon, theme classes) without re-rendering
+ * on every wheel frame.
+ */
+export function useTempFontZoom(fontConfig: FontConfig | undefined): ZoomIndicatorState {
+  const offsetsRef = useRef<Offsets>(createEmptyOffsets());
+  const [indicator, setIndicator] = useState<ZoomIndicatorState>(HIDDEN_INDICATOR);
+
+  const sizes = useMemo<Sizes | null>(() => {
+    if (!fontConfig) return null;
+    return {
+      ui: fontConfig.ui.size,
+      buffer: fontConfig.buffer.size,
+      terminal: fontConfig.terminal.size,
+      chat: fontConfig.chat.size,
+    };
+  }, [fontConfig]);
 
   useEffect(() => {
-    if (!fontConfig) return;
+    if (!sizes) return;
 
     const offsets = offsetsRef.current;
-    const pending = { context: null as keyof FontConfig | null, size: 0 };
+    let hideTimerId: ReturnType<typeof setTimeout> | undefined;
+    let rafId = 0;
+    let accumulatedDelta = 0;
+    const pending = new Map<FontContextKey, number>();
+
+    const writeSize = (context: FontContextKey, size: number) => {
+      document.documentElement.style.setProperty(`--font-${context}-size`, `${String(size)}px`);
+    };
 
     const flush = () => {
-      rafId.current = 0;
-      if (pending.context) {
-        document.documentElement.style.setProperty(
-           `--font-${pending.context}-size`,
-           `${String(pending.size)}px`,
-        );
-        pending.context = null;
+      rafId = 0;
+      for (const [context, size] of pending) writeSize(context, size);
+      pending.clear();
+    };
+
+    const scheduleFlush = () => {
+      if (!rafId) rafId = requestAnimationFrame(flush);
+    };
+
+    const applyAll = () => {
+      for (const key of ALL_CONTEXT_KEYS) {
+        const { offset, size } = applySteps(0, sizes[key], offsets[key]);
+        offsets[key] = offset;
+        writeSize(key, size);
       }
     };
 
-    const scheduleFontUpdate = (context: keyof FontConfig, size: number) => {
-      pending.context = context;
-      pending.size = size;
-      if (!rafId.current) {
-        rafId.current = requestAnimationFrame(flush);
-      }
+    const showIndicator = (context: FontContextKey, size: number) => {
+      setIndicator({ context, size, visible: true });
+      clearTimeout(hideTimerId);
+      hideTimerId = setTimeout(() => {
+        setIndicator((prev) => ({ ...prev, visible: false }));
+      }, INDICATOR_DURATION);
     };
 
     const resetAll = () => {
-      const keys = Object.keys(offsets) as (keyof FontConfig)[];
-      for (const key of keys) {
+      for (const key of ALL_CONTEXT_KEYS) {
         offsets[key] = 0;
-        document.documentElement.style.setProperty(
-          `--font-${key}-size`,
-          `${String(fontConfig[key].size)}px`,
-        );
+        writeSize(key, sizes[key]);
       }
     };
 
-    const handler = (e: WheelEvent) => {
+    const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
+
+      const context =
+        resolveContextKey(
+          e.target instanceof Element
+            ? e.target.closest<HTMLElement>('[data-font-ctx]')?.dataset.fontCtx
+            : undefined,
+        ) ?? 'ui';
+
       e.preventDefault();
 
-      const target = e.target as HTMLElement;
-      let context: keyof FontConfig = 'ui';
-      if (target.closest('[data-font-ctx="buffer"]')) context = 'buffer';
-      else if (target.closest('[data-font-ctx="terminal"]')) context = 'terminal';
-      else if (target.closest('[data-font-ctx="chat"]')) context = 'chat';
+      accumulatedDelta += normalizeDelta(e.deltaY, e.deltaMode);
+      const { steps, remainder } = consumeDeltaSteps(accumulatedDelta, DELTA_THRESHOLD);
+      accumulatedDelta = remainder;
+      if (steps === 0) return;
 
-      let rawDelta = e.deltaY;
-      if (e.deltaMode === 1) rawDelta *= 16;
-      else if (e.deltaMode === 2) rawDelta *= 500;
-
-      accumulatedDelta.current += rawDelta;
-      if (Math.abs(accumulatedDelta.current) < DELTA_THRESHOLD) return;
-
-      const direction = accumulatedDelta.current > 0 ? -1 : 1;
-      accumulatedDelta.current = 0;
-
-      const base = fontConfig[context].size;
-      offsets[context] += direction;
-      const newSize = Math.min(SIZE_MAX, Math.max(SIZE_MIN, base + offsets[context]));
-      scheduleFontUpdate(context, newSize);
-      showIndicator(LABELS[context], newSize);
+      const growSteps = -steps;
+      const { offset, size } = applySteps(growSteps, sizes[context], offsets[context]);
+      offsets[context] = offset;
+      pending.set(context, size);
+      scheduleFlush();
+      showIndicator(context, size);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === '0') {
-        e.preventDefault();
         resetAll();
       }
     };
 
-    document.addEventListener('wheel', handler, { passive: false });
+    applyAll();
+
+    document.addEventListener('wheel', onWheel, { passive: false });
     document.addEventListener('keydown', onKeyDown);
 
     return () => {
-      document.removeEventListener('wheel', handler);
+      document.removeEventListener('wheel', onWheel);
       document.removeEventListener('keydown', onKeyDown);
-      cancelAnimationFrame(rafId.current);
-      const el = document.getElementById('font-zoom-indicator');
-      if (el) {
-        clearTimeout(hideTimerId);
-        el.remove();
-      }
+      if (rafId) cancelAnimationFrame(rafId);
+      clearTimeout(hideTimerId);
     };
-  }, [fontConfig]);
+  }, [sizes]);
+
+  return indicator;
 }

@@ -165,7 +165,7 @@ export function CommandInputComposer({
       <div
         data-font-ctx="buffer"
         className={cn(
-          'liquid-glass flex flex-col overflow-visible rounded-xl border transition-all duration-300',
+          'bg-brand-mantle border-border/30 flex flex-col overflow-visible rounded-xl border transition-all duration-300',
           disabled ? 'opacity-30' : 'opacity-100',
           isFocused
             ? 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'

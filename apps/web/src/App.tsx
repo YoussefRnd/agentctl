@@ -8,14 +8,14 @@ import { NewProjectPalette } from './features/project/components/NewProjectPalet
 import { SetupWizard } from './features/settings/components/SetupWizard';
 import { SettingsPage } from './features/settings/components/SettingsPage';
 import { useSettings } from './hooks/useSettings';
-import { useTempFontZoom } from './hooks/useTempFontZoom';
+import { FontZoomIndicator } from './features/shell/components/FontZoomIndicator';
 
 export function App() {
   const { settings } = useSettings();
-  useTempFontZoom(settings?.fontConfig);
 
   return (
     <>
+      <FontZoomIndicator fontConfig={settings?.fontConfig} />
       <SetupWizard />
       <Routes>
         <Route path="/login" element={<LoginView />} />

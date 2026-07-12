@@ -68,6 +68,30 @@ export function Shell({
     }
   }, [isAsideOpen, asidePanelRef]);
 
+  useEffect(() => {
+    const handleZoomKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      const { view } = window.electronAPI ?? {};
+      if (!view) return;
+
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault();
+        view.zoomIn();
+      } else if (e.key === '-') {
+        e.preventDefault();
+        view.zoomOut();
+      } else if (e.key === '0') {
+        e.preventDefault();
+        view.zoomReset();
+      }
+    };
+
+    window.addEventListener('keydown', handleZoomKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleZoomKeyDown);
+    };
+  }, []);
+
   return (
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
       <ProgressBar />
@@ -95,9 +119,7 @@ export function Shell({
             </Panel>
           )}
 
-          {sidebar && (
-            <Separator className="hidden w-3 shrink-0 cursor-col-resize lg:block" />
-          )}
+          {sidebar && <Separator className="hidden w-3 shrink-0 cursor-col-resize lg:block" />}
 
           <Panel id="main" minSize="30%">
             <main className="relative flex h-full min-w-0 flex-col overflow-hidden">
@@ -105,9 +127,7 @@ export function Shell({
                 className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
                 intensity="high"
               >
-                <div className="relative flex flex-1 flex-col overflow-hidden">
-                  {children}
-                </div>
+                <div className="relative flex flex-1 flex-col overflow-hidden">{children}</div>
               </GlassPanel>
             </main>
           </Panel>

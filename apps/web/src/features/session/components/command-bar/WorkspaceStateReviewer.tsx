@@ -43,7 +43,7 @@ export function ContextWindowPopover({
   const usagePercent = Math.min(100, Math.max(0, (totalTokens / contextLimit) * 100));
   const { usageBreakdown, estimatedCost, turnsRemaining } = sessionMetrics;
 
-  const radius = 6;
+  const radius = 8;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (usagePercent / 100) * circumference;
 
@@ -67,17 +67,17 @@ export function ContextWindowPopover({
               'data-[state=open]:bg-accent/10 data-[state=open]:text-accent data-[state=open]:border-accent/40 data-[state=open]:w-16 data-[state=open]:gap-1.5 data-[state=open]:px-3',
             )}
           >
-            <svg className="h-3.5 w-3.5 shrink-0 -rotate-90" viewBox="0 0 16 16">
+            <svg className="h-5 w-5 shrink-0 -rotate-90" viewBox="0 0 20 20">
               <circle
-                cx="8"
-                cy="8"
+                cx="10"
+                cy="10"
                 r={radius}
                 className="stroke-text-muted/10 fill-none"
-                strokeWidth="2"
+                strokeWidth="3"
               />
               <circle
-                cx="8"
-                cy="8"
+                cx="10"
+                cy="10"
                 r={radius}
                 className={cn(
                   'fill-none transition-all duration-300',
@@ -87,7 +87,7 @@ export function ContextWindowPopover({
                       ? 'stroke-warning'
                       : 'stroke-accent',
                 )}
-                strokeWidth="2"
+                strokeWidth="3"
                 strokeDasharray={circumference}
                 strokeDashoffset={strokeDashoffset}
                 strokeLinecap="round"
@@ -96,19 +96,15 @@ export function ContextWindowPopover({
             <span
               className={cn(
                 'shrink-0 transition-all duration-300',
-                'opacity-0',
-                'group-data-[state=open]:opacity-100',
+                'w-0 overflow-hidden opacity-0',
+                'group-data-[state=open]:w-auto group-data-[state=open]:overflow-visible group-data-[state=open]:opacity-100',
               )}
             >
               {Math.round(usagePercent)}%
             </span>
           </button>
         </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            side="top"
-            className="w-[320px] rounded-xl p-4 shadow-2xl"
-        >
+        <PopoverContent align="end" side="top" className="w-[320px] rounded-xl p-4 shadow-2xl">
           <div className="flex flex-col gap-3 font-sans text-xs">
             <div className="flex flex-col gap-1">
               <span className="text-text-muted/45 text-[9px] font-bold tracking-[0.2em] uppercase">

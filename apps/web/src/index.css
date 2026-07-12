@@ -9,25 +9,21 @@
 html {
   font-family: var(--font-ui-family, 'Geist') !important;
   font-size: var(--font-ui-size, 14px) !important;
-  transition: font-size 0.06s ease-out;
 }
 
-[data-font-ctx="buffer"] {
+[data-font-ctx='buffer'] {
   font-family: var(--font-buffer-family, 'JetBrains Mono') !important;
   font-size: var(--font-buffer-size, 13px) !important;
-  transition: font-size 0.06s ease-out;
 }
 
-[data-font-ctx="terminal"] {
+[data-font-ctx='terminal'] {
   font-family: var(--font-terminal-family, 'JetBrains Mono') !important;
   font-size: var(--font-terminal-size, 12px) !important;
-  transition: font-size 0.06s ease-out;
 }
 
-[data-font-ctx="chat"] {
+[data-font-ctx='chat'] {
   font-family: var(--font-chat-family, 'JetBrains Mono') !important;
   font-size: var(--font-chat-size, 13px) !important;
-  transition: font-size 0.06s ease-out;
 }
 
 /* Premium Syntax Highlighting & Code Block styling overrides */
@@ -52,13 +48,48 @@ html {
   font-weight: 500 !important;
 }
 
-.label-3xs { font-size: 9px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; }
-.label-2xs { font-size: 10px; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; }
-.label-xs  { font-size: 11px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; }
-.label-sm  { font-size: 12px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; }
-.caption-3xs { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-.caption-2xs { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-.caption-xs  { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.label-3xs {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.label-2xs {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.label-xs {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.label-sm {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.caption-3xs {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.caption-2xs {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.caption-xs {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
 
 @layer utilities {
   .app-region-drag {

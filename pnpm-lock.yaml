@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@agentctl/eslint-config':
+        specifier: workspace:*
+        version: link:packages/eslint-config
       '@commitlint/cli':
         specifier: ^21.2.0
         version: 21.2.0(@types/node@25.7.0)(typescript@6.0.3)
