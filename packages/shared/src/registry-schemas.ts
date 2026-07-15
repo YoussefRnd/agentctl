@@ -43,6 +43,7 @@ export const registryDistributionBinaryTargetSchema = z.object({
   cmd: z.string().min(1),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional().default({}),
+  sha256: z.string().optional(),
 });
 
 export const registryDistributionUvxSchema = z.object({

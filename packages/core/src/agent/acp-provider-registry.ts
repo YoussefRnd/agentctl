@@ -1,9 +1,6 @@
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import type {
-  ProviderDiscovery,
-  RegistryAgent,
-} from '@agentctl/shared';
+import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentRuntime } from './acp-transport.js';
 import { createAgentConnection, DefaultAgentRuntime } from './acp-transport.js';
@@ -15,6 +12,8 @@ import { RegistryFetcher } from './registry/registry-fetcher.js';
 import { ProviderLauncher } from './registry/provider-launcher.js';
 import { AuthProvider } from './registry/auth-provider.js';
 import { ProviderSync } from './registry/provider-sync.js';
+
+type RegistrySnapshot = Awaited<ReturnType<RegistryFetcher['getSnapshot']>>;
 
 function getPlatformKey(): string {
   const arch = os.arch();
@@ -60,6 +59,22 @@ export class ProviderRegistry {
     this.syncProvider = new ProviderSync(this.fetcher, this.store, this.installer, this.launcher);
   }
 
+  private activeOps = new Map<string, Promise<unknown>>();
+
+  private runLocked<T>(key: string, op: () => Promise<T>): Promise<T> {
+    const existing = this.activeOps.get(key);
+    if (existing) return existing as Promise<T>;
+    const promise = (async () => {
+      try {
+        return await op();
+      } finally {
+        this.activeOps.delete(key);
+      }
+    })();
+    this.activeOps.set(key, promise);
+    return promise;
+  }
+
   getInstallDir(providerId: string): string {
     return this.installer.getInstallDir(providerId);
   }
@@ -76,20 +91,6 @@ export class ProviderRegistry {
         return [];
       }
       return afterSync.map((row) => new Provider(row).toDiscovery());
-    }
-
-    for (const row of rows) {
-      if (row.authState === 'unknown' && row.installState !== 'not_installed') {
-        this.logger.info(`Triggering background probe for enabled provider: ${row.id}`);
-        const snapshot = await this.fetcher.getSnapshot();
-        const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-        const agent = agents.find((a) => a.id === row.id);
-        if (agent) {
-          void this.launcher.probe(row.id, this.runtime, agent).catch((err: unknown) => {
-            this.logger.error(err, `Background probe failed for ${row.id}`);
-          });
-        }
-      }
     }
 
     return rows.map((row) => new Provider(row).toDiscovery());
@@ -113,13 +114,13 @@ export class ProviderRegistry {
           authState: 'unknown',
           enabled: true,
           hidden: false,
-          distribution: JSON.stringify(agent.distribution ?? {}),
+          distribution: JSON.stringify(agent.distribution),
           launchArgs: '[]',
           launchEnv: '{}',
           configOptions: JSON.stringify(agent.configOptions ?? []),
           authMethods: JSON.stringify(agent.authMethods ?? []),
           version: agent.version,
-          description: agent.description ?? null,
+          description: agent.description,
           icon: agent.icon ?? null,
           customEnv: '{}',
           supportsDynamicModel: !!agent.supportsDynamicModel,
@@ -146,7 +147,11 @@ export class ProviderRegistry {
   }
 
   async install(providerId: string): Promise<ProviderDiscovery> {
-    const snapshot = await this.fetcher.getSnapshot();
+    return this.runLocked(providerId, () => this.doInstall(providerId));
+  }
+
+  private async doInstall(providerId: string): Promise<ProviderDiscovery> {
+    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
     if (!snapshot) {
       throw new Error('No registry snapshot found. Please sync first.');
     }
@@ -157,14 +162,17 @@ export class ProviderRegistry {
       throw new Error(`Agent ${providerId} not found in registry`);
     }
 
+    const platform = getPlatformKey();
+    const binary = agent.distribution.binary;
+    const platformTarget = binary ? binary[platform] : undefined;
+
     let installState: 'not_installed' | 'installed_local' | 'system_available';
     let command: string;
     let launchArgs: string[];
     let launchEnv: Record<string, string>;
 
-    if (agent.distribution.binary) {
-      const platform = getPlatformKey();
-      const result = await this.installer.install(agent, platform);
+    if (platformTarget) {
+      const result = await this.installer.install(agent, platform, this.logger);
       installState = 'installed_local';
       command = result.command;
       launchArgs = result.args;
@@ -174,15 +182,21 @@ export class ProviderRegistry {
       if (!onPath) throw new Error('npx not found on PATH. Install Node.js/npm first.');
       installState = 'system_available';
       command = 'npx';
-      launchArgs = ['-y', agent.distribution.npx.package, ...(agent.distribution.npx.args ?? [])];
-      launchEnv = agent.distribution.npx.env ?? {};
+      launchArgs = [
+        '-y',
+        `${agent.distribution.npx.package}@0.0.0 - ${agent.version}`,
+        ...(agent.distribution.npx.args ?? []),
+      ];
+      launchEnv = agent.distribution.npx.env;
     } else if (agent.distribution.uvx) {
       const onPath = await this.launcher.isBinaryOnPath('uvx');
       if (!onPath) throw new Error('uvx not found on PATH. Install uv first.');
       installState = 'system_available';
       command = 'uvx';
       launchArgs = [agent.distribution.uvx.package, ...(agent.distribution.uvx.args ?? [])];
-      launchEnv = agent.distribution.uvx.env ?? {};
+      launchEnv = agent.distribution.uvx.env;
+    } else if (binary) {
+      throw new Error(`Agent ${providerId} binary not available for platform ${platform}`);
     } else {
       throw new Error(`Agent ${providerId} does not support installation`);
     }
@@ -205,27 +219,28 @@ export class ProviderRegistry {
       supportsLogout: agent.supportsLogout ?? false,
     });
 
-    void this.launcher.probe(providerId, this.runtime, agent).catch((err: unknown) => {
-      this.logger.error(err, `Install probe failed for ${providerId}`);
-    });
-
     const row = this.store.get(providerId);
-    return new Provider(row!).toDiscovery();
+    if (!row) throw new Error(`Provider ${providerId} vanished`);
+    return new Provider(row).toDiscovery();
   }
 
   async remove(providerId: string): Promise<ProviderDiscovery> {
+    return this.runLocked(providerId, () => this.doRemove(providerId));
+  }
+
+  private async doRemove(providerId: string): Promise<ProviderDiscovery> {
     const provider = this.store.get(providerId);
     if (!provider) throw new Error(`Provider ${providerId} not found`);
 
     this.launcher.invalidateProbe(providerId);
 
     if (provider.installState === 'installed_local') {
-      await this.installer.remove(providerId);
+      await this.installer.remove(providerId, this.logger);
     }
 
     this.store.delete(providerId);
 
-    const snapshot = await this.fetcher.getSnapshot();
+    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
@@ -233,18 +248,18 @@ export class ProviderRegistry {
       ? {
           id: agent.id,
           name: agent.name,
-          command: agent.distribution.npx ? 'npx' : (agent.distribution.uvx ? 'uvx' : agent.id),
+          command: agent.distribution.npx ? 'npx' : agent.distribution.uvx ? 'uvx' : agent.id,
           installState: 'not_installed',
           authState: 'unknown',
           enabled: true,
           hidden: false,
-          distribution: JSON.stringify(agent.distribution ?? {}),
+          distribution: JSON.stringify(agent.distribution),
           launchArgs: '[]',
           launchEnv: '{}',
           configOptions: JSON.stringify(agent.configOptions ?? []),
           authMethods: JSON.stringify(agent.authMethods ?? []),
           version: agent.version,
-          description: agent.description ?? null,
+          description: agent.description,
           icon: agent.icon ?? null,
           customEnv: '{}',
           supportsDynamicModel: !!agent.supportsDynamicModel,
@@ -269,9 +284,9 @@ export class ProviderRegistry {
           configOptions: '[]',
           authMethods: '[]',
           version: provider.version,
-           description: provider.description,
-           icon: provider.icon,
-           customEnv: '{}',
+          description: provider.description,
+          icon: provider.icon,
+          customEnv: '{}',
           supportsDynamicModel: false,
           supportsDynamicConfig: false,
           supportsLogout: false,
@@ -289,15 +304,21 @@ export class ProviderRegistry {
     methodId: string,
     params: Record<string, unknown> = {},
   ): Promise<void> {
-    const snapshot = await this.fetcher.getSnapshot();
+    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
-    await this.authProvider.login(providerId, agent ?? { id: providerId }, methodId, params, createAgentConnection);
+    await this.authProvider.login(
+      providerId,
+      agent ?? { id: providerId },
+      methodId,
+      params,
+      createAgentConnection,
+    );
   }
 
   async logout(providerId: string): Promise<void> {
-    const snapshot = await this.fetcher.getSnapshot();
+    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
@@ -309,26 +330,27 @@ export class ProviderRegistry {
     if (!row) throw new Error(`Provider ${providerId} not found`);
 
     if (row.authState === 'unknown' && row.installState !== 'not_installed') {
-      const snapshot = await this.fetcher.getSnapshot();
+      const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
       const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
       const agent = agents.find((a) => a.id === providerId);
       if (agent) {
-        await this.launcher.probe(providerId, this.runtime, agent).catch(() => {});
+        await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
       }
     }
 
     const updated = this.store.get(providerId);
-    return new Provider(updated!).toDiscovery();
+    if (!updated) throw new Error(`Provider ${providerId} vanished`);
+    return new Provider(updated).toDiscovery();
   }
 
   async refreshProvider(providerId: string): Promise<ProviderDiscovery> {
-    const snapshot = await this.fetcher.getSnapshot();
+    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
     this.launcher.invalidateProbe(providerId);
     if (agent) {
-      await this.launcher.probe(providerId, this.runtime, agent).catch(() => {});
+      await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
     }
 
     const row = this.store.get(providerId);
@@ -352,21 +374,22 @@ export class ProviderRegistry {
 
     this.launcher.invalidateProbe(providerId);
 
-    const snapshot = await this.fetcher.getSnapshot();
+    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
     if (agent) {
-      await this.launcher.probe(providerId, this.runtime, agent).catch(() => {});
+      await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
     }
 
     const row = this.store.get(providerId);
-    return new Provider(row!).toDiscovery();
+    if (!row) throw new Error(`Provider ${providerId} vanished`);
+    return new Provider(row).toDiscovery();
   }
 
-  async sync(options?: { force?: boolean }): Promise<void> {
-    if (this.syncProvider) {
+  async sync(): Promise<void> {
+    return this.runLocked('*', async () => {
       await this.syncProvider.sync();
-    }
+    });
   }
 
   async ensureProviderReady(
@@ -380,6 +403,13 @@ export class ProviderRegistry {
     }
     if (!row) throw new Error(`Provider ${providerId} not found`);
 
+    if (row.installState === 'not_installed') {
+      await this.install(providerId);
+      const updated = this.store.get(providerId);
+      if (!updated) throw new Error(`Provider ${providerId} vanished after install`);
+      return new Provider(updated);
+    }
+
     if (!options.force && (row.authState === 'authenticated' || row.authState === 'needs_auth')) {
       if (row.installState === 'installed_local') {
         if (!this.installer.isInstalled(providerId)) {
@@ -391,13 +421,13 @@ export class ProviderRegistry {
       return new Provider(row);
     }
 
-    const snapshot = await this.fetcher.getSnapshot();
+    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
     if (agent) {
       this.launcher.invalidateProbe(providerId);
-      await this.launcher.probe(providerId, this.runtime, agent, options).catch(() => {});
+      await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
     }
 
     const updated = this.store.get(providerId);
@@ -405,15 +435,20 @@ export class ProviderRegistry {
     return new Provider(updated);
   }
 
-  async getProvider(id: string): Promise<Provider | undefined> {
+  getProvider(id: string): Provider | undefined {
     const row = this.store.get(id);
     return row ? new Provider(row) : undefined;
   }
 
-  async getSettings(): Promise<Record<string, string>> {
+  getSettings(): Record<string, string> {
     const keys = [
-      'onboardingCompleted', 'onboardingVersion', 'setupStep',
-      'defaultProviderId', 'showThinking', 'registrySyncError', 'fontConfig',
+      'onboardingCompleted',
+      'onboardingVersion',
+      'setupStep',
+      'defaultProviderId',
+      'showThinking',
+      'registrySyncError',
+      'fontConfig',
     ];
     const settings: Record<string, string> = {};
     for (const key of keys) {
@@ -423,22 +458,40 @@ export class ProviderRegistry {
     return settings;
   }
 
-  async updateSetting(key: string, value: string): Promise<void> {
+  updateSetting(key: string, value: string): void {
     this.store.updateSetting(key, value);
   }
 
-  async probeAgent(
+  probeAgent(
     agent: RegistryAgent,
     launch: { command: string; args: string[]; env: Record<string, string> },
     _options?: object,
-    existing?: ProviderData,
-  ): Promise<ProviderDiscovery> {
-    const dummyStore = {
+    _existing?: ProviderData,
+  ): ProviderDiscovery {
+    const dummyStore: ProviderData = {
+      id: agent.id,
+      name: agent.name,
+      installState: 'system_available',
+      authState: 'unknown',
+      enabled: true,
+      hidden: false,
+      distribution: '{}',
       command: launch.command,
       launchArgs: JSON.stringify(launch.args),
       launchEnv: JSON.stringify(launch.env),
-      installState: 'system_available' as const,
-      authState: 'unknown' as const,
+      configOptions: '[]',
+      authMethods: '[]',
+      version: agent.version,
+      description: agent.description,
+      icon: agent.icon ?? null,
+      customEnv: '{}',
+      supportsDynamicModel: agent.supportsDynamicModel ?? false,
+      supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
+      supportsLogout: agent.supportsLogout ?? false,
+      nativelyLoadsSkills: false,
+      modes: '[]',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     const launchResolved = this.launcher.resolveLaunch(dummyStore, agent);
     const authMethods = agent.authMethods ?? [];

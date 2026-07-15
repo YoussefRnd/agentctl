@@ -93,7 +93,7 @@ export class SessionManager {
   async createSession(params: CreateSessionParams): Promise<{ sessionId: string }> {
     const { projectId, providerId, taskSlug, mode } = params;
 
-    const settings = await this.providerRegistry.getSettings();
+    const settings = this.providerRegistry.getSettings();
     const resolvedProviderId = providerId ?? settings.defaultProviderId;
 
     if (!resolvedProviderId) {

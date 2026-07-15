@@ -5,6 +5,8 @@ import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { RegistryAgent } from '@agentctl/shared';
+import type { AgentRuntime, AgentProbeResult } from '../acp-transport.js';
+import type { ProviderData } from '../provider.js';
 import type { ProviderStore } from './provider-store.js';
 import type { BinaryInstaller } from './binary-installer.js';
 
@@ -13,7 +15,7 @@ const execFilePromise = promisify(execFile);
 const PROBE_CACHE_TTL_MS = 60_000;
 
 function findBinaryOnPath(command: string): string | null {
-  const pathEnv = process.env.PATH || '';
+  const pathEnv = process.env.PATH ?? '';
   const pathDirs = pathEnv.split(path.delimiter);
   for (const dir of pathDirs) {
     const fullPath = path.join(dir, command);
@@ -36,7 +38,7 @@ const packageToBinaryMap: Record<string, string[]> = {
 };
 
 interface CacheEntry {
-  promise: Promise<any>;
+  promise: Promise<AgentProbeResult>;
   expiresAt: number;
 }
 
@@ -45,7 +47,7 @@ export class ProviderLauncher {
 
   constructor(
     private store: ProviderStore,
-    private installer: BinaryInstaller
+    private installer: BinaryInstaller,
   ) {}
 
   async isBinaryOnPath(command: string): Promise<boolean> {
@@ -58,14 +60,21 @@ export class ProviderLauncher {
     }
   }
 
-  resolveLaunch(provider: any, registryAgent?: RegistryAgent, options?: { force?: boolean }) {
+  resolveLaunch(
+    provider: ProviderData,
+    registryAgent?: RegistryAgent,
+  ): { command: string; args: string[]; env: Record<string, string> } {
     let command = provider.command;
-    let args = JSON.parse(provider.launchArgs || '[]');
-    let env = JSON.parse(provider.launchEnv || '{}');
+    let args: string[] = JSON.parse(provider.launchArgs || '[]') as string[];
+    let env: Record<string, string> = JSON.parse(provider.launchEnv || '{}') as Record<
+      string,
+      string
+    >;
 
-    if (registryAgent?.distribution?.npx) {
-      const pkg = registryAgent.distribution.npx.package;
-      const candidateBinaries = packageToBinaryMap[pkg] || [pkg.split('/').pop() || ''];
+    const registryAgentDist = registryAgent?.distribution;
+    if (registryAgentDist?.npx) {
+      const { package: pkg, args: npxArgs = [], env: npxEnv } = registryAgentDist.npx;
+      const candidateBinaries = packageToBinaryMap[pkg] ?? [pkg.split('/').pop() ?? ''];
       let localBinaryPath: string | null = null;
       for (const bin of candidateBinaries) {
         localBinaryPath = findBinaryOnPath(bin);
@@ -74,41 +83,46 @@ export class ProviderLauncher {
 
       if (localBinaryPath) {
         command = localBinaryPath;
-        args = registryAgent.distribution.npx.args ?? [];
-        env = registryAgent.distribution.npx.env ?? {};
+        args = npxArgs;
+        env = npxEnv;
       } else {
         command = 'npx';
-        args = ['-y', pkg, ...(registryAgent.distribution.npx.args ?? [])];
-        env = registryAgent.distribution.npx.env ?? {};
+        const spec = registryAgent?.version ? `${pkg}@0.0.0 - ${registryAgent.version}` : pkg;
+        args = ['-y', spec, ...npxArgs];
+        env = npxEnv;
       }
-    } else if (registryAgent?.distribution?.uvx) {
-      const pkg = registryAgent.distribution.uvx.package;
-      const binName = pkg.split('/').pop() || '';
+    } else if (registryAgentDist?.uvx) {
+      const { package: pkg, args: uvxArgs = [], env: uvxEnv } = registryAgentDist.uvx;
+      const binName = pkg.split('/').pop() ?? '';
       const localBinaryPath = findBinaryOnPath(binName);
       if (localBinaryPath) {
         command = localBinaryPath;
-        args = registryAgent.distribution.uvx.args ?? [];
-        env = registryAgent.distribution.uvx.env ?? {};
+        args = uvxArgs;
+        env = uvxEnv;
       } else {
         command = 'uvx';
-        args = [pkg, ...(registryAgent.distribution.uvx.args ?? [])];
-        env = registryAgent.distribution.uvx.env ?? {};
+        args = [pkg, ...uvxArgs];
+        env = uvxEnv;
       }
     } else if (provider.installState === 'system_available') {
       throw new Error('Registry agent metadata required for system_available providers');
     }
 
-    const customEnv = JSON.parse(provider.customEnv || '{}');
+    const customEnv = JSON.parse(provider.customEnv || '{}') as Record<string, string>;
     env = { ...env, ...customEnv };
 
     return { command, args, env };
   }
 
-  async probe(providerId: string, runtime: any, agent: RegistryAgent, options?: { force?: boolean }) {
+  async probe(
+    providerId: string,
+    runtime: AgentRuntime,
+    agent: RegistryAgent,
+  ): Promise<AgentProbeResult> {
     const provider = this.store.get(providerId);
     if (!provider) throw new Error(`Provider ${providerId} not found`);
 
-    const launch = this.resolveLaunch(provider, agent, options);
+    const launch = this.resolveLaunch(provider, agent);
     const hash = crypto.createHash('sha256').update(JSON.stringify(launch)).digest('hex');
     const cacheKey = `${providerId}:${hash}`;
 
@@ -120,7 +134,10 @@ export class ProviderLauncher {
     const probePromise = (async () => {
       try {
         const result = await runtime.probe(launch.command, launch.args, launch.env);
-        this.store.setAuthState(providerId, result.status === 'ready' ? 'authenticated' : result.status);
+        this.store.setAuthState(
+          providerId,
+          result.status === 'ready' ? 'authenticated' : result.status,
+        );
         return result;
       } catch (err) {
         this.store.setAuthState(providerId, 'error');

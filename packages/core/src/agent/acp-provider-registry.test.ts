@@ -1,5 +1,8 @@
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect, vi } from 'vitest';
+import os from 'node:os';
 import { ProviderRegistry } from './acp-provider-registry.js';
+import type { ProviderLauncher } from './registry/provider-launcher.js';
+import type { BinaryInstaller } from './registry/binary-installer.js';
 import { noopLogger } from '../logger.js';
 import type { RegistryAgent } from '@agentctl/shared';
 import { createDatabase } from '../db/index.js';
@@ -64,7 +67,7 @@ describe('ProviderRegistry', () => {
     });
 
     const registry = new ProviderRegistry(db, noopLogger);
-    const provider = await registry.getProvider('claude-acp');
+    const provider = registry.getProvider('claude-acp');
 
     expect(provider).toBeDefined();
     expect(provider?.id).toBe('claude-acp');
@@ -113,5 +116,160 @@ describe('ProviderRegistry', () => {
     const result = await registry.remove('npx-agent');
 
     expect(result.installState).toBe('not_installed');
+  });
+
+  test('concurrent install dedupes to a single installer run', async () => {
+    const db = createDatabase(':memory:');
+    const registry = new ProviderRegistry(db, noopLogger);
+    const agent: RegistryAgent = {
+      id: 'dup-agent',
+      name: 'Dup',
+      version: '1.0.0',
+      description: 'dup',
+      authors: [],
+      distribution: { npx: { package: 'dup-pkg', args: [], env: {} } },
+    };
+    await db
+      .insert(registrySnapshots)
+      .values({ data: JSON.stringify({ agents: [agent] }), fetchedAt: new Date() });
+
+    const reg = registry as unknown as { installer: BinaryInstaller; launcher: ProviderLauncher };
+    const spy = vi.spyOn(reg, 'installer', 'get').mockImplementationOnce(
+      () =>
+        ({
+          install: vi.fn(() => ({ command: 'npx', args: [], env: {} })),
+          remove: vi.fn(() => undefined),
+          isInstalled: vi.fn(() => true),
+        }) as unknown as BinaryInstaller,
+    );
+
+    const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath');
+
+    const [a, b] = await Promise.all([
+      registry.install('dup-agent'),
+      registry.install('dup-agent'),
+    ]);
+    expect(launcherSpy).toHaveBeenCalledTimes(1);
+    expect(a.id).toBe('dup-agent');
+    expect(b.id).toBe('dup-agent');
+    spy.mockRestore();
+    launcherSpy.mockRestore();
+  });
+
+  test('install falls back to npx when no binary for current platform', async () => {
+    const db = createDatabase(':memory:');
+    const registry = new ProviderRegistry(db, noopLogger);
+    const agent: RegistryAgent = {
+      id: 'fb-agent',
+      name: 'Fallback',
+      version: '1.0.0',
+      description: 'fallback',
+      authors: [],
+      distribution: {
+        binary: {
+          'darwin-aarch64': { archive: 'https://x.com/a.tar.gz', cmd: 'bin', args: [], env: {} },
+        },
+        npx: { package: 'fb-pkg', args: [], env: {} },
+      },
+    };
+    await db
+      .insert(registrySnapshots)
+      .values({ data: JSON.stringify({ agents: [agent] }), fetchedAt: new Date() });
+    const platformSpy = vi.spyOn(os, 'platform').mockReturnValue('linux');
+    const archSpy = vi.spyOn(os, 'arch').mockReturnValue('x64');
+    const reg = registry as unknown as { launcher: ProviderLauncher };
+    const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    try {
+      const res = await registry.install('fb-agent');
+      expect(res.installState).toBe('system_available');
+      expect(res.command).toBe('npx');
+    } finally {
+      platformSpy.mockRestore();
+      archSpy.mockRestore();
+      launcherSpy.mockRestore();
+    }
+  });
+
+  test('install throws when binary-only and platform unsupported', async () => {
+    const db = createDatabase(':memory:');
+    const registry = new ProviderRegistry(db, noopLogger);
+    const agent: RegistryAgent = {
+      id: 'no-agent',
+      name: 'No',
+      version: '1.0.0',
+      description: 'no',
+      authors: [],
+      distribution: {
+        binary: {
+          'darwin-aarch64': { archive: 'https://x.com/a.tar.gz', cmd: 'bin', args: [], env: {} },
+        },
+      },
+    };
+    await db
+      .insert(registrySnapshots)
+      .values({ data: JSON.stringify({ agents: [agent] }), fetchedAt: new Date() });
+    const platformSpy = vi.spyOn(os, 'platform').mockReturnValue('linux');
+    const archSpy = vi.spyOn(os, 'arch').mockReturnValue('x64');
+    try {
+      await expect(registry.install('no-agent')).rejects.toThrow(/not available for platform/);
+    } finally {
+      platformSpy.mockRestore();
+      archSpy.mockRestore();
+    }
+  });
+
+  test('ensureProviderReady installs when installState is not_installed', async () => {
+    const db = createDatabase(':memory:');
+    const registry = new ProviderRegistry(db, noopLogger);
+    const agent: RegistryAgent = {
+      id: 'lazy-agent',
+      name: 'Lazy',
+      version: '1.0.0',
+      authors: [],
+      description: '',
+      distribution: { npx: { package: 'lazy-pkg', args: [], env: {} } },
+    };
+    await db.insert(registrySnapshots).values({
+      data: JSON.stringify({ version: '1.0.0', agents: [agent] }),
+      fetchedAt: new Date(),
+    });
+    const regF = registry as unknown as { fetcher: { fetch: () => Promise<RegistryAgent[]> } };
+    const fetchSpy = vi.spyOn(regF.fetcher, 'fetch').mockResolvedValue([agent]);
+    await registry.sync();
+    const reg = registry as unknown as { launcher: ProviderLauncher };
+    const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    try {
+      const spy = vi.spyOn(registry, 'install');
+      const res = await registry.ensureProviderReady('lazy-agent');
+      expect(spy).toHaveBeenCalledWith('lazy-agent');
+      expect(res.installState).toBe('system_available');
+    } finally {
+      launcherSpy.mockRestore();
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test('npx launch args use range-bound version spec', async () => {
+    const db = createDatabase(':memory:');
+    const registry = new ProviderRegistry(db, noopLogger);
+    const agent: RegistryAgent = {
+      id: 'range-agent',
+      name: 'Range',
+      version: '1.2.3',
+      authors: [],
+      description: '',
+      distribution: { npx: { package: 'range-pkg', args: ['--x'], env: {} } },
+    };
+    await db
+      .insert(registrySnapshots)
+      .values({ data: JSON.stringify({ agents: [agent] }), fetchedAt: new Date() });
+    const reg = registry as unknown as { launcher: ProviderLauncher };
+    const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    try {
+      const res = await registry.install('range-agent');
+      expect(res.launchArgs).toEqual(['-y', 'range-pkg@0.0.0 - 1.2.3', '--x']);
+    } finally {
+      launcherSpy.mockRestore();
+    }
   });
 });
