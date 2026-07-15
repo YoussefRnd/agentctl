@@ -2,11 +2,9 @@
   "extends": "@agentctl/tsconfig/react.json",
 
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },
-    "ignoreDeprecations": "6.0",
     "outDir": "./dist",
     "rootDir": ".",
     "module": "Preserve",

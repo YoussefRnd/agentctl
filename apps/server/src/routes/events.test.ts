@@ -11,6 +11,7 @@ import http from 'node:http';
 describe('SSE stream & Client actions REST API endpoints', () => {
   let app: FastifyInstance;
   let db: ReturnType<typeof createDatabase>;
+  let activeRequests: http.ClientRequest[] = [];
   const mockSessionManager = {
     handleClientMessage: vi.fn(),
     getOrResuscitate: vi.fn(),
@@ -19,6 +20,7 @@ describe('SSE stream & Client actions REST API endpoints', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    activeRequests = [];
     db = createDatabase(':memory:');
 
     const testEnv = parseServerEnv({
@@ -36,6 +38,11 @@ describe('SSE stream & Client actions REST API endpoints', () => {
   });
 
   afterEach(async () => {
+    for (const req of activeRequests) {
+      if (!req.destroyed) {
+        req.destroy();
+      }
+    }
     await app.close();
   });
 
@@ -146,9 +153,10 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     const address = app.server.address();
     const port = typeof address === 'string' ? 3000 : (address?.port ?? 3000);
 
+    let req!: http.ClientRequest;
     const promise = new Promise<string>((resolve, reject) => {
       let buffer = '';
-      const req = http.get(
+      req = http.get(
         `http://localhost:${String(port)}/api/sessions/${sessionId}/events/stream`,
         {
           headers: {
@@ -166,6 +174,7 @@ describe('SSE stream & Client actions REST API endpoints', () => {
           });
         },
       );
+      activeRequests.push(req);
       req.on('error', (err) => {
         // req.destroy() triggers an ECONNRESET error which we can ignore
         if (buffer.includes('Hello from stream')) {
@@ -176,8 +185,15 @@ describe('SSE stream & Client actions REST API endpoints', () => {
       });
     });
 
-    // Let the event loop cycle so the route handler executes
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Wait for the subscriber to be registered on the eventBus
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(() => {
+        if (app.eventBus.listenerCount(sessionId) > 0) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 5);
+    });
 
     // Publish an event to eventBus to see if it is received
     const testEvent = {
@@ -239,9 +255,10 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     const address = app.server.address();
     const port = typeof address === 'string' ? 3000 : (address?.port ?? 3000);
 
+    let req!: http.ClientRequest;
     const promise = new Promise<string>((resolve, reject) => {
       let buffer = '';
-      const req = http.get(
+      req = http.get(
         `http://localhost:${String(port)}/api/sessions/${sessionId}/events/stream`,
         {
           headers: {
@@ -260,6 +277,7 @@ describe('SSE stream & Client actions REST API endpoints', () => {
           });
         },
       );
+      activeRequests.push(req);
       req.on('error', (err) => {
         if (buffer.includes('second')) {
           resolve(buffer);

@@ -19,4 +19,8 @@ export class EventBus {
       this.emitter.off(eventName, callback);
     };
   }
+
+  listenerCount(sessionId: string): number {
+    return this.emitter.listenerCount(`session:${sessionId}`);
+  }
 }
