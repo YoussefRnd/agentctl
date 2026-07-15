@@ -10,16 +10,24 @@ import { type Logger, noopLogger } from '../../logger.js';
 const CDN_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
 
 export class RegistryFetcher {
-  constructor(private db: DbClient, private logger: Logger = noopLogger) {}
+  constructor(
+    private db: DbClient,
+    private logger: Logger = noopLogger,
+  ) {}
 
-  async getSnapshot() {
-    const row = await this.db.select().from(registrySnapshots).orderBy(desc(registrySnapshots.id)).limit(1).all();
-    return row[0];
+  getSnapshot() {
+    const row = this.db
+      .select()
+      .from(registrySnapshots)
+      .orderBy(desc(registrySnapshots.id))
+      .limit(1)
+      .all();
+    return row.length > 0 ? row[0] : undefined;
   }
 
   async fetch(): Promise<RegistryAgent[]> {
     const localAgents = this.readLocalOverride();
-    const lastSnapshot = await this.getSnapshot();
+    const lastSnapshot = this.getSnapshot();
 
     const headers: Record<string, string> = {};
     if (lastSnapshot?.etag) headers['If-None-Match'] = lastSnapshot.etag;
@@ -37,29 +45,33 @@ export class RegistryFetcher {
         // The matching etag would keep returning 304 with corrupt data, so ignore it
         // and pull a fresh copy.
         this.logger.warn('Cached registry snapshot is stale/invalid; refetching fresh');
-        return this.fetchFresh(localAgents);
+        return await this.fetchFresh(localAgents);
       }
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch registry CDN: ${response.status}`);
+        throw new Error(`Failed to fetch registry CDN: ${String(response.status)}`);
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
       const validated = registrySchema.parse(data); // Zod validation
 
-      await this.persistSnapshot(data, response.headers.get('etag'), response.headers.get('last-modified'));
+      this.persistSnapshot(
+        data,
+        response.headers.get('etag'),
+        response.headers.get('last-modified'),
+      );
 
       return this.mergeAgents(localAgents, validated.agents);
     } catch (err) {
       this.logger.warn(err, 'Failed to fetch remote registry, falling back to cache');
       if (lastSnapshot) {
         try {
-          const data = JSON.parse(lastSnapshot.data);
+          const data: unknown = JSON.parse(lastSnapshot.data);
           const validated = registrySchema.parse(data);
           return this.mergeAgents(localAgents, validated.agents);
         } catch (e) {
           this.logger.error(e, 'Cached snapshot is invalid; clearing stale snapshot');
-          await this.clearSnapshot();
+          this.clearSnapshot();
         }
       }
       return localAgents;
@@ -69,26 +81,29 @@ export class RegistryFetcher {
   private async fetchFresh(localAgents: RegistryAgent[]): Promise<RegistryAgent[]> {
     const response = await fetch(CDN_URL);
     if (!response.ok) {
-      throw new Error(`Failed to fetch registry CDN: ${response.status}`);
+      throw new Error(`Failed to fetch registry CDN: ${String(response.status)}`);
     }
-    const data = await response.json();
+    const data: unknown = await response.json();
     const validated = registrySchema.parse(data);
-    await this.persistSnapshot(data, response.headers.get('etag'), response.headers.get('last-modified'));
+    this.persistSnapshot(data, response.headers.get('etag'), response.headers.get('last-modified'));
     return this.mergeAgents(localAgents, validated.agents);
   }
 
-  private async clearSnapshot(): Promise<void> {
-    const latest = await this.getSnapshot();
+  private clearSnapshot(): void {
+    const latest = this.getSnapshot();
     if (latest) {
-      await this.db.delete(registrySnapshots).where(eq(registrySnapshots.id, latest.id)).run();
+      this.db.delete(registrySnapshots).where(eq(registrySnapshots.id, latest.id)).run();
     }
   }
 
   private readLocalOverride(): RegistryAgent[] {
-    const localPath = process.env.AGENTCTL_REGISTRY_PATH ?? path.join(os.homedir(), '.agentctl', 'registry.json');
+    const localPath =
+      process.env.AGENTCTL_REGISTRY_PATH ?? path.join(os.homedir(), '.agentctl', 'registry.json');
     if (fs.existsSync(localPath)) {
       try {
-        const content = JSON.parse(fs.readFileSync(localPath, 'utf8'));
+        const content = JSON.parse(fs.readFileSync(localPath, 'utf8')) as {
+          agents?: RegistryAgent[];
+        };
         return content.agents ?? [];
       } catch (err) {
         this.logger.warn(err, 'Failed to read local override file');
@@ -104,17 +119,20 @@ export class RegistryFetcher {
     return Array.from(map.values());
   }
 
-  private async persistSnapshot(data: any, etag: string | null, lastModified: string | null): Promise<void> {
-    await this.db.insert(registrySnapshots).values({
-      data: JSON.stringify(data),
-      etag,
-      lastModified,
-      fetchedAt: new Date()
-    }).run();
+  private persistSnapshot(data: unknown, etag: string | null, lastModified: string | null): void {
+    this.db
+      .insert(registrySnapshots)
+      .values({
+        data: JSON.stringify(data),
+        etag,
+        lastModified,
+        fetchedAt: new Date(),
+      })
+      .run();
 
-    const latest = await this.getSnapshot();
+    const latest = this.getSnapshot();
     if (latest) {
-      await this.db.delete(registrySnapshots).where(lt(registrySnapshots.id, latest.id)).run();
+      this.db.delete(registrySnapshots).where(lt(registrySnapshots.id, latest.id)).run();
     }
   }
 }

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-deprecated */
 import { z } from 'zod';
 import {
   createSessionSchema,
@@ -244,7 +243,7 @@ export const apiContract = {
     method: 'GET',
     path: '/api/sessions/:id',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     responses: {
       200: sessionWithCapabilitiesSchema,
@@ -255,7 +254,7 @@ export const apiContract = {
     method: 'GET',
     path: '/api/sessions/:id/branches',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     responses: {
       200: z.array(z.string()),
@@ -266,7 +265,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/branch',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       branch: z.string(),
@@ -280,7 +279,7 @@ export const apiContract = {
     method: 'PATCH',
     path: '/api/sessions/:id/provider',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       providerId: z.string(),
@@ -295,7 +294,7 @@ export const apiContract = {
     method: 'PATCH',
     path: '/api/sessions/:id/mode',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       mode: z.enum(['local', 'worktree']),
@@ -309,7 +308,7 @@ export const apiContract = {
     method: 'PATCH',
     path: '/api/sessions/:id/approval-mode',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       approvalMode: z.enum(['review', 'auto_approve', 'yolo']),
@@ -323,7 +322,7 @@ export const apiContract = {
     method: 'PATCH',
     path: '/api/sessions/:id/persona',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       persona: z.string(),
@@ -337,7 +336,7 @@ export const apiContract = {
     method: 'PATCH',
     path: '/api/sessions/:id/config-option',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       configId: z.string(),
@@ -352,7 +351,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/terminal/:terminalId/input',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
       terminalId: z.string(),
     }),
     body: z.object({
@@ -367,7 +366,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/merge',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       commitMessage: z.string().optional(),
@@ -381,7 +380,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/discard',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.any(),
     responses: {
@@ -393,7 +392,7 @@ export const apiContract = {
     method: 'DELETE',
     path: '/api/sessions/:id',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
@@ -404,7 +403,7 @@ export const apiContract = {
     method: 'PATCH',
     path: '/api/sessions/:id/title',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       title: z.string(),
@@ -418,7 +417,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/archive',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.any(),
     responses: {
@@ -430,7 +429,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/restore',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.any(),
     responses: {
@@ -442,7 +441,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/cancel',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.any(),
     responses: {
@@ -454,7 +453,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/approve',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       eventId: z.number(),
@@ -469,7 +468,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/deny',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       eventId: z.number(),
@@ -483,7 +482,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/input',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       input: z.string(),
@@ -537,7 +536,7 @@ export const apiContract = {
     method: 'GET',
     path: '/api/sessions/:id/review',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     responses: {
       200: z.object({
@@ -550,7 +549,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/review/stage',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       filePath: z.string(),
@@ -564,7 +563,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/review/revert',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       filePath: z.string(),
@@ -578,7 +577,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/review/unstage',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       filePath: z.string(),
@@ -592,7 +591,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/review/stage-all',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.any(),
     responses: {
@@ -604,7 +603,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/review/unstage-all',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.any(),
     responses: {
@@ -616,7 +615,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/review/commit',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       message: z.string(),
@@ -630,7 +629,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/review/push',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.any(),
     responses: {
@@ -642,7 +641,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/review/pull',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.any(),
     responses: {
@@ -654,7 +653,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/rewind',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       eventId: z.number(),
@@ -672,7 +671,7 @@ export const apiContract = {
     method: 'POST',
     path: '/api/sessions/:id/merge-branch',
     pathParams: z.object({
-      id: z.string().uuid(),
+      id: z.uuid(),
     }),
     body: z.object({
       branch: z.string(),

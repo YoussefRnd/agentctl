@@ -35,7 +35,9 @@ type StatusFilter = 'all' | 'installed' | 'not_installed';
 
 const statusChipClass = (active: boolean) =>
   `cursor-pointer rounded-lg px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-all ${
-    active ? 'bg-accent text-brand-crust shadow-sm' : 'text-text-muted hover:text-text-main hover:bg-surface/60'
+    active
+      ? 'bg-accent text-brand-crust shadow-sm'
+      : 'text-text-muted hover:text-text-main hover:bg-surface/60'
   }`;
 
 export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
@@ -44,7 +46,10 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
   const [authProvider, setAuthProvider] = useState<ProviderDiscovery | null>(null);
 
   const syncProvidersRef = useRef(api.syncProviders);
-  syncProvidersRef.current = api.syncProviders;
+
+  useEffect(() => {
+    syncProvidersRef.current = api.syncProviders;
+  });
 
   useEffect(() => {
     let active = true;
@@ -63,7 +68,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
   const matchesQuery = (p: ProviderDiscovery) => {
     const q = query.toLowerCase().trim();
     if (!q) return true;
-    const label = (p.label ?? '').toLowerCase();
+    const label = p.label.toLowerCase();
     const name = (p.agent?.name ?? '').toLowerCase();
     const id = (p.agent?.id ?? '').toLowerCase();
     const desc = (p.agent?.description ?? '').toLowerCase();
@@ -77,7 +82,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
   const queryScore = (p: ProviderDiscovery): number => {
     const q = query.toLowerCase().trim();
     if (!q) return 0;
-    const label = (p.label ?? '').toLowerCase();
+    const label = p.label.toLowerCase();
     const name = (p.agent?.name ?? '').toLowerCase();
     const id = (p.agent?.id ?? '').toLowerCase();
     let s = 0;
@@ -115,7 +120,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
           <p className="text-text-main text-[12px] font-bold tracking-tight">
             {settings.registrySyncError}
           </p>
-          <p className="text-text-muted mt-0.5 text-[10px] uppercase tracking-wider opacity-70">
+          <p className="text-text-muted mt-0.5 text-[10px] tracking-wider uppercase opacity-70">
             Registry sync failed — showing last known providers
           </p>
         </Card>
@@ -127,7 +132,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
           <SearchBar
             value={query}
             onChange={(e) => {
-              setQuery((e.target as HTMLInputElement).value);
+              setQuery(e.target.value);
             }}
             onClear={() => {
               setQuery('');
@@ -146,11 +151,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
               }}
               className={statusChipClass(statusFilter === f)}
             >
-              {f === 'all'
-                ? 'All'
-                : f === 'installed'
-                  ? 'Installed'
-                  : 'Not Installed'}
+              {f === 'all' ? 'All' : f === 'installed' ? 'Installed' : 'Not Installed'}
             </button>
           ))}
         </div>
@@ -180,7 +181,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
           ))}
 
           {filtered.length === 0 && (
-            <Card className="border-dashed p-8 text-center bg-surface-secondary/5">
+            <Card className="bg-surface-secondary/5 border-dashed p-8 text-center">
               <div className="text-text-muted text-[10px] font-bold tracking-widest uppercase opacity-35">
                 No agents found
               </div>

@@ -8,12 +8,12 @@ export class ProviderSync {
     private fetcher: RegistryFetcher,
     private store: ProviderStore,
     private installer: BinaryInstaller,
-    private launcher: ProviderLauncher
+    private launcher: ProviderLauncher,
   ) {}
 
   async sync(): Promise<void> {
     const registryAgents = await this.fetcher.fetch();
-    const registryIds = new Set(registryAgents.map(a => a.id));
+    const registryIds = new Set(registryAgents.map((a) => a.id));
 
     const pathChecks: Promise<void>[] = [];
 
@@ -21,7 +21,7 @@ export class ProviderSync {
       const existing = this.store.get(agent.id);
 
       if (!existing) {
-        const command = agent.distribution.npx ? 'npx' : (agent.distribution.uvx ? 'uvx' : agent.id);
+        const command = agent.distribution.npx ? 'npx' : agent.distribution.uvx ? 'uvx' : agent.id;
         this.store.upsert(agent.id, {
           name: agent.name,
           version: agent.version,
@@ -35,7 +35,7 @@ export class ProviderSync {
           supportsDynamicModel: !!agent.supportsDynamicModel,
           supportsDynamicConfig: !!agent.supportsDynamicConfig,
           supportsLogout: !!agent.supportsLogout,
-          distribution: JSON.stringify(agent.distribution ?? {}),
+          distribution: JSON.stringify(agent.distribution),
           installState: 'not_installed',
           authState: 'unknown',
           enabled: true,
@@ -54,14 +54,14 @@ export class ProviderSync {
         }
       } else if (installState === 'system_available' || installState === 'installed') {
         installState = 'system_available';
-        const command = agent.distribution.npx ? 'npx' : (agent.distribution.uvx ? 'uvx' : agent.id);
+        const command = agent.distribution.npx ? 'npx' : agent.distribution.uvx ? 'uvx' : agent.id;
         pathChecks.push(
-          this.launcher.isBinaryOnPath(command).then(onPath => {
+          this.launcher.isBinaryOnPath(command).then((onPath) => {
             if (!onPath) {
               this.store.setInstallState(agent.id, 'not_installed');
               this.store.setAuthState(agent.id, 'unknown');
             }
-          })
+          }),
         );
       }
 
@@ -76,7 +76,7 @@ export class ProviderSync {
         supportsDynamicConfig: !!agent.supportsDynamicConfig,
         supportsLogout: !!agent.supportsLogout,
         nativelyLoadsSkills: existing.nativelyLoadsSkills,
-        distribution: JSON.stringify(agent.distribution ?? {}),
+        distribution: JSON.stringify(agent.distribution),
         installState,
         authState,
       });
@@ -88,7 +88,11 @@ export class ProviderSync {
     for (const row of currentRows) {
       if (!registryIds.has(row.id)) {
         if (row.installState === 'installed_local' || row.installState === 'system_available') {
-          this.store.update(row.id, { installState: 'not_installed', authState: 'unknown', hidden: true });
+          this.store.update(row.id, {
+            installState: 'not_installed',
+            authState: 'unknown',
+            hidden: true,
+          });
         } else {
           this.store.hide(row.id);
         }

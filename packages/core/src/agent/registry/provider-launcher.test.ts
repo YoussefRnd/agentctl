@@ -1,13 +1,23 @@
-import { test, describe, expect, beforeEach, vi } from 'vitest';
+import { test, describe, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { ChildProcess } from 'node:child_process';
 import { createDatabase } from '../../db/index.js';
 import type { DbClient } from '../acp-session.js';
-import type { AgentRuntime } from '../acp-transport.js';
+import type { AgentRuntime, ACPConnectionHandle, createAgentConnection } from '../acp-transport.js';
 import { ProviderStore } from './provider-store.js';
 import { BinaryInstaller } from './binary-installer.js';
 import { ProviderLauncher } from './provider-launcher.js';
 import { AuthProvider } from './auth-provider.js';
 import type { ProviderData } from '../provider.js';
 import type { RegistryAgent } from '@agentctl/shared';
+
+const PROXY_ENV = {
+  HTTP_PROXY: 'http://proxy.test:8080',
+  HTTPS_PROXY: 'http://proxy.test:8443',
+  NO_PROXY: 'localhost',
+  http_proxy: 'http://proxy.test:8080',
+  https_proxy: 'http://proxy.test:8443',
+  no_proxy: 'localhost',
+};
 
 function makeProvider(overrides: Partial<ProviderData> = {}): ProviderData {
   return {
@@ -45,10 +55,17 @@ describe('ProviderLauncher & AuthProvider Integration Tests', () => {
   let authProvider: AuthProvider;
 
   beforeEach(() => {
+    for (const [key, value] of Object.entries(PROXY_ENV)) {
+      vi.stubEnv(key, value);
+    }
     db = createDatabase(':memory:');
     store = new ProviderStore(db);
     launcher = new ProviderLauncher(store, new BinaryInstaller());
     authProvider = new AuthProvider(launcher, store);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('ProviderLauncher.isBinaryOnPath', () => {
@@ -76,6 +93,7 @@ describe('ProviderLauncher & AuthProvider Integration Tests', () => {
         command: 'my-agent',
         args: ['--foo', 'bar'],
         env: {
+          ...PROXY_ENV,
           MY_VAR: 'override',
           CUSTOM_VAR: 'abc',
         },
@@ -111,6 +129,7 @@ describe('ProviderLauncher & AuthProvider Integration Tests', () => {
         command: 'npx',
         args: ['-y', 'my-agent-package@0.0.0 - 1.0.0', '--npx-flag'],
         env: {
+          ...PROXY_ENV,
           NPX_ENV: 'npx-val',
         },
       });
@@ -145,6 +164,7 @@ describe('ProviderLauncher & AuthProvider Integration Tests', () => {
         command: 'uvx',
         args: ['my-agent-package', '--uvx-flag'],
         env: {
+          ...PROXY_ENV,
           UVX_ENV: 'uvx-val',
         },
       });
@@ -242,19 +262,24 @@ describe('ProviderLauncher & AuthProvider Integration Tests', () => {
   });
 
   describe('AuthProvider', () => {
-    const agent = { id: 'test-prov' };
-    interface MockChild {
-      kill: ReturnType<typeof vi.fn>;
-    }
-    interface MockConnection {
+    const agent: RegistryAgent = {
+      id: 'test-prov',
+      name: 'Test Agent',
+      version: '1.0.0',
+      description: 'test',
+      authors: [],
+      distribution: {},
+    };
+    let child: ChildProcess;
+    let mockConnection: {
       initialize: ReturnType<typeof vi.fn>;
+      newSession: ReturnType<typeof vi.fn>;
       authenticate: ReturnType<typeof vi.fn>;
+      closed: ReturnType<typeof vi.fn>;
       logout?: ReturnType<typeof vi.fn>;
       sendRequest: ReturnType<typeof vi.fn>;
-    }
-    let child: MockChild;
-    let mockConnection: MockConnection;
-    let createConnectionSpy: ReturnType<typeof vi.fn>;
+    };
+    let createConnectionSpy: ReturnType<typeof vi.fn<typeof createAgentConnection>>;
 
     beforeEach(() => {
       store.upsert('test-prov', {
@@ -263,18 +288,21 @@ describe('ProviderLauncher & AuthProvider Integration Tests', () => {
         authState: 'needs_auth',
       });
 
-      child = {
-        kill: vi.fn(),
-      };
+      child = { kill: vi.fn() } as unknown as ChildProcess;
 
       mockConnection = {
         initialize: vi.fn().mockResolvedValue({}),
+        newSession: vi.fn(),
         authenticate: vi.fn().mockResolvedValue({}),
+        closed: vi.fn(),
         logout: vi.fn().mockResolvedValue({}),
         sendRequest: vi.fn().mockResolvedValue({}),
       };
 
-      createConnectionSpy = vi.fn().mockReturnValue({ child, connection: mockConnection });
+      createConnectionSpy = vi.fn<typeof createAgentConnection>().mockReturnValue({
+        child,
+        connection: mockConnection as unknown as ACPConnectionHandle['connection'],
+      });
     });
 
     describe('login', () => {
@@ -289,7 +317,7 @@ describe('ProviderLauncher & AuthProvider Integration Tests', () => {
           createConnectionSpy,
         );
 
-        expect(createConnectionSpy).toHaveBeenCalledWith('test-cmd', [], {});
+        expect(createConnectionSpy).toHaveBeenCalledWith('test-cmd', [], { ...PROXY_ENV });
         expect(mockConnection.initialize).toHaveBeenCalledWith({
           protocolVersion: 1,
           clientInfo: { name: 'agentctl-login', title: 'Agentctl', version: '1.0.0' },

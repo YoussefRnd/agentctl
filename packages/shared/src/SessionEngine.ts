@@ -61,6 +61,14 @@ export class SessionEngine {
     return this.isConnected;
   }
 
+  private readActive(): boolean {
+    return this.active;
+  }
+
+  private readAbortController(): AbortController | null {
+    return this.abortController;
+  }
+
   private clearReconnectTimeout() {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -84,7 +92,7 @@ export class SessionEngine {
   }
 
   private async startStreaming() {
-    while (this.active) {
+    while (this.readActive()) {
       this.abortController = new AbortController();
 
       try {
@@ -126,8 +134,7 @@ export class SessionEngine {
         const decoder = new TextDecoder();
         let leftover = '';
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- this.active is mutated by disconnect() across await boundaries
-        while (this.active) {
+        while (this.readActive()) {
           const { value, done } = await reader.read();
           if (done) {
             break;
@@ -148,8 +155,7 @@ export class SessionEngine {
         }
       } catch (error: unknown) {
         const err = error as { name?: string; message?: string };
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- this.active is mutated by disconnect() across await boundaries
-        if (err.name === 'AbortError' || !this.active) {
+        if (err.name === 'AbortError' || !this.readActive()) {
           // Normal abort/disconnect, stop reconnect loop
           break;
         }
@@ -161,15 +167,14 @@ export class SessionEngine {
           this.options.onStatusChange(false);
           this.options.onStreamingChange(null);
         }
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- abortController may be nulled by disconnect() during async operations
-        if (this.abortController) {
-          this.abortController.abort();
+        const controller = this.readAbortController();
+        if (controller) {
+          controller.abort();
           this.abortController = null;
         }
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- this.active is mutated by disconnect() across await boundaries
-      if (this.active) {
+      if (this.readActive()) {
         await new Promise<void>((resolve) => {
           this.reconnectTimeout = setTimeout(() => {
             this.reconnectTimeout = null;

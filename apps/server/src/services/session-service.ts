@@ -71,7 +71,10 @@ export class SessionService {
     }
 
     const providersList = await this.providerRegistry.discover();
-    return { session: this.parseSessionRow(session), capabilities: providersList };
+    return {
+      session: this.parseSessionRow(session),
+      capabilities: providersList,
+    };
   }
 
   async updateSessionProvider(
@@ -101,7 +104,10 @@ export class SessionService {
     }
 
     const providersList = await this.providerRegistry.discover();
-    return { session: this.parseSessionRow(updatedSession), capabilities: providersList };
+    return {
+      session: this.parseSessionRow(updatedSession),
+      capabilities: providersList,
+    };
   }
 
   async listBranches(sessionId: string) {

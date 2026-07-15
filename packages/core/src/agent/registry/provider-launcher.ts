@@ -14,6 +14,26 @@ const execFilePromise = promisify(execFile);
 
 const PROBE_CACHE_TTL_MS = 60_000;
 
+const PROXY_ENV_VARS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+] as const;
+
+function pickProxyEnv(source: NodeJS.ProcessEnv): Record<string, string> {
+  const proxyEnv: Record<string, string> = {};
+  for (const key of PROXY_ENV_VARS) {
+    const value = source[key];
+    if (typeof value === 'string' && value.length > 0) {
+      proxyEnv[key] = value;
+    }
+  }
+  return proxyEnv;
+}
+
 function findBinaryOnPath(command: string): string | null {
   const pathEnv = process.env.PATH ?? '';
   const pathDirs = pathEnv.split(path.delimiter);
@@ -109,7 +129,7 @@ export class ProviderLauncher {
     }
 
     const customEnv = JSON.parse(provider.customEnv || '{}') as Record<string, string>;
-    env = { ...env, ...customEnv };
+    env = { ...pickProxyEnv(process.env), ...env, ...customEnv };
 
     return { command, args, env };
   }

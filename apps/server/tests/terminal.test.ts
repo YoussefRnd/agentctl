@@ -1,15 +1,20 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { test, expect, describe, beforeAll, afterAll } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { createDatabase, projects, sessions } from '@agentctl/core';
 import type { FastifyInstance } from 'fastify';
 
+interface TestSession {
+  writeTerminalInput(terminalId: string, data: string): boolean;
+  stop(): Promise<void>;
+}
+
+interface TestableSessionManager {
+  stateMachine: { sessions: Map<string, TestSession> };
+}
+
 describe('Fastify Terminal Input API Integration Tests', () => {
   let app: FastifyInstance;
-  let db: any;
+  let db: ReturnType<typeof createDatabase>;
 
   beforeAll(async () => {
     db = createDatabase(':memory:');
@@ -46,18 +51,20 @@ describe('Fastify Terminal Input API Integration Tests', () => {
       taskSlug: 'test-task',
     });
 
-    // 2. Start session inside SessionManager so it is in memory
-    // We can manually add a mock session to stateMachine sessions map
-    const mockSession = {
-      sessionId,
-      writeTerminalInput: (terminalId: string, data: string) => {
+    // 2. Register a mock session in the in-memory state machine so
+    //    SessionManager.writeTerminalInput can find it.
+    const mockSession: TestSession = {
+      writeTerminalInput: (terminalId, data) => {
         expect(terminalId).toBe('term-123');
         expect(data).toBe('hello\n');
         return true;
       },
       stop: () => Promise.resolve(),
     };
-    (app.sessionManager as any).stateMachine.sessions.set(sessionId, mockSession);
+    (app.sessionManager as unknown as TestableSessionManager).stateMachine.sessions.set(
+      sessionId,
+      mockSession,
+    );
 
     // 3. Make HTTP request to our new endpoint
     const response = await app.inject({
@@ -72,7 +79,7 @@ describe('Fastify Terminal Input API Integration Tests', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.payload);
+    const body = JSON.parse(response.payload) as { success: boolean };
     expect(body).toEqual({ success: true });
   });
 

@@ -9,11 +9,18 @@ import {
   ndJsonStream,
   type McpServer,
   type Client,
+  type Stream,
+  type AnyMessage,
 } from '@agentclientprotocol/sdk';
 import type {
   RequestPermissionResponse,
+  RequestPermissionRequest,
   SessionNotification,
   ContentBlock,
+  NewSessionResponse,
+  ResumeSessionResponse,
+  LoadSessionResponse,
+  SessionConfigOption,
 } from '@agentclientprotocol/sdk';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AuthMethod, ThinkingEffort, ACPConfigOption, SessionMetrics } from '@agentctl/shared';
@@ -22,7 +29,13 @@ import type { McpGateway } from './mcp-gateway.js';
 
 export interface ACPConnectionHandle {
   child: ChildProcess;
-  connection: Pick<ClientSideConnection, 'initialize' | 'newSession' | 'authenticate' | 'closed'>;
+  connection: Pick<
+    ClientSideConnection,
+    'initialize' | 'newSession' | 'authenticate' | 'closed'
+  > & {
+    logout?: (params: Record<string, unknown>) => Promise<unknown>;
+    sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
+  };
 }
 
 export interface AgentStreamTransport {
@@ -253,7 +266,6 @@ export interface AgentRuntimeHandle {
     attachments?: { filePath: string; mimeType: string }[],
     embeddedContext?: string,
   ): Promise<PromptResult>;
-  respondToPermission(permissionId: string, response: DomainPermissionResponse): void;
   authenticate(methodId: string): Promise<void>;
   cancel(): Promise<void>;
   stop(): Promise<void>;
@@ -639,6 +651,27 @@ function getCacheKey(command: string, args: string[], env: Record<string, string
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
+/**
+ * The `session/delete` capability is an ACP extension not present in the SDK's
+ * generated `SessionCapabilities` type. Read it defensively without widening casts.
+ */
+function sessionSupportsDelete(caps: unknown): boolean {
+  if (!caps || typeof caps !== 'object') {
+    return false;
+  }
+  return Boolean((caps as { delete?: unknown }).delete);
+}
+
+interface PermissionToolCall {
+  name?: string;
+  toolCallId?: string;
+  kind?: string;
+  title?: string;
+  locations?: { path?: string }[];
+  arguments?: Record<string, unknown>;
+  rawInput?: unknown;
+}
+
 export class DefaultAgentRuntime implements AgentRuntime {
   constructor(
     private spawnImpl: typeof spawn = spawn,
@@ -670,7 +703,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
     const transport = this.createTransport(child, this.logger);
 
-    const stream = ndJsonStream(transport.stdin, transport.stdout);
+    const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
 
     const logger = this.logger;
     const terminalManager = new TerminalManager(logger);
@@ -683,30 +716,19 @@ export class DefaultAgentRuntime implements AgentRuntime {
             await callbacks.onEvent(event);
           }
         },
-        async requestPermission(r: {
-          toolCall: {
-            name?: string;
-            toolCallId: string;
-            kind?: string;
-            title?: string;
-            locations?: { path?: string }[];
-            arguments?: Record<string, unknown>;
-            rawInput?: unknown;
-          };
-          options: { optionId: string; name?: string }[];
-        }) {
-          const toolCallRaw = r.toolCall as unknown as Record<string, unknown>;
-          const rawInput = toolCallRaw.rawInput as Record<string, unknown> | undefined;
+        async requestPermission(r: RequestPermissionRequest) {
+          const toolCall = r.toolCall as unknown as PermissionToolCall;
+          const rawInput = toolCall.rawInput as Record<string, unknown> | undefined;
 
-          let parsedName = typeof toolCallRaw.name === 'string' ? toolCallRaw.name : '';
-          if (!parsedName && r.toolCall.toolCallId) {
-            parsedName = r.toolCall.toolCallId.split('__')[0];
+          let parsedName = typeof toolCall.name === 'string' ? toolCall.name : '';
+          if (!parsedName && toolCall.toolCallId) {
+            parsedName = toolCall.toolCallId.split('__')[0];
           }
           if (!parsedName) {
-            parsedName = typeof toolCallRaw.kind === 'string' ? toolCallRaw.kind : 'tool';
+            parsedName = typeof toolCall.kind === 'string' ? toolCall.kind : 'tool';
           }
 
-          let parsedArgs = toolCallRaw.arguments as Record<string, unknown> | undefined;
+          let parsedArgs = toolCall.arguments;
           if (!parsedArgs) {
             if (rawInput && typeof rawInput === 'object') {
               if (rawInput.arguments && typeof rawInput.arguments === 'object') {
@@ -720,10 +742,10 @@ export class DefaultAgentRuntime implements AgentRuntime {
             }
           }
           if (!parsedArgs) {
-            const locations = toolCallRaw.locations as { path?: string }[] | undefined;
+            const locations = toolCall.locations;
             const primaryPath =
               locations?.[0]?.path ??
-              (typeof toolCallRaw.title === 'string' ? toolCallRaw.title : undefined);
+              (typeof toolCall.title === 'string' ? toolCall.title : undefined);
             if (primaryPath) {
               parsedArgs = {
                 path: primaryPath,
@@ -734,8 +756,8 @@ export class DefaultAgentRuntime implements AgentRuntime {
           }
 
           const domainReq: DomainPermissionRequest = {
-            permissionId: r.toolCall.toolCallId,
-            description: typeof toolCallRaw.title === 'string' ? toolCallRaw.title : '',
+            permissionId: toolCall.toolCallId ?? '',
+            description: typeof toolCall.title === 'string' ? toolCall.title : '',
             options: r.options.map((opt) => ({
               optionId: opt.optionId,
               label: opt.name,
@@ -743,17 +765,16 @@ export class DefaultAgentRuntime implements AgentRuntime {
             toolCall: {
               name: parsedName,
               arguments: parsedArgs,
-              toolCallId: r.toolCall.toolCallId,
+              toolCallId: toolCall.toolCallId,
             },
           };
           const domainResp = await callbacks.onRequestPermission(domainReq);
-          if (domainResp.allowed) {
+          if (domainResp.allowed && domainResp.optionId) {
             return {
-              outcome: { outcome: 'selected', optionId: domainResp.optionId ?? 'allow-once' },
+              outcome: { outcome: 'selected', optionId: domainResp.optionId },
             };
-          } else {
-            return { outcome: { outcome: 'cancelled' } };
           }
+          return { outcome: { outcome: 'cancelled' } };
         },
         async 'fs.readTextFile'(p: { path: string }) {
           const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(options.cwd, p.path);
@@ -944,7 +965,6 @@ export class DefaultAgentRuntime implements AgentRuntime {
       void callbacks.onEvent({ type: 'terminal_exit', terminalId, code });
     });
 
-    const pendingApprovals = new Map<string, (response: RequestPermissionResponse) => void>();
     let supportsCloseSession = false;
     let supportsDeleteSession = false;
     let supportsListSessions = false;
@@ -1013,144 +1033,69 @@ export class DefaultAgentRuntime implements AgentRuntime {
           await (connection.cancel({ sessionId: this.acpSessionId }) as Promise<unknown>);
         }
       },
-      respondToPermission(permissionId: string, response: DomainPermissionResponse): void {
-        const resolve = pendingApprovals.get(permissionId);
-        if (resolve) {
-          if (response.allowed) {
-            resolve({
-              outcome: { outcome: 'selected', optionId: response.optionId ?? 'allow-once' },
-            });
-          } else {
-            resolve({ outcome: { outcome: 'cancelled' } });
-          }
-          pendingApprovals.delete(permissionId);
-        }
-      },
       async stop(): Promise<void> {
-        pendingApprovals.clear();
         if (supportsCloseSession && this.acpSessionId) {
-          const dynConn = connection as unknown as {
-            sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-          };
-          if (typeof dynConn.sendRequest === 'function') {
-            try {
-              await withTimeout(
-                dynConn.sendRequest('session/close', { sessionId: this.acpSessionId }),
-                2000,
-                'closing ACP session',
-              );
-            } catch {
-              // Ignore error on close, we still want to kill the process
-            }
+          try {
+            await withTimeout(
+              connection.closeSession({ sessionId: this.acpSessionId }),
+              2000,
+              'closing ACP session',
+            );
+          } catch {
+            // Ignore error on close, we still want to kill the process
           }
         }
         transport.kill();
         await terminalManager.dispose();
       },
       async updateModel(modelId: string): Promise<void> {
-        const dynConn = connection as unknown as {
-          unstable_setSessionModel?: (p: {
-            sessionId: string;
-            modelId: string;
-          }) => Promise<unknown>;
-        };
-        if (typeof dynConn.unstable_setSessionModel === 'function' && this.acpSessionId) {
-          await dynConn.unstable_setSessionModel({
+        if (this.acpSessionId) {
+          await connection.unstable_setSessionModel({
             sessionId: this.acpSessionId,
             modelId,
           });
         }
       },
       async updateConfigOption(configId: string, value: string): Promise<ACPConfigOption[]> {
-        const dynConn = connection as unknown as {
-          setSessionConfigOption?: (p: {
-            sessionId: string;
-            configId: string;
-            value: string;
-          }) => Promise<{ configOptions: ACPConfigOption[] }>;
-          sendRequest?: (
-            method: string,
-            params: Record<string, unknown>,
-          ) => Promise<{ configOptions: ACPConfigOption[] }>;
-        };
-        if (this.acpSessionId && typeof dynConn.sendRequest === 'function') {
-          const result = await dynConn.sendRequest('session/set_config_option', {
-            sessionId: this.acpSessionId,
-            configId,
-            value,
-          });
-          return result.configOptions;
-        }
-        if (typeof dynConn.setSessionConfigOption === 'function' && this.acpSessionId) {
-          const result = await dynConn.setSessionConfigOption({
-            sessionId: this.acpSessionId,
-            configId,
-            value,
-          });
-          return result.configOptions;
-        }
-        return [];
+        if (!this.acpSessionId) return [];
+        const result = await connection.setSessionConfigOption({
+          sessionId: this.acpSessionId,
+          configId,
+          value,
+        });
+        return result.configOptions as ACPConfigOption[];
       },
       async setMode(modeId: string): Promise<void> {
-        const dynConn = connection as unknown as {
-          unstable_setSessionMode?: (p: { sessionId: string; modeId: string }) => Promise<unknown>;
-          sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-        };
-        if (typeof dynConn.unstable_setSessionMode === 'function' && this.acpSessionId) {
-          await dynConn.unstable_setSessionMode({
+        if (this.acpSessionId) {
+          await connection.setSessionMode({
             sessionId: this.acpSessionId,
             modeId,
-          });
-        } else if (this.acpSessionId && typeof dynConn.sendRequest === 'function') {
-          await dynConn.sendRequest('session/set_mode', {
-            sessionId: this.acpSessionId,
-            mode: modeId,
           });
         }
       },
       async deleteSession(acpSessionId: string): Promise<void> {
         if (supportsDeleteSession) {
-          const dynConn = connection as unknown as {
-            sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-          };
-          if (typeof dynConn.sendRequest === 'function') {
-            await withTimeout(
-              dynConn.sendRequest('session/delete', { sessionId: acpSessionId }),
-              5000,
-              'deleting ACP session',
-            );
-          }
+          await withTimeout(
+            connection.extMethod('session/delete', { sessionId: acpSessionId }),
+            5000,
+            'deleting ACP session',
+          );
         }
       },
       async listSessions(params?: {
         cwd?: string;
         cursor?: string;
       }): Promise<{ sessions: unknown[]; nextCursor?: string }> {
-        if (supportsListSessions) {
-          const dynConn = connection as unknown as {
-            sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-          };
-          if (typeof dynConn.sendRequest === 'function') {
-            const res = (await withTimeout(
-              dynConn.sendRequest('session/list', params ?? {}),
-              5000,
-              'listing ACP sessions',
-            )) as { sessions: unknown[]; nextCursor?: string };
-            return res;
-          }
-        }
-        return { sessions: [] };
+        if (!supportsListSessions) return { sessions: [] };
+        const result = await withTimeout(
+          connection.listSessions(params ?? {}),
+          5000,
+          'listing ACP sessions',
+        );
+        return { sessions: result.sessions, nextCursor: result.nextCursor ?? undefined };
       },
       async logout(): Promise<void> {
-        const conn = connection as {
-          logout?: (params: Record<string, unknown>) => Promise<unknown>;
-          sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-        };
-        if (typeof conn.logout === 'function') {
-          await conn.logout({});
-        } else if (typeof conn.sendRequest === 'function') {
-          await conn.sendRequest('logout', {});
-        }
+        await connection.unstable_logout({});
       },
       writeTerminalInput(terminalId: string, data: string): boolean {
         return terminalManager.write(terminalId, data);
@@ -1158,130 +1103,98 @@ export class DefaultAgentRuntime implements AgentRuntime {
     };
 
     try {
-      const initResult = (await withTimeout(
-        connection.initialize({
-          protocolVersion: 1,
-          clientCapabilities: {
-            terminal: true,
-            fs: {
-              readTextFile: true,
-              writeTextFile: true,
+      const initResult = await withTimeout(
+        Promise.race([
+          connection.initialize({
+            protocolVersion: 1,
+            clientCapabilities: {
+              terminal: true,
+              fs: {
+                readTextFile: true,
+                writeTextFile: true,
+              },
+              _meta: {
+                builtin: { bash: true },
+              },
             },
-            _meta: {
-              builtin: { bash: true },
-            },
-          },
-          clientInfo: { name: 'agentctl', title: 'Agentctl', version: '1.0.0' },
-        }),
+            clientInfo: { name: 'agentctl', title: 'Agentctl', version: '1.0.0' },
+          }),
+          transport.closed.then(() => {
+            throw new Error('ACP agent process exited before initialization completed');
+          }),
+        ]),
         60_000,
         'initializing ACP connection',
-      )) as {
-        capabilities?: {
-          loadSession?: boolean;
-          modes?: string[];
-          [key: string]: unknown;
-        };
-      };
+      );
 
-      /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-      const sessionCaps = (initResult.capabilities as any)?.sessionCapabilities;
+      const agentCapabilities = initResult.agentCapabilities;
+      const sessionCaps = agentCapabilities?.sessionCapabilities;
       const supportsResumeSession = !!sessionCaps?.resume;
       supportsCloseSession = !!sessionCaps?.close;
-      supportsDeleteSession = !!sessionCaps?.delete;
+      supportsDeleteSession = sessionSupportsDelete(sessionCaps);
       supportsListSessions = !!sessionCaps?.list;
       const supportsAdditionalDirectories = !!sessionCaps?.additionalDirectories;
-      /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 
-      const agentModes = initResult.capabilities?.modes ?? [];
-      handle.availableModes = agentModes;
-
-      /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-      const supportsLoadSession = !!initResult.capabilities?.loadSession;
-      let newSessionResult: any;
+      const supportsLoadSession = !!agentCapabilities?.loadSession;
+      let newSessionResult:
+        | NewSessionResponse
+        | ResumeSessionResponse
+        | LoadSessionResponse
+        | null = null;
       let acpSessionId: string | null = null;
+
+      const baseSessionParams = {
+        cwd: options.cwd,
+        mcpServers: options.mcpServers ?? [],
+        ...(supportsAdditionalDirectories && options.additionalDirectories
+          ? { additionalDirectories: options.additionalDirectories }
+          : {}),
+      };
 
       try {
         if (options.existingAgentSessionId && (supportsResumeSession || supportsLoadSession)) {
           try {
             if (supportsResumeSession) {
-              const dynConn = connection as unknown as {
-                sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-              };
-              if (typeof dynConn.sendRequest === 'function') {
-                const params: Record<string, unknown> = {
-                  sessionId: options.existingAgentSessionId,
-                  cwd: options.cwd,
-                  mcpServers: options.mcpServers ?? [],
-                };
-                if (supportsAdditionalDirectories && options.additionalDirectories) {
-                  params.additionalDirectories = options.additionalDirectories;
-                }
-                newSessionResult = (await withTimeout(
-                  dynConn.sendRequest('session/resume', params),
-                  60_000,
-                  'resuming ACP session',
-                )) as { sessionId?: string; [key: string]: unknown };
-                acpSessionId = options.existingAgentSessionId;
-              } else {
-                throw new Error(
-                  'connection.sendRequest is not a function, fallback to loadSession',
-                );
-              }
-            } else {
-              const params: Parameters<ClientSideConnection['loadSession']>[0] & {
-                additionalDirectories?: string[];
-              } = {
-                sessionId: options.existingAgentSessionId,
-                cwd: options.cwd,
-                mcpServers: options.mcpServers ?? [],
-                ...(supportsAdditionalDirectories && options.additionalDirectories
-                  ? { additionalDirectories: options.additionalDirectories }
-                  : {}),
-              };
               newSessionResult = await withTimeout(
-                connection.loadSession(params),
+                connection.resumeSession({
+                  sessionId: options.existingAgentSessionId,
+                  ...baseSessionParams,
+                }),
+                60_000,
+                'resuming ACP session',
+              );
+            } else {
+              newSessionResult = await withTimeout(
+                connection.loadSession({
+                  sessionId: options.existingAgentSessionId,
+                  ...baseSessionParams,
+                }),
                 60_000,
                 'loading ACP session',
               );
-              acpSessionId = options.existingAgentSessionId;
             }
+            acpSessionId = options.existingAgentSessionId;
           } catch (loadErr) {
             this.logger.warn(
               loadErr,
               `Failed to load/resume existing session ${options.existingAgentSessionId}, falling back to new session`,
             );
-            const params: Parameters<ClientSideConnection['newSession']>[0] & {
-              additionalDirectories?: string[];
-            } = {
-              cwd: options.cwd,
-              mcpServers: options.mcpServers ?? [],
-              ...(supportsAdditionalDirectories && options.additionalDirectories
-                ? { additionalDirectories: options.additionalDirectories }
-                : {}),
-            };
-            newSessionResult = await withTimeout(
-              connection.newSession(params),
+            const created = await withTimeout(
+              connection.newSession(baseSessionParams),
               60_000,
               'creating ACP session',
             );
-            acpSessionId = newSessionResult.sessionId;
+            newSessionResult = created;
+            acpSessionId = created.sessionId;
           }
         } else {
-          const params: Parameters<ClientSideConnection['newSession']>[0] & {
-            additionalDirectories?: string[];
-          } = {
-            cwd: options.cwd,
-            mcpServers: options.mcpServers ?? [],
-            ...(supportsAdditionalDirectories && options.additionalDirectories
-              ? { additionalDirectories: options.additionalDirectories }
-              : {}),
-          };
-          newSessionResult = await withTimeout(
-            connection.newSession(params),
+          const created = await withTimeout(
+            connection.newSession(baseSessionParams),
             60_000,
             'creating ACP session',
           );
-          acpSessionId = newSessionResult.sessionId;
+          newSessionResult = created;
+          acpSessionId = created.sessionId;
         }
       } catch (err: unknown) {
         const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
@@ -1297,31 +1210,24 @@ export class DefaultAgentRuntime implements AgentRuntime {
       }
 
       handle.acpSessionId = acpSessionId;
-      /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unnecessary-condition */
-      if ((!handle.availableModes || handle.availableModes.length === 0) && newSessionResult) {
+      if (!handle.availableModes || handle.availableModes.length === 0) {
         const resultModes = newSessionResult.modes?.availableModes ?? [];
         if (resultModes.length > 0) {
-          handle.availableModes = resultModes.map((m: any) => m.id);
+          handle.availableModes = resultModes.map((m) => m.id);
         } else if (newSessionResult.configOptions) {
           // If modes are exposed in config options
-          const modeOpt = newSessionResult.configOptions.find((opt: any) => opt.id === 'mode');
+          const modeOpt = newSessionResult.configOptions.find(
+            (opt): opt is Extract<SessionConfigOption, { type: 'select' }> =>
+              opt.id === 'mode' && opt.type === 'select',
+          );
           if (modeOpt?.options) {
-            handle.availableModes = modeOpt.options.map((opt: any) => opt.value);
+            handle.availableModes = modeOpt.options
+              .filter((opt) => typeof (opt as { value?: unknown }).value === 'string')
+              .map((opt) => (opt as { value: string }).value);
           }
         }
       }
-      /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unnecessary-condition */
-
-      const dynConn = connection as unknown as {
-        unstable_setSessionModel?: (p: { sessionId: string; modelId: string }) => Promise<unknown>;
-        setSessionConfigOption?: (p: {
-          sessionId: string;
-          configId: string;
-          value: string;
-        }) => Promise<unknown>;
-      };
 
       const finalSessionId = handle.acpSessionId;
       if (finalSessionId) {
@@ -1330,30 +1236,26 @@ export class DefaultAgentRuntime implements AgentRuntime {
           options.selectedModel &&
           options.selectedModel !== 'default'
         ) {
-          if (typeof dynConn.unstable_setSessionModel === 'function') {
-            await dynConn.unstable_setSessionModel({
-              sessionId: finalSessionId,
-              modelId: options.selectedModel,
-            });
-          }
+          await connection.unstable_setSessionModel({
+            sessionId: finalSessionId,
+            modelId: options.selectedModel,
+          });
         } else if (
           options.selectedModel &&
           options.selectedModel !== 'default' &&
           options.resolvedModelConfigId
         ) {
-          if (typeof dynConn.setSessionConfigOption === 'function') {
-            try {
-              await dynConn.setSessionConfigOption({
-                sessionId: finalSessionId,
-                configId: options.resolvedModelConfigId,
-                value: options.selectedModel,
-              });
-            } catch (configErr) {
-              this.logger.warn(
-                configErr,
-                `Failed to dynamically set model configuration on init (configId: ${options.resolvedModelConfigId})`,
-              );
-            }
+          try {
+            await connection.setSessionConfigOption({
+              sessionId: finalSessionId,
+              configId: options.resolvedModelConfigId,
+              value: options.selectedModel,
+            });
+          } catch (configErr) {
+            this.logger.warn(
+              configErr,
+              `Failed to dynamically set model configuration on init (configId: ${options.resolvedModelConfigId})`,
+            );
           }
         }
 
@@ -1362,19 +1264,17 @@ export class DefaultAgentRuntime implements AgentRuntime {
           options.selectedThinkingEffort &&
           options.resolvedThinkingConfigId
         ) {
-          if (typeof dynConn.setSessionConfigOption === 'function') {
-            try {
-              await dynConn.setSessionConfigOption({
-                sessionId: finalSessionId,
-                configId: options.resolvedThinkingConfigId,
-                value: options.selectedThinkingEffort,
-              });
-            } catch (configErr) {
-              this.logger.warn(
-                configErr,
-                `Failed to dynamically set thinking effort on init (configId: ${options.resolvedThinkingConfigId})`,
-              );
-            }
+          try {
+            await connection.setSessionConfigOption({
+              sessionId: finalSessionId,
+              configId: options.resolvedThinkingConfigId,
+              value: options.selectedThinkingEffort,
+            });
+          } catch (configErr) {
+            this.logger.warn(
+              configErr,
+              `Failed to dynamically set thinking effort on init (configId: ${options.resolvedThinkingConfigId})`,
+            );
           }
         }
       }
@@ -1418,7 +1318,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
     // Suppress unhandled errors from process exit during probe
     transport.closed.catch(() => undefined);
 
-    const stream = ndJsonStream(transport.stdin, transport.stdout);
+    const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
 
     const connection = new ClientSideConnection(
       () => ({
@@ -1442,30 +1342,21 @@ export class DefaultAgentRuntime implements AgentRuntime {
             clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
           });
 
+          const agentCapabilities = initResult.agentCapabilities;
+
           let status: 'ready' | 'needs_auth' = 'ready';
           let configOptions: ACPConfigOption[] = [];
           let supportsDynamicModel = false;
           let supportsDynamicConfig = false;
 
           try {
-            const sessionResult = (await connection.newSession({
+            const sessionResult = await connection.newSession({
               cwd: os.tmpdir(),
               mcpServers: [],
-            })) as {
-              sessionId?: string;
-              configOptions?: ACPConfigOption[] | null;
-              models?: {
-                currentModelId?: string;
-                availableModels?: { modelId: string; name: string; description?: string }[];
-              };
-              modes?: {
-                currentModeId?: string;
-                availableModes?: { id: string; name: string; description?: string }[];
-              };
-            };
+            });
 
             if (sessionResult.configOptions) {
-              configOptions = sessionResult.configOptions;
+              configOptions = sessionResult.configOptions as ACPConfigOption[];
             } else {
               const models = sessionResult.models;
               if (models?.availableModels) {
@@ -1474,11 +1365,11 @@ export class DefaultAgentRuntime implements AgentRuntime {
                   name: 'Model',
                   description: 'Select the model to use',
                   type: 'select',
-                  currentValue: models.currentModelId ?? '',
+                  currentValue: models.currentModelId,
                   options: models.availableModels.map((m) => ({
                     value: m.modelId,
                     name: m.name,
-                    description: m.description,
+                    description: m.description ?? undefined,
                   })),
                 });
               }
@@ -1489,31 +1380,24 @@ export class DefaultAgentRuntime implements AgentRuntime {
                   name: 'Mode',
                   description: 'Select the tool approval mode',
                   type: 'select',
-                  currentValue: modes.currentModeId ?? '',
+                  currentValue: modes.currentModeId,
                   options: modes.availableModes.map((m) => ({
                     value: m.id,
                     name: m.name,
-                    description: m.description,
+                    description: m.description ?? undefined,
                   })),
                 });
               }
             }
 
-            const initRaw = initResult as unknown as Record<string, unknown>;
-            const hasModelsCapability = !!(
-              initRaw.capabilities as Record<string, unknown> | undefined
-            )?.models;
             const hasAlternateModels = (sessionResult.models?.availableModels ?? []).length > 0;
-            supportsDynamicModel = hasModelsCapability || hasAlternateModels;
+            supportsDynamicModel = hasAlternateModels;
 
             // Inspect if configOptions / settings schema exists and has parameters defined
-            const hasConfigOptions = configOptions.length > 0;
-            supportsDynamicConfig = hasConfigOptions;
+            supportsDynamicConfig = configOptions.length > 0;
 
-            const capabilities = initRaw.capabilities as Record<string, unknown> | undefined;
-            const modes = capabilities?.modes as string[] | undefined;
-            const supportsLogout = !!(capabilities?.auth as Record<string, unknown> | undefined)
-              ?.logout;
+            const modes = sessionResult.modes?.availableModes.map((m) => m.id);
+            const supportsLogout = !!agentCapabilities?.auth?.logout;
 
             const probeResult: AgentProbeResult = {
               status,
@@ -1544,10 +1428,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
             }
           }
 
-          const initRaw = initResult as unknown as Record<string, unknown>;
-          const capabilities = initRaw.capabilities as Record<string, unknown> | undefined;
-          const supportsLogout = !!(capabilities?.auth as Record<string, unknown> | undefined)
-            ?.logout;
+          const supportsLogout = !!agentCapabilities?.auth?.logout;
 
           const probeResult: AgentProbeResult = {
             status,
@@ -1579,7 +1460,6 @@ export class DefaultAgentRuntime implements AgentRuntime {
     env: Record<string, string> | undefined,
     acpSessionId: string,
   ): Promise<void> {
-    /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-empty-function, @typescript-eslint/no-unsafe-assignment */
     const cleanEnvObj = cleanEnv(env);
     const child = this.spawnImpl(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -1588,8 +1468,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
     });
 
     const transport = this.createTransport(child, this.logger);
-
-    const stream = ndJsonStream(transport.stdin, transport.stdout);
+    const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
 
     const connectionInstance = new ClientSideConnection(
       () => ({
@@ -1605,164 +1484,76 @@ export class DefaultAgentRuntime implements AgentRuntime {
       stream,
     );
 
-    // Suppress unhandled errors during delete call
-    (connectionInstance as any).on('error', () => {});
-    transport.closed.catch(() => {});
+    // Suppress unhandled transport errors during delete call
+    transport.closed.catch(() => undefined);
 
     try {
-      const initResult = (await withTimeout(
+      const initResult = await withTimeout(
         connectionInstance.initialize({
           protocolVersion: 1,
           clientInfo: { name: 'agentctl-delete', version: '1.0.0' },
         }),
         10_000,
         'initializing connection for delete',
-      )) as any;
+      );
 
-      const supportsDelete = !!initResult?.capabilities?.sessionCapabilities?.delete;
+      const supportsDelete = sessionSupportsDelete(
+        initResult.agentCapabilities?.sessionCapabilities,
+      );
       if (supportsDelete) {
-        const dynConn = connectionInstance as unknown as {
-          sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-        };
-        if (typeof dynConn.sendRequest === 'function') {
-          await withTimeout(
-            dynConn.sendRequest('session/delete', { sessionId: acpSessionId }),
-            10_000,
-            'sending session/delete request',
-          );
-        }
+        await withTimeout(
+          connectionInstance.extMethod('session/delete', { sessionId: acpSessionId }),
+          10_000,
+          'sending session/delete request',
+        );
       }
     } finally {
       transport.kill();
-      await transport.closed.catch(() => {});
+      await transport.closed.catch(() => undefined);
     }
-    /* eslint-enable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-empty-function, @typescript-eslint/no-unsafe-assignment */
-  }
-}
-
-interface GeminiModelInfo {
-  modelId: string;
-  name: string;
-  description?: string;
-}
-
-interface GeminiModeInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-interface ExtendedSessionResult {
-  sessionId?: string;
-  configOptions?: ACPConfigOption[] | null;
-  models?: { currentModelId?: string; availableModels?: GeminiModelInfo[] };
-  modes?: { currentModeId?: string; availableModes?: GeminiModeInfo[] };
-}
-
-export class LegacyConnectionRuntimeAdapter implements AgentRuntime {
-  constructor(
-    private createConnection: typeof createAgentConnection,
-    private logger: Logger,
-  ) {}
-
-  execute(): Promise<AgentRuntimeHandle> {
-    throw new Error('execute is not supported in legacy connection adapter');
   }
 
-  async probe(
-    command: string,
-    args: string[],
-    env?: Record<string, string>,
-  ): Promise<AgentProbeResult> {
-    const { child, connection } = this.createConnection(command, args, env ?? {});
-
-    try {
-      const initResult = await connection.initialize({
-        protocolVersion: 1,
-        clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
-      });
-
-      let status: 'ready' | 'needs_auth' = 'ready';
-      let configOptions: ACPConfigOption[] = [];
-      let supportsDynamicModel = false;
-      let supportsDynamicConfig = false;
-
-      try {
-        const sessionResult = (await connection.newSession({
-          cwd: os.tmpdir(),
-          mcpServers: [],
-        })) as ExtendedSessionResult;
-
-        if (sessionResult.configOptions) {
-          configOptions = sessionResult.configOptions;
-        } else {
-          const models = sessionResult.models;
-          if (models?.availableModels) {
-            configOptions.push({
-              id: 'model',
-              name: 'Model',
-              description: 'Select the model to use',
-              type: 'select',
-              currentValue: models.currentModelId ?? '',
-              options: models.availableModels.map((m) => ({
-                value: m.modelId,
-                name: m.name,
-                description: m.description,
-              })),
-            });
-          }
-          const modes = sessionResult.modes;
-          if (modes?.availableModes) {
-            configOptions.push({
-              id: 'mode',
-              name: 'Mode',
-              description: 'Select the tool approval mode',
-              type: 'select',
-              currentValue: modes.currentModeId ?? '',
-              options: modes.availableModes.map((m) => ({
-                value: m.id,
-                name: m.name,
-                description: m.description,
-              })),
-            });
-          }
-        }
-
-        const initRaw = initResult as unknown as Record<string, unknown>;
-        const hasModelsCapability = !!(initRaw.capabilities as Record<string, unknown> | undefined)
-          ?.models;
-        const hasAlternateModels = (sessionResult.models?.availableModels ?? []).length > 0;
-        supportsDynamicModel = hasModelsCapability || hasAlternateModels;
-
-        // Inspect if configOptions / settings schema exists and has parameters defined
-        const hasConfigOptions = configOptions.length > 0;
-        supportsDynamicConfig = hasConfigOptions;
-      } catch (err: unknown) {
-        const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
-        if (error.code === 'auth_required') {
-          status = 'needs_auth';
-          if (error.data?.configOptions) {
-            configOptions = error.data.configOptions;
-          }
-        } else {
-          throw err;
-        }
-      }
-
-      const initRaw = initResult as unknown as Record<string, unknown>;
-      const capabilities = initRaw.capabilities as Record<string, unknown> | undefined;
-      const supportsLogout = !!(capabilities?.auth as Record<string, unknown> | undefined)?.logout;
-
-      return {
-        status,
-        configOptions,
-        authMethods: (initResult.authMethods ?? []) as AuthMethod[],
-        supportsDynamicModel,
-        supportsDynamicConfig,
-        supportsLogout,
-      };
-    } finally {
-      child.kill();
+  private wrapDebug(stream: Stream): Stream {
+    if (process.env.AGENTCTL_ACP_DEBUG !== '1') {
+      return stream;
     }
+
+    const { readable, writable } = stream;
+    const log = (direction: 'send' | 'recv', message: unknown): void => {
+      const parsed = message as { method?: string; id?: unknown };
+      this.logger.debug({ direction, method: parsed.method, id: parsed.id }, 'ACP message');
+    };
+
+    const reader = readable.getReader();
+    const loggedReadable = new ReadableStream<AnyMessage>({
+      async pull(controller) {
+        const { value, done } = await reader.read();
+        if (done) {
+          controller.close();
+          return;
+        }
+        log('recv', value);
+        controller.enqueue(value);
+      },
+      cancel(reason) {
+        return reader.cancel(reason);
+      },
+    });
+
+    const writer = writable.getWriter();
+    const loggedWritable = new WritableStream<AnyMessage>({
+      async write(chunk) {
+        log('send', chunk);
+        await writer.write(chunk);
+      },
+      close() {
+        return writer.close();
+      },
+      abort(reason) {
+        return writer.abort(reason);
+      },
+    });
+
+    return { readable: loggedReadable, writable: loggedWritable };
   }
 }

@@ -223,11 +223,13 @@ export function useProviders(sessionId: string | null) {
       successMessage: 'Configuration updated',
     }),
     isUpdatingConfig: updateProviderConfigMutation.isPending,
-    installProvider: wrapMutate('install', installMutation, { successMessage: 'Provider installed' }),
+    installProvider: wrapMutate('install', installMutation, {
+      successMessage: 'Provider installed',
+    }),
     isInstalling: installMutation.isPending,
-    installingProviderId: installMutation.isPending ? (installMutation.variables as string) : null,
+    installingProviderId: installMutation.isPending ? installMutation.variables : null,
     removeProvider: wrapMutate('remove', removeMutation, { successMessage: 'Provider removed' }),
     isRemoving: removeMutation.isPending,
-    removingProviderId: removeMutation.isPending ? (removeMutation.variables as string) : null,
+    removingProviderId: removeMutation.isPending ? removeMutation.variables : null,
   };
 }

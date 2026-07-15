@@ -9,15 +9,15 @@ import { Card, Button, Switch, Select } from '@agentctl/ui';
 import { ChecklistItem } from './SetupWizardChecklistItem';
 import { SetupWizardProviderRow } from './SetupWizardProviderRow';
 
+function readCustomEnv(env: Record<string, string> | undefined, key: string): string | undefined {
+  return env?.[key];
+}
+
 export function SetupWizard() {
   const { showWizard, markDone } = useSetupWizard();
   const { settings, updateSettings } = useSettings();
-  const {
-    providers,
-    isLoadingProviders,
-    updateProviderConfig,
-    isUpdatingConfig,
-  } = useProviders(null);
+  const { providers, isLoadingProviders, updateProviderConfig, isUpdatingConfig } =
+    useProviders(null);
   const [localCustomEnvs, setLocalCustomEnvs] = useState<
     Record<string, Record<string, string> | undefined>
   >({});
@@ -27,11 +27,10 @@ export function SetupWizard() {
     if (provider.installState === 'not_installed') return false;
     const envKeys = getProviderEnvKeys(provider);
     return envKeys.some((key) => {
-      const envs = localCustomEnvs[provider.id] ?? {};
-      // `envs`/`provider.customEnv` index access can be undefined at runtime; the
-      // lint rule misreads this index-signature value type as always defined.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      const val = envs[key] ?? provider.customEnv[key] ?? '';
+      const val =
+        readCustomEnv(localCustomEnvs[provider.id], key) ??
+        readCustomEnv(provider.customEnv, key) ??
+        '';
       return validateApiKey(key, val) !== null;
     });
   });
@@ -41,11 +40,15 @@ export function SetupWizard() {
   const enabledProviders = providers.filter((p) => p.installState !== 'not_installed');
   const registryOk = !settings?.registrySyncError && providers.length > 0;
   const atLeastOneEnabled = providers.some((p) => p.installState !== 'not_installed');
-  const allEnabledReady = providers.every((p) => p.installState === 'not_installed' || p.authState === 'authenticated');
+  const allEnabledReady = providers.every(
+    (p) => p.installState === 'not_installed' || p.authState === 'authenticated',
+  );
   const authOk = (allEnabledReady || authDeferred) && !hasAnyInvalidProvider;
   const defaultSelected =
     !!settings?.defaultProviderId &&
-    !!providers.find((p) => p.id === settings.defaultProviderId && p.installState !== 'not_installed');
+    !!providers.find(
+      (p) => p.id === settings.defaultProviderId && p.installState !== 'not_installed',
+    );
 
   const isReady = registryOk && atLeastOneEnabled && authOk && defaultSelected;
 
@@ -110,7 +113,9 @@ export function SetupWizard() {
           </ul>
         </div>
 
-        {providers.some((p) => p.installState !== 'not_installed' && p.authState === 'needs_auth') && (
+        {providers.some(
+          (p) => p.installState !== 'not_installed' && p.authState === 'needs_auth',
+        ) && (
           <div className="bg-surface-secondary/10 border-border/10 flex items-center gap-3 rounded-xl border p-3 select-none">
             <Switch id="deferAuth" checked={authDeferred} onCheckedChange={setAuthDeferred} />
             <label
@@ -175,7 +180,7 @@ export function SetupWizard() {
             onClick={() => {
               void markDone();
             }}
-            className="text-text-muted inline-flex items-center gap-1.5 label-3xs transition-colors hover:text-white"
+            className="text-text-muted label-3xs inline-flex items-center gap-1.5 transition-colors hover:text-white"
           >
             <Terminal className="h-3 w-3" />
             ADVANCED_CONFIGURATION
@@ -188,7 +193,7 @@ export function SetupWizard() {
               void markDone();
             }}
             disabled={!isReady}
-            className="h-9 w-full px-4 label-2xs"
+            className="label-2xs h-9 w-full px-4"
           >
             INITIALIZATION_COMPLETE
           </Button>

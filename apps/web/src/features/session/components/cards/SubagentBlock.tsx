@@ -62,12 +62,10 @@ function SubagentCard({
 
   const isRunning = data.status === 'running' || data.status === 'spawning';
 
-  const startDate = childEvents.length > 0
-    ? childEvents[0].createdAt
-    : group.subagentEvent.createdAt;
-  const endDate = !isRunning && childEvents.length > 0
-    ? childEvents[childEvents.length - 1].createdAt
-    : null;
+  const startDate =
+    childEvents.length > 0 ? childEvents[0].createdAt : group.subagentEvent.createdAt;
+  const endDate =
+    !isRunning && childEvents.length > 0 ? childEvents[childEvents.length - 1].createdAt : null;
   const duration = formatDuration(startDate, now, endDate);
 
   const peekText = isOpen ? undefined : formatPeek(childEvents);
@@ -79,12 +77,12 @@ function SubagentCard({
       {data.status === 'spawning' ? 'spawning' : 'running'}
     </span>
   ) : data.status === 'completed' ? (
-    <span className="text-emerald-400 flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase">
+    <span className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
       <CheckCircle2 className="h-3 w-3" />
       done
     </span>
   ) : (
-    <span className="text-rose-400 flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase">
+    <span className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-rose-400 uppercase">
       <XCircle className="h-3 w-3" />
       failed
     </span>
@@ -102,9 +100,11 @@ function SubagentCard({
         onClick={onToggle}
         className="flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left"
       >
-        <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
-          isRunning ? 'border-accent/30 bg-accent/5' : 'border-border/40 bg-surface-secondary/30'
-        }`}>
+        <div
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
+            isRunning ? 'border-accent/30 bg-accent/5' : 'border-border/40 bg-surface-secondary/30'
+          }`}
+        >
           {React.createElement(getSubagentIcon(data.name), {
             className: `h-3 w-3 ${isRunning ? 'text-accent' : 'text-text-muted/60'}`,
           })}
@@ -116,21 +116,19 @@ function SubagentCard({
               {data.name}
             </span>
             {data.subagentId && (
-              <span className="text-text-muted/40 text-[10px] font-mono">
+              <span className="text-text-muted/40 font-mono text-[10px]">
                 #{data.subagentId.slice(0, 8)}
               </span>
             )}
           </div>
-          <p className="text-text-muted/70 line-clamp-1 text-[12px] leading-tight">
-            {data.scope}
-          </p>
+          <p className="text-text-muted/70 line-clamp-1 text-[12px] leading-tight">{data.scope}</p>
           {peekText && (
-            <p className="text-text-muted/50 line-clamp-1 text-[12px] leading-tight mt-0.5 font-mono">
+            <p className="text-text-muted/50 mt-0.5 line-clamp-1 font-mono text-[12px] leading-tight">
               {peekText}
             </p>
           )}
           {dots.length > 0 && (
-            <div className="flex items-center gap-[4px] mt-1">
+            <div className="mt-1 flex items-center gap-[4px]">
               {dots.map((d, i) => {
                 if (d.overflow != null) {
                   return (
@@ -153,32 +151,36 @@ function SubagentCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-text-muted/30 flex items-center gap-1 text-[10px] font-mono tabular-nums">
+          <span className="text-text-muted/30 flex items-center gap-1 font-mono text-[10px] tabular-nums">
             <Clock className="h-3 w-3" />
             {duration}
           </span>
           {data.result?.tokensUsed != null && (
-            <span className="text-text-muted/40 text-[10px] font-mono tabular-nums">
+            <span className="text-text-muted/40 font-mono text-[10px] tabular-nums">
               {data.result.tokensUsed} tok
             </span>
           )}
           {statusBadge}
-          <ChevronRight className={`h-3.5 w-3.5 text-text-muted/40 transition-transform duration-150 ${
-            isOpen ? 'rotate-90' : ''
-          }`} />
+          <ChevronRight
+            className={`text-text-muted/40 h-3.5 w-3.5 transition-transform duration-150 ${
+              isOpen ? 'rotate-90' : ''
+            }`}
+          />
         </div>
       </button>
 
-      <div className={`grid transition-all duration-150 ${
-        isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-      }`}>
+      <div
+        className={`grid transition-all duration-150 ${
+          isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
         <div className="overflow-hidden">
           {childEvents.length > 0 && (
-            <div className="ml-12 mr-3 border-t border-border/20 pb-2 pl-2">
+            <div className="border-border/20 mr-3 ml-12 border-t pb-2 pl-2">
               {childEvents.map((e, i) => {
-                const isLastStreaming = isStreaming && e.id === childEvents[childEvents.length - 1].id;
-                const isChildFailed = e.type === 'tool_call'
-                  && e.data.status === 'failed';
+                const isLastStreaming =
+                  isStreaming && e.id === childEvents[childEvents.length - 1].id;
+                const isChildFailed = e.type === 'tool_call' && e.data.status === 'failed';
 
                 if (e.type === 'text' && 'content' in e.data) {
                   const textData = e.data as { content: string; role?: string };
@@ -189,9 +191,11 @@ function SubagentCard({
                       isPulsing={isLastStreaming}
                       index={i}
                     >
-                      <span className={`text-text-muted/80 text-[13px] leading-relaxed select-text ${
-                        isChildFailed ? 'border-l-2 border-rose-500/50 pl-2' : ''
-                      }`}>
+                      <span
+                        className={`text-text-muted/80 text-[13px] leading-relaxed select-text ${
+                          isChildFailed ? 'border-l-2 border-rose-500/50 pl-2' : ''
+                        }`}
+                      >
                         {textData.content}
                       </span>
                       {isLastStreaming && (
@@ -208,12 +212,20 @@ function SubagentCard({
                   return (
                     <TimelineEvent
                       key={e.id}
-                      dotColor={isFailedTool ? 'bg-rose-500' : getToolMeta(payload.kind, toolName).dotColor}
+                      dotColor={
+                        isFailedTool ? 'bg-rose-500' : getToolMeta(payload.kind, toolName).dotColor
+                      }
                       isPulsing={isLastStreaming}
                       index={i}
                     >
-                      <div className={isFailedTool ? 'border-l-2 border-rose-500/50 pl-2' : undefined}>
-                        <ToolCallCard tool={toolName} payload={payload} isStreaming={isLastStreaming} />
+                      <div
+                        className={isFailedTool ? 'border-l-2 border-rose-500/50 pl-2' : undefined}
+                      >
+                        <ToolCallCard
+                          tool={toolName}
+                          payload={payload}
+                          isStreaming={isLastStreaming}
+                        />
                       </div>
                     </TimelineEvent>
                   );
@@ -229,10 +241,7 @@ function SubagentCard({
   );
 }
 
-export function SubagentBlock({
-  subagentGroups,
-  isStreaming = false,
-}: SubagentBlockProps) {
+export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentBlockProps) {
   const [openMap, setOpenMap] = useState<Partial<Record<string, boolean>>>({});
   const [forceAllOpen, setForceAllOpen] = useState<boolean | undefined>(undefined);
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -242,10 +251,14 @@ export function SubagentBlock({
 
   const sorted = useMemo(() => sortSubagentGroups(subagentGroups), [subagentGroups]);
 
-  const hasRunning = useMemo(() => sorted.some((g) => {
-    const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
-    return data.status === 'running' || data.status === 'spawning';
-  }), [sorted]);
+  const hasRunning = useMemo(
+    () =>
+      sorted.some((g) => {
+        const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
+        return data.status === 'running' || data.status === 'spawning';
+      }),
+    [sorted],
+  );
 
   useEffect(() => {
     if (!hasRunning) {
@@ -285,10 +298,7 @@ export function SubagentBlock({
       const prevStatus = prevStatuses.current.get(subId);
       prevStatuses.current.set(subId, data.status);
 
-      if (
-        data.status === 'failed' &&
-        prevStatus !== 'failed'
-      ) {
+      if (data.status === 'failed' && prevStatus !== 'failed') {
         setOpenMap((prev) => ({ ...prev, [subId]: true }));
       }
     }
@@ -345,21 +355,21 @@ export function SubagentBlock({
   }, [sorted.length, focusedIndex]);
 
   // Only auto-scroll when a new running subagent appears (sortedKey includes a new running id)
-  const runningIds = useMemo(() =>
-    sorted
-      .filter((g) => {
-        const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
-        return data.status === 'running' || data.status === 'spawning';
-      })
-      .map((g) => (g.subagentEvent.data as ACPEventSubagentUpdateData).subagentId)
-      .join(','),
-  [sorted]);
+  const runningIds = useMemo(
+    () =>
+      sorted
+        .filter((g) => {
+          const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
+          return data.status === 'running' || data.status === 'spawning';
+        })
+        .map((g) => (g.subagentEvent.data as ACPEventSubagentUpdateData).subagentId)
+        .join(','),
+    [sorted],
+  );
 
   useEffect(() => {
     if (!runningIds) return;
-    const runningEl = document.querySelector(
-      `[data-sortable-subagent="running"]`,
-    );
+    const runningEl = document.querySelector(`[data-sortable-subagent="running"]`);
     if (runningEl) {
       const rect = runningEl.getBoundingClientRect();
       const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
@@ -371,14 +381,13 @@ export function SubagentBlock({
 
   if (sorted.length === 0) return null;
 
-  /* eslint-disable jsx-a11y/no-noninteractive-tabindex */
   return (
     <div
       tabIndex={0}
-      role="region"
+      role="listbox"
       aria-label="Subagent responses"
       onKeyDown={handleKeyDown}
-      className="mb-4 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/30 rounded-lg"
+      className="focus-visible:ring-accent/30 mb-4 rounded-lg focus:outline-none focus-visible:ring-1"
     >
       <div className="text-text-muted/40 mb-2 flex items-center gap-2 text-[10px] font-bold tracking-[0.15em] uppercase">
         Subagents ({sorted.length})
@@ -412,5 +421,4 @@ export function SubagentBlock({
       })}
     </div>
   );
-  /* eslint-enable jsx-a11y/no-noninteractive-tabindex */
 }

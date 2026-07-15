@@ -15,6 +15,5 @@ test('providers table has the correct redesigned columns', () => {
   expect(providers.installState).toBeDefined();
   expect(providers.authState).toBeDefined();
   expect(providers.hidden).toBeDefined();
-  expect((providers as any).status).toBeUndefined();
+  expect('status' in providers).toBe(false);
 });
-

@@ -10,6 +10,10 @@ interface SetupWizardProviderRowProps {
   isUpdatingConfig: boolean;
 }
 
+function readCustomEnv(env: Record<string, string> | undefined, key: string): string | undefined {
+  return env?.[key];
+}
+
 export function SetupWizardProviderRow({
   provider,
   localCustomEnvs,
@@ -22,11 +26,10 @@ export function SetupWizardProviderRow({
   const hasKeys = envKeys.length > 0;
 
   const keysValues = envKeys.reduce<Record<string, string>>((acc, key) => {
-    const envs = localCustomEnvs[provider.id] ?? {};
-    // `envs`/`provider.customEnv` index access can be undefined at runtime; the lint
-    // rule misreads this index-signature value type as always defined.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    acc[key] = envs[key] ?? provider.customEnv[key] ?? '';
+    acc[key] =
+      readCustomEnv(localCustomEnvs[provider.id], key) ??
+      readCustomEnv(provider.customEnv, key) ??
+      '';
     return acc;
   }, {});
 
@@ -41,9 +44,7 @@ export function SetupWizardProviderRow({
         <div className="flex min-w-0 items-center gap-2.5">
           <ProviderIcon provider={provider} size="sm" />
           <div className="min-w-0">
-            <div className="text-text-main truncate label-xs">
-              {provider.label}
-            </div>
+            <div className="text-text-main label-xs truncate">{provider.label}</div>
             <div className="text-text-muted mt-0.5 text-[8px] font-black tracking-widest uppercase opacity-45">
               {provider.installState === 'not_installed'
                 ? 'SUPPORTED'
@@ -85,7 +86,9 @@ export function SetupWizardProviderRow({
             {hasChanges && (
               <div className="flex justify-end pt-1">
                 <Button
-                  onClick={() => { onSaveConfig(provider.id, keysValues); }}
+                  onClick={() => {
+                    onSaveConfig(provider.id, keysValues);
+                  }}
                   disabled={
                     isUpdatingConfig ||
                     envKeys.some((key) => validateApiKey(key, keysValues[key]) !== null)

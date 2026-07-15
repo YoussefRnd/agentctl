@@ -2,6 +2,7 @@ import type {
   ACPConfigOption,
   AuthMethod,
   ProviderDiscovery,
+  ProviderStatus,
   ThinkingEffort,
   RegistryAgent,
 } from '@agentctl/shared';
@@ -47,6 +48,14 @@ export class Provider {
 
   get hasError(): boolean {
     return this.data.authState === 'error';
+  }
+
+  get status(): ProviderStatus {
+    if (!this.data.enabled) return 'inactive';
+    if (this.data.installState === 'not_installed') return 'not_found';
+    if (this.data.authState === 'needs_auth') return 'needs_auth';
+    if (this.data.authState === 'error') return 'error';
+    return 'ready';
   }
 
   get supportsDynamicModel(): boolean {
@@ -152,8 +161,9 @@ export class Provider {
       nativelyLoadsSkills: this.data.nativelyLoadsSkills,
       installState: this.data.installState as ProviderDiscovery['installState'],
       authState: this.data.authState as ProviderDiscovery['authState'],
-      enabled: this.data.enabled ?? true,
-      hidden: this.data.hidden ?? undefined,
+      status: this.status,
+      enabled: this.data.enabled,
+      hidden: this.data.hidden,
       agent: this.buildAgent(),
     };
   }

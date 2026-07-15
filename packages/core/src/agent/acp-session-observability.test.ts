@@ -70,9 +70,6 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
         }
         return { stopReason: 'end_turn' };
       },
-      respondToPermission: () => {
-        /* noop */
-      },
       stop: async () => {
         /* noop */
       },

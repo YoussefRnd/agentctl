@@ -13,8 +13,6 @@ import { ProviderLauncher } from './registry/provider-launcher.js';
 import { AuthProvider } from './registry/auth-provider.js';
 import { ProviderSync } from './registry/provider-sync.js';
 
-type RegistrySnapshot = Awaited<ReturnType<RegistryFetcher['getSnapshot']>>;
-
 function getPlatformKey(): string {
   const arch = os.arch();
   const platform = os.platform();
@@ -151,7 +149,7 @@ export class ProviderRegistry {
   }
 
   private async doInstall(providerId: string): Promise<ProviderDiscovery> {
-    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
+    const snapshot = this.fetcher.getSnapshot();
     if (!snapshot) {
       throw new Error('No registry snapshot found. Please sync first.');
     }
@@ -240,7 +238,7 @@ export class ProviderRegistry {
 
     this.store.delete(providerId);
 
-    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
+    const snapshot = this.fetcher.getSnapshot();
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
@@ -304,25 +302,19 @@ export class ProviderRegistry {
     methodId: string,
     params: Record<string, unknown> = {},
   ): Promise<void> {
-    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
+    const snapshot = this.fetcher.getSnapshot();
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
-    await this.authProvider.login(
-      providerId,
-      agent ?? { id: providerId },
-      methodId,
-      params,
-      createAgentConnection,
-    );
+    await this.authProvider.login(providerId, agent, methodId, params, createAgentConnection);
   }
 
   async logout(providerId: string): Promise<void> {
-    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
+    const snapshot = this.fetcher.getSnapshot();
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
-    await this.authProvider.logout(providerId, agent ?? { id: providerId }, createAgentConnection);
+    await this.authProvider.logout(providerId, agent, createAgentConnection);
   }
 
   async activate(providerId: string): Promise<ProviderDiscovery> {
@@ -330,7 +322,7 @@ export class ProviderRegistry {
     if (!row) throw new Error(`Provider ${providerId} not found`);
 
     if (row.authState === 'unknown' && row.installState !== 'not_installed') {
-      const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
+      const snapshot = this.fetcher.getSnapshot();
       const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
       const agent = agents.find((a) => a.id === providerId);
       if (agent) {
@@ -344,7 +336,7 @@ export class ProviderRegistry {
   }
 
   async refreshProvider(providerId: string): Promise<ProviderDiscovery> {
-    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
+    const snapshot = this.fetcher.getSnapshot();
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
@@ -374,7 +366,7 @@ export class ProviderRegistry {
 
     this.launcher.invalidateProbe(providerId);
 
-    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
+    const snapshot = this.fetcher.getSnapshot();
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
     if (agent) {
@@ -421,7 +413,7 @@ export class ProviderRegistry {
       return new Provider(row);
     }
 
-    const snapshot = (await this.fetcher.getSnapshot()) as RegistrySnapshot | undefined;
+    const snapshot = this.fetcher.getSnapshot();
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
     const agent = agents.find((a) => a.id === providerId);
 
@@ -440,7 +432,7 @@ export class ProviderRegistry {
     return row ? new Provider(row) : undefined;
   }
 
-  getSettings(): Record<string, string> {
+  getSettings(): Record<string, string | undefined> {
     const keys = [
       'onboardingCompleted',
       'onboardingVersion',
@@ -450,7 +442,7 @@ export class ProviderRegistry {
       'registrySyncError',
       'fontConfig',
     ];
-    const settings: Record<string, string> = {};
+    const settings: Record<string, string | undefined> = {};
     for (const key of keys) {
       const val = this.store.getSetting(key);
       if (val !== undefined) settings[key] = val;

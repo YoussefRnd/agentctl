@@ -139,7 +139,6 @@ describe('SessionManager tests', () => {
         },
         prompt: (_text: string, _attachments?: unknown[], _embedded?: string) =>
           Promise.resolve({ stopReason: 'end_turn' }),
-        respondToPermission: () => undefined,
         authenticate: () => Promise.resolve(),
         cancel: () => Promise.resolve(),
         stop: () => Promise.resolve(),
@@ -552,20 +551,16 @@ describe('SessionManager tests', () => {
 
   test('SessionManager deleteSession calls runtime deleteAgentSession if agentSessionId is present', async () => {
     let deletedAgentSessionId = '';
-    /* eslint-disable @typescript-eslint/require-await */
     const spyRuntime: AgentRuntime = {
       ...fakeRuntime,
-      async deleteAgentSession(_cmd, _args, _env, acpSessionId) {
+      deleteAgentSession(_cmd, _args, _env, acpSessionId) {
         deletedAgentSessionId = acpSessionId;
+        return Promise.resolve();
       },
     };
-    /* eslint-enable @typescript-eslint/require-await */
 
-    /* eslint-disable @typescript-eslint/no-misused-spread */
     const localDb = {
-      ...mockDb,
       query: {
-        ...mockDb.query,
         sessions: {
           findFirst: () =>
             Promise.resolve({
@@ -581,14 +576,9 @@ describe('SessionManager tests', () => {
                 path: '/tmp/project-1',
               },
             }),
-          findMany: () => Promise.resolve([]),
         },
       },
-      delete: () => ({
-        where: () => Promise.resolve(),
-      }),
     } as unknown as DbClient;
-    /* eslint-enable @typescript-eslint/no-misused-spread */
 
     const manager = new SessionManager(
       mockDb,

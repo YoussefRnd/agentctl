@@ -14,13 +14,50 @@ export const baseConfig = [
     },
   },
   {
-    files: ['**/*.js', '**/*.config.js', '**/*.config.ts', '**/*.d.ts'],
+    files: [
+      '*.js',
+      '*.mjs',
+      '*.cjs',
+      '*.config.js',
+      '*.config.mjs',
+      '*.config.ts',
+      '**/*.js',
+      '**/*.mjs',
+      '**/*.cjs',
+      '**/*.config.js',
+      '**/*.config.mjs',
+      '**/*.config.ts',
+      '**/*.d.ts',
+      '**/*.mts',
+      '**/*.cts',
+    ],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
       parserOptions: {
         project: false,
         projectService: false,
       },
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      'no-console': 'off',
+    },
+  },
+  {
+    files: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.test.js',
+      '**/*.test.mjs',
+      '**/*.test.cjs',
+    ],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
 

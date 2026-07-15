@@ -69,7 +69,11 @@ export const providerCapabilitySchema = z.object({
   modes: z.array(z.string()).optional().default([]),
 });
 
-import { registryAgentSchema, acpConfigOptionSchema, authMethodSchema } from './registry-schemas.js';
+import {
+  registryAgentSchema,
+  acpConfigOptionSchema,
+  authMethodSchema,
+} from './registry-schemas.js';
 
 export const installStateSchema = z.enum(['not_installed', 'installed_local', 'system_available']);
 export const authStateSchema = z.enum(['unknown', 'authenticated', 'needs_auth', 'error']);
@@ -91,6 +95,7 @@ export const providerDiscoverySchema = z.object({
   // New fields
   installState: installStateSchema.optional(),
   authState: authStateSchema.optional(),
+  status: providerStatusSchema.optional(),
   enabled: z.boolean().default(true),
   hidden: z.boolean().optional(),
   agent: registryAgentSchema.optional(),
@@ -106,9 +111,11 @@ export function getProviderEnvKeys(provider: {
   id: string;
   authMethods?: { type?: string; vars?: { name: string }[] }[] | null;
 }): string[] {
-  return provider.authMethods
-    ?.filter((m) => m.type === 'env_var')
-    .flatMap((m) => m.vars?.map((v) => v.name) ?? []) ?? [];
+  return (
+    provider.authMethods
+      ?.filter((m) => m.type === 'env_var')
+      .flatMap((m) => m.vars?.map((v) => v.name) ?? []) ?? []
+  );
 }
 
 export const availableCommandSchema = z.object({

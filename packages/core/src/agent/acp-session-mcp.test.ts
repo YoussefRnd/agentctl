@@ -170,9 +170,6 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
         promptCalledWith = text;
         return { stopReason: 'end_turn' };
       },
-      respondToPermission: () => {
-        /* noop */
-      },
       stop: async () => {
         await Promise.resolve();
       },
