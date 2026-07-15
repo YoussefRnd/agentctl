@@ -20,6 +20,11 @@ export function useProviders(sessionId: string | null) {
     queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/providers'),
   });
 
+  const { data: registry = [], isLoading: isLoadingRegistry } = useQuery({
+    queryKey: ['registry'],
+    queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/registry'),
+  });
+
   const updateProviderMutation = useMutation({
     mutationFn: ({ providerId, modelId }: { providerId: string; modelId?: string }) => {
       if (!sessionId) {
@@ -46,7 +51,6 @@ export function useProviders(sessionId: string | null) {
 
     const capability = sessionData?.capabilities.find((item) => item.id === providerId);
 
-    // If a model is explicitly passed, use it. Otherwise, fallback to the current/default.
     let selectedModel = modelId;
     if (!selectedModel) {
       const modelOption = capability?.configOptions?.find(
@@ -72,6 +76,19 @@ export function useProviders(sessionId: string | null) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['registry'] });
+    },
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async (providerId: string) => {
+      return apiClient.fetch(`/api/providers/${providerId}/logout`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['registry'] });
     },
   });
 
@@ -83,6 +100,7 @@ export function useProviders(sessionId: string | null) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['registry'] });
     },
   });
 
@@ -92,20 +110,9 @@ export function useProviders(sessionId: string | null) {
         method: 'POST',
       });
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['providers'], data);
-    },
-  });
-
-  const toggleMutation = useMutation({
-    mutationFn: async ({ providerId, enabled }: { providerId: string; enabled: boolean }) => {
-      return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/toggle`, {
-        method: 'POST',
-        body: JSON.stringify({ enabled }),
-      });
-    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['registry'] });
     },
   });
 
@@ -115,10 +122,32 @@ export function useProviders(sessionId: string | null) {
         method: 'POST',
       });
     },
-    onSuccess: (updatedProvider) => {
-      queryClient.setQueryData<ProviderDiscovery[]>(['providers'], (current = []) =>
-        current.map((p) => (p.id === updatedProvider.id ? updatedProvider : p)),
-      );
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['providers'] });
+    },
+  });
+
+  const installMutation = useMutation({
+    mutationFn: async (providerId: string) => {
+      return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/install`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['registry'] });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async (providerId: string) => {
+      return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/remove`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['registry'] });
     },
   });
 
@@ -137,11 +166,9 @@ export function useProviders(sessionId: string | null) {
         body: JSON.stringify({ customEnv, nativelyLoadsSkills }),
       });
     },
-    onSuccess: (updatedProvider) => {
-      queryClient.setQueryData<ProviderDiscovery[]>(['providers'], (current = []) =>
-        current.map((p) => (p.id === updatedProvider.id ? updatedProvider : p)),
-      );
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['registry'] });
     },
   });
 
@@ -176,16 +203,18 @@ export function useProviders(sessionId: string | null) {
   return {
     providers,
     isLoadingProviders,
+    registry,
+    isLoadingRegistry,
     switchProvider,
     login: wrapMutate('login', loginMutation, { successMessage: 'Login successful' }),
     isLoggingIn: loginMutation.isPending,
+    logoutProvider: wrapMutate('logout', logoutMutation, { successMessage: 'Logged out' }),
+    isLoggingOut: logoutMutation.isPending,
     isSwitching: updateProviderMutation.isPending,
     activate: wrapMutate('activate', activateMutation, { successMessage: 'Provider activated' }),
     isActivating: activateMutation.isPending,
     syncProviders: wrapMutate('sync', syncMutation, { successMessage: 'Providers synced' }),
     isSyncing: syncMutation.isPending,
-    toggleProvider: wrapMutate('toggle', toggleMutation),
-    isToggling: toggleMutation.isPending,
     refreshProvider: wrapMutate('refresh', refreshMutation, {
       successMessage: 'Provider refreshed',
     }),
@@ -194,5 +223,11 @@ export function useProviders(sessionId: string | null) {
       successMessage: 'Configuration updated',
     }),
     isUpdatingConfig: updateProviderConfigMutation.isPending,
+    installProvider: wrapMutate('install', installMutation, { successMessage: 'Provider installed' }),
+    isInstalling: installMutation.isPending,
+    installingProviderId: installMutation.isPending ? (installMutation.variables as string) : null,
+    removeProvider: wrapMutate('remove', removeMutation, { successMessage: 'Provider removed' }),
+    isRemoving: removeMutation.isPending,
+    removingProviderId: removeMutation.isPending ? (removeMutation.variables as string) : null,
   };
 }

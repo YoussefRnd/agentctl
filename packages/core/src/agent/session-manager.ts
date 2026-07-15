@@ -328,7 +328,7 @@ export class SessionManager {
     requestedThinkingEffort?: ThinkingEffort,
   ) {
     const provider = await this.providerRegistry.ensureProviderReady(providerId, { force: false });
-    if (provider.status !== 'ready' && provider.status !== 'needs_auth') {
+    if (!provider.isReady && !provider.needsAuth) {
       throw new Error(`Selected agent is not ready: ${providerId}`);
     }
 
@@ -392,7 +392,7 @@ export class SessionManager {
       })
       .where(eq(sessions.id, sessionId));
 
-    if (provider.status !== 'ready' && provider.status !== 'needs_auth') {
+    if (!provider.isReady && !provider.needsAuth) {
       return null;
     }
 

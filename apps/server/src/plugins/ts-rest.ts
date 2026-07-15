@@ -19,6 +19,29 @@ export default fp(async (fastify) => {
         body: providers,
       };
     },
+    getRegistry: async () => {
+      const providers = await fastify.providerRegistry.catalog();
+      return {
+        status: 200 as const,
+        body: providers,
+      };
+    },
+    installProvider: async ({ params }) => {
+      const { id } = params;
+      const result = await fastify.providerRegistry.install(id);
+      return {
+        status: 200 as const,
+        body: result,
+      };
+    },
+    removeProvider: async ({ params }) => {
+      const { id } = params;
+      const result = await fastify.providerRegistry.remove(id);
+      return {
+        status: 200 as const,
+        body: result,
+      };
+    },
     loginProvider: async ({ params, body }) => {
       const { id } = params;
       const { methodId, params: loginParams } = body;
@@ -52,15 +75,6 @@ export default fp(async (fastify) => {
         body: result,
       };
     },
-    toggleProvider: async ({ params, body }) => {
-      const { id } = params;
-      const { enabled } = body;
-      const result = await fastify.providerRegistry.setProviderEnabled(id, enabled);
-      return {
-        status: 200 as const,
-        body: result,
-      };
-    },
     setProviderConfig: async ({ params, body }) => {
       const { id } = params;
       const { customEnv, nativelyLoadsSkills } = body;
@@ -74,7 +88,7 @@ export default fp(async (fastify) => {
       };
     },
     syncProviders: async () => {
-      await fastify.providerRegistry.sync();
+      await fastify.providerRegistry.sync({ force: true });
       const providers = await fastify.providerRegistry.discover();
       return {
         status: 200 as const,

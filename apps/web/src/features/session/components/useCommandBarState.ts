@@ -103,9 +103,12 @@ export function useCommandBarState({
 
   const selectedId = propSelectedProviderId ?? null;
 
-  const firstId = providers[0]?.id ?? null;
+  const installedProviders = providers.filter(
+    (p) => p.installState !== 'not_installed',
+  );
+  const firstId = installedProviders[0]?.id ?? null;
   const resolvedId = selectedId ?? firstId;
-  const activeProvider = providers.find((p) => p.id === resolvedId);
+  const activeProvider = installedProviders.find((p) => p.id === resolvedId);
   const selectedProviderLabel =
     activeProvider !== undefined ? activeProvider.label : 'Select provider';
 
@@ -221,7 +224,7 @@ export function useCommandBarState({
     setSessionConfigOption,
     isUpdatingConfigOption,
     isLoadingSession,
-    providers,
+    providers: installedProviders,
     isLoadingProviders,
     input,
     setInput,

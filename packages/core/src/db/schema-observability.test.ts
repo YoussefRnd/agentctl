@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { acpEvents, mcpServers } from './schema.js';
+import { acpEvents, mcpServers, providers } from './schema.js';
 
 test('acpEvents schema has parentEventId and metadata', () => {
   expect(acpEvents.parentEventId).toBeDefined();
@@ -9,5 +9,12 @@ test('acpEvents schema has parentEventId and metadata', () => {
 test('mcpServers schema has approvalPolicy and toolPermissions', () => {
   expect(mcpServers.approvalPolicy).toBeDefined();
   expect(mcpServers.toolPermissions).toBeDefined();
+});
+
+test('providers table has the correct redesigned columns', () => {
+  expect(providers.installState).toBeDefined();
+  expect(providers.authState).toBeDefined();
+  expect(providers.hidden).toBeDefined();
+  expect((providers as any).status).toBeUndefined();
 });
 

@@ -51,8 +51,8 @@ export function ProviderPickerTrigger({
           >
             {isLoading ? (
               <div className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
-            ) : activeProvider?.icon ? (
-              <img src={activeProvider.icon} alt="" className="h-3.5 w-3.5 object-contain" />
+            ) : activeProvider?.agent?.icon ? (
+              <img src={activeProvider.agent.icon} alt="" className="h-3.5 w-3.5 object-contain" />
             ) : (
               <Zap
                 className={cn('h-3.5 w-3.5 transition-all duration-200', isOpen && 'fill-accent')}

@@ -14,8 +14,6 @@ export function SetupWizard() {
   const { settings, updateSettings } = useSettings();
   const {
     providers,
-    activate,
-    toggleProvider,
     isLoadingProviders,
     updateProviderConfig,
     isUpdatingConfig,
@@ -26,7 +24,7 @@ export function SetupWizard() {
   const [authDeferred, setAuthDeferred] = useState(false);
 
   const hasAnyInvalidProvider = providers.some((provider) => {
-    if (!provider.enabled) return false;
+    if (provider.installState === 'not_installed') return false;
     const envKeys = getProviderEnvKeys(provider);
     return envKeys.some((key) => {
       const envs = localCustomEnvs[provider.id] ?? {};
@@ -40,17 +38,16 @@ export function SetupWizard() {
 
   if (!showWizard) return null;
 
-  const enabledProviders = providers.filter((p) => p.enabled);
+  const enabledProviders = providers.filter((p) => p.installState !== 'not_installed');
   const registryOk = !settings?.registrySyncError && providers.length > 0;
-  const allowedAgentsOk = !settings?.registrySyncError && providers.length > 0;
-  const atLeastOneEnabled = providers.some((p) => p.enabled);
-  const allEnabledReady = providers.every((p) => !p.enabled || p.status === 'ready');
+  const atLeastOneEnabled = providers.some((p) => p.installState !== 'not_installed');
+  const allEnabledReady = providers.every((p) => p.installState === 'not_installed' || p.authState === 'authenticated');
   const authOk = (allEnabledReady || authDeferred) && !hasAnyInvalidProvider;
   const defaultSelected =
     !!settings?.defaultProviderId &&
-    !!providers.find((p) => p.id === settings.defaultProviderId)?.enabled;
+    !!providers.find((p) => p.id === settings.defaultProviderId && p.installState !== 'not_installed');
 
-  const isReady = registryOk && allowedAgentsOk && atLeastOneEnabled && authOk && defaultSelected;
+  const isReady = registryOk && atLeastOneEnabled && authOk && defaultSelected;
 
   const handleEnvChange = (providerId: string, key: string, value: string) => {
     setLocalCustomEnvs((prev) => ({
@@ -60,14 +57,6 @@ export function SetupWizard() {
         [key]: value,
       },
     }));
-  };
-
-  const handleToggle = (providerId: string, enabled: boolean) => {
-    toggleProvider({ providerId, enabled });
-    const provider = providers.find((p) => p.id === providerId);
-    if (enabled && provider?.status === 'inactive') {
-      activate(providerId);
-    }
   };
 
   const handleSaveConfig = (providerId: string, customEnv: Record<string, string>) => {
@@ -98,12 +87,6 @@ export function SetupWizard() {
             <div className="text-text-main/90 font-mono text-[9.5px] leading-relaxed font-bold uppercase">
               {settings.registrySyncError}
             </div>
-            {settings.registrySyncError.includes('ALLOWED_AGENTS') && (
-              <div className="text-text-muted/65 text-[8.5px] leading-normal font-medium lowercase">
-                * tip: make sure you have defined ALLOWED_AGENTS in your .env or server environment
-                variables (e.g. ALLOWED_AGENTS=claude-acp,gemini,opencode) and restart the server.
-              </div>
-            )}
           </div>
         )}
 
@@ -117,15 +100,6 @@ export function SetupWizard() {
               checked={registryOk}
               error={settings?.registrySyncError ? 'Registry sync failed' : undefined}
             />
-            <ChecklistItem
-              label="ALLOWED_AGENTS Configured"
-              checked={allowedAgentsOk}
-              error={
-                settings?.registrySyncError?.includes('ALLOWED_AGENTS')
-                  ? 'ALLOWED_AGENTS missing in environment'
-                  : undefined
-              }
-            />
             <ChecklistItem label="At Least One Agent Enabled" checked={atLeastOneEnabled} />
             <ChecklistItem
               label="Authentication Resolved"
@@ -136,7 +110,7 @@ export function SetupWizard() {
           </ul>
         </div>
 
-        {providers.some((p) => p.enabled && p.status === 'needs_auth') && (
+        {providers.some((p) => p.installState !== 'not_installed' && p.authState === 'needs_auth') && (
           <div className="bg-surface-secondary/10 border-border/10 flex items-center gap-3 rounded-xl border p-3 select-none">
             <Switch id="deferAuth" checked={authDeferred} onCheckedChange={setAuthDeferred} />
             <label
@@ -188,7 +162,6 @@ export function SetupWizard() {
                 provider={provider}
                 localCustomEnvs={localCustomEnvs}
                 onEnvChange={handleEnvChange}
-                onToggle={handleToggle}
                 onSaveConfig={handleSaveConfig}
                 isUpdatingConfig={isUpdatingConfig}
               />

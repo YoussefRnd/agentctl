@@ -24,14 +24,14 @@ export const useActionDispatcher = () => {
       try {
         const result = await actionFn();
         if (!silent && successMessage) {
-          toast.success(successMessage);
+          toast.success(successMessage, { id: successMessage });
         }
         return result;
       } catch (error) {
         if (!silent) {
           const message =
             errorMessage ?? (error instanceof Error ? error.message : 'Action failed');
-          toast.error(message);
+          toast.error(message, { id: message });
         }
         return undefined;
       } finally {

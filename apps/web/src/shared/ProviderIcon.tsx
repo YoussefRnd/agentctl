@@ -17,10 +17,10 @@ const sizeMap = {
 export function ProviderIcon({ provider, size = 'md', showFallbackIcon = true, className = '' }: ProviderIconProps) {
   const s = sizeMap[size];
 
-  if (provider.icon) {
+  if (provider.agent?.icon) {
     return (
       <div className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}>
-        <img src={provider.icon} alt="" className={`object-contain ${s.img}`} />
+        <img src={provider.agent.icon} alt="" className={`object-contain ${s.img}`} />
       </div>
     );
   }

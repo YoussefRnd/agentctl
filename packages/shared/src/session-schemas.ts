@@ -55,22 +55,6 @@ export const providerStatusSchema = z.enum([
   'inactive',
 ]);
 
-export const acpConfigOptionSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string().optional(),
-  category: z.string().optional(),
-  type: z.literal('select'),
-  currentValue: z.string(),
-  options: z.array(
-    z.object({
-      value: z.string(),
-      name: z.string(),
-      description: z.string().optional(),
-    }),
-  ),
-});
-
 export const providerCapabilitySchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -85,31 +69,15 @@ export const providerCapabilitySchema = z.object({
   modes: z.array(z.string()).optional().default([]),
 });
 
-export const authEnvVarSchema = z.object({
-  name: z.string(),
-  label: z.string().optional(),
-  secret: z.boolean().default(true),
-  optional: z.boolean().default(false),
-});
+import { registryAgentSchema, acpConfigOptionSchema, authMethodSchema } from './registry-schemas.js';
 
-export const authMethodSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.enum(['agent', 'env_var']).optional().default('agent'),
-  description: z.string().nullable().optional(),
-  vars: z.array(authEnvVarSchema).optional(),
-  _meta: z.record(z.string(), z.any()).nullable().optional(),
-});
+export const installStateSchema = z.enum(['not_installed', 'installed_local', 'system_available']);
+export const authStateSchema = z.enum(['unknown', 'authenticated', 'needs_auth', 'error']);
 
 export const providerDiscoverySchema = z.object({
+  // Legacy fields (retained to keep the monolith compiling)
   id: z.string(),
   label: z.string(),
-  status: providerStatusSchema,
-  command: z.string(),
-  enabled: z.boolean().default(false),
-  launchArgs: z.array(z.string()).optional().default([]),
-  launchEnv: z.record(z.string(), z.string()).optional().default({}),
-  customEnv: z.record(z.string(), z.string()).optional().default({}),
   configOptions: z.array(acpConfigOptionSchema).optional(),
   authMethods: z.array(authMethodSchema).optional().default([]),
   version: z.string().optional(),
@@ -119,17 +87,28 @@ export const providerDiscoverySchema = z.object({
   supportsDynamicConfig: z.boolean().optional().default(false),
   supportsLogout: z.boolean().optional().default(false),
   nativelyLoadsSkills: z.boolean().optional().default(false),
+
+  // New fields
+  installState: installStateSchema.optional(),
+  authState: authStateSchema.optional(),
+  enabled: z.boolean().default(true),
+  hidden: z.boolean().optional(),
+  agent: registryAgentSchema.optional(),
+
+  // Shared fields
+  command: z.string(),
+  launchArgs: z.array(z.string()).default([]),
+  launchEnv: z.record(z.string(), z.string()).default({}),
+  customEnv: z.record(z.string(), z.string()).default({}),
 });
 
 export function getProviderEnvKeys(provider: {
   id: string;
   authMethods?: { type?: string; vars?: { name: string }[] }[] | null;
 }): string[] {
-  const envVarMethod = provider.authMethods?.find((m) => m.type === 'env_var');
-  if (envVarMethod?.vars && envVarMethod.vars.length > 0) {
-    return envVarMethod.vars.map((v) => v.name);
-  }
-  return [];
+  return provider.authMethods
+    ?.filter((m) => m.type === 'env_var')
+    .flatMap((m) => m.vars?.map((v) => v.name) ?? []) ?? [];
 }
 
 export const availableCommandSchema = z.object({

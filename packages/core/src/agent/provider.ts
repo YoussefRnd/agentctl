@@ -3,6 +3,7 @@ import type {
   AuthMethod,
   ProviderDiscovery,
   ThinkingEffort,
+  RegistryAgent,
 } from '@agentctl/shared';
 import type { providers } from '../db/schema.js';
 
@@ -24,12 +25,28 @@ export class Provider {
     return this.data.id;
   }
 
-  get status(): ProviderData['status'] {
-    return this.data.status;
+  get installState(): string {
+    return this.data.installState;
   }
 
-  get enabled(): boolean {
-    return this.data.enabled;
+  get authState(): string {
+    return this.data.authState;
+  }
+
+  get isInstalled(): boolean {
+    return this.data.installState !== 'not_installed';
+  }
+
+  get isReady(): boolean {
+    return this.data.installState !== 'not_installed' && this.data.authState === 'authenticated';
+  }
+
+  get needsAuth(): boolean {
+    return this.data.installState !== 'not_installed' && this.data.authState === 'needs_auth';
+  }
+
+  get hasError(): boolean {
+    return this.data.authState === 'error';
   }
 
   get supportsDynamicModel(): boolean {
@@ -99,13 +116,28 @@ export class Provider {
     };
   }
 
+  private buildAgent(): RegistryAgent {
+    return {
+      id: this.data.id,
+      name: this.data.name,
+      version: this.data.version ?? '',
+      description: this.data.description ?? '',
+      authors: [],
+      distribution: this.parseDistribution(),
+      icon: this.data.icon ?? undefined,
+      configOptions: this.parseConfigOptions(),
+      authMethods: this.parseAuthMethods(),
+      supportsDynamicModel: this.data.supportsDynamicModel,
+      supportsDynamicConfig: this.data.supportsDynamicConfig,
+      supportsLogout: this.data.supportsLogout,
+    };
+  }
+
   toDiscovery(): ProviderDiscovery {
     return {
       id: this.data.id,
       label: this.data.name,
-      status: this.data.status,
       command: this.data.command,
-      enabled: this.data.enabled,
       launchArgs: this.parseStringArray(this.data.launchArgs),
       launchEnv: this.parseStringRecord(this.data.launchEnv),
       customEnv: this.parseStringRecord(this.data.customEnv),
@@ -118,6 +150,11 @@ export class Provider {
       supportsDynamicConfig: this.data.supportsDynamicConfig,
       supportsLogout: this.data.supportsLogout,
       nativelyLoadsSkills: this.data.nativelyLoadsSkills,
+      installState: this.data.installState as ProviderDiscovery['installState'],
+      authState: this.data.authState as ProviderDiscovery['authState'],
+      enabled: this.data.enabled ?? true,
+      hidden: this.data.hidden ?? undefined,
+      agent: this.buildAgent(),
     };
   }
 
@@ -156,6 +193,17 @@ export class Provider {
       return JSON.parse(value) as AuthMethod[];
     } catch {
       return [];
+    }
+  }
+
+  private parseDistribution(
+    value: string | null | undefined = this.data.distribution,
+  ): RegistryAgent['distribution'] {
+    if (!value) return {};
+    try {
+      return JSON.parse(value) as RegistryAgent['distribution'];
+    } catch {
+      return {};
     }
   }
 }

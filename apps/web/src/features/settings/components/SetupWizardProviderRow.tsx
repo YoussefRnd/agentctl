@@ -1,4 +1,4 @@
-import { Input, Switch, Button } from '@agentctl/ui';
+import { Input, Button } from '@agentctl/ui';
 import { ProviderIcon } from '@/shared/ProviderIcon';
 import { getProviderEnvKeys, validateApiKey, type ProviderDiscovery } from '@agentctl/shared';
 
@@ -6,7 +6,6 @@ interface SetupWizardProviderRowProps {
   provider: ProviderDiscovery;
   localCustomEnvs: Record<string, Record<string, string> | undefined>;
   onEnvChange: (providerId: string, key: string, value: string) => void;
-  onToggle: (providerId: string, enabled: boolean) => void;
   onSaveConfig: (providerId: string, customEnv: Record<string, string>) => void;
   isUpdatingConfig: boolean;
 }
@@ -15,11 +14,10 @@ export function SetupWizardProviderRow({
   provider,
   localCustomEnvs,
   onEnvChange,
-  onToggle,
   onSaveConfig,
   isUpdatingConfig,
 }: SetupWizardProviderRowProps) {
-  const isActive = provider.enabled;
+  const isActive = provider.installState !== 'not_installed';
   const envKeys = getProviderEnvKeys(provider);
   const hasKeys = envKeys.length > 0;
 
@@ -47,22 +45,14 @@ export function SetupWizardProviderRow({
               {provider.label}
             </div>
             <div className="text-text-muted mt-0.5 text-[8px] font-black tracking-widest uppercase opacity-45">
-              {!provider.enabled
+              {provider.installState === 'not_installed'
                 ? 'SUPPORTED'
-                : provider.status === 'ready'
+                : provider.authState === 'authenticated'
                   ? 'ACTIVE'
-                  : provider.status.replace('_', ' ')}
+                  : (provider.authState ?? provider.installState ?? 'unknown').replace('_', ' ')}
             </div>
           </div>
         </div>
-
-        <Switch
-          checked={isActive}
-          onCheckedChange={(nextEnabled) => {
-            onToggle(provider.id, nextEnabled);
-          }}
-          size="sm"
-        />
       </div>
       {isActive && hasKeys && (
         <div className="border-border/10 space-y-2 border-t pt-2.5">

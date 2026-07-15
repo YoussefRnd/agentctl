@@ -1,0 +1,1 @@
+ALTER TABLE `providers` ADD `enabled` integer DEFAULT true NOT NULL;

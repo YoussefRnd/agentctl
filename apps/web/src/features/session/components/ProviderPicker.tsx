@@ -29,8 +29,6 @@ export function ProviderPicker({
     isUpdatingConfig,
     refreshProvider,
     isRefreshing,
-    toggleProvider,
-    isToggling,
     activate,
     isActivating,
     login,
@@ -88,31 +86,14 @@ export function ProviderPicker({
 
   if (!isOpen || !activeProvider) return null;
 
-  const isPending = isUpdatingConfig || isToggling || isActivating || isLoggingIn;
+  const isPending = isUpdatingConfig || isActivating || isLoggingIn;
 
   const handleSaveAndConnect = () => {
     const hasKeys = envKeys.length > 0;
     const keysChanged = envKeys.some((k) => keysValues[k] !== (activeProvider.customEnv[k] ?? ''));
 
-    const proceedWithEnable = () => {
-      if (!activeProvider.enabled) {
-        toggleProvider(
-          { providerId: activeProvider.id, enabled: true },
-          {
-            onSuccess: () => {
-              if (activeProvider.status !== 'ready' && activeProvider.status !== 'needs_auth') {
-                activate(activeProvider.id, {
-                  onSuccess: () => {
-                    onSelect(activeProvider.id);
-                  },
-                });
-              } else {
-                onSelect(activeProvider.id);
-              }
-            },
-          },
-        );
-      } else if (activeProvider.status !== 'ready' && activeProvider.status !== 'needs_auth') {
+    const proceed = () => {
+      if (activeProvider.installState === 'not_installed' || (activeProvider.authState !== 'authenticated' && activeProvider.authState !== 'needs_auth')) {
         activate(activeProvider.id, {
           onSuccess: () => {
             onSelect(activeProvider.id);
@@ -128,12 +109,12 @@ export function ProviderPicker({
         { providerId: activeProvider.id, customEnv: keysValues },
         {
           onSuccess: () => {
-            proceedWithEnable();
+            proceed();
           },
         },
       );
     } else {
-      proceedWithEnable();
+      proceed();
     }
   };
 
@@ -175,7 +156,7 @@ export function ProviderPicker({
         </div>
 
         <div className="h-[280px] space-y-1 overflow-y-auto p-1.5">
-          {activeProvider.status === 'needs_auth' || !activeProvider.enabled ? (
+          {activeProvider.authState === 'needs_auth' || activeProvider.installState === 'not_installed' ? (
             <ProviderSetupPanel
               activeProvider={activeProvider}
               envKeys={envKeys}
@@ -258,9 +239,11 @@ function ProviderSidebar({
 }: ProviderSidebarProps) {
   return (
     <div className="border-border/30 bg-surface-secondary/20 flex w-12 shrink-0 flex-col items-center gap-2 border-r py-2">
-      {providers.filter((p) => p.enabled).map((p) => {
+      {providers
+        .filter((p) => p.installState !== 'not_installed')
+        .map((p) => {
         const isSelected = p.id === internalProviderId;
-        const needsAuth = p.status === 'needs_auth';
+        const needsAuth = p.authState === 'needs_auth';
 
         return (
           <button
@@ -317,7 +300,7 @@ function ProviderSetupPanel({
   return (
     <div className="flex h-full flex-col items-center justify-center p-4 text-center">
       <h3 className="text-text-main mb-1 text-[11px] font-black tracking-wider uppercase">
-        {!activeProvider.enabled ? 'Setup Required' : 'Authentication Required'}
+        {activeProvider.installState === 'not_installed' ? 'Setup Required' : 'Authentication Required'}
       </h3>
       <p className="text-text-muted mb-4 max-w-[240px] caption-2xs">
         Configure and enable {activeProvider.label}.

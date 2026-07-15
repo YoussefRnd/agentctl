@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, real, index, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
-import type { SessionStatus, ACPEvent, ProviderStatus, SessionMode } from '@agentctl/shared';
+import type { SessionStatus, ACPEvent, SessionMode } from '@agentctl/shared';
 
 // Timestamps with DB-level defaults and auto-update on updatedAt
 const timestamps = {
@@ -71,7 +71,11 @@ export const sessions = sqliteTable('sessions', {
 export const providers = sqliteTable('providers', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  status: text('status').$type<ProviderStatus>().notNull().default('not_found'),
+  installState: text('install_state').notNull().default('not_installed'),
+  authState: text('auth_state').notNull().default('unknown'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
+  distribution: text('distribution').notNull().default('{}'),
   command: text('command').notNull(),
   launchArgs: text('launch_args').notNull().default('[]'), // JSON string
   launchEnv: text('launch_env').notNull().default('{}'), // JSON string
@@ -80,7 +84,6 @@ export const providers = sqliteTable('providers', {
   version: text('version'),
   description: text('description'),
   icon: text('icon'),
-  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
   customEnv: text('custom_env').notNull().default('{}'), // Store user-configured credentials as a JSON string
   supportsDynamicModel: integer('supports_dynamic_model', { mode: 'boolean' })
     .notNull()

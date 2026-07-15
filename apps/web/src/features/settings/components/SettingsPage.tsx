@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
-import { ProviderCard } from './ProviderCard';
 import { useProviders } from '../../../hooks/useProviders';
+import { RegistryBrowser } from './RegistryBrowser';
 import { useTheme } from '../../../contexts/ThemeProvider';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { Button, Switch, Select, Card } from '@agentctl/ui';
@@ -19,23 +19,14 @@ export function SettingsPage() {
     useTheme();
   const { settings, updateSettings } = useSettings();
 
-  const {
-    providers,
-    activate,
-    syncProviders,
-    isLoadingProviders,
-    isSyncing,
-    toggleProvider,
-    updateProviderConfig,
-    isUpdatingConfig,
-  } = useProviders(null);
+  const providersApi = useProviders(null);
 
   if (activeTab === 'mcp') {
     return <McpSettings />;
   }
 
   if (activeTab === 'general') {
-    const enabledProviders = providers.filter((p) => p.enabled);
+    const enabledProviders = providersApi.providers.filter((p) => p.installState !== 'not_installed');
 
     return (
       <div className="relative mx-auto h-full w-full max-w-4xl overflow-y-auto p-6">
@@ -122,7 +113,7 @@ export function SettingsPage() {
                 onChange={(value) => {
                   void updateSettings({ defaultProviderId: value || null });
                 }}
-                disabled={isLoadingProviders}
+                disabled={providersApi.isLoadingProviders}
                 options={[
                   { value: '', label: 'Select default provider...' },
                   ...enabledProviders.map((p) => ({
@@ -198,12 +189,12 @@ export function SettingsPage() {
         <Button
           variant="outline"
           onClick={() => {
-            syncProviders();
+            providersApi.syncProviders();
           }}
-          disabled={isSyncing}
+          disabled={providersApi.isSyncing}
           className="group flex h-9 items-center gap-2 rounded-xl px-4 text-[11px] font-bold tracking-widest uppercase"
         >
-          {isSyncing ? (
+          {providersApi.isSyncing ? (
             <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
             <RefreshCw className="h-3 w-3 transition-transform duration-500 group-hover:rotate-180" />
@@ -212,44 +203,7 @@ export function SettingsPage() {
         </Button>
       </div>
 
-      <div className="relative z-10 space-y-3">
-        {isLoadingProviders ? (
-          <div className="animate-pulse space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 rounded-2xl border border-white/5 bg-white/5" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {providers.map((provider) => (
-              <ProviderCard
-                key={provider.id}
-                provider={provider}
-                onActivate={(id) => {
-                  activate(id);
-                }}
-                onToggle={(id, enabled) => {
-                  toggleProvider({ providerId: id, enabled });
-                }}
-                onResync={() => {
-                  syncProviders();
-                }}
-                onUpdateConfig={(id, updates) => {
-                  updateProviderConfig({ providerId: id, ...updates });
-                }}
-                isUpdatingConfig={isUpdatingConfig}
-              />
-            ))}
-            {providers.length === 0 && (
-              <Card className="border-dashed p-8 text-center">
-                <div className="text-text-muted text-[10px] font-bold tracking-widest uppercase opacity-30">
-                  NO_PROVIDERS_DETECTED
-                </div>
-              </Card>
-            )}
-          </div>
-        )}
-      </div>
+      <RegistryBrowser settings={settings} api={providersApi} />
     </div>
   );
 }

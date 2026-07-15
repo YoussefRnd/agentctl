@@ -1,5 +1,36 @@
 import { z } from 'zod';
-import { acpConfigOptionSchema, authMethodSchema } from './session-schemas.js';
+
+export const authEnvVarSchema = z.object({
+  name: z.string(),
+  label: z.string().optional(),
+  secret: z.boolean().default(true),
+  optional: z.boolean().default(false),
+});
+
+export const acpConfigOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  type: z.literal('select'),
+  currentValue: z.string(),
+  options: z.array(
+    z.object({
+      value: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+    }),
+  ),
+});
+
+export const authMethodSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(['agent', 'env_var']).optional().default('agent'),
+  description: z.string().nullable().optional(),
+  vars: z.array(authEnvVarSchema).optional(),
+  _meta: z.record(z.string(), z.any()).nullable().optional(),
+});
 
 export const registryDistributionNpxSchema = z.object({
   package: z.string().min(1),

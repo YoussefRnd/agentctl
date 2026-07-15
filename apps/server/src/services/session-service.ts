@@ -175,7 +175,7 @@ export class SessionService {
       const provider = await this.providerRegistry.ensureProviderReady(session.selectedProvider, {
         force: false,
       });
-      if (provider.status === 'ready' || provider.status === 'needs_auth') {
+      if (provider.isReady || provider.needsAuth) {
         await this.sessionManager.restartSession(sessionId);
       }
     }

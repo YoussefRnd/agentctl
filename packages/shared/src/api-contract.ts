@@ -130,6 +130,34 @@ export const apiContract = {
     },
     summary: 'Discover providers',
   },
+  getRegistry: {
+    method: 'GET',
+    path: '/api/registry',
+    responses: {
+      200: z.array(providerDiscoverySchema),
+    },
+    summary: 'Full registry catalog',
+  },
+  installProvider: {
+    method: 'POST',
+    path: '/api/providers/:id/install',
+    pathParams: z.object({ id: z.string() }),
+    body: z.any(),
+    responses: {
+      200: providerDiscoverySchema,
+    },
+    summary: 'Install provider',
+  },
+  removeProvider: {
+    method: 'POST',
+    path: '/api/providers/:id/remove',
+    pathParams: z.object({ id: z.string() }),
+    body: z.any(),
+    responses: {
+      200: providerDiscoverySchema,
+    },
+    summary: 'Remove provider',
+  },
   loginProvider: {
     method: 'POST',
     path: '/api/providers/:id/login',
@@ -172,16 +200,6 @@ export const apiContract = {
       200: providerDiscoverySchema,
     },
     summary: 'Refresh provider',
-  },
-  toggleProvider: {
-    method: 'POST',
-    path: '/api/providers/:id/toggle',
-    pathParams: z.object({ id: z.string() }),
-    body: z.object({ enabled: z.boolean() }),
-    responses: {
-      200: providerDiscoverySchema,
-    },
-    summary: 'Toggle provider enabled state',
   },
   setProviderConfig: {
     method: 'POST',

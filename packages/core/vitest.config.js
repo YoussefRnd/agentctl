@@ -4,8 +4,6 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     exclude: ['node_modules', 'dist'],
-    env: {
-      ALLOWED_AGENTS: 'opencode,claude-acp,codex-acp,gemini',
-    },
+    globalSetup: ['./vitest.globalSetup.mjs'],
   },
 });

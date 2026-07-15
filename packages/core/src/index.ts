@@ -17,3 +17,11 @@ export * from './config/index.js';
 export * from './logger.js';
 export * from './git/session-workspace.js';
 export * from './agent/mcp-gateway.js';
+export * from './agent/registry/provider-store.js';
+export * from './agent/registry/binary-installer.js';
+export * from './agent/registry/registry-fetcher.js';
+export * from './agent/registry/provider-launcher.js';
+export * from './agent/registry/auth-provider.js';
+export * from './agent/registry/provider-sync.js';
+
+

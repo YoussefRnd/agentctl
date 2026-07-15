@@ -54,7 +54,7 @@ const AgentResponseComponent = function AgentResponse({
 
   const providerIcon = useMemo(() => {
     if (!selectedProviderId) return null;
-    return providers.find((p) => p.id === selectedProviderId)?.icon ?? null;
+    return providers.find((p) => p.id === selectedProviderId)?.agent?.icon ?? null;
   }, [providers, selectedProviderId]);
   const { activityEvents, responseEvent, subagentGroups } = useMemo(() => {
     const activity: ACPEventRow[] = [];
