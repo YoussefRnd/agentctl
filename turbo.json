@@ -33,10 +33,12 @@
       ]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["src/**/*", "tests/**/*", "vitest.config.*", "vitest.workspace.*", "tsconfig.json"]
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["src/**/*", "eslint.config.*", "tsconfig.json"]
     },
     "clean": {
       "cache": false
