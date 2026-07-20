@@ -284,8 +284,8 @@ export class SessionStateMachine {
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, sessionId),
       });
-      if (sessionRecord?.approvalMode) {
-        await session.setMode(sessionRecord.approvalMode);
+      if (sessionRecord?.agentPersona) {
+        await session.setMode(sessionRecord.agentPersona);
       }
 
       const providerId = sessionRecord?.selectedProvider ?? 'default';

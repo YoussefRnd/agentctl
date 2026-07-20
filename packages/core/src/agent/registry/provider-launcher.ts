@@ -158,9 +158,13 @@ export class ProviderLauncher {
           providerId,
           result.status === 'ready' ? 'authenticated' : result.status,
         );
+        this.store.setConfigOptions(providerId, result.configOptions);
         return result;
       } catch (err) {
-        this.store.setAuthState(providerId, 'error');
+        const msg = err instanceof Error ? err.message : String(err);
+        const isAuthError =
+          msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('unauthorized');
+        this.store.setAuthState(providerId, isAuthError ? 'needs_auth' : 'error');
         this.probeCache.delete(cacheKey);
         throw err;
       }

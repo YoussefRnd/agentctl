@@ -11,7 +11,10 @@ export class SessionEventStore {
   ) {}
 
   private async refreshTotalTokens(sessionId: string): Promise<void> {
-    const events = await this.db.select().from(acpEvents).where(eq(acpEvents.sessionId, sessionId));
+    const events = await this.db
+      .select({ metadata: acpEvents.metadata })
+      .from(acpEvents)
+      .where(eq(acpEvents.sessionId, sessionId));
 
     let total = 0;
     for (const e of events) {
@@ -147,9 +150,14 @@ export class SessionEventStore {
   }
 
   async getEventWithMetadata(
+    sessionId: string,
     eventId: number,
   ): Promise<{ id: number; type: string; data: unknown; metadata: unknown } | null> {
-    const rows = await this.db.select().from(acpEvents).where(eq(acpEvents.id, eventId)).limit(1);
+    const rows = await this.db
+      .select()
+      .from(acpEvents)
+      .where(and(eq(acpEvents.id, eventId), eq(acpEvents.sessionId, sessionId)))
+      .limit(1);
 
     if (rows.length === 0) return null;
     const first = rows[0];

@@ -1,6 +1,11 @@
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
+import {
+  registrySchema,
+  type ProviderDiscovery,
+  type RegistryAgent,
+  type ACPConfigOption,
+} from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentRuntime } from './acp-transport.js';
 import { createAgentConnection, DefaultAgentRuntime } from './acp-transport.js';
@@ -12,6 +17,7 @@ import { RegistryFetcher } from './registry/registry-fetcher.js';
 import { ProviderLauncher } from './registry/provider-launcher.js';
 import { AuthProvider } from './registry/auth-provider.js';
 import { ProviderSync } from './registry/provider-sync.js';
+import { PersistentAgentConnectionManager } from './registry/persistent-connection.js';
 
 function getPlatformKey(): string {
   const arch = os.arch();
@@ -29,9 +35,34 @@ function getPlatformKey(): string {
   return `${platformMap[platform] ?? platform}-${archMap[arch] ?? arch}`;
 }
 
-function parseRegistryAgents(data: string): RegistryAgent[] {
-  const parsed = JSON.parse(data) as { agents: RegistryAgent[] };
-  return parsed.agents;
+export function parseRegistryAgents(data: string): RegistryAgent[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data);
+  } catch (cause) {
+    throw new Error('Registry snapshot contains invalid JSON. Run a registry sync and try again.', {
+      cause,
+    });
+  }
+
+  const validated = registrySchema.safeParse(parsed);
+  if (!validated.success) {
+    throw new Error(
+      `Registry snapshot failed validation. Run a registry sync and try again: ${validated.error.message}`,
+    );
+  }
+
+  return validated.data.agents;
+}
+
+interface ProviderOperation {
+  name: string;
+  promise: Promise<unknown>;
+}
+
+interface CoordinationWaiter {
+  kind: 'mutation' | 'sync';
+  resolve: (release: () => void) => void;
 }
 
 export class ProviderRegistry {
@@ -42,6 +73,13 @@ export class ProviderRegistry {
   private authProvider: AuthProvider;
   private syncProvider: ProviderSync;
   private runtime: AgentRuntime;
+
+  private providerOperations = new Map<string, ProviderOperation>();
+  private activeMutations = 0;
+  private syncActive = false;
+  private coordinationWaiters: CoordinationWaiter[] = [];
+  private activeSync?: Promise<void>;
+  private connectionManager: PersistentAgentConnectionManager;
 
   constructor(
     private db: DbClient,
@@ -55,22 +93,126 @@ export class ProviderRegistry {
     this.launcher = new ProviderLauncher(this.store, this.installer);
     this.authProvider = new AuthProvider(this.launcher, this.store);
     this.syncProvider = new ProviderSync(this.fetcher, this.store, this.installer, this.launcher);
+    this.connectionManager = new PersistentAgentConnectionManager(this.store, this.fetcher, logger);
   }
 
-  private activeOps = new Map<string, Promise<unknown>>();
+  getConnectionManager(): PersistentAgentConnectionManager {
+    return this.connectionManager;
+  }
 
-  private runLocked<T>(key: string, op: () => Promise<T>): Promise<T> {
-    const existing = this.activeOps.get(key);
-    if (existing) return existing as Promise<T>;
-    const promise = (async () => {
-      try {
-        return await op();
-      } finally {
-        this.activeOps.delete(key);
-      }
-    })();
-    this.activeOps.set(key, promise);
+  private acquireMutation(): Promise<() => void> {
+    if (!this.syncActive && this.coordinationWaiters.length === 0) {
+      this.activeMutations += 1;
+      return Promise.resolve(() => {
+        this.releaseMutation();
+      });
+    }
+
+    return new Promise((resolve) => {
+      this.coordinationWaiters.push({ kind: 'mutation', resolve });
+      this.processCoordinationWaiters();
+    });
+  }
+
+  private acquireSync(): Promise<() => void> {
+    if (!this.syncActive && this.activeMutations === 0 && this.coordinationWaiters.length === 0) {
+      this.syncActive = true;
+      return Promise.resolve(() => {
+        this.releaseSync();
+      });
+    }
+
+    return new Promise((resolve) => {
+      this.coordinationWaiters.push({ kind: 'sync', resolve });
+      this.processCoordinationWaiters();
+    });
+  }
+
+  private releaseMutation(): void {
+    this.activeMutations -= 1;
+    this.processCoordinationWaiters();
+  }
+
+  private releaseSync(): void {
+    this.syncActive = false;
+    this.processCoordinationWaiters();
+  }
+
+  private processCoordinationWaiters(): void {
+    if (this.syncActive || this.activeMutations > 0 || this.coordinationWaiters.length === 0) {
+      return;
+    }
+
+    if (this.coordinationWaiters[0].kind === 'sync') {
+      const waiter = this.coordinationWaiters.shift();
+      if (!waiter) return;
+      this.syncActive = true;
+      waiter.resolve(() => {
+        this.releaseSync();
+      });
+      return;
+    }
+
+    while (this.coordinationWaiters.length > 0) {
+      const waiter: CoordinationWaiter = this.coordinationWaiters[0];
+      if (waiter.kind !== 'mutation') break;
+      this.coordinationWaiters.shift();
+      this.activeMutations += 1;
+      waiter.resolve(() => {
+        this.releaseMutation();
+      });
+    }
+  }
+
+  private async runMutation<T>(op: () => Promise<T>): Promise<T> {
+    const release = await this.acquireMutation();
+    try {
+      return await op();
+    } finally {
+      release();
+    }
+  }
+
+  private async runSync(op: () => Promise<void>): Promise<void> {
+    const release = await this.acquireSync();
+    try {
+      await op();
+    } finally {
+      release();
+    }
+  }
+
+  private runProviderOperation<T>(
+    providerId: string,
+    operationName: string,
+    op: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.providerOperations.get(providerId);
+    if (previous?.name === operationName) {
+      return previous.promise as Promise<T>;
+    }
+
+    const promise = this.runMutation(async () => {
+      await previous?.promise.catch(() => undefined);
+      return op();
+    });
+    this.providerOperations.set(providerId, { name: operationName, promise });
+
+    void promise.then(
+      () => {
+        this.clearProviderOperation(providerId, promise);
+      },
+      () => {
+        this.clearProviderOperation(providerId, promise);
+      },
+    );
     return promise;
+  }
+
+  private clearProviderOperation(providerId: string, promise: Promise<unknown>): void {
+    if (this.providerOperations.get(providerId)?.promise === promise) {
+      this.providerOperations.delete(providerId);
+    }
   }
 
   getInstallDir(providerId: string): string {
@@ -145,7 +287,7 @@ export class ProviderRegistry {
   }
 
   async install(providerId: string): Promise<ProviderDiscovery> {
-    return this.runLocked(providerId, () => this.doInstall(providerId));
+    return this.runProviderOperation(providerId, 'install', () => this.doInstall(providerId));
   }
 
   private async doInstall(providerId: string): Promise<ProviderDiscovery> {
@@ -211,11 +353,15 @@ export class ProviderRegistry {
       configOptions: JSON.stringify(agent.configOptions ?? []),
       authMethods: JSON.stringify(agent.authMethods ?? []),
       installState,
-      authState: 'unknown',
+      authState: (agent.authMethods ?? []).length ? 'unknown' : 'authenticated',
       supportsDynamicModel: agent.supportsDynamicModel ?? false,
       supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
       supportsLogout: agent.supportsLogout ?? false,
     });
+
+    // Run probe to populate config options (model list, currentValue, etc.)
+    this.launcher.invalidateProbe(providerId);
+    await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
 
     const row = this.store.get(providerId);
     if (!row) throw new Error(`Provider ${providerId} vanished`);
@@ -223,12 +369,17 @@ export class ProviderRegistry {
   }
 
   async remove(providerId: string): Promise<ProviderDiscovery> {
-    return this.runLocked(providerId, () => this.doRemove(providerId));
+    return this.runProviderOperation(providerId, 'remove', () => this.doRemove(providerId));
   }
 
   private async doRemove(providerId: string): Promise<ProviderDiscovery> {
     const provider = this.store.get(providerId);
     if (!provider) throw new Error(`Provider ${providerId} not found`);
+
+    const snapshot = this.fetcher.getSnapshot();
+    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
+    const agent = agents.find((a) => a.id === providerId);
+    const wasDefault = this.store.getDefaultProviderId() === providerId;
 
     this.launcher.invalidateProbe(providerId);
 
@@ -238,9 +389,12 @@ export class ProviderRegistry {
 
     this.store.delete(providerId);
 
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((a) => a.id === providerId);
+    if (wasDefault) {
+      const nextDefault = this.store
+        .list()
+        .find((candidate) => candidate.enabled && candidate.installState !== 'not_installed');
+      this.setDefaultProvider(nextDefault?.id ?? null);
+    }
 
     const synthetic: ProviderData = agent
       ? {
@@ -302,52 +456,63 @@ export class ProviderRegistry {
     methodId: string,
     params: Record<string, unknown> = {},
   ): Promise<void> {
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((a) => a.id === providerId);
-
-    await this.authProvider.login(providerId, agent, methodId, params, createAgentConnection);
-  }
-
-  async logout(providerId: string): Promise<void> {
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((a) => a.id === providerId);
-
-    await this.authProvider.logout(providerId, agent, createAgentConnection);
-  }
-
-  async activate(providerId: string): Promise<ProviderDiscovery> {
-    const row = this.store.get(providerId);
-    if (!row) throw new Error(`Provider ${providerId} not found`);
-
-    if (row.authState === 'unknown' && row.installState !== 'not_installed') {
+    return this.runProviderOperation(providerId, `login:${methodId}`, async () => {
       const snapshot = this.fetcher.getSnapshot();
       const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
       const agent = agents.find((a) => a.id === providerId);
-      if (agent) {
-        await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
-      }
-    }
 
-    const updated = this.store.get(providerId);
-    if (!updated) throw new Error(`Provider ${providerId} vanished`);
-    return new Provider(updated).toDiscovery();
+      await this.authProvider.login(providerId, agent, methodId, params, createAgentConnection);
+    });
+  }
+
+  async logout(providerId: string): Promise<void> {
+    return this.runProviderOperation(providerId, 'logout', async () => {
+      const snapshot = this.fetcher.getSnapshot();
+      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
+      const agent = agents.find((a) => a.id === providerId);
+
+      await this.authProvider.logout(providerId, agent, createAgentConnection);
+    });
+  }
+
+  async activate(providerId: string): Promise<ProviderDiscovery> {
+    return this.runProviderOperation(providerId, 'activate', async () => {
+      const row = this.store.get(providerId);
+      if (!row) throw new Error(`Provider ${providerId} not found`);
+
+      if (row.authState === 'unknown' && row.installState !== 'not_installed') {
+        const snapshot = this.fetcher.getSnapshot();
+        const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
+        const agent = agents.find((a) => a.id === providerId);
+        if (agent) {
+          await this.probeWithStatePreserved(providerId, agent, row.authState, 'activate');
+        }
+      }
+
+      const updated = this.store.get(providerId);
+      if (!updated) throw new Error(`Provider ${providerId} vanished`);
+      return new Provider(updated).toDiscovery();
+    });
   }
 
   async refreshProvider(providerId: string): Promise<ProviderDiscovery> {
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((a) => a.id === providerId);
+    return this.runProviderOperation(providerId, 'refresh', async () => {
+      const rowBeforeProbe = this.store.get(providerId);
+      if (!rowBeforeProbe) throw new Error(`Provider ${providerId} not found`);
 
-    this.launcher.invalidateProbe(providerId);
-    if (agent) {
-      await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
-    }
+      const snapshot = this.fetcher.getSnapshot();
+      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
+      const agent = agents.find((a) => a.id === providerId);
 
-    const row = this.store.get(providerId);
-    if (!row) throw new Error(`Provider ${providerId} vanished`);
-    return new Provider(row).toDiscovery();
+      this.launcher.invalidateProbe(providerId);
+      if (agent) {
+        await this.probeWithStatePreserved(providerId, agent, rowBeforeProbe.authState, 'refresh');
+      }
+
+      const row = this.store.get(providerId);
+      if (!row) throw new Error(`Provider ${providerId} vanished`);
+      return new Provider(row).toDiscovery();
+    });
   }
 
   async setProviderConfig(
@@ -355,33 +520,103 @@ export class ProviderRegistry {
     updates: {
       customEnv?: Record<string, string>;
       nativelyLoadsSkills?: boolean;
+      defaultConfigOptions?: ACPConfigOption[];
     },
   ): Promise<ProviderDiscovery> {
-    if (updates.customEnv !== undefined) {
-      this.store.setCustomEnv(providerId, updates.customEnv);
-    }
-    if (updates.nativelyLoadsSkills !== undefined) {
-      this.store.update(providerId, { nativelyLoadsSkills: updates.nativelyLoadsSkills });
-    }
+    return this.runProviderOperation(providerId, 'set-config', async () => {
+      const rowBeforeUpdate = this.store.get(providerId);
+      if (!rowBeforeUpdate) throw new Error(`Provider ${providerId} not found`);
 
-    this.launcher.invalidateProbe(providerId);
+      if (updates.customEnv !== undefined) {
+        let existingCustomEnv: Record<string, string> = {};
+        try {
+          existingCustomEnv = JSON.parse(rowBeforeUpdate.customEnv || '{}') as Record<
+            string,
+            string
+          >;
+        } catch {
+          existingCustomEnv = {};
+        }
 
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((a) => a.id === providerId);
-    if (agent) {
-      await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
+        const merged: Record<string, string> = {};
+        const removeKeys = new Set(
+          Object.entries(updates.customEnv)
+            .filter(([, value]) => value.trim().length === 0)
+            .map(([key]) => key),
+        );
+        for (const [key, value] of Object.entries(existingCustomEnv)) {
+          if (!removeKeys.has(key)) merged[key] = value;
+        }
+        for (const [key, value] of Object.entries(updates.customEnv)) {
+          if (value.trim().length > 0) merged[key] = value;
+        }
+        this.store.setCustomEnv(providerId, merged);
+      }
+      if (updates.nativelyLoadsSkills !== undefined) {
+        this.store.update(providerId, { nativelyLoadsSkills: updates.nativelyLoadsSkills });
+      }
+      if (updates.defaultConfigOptions !== undefined) {
+        this.store.setDefaultConfigOptions(providerId, updates.defaultConfigOptions);
+      }
+
+      this.launcher.invalidateProbe(providerId);
+
+      const snapshot = this.fetcher.getSnapshot();
+      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
+      const agent = agents.find((a) => a.id === providerId);
+      if (agent) {
+        await this.probeWithStatePreserved(
+          providerId,
+          agent,
+          rowBeforeUpdate.authState,
+          'apply configuration for',
+        );
+      }
+
+      const row = this.store.get(providerId);
+      if (!row) throw new Error(`Provider ${providerId} vanished`);
+      return new Provider(row).toDiscovery();
+    });
+  }
+
+  private async probeWithStatePreserved(
+    providerId: string,
+    agent: RegistryAgent,
+    previousAuthState: ProviderData['authState'],
+    action: string,
+  ): Promise<void> {
+    try {
+      await this.launcher.probe(providerId, this.runtime, agent);
+    } catch (cause) {
+      if (this.store.get(providerId)) {
+        const restoredAuthState =
+          previousAuthState === 'authenticated' ||
+          previousAuthState === 'error' ||
+          previousAuthState === 'needs_auth' ||
+          previousAuthState === 'unknown'
+            ? previousAuthState
+            : 'unknown';
+        this.store.setAuthState(providerId, restoredAuthState);
+      }
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(`Failed to ${action} provider ${providerId}: ${detail}`, { cause });
     }
-
-    const row = this.store.get(providerId);
-    if (!row) throw new Error(`Provider ${providerId} vanished`);
-    return new Provider(row).toDiscovery();
   }
 
   async sync(): Promise<void> {
-    return this.runLocked('*', async () => {
-      await this.syncProvider.sync();
-    });
+    if (this.activeSync) return this.activeSync;
+
+    const promise = this.runSync(() => this.syncProvider.sync());
+    this.activeSync = promise;
+    void promise.then(
+      () => {
+        if (this.activeSync === promise) this.activeSync = undefined;
+      },
+      () => {
+        if (this.activeSync === promise) this.activeSync = undefined;
+      },
+    );
+    return promise;
   }
 
   async ensureProviderReady(
@@ -395,6 +630,12 @@ export class ProviderRegistry {
     }
     if (!row) throw new Error(`Provider ${providerId} not found`);
 
+    if (row.installState === 'installed_local' && !this.installer.isInstalled(providerId)) {
+      this.store.setInstallState(providerId, 'not_installed');
+      this.store.setAuthState(providerId, 'unknown');
+      row = this.store.get(providerId) ?? row;
+    }
+
     if (row.installState === 'not_installed') {
       await this.install(providerId);
       const updated = this.store.get(providerId);
@@ -402,15 +643,28 @@ export class ProviderRegistry {
       return new Provider(updated);
     }
 
-    if (!options.force && (row.authState === 'authenticated' || row.authState === 'needs_auth')) {
-      if (row.installState === 'installed_local') {
-        if (!this.installer.isInstalled(providerId)) {
-          this.store.setInstallState(providerId, 'not_installed');
-          this.store.setAuthState(providerId, 'unknown');
-          return new Provider({ ...row, installState: 'not_installed', authState: 'unknown' });
-        }
-      }
+    if (!options.force && row.authState === 'needs_auth') {
       return new Provider(row);
+    }
+
+    if (!options.force && row.authState === 'authenticated') {
+      let hasModelConfig = false;
+      try {
+        const opts = (row.configOptions ? JSON.parse(row.configOptions) : []) as unknown[];
+        hasModelConfig = opts.some(
+          (opt) =>
+            typeof opt === 'object' &&
+            opt !== null &&
+            'id' in opt &&
+            ((opt as Record<string, unknown>).id === 'model' ||
+              (opt as Record<string, unknown>).id === 'selectedModel'),
+        );
+      } catch {
+        hasModelConfig = false;
+      }
+      if (hasModelConfig) {
+        return new Provider(row);
+      }
     }
 
     const snapshot = this.fetcher.getSnapshot();
@@ -419,7 +673,25 @@ export class ProviderRegistry {
 
     if (agent) {
       this.launcher.invalidateProbe(providerId);
-      await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
+      try {
+        await this.launcher.probe(providerId, this.runtime, agent);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isAuthError =
+          msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('unauthorized');
+        if (isAuthError) {
+          this.logger.info(
+            { providerId },
+            'Probe failed due to auth error, setting state to needs_auth',
+          );
+          this.store.setAuthState(providerId, 'needs_auth');
+          const rowNow = this.store.get(providerId);
+          if (rowNow) return new Provider(rowNow);
+        }
+        this.logger.error({ err, providerId }, 'Probe failed, setting auth state to error');
+        this.store.setAuthState(providerId, 'error');
+        throw err;
+      }
     }
 
     const updated = this.store.get(providerId);
@@ -452,6 +724,30 @@ export class ProviderRegistry {
 
   updateSetting(key: string, value: string): void {
     this.store.updateSetting(key, value);
+  }
+
+  /**
+   * Set the default provider, validating the id against enabled providers.
+   * An empty/null/unknown id clears the default (the setting is deleted rather
+   * than stored as an invalid empty string).
+   */
+  setDefaultProvider(id: string | null | undefined): void {
+    const normalized = id?.trim() ? id.trim() : null;
+    if (normalized) {
+      const exists = this.store
+        .list()
+        .some((p) => p.id === normalized && p.enabled && p.installState !== 'not_installed');
+      if (!exists) {
+        throw new Error(
+          `Cannot set default provider: ${normalized} is not an enabled, installed provider`,
+        );
+      }
+    }
+    if (normalized) {
+      this.store.setDefaultProviderId(normalized);
+    } else {
+      this.store.deleteSetting('defaultProviderId');
+    }
   }
 
   probeAgent(
@@ -494,6 +790,7 @@ export class ProviderRegistry {
       launchArgs: launchResolved.args,
       launchEnv: launchResolved.env,
       customEnv: {},
+      customEnvConfigured: {},
       configOptions: agent.configOptions ?? [],
       authMethods,
       version: agent.version,

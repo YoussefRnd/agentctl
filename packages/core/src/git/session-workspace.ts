@@ -3,7 +3,7 @@ import type { DbClient } from '../agent/acp-session.js';
 import type { WorkspaceManager, Workspace as WorkspaceHandle } from './worktree-manager.js';
 import { sessions, projects, acpEvents } from '../db/schema.js';
 import type { SnapshotService } from './snapshot-service.js';
-import type { SessionMode, ProviderName, ThinkingEffort } from '@agentctl/shared';
+import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
 import crypto from 'node:crypto';
 import { simpleGit } from 'simple-git';
 
@@ -203,7 +203,7 @@ export class SessionWorkspace {
       baseCommit,
       baseBranch,
       mode: resolvedMode,
-      selectedProvider: (options?.selectedProvider ?? 'claude-acp') as ProviderName,
+      selectedProvider: options?.selectedProvider ?? 'claude-acp',
       selectedModel: options?.selectedModel ?? 'sonnet-4',
       selectedThinkingEffort: (options?.selectedThinkingEffort ?? 'medium') as ThinkingEffort,
       contextLimit: options?.contextLimit ?? 0,

@@ -21,17 +21,19 @@ export class ProviderStore {
   upsert(id: string, fields: Partial<typeof providers.$inferInsert>) {
     const existing = this.get(id);
     if (existing) {
-      this.db.update(providers)
+      this.db
+        .update(providers)
         .set({ ...fields, updatedAt: new Date() })
         .where(eq(providers.id, id))
         .run();
     } else {
-      this.db.insert(providers)
+      this.db
+        .insert(providers)
         .values({
           id,
           name: fields.name ?? id,
           command: fields.command ?? id,
-          ...fields
+          ...fields,
         })
         .run();
     }
@@ -78,16 +80,21 @@ export class ProviderStore {
   }
 
   getSetting(key: string): string | undefined {
-    const row = this.db.select().from(systemSettings).where(eq(systemSettings.key, key)).all()[0] as typeof systemSettings.$inferSelect | undefined;
+    const row = this.db
+      .select()
+      .from(systemSettings)
+      .where(eq(systemSettings.key, key))
+      .all()[0] as typeof systemSettings.$inferSelect | undefined;
     return row?.value;
   }
 
   updateSetting(key: string, value: string) {
-    this.db.insert(systemSettings)
+    this.db
+      .insert(systemSettings)
       .values({ key, value, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: systemSettings.key,
-        set: { value, updatedAt: new Date() }
+        set: { value, updatedAt: new Date() },
       })
       .run();
   }
@@ -98,5 +105,17 @@ export class ProviderStore {
 
   setDefaultProviderId(id: string) {
     this.updateSetting('defaultProviderId', id);
+  }
+
+  deleteSetting(key: string) {
+    this.db.delete(systemSettings).where(eq(systemSettings.key, key)).run();
+  }
+
+  setDefaultConfigOptions(id: string, options: unknown[]) {
+    this.update(id, { configOptions: JSON.stringify(options) });
+  }
+
+  setConfigOptions(id: string, options: unknown[]) {
+    this.update(id, { configOptions: JSON.stringify(options) });
   }
 }

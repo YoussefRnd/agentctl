@@ -546,11 +546,14 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
     const size = typeof chunk.size === 'number' ? chunk.size : parseInt(chunk.size, 10);
     let cost: { amount: number; currency: string } | undefined = undefined;
     if (chunk.cost) {
-      cost = {
-        amount:
-          typeof chunk.cost.amount === 'number' ? chunk.cost.amount : parseFloat(chunk.cost.amount),
-        currency: chunk.cost.currency,
-      };
+      const amt =
+        typeof chunk.cost.amount === 'number' ? chunk.cost.amount : parseFloat(chunk.cost.amount);
+      if (!isNaN(amt)) {
+        cost = {
+          amount: amt,
+          currency: chunk.cost.currency,
+        };
+      }
     }
     if (!isNaN(used) && !isNaN(size)) {
       events.push({
@@ -655,14 +658,14 @@ function getCacheKey(command: string, args: string[], env: Record<string, string
  * The `session/delete` capability is an ACP extension not present in the SDK's
  * generated `SessionCapabilities` type. Read it defensively without widening casts.
  */
-function sessionSupportsDelete(caps: unknown): boolean {
+export function sessionSupportsDelete(caps: unknown): boolean {
   if (!caps || typeof caps !== 'object') {
     return false;
   }
   return Boolean((caps as { delete?: unknown }).delete);
 }
 
-interface PermissionToolCall {
+export interface PermissionToolCall {
   name?: string;
   toolCallId?: string;
   kind?: string;
@@ -672,7 +675,34 @@ interface PermissionToolCall {
   rawInput?: unknown;
 }
 
+export interface IConnectionManager {
+  getProviderIdByCommand(command: string): string | undefined;
+  getConnection(providerId: string): Promise<{
+    child: ChildProcess;
+    transport: AgentStreamTransport;
+    connection: ClientSideConnection;
+    supportsResumeSession?: boolean;
+    supportsCloseSession?: boolean;
+    supportsDeleteSession?: boolean;
+    supportsListSessions?: boolean;
+    supportsAdditionalDirectories?: boolean;
+  }>;
+  closeSession(providerId: string, sessionId: string): Promise<void>;
+  writeTerminalInput(terminalId: string, data: string): boolean;
+  registerActiveSession(
+    acpSessionId: string,
+    session: {
+      acpSessionId: string;
+      localSessionId: string;
+      options: RuntimeOptions;
+      callbacks: SessionCallbacks;
+    },
+  ): void;
+}
+
 export class DefaultAgentRuntime implements AgentRuntime {
+  private connectionManager?: IConnectionManager;
+
   constructor(
     private spawnImpl: typeof spawn = spawn,
     private logger: Logger = noopLogger,
@@ -682,6 +712,10 @@ export class DefaultAgentRuntime implements AgentRuntime {
     ) => new ProcessStreamTransport(child, logger),
     private cache?: CacheStorage,
   ) {}
+
+  setConnectionManager(manager: IConnectionManager): void {
+    this.connectionManager = manager;
+  }
 
   private getCache(): CacheStorage {
     if (this.cache) return this.cache;
@@ -695,279 +729,312 @@ export class DefaultAgentRuntime implements AgentRuntime {
     options: RuntimeOptions,
     callbacks: SessionCallbacks,
   ): Promise<AgentRuntimeHandle> {
-    const child = this.spawnImpl(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnv(options.env),
-      cwd: options.cwd,
-    });
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    let child!: ChildProcess;
+    let transport!: AgentStreamTransport;
+    let connection!: ClientSideConnection;
+    let isPersistent = false;
+    let providerId = '';
 
-    const transport = this.createTransport(child, this.logger);
-
-    const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
+    if (this.connectionManager) {
+      providerId = this.connectionManager.getProviderIdByCommand(command) ?? command;
+      try {
+        const persistentConn = await this.connectionManager.getConnection(providerId);
+        child = persistentConn.child;
+        transport = persistentConn.transport;
+        connection = persistentConn.connection;
+        isPersistent = true;
+      } catch (err) {
+        this.logger.warn(
+          err,
+          `Failed to get persistent connection for ${providerId}, falling back to spawn`,
+        );
+      }
+    }
 
     const logger = this.logger;
-    const terminalManager = new TerminalManager(logger);
+    let terminalManager: TerminalManager | undefined;
 
-    const connection = new ClientSideConnection(() => {
-      const handlers: Record<string, unknown> = {
-        async sessionUpdate(n: SessionNotification) {
-          const events = parseNotificationToEvents(n);
-          for (const event of events) {
-            await callbacks.onEvent(event);
-          }
-        },
-        async requestPermission(r: RequestPermissionRequest) {
-          const toolCall = r.toolCall as unknown as PermissionToolCall;
-          const rawInput = toolCall.rawInput as Record<string, unknown> | undefined;
+    if (!isPersistent) {
+      child = this.spawnImpl(command, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: cleanEnv(options.env),
+        cwd: options.cwd,
+      });
 
-          let parsedName = typeof toolCall.name === 'string' ? toolCall.name : '';
-          if (!parsedName && toolCall.toolCallId) {
-            parsedName = toolCall.toolCallId.split('__')[0];
-          }
-          if (!parsedName) {
-            parsedName = typeof toolCall.kind === 'string' ? toolCall.kind : 'tool';
-          }
+      transport = this.createTransport(child, this.logger);
 
-          let parsedArgs = toolCall.arguments;
-          if (!parsedArgs) {
-            if (rawInput && typeof rawInput === 'object') {
-              if (rawInput.arguments && typeof rawInput.arguments === 'object') {
-                parsedArgs = rawInput.arguments as Record<string, unknown>;
-              } else {
-                const rest = { ...rawInput };
-                delete rest.name;
-                delete rest.arguments;
-                parsedArgs = rest;
+      const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
+
+      const activeTerminalManager = (terminalManager = new TerminalManager(logger));
+
+      connection = new ClientSideConnection(() => {
+        const handlers: Record<string, unknown> = {
+          async sessionUpdate(n: SessionNotification) {
+            const events = parseNotificationToEvents(n);
+            for (const event of events) {
+              await callbacks.onEvent(event);
+            }
+          },
+          async requestPermission(r: RequestPermissionRequest) {
+            const toolCall = r.toolCall as unknown as PermissionToolCall;
+            const rawInput = toolCall.rawInput as Record<string, unknown> | undefined;
+
+            let parsedName = typeof toolCall.name === 'string' ? toolCall.name : '';
+            if (!parsedName && toolCall.toolCallId) {
+              parsedName = toolCall.toolCallId.split('__')[0];
+            }
+            if (!parsedName) {
+              parsedName = typeof toolCall.kind === 'string' ? toolCall.kind : 'tool';
+            }
+
+            let parsedArgs = toolCall.arguments;
+            if (!parsedArgs) {
+              if (rawInput && typeof rawInput === 'object') {
+                if (rawInput.arguments && typeof rawInput.arguments === 'object') {
+                  parsedArgs = rawInput.arguments as Record<string, unknown>;
+                } else {
+                  const rest = { ...rawInput };
+                  delete rest.name;
+                  delete rest.arguments;
+                  parsedArgs = rest;
+                }
               }
             }
-          }
-          if (!parsedArgs) {
-            const locations = toolCall.locations;
-            const primaryPath =
-              locations?.[0]?.path ??
-              (typeof toolCall.title === 'string' ? toolCall.title : undefined);
-            if (primaryPath) {
-              parsedArgs = {
-                path: primaryPath,
-                TargetFile: primaryPath,
-                AbsolutePath: primaryPath,
-              };
-            }
-          }
-
-          const domainReq: DomainPermissionRequest = {
-            permissionId: toolCall.toolCallId ?? '',
-            description: typeof toolCall.title === 'string' ? toolCall.title : '',
-            options: r.options.map((opt) => ({
-              optionId: opt.optionId,
-              label: opt.name,
-            })),
-            toolCall: {
-              name: parsedName,
-              arguments: parsedArgs,
-              toolCallId: toolCall.toolCallId,
-            },
-          };
-          const domainResp = await callbacks.onRequestPermission(domainReq);
-          if (domainResp.allowed && domainResp.optionId) {
-            return {
-              outcome: { outcome: 'selected', optionId: domainResp.optionId },
-            };
-          }
-          return { outcome: { outcome: 'cancelled' } };
-        },
-        async 'fs.readTextFile'(p: { path: string }) {
-          const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(options.cwd, p.path);
-          if (!fs.existsSync(absPath)) {
-            throw new Error(`File not found: ${absPath}`);
-          }
-          const content = fs.readFileSync(absPath, 'utf8');
-          return Promise.resolve({ content });
-        },
-        async 'fs.writeTextFile'(p: { path: string; content: string }) {
-          const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(options.cwd, p.path);
-          const dir = path.dirname(absPath);
-          if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
-          fs.writeFileSync(absPath, p.content, 'utf8');
-          return Promise.resolve({});
-        },
-        async 'terminal/create'(p: {
-          command: string;
-          args?: string[];
-          cwd?: string;
-          env?: Record<string, string>;
-        }) {
-          const terminalCwd = p.cwd
-            ? path.isAbsolute(p.cwd)
-              ? p.cwd
-              : path.resolve(options.cwd, p.cwd)
-            : options.cwd;
-          logger.debug(`Terminal create requested for ${p.command} in ${terminalCwd}`);
-          const terminalId = terminalManager.spawn({
-            command: p.command,
-            args: p.args,
-            cwd: terminalCwd,
-            env: p.env,
-          });
-          await callbacks.onEvent({ type: 'terminal_created', terminalId, command: p.command });
-          return Promise.resolve({ terminalId });
-        },
-        async 'terminal/release'(p: { terminalId: string }) {
-          logger.debug(`Terminal release requested for ${p.terminalId}`);
-          terminalManager.release(p.terminalId);
-          return Promise.resolve({});
-        },
-        async 'terminal/output'(p: { terminalId: string }) {
-          logger.debug(`Terminal output requested for ${p.terminalId}`);
-          const term = terminalManager.getTerminal(p.terminalId);
-          if (!term) {
-            return Promise.reject(new Error(`Terminal not found: ${p.terminalId}`));
-          }
-          const exitStatus = term.hasExited
-            ? { exitCode: term.exitCode, signal: term.signal }
-            : undefined;
-          return Promise.resolve({
-            output: term.output,
-            truncated: false,
-            ...(exitStatus ? { exitStatus } : {}),
-          });
-        },
-        async 'terminal/wait_for_exit'(p: { terminalId: string }) {
-          logger.debug(`Terminal wait_for_exit requested for ${p.terminalId}`);
-          const term = terminalManager.getTerminal(p.terminalId);
-          if (!term) {
-            return Promise.reject(new Error(`Terminal not found: ${p.terminalId}`));
-          }
-          const res = await term.closed;
-          return Promise.resolve({
-            exitCode: res.exitCode,
-            signal: res.signal,
-          });
-        },
-        async 'terminal/kill'(p: { terminalId: string }) {
-          logger.debug(`Terminal kill requested for ${p.terminalId}`);
-          terminalManager.kill(p.terminalId);
-          return Promise.resolve({});
-        },
-        async 'terminal/write'(p: { terminalId: string; data: string }) {
-          logger.debug(`Terminal write requested for ${p.terminalId}`);
-          const ok = terminalManager.write(p.terminalId, p.data);
-          if (!ok) {
-            return Promise.reject(new Error(`Failed to write to terminal ${p.terminalId}`));
-          }
-          return Promise.resolve({});
-        },
-        async 'builtin/bash'(p: {
-          command: string;
-          args?: string[];
-          pty?: boolean;
-          input?: string;
-          cwd?: string;
-        }) {
-          const resolvedCwd = p.cwd
-            ? path.isAbsolute(p.cwd)
-              ? p.cwd
-              : path.resolve(options.cwd, p.cwd)
-            : options.cwd;
-          logger.debug(`builtin/bash: ${p.command} in ${resolvedCwd} (pty: ${String(p.pty)})`);
-          const terminalId = terminalManager.spawn({
-            command: p.command,
-            args: p.args,
-            cwd: resolvedCwd,
-          });
-          if (p.input) {
-            terminalManager.write(terminalId, p.input);
-          }
-          if (!p.pty) {
-            const result = await terminalManager.wait(terminalId);
-            const term = terminalManager.getTerminal(terminalId);
-            return {
-              output: term?.output ?? '',
-              exitCode: result?.exitCode,
-            };
-          }
-          // pty mode: return terminalId immediately, output streams via events, input via HTTP
-          return {
-            terminalId,
-            output: '',
-            exitCode: null,
-          };
-        },
-      };
-
-      return new Proxy(handlers, {
-        get(target, prop, receiver) {
-          if (
-            typeof prop === 'string' &&
-            (prop.startsWith('_') ||
-              prop.includes('.') ||
-              prop.includes('/') ||
-              prop.includes('__'))
-          ) {
-            const canonical = typeof prop === 'string' ? prop.replace(/\./g, '/') : prop;
-            if (canonical in target) {
-              return Reflect.get(target, canonical, receiver);
-            }
-            if (!(prop in target)) {
-              if (prop.includes('__') && options.mcpGateway) {
-                const parts = prop.split('__');
-                const serverId = parts[0];
-                const toolName = parts.slice(1).join('__');
-                const mcpGateway = options.mcpGateway;
-                return async (params: unknown) => {
-                  try {
-                    logger.info(
-                      { serverId, toolName, params },
-                      `Routing tool call to client-side MCP gateway`,
-                    );
-                    const args =
-                      typeof params === 'object' && params !== null
-                        ? (params as Record<string, unknown>)
-                        : {};
-                    const result = await mcpGateway.callTool(serverId, toolName, args);
-                    return result;
-                  } catch (err: unknown) {
-                    logger.error(err, `Failed to execute client-side MCP tool: ${prop}`);
-                    throw err;
-                  }
+            if (!parsedArgs) {
+              const locations = toolCall.locations;
+              const primaryPath =
+                locations?.[0]?.path ??
+                (typeof toolCall.title === 'string' ? toolCall.title : undefined);
+              if (primaryPath) {
+                parsedArgs = {
+                  path: primaryPath,
+                  TargetFile: primaryPath,
+                  AbsolutePath: primaryPath,
                 };
               }
-              return (params: unknown) => {
-                logger.debug({ params }, `Generic handler for ${prop}`);
-                return Promise.resolve({});
+            }
+
+            const domainReq: DomainPermissionRequest = {
+              permissionId: toolCall.toolCallId ?? '',
+              description: typeof toolCall.title === 'string' ? toolCall.title : '',
+              options: r.options.map((opt) => ({
+                optionId: opt.optionId,
+                label: opt.name,
+              })),
+              toolCall: {
+                name: parsedName,
+                arguments: parsedArgs,
+                toolCallId: toolCall.toolCallId,
+              },
+            };
+            const domainResp = await callbacks.onRequestPermission(domainReq);
+            if (domainResp.allowed && domainResp.optionId) {
+              return {
+                outcome: { outcome: 'selected', optionId: domainResp.optionId },
               };
             }
-          }
-          return Reflect.get(target, prop, receiver) as unknown;
-        },
-      }) as unknown as Client;
-    }, stream);
+            return { outcome: { outcome: 'cancelled' } };
+          },
+          async 'fs.readTextFile'(p: { path: string }) {
+            const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(options.cwd, p.path);
+            if (!fs.existsSync(absPath)) {
+              throw new Error(`File not found: ${absPath}`);
+            }
+            const content = fs.readFileSync(absPath, 'utf8');
+            return Promise.resolve({ content });
+          },
+          async 'fs.writeTextFile'(p: { path: string; content: string }) {
+            const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(options.cwd, p.path);
+            const dir = path.dirname(absPath);
+            if (!fs.existsSync(dir)) {
+              fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(absPath, p.content, 'utf8');
+            return Promise.resolve({});
+          },
+          async 'terminal/create'(p: {
+            command: string;
+            args?: string[];
+            cwd?: string;
+            env?: Record<string, string>;
+          }) {
+            const terminalCwd = p.cwd
+              ? path.isAbsolute(p.cwd)
+                ? p.cwd
+                : path.resolve(options.cwd, p.cwd)
+              : options.cwd;
+            logger.debug(`Terminal create requested for ${p.command} in ${terminalCwd}`);
+            const terminalId = activeTerminalManager.spawn({
+              command: p.command,
+              args: p.args,
+              cwd: terminalCwd,
+              env: p.env,
+            });
+            await callbacks.onEvent({ type: 'terminal_created', terminalId, command: p.command });
+            return Promise.resolve({ terminalId });
+          },
+          async 'terminal/release'(p: { terminalId: string }) {
+            logger.debug(`Terminal release requested for ${p.terminalId}`);
+            activeTerminalManager.release(p.terminalId);
+            return Promise.resolve({});
+          },
+          async 'terminal/output'(p: { terminalId: string }) {
+            logger.debug(`Terminal output requested for ${p.terminalId}`);
+            const term = activeTerminalManager.getTerminal(p.terminalId);
+            if (!term) {
+              return Promise.reject(new Error(`Terminal not found: ${p.terminalId}`));
+            }
+            const exitStatus = term.hasExited
+              ? { exitCode: term.exitCode, signal: term.signal }
+              : undefined;
+            return Promise.resolve({
+              output: term.output,
+              truncated: false,
+              ...(exitStatus ? { exitStatus } : {}),
+            });
+          },
+          async 'terminal/wait_for_exit'(p: { terminalId: string }) {
+            logger.debug(`Terminal wait_for_exit requested for ${p.terminalId}`);
+            const term = activeTerminalManager.getTerminal(p.terminalId);
+            if (!term) {
+              return Promise.reject(new Error(`Terminal not found: ${p.terminalId}`));
+            }
+            const res = await term.closed;
+            return Promise.resolve({
+              exitCode: res.exitCode,
+              signal: res.signal,
+            });
+          },
+          async 'terminal/kill'(p: { terminalId: string }) {
+            logger.debug(`Terminal kill requested for ${p.terminalId}`);
+            activeTerminalManager.kill(p.terminalId);
+            return Promise.resolve({});
+          },
+          async 'terminal/write'(p: { terminalId: string; data: string }) {
+            logger.debug(`Terminal write requested for ${p.terminalId}`);
+            const ok = activeTerminalManager.write(p.terminalId, p.data);
+            if (!ok) {
+              return Promise.reject(new Error(`Failed to write to terminal ${p.terminalId}`));
+            }
+            return Promise.resolve({});
+          },
+          async 'builtin/bash'(p: {
+            command: string;
+            args?: string[];
+            pty?: boolean;
+            input?: string;
+            cwd?: string;
+          }) {
+            const resolvedCwd = p.cwd
+              ? path.isAbsolute(p.cwd)
+                ? p.cwd
+                : path.resolve(options.cwd, p.cwd)
+              : options.cwd;
+            logger.debug(`builtin/bash: ${p.command} in ${resolvedCwd} (pty: ${String(p.pty)})`);
+            const terminalId = activeTerminalManager.spawn({
+              command: p.command,
+              args: p.args,
+              cwd: resolvedCwd,
+            });
+            if (p.input) {
+              activeTerminalManager.write(terminalId, p.input);
+            }
+            if (!p.pty) {
+              const result = await activeTerminalManager.wait(terminalId);
+              const term = activeTerminalManager.getTerminal(terminalId);
+              return {
+                output: term?.output ?? '',
+                exitCode: result?.exitCode,
+              };
+            }
+            // pty mode: return terminalId immediately, output streams via events, input via HTTP
+            return {
+              terminalId,
+              output: '',
+              exitCode: null,
+            };
+          },
+        };
 
-    terminalManager.on('output', (event) => {
-      const { terminalId, data } = event as { terminalId: string; data: string };
-      const conn = connection as unknown as { notification: (p: unknown) => void };
-      conn.notification({
-        method: 'terminal/output',
-        params: { terminalId, data },
+        return new Proxy(handlers, {
+          get(target, prop, receiver) {
+            if (
+              typeof prop === 'string' &&
+              (prop.startsWith('_') ||
+                prop.includes('.') ||
+                prop.includes('/') ||
+                prop.includes('__'))
+            ) {
+              const canonical = typeof prop === 'string' ? prop.replace(/\./g, '/') : prop;
+              if (canonical in target) {
+                return Reflect.get(target, canonical, receiver);
+              }
+              if (!(prop in target)) {
+                if (prop.includes('__') && options.mcpGateway) {
+                  const parts = prop.split('__');
+                  const serverId = parts[0];
+                  const toolName = parts.slice(1).join('__');
+                  const mcpGateway = options.mcpGateway;
+                  return async (params: unknown) => {
+                    try {
+                      logger.info(
+                        { serverId, toolName, params },
+                        `Routing tool call to client-side MCP gateway`,
+                      );
+                      const args =
+                        typeof params === 'object' && params !== null
+                          ? (params as Record<string, unknown>)
+                          : {};
+                      const result = await mcpGateway.callTool(serverId, toolName, args);
+                      return result;
+                    } catch (err: unknown) {
+                      logger.error(err, `Failed to execute client-side MCP tool: ${prop}`);
+                      throw err;
+                    }
+                  };
+                }
+                return (params: unknown) => {
+                  logger.debug({ params }, `Generic handler for ${prop}`);
+                  return Promise.resolve({});
+                };
+              }
+            }
+            return Reflect.get(target, prop, receiver) as unknown;
+          },
+        }) as unknown as Client;
+      }, stream);
+    }
+
+    if (!isPersistent && terminalManager) {
+      terminalManager.on('output', (event) => {
+        const { terminalId, data } = event as { terminalId: string; data: string };
+        const conn = connection as unknown as { notification: (p: unknown) => void };
+        conn.notification({
+          method: 'terminal/output',
+          params: { terminalId, data },
+        });
+        void callbacks.onEvent({ type: 'terminal_output', terminalId, data });
       });
-      void callbacks.onEvent({ type: 'terminal_output', terminalId, data });
-    });
 
-    terminalManager.on('exit', (event) => {
-      const { terminalId, code } = event as { terminalId: string; code: number | null };
-      const conn = connection as unknown as { notification: (p: unknown) => void };
-      conn.notification({
-        method: 'terminal/exit',
-        params: { terminalId, code },
+      terminalManager.on('exit', (event) => {
+        const { terminalId, code } = event as { terminalId: string; code: number | null };
+        const conn = connection as unknown as { notification: (p: unknown) => void };
+        conn.notification({
+          method: 'terminal/exit',
+          params: { terminalId, code },
+        });
+        void callbacks.onEvent({ type: 'terminal_exit', terminalId, code });
       });
-      void callbacks.onEvent({ type: 'terminal_exit', terminalId, code });
-    });
+    }
 
+    let supportsResumeSession = false;
     let supportsCloseSession = false;
     let supportsDeleteSession = false;
     let supportsListSessions = false;
+    let supportsAdditionalDirectories = false;
+    let supportsLoadSession = false;
 
     const handle: AgentRuntimeHandle = {
       acpSessionId: null,
@@ -1034,19 +1101,27 @@ export class DefaultAgentRuntime implements AgentRuntime {
         }
       },
       async stop(): Promise<void> {
-        if (supportsCloseSession && this.acpSessionId) {
-          try {
-            await withTimeout(
-              connection.closeSession({ sessionId: this.acpSessionId }),
-              2000,
-              'closing ACP session',
-            );
-          } catch {
-            // Ignore error on close, we still want to kill the process
+        if (this.acpSessionId) {
+          if (isPersistent && self.connectionManager) {
+            await self.connectionManager.closeSession(providerId, this.acpSessionId);
+          } else if (supportsCloseSession) {
+            try {
+              await withTimeout(
+                connection.closeSession({ sessionId: this.acpSessionId }),
+                2000,
+                'closing ACP session',
+              );
+            } catch {
+              // Ignore error on close, we still want to kill the process
+            }
           }
         }
-        transport.kill();
-        await terminalManager.dispose();
+        if (!isPersistent) {
+          transport.kill();
+          if (terminalManager) {
+            await terminalManager.dispose();
+          }
+        }
       },
       async updateModel(modelId: string): Promise<void> {
         if (this.acpSessionId) {
@@ -1098,49 +1173,58 @@ export class DefaultAgentRuntime implements AgentRuntime {
         await connection.unstable_logout({});
       },
       writeTerminalInput(terminalId: string, data: string): boolean {
-        return terminalManager.write(terminalId, data);
+        if (isPersistent && self.connectionManager) {
+          return self.connectionManager.writeTerminalInput(terminalId, data);
+        }
+        return terminalManager ? terminalManager.write(terminalId, data) : false;
       },
     };
 
     try {
-      const initResult = await withTimeout(
-        Promise.race([
-          connection.initialize({
-            protocolVersion: 1,
-            clientCapabilities: {
-              terminal: true,
-              fs: {
-                readTextFile: true,
-                writeTextFile: true,
+      if (isPersistent && self.connectionManager) {
+        const persistentConn = await self.connectionManager.getConnection(providerId);
+        supportsResumeSession = !!persistentConn.supportsResumeSession;
+        supportsCloseSession = !!persistentConn.supportsCloseSession;
+        supportsDeleteSession = !!persistentConn.supportsDeleteSession;
+        supportsListSessions = !!persistentConn.supportsListSessions;
+        supportsAdditionalDirectories = !!persistentConn.supportsAdditionalDirectories;
+        supportsLoadSession = !!persistentConn.supportsResumeSession;
+      } else {
+        const initResult = await withTimeout(
+          Promise.race([
+            connection.initialize({
+              protocolVersion: 1,
+              clientCapabilities: {
+                terminal: true,
+                fs: {
+                  readTextFile: true,
+                  writeTextFile: true,
+                },
+                _meta: {
+                  builtin: { bash: true },
+                },
               },
-              _meta: {
-                builtin: { bash: true },
-              },
-            },
-            clientInfo: { name: 'agentctl', title: 'Agentctl', version: '1.0.0' },
-          }),
-          transport.closed.then(() => {
-            throw new Error('ACP agent process exited before initialization completed');
-          }),
-        ]),
-        60_000,
-        'initializing ACP connection',
-      );
+              clientInfo: { name: 'agentctl', title: 'Agentctl', version: '1.0.0' },
+            }),
+            transport.closed.then(() => {
+              throw new Error('ACP agent process exited before initialization completed');
+            }),
+          ]),
+          60_000,
+          'initializing ACP connection',
+        );
 
-      const agentCapabilities = initResult.agentCapabilities;
-      const sessionCaps = agentCapabilities?.sessionCapabilities;
-      const supportsResumeSession = !!sessionCaps?.resume;
-      supportsCloseSession = !!sessionCaps?.close;
-      supportsDeleteSession = sessionSupportsDelete(sessionCaps);
-      supportsListSessions = !!sessionCaps?.list;
-      const supportsAdditionalDirectories = !!sessionCaps?.additionalDirectories;
-
-      const supportsLoadSession = !!agentCapabilities?.loadSession;
+        const agentCapabilities = initResult.agentCapabilities;
+        const sessionCaps = agentCapabilities?.sessionCapabilities;
+        supportsResumeSession = !!sessionCaps?.resume;
+        supportsCloseSession = !!sessionCaps?.close;
+        supportsDeleteSession = sessionSupportsDelete(sessionCaps);
+        supportsListSessions = !!sessionCaps?.list;
+        supportsAdditionalDirectories = !!sessionCaps?.additionalDirectories;
+        supportsLoadSession = !!agentCapabilities?.loadSession;
+      }
       let newSessionResult:
-        | NewSessionResponse
-        | ResumeSessionResponse
-        | LoadSessionResponse
-        | null = null;
+        NewSessionResponse | ResumeSessionResponse | LoadSessionResponse | null = null;
       let acpSessionId: string | null = null;
 
       const baseSessionParams = {
@@ -1277,6 +1361,15 @@ export class DefaultAgentRuntime implements AgentRuntime {
             );
           }
         }
+      }
+
+      if (isPersistent && finalSessionId && self.connectionManager) {
+        self.connectionManager.registerActiveSession(finalSessionId, {
+          acpSessionId: finalSessionId,
+          localSessionId: options.existingAgentSessionId ?? '',
+          options,
+          callbacks,
+        });
       }
 
       return handle;
@@ -1556,4 +1649,53 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
     return { readable: loggedReadable, writable: loggedWritable };
   }
+}
+
+export function resolveAllowedPath(
+  requestedPath: string,
+  cwd: string,
+  additionalDirectories: string[] = [],
+  _allowWrite = false,
+): string {
+  const resolved = path.isAbsolute(requestedPath)
+    ? requestedPath
+    : path.resolve(cwd, requestedPath);
+
+  const canonical = fs.existsSync(resolved) ? fs.realpathSync(resolved) : path.normalize(resolved);
+  const roots = [fs.realpathSync(cwd), ...additionalDirectories.map((d) => fs.realpathSync(d))];
+
+  const isWithin = roots.some((root) => {
+    const rel = path.relative(root, canonical);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  });
+
+  if (!isWithin) {
+    throw new Error(
+      `Directory traversal detected: path "${requestedPath}" is outside allowed roots.`,
+    );
+  }
+
+  return canonical;
+}
+
+export class AcpDebugLog {
+  private logs: { timestamp: Date; type: 'incoming' | 'outgoing' | 'stderr'; line: string }[] = [];
+
+  recordLine(type: 'incoming' | 'outgoing' | 'stderr', line: string): void {
+    this.logs.push({ timestamp: new Date(), type, line });
+  }
+
+  getLogs() {
+    return this.logs;
+  }
+}
+
+export function sessionSupportsClose(caps: unknown): boolean {
+  if (!caps || typeof caps !== 'object') return false;
+  return Boolean((caps as { close?: unknown }).close);
+}
+
+export function sessionSupportsResume(caps: unknown): boolean {
+  if (!caps || typeof caps !== 'object') return false;
+  return Boolean((caps as { resume?: unknown }).resume);
 }

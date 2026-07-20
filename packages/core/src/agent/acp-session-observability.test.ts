@@ -24,6 +24,7 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
       worktreePath: '/tmp/proj-obs',
       taskSlug: 'test-obs',
       agent: 'claude-acp',
+      selectedProvider: 'claude-acp',
       baseCommit: 'hash',
     });
 

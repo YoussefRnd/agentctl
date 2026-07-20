@@ -46,6 +46,9 @@ export class SessionManager {
     private runtime: AgentRuntime = new DefaultAgentRuntime(spawn, logger),
     private mcpGateway?: McpGateway,
   ) {
+    if (this.runtime instanceof DefaultAgentRuntime) {
+      this.runtime.setConnectionManager(this.providerRegistry.getConnectionManager());
+    }
     this.eventStore = new SessionEventStore(db, eventBus);
     this.stateMachine = new SessionStateMachine(
       db,
@@ -94,7 +97,7 @@ export class SessionManager {
     const { projectId, providerId, taskSlug, mode } = params;
 
     const settings = this.providerRegistry.getSettings();
-    const resolvedProviderId = providerId ?? settings.defaultProviderId;
+    const resolvedProviderId = providerId ?? settings.defaultProviderId ?? undefined;
 
     if (!resolvedProviderId) {
       throw new Error(
@@ -193,8 +196,7 @@ export class SessionManager {
         if (parsed && typeof parsed === 'object') {
           resolvedAgentSessionId =
             ((parsed as Record<string, unknown>)[sessionRecord.selectedProvider] as
-              | string
-              | undefined) ?? null;
+              string | undefined) ?? null;
         }
       } catch {
         resolvedAgentSessionId = sessionRecord.agentSessionId;
@@ -367,83 +369,119 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    const providerIdChanged = sessionRecord.selectedProvider !== params.selectedProvider;
-
+    // Resolve and negotiate before mutating persisted state. In particular, a
+    // provider requiring authentication is not ready for a live switch.
     const provider = await this.providerRegistry.ensureProviderReady(params.selectedProvider, {
       force: false,
     });
+    if (!provider.isReady && !provider.needsAuth) {
+      throw new Error(`Selected agent is not ready: ${params.selectedProvider}`);
+    }
 
-    const newConfigOptions = this.buildInitialConfigOptions(
-      provider.toDiscovery().configOptions ?? [],
+    const selection = negotiateCapabilities(
+      provider,
       params.selectedModel,
       params.selectedThinkingEffort,
     );
-
-    await this.db
-      .update(sessions)
-      .set({
-        selectedProvider: params.selectedProvider,
-        selectedModel: params.selectedModel,
-        selectedThinkingEffort: params.selectedThinkingEffort,
-        agent: params.selectedProvider,
-        contextLimit: 0,
-        availableCommands: '[]',
-        sessionConfigOptions: JSON.stringify(newConfigOptions),
-      })
-      .where(eq(sessions.id, sessionId));
-
-    if (!provider.isReady && !provider.needsAuth) {
-      return null;
+    if (!selection.selectedModel.trim()) {
+      throw new Error(`Provider ${params.selectedProvider} did not negotiate a model`);
     }
 
+    const configOptions = provider.toDiscovery().configOptions ?? [];
+    const newConfigOptions = this.buildInitialConfigOptions(
+      configOptions,
+      selection.selectedModel,
+      selection.selectedThinkingEffort,
+    );
+    const providerIdChanged = sessionRecord.selectedProvider !== params.selectedProvider;
+    const modelChanged = selection.selectedModel !== sessionRecord.selectedModel;
+    const effortChanged = selection.selectedThinkingEffort !== sessionRecord.selectedThinkingEffort;
     const activeSession = this.stateMachine.getSession(sessionId);
 
+    const persistSelection = async (): Promise<void> => {
+      await this.db
+        .update(sessions)
+        .set({
+          selectedProvider: params.selectedProvider,
+          selectedModel: selection.selectedModel,
+          selectedThinkingEffort: selection.selectedThinkingEffort,
+          agent: params.selectedProvider,
+          contextLimit: 0,
+          availableCommands: '[]',
+          sessionConfigOptions: JSON.stringify(newConfigOptions),
+          updatedAt: new Date(),
+        })
+        .where(eq(sessions.id, sessionId));
+    };
+
+    const rollbackSelection = async (): Promise<void> => {
+      await this.db
+        .update(sessions)
+        .set({
+          selectedProvider: sessionRecord.selectedProvider,
+          selectedModel: sessionRecord.selectedModel,
+          selectedThinkingEffort: sessionRecord.selectedThinkingEffort,
+          agent: sessionRecord.agent,
+          contextLimit: sessionRecord.contextLimit,
+          availableCommands: sessionRecord.availableCommands,
+          sessionConfigOptions: sessionRecord.sessionConfigOptions,
+          updatedAt: sessionRecord.updatedAt,
+        })
+        .where(eq(sessions.id, sessionId));
+    };
+
     if (activeSession && !activeSession.isDead && !providerIdChanged) {
-      const supportsDynamicModel = provider.supportsDynamicModel;
-      const supportsDynamicConfig = provider.supportsDynamicConfig;
+      const needsModelRestart = modelChanged && !selection.supportsDynamicModel;
+      const needsEffortRestart = effortChanged && !selection.supportsDynamicConfig;
 
-      if (supportsDynamicModel && params.selectedModel !== sessionRecord.selectedModel) {
-        await activeSession.updateModel(params.selectedModel);
-      }
-
-      if (
-        supportsDynamicConfig &&
-        params.selectedThinkingEffort !== sessionRecord.selectedThinkingEffort
-      ) {
-        const configOptions = provider.toDiscovery().configOptions ?? [];
+      if (!needsModelRestart && !needsEffortRestart) {
         const thinkingOption = configOptions.find(
           (opt) =>
             opt.id === 'thinking' ||
             opt.id === 'thinking_effort' ||
             opt.id === 'selectedThinkingEffort',
         );
-        if (thinkingOption) {
-          try {
+        let modelWasUpdated = false;
+        let effortWasUpdated = false;
+        try {
+          if (modelChanged) {
+            await activeSession.updateModel(selection.selectedModel);
+            modelWasUpdated = true;
+          }
+          if (effortChanged) {
+            if (!thinkingOption) {
+              throw new Error('Provider did not advertise a thinking-effort option');
+            }
             await activeSession.updateConfigOption(
               thinkingOption.id,
-              params.selectedThinkingEffort,
+              selection.selectedThinkingEffort,
             );
-          } catch (configErr) {
-            this.logger.warn(
-              configErr,
-              `Failed to dynamically update thinking effort (configId: ${thinkingOption.id})`,
-            );
+            effortWasUpdated = true;
           }
+          await persistSelection();
+          return activeSession;
+        } catch (error) {
+          // Best-effort runtime rollback; persisted state has not changed yet.
+          if (effortWasUpdated && thinkingOption) {
+            await activeSession
+              .updateConfigOption(thinkingOption.id, sessionRecord.selectedThinkingEffort)
+              .catch(() => undefined);
+          }
+          if (modelWasUpdated) {
+            await activeSession.updateModel(sessionRecord.selectedModel).catch(() => undefined);
+          }
+          throw error;
         }
-      }
-
-      const modelChanged = params.selectedModel !== sessionRecord.selectedModel;
-      const effortChanged = params.selectedThinkingEffort !== sessionRecord.selectedThinkingEffort;
-
-      const needsModelRestart = modelChanged && !supportsDynamicModel;
-      const needsEffortRestart = effortChanged && !supportsDynamicConfig;
-
-      if (!needsModelRestart && !needsEffortRestart) {
-        return activeSession;
       }
     }
 
-    return this.restartSession(sessionId);
+    await persistSelection();
+    try {
+      return await this.restartSession(sessionId);
+    } catch (error) {
+      await rollbackSelection();
+      throw error;
+    }
   }
 
   async switchMode(sessionId: string, newMode: SessionMode): Promise<ACPSession | null> {
@@ -623,9 +661,45 @@ export class SessionManager {
 
   async setConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
     const session = this.stateMachine.getSession(sessionId);
-    if (session && !session.isDead) {
-      await session.updateConfigOption(configId, value);
+    if (!session || session.isDead) {
+      throw new Error(`Session is not active: ${sessionId}`);
     }
+
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+    });
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    let advertisedOptions: ACPConfigOption[];
+    try {
+      advertisedOptions = JSON.parse(sessionRecord.sessionConfigOptions) as ACPConfigOption[];
+    } catch {
+      throw new Error(`Session ${sessionId} has invalid advertised config options`);
+    }
+    const option = advertisedOptions.find((candidate) => candidate.id === configId);
+    if (!option) {
+      throw new Error(`Config option is not advertised for this session: ${configId}`);
+    }
+    if (!option.options.some((candidate) => candidate.value === value)) {
+      throw new Error(`Invalid value for config option ${configId}: ${value}`);
+    }
+
+    const provider = await this.providerRegistry.ensureProviderReady(
+      sessionRecord.selectedProvider,
+      { force: false },
+    );
+    if (!provider.isReady && !provider.needsAuth) {
+      throw new Error(`Selected agent is not ready: ${sessionRecord.selectedProvider}`);
+    }
+
+    const isModelOption = configId === 'model' || configId === 'selectedModel';
+    if (isModelOption && !provider.supportsDynamicModel) {
+      throw new Error(`Provider does not support dynamic config option: ${configId}`);
+    }
+
+    await session.updateConfigOption(configId, value);
   }
 
   async handleClientMessage(
@@ -698,7 +772,31 @@ export class SessionManager {
   }
 
   async setAgentPersona(sessionId: string, persona: string) {
-    // Update DB
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+    });
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    let availablePersonas: string[];
+    try {
+      const parsed = JSON.parse(sessionRecord.availableAgentPersonas) as unknown;
+      availablePersonas = Array.isArray(parsed)
+        ? parsed.filter((value): value is string => typeof value === 'string')
+        : [];
+    } catch {
+      availablePersonas = [];
+    }
+    if (!availablePersonas.includes(persona)) {
+      throw new Error(`Agent persona is not available for this session: ${persona}`);
+    }
+
+    const session = this.stateMachine.getSession(sessionId);
+    if (session && !session.isDead) {
+      await session.setMode(persona);
+    }
+
     await this.db
       .update(sessions)
       .set({
@@ -706,12 +804,6 @@ export class SessionManager {
         updatedAt: new Date(),
       })
       .where(eq(sessions.id, sessionId));
-
-    // Notify agent if running
-    const session = this.stateMachine.getSession(sessionId);
-    if (session && !session.isDead) {
-      await session.setMode(persona);
-    }
   }
 
   async updateApprovalMode(sessionId: string, approvalMode: string) {
@@ -728,11 +820,7 @@ export class SessionManager {
       })
       .where(eq(sessions.id, sessionId));
 
-    // Notify agent if running
-    const session = this.stateMachine.getSession(sessionId);
-    if (session && !session.isDead) {
-      await session.setMode(validMode);
-    }
+    // Approval mode is a local policy and must never be sent through ACP setMode.
   }
 
   async rewindSession(
@@ -753,7 +841,7 @@ export class SessionManager {
       throw new Error('Cannot rewind a running session. Wait for the agent to finish.');
     }
 
-    const event = await this.eventStore.getEventWithMetadata(eventId);
+    const event = await this.eventStore.getEventWithMetadata(sessionId, eventId);
     if (!event) {
       throw new Error(`Event not found: ${String(eventId)}`);
     }

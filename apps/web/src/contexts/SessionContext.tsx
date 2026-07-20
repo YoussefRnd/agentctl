@@ -200,6 +200,8 @@ export function SessionStreamProvider({
     const isIdle = sessionData?.session.status === 'idle';
     if (isIdle && queuedMessages.length > 0) {
       const nextMessage = queuedMessages[0];
+      // Dequeue message synchronously to prevent concurrent re-triggers
+      setQueuedMessages((prev) => prev.filter((m) => m.id !== nextMessage.id));
       void api
         .sendInput({
           params: { id: sessionId },
@@ -210,8 +212,9 @@ export function SessionStreamProvider({
               : {}),
           },
         })
-        .finally(() => {
-          setQueuedMessages((prev) => prev.filter((m) => m.id !== nextMessage.id));
+        .catch((err: unknown) => {
+          // eslint-disable-next-line no-console
+          console.error('Failed to send queued message:', err);
         });
     }
   }, [sessionData?.session.status, queuedMessages, sessionId]);

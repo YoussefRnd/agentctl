@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { sessions, acpEvents, providers, mcpServers } from '../db/schema.js';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import type { createDatabase } from '../db/index.js';
 import { type Logger, noopLogger } from '../logger.js';
 import type { SessionEventStore } from './session-event-store.js';
@@ -122,11 +122,7 @@ export class ACPSession {
       }
     };
 
-    // 1. Read global skills
-    const globalPath = path.join(os.homedir(), '.gemini', 'config');
-    readSkillsFromBase(globalPath);
-
-    // 2. Read workspace skills
+    // Read workspace skills from .agents directory
     const workspacePath = path.join(cwd, '.agents');
     readSkillsFromBase(workspacePath);
 
@@ -327,27 +323,23 @@ export class ACPSession {
             ? await this.db
                 .select()
                 .from(acpEvents)
-                .where(eq(acpEvents.sessionId, this.sessionId))
+                .where(and(eq(acpEvents.sessionId, this.sessionId), eq(acpEvents.type, 'text')))
                 .orderBy(asc(acpEvents.id))
             : [];
 
         const textEvents: { content: string; role?: string }[] = [];
         for (const e of pastEvents) {
-          if (e.type === 'text') {
-            try {
-              const parsed = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as
-                | Record<string, unknown>
-                | null
-                | undefined;
-              if (parsed && typeof parsed.content === 'string') {
-                textEvents.push({
-                  content: parsed.content,
-                  role: typeof parsed.role === 'string' ? parsed.role : undefined,
-                });
-              }
-            } catch {
-              // ignore
+          try {
+            const parsed = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as
+              Record<string, unknown> | null | undefined;
+            if (parsed && typeof parsed.content === 'string') {
+              textEvents.push({
+                content: parsed.content,
+                role: typeof parsed.role === 'string' ? parsed.role : undefined,
+              });
             }
+          } catch {
+            // ignore
           }
         }
 

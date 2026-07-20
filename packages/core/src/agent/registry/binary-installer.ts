@@ -235,8 +235,7 @@ export class BinaryInstaller {
         );
         await extractArchive(tempFile, stagingDir);
 
-        const binaryPath = path.resolve(stagingDir, target.cmd);
-        const actualHash = await computeSha256(binaryPath);
+        const actualHash = await computeSha256(tempFile);
         const expected = target.sha256 ?? (await resolveGitHubSha256(archiveUrl, logger));
         if (expected && expected.toLowerCase() !== actualHash.toLowerCase()) {
           throw new Error(

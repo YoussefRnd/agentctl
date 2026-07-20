@@ -69,6 +69,18 @@ export function ProviderPicker({
     return values;
   }, [activeProvider, envKeys, localCustomEnvs]);
 
+  useEffect(() => {
+    if (!isOpen || !activeProvider) return;
+    if (activeProvider.installState === 'not_installed') return;
+    if (activeProvider.authState === 'needs_auth') return;
+    if (!activeProvider.supportsDynamicModel) return;
+    const hasModelOption = (activeProvider.configOptions ?? []).some(
+      (opt) => opt.id === 'model' || opt.id === 'selectedModel',
+    );
+    if (hasModelOption) return;
+    refreshProvider(activeProvider.id);
+  }, [isOpen, activeProvider, refreshProvider]);
+
   const models = useMemo(() => {
     if (!activeProvider) return [];
 
@@ -93,7 +105,10 @@ export function ProviderPicker({
     const keysChanged = envKeys.some((k) => keysValues[k] !== (activeProvider.customEnv[k] ?? ''));
 
     const proceed = () => {
-      if (activeProvider.installState === 'not_installed' || (activeProvider.authState !== 'authenticated' && activeProvider.authState !== 'needs_auth')) {
+      if (
+        activeProvider.installState === 'not_installed' ||
+        (activeProvider.authState !== 'authenticated' && activeProvider.authState !== 'needs_auth')
+      ) {
         activate(activeProvider.id, {
           onSuccess: () => {
             onSelect(activeProvider.id);
@@ -105,8 +120,9 @@ export function ProviderPicker({
     };
 
     if (hasKeys && keysChanged) {
+      const updates = localCustomEnvs[activeProvider.id] ?? {};
       updateProviderConfig(
-        { providerId: activeProvider.id, customEnv: keysValues },
+        { providerId: activeProvider.id, customEnv: updates },
         {
           onSuccess: () => {
             proceed();
@@ -148,7 +164,7 @@ export function ProviderPicker({
             onClick={() => {
               refreshProvider(activeProvider.id);
             }}
-            disabled={isRefreshing}
+            disabled={isRefreshing || activeProvider.authState === 'needs_auth'}
             className="text-text-muted hover:text-text-main hover:bg-text-main/5 rounded-lg p-1.5 transition-colors disabled:opacity-30"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -156,7 +172,8 @@ export function ProviderPicker({
         </div>
 
         <div className="h-[280px] space-y-1 overflow-y-auto p-1.5">
-          {activeProvider.authState === 'needs_auth' || activeProvider.installState === 'not_installed' ? (
+          {activeProvider.authState === 'needs_auth' ||
+          activeProvider.installState === 'not_installed' ? (
             <ProviderSetupPanel
               activeProvider={activeProvider}
               envKeys={envKeys}
@@ -167,6 +184,7 @@ export function ProviderPicker({
               isLoggingIn={isLoggingIn}
               login={login}
               handleSaveAndConnect={handleSaveAndConnect}
+              onSelect={onSelect}
             />
           ) : models.length === 0 ? (
             <div className="p-2">
@@ -180,9 +198,7 @@ export function ProviderPicker({
                 <div className="text-text-main text-[11px] font-black tracking-wider uppercase">
                   {activeProvider.label}
                 </div>
-                <div className="text-text-muted caption-3xs">
-                  DEFAULT CONFIG
-                </div>
+                <div className="text-text-muted caption-3xs">DEFAULT CONFIG</div>
               </button>
             </div>
           ) : (
@@ -242,32 +258,32 @@ function ProviderSidebar({
       {providers
         .filter((p) => p.installState !== 'not_installed')
         .map((p) => {
-        const isSelected = p.id === internalProviderId;
-        const needsAuth = p.authState === 'needs_auth';
+          const isSelected = p.id === internalProviderId;
+          const needsAuth = p.authState === 'needs_auth';
 
-        return (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => {
-              setInternalProviderIdOverride(p.id);
-              setSearch('');
-            }}
-            title={p.label}
-            aria-label={p.label}
-            className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
-              isSelected
-                ? 'bg-accent/15 border-accent/30 text-accent'
-                : 'text-text-muted hover:bg-text-main/5 hover:text-text-main border-transparent'
-            }`}
-          >
-            <ProviderIcon provider={p} size="sm" className="bg-transparent border-none" />
-            {needsAuth && !isSelected && (
-              <div className="bg-warning status-glow absolute top-0 right-0 h-1.5 w-1.5 rounded-full" />
-            )}
-          </button>
-        );
-      })}
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => {
+                setInternalProviderIdOverride(p.id);
+                setSearch('');
+              }}
+              title={p.label}
+              aria-label={p.label}
+              className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
+                isSelected
+                  ? 'bg-accent/15 border-accent/30 text-accent'
+                  : 'text-text-muted hover:bg-text-main/5 hover:text-text-main border-transparent'
+              }`}
+            >
+              <ProviderIcon provider={p} size="sm" className="border-none bg-transparent" />
+              {needsAuth && !isSelected && (
+                <div className="bg-warning status-glow absolute top-0 right-0 h-1.5 w-1.5 rounded-full" />
+              )}
+            </button>
+          );
+        })}
     </div>
   );
 }
@@ -284,6 +300,7 @@ interface ProviderSetupPanelProps {
   isLoggingIn: boolean;
   login: (args: { providerId: string; methodId: string }) => void;
   handleSaveAndConnect: () => void;
+  onSelect: (providerId: string, modelId?: string) => void;
 }
 
 function ProviderSetupPanel({
@@ -296,39 +313,49 @@ function ProviderSetupPanel({
   isLoggingIn,
   login,
   handleSaveAndConnect,
+  onSelect,
 }: ProviderSetupPanelProps) {
+  const getKeyError = (key: string): string | null => {
+    const localProviderEnv = localCustomEnvs[activeProvider.id];
+    const hasLocalValue = Boolean(localProviderEnv && key in localProviderEnv);
+    if (hasLocalValue) {
+      return validateApiKey(key, keysValues[key] || '');
+    }
+    if (activeProvider.customEnvConfigured[key]) return null;
+    return validateApiKey(key, keysValues[key] || '');
+  };
+
   return (
     <div className="flex h-full flex-col items-center justify-center p-4 text-center">
       <h3 className="text-text-main mb-1 text-[11px] font-black tracking-wider uppercase">
-        {activeProvider.installState === 'not_installed' ? 'Setup Required' : 'Authentication Required'}
+        {activeProvider.installState === 'not_installed'
+          ? 'Setup Required'
+          : 'Authentication Required'}
       </h3>
-      <p className="text-text-muted mb-4 max-w-[240px] caption-2xs">
+      <p className="text-text-muted caption-2xs mb-4 max-w-[240px]">
         Configure and enable {activeProvider.label}.
       </p>
 
       <div className="flex w-full max-w-[240px] flex-col gap-3 text-left">
         {envKeys.map((key) => {
-          const errorMsg = validateApiKey(key, keysValues[key] || '');
+          const errorMsg = getKeyError(key);
           return (
             <div key={key} className="space-y-1.5">
               <div className="flex items-baseline justify-between">
-                <label
-                  htmlFor={key}
-                  className="text-text-muted label-3xs"
-                >
+                <label htmlFor={key} className="text-text-muted label-3xs">
                   {key}
                 </label>
-                {errorMsg && (
-                  <span className="text-danger caption-3xs">
-                    {errorMsg}
-                  </span>
-                )}
+                {errorMsg && <span className="text-danger caption-3xs">{errorMsg}</span>}
               </div>
               <input
                 id={key}
                 type="password"
                 value={keysValues[key] || ''}
-                placeholder={`Enter ${key}...`}
+                placeholder={
+                  activeProvider.customEnvConfigured[key]
+                    ? 'Configured (enter to replace)'
+                    : `Enter ${key}...`
+                }
                 onChange={(e) => {
                   setLocalCustomEnvs({
                     ...localCustomEnvs,
@@ -344,11 +371,21 @@ function ProviderSetupPanel({
           );
         })}
 
+        {activeProvider.installState !== 'not_installed' && (
+          <button
+            type="button"
+            onClick={() => {
+              onSelect(activeProvider.id);
+            }}
+            className="border-border/30 text-text-muted hover:bg-text-main/5 hover:text-text-main flex h-8 w-full items-center justify-center rounded-lg border text-center text-[10px] font-bold tracking-wider uppercase transition-all"
+          >
+            Select Provider anyway
+          </button>
+        )}
+
         {activeProvider.authMethods.length > 0 && (
           <div className="mt-2 space-y-1.5">
-            <span className="text-text-muted label-3xs">
-              Auth Methods
-            </span>
+            <span className="text-text-muted label-3xs">Auth Methods</span>
             {activeProvider.authMethods.map((method) => (
               <button
                 key={method.id}
@@ -368,9 +405,7 @@ function ProviderSetupPanel({
         <button
           type="button"
           onClick={handleSaveAndConnect}
-          disabled={
-            isPending || envKeys.some((key) => validateApiKey(key, keysValues[key] || '') !== null)
-          }
+          disabled={isPending || envKeys.some((key) => getKeyError(key) !== null)}
           className="bg-accent text-brand-crust mt-2 flex h-8 w-full items-center justify-center rounded-lg text-center text-[10px] font-bold tracking-wider uppercase transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
         >
           {isPending ? 'CONNECTING...' : 'SAVE AND CONNECT'}

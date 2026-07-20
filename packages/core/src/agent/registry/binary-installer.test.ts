@@ -120,7 +120,7 @@ describe('BinaryInstaller.install staging + atomic swap', () => {
     fs.mkdirSync(work, { recursive: true });
     const content = 'binary-bytes';
     const archive = makeTarGzFixture(work, 'mybin', content);
-    const sha = crypto.createHash('sha256').update(content).digest('hex');
+    const sha = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
 
     const agent: RegistryAgent = {
       id: 'myagent',

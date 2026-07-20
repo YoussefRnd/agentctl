@@ -144,6 +144,7 @@ describe('SSE stream & Client actions REST API endpoints', () => {
       worktreePath: '/tmp/worktree-1',
       taskSlug: 'task-1',
       agent: 'claude-acp',
+      selectedProvider: 'claude-acp',
       baseCommit: 'none',
     });
 
@@ -231,6 +232,7 @@ describe('SSE stream & Client actions REST API endpoints', () => {
       worktreePath: '/tmp/worktree-1',
       taskSlug: 'task-1',
       agent: 'claude-acp',
+      selectedProvider: 'claude-acp',
       baseCommit: 'none',
     });
 

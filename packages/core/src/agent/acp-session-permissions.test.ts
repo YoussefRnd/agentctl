@@ -29,6 +29,7 @@ describe('MCP Permissions Routing', () => {
       worktreePath: '/tmp/proj',
       taskSlug: 'test',
       agent: 'test',
+      selectedProvider: 'test',
       baseCommit: 'hash',
       approvalMode: 'auto_approve',
     });
@@ -76,7 +77,16 @@ describe('MCP Permissions Routing', () => {
       },
     } as unknown as AgentRuntimeHandle;
 
-    const session = new ACPSession('sess-p', runtimeHandle, db, eventStore, '/tmp/proj', undefined, undefined, gateway);
+    const session = new ACPSession(
+      'sess-p',
+      runtimeHandle,
+      db,
+      eventStore,
+      '/tmp/proj',
+      undefined,
+      undefined,
+      gateway,
+    );
 
     // 1. Check Tool-Level Auto-Approve Override
     const resSafe = await session.handleRequestPermission({

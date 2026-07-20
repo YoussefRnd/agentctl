@@ -78,7 +78,7 @@ describe('SessionEventStore', () => {
       const eventBus = { publish: vi.fn() } as unknown as IEventBus;
       const store = new SessionEventStore(mockDb, eventBus);
 
-      const event = await store.getEventWithMetadata(1);
+      const event = await store.getEventWithMetadata('session-1', 1);
       expect(event?.metadata).toEqual({ snapshotHash: 'abc123' });
     });
   });

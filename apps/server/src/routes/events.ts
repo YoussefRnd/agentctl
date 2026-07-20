@@ -116,19 +116,23 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
               .orderBy(asc(acpEvents.id));
 
             for (const row of missedEvents) {
+              if (reply.raw.destroyed) return;
               const parsed = parseEventRow(row);
               reply.raw.write(formatSSEEvent(parsed));
             }
           } catch (err: unknown) {
             fastify.log.error(err, 'Failed to replay missed events');
-            const msg = err instanceof Error ? err.message : String(err);
-            reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: msg })}\n\n`);
+            if (!reply.raw.destroyed) {
+              const msg = err instanceof Error ? err.message : String(err);
+              reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: msg })}\n\n`);
+            }
           }
         }
       }
 
       // 5. Subscribe to live events
       const unsubscribe = fastify.eventBus.subscribe(id, (raw) => {
+        if (reply.raw.destroyed) return;
         try {
           const parsed = parseBusEvent(raw);
           reply.raw.write(formatSSEEvent(parsed));

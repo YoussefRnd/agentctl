@@ -85,7 +85,7 @@ describe('ProviderRegistry', () => {
       distribution: { npx: { package: 'npx-agent-pkg', args: ['--foo'], env: { BAR: 'baz' } } },
     };
     await db.insert(registrySnapshots).values({
-      data: JSON.stringify({ agents: [agent] }),
+      data: JSON.stringify({ version: '1', agents: [agent] }),
       fetchedAt: new Date(),
     });
 
@@ -108,7 +108,7 @@ describe('ProviderRegistry', () => {
       distribution: { npx: { package: 'npx-agent-pkg', args: [], env: {} } },
     };
     await db.insert(registrySnapshots).values({
-      data: JSON.stringify({ agents: [agent] }),
+      data: JSON.stringify({ version: '1', agents: [agent] }),
       fetchedAt: new Date(),
     });
     await registry.install('npx-agent');
@@ -131,7 +131,7 @@ describe('ProviderRegistry', () => {
     };
     await db
       .insert(registrySnapshots)
-      .values({ data: JSON.stringify({ agents: [agent] }), fetchedAt: new Date() });
+      .values({ data: JSON.stringify({ version: '1', agents: [agent] }), fetchedAt: new Date() });
 
     const reg = registry as unknown as { installer: BinaryInstaller; launcher: ProviderLauncher };
     const spy = vi.spyOn(reg, 'installer', 'get').mockImplementationOnce(
@@ -174,7 +174,7 @@ describe('ProviderRegistry', () => {
     };
     await db
       .insert(registrySnapshots)
-      .values({ data: JSON.stringify({ agents: [agent] }), fetchedAt: new Date() });
+      .values({ data: JSON.stringify({ version: '1', agents: [agent] }), fetchedAt: new Date() });
     const platformSpy = vi.spyOn(os, 'platform').mockReturnValue('linux');
     const archSpy = vi.spyOn(os, 'arch').mockReturnValue('x64');
     const reg = registry as unknown as { launcher: ProviderLauncher };
@@ -207,7 +207,7 @@ describe('ProviderRegistry', () => {
     };
     await db
       .insert(registrySnapshots)
-      .values({ data: JSON.stringify({ agents: [agent] }), fetchedAt: new Date() });
+      .values({ data: JSON.stringify({ version: '1', agents: [agent] }), fetchedAt: new Date() });
     const platformSpy = vi.spyOn(os, 'platform').mockReturnValue('linux');
     const archSpy = vi.spyOn(os, 'arch').mockReturnValue('x64');
     try {
@@ -262,7 +262,7 @@ describe('ProviderRegistry', () => {
     };
     await db
       .insert(registrySnapshots)
-      .values({ data: JSON.stringify({ agents: [agent] }), fetchedAt: new Date() });
+      .values({ data: JSON.stringify({ version: '1', agents: [agent] }), fetchedAt: new Date() });
     const reg = registry as unknown as { launcher: ProviderLauncher };
     const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
     try {

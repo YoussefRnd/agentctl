@@ -143,13 +143,23 @@ export class Provider {
   }
 
   toDiscovery(): ProviderDiscovery {
+    const rawCustomEnv = this.parseStringRecord(this.data.customEnv);
+    const customEnvConfigured: Record<string, boolean> = {};
+    const redactedCustomEnv: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(rawCustomEnv)) {
+      customEnvConfigured[key] = value !== '';
+      redactedCustomEnv[key] = '';
+    }
+
     return {
       id: this.data.id,
       label: this.data.name,
       command: this.data.command,
       launchArgs: this.parseStringArray(this.data.launchArgs),
       launchEnv: this.parseStringRecord(this.data.launchEnv),
-      customEnv: this.parseStringRecord(this.data.customEnv),
+      customEnv: redactedCustomEnv,
+      customEnvConfigured,
       configOptions: this.parseConfigOptions(),
       authMethods: this.parseAuthMethods(),
       version: this.data.version ?? undefined,

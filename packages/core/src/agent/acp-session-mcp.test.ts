@@ -107,6 +107,7 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
         worktreePath: '/tmp/proj-mcp',
         taskSlug: 'test-mcp',
         agent: 'claude-acp',
+        selectedProvider: 'claude-acp',
         baseCommit: 'hash',
       },
       {
@@ -116,6 +117,7 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
         worktreePath: '/tmp/proj-mcp',
         taskSlug: 'test-mcp-fail',
         agent: 'claude-acp',
+        selectedProvider: 'claude-acp',
         baseCommit: 'hash',
       },
       {
@@ -125,6 +127,7 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
         worktreePath: '/tmp/proj-mcp',
         taskSlug: 'test-mcp-bypass',
         agent: 'claude-acp',
+        selectedProvider: 'claude-acp',
         baseCommit: 'hash',
       },
     ]);

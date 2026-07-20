@@ -47,6 +47,7 @@ describe('Fastify Terminal Input API Integration Tests', () => {
       baseCommit: 'none',
       mode: 'local',
       agent: 'test-agent',
+      selectedProvider: 'test-agent',
       worktreePath: '/tmp/test',
       taskSlug: 'test-task',
     });

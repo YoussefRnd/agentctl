@@ -1,4 +1,11 @@
-import { sqliteTable, text, integer, real, index, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  type AnySQLiteColumn,
+} from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
 import type { SessionStatus, ACPEvent, SessionMode } from '@agentctl/shared';
 
@@ -45,7 +52,7 @@ export const sessions = sqliteTable('sessions', {
   baseBranch: text('base_branch'),
   agent: text('agent').notNull(),
   agentSessionId: text('agent_session_id'),
-  selectedProvider: text('selected_provider').notNull().default('claude-acp'),
+  selectedProvider: text('selected_provider').notNull(),
   selectedModel: text('selected_model').notNull().default('sonnet-4'),
   selectedThinkingEffort: text('selected_thinking_effort').notNull().default('medium'),
   mode: text('mode').$type<SessionMode>().notNull().default('local'),
@@ -122,8 +129,9 @@ export const acpEvents = sqliteTable(
     sessionId: text('session_id')
       .notNull()
       .references(() => sessions.id, { onDelete: 'cascade' }),
-    parentEventId: integer('parent_event_id')
-      .references((): AnySQLiteColumn => acpEvents.id, { onDelete: 'cascade' }),
+    parentEventId: integer('parent_event_id').references((): AnySQLiteColumn => acpEvents.id, {
+      onDelete: 'cascade',
+    }),
     type: text('type').$type<ACPEvent['type']>().notNull(),
     data: text('data').notNull(), // JSON string
     metadata: text('metadata'), // JSON string
@@ -166,7 +174,7 @@ export const mcpServers = sqliteTable('mcp_servers', {
   launchArgs: text('launch_args').notNull().default('[]'), // JSON string array
   launchEnv: text('launch_env').notNull().default('{}'), // JSON string object (can contain secrets)
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-  
+
   // Server-level default policy
   approvalPolicy: text('approval_policy')
     .$type<'always_prompt' | 'auto_approve_all' | 'deny_all'>()
@@ -175,11 +183,10 @@ export const mcpServers = sqliteTable('mcp_servers', {
 
   // JSON string for per-tool overrides
   toolPermissions: text('tool_permissions').notNull().default('{}'),
-  
+
   type: text('type').notNull().default('local'), // 'local' or 'remote'
   url: text('url'),
   headers: text('headers'), // JSON string for HTTP headers
   ...timestamps,
   autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
 });
-

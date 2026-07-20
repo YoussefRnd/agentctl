@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const providerSchema = z.enum(['claude-acp', 'opencode', 'codex-acp', 'gemini']);
+export const providerSchema = z.string().min(1);
 
 export const sessionModeSchema = z.enum(['worktree', 'local']);
 
@@ -105,6 +105,7 @@ export const providerDiscoverySchema = z.object({
   launchArgs: z.array(z.string()).default([]),
   launchEnv: z.record(z.string(), z.string()).default({}),
   customEnv: z.record(z.string(), z.string()).default({}),
+  customEnvConfigured: z.record(z.string(), z.boolean()).optional().default({}),
 });
 
 export function getProviderEnvKeys(provider: {
