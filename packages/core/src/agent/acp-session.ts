@@ -16,11 +16,16 @@ import type {
 import type { SessionStateMachine } from './session-state-machine.js';
 import { EventStreamAdapter } from './event-stream-adapter.js';
 import type { McpGateway } from './mcp-gateway.js';
+import { ElicitationStore } from './elicitation-store.js';
+import { PermissionPatternManager } from './permission-pattern-manager.js';
+import type { ElicitationRequest, ElicitationResponse } from '@agentctl/shared';
 
 export type DbClient = ReturnType<typeof createDatabase>;
 
 export class ACPSession {
   public acpSessionId: string | null = null;
+  public elicitationStore = new ElicitationStore();
+  public permissionPatternManager = new PermissionPatternManager();
   private pendingApprovals = new Map<string, (response: DomainPermissionResponse) => void>();
   private pendingRequests = new Map<string, DomainPermissionRequest>();
   private historyHydrated = false;
@@ -41,7 +46,7 @@ export class ACPSession {
     public sessionId: string,
     private runtimeHandle: AgentRuntimeHandle,
     private db: DbClient,
-    private eventStore: SessionEventStore,
+    public eventStore: SessionEventStore,
     private cwd: string,
     private stateMachine?: SessionStateMachine,
     private logger: Logger = noopLogger,
@@ -473,6 +478,14 @@ ${promptText}`;
         }
       }
 
+      if (finalResponse.allowed) {
+        this.permissionPatternManager.applyOutcome({
+          option_id: finalResponse.optionId ?? 'allow_once',
+          option_kind: finalResponse.optionId === 'allow_always' ? 'allow_always' : 'allow_once',
+          params: (response as { params?: Record<string, unknown> }).params,
+        });
+      }
+
       resolve(finalResponse);
       this.pendingApprovals.delete(permissionId);
 
@@ -490,6 +503,44 @@ ${promptText}`;
         });
       }
     }
+  }
+
+  async requestElicitation(request: ElicitationRequest): Promise<ElicitationResponse> {
+    const { item, promise } = this.elicitationStore.createElicitation(request);
+
+    await this.eventStore.append(
+      this.sessionId,
+      'status',
+      {
+        status: 'elicitation_requested',
+        request,
+        elicitation: item,
+      },
+      null,
+    );
+
+    return promise;
+  }
+
+  respondToElicitation(elicitationId: string, response: ElicitationResponse): boolean {
+    const ok = this.elicitationStore.respondToElicitation(elicitationId, response);
+    if (ok) {
+      void this.eventStore.append(
+        this.sessionId,
+        'status',
+        {
+          status: 'elicitation_responded',
+          elicitationId,
+          response,
+        },
+        null,
+      );
+    }
+    return ok;
+  }
+
+  cancelElicitation(elicitationId: string): boolean {
+    return this.respondToElicitation(elicitationId, { action: 'cancel' });
   }
 
   kill(): void {
@@ -529,24 +580,41 @@ ${promptText}`;
   async updateConfigOption(configId: string, value: string): Promise<void> {
     if (this.isStopped) return;
     if (typeof this.runtimeHandle.updateConfigOption === 'function') {
-      const configOptions = await this.runtimeHandle.updateConfigOption(configId, value);
-      if (configOptions.length > 0) {
-        await this.db
-          .update(sessions)
-          .set({
-            sessionConfigOptions: JSON.stringify(configOptions),
-            updatedAt: new Date(),
-          })
-          .where(eq(sessions.id, this.sessionId));
+      try {
+        const configOptions = await this.runtimeHandle.updateConfigOption(configId, value);
+        if (configOptions.length > 0) {
+          await this.db
+            .update(sessions)
+            .set({
+              sessionConfigOptions: JSON.stringify(configOptions),
+              updatedAt: new Date(),
+            })
+            .where(eq(sessions.id, this.sessionId));
+          await this.eventStore.append(
+            this.sessionId,
+            'status',
+            {
+              status: 'config_option_update',
+              configOptions,
+            },
+            null,
+          );
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        this.logger.error(err, `Failed to update config option ${configId} to ${value}`);
         await this.eventStore.append(
           this.sessionId,
           'status',
           {
-            status: 'config_option_update',
-            configOptions,
+            status: 'config_option_error',
+            configId,
+            value,
+            error: errorMessage,
           },
           null,
         );
+        throw err;
       }
     }
   }
@@ -802,6 +870,25 @@ ${promptText}`;
       });
 
       const toolName = request.toolCall.name;
+      const toolArgs = request.toolCall.arguments ?? {};
+
+      if (this.permissionPatternManager.isToolCallApproved(toolName, toolArgs)) {
+        await this.eventStore.append(
+          this.sessionId,
+          'approval_request',
+          {
+            name: 'request_permission',
+            toolCallId: permissionId,
+            requiresApproval: false,
+            request,
+            status: 'approved',
+            patternAutoApproved: true,
+          },
+          parentId,
+        );
+        return { allowed: true };
+      }
+
       let shouldAutoApprove =
         sessionRecord?.approvalMode === 'yolo' ||
         (sessionRecord?.approvalMode === 'auto_approve' && toolName.startsWith('fs/'));
@@ -908,6 +995,11 @@ ${promptText}`;
           .where(eq(sessions.id, this.sessionId));
       }
 
+      const permissionOptions = this.permissionPatternManager.buildPermissionOptions(
+        toolName,
+        toolArgs,
+      );
+
       const eventId = await this.eventStore.append(
         this.sessionId,
         'approval_request',
@@ -916,6 +1008,7 @@ ${promptText}`;
           toolCallId: permissionId,
           requiresApproval: true,
           request,
+          permissionOptions,
           status: 'pending',
         },
         parentId,

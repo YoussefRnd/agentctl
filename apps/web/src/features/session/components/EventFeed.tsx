@@ -4,7 +4,8 @@ import { Brain } from 'lucide-react';
 import { TextCard } from './cards/TextCard';
 import { AgentResponse } from './cards/AgentResponse';
 import { CommandResultCard } from './cards/CommandResultCard';
-import type { ACPEventRow } from '@agentctl/shared';
+import { ElicitationCard } from './cards/ElicitationCard';
+import type { ACPEventRow, ElicitationItem } from '@agentctl/shared';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { Card } from '@agentctl/ui';
 import type { RewindMode } from './RewindMenu';
@@ -35,6 +36,7 @@ export function EventFeed({
       | { type: 'user'; event: ACPEventRow; isStreaming: boolean }
       | { type: 'agent'; events: ACPEventRow[]; isStreaming: boolean; id: string }
       | { type: 'command'; event: ACPEventRow; isStreaming: boolean }
+      | { type: 'elicitation'; event: ACPEventRow; isStreaming: boolean }
     )[] = [];
     let currentAgentTurn: {
       type: 'agent';
@@ -44,11 +46,35 @@ export function EventFeed({
     } | null = null;
 
     for (const e of events) {
+      const statusVal = (e.data as { status?: string } | null)?.status;
+      const isHiddenSystemEvent =
+        e.type === 'status' &&
+        typeof statusVal === 'string' &&
+        [
+          'available_commands_update',
+          'config_option_update',
+          'session_info_update',
+          'turn_end',
+        ].includes(statusVal);
+
+      if (isHiddenSystemEvent) {
+        continue;
+      }
+
       const isStreaming = e.id === streamingEventId;
 
       if (e.type === 'status' && (e.data as { status?: string }).status === 'command_result') {
         currentAgentTurn = null;
         result.push({ type: 'command', event: e, isStreaming });
+        continue;
+      }
+
+      if (
+        e.type === 'status' &&
+        (e.data as { status?: string }).status === 'elicitation_requested'
+      ) {
+        currentAgentTurn = null;
+        result.push({ type: 'elicitation', event: e, isStreaming });
         continue;
       }
 
@@ -125,7 +151,12 @@ export function EventFeed({
   }
 
   return (
-    <div className="relative flex h-full flex-grow flex-col overflow-hidden" role="log" aria-live="polite" aria-label="Session event feed">
+    <div
+      className="relative flex h-full flex-grow flex-col overflow-hidden"
+      role="log"
+      aria-live="polite"
+      aria-label="Session event feed"
+    >
       <Virtuoso
         ref={virtuosoRef}
         className="no-scrollbar h-full w-full flex-grow"
@@ -151,6 +182,31 @@ export function EventFeed({
                         args={data.args}
                         status={data.commandStatus}
                         isStreaming={group.isStreaming}
+                      />
+                    </div>
+                  );
+                })()
+              ) : group.type === 'elicitation' ? (
+                (() => {
+                  const data = group.event.data as {
+                    elicitation?: ElicitationItem;
+                  };
+                  if (!data.elicitation) return null;
+                  return (
+                    <div className="animate-in fade-in slide-in-from-bottom-2 my-2 duration-500 ease-out">
+                      <ElicitationCard
+                        elicitation={data.elicitation}
+                        onRespond={(id, resp) => {
+                          if (!sessionData?.session.id) return;
+                          void fetch(
+                            `/api/sessions/${sessionData.session.id}/elicitations/${id}/respond`,
+                            {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(resp),
+                            },
+                          );
+                        }}
                       />
                     </div>
                   );

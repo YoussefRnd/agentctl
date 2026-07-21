@@ -156,5 +156,32 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
     },
   );
 
+  fastify.withTypeProvider<ZodTypeProvider>().post(
+    '/sessions/:id/elicitations/:elicitationId/respond',
+    {
+      schema: {
+        params: z.object({
+          id: z.uuid(),
+          elicitationId: z.string(),
+        }),
+        body: z.object({
+          action: z.enum(['submit', 'cancel']),
+          values: z.record(z.string(), z.unknown()).optional(),
+        }),
+      },
+    },
+    (request) => {
+      const { id, elicitationId } = request.params;
+      const { action, values } = request.body;
+
+      fastify.sessionService.respondToElicitation(id, elicitationId, {
+        action,
+        values,
+      });
+
+      return { success: true };
+    },
+  );
+
   done();
 };

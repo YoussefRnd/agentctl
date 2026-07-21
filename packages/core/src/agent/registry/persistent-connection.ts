@@ -231,7 +231,16 @@ export class PersistentAgentConnectionManager {
 
       return {
         async sessionUpdate(n: SessionNotification) {
-          const session = getSessionContext(n);
+          const acpSessionId = n.sessionId;
+          if (!acpSessionId) return;
+          const session = activeSessions.get(acpSessionId);
+          if (!session) {
+            debugLog.recordLine(
+              'incoming',
+              `Ignoring sessionUpdate for inactive session: ${acpSessionId}`,
+            );
+            return;
+          }
           const events = parseNotificationToEvents(n);
           for (const event of events) {
             await session.callbacks.onEvent(event);

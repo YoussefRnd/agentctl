@@ -23,7 +23,14 @@ import type {
   SessionConfigOption,
 } from '@agentclientprotocol/sdk';
 import { type Logger, noopLogger } from '../logger.js';
-import type { AuthMethod, ThinkingEffort, ACPConfigOption, SessionMetrics } from '@agentctl/shared';
+import type {
+  AuthMethod,
+  ThinkingEffort,
+  ACPConfigOption,
+  SessionMetrics,
+  ElicitationRequest,
+  ElicitationResponse,
+} from '@agentctl/shared';
 import { TerminalManager } from './terminal-manager.js';
 import type { McpGateway } from './mcp-gateway.js';
 
@@ -206,6 +213,7 @@ export type DomainAgentEvent = (
         input?: {
           hint: string;
         };
+        category?: string;
       }[];
     }
   | {
@@ -300,6 +308,7 @@ export interface RuntimeOptions {
 export interface SessionCallbacks {
   onEvent: (event: DomainAgentEvent) => Promise<void> | void;
   onRequestPermission: (request: DomainPermissionRequest) => Promise<DomainPermissionResponse>;
+  onRequestElicitation?: (request: ElicitationRequest) => Promise<ElicitationResponse>;
 }
 
 export interface AgentProbeResult {
@@ -572,6 +581,9 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
         input?: {
           hint: string;
         };
+        _meta?: {
+          command_category?: string;
+        };
       }[];
     };
     if (chunk.availableCommands && Array.isArray(chunk.availableCommands)) {
@@ -581,6 +593,7 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
           name: cmd.name,
           description: cmd.description,
           input: cmd.input ? { hint: cmd.input.hint } : undefined,
+          category: cmd._meta?.command_category,
         })),
         _meta,
       });
@@ -837,6 +850,19 @@ export class DefaultAgentRuntime implements AgentRuntime {
             }
             return { outcome: { outcome: 'cancelled' } };
           },
+          async createElicitation(p: Record<string, unknown>) {
+            const modeObj = p.mode as { type?: string } | undefined;
+            const req: ElicitationRequest = {
+              id: typeof p.id === 'string' ? p.id : `el-${String(Date.now())}`,
+              mode: modeObj?.type === 'url' || typeof p.url === 'string' ? 'url' : 'form',
+              form: p.form as ElicitationRequest['form'],
+              url: p.url as ElicitationRequest['url'],
+            };
+            if (callbacks.onRequestElicitation) {
+              return await callbacks.onRequestElicitation(req);
+            }
+            return { action: 'cancel' };
+          },
           async 'fs.readTextFile'(p: { path: string }) {
             const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(options.cwd, p.path);
             if (!fs.existsSync(absPath)) {
@@ -1035,6 +1061,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
     let supportsListSessions = false;
     let supportsAdditionalDirectories = false;
     let supportsLoadSession = false;
+    let supportsEmbeddedContext = false;
 
     const handle: AgentRuntimeHandle = {
       acpSessionId: null,
@@ -1051,18 +1078,25 @@ export class DefaultAgentRuntime implements AgentRuntime {
         embeddedContext?: string,
       ): Promise<PromptResult> {
         const promptParts: ContentBlock[] = [];
-        if (text) {
-          promptParts.push({ type: 'text', text });
-        }
         if (embeddedContext) {
-          promptParts.push({
-            type: 'resource',
-            resource: {
-              uri: 'internal://embedded_context',
-              text: embeddedContext,
-              mimeType: 'text/markdown',
-            },
-          } as unknown as ContentBlock);
+          if (supportsEmbeddedContext) {
+            if (text) {
+              promptParts.push({ type: 'text', text });
+            }
+            promptParts.push({
+              type: 'resource',
+              resource: {
+                uri: 'internal://embedded_context',
+                text: embeddedContext,
+                mimeType: 'text/markdown',
+              },
+            } as unknown as ContentBlock);
+          } else {
+            const combinedText = text ? `${text}\n\n---\n${embeddedContext}` : embeddedContext;
+            promptParts.push({ type: 'text', text: combinedText });
+          }
+        } else if (text) {
+          promptParts.push({ type: 'text', text });
         }
         for (const att of attachments ?? []) {
           const data = fs.readFileSync(att.filePath).toString('base64');
@@ -1222,6 +1256,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
         supportsListSessions = !!sessionCaps?.list;
         supportsAdditionalDirectories = !!sessionCaps?.additionalDirectories;
         supportsLoadSession = !!agentCapabilities?.loadSession;
+        supportsEmbeddedContext = !!agentCapabilities?.promptCapabilities?.embeddedContext;
       }
       let newSessionResult:
         NewSessionResponse | ResumeSessionResponse | LoadSessionResponse | null = null;
@@ -1296,19 +1331,24 @@ export class DefaultAgentRuntime implements AgentRuntime {
       handle.acpSessionId = acpSessionId;
 
       if (!handle.availableModes || handle.availableModes.length === 0) {
-        const resultModes = newSessionResult.modes?.availableModes ?? [];
+        const resultModes =
+          (newSessionResult as { modes?: { availableModes?: { id: string }[] } } | null)?.modes
+            ?.availableModes ?? [];
         if (resultModes.length > 0) {
           handle.availableModes = resultModes.map((m) => m.id);
-        } else if (newSessionResult.configOptions) {
-          // If modes are exposed in config options
-          const modeOpt = newSessionResult.configOptions.find(
-            (opt): opt is Extract<SessionConfigOption, { type: 'select' }> =>
-              opt.id === 'mode' && opt.type === 'select',
-          );
-          if (modeOpt?.options) {
-            handle.availableModes = modeOpt.options
-              .filter((opt) => typeof (opt as { value?: unknown }).value === 'string')
-              .map((opt) => (opt as { value: string }).value);
+        } else {
+          const opts = (newSessionResult as { configOptions?: SessionConfigOption[] } | null)
+            ?.configOptions;
+          if (opts) {
+            const modeOpt = opts.find(
+              (opt): opt is Extract<SessionConfigOption, { type: 'select' }> =>
+                opt.id === 'mode' && opt.type === 'select',
+            );
+            if (modeOpt?.options) {
+              handle.availableModes = modeOpt.options
+                .filter((opt) => typeof (opt as { value?: unknown }).value === 'string')
+                .map((opt) => (opt as { value: string }).value);
+            }
           }
         }
       }
@@ -1336,10 +1376,18 @@ export class DefaultAgentRuntime implements AgentRuntime {
               value: options.selectedModel,
             });
           } catch (configErr) {
+            const errorMsg = configErr instanceof Error ? configErr.message : String(configErr);
             this.logger.warn(
               configErr,
               `Failed to dynamically set model configuration on init (configId: ${options.resolvedModelConfigId})`,
             );
+            void (callbacks.onEvent as (e: unknown) => Promise<void>)({
+              type: 'status',
+              status: 'config_option_error',
+              configId: options.resolvedModelConfigId,
+              value: options.selectedModel,
+              error: errorMsg,
+            });
           }
         }
 

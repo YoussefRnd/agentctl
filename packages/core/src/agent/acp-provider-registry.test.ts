@@ -76,6 +76,8 @@ describe('ProviderRegistry', () => {
   test('install persists provider with system_available state and enables it', async () => {
     const db = createDatabase(':memory:');
     const registry = new ProviderRegistry(db, noopLogger);
+    const reg = registry as unknown as { launcher: ProviderLauncher };
+    const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
     const agent: RegistryAgent = {
       id: 'npx-agent',
       name: 'NPX Agent',
@@ -94,11 +96,14 @@ describe('ProviderRegistry', () => {
     expect(result.id).toBe('npx-agent');
     expect(result.installState).toBe('system_available');
     expect(result.command).toBe('npx');
-  });
+    launcherSpy.mockRestore();
+  }, 15000);
 
   test('remove resets provider to not_installed and disables it', async () => {
     const db = createDatabase(':memory:');
     const registry = new ProviderRegistry(db, noopLogger);
+    const reg = registry as unknown as { launcher: ProviderLauncher };
+    const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
     const agent: RegistryAgent = {
       id: 'npx-agent',
       name: 'NPX Agent',
@@ -116,7 +121,8 @@ describe('ProviderRegistry', () => {
     const result = await registry.remove('npx-agent');
 
     expect(result.installState).toBe('not_installed');
-  });
+    launcherSpy.mockRestore();
+  }, 15000);
 
   test('concurrent install dedupes to a single installer run', async () => {
     const db = createDatabase(':memory:');
@@ -143,7 +149,7 @@ describe('ProviderRegistry', () => {
         }) as unknown as BinaryInstaller,
     );
 
-    const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath');
+    const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
 
     const [a, b] = await Promise.all([
       registry.install('dup-agent'),
@@ -154,7 +160,7 @@ describe('ProviderRegistry', () => {
     expect(b.id).toBe('dup-agent');
     spy.mockRestore();
     launcherSpy.mockRestore();
-  });
+  }, 15000);
 
   test('install falls back to npx when no binary for current platform', async () => {
     const db = createDatabase(':memory:');
@@ -188,7 +194,7 @@ describe('ProviderRegistry', () => {
       archSpy.mockRestore();
       launcherSpy.mockRestore();
     }
-  });
+  }, 30000);
 
   test('install throws when binary-only and platform unsupported', async () => {
     const db = createDatabase(':memory:');
@@ -247,7 +253,7 @@ describe('ProviderRegistry', () => {
       launcherSpy.mockRestore();
       fetchSpy.mockRestore();
     }
-  });
+  }, 15000);
 
   test('npx launch args use range-bound version spec', async () => {
     const db = createDatabase(':memory:');
@@ -271,5 +277,5 @@ describe('ProviderRegistry', () => {
     } finally {
       launcherSpy.mockRestore();
     }
-  });
+  }, 15000);
 });

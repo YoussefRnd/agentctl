@@ -127,6 +127,107 @@ export const availableCommandSchema = z.object({
       hint: z.string(),
     })
     .optional(),
+  category: z.string().optional(),
+});
+
+export const elicitationFormFieldSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  type: z.enum(['string', 'number', 'boolean', 'select']).default('string'),
+  default: z.string().optional(),
+  required: z.boolean().optional().default(false),
+  options: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.string(),
+      }),
+    )
+    .optional(),
+});
+
+export const formElicitationSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  fields: z.array(elicitationFormFieldSchema),
+});
+
+export const urlElicitationSchema = z.object({
+  url: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+});
+
+export const elicitationRequestSchema = z.object({
+  id: z.string(),
+  mode: z.enum(['form', 'url']),
+  form: formElicitationSchema.optional(),
+  url: urlElicitationSchema.optional(),
+});
+
+export const elicitationResponseSchema = z.object({
+  action: z.enum(['submit', 'cancel']),
+  values: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const elicitationItemSchema = z.object({
+  id: z.string(),
+  request: elicitationRequestSchema,
+  status: z.enum(['pending', 'completed', 'cancelled']),
+  createdAt: z.string(),
+  response: elicitationResponseSchema.optional(),
+});
+
+export const permissionOptionKindSchema = z.enum([
+  'allow_once',
+  'allow_always',
+  'reject_once',
+  'reject_always',
+]);
+
+export const permissionOptionSchema = z.object({
+  option_id: z.string(),
+  kind: permissionOptionKindSchema,
+  name: z.string(),
+  description: z.string().optional(),
+});
+
+export const permissionOptionChoiceSchema = z.object({
+  allow: permissionOptionSchema,
+  deny: permissionOptionSchema,
+  sub_patterns: z.array(z.string()).default([]),
+});
+
+export const permissionPatternSchema = z.object({
+  pattern: z.string(),
+  display_name: z.string(),
+});
+
+export const permissionOptionsSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('flat'),
+    options: z.array(permissionOptionSchema),
+  }),
+  z.object({
+    type: z.literal('dropdown'),
+    choices: z.array(permissionOptionChoiceSchema),
+  }),
+  z.object({
+    type: z.literal('dropdown_with_patterns'),
+    choices: z.array(permissionOptionChoiceSchema),
+    patterns: z.array(permissionPatternSchema),
+    tool_name: z.string(),
+  }),
+]);
+
+export const selectedPermissionParamsSchema = z.object({
+  patterns: z.array(z.string()).optional(),
+});
+
+export const selectedPermissionOutcomeSchema = z.object({
+  option_id: z.string(),
+  option_kind: permissionOptionKindSchema,
+  params: selectedPermissionParamsSchema.optional(),
 });
 
 export const sessionConfigOptionsSchema = z.array(acpConfigOptionSchema);
@@ -306,3 +407,18 @@ export type ProviderDiscovery = z.infer<typeof providerDiscoverySchema>;
 export type AuthMethod = z.infer<typeof authMethodSchema>;
 export type ProjectListRow = z.infer<typeof projectListRowSchema>;
 export type McpToolResult = z.infer<typeof mcpToolResultSchema>;
+
+export type ElicitationFormField = z.infer<typeof elicitationFormFieldSchema>;
+export type FormElicitation = z.infer<typeof formElicitationSchema>;
+export type UrlElicitation = z.infer<typeof urlElicitationSchema>;
+export type ElicitationRequest = z.infer<typeof elicitationRequestSchema>;
+export type ElicitationResponse = z.infer<typeof elicitationResponseSchema>;
+export type ElicitationItem = z.infer<typeof elicitationItemSchema>;
+
+export type PermissionOptionKind = z.infer<typeof permissionOptionKindSchema>;
+export type PermissionOption = z.infer<typeof permissionOptionSchema>;
+export type PermissionOptionChoice = z.infer<typeof permissionOptionChoiceSchema>;
+export type PermissionPattern = z.infer<typeof permissionPatternSchema>;
+export type PermissionOptions = z.infer<typeof permissionOptionsSchema>;
+export type SelectedPermissionParams = z.infer<typeof selectedPermissionParamsSchema>;
+export type SelectedPermissionOutcome = z.infer<typeof selectedPermissionOutcomeSchema>;

@@ -266,6 +266,12 @@ export class SessionStateMachine {
             }
             return { allowed: false };
           },
+          onRequestElicitation: async (req) => {
+            if (session) {
+              return await session.requestElicitation(req);
+            }
+            return { action: 'cancel' };
+          },
         },
       );
 

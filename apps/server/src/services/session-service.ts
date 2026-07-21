@@ -324,6 +324,50 @@ export class SessionService {
     }
   }
 
+  async renameSession(sessionId: string, title: string) {
+    const session = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+    });
+
+    if (!session) {
+      throw new AppError('Session not found', 404);
+    }
+
+    await this.db
+      .update(sessions)
+      .set({ title, updatedAt: new Date() })
+      .where(eq(sessions.id, sessionId));
+
+    const activeSession = this.sessionManager.getSession(sessionId);
+    if (activeSession) {
+      await activeSession.eventStore.append(
+        sessionId,
+        'status',
+        {
+          status: 'session_info_update',
+          title,
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+      );
+    }
+  }
+
+  respondToElicitation(
+    sessionId: string,
+    elicitationId: string,
+    response: { action: 'submit' | 'cancel'; values?: Record<string, unknown> },
+  ) {
+    const activeSession = this.sessionManager.getSession(sessionId);
+    if (!activeSession) {
+      throw new AppError('Active session not found', 404);
+    }
+    const ok = activeSession.respondToElicitation(elicitationId, response);
+    if (!ok) {
+      throw new AppError('Elicitation not found or already completed', 400);
+    }
+  }
+
   getSnapshotService() {
     return this.sessionManager.getSnapshotService();
   }

@@ -378,7 +378,7 @@ export default fp(async (fastify) => {
     renameSession: async ({ params, body }) => {
       const { id } = params;
       const { title } = body;
-      await fastify.db.update(sessions).set({ title }).where(eq(sessions.id, id));
+      await fastify.sessionService.renameSession(id, title);
       return {
         status: 200 as const,
         body: { success: true },

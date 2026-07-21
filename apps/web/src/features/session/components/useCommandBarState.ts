@@ -11,6 +11,7 @@ const CLIENT_COMMANDS = [
   {
     name: 'mcp',
     description: 'Manage MCP servers and integrations',
+    category: 'client',
   },
 ] as const;
 
@@ -18,6 +19,7 @@ interface CommandInfo {
   name: string;
   description?: string;
   input?: { hint?: string };
+  category?: string;
 }
 
 export function useCommandBarState({
@@ -74,8 +76,13 @@ export function useCommandBarState({
   const mcpCommandList = mcpTools.map((t) => ({
     name: `${t.serverId}:${t.name.split('__')[1] ?? t.name}`,
     description: t.description ?? 'MCP Tool',
+    category: 'mcp',
   }));
-  const combinedCommands = [...availableCommands, ...mcpCommandList, ...CLIENT_COMMANDS];
+  const combinedCommands: CommandInfo[] = [
+    ...availableCommands,
+    ...mcpCommandList,
+    ...CLIENT_COMMANDS,
+  ];
 
   const showSlashMenu =
     input.startsWith('/') && !input.includes(' ') && combinedCommands.length > 0;
@@ -103,9 +110,7 @@ export function useCommandBarState({
 
   const selectedId = propSelectedProviderId ?? null;
 
-  const installedProviders = providers.filter(
-    (p) => p.installState !== 'not_installed',
-  );
+  const installedProviders = providers.filter((p) => p.installState !== 'not_installed');
   const firstId = installedProviders[0]?.id ?? null;
   const resolvedId = selectedId ?? firstId;
   const activeProvider = installedProviders.find((p) => p.id === resolvedId);
