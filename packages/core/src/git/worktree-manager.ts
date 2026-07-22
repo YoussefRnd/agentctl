@@ -1,9 +1,9 @@
-import type { GitMutex } from './git-mutex.js';
+import type { GitMutex } from './mutex.js';
 import { simpleGit } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
-import { type ReviewFile, parseMultiFileDiff } from './git-utils.js';
+import { type ReviewFile, parseMultiFileDiff } from './utils.js';
 
 export interface RepositoryInfo {
   selectedPath: string;

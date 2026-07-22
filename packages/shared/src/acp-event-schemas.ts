@@ -25,6 +25,36 @@ export const acpEventToolCallDataSchema = z
     kind: z
       .enum(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other'])
       .optional(),
+    locations: z
+      .array(
+        z.object({
+          path: z.string().optional(),
+          line: z.number().optional(),
+        }),
+      )
+      .optional(),
+    content: z
+      .array(
+        z
+          .object({
+            type: z.enum(['content', 'diff', 'terminal']),
+            content: z
+              .object({
+                type: z.string().optional(),
+                text: z.string().optional(),
+              })
+              .loose()
+              .optional(),
+            path: z.string().optional(),
+            oldText: z.string().nullable().optional(),
+            newText: z.string().optional(),
+            terminalId: z.string().optional(),
+          })
+          .loose(),
+      )
+      .optional(),
+    rawInput: z.record(z.string(), z.unknown()).optional(),
+    rawOutput: z.record(z.string(), z.unknown()).optional(),
   })
   .loose();
 
@@ -53,6 +83,7 @@ export const acpEventPlanDataSchema = z.object({
       name: z.string(),
       status: z.string(),
       isCompleted: z.boolean(),
+      priority: z.enum(['high', 'medium', 'low']).optional(),
     }),
   ),
 });

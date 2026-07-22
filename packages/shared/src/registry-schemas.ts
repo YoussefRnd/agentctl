@@ -12,15 +12,17 @@ export const acpConfigOptionSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   category: z.string().optional(),
-  type: z.literal('select'),
-  currentValue: z.string(),
-  options: z.array(
-    z.object({
-      value: z.string(),
-      name: z.string(),
-      description: z.string().optional(),
-    }),
-  ),
+  type: z.enum(['select', 'boolean']).default('select'),
+  currentValue: z.union([z.string(), z.boolean()]),
+  options: z
+    .array(
+      z.object({
+        value: z.string(),
+        name: z.string(),
+        description: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const authMethodSchema = z.object({

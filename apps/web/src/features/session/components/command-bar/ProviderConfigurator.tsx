@@ -278,7 +278,11 @@ export function AgentPersonaSelector({
 
   return (
     <CommandDropdown
-      value={modeOption?.currentValue ?? agentPersona ?? availableAgentPersonas[0]}
+      value={
+        typeof modeOption?.currentValue === 'string'
+          ? modeOption.currentValue
+          : (agentPersona ?? availableAgentPersonas[0])
+      }
       disabled={isUpdating}
       variant="toolbar"
       onChange={(val) => {
@@ -291,7 +295,7 @@ export function AgentPersonaSelector({
       icon={<Zap className="text-accent h-3.5 w-3.5" />}
       options={
         modeOption
-          ? modeOption.options.map((o) => ({ value: o.value, label: o.name }))
+          ? (modeOption.options ?? []).map((o) => ({ value: o.value, label: o.name }))
           : availableAgentPersonas.map((p) => ({
               value: p,
               label: p.charAt(0).toUpperCase() + p.slice(1),

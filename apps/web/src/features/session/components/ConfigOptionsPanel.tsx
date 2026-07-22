@@ -85,7 +85,7 @@ interface ConfigOptionRowProps {
 }
 
 function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptionRowProps) {
-  const currentOption = option.options.find((o) => o.value === option.currentValue);
+  const currentOption = (option.options ?? []).find((o) => o.value === option.currentValue);
 
   return (
     <div className="group relative">
@@ -97,10 +97,10 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
       </div>
 
       <Select
-        value={option.currentValue}
+        value={typeof option.currentValue === 'string' ? option.currentValue : ''}
         onChange={onChange}
         disabled={disabled}
-        options={option.options.map((opt) => ({
+        options={(option.options ?? []).map((opt) => ({
           value: opt.value,
           label: opt.name,
         }))}

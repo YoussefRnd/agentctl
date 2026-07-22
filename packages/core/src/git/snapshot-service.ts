@@ -3,7 +3,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import { simpleGit } from 'simple-git';
-import { type ReviewFile, parseMultiFileDiff } from './git-utils.js';
+import { type ReviewFile, parseMultiFileDiff } from './utils.js';
 
 export interface FilePatch {
   path: string;

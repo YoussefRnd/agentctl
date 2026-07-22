@@ -315,6 +315,7 @@ export const sessionRowSchema = sessionSchema.extend({
           name: z.string(),
           status: z.enum(['pending', 'in_progress', 'completed']),
           isCompleted: z.boolean(),
+          priority: z.enum(['high', 'medium', 'low']).optional(),
         }),
       ),
     )

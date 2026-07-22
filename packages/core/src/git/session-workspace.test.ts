@@ -1,7 +1,7 @@
 import { test, expect, describe, beforeAll, afterEach, beforeEach } from 'vitest';
 import { SessionWorkspace } from './session-workspace.js';
 import { WorkspaceManager } from './worktree-manager.js';
-import { GitMutex } from './git-mutex.js';
+import { GitMutex } from './mutex.js';
 import { createDatabase } from '../db/index.js';
 import { projects, sessions } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -9,7 +9,7 @@ import { simpleGit } from 'simple-git';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import type { DbClient } from '../agent/acp-session.js';
+import type { DbClient } from '../acp/session-client.js';
 import { SnapshotService } from './snapshot-service.js';
 
 describe('SessionWorkspace Integration Tests (Mock-Free)', () => {

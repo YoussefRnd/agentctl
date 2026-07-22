@@ -56,7 +56,10 @@ export function useProviders(sessionId: string | null) {
       const modelOption = capability?.configOptions?.find(
         (option) => option.id === 'model' || option.id === 'selectedModel',
       );
-      selectedModel = modelOption?.currentValue ?? modelOption?.options[0]?.value ?? 'default';
+      selectedModel =
+        (typeof modelOption?.currentValue === 'string'
+          ? modelOption.currentValue
+          : modelOption?.options?.[0]?.value) ?? 'default';
     }
 
     void execute(`switch-provider-${providerId}`, () =>
