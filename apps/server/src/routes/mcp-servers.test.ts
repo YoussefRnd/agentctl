@@ -1,8 +1,7 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../app.js';
-import { createDatabase } from '@agentctl/core';
-import type { SessionManager } from '@agentctl/core';
-import { mcpServers } from '@agentctl/core';
+import { createDatabase, mcpServers } from '@agentctl/core/db';
+import type { SessionManager } from '@agentctl/core/session';
 import type { FastifyInstance } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
 import { eq } from 'drizzle-orm';

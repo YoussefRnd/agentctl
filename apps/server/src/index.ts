@@ -1,5 +1,5 @@
 import { buildApp } from './app.js';
-import { Config } from '@agentctl/core';
+import { Config } from '@agentctl/core/config';
 import crypto from 'node:crypto';
 
 const start = async () => {

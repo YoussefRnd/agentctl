@@ -1,8 +1,7 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../app.js';
-import { createDatabase } from '@agentctl/core';
-import type { SessionManager } from '@agentctl/core';
-import { projects, sessions, acpEvents } from '@agentctl/core';
+import { createDatabase, projects, sessions, acpEvents } from '@agentctl/core/db';
+import type { SessionManager } from '@agentctl/core/session';
 import type { FastifyInstance } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
 import type { ACPEventRow } from '@agentctl/shared';

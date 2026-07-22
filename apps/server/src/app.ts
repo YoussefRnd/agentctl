@@ -8,16 +8,11 @@ import tsRestPlugin from './plugins/ts-rest.js';
 import { eventsRoutes } from './routes/events.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
-import {
-  db as defaultDb,
-  WorktreeManager,
-  GitMutex,
-  ProviderRegistry,
-  SessionManager,
-  projects,
-  sessions,
-  McpGateway,
-} from '@agentctl/core';
+import { db as defaultDb, projects, sessions } from '@agentctl/core/db';
+import { WorktreeManager, GitMutex } from '@agentctl/core/git';
+import { ProviderRegistry } from '@agentctl/core/providers';
+import { SessionManager } from '@agentctl/core/session';
+import { McpGateway } from '@agentctl/core/mcp';
 import { EventBus } from './utils/event-bus.js';
 import { AppError } from './errors/app-error.js';
 import type { FastifyError } from 'fastify';
@@ -179,7 +174,14 @@ export async function buildApp(deps: AppDependencies = {}) {
       : true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept', 'Last-Event-Id', 'Last-Event-ID'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Origin',
+      'Accept',
+      'Last-Event-Id',
+      'Last-Event-ID',
+    ],
   });
 
   // Register Secure Session

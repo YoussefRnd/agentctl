@@ -8,7 +8,7 @@ import {
   type FontConfig,
 } from '@agentctl/shared';
 import fp from 'fastify-plugin';
-import { projects, sessions, mcpServers } from '@agentctl/core';
+import { projects, sessions, mcpServers } from '@agentctl/core/db';
 import { eq, desc } from 'drizzle-orm';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -128,8 +128,9 @@ export default fp(async (fastify) => {
           (p) =>
             p.name.toLowerCase().includes(q) ||
             p.path.toLowerCase().includes(q) ||
-            p.sessions.some((s) =>
-              (s.title || s.taskSlug || s.branch || '').toLowerCase().includes(q),
+            p.sessions.some(
+              (s: { title?: string | null; taskSlug?: string | null; branch?: string | null }) =>
+                (s.title ?? s.taskSlug ?? s.branch ?? '').toLowerCase().includes(q),
             ),
         );
       }

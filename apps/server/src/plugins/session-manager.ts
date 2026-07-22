@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import type { SessionManager } from '@agentctl/core';
+import type { SessionManager } from '@agentctl/core/session';
 import type { FastifyInstance } from 'fastify';
 
 declare module 'fastify' {

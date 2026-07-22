@@ -1,12 +1,9 @@
-import { sessions, projects } from '@agentctl/core';
+import { sessions, projects, type db as defaultDb } from '@agentctl/core/db';
 import { eq } from 'drizzle-orm';
 import { AppError } from '../errors/app-error.js';
-import type {
-  db as defaultDb,
-  SessionManager,
-  WorktreeManager,
-  ProviderRegistry,
-} from '@agentctl/core';
+import type { SessionManager } from '@agentctl/core/session';
+import type { WorktreeManager } from '@agentctl/core/git';
+import type { ProviderRegistry } from '@agentctl/core/providers';
 import type { FastifyBaseLogger } from 'fastify';
 import { type SessionMode, sessionRowSchema, type SessionRow } from '@agentctl/shared';
 

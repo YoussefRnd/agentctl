@@ -1,7 +1,7 @@
 /// <reference types="electron" />
 
 import { buildApp } from '@agentctl/server/app';
-import { Config } from '@agentctl/core';
+import { Config } from '@agentctl/core/config';
 import crypto from 'node:crypto';
 
 async function startServer() {

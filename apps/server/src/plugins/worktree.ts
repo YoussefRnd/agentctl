@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { sessions, projects } from '@agentctl/core';
+import { sessions, projects } from '@agentctl/core/db';
 import { eq, notInArray, and } from 'drizzle-orm';
 
 export default fp(async (fastify) => {

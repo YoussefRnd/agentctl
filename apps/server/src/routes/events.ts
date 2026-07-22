@@ -1,6 +1,6 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
-import { acpEvents } from '@agentctl/core';
+import { acpEvents } from '@agentctl/core/db';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { ACPEventRow } from '@agentctl/shared';
