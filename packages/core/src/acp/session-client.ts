@@ -1,8 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { sessions, acpEvents, providers, mcpServers } from '../db/schema.js';
-import { eq, asc, and } from 'drizzle-orm';
+import { sessions, providers, mcpServers } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 import type { createDatabase } from '../db/index.js';
 import { type Logger, noopLogger } from '../logger.js';
 import type { SessionEventStore } from '../session/event-store.js';
@@ -28,7 +28,6 @@ export class ACPSession {
   public permissionPatternManager = new PermissionPatternManager();
   private pendingApprovals = new Map<string, (response: DomainPermissionResponse) => void>();
   private pendingRequests = new Map<string, DomainPermissionRequest>();
-  private historyHydrated = false;
   private isStopped = false;
   private stopKind: 'idle' | 'error' | null = null;
 
@@ -319,53 +318,6 @@ export class ACPSession {
       if (!isManualMcp) {
         // Persist user message immediately so it shows up in history
         await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
-      }
-      if (!this.historyHydrated) {
-        this.historyHydrated = true;
-
-        const pastEvents =
-          typeof this.db.select === 'function'
-            ? await this.db
-                .select()
-                .from(acpEvents)
-                .where(and(eq(acpEvents.sessionId, this.sessionId), eq(acpEvents.type, 'text')))
-                .orderBy(asc(acpEvents.id))
-            : [];
-
-        const textEvents: { content: string; role?: string }[] = [];
-        for (const e of pastEvents) {
-          try {
-            const parsed = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as
-              Record<string, unknown> | null | undefined;
-            if (parsed && typeof parsed.content === 'string') {
-              textEvents.push({
-                content: parsed.content,
-                role: typeof parsed.role === 'string' ? parsed.role : undefined,
-              });
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        // We exclude the last one we just appended
-        if (textEvents.length > 1) {
-          const formattedHistory = textEvents
-            .slice(0, -1)
-            .map((item) => {
-              const roleName = item.role === 'user' ? 'User' : 'Agent';
-              return `### ${roleName}:\n${item.content}`;
-            })
-            .join('\n\n');
-
-          promptText = `[System: The session runtime was restarted, so you have lost your active memory. Below is the transcript of the conversation history for your context. Please review the context and resume the task without repeating completed steps.]
-
-## Conversation History:
-${formattedHistory}
-
-## User's New Prompt:
-${promptText}`;
-        }
       }
 
       let nativelyLoadsSkills = false;
