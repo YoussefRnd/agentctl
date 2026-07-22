@@ -515,6 +515,34 @@ export class ProviderRegistry {
     });
   }
 
+  async probeAllInstalledProviders(): Promise<void> {
+    const allProviders = this.store.list();
+    const candidates = allProviders.filter(
+      (row) => row.installState !== 'not_installed' && row.authState !== 'needs_auth',
+    );
+
+    const snapshot = this.fetcher.getSnapshot();
+    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
+
+    await Promise.allSettled(
+      candidates.map(async (row) => {
+        try {
+          const agent = agents.find((a) => a.id === row.id);
+          if (agent) {
+            await this.probeWithStatePreserved(row.id, agent, row.authState, 'startup-probe');
+          } else {
+            await this.refreshProvider(row.id);
+          }
+        } catch (err) {
+          this.logger.warn(
+            { err, providerId: row.id },
+            'Background startup probe failed for provider',
+          );
+        }
+      }),
+    );
+  }
+
   async setProviderConfig(
     providerId: string,
     updates: {

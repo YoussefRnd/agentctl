@@ -98,10 +98,13 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.decorate('config', config);
   fastify.decorate('mcpGateway', mcpGateway);
 
-  // Sync providers in the background on startup
-  void providerRegistry.sync().catch((err: unknown) => {
-    fastify.log.error(err, 'Failed to sync provider registry on startup');
-  });
+  // Sync providers in the background on startup and pre-probe installed providers
+  void providerRegistry
+    .sync()
+    .then(() => providerRegistry.probeAllInstalledProviders())
+    .catch((err: unknown) => {
+      fastify.log.error(err, 'Failed to sync provider registry on startup');
+    });
 
   // Prune orphaned worktrees on startup
   if (typeof sessionManager.syncOrphans === 'function') {

@@ -3,7 +3,7 @@ import { api } from '@agentctl/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { ACPEventRow, SessionWithCapabilities } from '@agentctl/shared';
 
 export function useSessionActions() {
   const { sessionId, sessionData } = useSession();
@@ -19,25 +19,39 @@ export function useSessionActions() {
 
     if (!text.trim() && (!attachmentIds || attachmentIds.length === 0)) return;
 
+    const tempId = -Date.now();
+    const optimisticEvent: ACPEventRow = {
+      id: tempId,
+      sessionId: sessionId,
+      type: 'text',
+      data: {
+        role: 'user',
+        content: text,
+      },
+      createdAt: new Date(),
+    };
+
+    queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
+      return [...old, optimisticEvent];
+    });
+
     const isRunning = sessionData?.session.status === 'running';
     if (isRunning) {
       enqueueMessage(text, attachmentIds);
     } else {
-      const tempId = -Date.now();
-      const optimisticEvent: ACPEventRow = {
-        id: tempId,
-        sessionId: sessionId,
-        type: 'text',
-        data: {
-          role: 'user',
-          content: text,
+      queryClient.setQueryData<SessionWithCapabilities>(
+        ['session', sessionId],
+        (old: SessionWithCapabilities | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            session: {
+              ...old.session,
+              status: 'running',
+            },
+          };
         },
-        createdAt: new Date(),
-      };
-
-      queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
-        return [...old, optimisticEvent];
-      });
+      );
 
       try {
         await api.sendInput({
@@ -51,6 +65,19 @@ export function useSessionActions() {
         queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
           return old.filter((e) => e.id !== tempId);
         });
+        queryClient.setQueryData<SessionWithCapabilities>(
+          ['session', sessionId],
+          (old: SessionWithCapabilities | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              session: {
+                ...old.session,
+                status: 'idle',
+              },
+            };
+          },
+        );
         toast.error('Failed to send message');
       }
     }

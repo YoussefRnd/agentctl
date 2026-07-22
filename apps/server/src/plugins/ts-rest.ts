@@ -708,15 +708,16 @@ export default fp(async (fastify) => {
     sendInput: async ({ params, body }) => {
       const { id } = params;
       const { input, attachmentIds } = body;
-      try {
-        await fastify.sessionManager.handleClientMessage(id, 'session.input', {
+      void Promise.resolve(
+        fastify.sessionManager.handleClientMessage(id, 'session.input', {
           input,
           attachmentIds,
-        });
-      } catch (err: unknown) {
+        }),
+      ).catch((err: unknown) => {
         fastify.log.error({ err, sessionId: id }, 'sendInput handleClientMessage failed');
-        throw err;
-      }
+      });
+
+      await Promise.resolve();
       return {
         status: 200 as const,
         body: { success: true },

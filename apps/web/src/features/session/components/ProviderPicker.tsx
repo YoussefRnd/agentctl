@@ -69,18 +69,6 @@ export function ProviderPicker({
     return values;
   }, [activeProvider, envKeys, localCustomEnvs]);
 
-  useEffect(() => {
-    if (!isOpen || !activeProvider) return;
-    if (activeProvider.installState === 'not_installed') return;
-    if (activeProvider.authState === 'needs_auth') return;
-    if (!activeProvider.supportsDynamicModel) return;
-    const hasModelOption = (activeProvider.configOptions ?? []).some(
-      (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-    );
-    if (hasModelOption) return;
-    refreshProvider(activeProvider.id);
-  }, [isOpen, activeProvider, refreshProvider]);
-
   const models = useMemo(() => {
     if (!activeProvider) return [];
 
@@ -188,18 +176,25 @@ export function ProviderPicker({
             />
           ) : models.length === 0 ? (
             <div className="p-2">
-              <button
-                type="button"
-                onClick={() => {
-                  onSelect(activeProvider.id);
-                }}
-                className="border-border/20 hover:bg-text-main/5 flex w-full flex-col rounded-lg border p-3 text-left transition-all"
-              >
-                <div className="text-text-main text-[11px] font-black tracking-wider uppercase">
-                  {activeProvider.label}
+              {isRefreshing ? (
+                <div className="text-text-muted flex items-center justify-center gap-2 p-6 text-xs font-medium">
+                  <RefreshCw className="text-accent h-4 w-4 animate-spin" />
+                  <span>Loading available models...</span>
                 </div>
-                <div className="text-text-muted caption-3xs">DEFAULT CONFIG</div>
-              </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(activeProvider.id);
+                  }}
+                  className="border-border/20 hover:bg-text-main/5 flex w-full flex-col rounded-lg border p-3 text-left transition-all"
+                >
+                  <div className="text-text-main text-[11px] font-black tracking-wider uppercase">
+                    {activeProvider.label}
+                  </div>
+                  <div className="text-text-muted caption-3xs">DEFAULT CONFIG</div>
+                </button>
+              )}
             </div>
           ) : (
             models.map((model, _i) => {
