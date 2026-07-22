@@ -1,5 +1,5 @@
-import { acpEventRowSchema } from './acp-event-schemas.js';
-import type { ACPEventRow } from './acp-event-schemas.js';
+import { acpEventRowSchema } from '../schemas/acp.js';
+import type { ACPEventRow } from '../schemas/acp.js';
 
 export interface SessionEngineOptions {
   sessionId: string;

@@ -5,8 +5,8 @@ import {
   type MutateOptions,
   type MutationFunctionContext,
 } from '@tanstack/react-query';
-import { apiClient } from '@agentctl/api-client';
-import type { ProviderDiscovery, SessionWithCapabilities } from '@agentctl/shared';
+import { providerService } from '@agentctl/api-client';
+import type { SessionWithCapabilities } from '@agentctl/shared';
 import { useActionDispatcher } from './useActionDispatcher';
 
 type SessionResponse = SessionWithCapabilities;
@@ -17,12 +17,12 @@ export function useProviders(sessionId: string | null) {
 
   const { data: providers = [], isLoading: isLoadingProviders } = useQuery({
     queryKey: ['providers'],
-    queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/providers'),
+    queryFn: () => providerService.getProviders(),
   });
 
   const { data: registry = [], isLoading: isLoadingRegistry } = useQuery({
     queryKey: ['registry'],
-    queryFn: () => apiClient.fetch<ProviderDiscovery[]>('/api/registry'),
+    queryFn: () => providerService.getRegistry(),
   });
 
   const updateProviderMutation = useMutation({
@@ -30,10 +30,7 @@ export function useProviders(sessionId: string | null) {
       if (!sessionId) {
         throw new Error('No active session ID');
       }
-      return apiClient.fetch(`/api/sessions/${sessionId}/provider`, {
-        method: 'PATCH',
-        body: JSON.stringify({ providerId, modelId }),
-      });
+      return providerService.updateSessionProvider(sessionId, providerId, modelId);
     },
     onSuccess: () => {
       if (sessionId) {
@@ -72,10 +69,7 @@ export function useProviders(sessionId: string | null) {
 
   const loginMutation = useMutation({
     mutationFn: async ({ providerId, methodId }: { providerId: string; methodId: string }) => {
-      return apiClient.fetch(`/api/providers/${providerId}/login`, {
-        method: 'POST',
-        body: JSON.stringify({ methodId }),
-      });
+      return providerService.login(providerId, methodId);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
@@ -85,9 +79,7 @@ export function useProviders(sessionId: string | null) {
 
   const logoutMutation = useMutation({
     mutationFn: async (providerId: string) => {
-      return apiClient.fetch(`/api/providers/${providerId}/logout`, {
-        method: 'POST',
-      });
+      return providerService.logout(providerId);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
@@ -97,9 +89,7 @@ export function useProviders(sessionId: string | null) {
 
   const activateMutation = useMutation({
     mutationFn: async (providerId: string) => {
-      return apiClient.fetch(`/api/providers/${providerId}/activate`, {
-        method: 'POST',
-      });
+      return providerService.activate(providerId);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
@@ -109,9 +99,7 @@ export function useProviders(sessionId: string | null) {
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      return apiClient.fetch<ProviderDiscovery[]>('/api/providers/sync', {
-        method: 'POST',
-      });
+      return providerService.sync();
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
@@ -121,9 +109,7 @@ export function useProviders(sessionId: string | null) {
 
   const refreshMutation = useMutation({
     mutationFn: async (providerId: string) => {
-      return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/refresh`, {
-        method: 'POST',
-      });
+      return providerService.refresh(providerId);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
@@ -132,9 +118,7 @@ export function useProviders(sessionId: string | null) {
 
   const installMutation = useMutation({
     mutationFn: async (providerId: string) => {
-      return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/install`, {
-        method: 'POST',
-      });
+      return providerService.install(providerId);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
@@ -144,9 +128,7 @@ export function useProviders(sessionId: string | null) {
 
   const removeMutation = useMutation({
     mutationFn: async (providerId: string) => {
-      return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/remove`, {
-        method: 'POST',
-      });
+      return providerService.remove(providerId);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });
@@ -164,10 +146,7 @@ export function useProviders(sessionId: string | null) {
       customEnv?: Record<string, string>;
       nativelyLoadsSkills?: boolean;
     }) => {
-      return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/config`, {
-        method: 'POST',
-        body: JSON.stringify({ customEnv, nativelyLoadsSkills }),
-      });
+      return providerService.updateConfig(providerId, customEnv, nativelyLoadsSkills);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['providers'] });

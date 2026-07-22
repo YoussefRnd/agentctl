@@ -1,4 +1,4 @@
-import type { SessionWithCapabilities } from '../session-schemas.js';
+import type { SessionWithCapabilities } from '../schemas/session.js';
 
 type Listener<T> = (state: T) => void;
 

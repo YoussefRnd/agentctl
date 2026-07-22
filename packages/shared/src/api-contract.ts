@@ -7,7 +7,7 @@ import {
   sessionModeSchema,
   projectListRowSchema,
   mcpToolResultSchema,
-} from './session-schemas.js';
+} from './schemas/session.js';
 
 export const mcpServerSchema = z.object({
   id: z.string(),

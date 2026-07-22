@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { registryAgentSchema, acpConfigOptionSchema, authMethodSchema } from './registry.js';
 
 export const providerSchema = z.string().min(1);
 
@@ -68,12 +69,6 @@ export const providerCapabilitySchema = z.object({
   supportsDynamicConfig: z.boolean().optional(),
   modes: z.array(z.string()).optional().default([]),
 });
-
-import {
-  registryAgentSchema,
-  acpConfigOptionSchema,
-  authMethodSchema,
-} from './registry-schemas.js';
 
 export const installStateSchema = z.enum(['not_installed', 'installed_local', 'system_available']);
 export const authStateSchema = z.enum(['unknown', 'authenticated', 'needs_auth', 'error']);
