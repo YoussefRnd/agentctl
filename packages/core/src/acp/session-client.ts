@@ -22,6 +22,53 @@ import type { ElicitationRequest, ElicitationResponse } from '@agentctl/shared';
 
 export type DbClient = ReturnType<typeof createDatabase>;
 
+interface ParsedUsageMetrics {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  contextLimit?: number;
+  cost?: { amount: number; currency: string };
+}
+
+function parseUsageMetrics(usage: unknown): ParsedUsageMetrics | null {
+  if (!usage || typeof usage !== 'object') return null;
+  const raw = usage as Record<string, unknown>;
+
+  const getNum = (...keys: string[]): number | undefined => {
+    for (const key of keys) {
+      const val = raw[key];
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      if (typeof val === 'string') {
+        const parsed = parseInt(val, 10);
+        if (!isNaN(parsed)) return parsed;
+      }
+    }
+    return undefined;
+  };
+
+  const inputTokens = getNum('inputTokens', 'input_tokens', 'promptTokens', 'prompt_tokens');
+  const outputTokens = getNum(
+    'outputTokens',
+    'output_tokens',
+    'completionTokens',
+    'completion_tokens',
+  );
+  const totalTokens = getNum('totalTokens', 'total_tokens', 'used', 'usedTokens');
+  const contextLimit = getNum('contextLimit', 'context_limit', 'size', 'maxTokens');
+
+  let cost: { amount: number; currency: string } | undefined = undefined;
+  if (raw.cost && typeof raw.cost === 'object') {
+    const c = raw.cost as Record<string, unknown>;
+    const amt = typeof c.amount === 'number' ? c.amount : parseFloat(String(c.amount));
+    if (!isNaN(amt)) {
+      const currencyStr = typeof c.currency === 'string' ? c.currency : 'USD';
+      cost = { amount: amt, currency: currencyStr };
+    }
+  }
+
+  return { inputTokens, outputTokens, totalTokens, contextLimit, cost };
+}
+
 export class ACPSession {
   public acpSessionId: string | null = null;
   public elicitationStore = new ElicitationStore();
@@ -348,8 +395,60 @@ export class ACPSession {
         status: 'turn_end',
         stopReason: promptResult.stopReason,
       };
+
       if (promptResult.usage) {
-        turnData.usage = promptResult.usage;
+        const metrics = parseUsageMetrics(promptResult.usage);
+        if (metrics) {
+          turnData.usage = metrics;
+
+          const sessionRecord = await this.db.query.sessions.findFirst({
+            where: eq(sessions.id, this.sessionId),
+          });
+          if (sessionRecord) {
+            let existingMetrics: Record<string, unknown> = {};
+            try {
+              existingMetrics = JSON.parse(sessionRecord.sessionMetrics) as Record<string, unknown>;
+            } catch {
+              existingMetrics = {};
+            }
+
+            const currentInput =
+              typeof existingMetrics.inputTokens === 'number' ? existingMetrics.inputTokens : 0;
+            const currentOutput =
+              typeof existingMetrics.outputTokens === 'number' ? existingMetrics.outputTokens : 0;
+
+            const newInput = currentInput + (metrics.inputTokens ?? 0);
+            const newOutput = currentOutput + (metrics.outputTokens ?? 0);
+            const newTotal = metrics.totalTokens ?? newInput + newOutput;
+            const newContextLimit = metrics.contextLimit ?? sessionRecord.contextLimit;
+            const newCost = metrics.cost
+              ? sessionRecord.estimatedCost + metrics.cost.amount
+              : sessionRecord.estimatedCost;
+
+            const updatedMetrics = {
+              ...existingMetrics,
+              inputTokens: newInput,
+              outputTokens: newOutput,
+              totalTokens: newTotal,
+              contextLimit: newContextLimit,
+              estimatedCost: newCost,
+              lastTurn: metrics,
+            };
+
+            await this.db
+              .update(sessions)
+              .set({
+                totalTokens: newTotal,
+                contextLimit: newContextLimit,
+                estimatedCost: newCost,
+                sessionMetrics: JSON.stringify(updatedMetrics),
+                updatedAt: new Date(),
+              })
+              .where(eq(sessions.id, this.sessionId));
+          }
+        } else {
+          turnData.usage = promptResult.usage;
+        }
       }
       if (promptResult.userMessageId) {
         turnData.userMessageId = promptResult.userMessageId;

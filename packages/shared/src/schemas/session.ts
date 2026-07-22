@@ -228,6 +228,10 @@ export const selectedPermissionOutcomeSchema = z.object({
 export const sessionConfigOptionsSchema = z.array(acpConfigOptionSchema);
 
 export const sessionMetricsSchema = z.object({
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
+  contextLimit: z.number().optional(),
   usageBreakdown: z
     .object({
       history: z.number().optional(),
