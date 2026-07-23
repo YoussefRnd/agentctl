@@ -283,21 +283,6 @@ function ProviderSidebar({
   );
 }
 
-interface ProviderSetupPanelProps {
-  activeProvider: ProviderDiscovery;
-  envKeys: string[];
-  keysValues: Record<string, string>;
-  localCustomEnvs: Record<string, Record<string, string> | undefined>;
-  setLocalCustomEnvs: React.Dispatch<
-    React.SetStateAction<Record<string, Record<string, string> | undefined>>
-  >;
-  isPending: boolean;
-  isLoggingIn: boolean;
-  login: (args: { providerId: string; methodId: string }) => void;
-  handleSaveAndConnect: () => void;
-  onSelect: (providerId: string, modelId?: string) => void;
-}
-
 function ProviderSetupPanel({
   activeProvider,
   envKeys,
@@ -309,10 +294,26 @@ function ProviderSetupPanel({
   login,
   handleSaveAndConnect,
   onSelect,
-}: ProviderSetupPanelProps) {
+}: {
+  activeProvider: ProviderDiscovery;
+  envKeys: string[];
+  keysValues: Record<string, string>;
+  localCustomEnvs: Record<string, Record<string, string>>;
+  setLocalCustomEnvs: React.Dispatch<React.SetStateAction<Record<string, Record<string, string>>>>;
+  isPending: boolean;
+  isLoggingIn: boolean;
+  login: (args: { providerId: string; methodId: string }) => void;
+  handleSaveAndConnect: () => void;
+  onSelect: (providerId: string, modelId?: string) => void;
+}) {
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const authMethods = activeProvider.authMethods;
+  const hasAuthMethods = authMethods.length > 0;
+  const hasEnvKeys = envKeys.length > 0;
+
   const getKeyError = (key: string): string | null => {
-    const localProviderEnv = localCustomEnvs[activeProvider.id];
-    const hasLocalValue = Boolean(localProviderEnv && key in localProviderEnv);
+    const providerLocal = localCustomEnvs[activeProvider.id] ?? {};
+    const hasLocalValue = key in providerLocal;
     if (hasLocalValue) {
       return validateApiKey(key, keysValues[key] || '');
     }
@@ -322,88 +323,109 @@ function ProviderSetupPanel({
 
   return (
     <div className="flex h-full flex-col items-center justify-center p-4 text-center">
-      <h3 className="text-text-main mb-1 text-[11px] font-black tracking-wider uppercase">
-        {activeProvider.installState === 'not_installed'
-          ? 'Setup Required'
-          : 'Authentication Required'}
+      <h3 className="text-text-main mb-1 text-xs font-semibold">
+        Authenticate to {activeProvider.label}
       </h3>
-      <p className="text-text-muted caption-2xs mb-4 max-w-[240px]">
-        Configure and enable {activeProvider.label}.
+      <p className="text-text-muted mb-4 max-w-[240px] text-xs">
+        Choose one of the following authentication options:
       </p>
 
-      <div className="flex w-full max-w-[240px] flex-col gap-3 text-left">
-        {envKeys.map((key) => {
-          const errorMsg = getKeyError(key);
-          return (
-            <div key={key} className="space-y-1.5">
-              <div className="flex items-baseline justify-between">
-                <label htmlFor={key} className="text-text-muted label-3xs">
-                  {key}
-                </label>
-                {errorMsg && <span className="text-danger caption-3xs">{errorMsg}</span>}
-              </div>
-              <input
-                id={key}
-                type="password"
-                value={keysValues[key] || ''}
-                placeholder={
-                  activeProvider.customEnvConfigured[key]
-                    ? 'Configured (enter to replace)'
-                    : `Enter ${key}...`
-                }
-                onChange={(e) => {
-                  setLocalCustomEnvs({
-                    ...localCustomEnvs,
-                    [activeProvider.id]: {
-                      ...(localCustomEnvs[activeProvider.id] ?? {}),
-                      [key]: e.target.value,
-                    },
-                  });
-                }}
-                className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-sans text-[11px] transition-all duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
-              />
-            </div>
-          );
-        })}
-
-        {activeProvider.installState !== 'not_installed' && (
-          <button
-            type="button"
-            onClick={() => {
-              onSelect(activeProvider.id);
-            }}
-            className="border-border/30 text-text-muted hover:bg-text-main/5 hover:text-text-main flex h-8 w-full items-center justify-center rounded-lg border text-center text-[10px] font-bold tracking-wider uppercase transition-all"
-          >
-            Select Provider anyway
-          </button>
-        )}
-
-        {activeProvider.authMethods.length > 0 && (
-          <div className="mt-2 space-y-1.5">
-            <span className="text-text-muted label-3xs">Auth Methods</span>
-            {activeProvider.authMethods.map((method) => (
-              <button
-                key={method.id}
-                type="button"
-                onClick={() => {
+      <div className="flex w-full max-w-[240px] flex-col gap-2 text-left">
+        <div className="flex flex-col gap-2">
+          {authMethods.map((method, idx) => (
+            <button
+              key={method.id}
+              type="button"
+              onClick={() => {
+                if (method.id === 'api_key') {
+                  setShowApiKeyInput((prev) => !prev);
+                } else {
                   login({ providerId: activeProvider.id, methodId: method.id });
-                }}
-                disabled={isPending}
-                className="border-border/30 bg-surface-secondary/30 text-text-main hover:bg-text-main/5 hover:border-border/50 flex h-8 w-full items-center justify-center rounded-lg border text-center text-[10px] font-bold tracking-wider uppercase transition-all disabled:opacity-30"
-              >
-                {isLoggingIn ? 'AUTHENTICATING...' : `Login via ${method.name}`}
-              </button>
-            ))}
+                }
+              }}
+              disabled={isPending}
+              className={`flex h-8 w-full items-center justify-center rounded-lg px-3 text-xs font-medium transition-all disabled:opacity-30 ${
+                idx === 0
+                  ? 'bg-accent text-brand-crust font-semibold hover:opacity-90 active:scale-[0.98]'
+                  : 'border-border/40 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/80 border'
+              }`}
+            >
+              {isLoggingIn ? 'Authenticating...' : method.name}
+            </button>
+          ))}
+
+          {hasEnvKeys && !authMethods.some((m) => m.id === 'api_key') && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowApiKeyInput((prev) => !prev);
+              }}
+              disabled={isPending}
+              className={`border-border/40 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/80 flex h-8 w-full items-center justify-center rounded-lg border px-3 text-xs font-medium transition-all disabled:opacity-30 ${
+                !hasAuthMethods
+                  ? 'bg-accent text-brand-crust border-none font-semibold hover:opacity-90'
+                  : ''
+              }`}
+            >
+              API Key
+            </button>
+          )}
+        </div>
+
+        {(showApiKeyInput || (!hasAuthMethods && hasEnvKeys)) && (
+          <div className="border-border/20 mt-1 space-y-2 border-t pt-2.5">
+            {envKeys.map((key) => {
+              const errorMsg = getKeyError(key);
+              return (
+                <div key={key} className="space-y-1">
+                  <div className="flex items-baseline justify-between">
+                    <label htmlFor={key} className="text-text-muted label-3xs">
+                      {key}
+                    </label>
+                    {errorMsg && <span className="text-danger caption-3xs">{errorMsg}</span>}
+                  </div>
+                  <input
+                    id={key}
+                    type="password"
+                    value={keysValues[key] || ''}
+                    placeholder={
+                      activeProvider.customEnvConfigured[key]
+                        ? 'Configured (enter to replace)'
+                        : `Enter ${key}...`
+                    }
+                    onChange={(e) => {
+                      setLocalCustomEnvs({
+                        ...localCustomEnvs,
+                        [activeProvider.id]: {
+                          ...(localCustomEnvs[activeProvider.id] ?? {}),
+                          [key]: e.target.value,
+                        },
+                      });
+                    }}
+                    className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-sans text-[11px] transition-all duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
+                  />
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={handleSaveAndConnect}
+              disabled={isPending || envKeys.some((key) => getKeyError(key) !== null)}
+              className="bg-accent text-brand-crust flex h-8 w-full items-center justify-center rounded-lg text-center text-[10px] font-bold tracking-wider uppercase transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
+            >
+              {isPending ? 'CONNECTING...' : 'SAVE AND CONNECT'}
+            </button>
           </div>
         )}
 
         <button
           type="button"
-          onClick={handleSaveAndConnect}
-          disabled={isPending || envKeys.some((key) => getKeyError(key) !== null)}
-          className="bg-accent text-brand-crust mt-2 flex h-8 w-full items-center justify-center rounded-lg text-center text-[10px] font-bold tracking-wider uppercase transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
+          onClick={() => {
+            onSelect(activeProvider.id);
+          }}
+          className="border-border/30 text-text-muted hover:bg-text-main/5 hover:text-text-main mt-1 flex h-7 w-full items-center justify-center rounded-lg border text-center text-[10px] font-medium transition-all"
         >
-          {isPending ? 'CONNECTING...' : 'SAVE AND CONNECT'}
+          Select Provider
         </button>
       </div>
     </div>

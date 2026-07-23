@@ -8,7 +8,7 @@ import {
 } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentRuntime } from '../acp/types.js';
-import { createAgentConnection, DefaultAgentRuntime } from '../acp/index.js';
+import { createAgentConnection, DefaultAgentRuntime, isAuthRequiredError } from '../acp/index.js';
 import type { DbClient } from '../acp/session-client.js';
 import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
@@ -616,6 +616,10 @@ export class ProviderRegistry {
     try {
       await this.launcher.probe(providerId, this.runtime, agent);
     } catch (cause) {
+      if (isAuthRequiredError(cause)) {
+        this.store.setAuthState(providerId, 'needs_auth');
+        return;
+      }
       if (this.store.get(providerId)) {
         const restoredAuthState =
           previousAuthState === 'authenticated' ||

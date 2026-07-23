@@ -38,6 +38,32 @@ import {
 } from './transport/capabilities-cache.js';
 import { parseNotificationToEvents } from './protocol/events.js';
 import { handleFsReadTextFile, handleFsWriteTextFile } from './protocol/file-system.js';
+
+export function isAuthRequiredError(err: unknown): boolean {
+  if (!err) return false;
+  if (err instanceof AuthRequiredError) return true;
+  if (typeof err === 'string') {
+    const lower = err.toLowerCase();
+    return (
+      lower.includes('auth') || lower.includes('unauthorized') || lower.includes('unauthenticated')
+    );
+  }
+  if (typeof err === 'object') {
+    const e = err as { code?: string | number; message?: string };
+    if (e.code === 'auth_required' || e.code === 'needs_auth') return true;
+    if (typeof e.message === 'string') {
+      const lower = e.message.toLowerCase();
+      return (
+        lower.includes('authentication required') ||
+        lower.includes('auth_required') ||
+        lower.includes('needs_auth') ||
+        lower.includes('unauthenticated') ||
+        lower.includes('unauthorized')
+      );
+    }
+  }
+  return false;
+}
 import {
   handleTerminalCreate,
   handleTerminalRelease,
@@ -657,23 +683,26 @@ export class DefaultAgentRuntime implements AgentRuntime {
     try {
       const result = await Promise.race([
         (async (): Promise<AgentProbeResult> => {
-          const { initResult } = await initializeAcpConnection(connection, {
-            clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
-          });
-
-          const typedInit = initResult as {
-            agentCapabilities?: { auth?: { logout?: boolean } };
-            authMethods?: AgentProbeResult['authMethods'];
-          };
-          const agentCapabilities = typedInit.agentCapabilities;
-          const authMethods = typedInit.authMethods ?? [];
-
           let status: 'ready' | 'needs_auth' = 'ready';
           let configOptions: ACPConfigOption[] = [];
           let supportsDynamicModel = false;
           let supportsDynamicConfig = false;
+          let authMethods: AgentProbeResult['authMethods'] = [];
+          let agentCapabilities: { auth?: { logout?: boolean } } | undefined;
+          let modes: string[] | undefined;
 
           try {
+            const { initResult } = await initializeAcpConnection(connection, {
+              clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
+            });
+
+            const typedInit = initResult as {
+              agentCapabilities?: { auth?: { logout?: boolean } };
+              authMethods?: AgentProbeResult['authMethods'];
+            };
+            agentCapabilities = typedInit.agentCapabilities;
+            authMethods = typedInit.authMethods ?? [];
+
             const sessionResult = await connection.newSession({
               cwd: os.tmpdir(),
               mcpServers: [],
@@ -697,15 +726,15 @@ export class DefaultAgentRuntime implements AgentRuntime {
                   })),
                 });
               }
-              const modes = sessionResult.modes;
-              if (modes?.availableModes) {
+              const modesRes = sessionResult.modes;
+              if (modesRes?.availableModes) {
                 configOptions.push({
                   id: 'mode',
                   name: 'Mode',
                   description: 'Select the tool approval mode',
                   type: 'select',
-                  currentValue: modes.currentModeId,
-                  options: modes.availableModes.map((m) => ({
+                  currentValue: modesRes.currentModeId,
+                  options: modesRes.availableModes.map((m) => ({
                     value: m.id,
                     name: m.name,
                     description: m.description ?? undefined,
@@ -716,33 +745,12 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
             const hasAlternateModels = (sessionResult.models?.availableModels ?? []).length > 0;
             supportsDynamicModel = hasAlternateModels;
-
             supportsDynamicConfig = configOptions.length > 0;
-
-            const modes = sessionResult.modes?.availableModes.map((m) => m.id);
-            const supportsLogout = !!agentCapabilities?.auth?.logout;
-
-            const probeResult: AgentProbeResult = {
-              status,
-              configOptions,
-              authMethods,
-              supportsDynamicModel,
-              supportsDynamicConfig,
-              modes,
-              supportsLogout,
-            };
-
-            try {
-              await cache.set(cacheKey, probeResult);
-            } catch (cacheErr) {
-              this.logger.warn(cacheErr, 'Failed to write to capabilities manifest cache');
-            }
-
-            return probeResult;
+            modes = sessionResult.modes?.availableModes.map((m) => m.id);
           } catch (err: unknown) {
-            const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
-            if (error.code === 'auth_required') {
+            if (isAuthRequiredError(err)) {
               status = 'needs_auth';
+              const error = err as { data?: { configOptions?: ACPConfigOption[] } };
               if (error.data?.configOptions) {
                 configOptions = error.data.configOptions;
               }
@@ -759,8 +767,15 @@ export class DefaultAgentRuntime implements AgentRuntime {
             authMethods,
             supportsDynamicModel,
             supportsDynamicConfig,
+            modes,
             supportsLogout,
           };
+
+          try {
+            await cache.set(cacheKey, probeResult);
+          } catch (cacheErr) {
+            this.logger.warn(cacheErr, 'Failed to write to capabilities manifest cache');
+          }
 
           return probeResult;
         })(),

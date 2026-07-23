@@ -3,6 +3,7 @@ import type { ProviderData } from '../provider.js';
 import type { BinaryInstaller } from './binary-installer.js';
 import type { ProviderStore } from './provider-store.js';
 import type { AgentRuntime, AgentProbeResult } from '../../acp/types.js';
+import { isAuthRequiredError } from '../../acp/runtime.js';
 
 export interface LaunchResolved {
   command: string;
@@ -143,6 +144,18 @@ export class ProviderLauncher {
       try {
         result = await runtime.probe(launch.command, launch.args, launch.env);
       } catch (err: unknown) {
+        if (isAuthRequiredError(err)) {
+          this.store.setAuthState(providerId, 'needs_auth');
+          const fallbackResult: AgentProbeResult = {
+            status: 'needs_auth',
+            configOptions: [],
+            authMethods: [],
+            supportsDynamicModel: false,
+            supportsDynamicConfig: false,
+            supportsLogout: false,
+          };
+          return fallbackResult;
+        }
         this.store.setAuthState(providerId, 'error');
         throw err;
       }

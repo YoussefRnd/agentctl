@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Lock } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { getProviderEnvKeys, validateApiKey, type ProviderDiscovery } from '@agentctl/shared';
 import { useProviders } from '../../../hooks/useProviders';
 import { CommandBarToolbar } from './CommandBarToolbar';
@@ -29,6 +29,7 @@ function InlineAuthPanel({
   const { updateProviderConfig, isUpdatingConfig, login, isLoggingIn } = useProviders(sessionId);
 
   const [localEnvs, setLocalEnvs] = useState<Record<string, string>>({});
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
 
   const envKeys = useMemo(() => {
     return getProviderEnvKeys(activeProvider);
@@ -66,77 +67,101 @@ function InlineAuthPanel({
   };
 
   const authMethods = activeProvider.authMethods;
+  const hasAuthMethods = authMethods.length > 0;
+  const hasEnvKeys = envKeys.length > 0;
 
   return (
-    <div className="flex w-full flex-col gap-4 px-5 pt-5 pb-4 font-sans text-xs">
-      <div className="flex items-start gap-3.5">
-        <div className="bg-warning/15 text-warning flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-          <Lock className="h-4 w-4" />
+    <div className="flex w-full flex-col gap-3.5 px-5 pt-4 pb-4 font-sans text-xs">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="bg-accent/15 text-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
+            <Info className="h-4 w-4" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-text-main text-sm leading-none font-medium">
+              Authenticate to {activeProvider.label}
+            </h4>
+            <p className="text-text-muted text-xs leading-normal">
+              Choose one of the following authentication options:
+            </p>
+          </div>
         </div>
-        <div className="flex-1 space-y-1">
-          <h4 className="text-text-main text-sm leading-none font-semibold">
-            Authenticate to {activeProvider.label}
-          </h4>
-          <p className="text-text-muted text-xs leading-normal">
-            Choose one of the following authentication options:
-          </p>
+
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+          {authMethods.map((method, idx) => (
+            <button
+              key={method.id}
+              type="button"
+              onClick={() => {
+                if (method.id === 'api_key') {
+                  setShowApiKeyInput((prev) => !prev);
+                } else {
+                  login({ providerId: activeProvider.id, methodId: method.id });
+                }
+              }}
+              disabled={isPending}
+              className={`flex h-8 items-center justify-center rounded-lg px-4 text-xs font-semibold transition-all disabled:opacity-30 ${
+                idx === 0
+                  ? 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]'
+                  : 'border-border/50 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/80 border'
+              }`}
+            >
+              {isLoggingIn ? 'Authenticating...' : method.name}
+            </button>
+          ))}
+
+          {hasEnvKeys && !authMethods.some((m) => m.id === 'api_key') && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowApiKeyInput((prev) => !prev);
+              }}
+              disabled={isPending}
+              className={`border-border/50 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/80 flex h-8 items-center justify-center rounded-lg border px-4 text-xs font-semibold transition-all disabled:opacity-30 ${
+                !hasAuthMethods ? 'bg-accent text-brand-crust border-none hover:opacity-90' : ''
+              }`}
+            >
+              API Key
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {envKeys.map((key: string) => {
-          const errorMsg = getKeyError(key);
-          return (
-            <div key={key} className="max-w-sm space-y-1.5">
-              <div className="flex items-baseline justify-between">
-                <label htmlFor={`inline-${key}`} className="text-text-muted label-3xs">
-                  {key}
-                </label>
-                {errorMsg && <span className="text-danger caption-3xs">{errorMsg}</span>}
+      {(showApiKeyInput || (!hasAuthMethods && hasEnvKeys)) && (
+        <div className="border-border/20 flex max-w-md flex-col gap-3 border-t pt-3">
+          {envKeys.map((key: string) => {
+            const errorMsg = getKeyError(key);
+            return (
+              <div key={key} className="space-y-1">
+                <div className="flex items-baseline justify-between">
+                  <label htmlFor={`inline-${key}`} className="text-text-muted label-3xs">
+                    {key}
+                  </label>
+                  {errorMsg && <span className="text-danger caption-3xs">{errorMsg}</span>}
+                </div>
+                <input
+                  id={`inline-${key}`}
+                  type="password"
+                  value={keysValues[key] ?? ''}
+                  placeholder={
+                    activeProvider.customEnvConfigured[key]
+                      ? 'Configured (enter to replace)'
+                      : `Enter ${key}...`
+                  }
+                  onChange={(e) => {
+                    setLocalEnvs({
+                      ...localEnvs,
+                      [key]: e.target.value,
+                    });
+                  }}
+                  className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-sans text-[11px] transition-all duration-200 outline-none focus:ring-1 ${
+                    errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''
+                  }`}
+                />
               </div>
-              <input
-                id={`inline-${key}`}
-                type="password"
-                value={keysValues[key] ?? ''}
-                placeholder={
-                  activeProvider.customEnvConfigured[key]
-                    ? 'Configured (enter to replace)'
-                    : `Enter ${key}...`
-                }
-                onChange={(e) => {
-                  setLocalEnvs({
-                    ...localEnvs,
-                    [key]: e.target.value,
-                  });
-                }}
-                className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-sans text-[11px] transition-all duration-200 outline-none focus:ring-1 ${
-                  errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''
-                }`}
-              />
-            </div>
-          );
-        })}
-
-        {authMethods.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-2">
-            {authMethods.map((method) => (
-              <button
-                key={method.id}
-                type="button"
-                onClick={() => {
-                  login({ providerId: activeProvider.id, methodId: method.id });
-                }}
-                disabled={isPending}
-                className="border-border/30 bg-surface-secondary/30 text-text-main hover:bg-text-main/5 hover:border-border/50 flex h-8 items-center justify-center rounded-lg border px-4 text-center text-[10px] font-bold tracking-wider uppercase transition-all disabled:opacity-30"
-              >
-                {isLoggingIn ? 'Authenticating...' : `Login via ${method.name}`}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {envKeys.length > 0 && (
-          <div className="mt-1">
+            );
+          })}
+          <div className="pt-1">
             <button
               type="button"
               onClick={handleSave}
@@ -146,8 +171,8 @@ function InlineAuthPanel({
               {isUpdatingConfig ? 'Saving...' : 'Save API Key'}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
