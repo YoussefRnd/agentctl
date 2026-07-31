@@ -77,13 +77,14 @@ export function parseAcpCapabilities(agentCapabilities: unknown): AcpParsedCapab
     | undefined;
   const caps = agentCapsObj?.sessionCapabilities;
   const supportsResume = !!caps?.resume;
+  const supportsLoad = Boolean(agentCapsObj?.loadSession) || Boolean(caps?.load) || supportsResume;
   return {
     supportsResumeSession: supportsResume,
     supportsCloseSession: !!caps?.close,
     supportsDeleteSession: sessionSupportsDelete(caps),
     supportsListSessions: !!caps?.list,
     supportsAdditionalDirectories: !!caps?.additionalDirectories,
-    supportsLoadSession: Boolean(agentCapsObj?.loadSession) || supportsResume,
+    supportsLoadSession: supportsLoad,
     supportsEmbeddedContext: Boolean(agentCapsObj?.promptCapabilities?.embeddedContext),
   };
 }

@@ -14,7 +14,7 @@ import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
 import { BinaryInstaller } from './registry/binary-installer.js';
 import { RegistryFetcher } from './registry/registry-fetcher.js';
-import { ProviderLauncher } from './registry/provider-launcher.js';
+import { ProviderLauncher, resolveNpxPackageSpec } from './registry/provider-launcher.js';
 import { AuthProvider } from './registry/auth-provider.js';
 import { ProviderSync } from './registry/provider-sync.js';
 import { PersistentAgentConnectionManager } from './registry/persistent-connection.js';
@@ -91,9 +91,15 @@ export class ProviderRegistry {
     this.installer = new BinaryInstaller();
     this.store = new ProviderStore(db);
     this.launcher = new ProviderLauncher(this.store, this.installer);
-    this.authProvider = new AuthProvider(this.launcher, this.store);
+    this.connectionManager = new PersistentAgentConnectionManager(
+      this.store,
+      this.fetcher,
+      this.launcher,
+      logger,
+    );
+    this.launcher.setConnectionManager(this.connectionManager);
+    this.authProvider = new AuthProvider(this.launcher, this.store, this.connectionManager);
     this.syncProvider = new ProviderSync(this.fetcher, this.store, this.installer, this.launcher);
-    this.connectionManager = new PersistentAgentConnectionManager(this.store, this.fetcher, logger);
   }
 
   getConnectionManager(): PersistentAgentConnectionManager {
@@ -324,7 +330,7 @@ export class ProviderRegistry {
       command = 'npx';
       launchArgs = [
         '-y',
-        `${agent.distribution.npx.package}@0.0.0 - ${agent.version}`,
+        resolveNpxPackageSpec(agent.distribution.npx.package, agent.version),
         ...(agent.distribution.npx.args ?? []),
       ];
       launchEnv = agent.distribution.npx.env;
@@ -617,7 +623,9 @@ export class ProviderRegistry {
       await this.launcher.probe(providerId, this.runtime, agent);
     } catch (cause) {
       if (isAuthRequiredError(cause)) {
-        this.store.setAuthState(providerId, 'needs_auth');
+        if (previousAuthState !== 'authenticated') {
+          this.store.setAuthState(providerId, 'needs_auth');
+        }
         return;
       }
       if (this.store.get(providerId)) {

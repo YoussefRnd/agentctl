@@ -15,6 +15,15 @@ export class ProcessStreamTransport implements AgentStreamTransport {
   public readonly stdin: WritableStream<Uint8Array>;
   public readonly stdout: ReadableStream<Uint8Array>;
   public readonly closed: Promise<void>;
+  private _isClosed = false;
+
+  get isClosed(): boolean {
+    return this._isClosed;
+  }
+
+  get isAlive(): boolean {
+    return !this._isClosed && !this.child.killed && this.child.exitCode === null;
+  }
 
   constructor(
     public readonly child: ChildProcess,
@@ -38,12 +47,17 @@ export class ProcessStreamTransport implements AgentStreamTransport {
     this.stdin = Writable.toWeb(stdin) as WritableStream<Uint8Array>;
     this.stdout = Readable.toWeb(stdout) as ReadableStream<Uint8Array>;
 
+    this.child.once('exit', () => {
+      this._isClosed = true;
+    });
+
     this.closed = new Promise<void>((resolve, reject) => {
       let resolved = false;
 
       const handleExit = (code: number | null, signal: NodeJS.Signals | null) => {
         if (resolved) return;
         resolved = true;
+        this._isClosed = true;
         if (code === 0 || code === null) {
           resolve();
         } else {
@@ -59,12 +73,14 @@ export class ProcessStreamTransport implements AgentStreamTransport {
       child.on('error', (err) => {
         if (resolved) return;
         resolved = true;
+        this._isClosed = true;
         reject(err);
       });
     });
   }
 
   kill(signal: NodeJS.Signals | number = 'SIGTERM'): void {
+    this._isClosed = true;
     if (!this.child.killed) {
       this.child.kill(signal);
 

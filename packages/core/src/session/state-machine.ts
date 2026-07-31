@@ -238,10 +238,16 @@ export class SessionStateMachine {
         }
       });
 
+      const sessionRecord = await this.db.query.sessions.findFirst({
+        where: eq(sessions.id, sessionId),
+      });
+      const providerId = sessionRecord?.selectedProvider ?? 'default';
+
       const runtimeHandle = await this.runtime.execute(
         command,
         args,
         {
+          providerId,
           cwd: worktreePath,
           env,
           selectedModel,
@@ -286,15 +292,10 @@ export class SessionStateMachine {
         this.mcpGateway,
       );
 
-      // Synchronize initial mode from DB
-      const sessionRecord = await this.db.query.sessions.findFirst({
-        where: eq(sessions.id, sessionId),
-      });
       if (sessionRecord?.agentPersona) {
         await session.setMode(sessionRecord.agentPersona);
       }
 
-      const providerId = sessionRecord?.selectedProvider ?? 'default';
       let currentMapping: Record<string, string> = {};
       if (sessionRecord?.agentSessionId) {
         try {
@@ -303,8 +304,9 @@ export class SessionStateMachine {
             currentMapping = parsed as Record<string, string>;
           }
         } catch {
-          if (sessionRecord.selectedProvider) {
-            currentMapping[sessionRecord.selectedProvider] = sessionRecord.agentSessionId;
+          const initialProvider = sessionRecord.agent || sessionRecord.selectedProvider;
+          if (initialProvider) {
+            currentMapping[initialProvider] = sessionRecord.agentSessionId;
           }
         }
       }

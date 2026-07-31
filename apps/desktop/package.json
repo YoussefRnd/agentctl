@@ -34,14 +34,14 @@
   "devDependencies": {
     "@agentctl/eslint-config": "workspace:*",
     "@agentctl/tsconfig": "workspace:*",
-    "@tailwindcss/vite": "^4.3.0",
-    "@vitejs/plugin-react": "^6.0.1",
-    "electron": "^43.0.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@typescript/native": "catalog:",
+    "@vitejs/plugin-react": "^6.0.4",
+    "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
-    "tailwindcss": "^4.3.0",
-    "@typescript/native": "catalog:",
+    "tailwindcss": "^4.3.3",
     "typescript": "catalog:",
-    "vite": "^8.0.11"
+    "vite": "^8.1.5"
   }
 }

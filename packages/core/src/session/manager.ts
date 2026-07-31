@@ -20,6 +20,7 @@ import {
 } from '@agentctl/shared';
 import { SessionStateMachine } from './state-machine.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
+import { buildConversationHistoryTranscript } from './history-transcript.js';
 
 export interface IEventBus {
   publish(event: unknown): void;
@@ -30,6 +31,26 @@ export interface CreateSessionParams {
   providerId?: string;
   taskSlug: string;
   mode?: SessionMode;
+}
+
+export function resolveAgentSessionId(
+  rawAgentSessionId: string | null | undefined,
+  targetProviderId: string,
+  initialProviderId?: string | null,
+): string | null {
+  if (!rawAgentSessionId) return null;
+  try {
+    const parsed = JSON.parse(rawAgentSessionId) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const val = (parsed as Record<string, unknown>)[targetProviderId];
+      return typeof val === 'string' ? val : null;
+    }
+  } catch {
+    if (!initialProviderId || initialProviderId === targetProviderId) {
+      return rawAgentSessionId;
+    }
+  }
+  return null;
 }
 
 export class SessionManager {
@@ -189,19 +210,11 @@ export class SessionManager {
       workspacePath = context.worktreePath;
     }
 
-    let resolvedAgentSessionId: string | null = null;
-    if (sessionRecord.agentSessionId) {
-      try {
-        const parsed = JSON.parse(sessionRecord.agentSessionId) as unknown;
-        if (parsed && typeof parsed === 'object') {
-          resolvedAgentSessionId =
-            ((parsed as Record<string, unknown>)[sessionRecord.selectedProvider] as
-              string | undefined) ?? null;
-        }
-      } catch {
-        resolvedAgentSessionId = sessionRecord.agentSessionId;
-      }
-    }
+    const resolvedAgentSessionId = resolveAgentSessionId(
+      sessionRecord.agentSessionId,
+      sessionRecord.selectedProvider,
+      sessionRecord.agent,
+    );
 
     return this.startSession(
       sessionId,
@@ -405,7 +418,6 @@ export class SessionManager {
           selectedProvider: params.selectedProvider,
           selectedModel: selection.selectedModel,
           selectedThinkingEffort: selection.selectedThinkingEffort,
-          agent: params.selectedProvider,
           contextLimit: 0,
           availableCommands: '[]',
           sessionConfigOptions: JSON.stringify(newConfigOptions),
@@ -547,7 +559,8 @@ export class SessionManager {
             providerSessions = parsed as Record<string, string>;
           }
         } catch {
-          providerSessions = { [sessionRecord.selectedProvider]: sessionRecord.agentSessionId };
+          const initialProvider = sessionRecord.agent || sessionRecord.selectedProvider;
+          providerSessions = { [initialProvider]: sessionRecord.agentSessionId };
         }
 
         if (typeof this.runtime.deleteAgentSession === 'function') {
@@ -777,7 +790,40 @@ export class SessionManager {
       }
       await this.rewindSession(sessionId, evtId, rewindMode);
     } else if (payload.input !== undefined) {
-      await session.prompt(payload.input, payload.attachmentIds);
+      let historyContext: string | undefined;
+
+      const sessionRecord = await this.db.query.sessions.findFirst({
+        where: eq(sessions.id, sessionId),
+      });
+
+      if (sessionRecord) {
+        const existingAgentSessionId = resolveAgentSessionId(
+          sessionRecord.agentSessionId,
+          sessionRecord.selectedProvider,
+          sessionRecord.agent,
+        );
+        const hasExistingProviderSession = Boolean(existingAgentSessionId);
+
+        if (!hasExistingProviderSession) {
+          const transcript = await buildConversationHistoryTranscript(this.db, sessionId, {
+            maxTurns: 10,
+          });
+          if (transcript) {
+            historyContext = transcript;
+            await this.eventStore.append(
+              sessionId,
+              'status',
+              {
+                status: 'context_handoff',
+                title: `Transferred recent conversation context to ${sessionRecord.selectedProvider}`,
+              },
+              null,
+            );
+          }
+        }
+      }
+
+      await session.prompt(payload.input, payload.attachmentIds, historyContext);
     }
   }
 

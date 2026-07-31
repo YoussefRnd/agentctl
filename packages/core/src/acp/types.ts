@@ -25,6 +25,7 @@ export interface AgentStreamTransport {
   stdout: ReadableStream<Uint8Array>;
   closed: Promise<void>;
   child: ChildProcess;
+  isAlive: boolean;
   kill(signal?: NodeJS.Signals | number): void;
 }
 
@@ -175,6 +176,7 @@ export interface AgentRuntimeHandle {
 }
 
 export interface RuntimeOptions {
+  providerId?: string;
   cwd: string;
   env?: Record<string, string>;
   selectedModel?: string;
@@ -256,6 +258,7 @@ export interface IConnectionManager {
     supportsDeleteSession?: boolean;
     supportsListSessions?: boolean;
     supportsAdditionalDirectories?: boolean;
+    supportsLoadSession?: boolean;
   }>;
   closeSession(providerId: string, sessionId: string): Promise<void>;
   writeTerminalInput(terminalId: string, data: string): boolean;
@@ -267,6 +270,7 @@ export interface IConnectionManager {
       options: RuntimeOptions;
       callbacks: SessionCallbacks;
     },
+    providerId?: string,
   ): void;
 }
 

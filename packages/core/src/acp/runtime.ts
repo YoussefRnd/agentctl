@@ -116,7 +116,8 @@ export class DefaultAgentRuntime implements AgentRuntime {
     let providerId = '';
 
     if (this.connectionManager) {
-      providerId = this.connectionManager.getProviderIdByCommand(command) ?? command;
+      providerId =
+        options.providerId ?? this.connectionManager.getProviderIdByCommand(command) ?? command;
       try {
         const persistentConn = await this.connectionManager.getConnection(providerId);
         child = persistentConn.child;
@@ -226,52 +227,57 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
         return new Proxy(handlers, {
           get(target, prop, receiver) {
-            if (
-              typeof prop === 'string' &&
-              (prop.startsWith('_') ||
-                prop.includes('.') ||
-                prop.includes('/') ||
-                prop.includes('__'))
-            ) {
-              const canonical = typeof prop === 'string' ? prop.replace(/\./g, '/') : prop;
+            if (typeof prop === 'string') {
+              const canonical = prop.includes('.') ? prop.replace(/\./g, '/') : prop;
               if (canonical in target) {
                 return Reflect.get(target, canonical, receiver);
               }
-              if (!(prop in target)) {
-                if (prop.includes('__') && options.mcpGateway) {
-                  const parts = prop.split('__');
-                  const serverId = parts[0];
-                  const toolName = parts.slice(1).join('__');
-                  const mcpGateway = options.mcpGateway;
-                  return async (params: unknown) => {
-                    try {
-                      logger.info(
-                        { serverId, toolName, params },
-                        `Routing tool call to client-side MCP gateway`,
-                      );
-                      const args =
-                        typeof params === 'object' && params !== null
-                          ? (params as Record<string, unknown>)
-                          : {};
-                      const mcpClient = mcpGateway as {
-                        callTool: (
-                          serverId: string,
-                          toolName: string,
-                          args: Record<string, unknown>,
-                        ) => Promise<unknown>;
-                      };
-                      return await mcpClient.callTool(serverId, toolName, args);
-                    } catch (err: unknown) {
-                      logger.error(err, `Failed to execute client-side MCP tool: ${prop}`);
-                      throw err;
-                    }
-                  };
-                }
-                return (params: unknown) => {
-                  logger.debug({ params }, `Generic handler for ${prop}`);
-                  return Promise.resolve({});
+              if (prop in target) {
+                return Reflect.get(target, prop, receiver);
+              }
+              if (prop.includes('__') && options.mcpGateway) {
+                const parts = prop.split('__');
+                const serverId = parts[0];
+                const toolName = parts.slice(1).join('__');
+                const mcpGateway = options.mcpGateway;
+                return async (params: unknown) => {
+                  try {
+                    logger.info(
+                      { serverId, toolName, params },
+                      `Routing tool call to client-side MCP gateway`,
+                    );
+                    const args =
+                      typeof params === 'object' && params !== null
+                        ? (params as Record<string, unknown>)
+                        : {};
+                    const mcpClient = mcpGateway as {
+                      callTool: (
+                        serverId: string,
+                        toolName: string,
+                        args: Record<string, unknown>,
+                      ) => Promise<unknown>;
+                    };
+                    return await mcpClient.callTool(serverId, toolName, args);
+                  } catch (err: unknown) {
+                    logger.error(err, `Failed to execute client-side MCP tool: ${prop}`);
+                    throw err;
+                  }
                 };
               }
+              return (params: unknown) => {
+                logger.debug({ params }, `Generic handler for ${prop}`);
+                if (
+                  (prop.endsWith('session_notification') || prop.endsWith('sessionUpdate')) &&
+                  params &&
+                  typeof params === 'object' &&
+                  'sessionId' in params
+                ) {
+                  return (
+                    handlers as Record<string, (p: unknown) => Promise<unknown>>
+                  ).sessionUpdate(params);
+                }
+                return Promise.resolve({});
+              };
             }
             return Reflect.get(target, prop, receiver) as unknown;
           },
@@ -354,7 +360,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
         if (this.acpSessionId) {
           if (isPersistent && self.connectionManager) {
             await self.connectionManager.closeSession(providerId, this.acpSessionId);
-          } else if (supportsCloseSession) {
+          } else if (!isPersistent && supportsCloseSession && transport.isAlive) {
             try {
               await withTimeout(
                 connection.closeSession({ sessionId: this.acpSessionId }),
@@ -450,11 +456,11 @@ export class DefaultAgentRuntime implements AgentRuntime {
         supportsDeleteSession = !!persistentConn.supportsDeleteSession;
         supportsListSessions = !!persistentConn.supportsListSessions;
         supportsAdditionalDirectories = !!persistentConn.supportsAdditionalDirectories;
-        supportsLoadSession = !!persistentConn.supportsResumeSession;
+        supportsLoadSession = !!persistentConn.supportsLoadSession;
       } else {
         const { parsedCapabilities } = await initializeAcpConnection(connection, {
           transport,
-          timeoutMs: 60_000,
+          timeoutMs: 120_000,
         });
 
         supportsResumeSession = parsedCapabilities.supportsResumeSession;
@@ -477,41 +483,27 @@ export class DefaultAgentRuntime implements AgentRuntime {
       });
 
       try {
-        if (options.existingAgentSessionId && (supportsResumeSession || supportsLoadSession)) {
-          try {
-            if (supportsResumeSession) {
-              newSessionResult = await withTimeout(
-                connection.resumeSession({
-                  sessionId: options.existingAgentSessionId,
-                  ...baseSessionParams,
-                }),
-                60_000,
-                'resuming ACP session',
-              );
-            } else {
-              newSessionResult = await withTimeout(
-                connection.loadSession({
-                  sessionId: options.existingAgentSessionId,
-                  ...baseSessionParams,
-                }),
-                60_000,
-                'loading ACP session',
-              );
-            }
-            acpSessionId = options.existingAgentSessionId;
-          } catch (loadErr) {
-            this.logger.warn(
-              loadErr,
-              `Failed to load/resume existing session ${options.existingAgentSessionId}, falling back to new session`,
-            );
-            const created = await withTimeout(
-              connection.newSession(baseSessionParams),
+        if (options.existingAgentSessionId && (supportsLoadSession || supportsResumeSession)) {
+          if (supportsLoadSession) {
+            newSessionResult = await withTimeout(
+              connection.loadSession({
+                sessionId: options.existingAgentSessionId,
+                ...baseSessionParams,
+              }),
               60_000,
-              'creating ACP session',
+              'loading ACP session',
             );
-            newSessionResult = created;
-            acpSessionId = created.sessionId;
+          } else if (supportsResumeSession) {
+            newSessionResult = await withTimeout(
+              connection.resumeSession({
+                sessionId: options.existingAgentSessionId,
+                ...baseSessionParams,
+              }),
+              60_000,
+              'resuming ACP session',
+            );
           }
+          acpSessionId = options.existingAgentSessionId;
         } else {
           const created = await withTimeout(
             connection.newSession(baseSessionParams),
@@ -618,12 +610,16 @@ export class DefaultAgentRuntime implements AgentRuntime {
       }
 
       if (isPersistent && finalSessionId && self.connectionManager) {
-        self.connectionManager.registerActiveSession(finalSessionId, {
-          acpSessionId: finalSessionId,
-          localSessionId: options.existingAgentSessionId ?? '',
-          options,
-          callbacks,
-        });
+        self.connectionManager.registerActiveSession(
+          finalSessionId,
+          {
+            acpSessionId: finalSessionId,
+            localSessionId: options.existingAgentSessionId ?? '',
+            options,
+            callbacks,
+          },
+          providerId,
+        );
       }
 
       return handle;
@@ -708,40 +704,9 @@ export class DefaultAgentRuntime implements AgentRuntime {
               mcpServers: [],
             });
 
-            if (sessionResult.configOptions) {
-              configOptions = sessionResult.configOptions as ACPConfigOption[];
-            } else {
-              const models = sessionResult.models;
-              if (models?.availableModels) {
-                configOptions.push({
-                  id: 'model',
-                  name: 'Model',
-                  description: 'Select the model to use',
-                  type: 'select',
-                  currentValue: models.currentModelId,
-                  options: models.availableModels.map((m) => ({
-                    value: m.modelId,
-                    name: m.name,
-                    description: m.description ?? undefined,
-                  })),
-                });
-              }
-              const modesRes = sessionResult.modes;
-              if (modesRes?.availableModes) {
-                configOptions.push({
-                  id: 'mode',
-                  name: 'Mode',
-                  description: 'Select the tool approval mode',
-                  type: 'select',
-                  currentValue: modesRes.currentModeId,
-                  options: modesRes.availableModes.map((m) => ({
-                    value: m.id,
-                    name: m.name,
-                    description: m.description ?? undefined,
-                  })),
-                });
-              }
-            }
+            configOptions = extractConfigOptionsFromSessionResult(
+              sessionResult as Parameters<typeof extractConfigOptionsFromSessionResult>[0],
+            );
 
             const hasAlternateModels = (sessionResult.models?.availableModels ?? []).length > 0;
             supportsDynamicModel = hasAlternateModels;
@@ -884,9 +849,56 @@ export class DefaultAgentRuntime implements AgentRuntime {
         return writer.abort(reason);
       },
     });
-
     return { readable: loggedReadable, writable: loggedWritable };
   }
+}
+
+export function extractConfigOptionsFromSessionResult(sessionResult: {
+  configOptions?: unknown;
+  models?: {
+    availableModels?: { modelId: string; name: string; description?: string | null }[];
+    currentModelId?: string;
+  };
+  modes?: {
+    availableModes?: { id: string; name: string; description?: string | null }[];
+    currentModeId?: string;
+  };
+}): ACPConfigOption[] {
+  const configOptions: ACPConfigOption[] = [];
+  if (Array.isArray(sessionResult.configOptions) && sessionResult.configOptions.length > 0) {
+    return sessionResult.configOptions as ACPConfigOption[];
+  }
+  const models = sessionResult.models;
+  if (models?.availableModels && models.availableModels.length > 0) {
+    configOptions.push({
+      id: 'model',
+      name: 'Model',
+      description: 'Select the model to use',
+      type: 'select',
+      currentValue: models.currentModelId ?? '',
+      options: models.availableModels.map((m) => ({
+        value: m.modelId,
+        name: m.name,
+        description: m.description ?? undefined,
+      })),
+    });
+  }
+  const modesRes = sessionResult.modes;
+  if (modesRes?.availableModes && modesRes.availableModes.length > 0) {
+    configOptions.push({
+      id: 'mode',
+      name: 'Mode',
+      description: 'Select the tool approval mode',
+      type: 'select',
+      currentValue: modesRes.currentModeId ?? '',
+      options: modesRes.availableModes.map((m) => ({
+        value: m.id,
+        name: m.name,
+        description: m.description ?? undefined,
+      })),
+    });
+  }
+  return configOptions;
 }
 
 export class AcpDebugLog {

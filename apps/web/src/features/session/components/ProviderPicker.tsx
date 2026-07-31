@@ -152,7 +152,7 @@ export function ProviderPicker({
             onClick={() => {
               refreshProvider(activeProvider.id);
             }}
-            disabled={isRefreshing || activeProvider.authState === 'needs_auth'}
+            disabled={isRefreshing}
             className="text-text-muted hover:text-text-main hover:bg-text-main/5 rounded-lg p-1.5 transition-colors disabled:opacity-30"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -298,8 +298,10 @@ function ProviderSetupPanel({
   activeProvider: ProviderDiscovery;
   envKeys: string[];
   keysValues: Record<string, string>;
-  localCustomEnvs: Record<string, Record<string, string>>;
-  setLocalCustomEnvs: React.Dispatch<React.SetStateAction<Record<string, Record<string, string>>>>;
+  localCustomEnvs: Record<string, Record<string, string> | undefined>;
+  setLocalCustomEnvs: React.Dispatch<
+    React.SetStateAction<Record<string, Record<string, string> | undefined>>
+  >;
   isPending: boolean;
   isLoggingIn: boolean;
   login: (args: { providerId: string; methodId: string }) => void;

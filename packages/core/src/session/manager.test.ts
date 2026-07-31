@@ -1,5 +1,5 @@
-import { test, expect, describe, vi } from 'vitest';
-import { SessionManager, type IEventBus } from './manager.js';
+import { test, it, expect, describe, vi } from 'vitest';
+import { SessionManager, resolveAgentSessionId, type IEventBus } from './manager.js';
 import type { DbClient, ACPSession } from '../acp/session-client.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
@@ -9,6 +9,9 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { AgentRuntime } from '../acp/types.js';
 import type { ChildProcess } from 'node:child_process';
+import { createDatabase } from '../db/index.js';
+import { projects, sessions } from '../db/schema.js';
+import { SessionEventStore } from './event-store.js';
 
 describe('SessionManager tests', () => {
   const mockDb = {
@@ -947,5 +950,147 @@ describe('SessionManager tests', () => {
     await expect(manager.setConfigOption('sess-1', 'model', 'model-2')).resolves.not.toThrow();
 
     expect(updateConfigOption).toHaveBeenCalledWith('model', 'model-2');
+  });
+
+  describe('resolveAgentSessionId', () => {
+    it('returns null if rawAgentSessionId is null or empty', () => {
+      expect(resolveAgentSessionId(null, 'provider-a', 'provider-a')).toBeNull();
+      expect(resolveAgentSessionId('', 'provider-a', 'provider-a')).toBeNull();
+    });
+
+    it('parses JSON map and returns session ID for matching target provider', () => {
+      const map = JSON.stringify({
+        'provider-a': 'sess-a-123',
+        'provider-b': 'sess-b-456',
+      });
+      expect(resolveAgentSessionId(map, 'provider-a', 'provider-a')).toBe('sess-a-123');
+      expect(resolveAgentSessionId(map, 'provider-b', 'provider-a')).toBe('sess-b-456');
+      expect(resolveAgentSessionId(map, 'provider-c', 'provider-a')).toBeNull();
+    });
+
+    it('handles legacy plain string format: returns string only for original provider, null for new provider', () => {
+      const legacyId = 'legacy-sess-uuid';
+      // Original provider matches target provider -> returns legacy string
+      expect(resolveAgentSessionId(legacyId, 'provider-a', 'provider-a')).toBe('legacy-sess-uuid');
+      // Target provider is different -> returns null to prevent passing legacy ID to new agent
+      expect(resolveAgentSessionId(legacyId, 'provider-b', 'provider-a')).toBeNull();
+    });
+  });
+
+  describe('handleClientMessage / sendUserAction history context injection', () => {
+    it('injects history transcript as embeddedContext when prompt is sent to a new provider for the first time', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-1',
+        name: 'test-project',
+        path: '/tmp/test',
+      });
+      await db.insert(sessions).values({
+        id: 'sess-history-test',
+        projectId: 'proj-1',
+        branch: 'main',
+        worktreePath: '/tmp/test',
+        taskSlug: 'test',
+        agent: 'provider-a',
+        title: 'history test',
+        status: 'idle',
+        selectedProvider: 'provider-b',
+        agentSessionId: JSON.stringify({ 'provider-a': 'agent-sess-1' }),
+        baseCommit: 'hash',
+      });
+
+      const store = new SessionEventStore(db, {
+        publish() {
+          /* noop */
+        },
+      });
+      await store.append(
+        'sess-history-test',
+        'text',
+        { text: 'Create login page', role: 'user' },
+        null,
+      );
+      await store.append(
+        'sess-history-test',
+        'text',
+        { text: 'Created login page', role: 'provider' },
+        null,
+      );
+
+      const mockPrompt = vi.fn().mockResolvedValue(undefined);
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        mockProviderRegistry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue({
+        prompt: mockPrompt,
+      } as unknown as ACPSession);
+
+      await manager.handleClientMessage('sess-history-test', 'session.input', {
+        input: 'Add validation',
+      });
+
+      expect(mockPrompt).toHaveBeenCalledWith(
+        'Add validation',
+        undefined,
+        expect.stringContaining('<previous_conversation_context>'),
+      );
+      expect(mockPrompt.mock.calls[0][2]).toContain('[User]: Create login page');
+      expect(mockPrompt.mock.calls[0][2]).toContain('[Assistant]: Created login page');
+    });
+
+    it('does NOT inject history transcript when provider already has an agentSessionId entry', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-1',
+        name: 'test-project',
+        path: '/tmp/test',
+      });
+      await db.insert(sessions).values({
+        id: 'sess-existing-test',
+        projectId: 'proj-1',
+        branch: 'main',
+        worktreePath: '/tmp/test',
+        taskSlug: 'test',
+        agent: 'provider-b',
+        title: 'existing test',
+        status: 'idle',
+        selectedProvider: 'provider-b',
+        agentSessionId: JSON.stringify({ 'provider-b': 'agent-sess-2' }),
+        baseCommit: 'hash',
+      });
+
+      const store = new SessionEventStore(db, {
+        publish() {
+          /* noop */
+        },
+      });
+      await store.append('sess-existing-test', 'text', { text: 'Hello', role: 'user' }, null);
+
+      const mockPrompt = vi.fn().mockResolvedValue(undefined);
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        mockProviderRegistry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue({
+        prompt: mockPrompt,
+      } as unknown as ACPSession);
+
+      await manager.handleClientMessage('sess-existing-test', 'session.input', {
+        input: 'Followup message',
+      });
+
+      expect(mockPrompt).toHaveBeenCalledWith('Followup message', undefined, undefined);
+    });
   });
 });

@@ -143,6 +143,8 @@ test('DefaultAgentRuntime.probe uses cache and skips spawn on cache hit', async 
     stdout: new PassThrough() as unknown as ReadableStream<Uint8Array>,
     closed: Promise.resolve(),
     child: {} as unknown as ChildProcess,
+    isAlive: true,
+    isClosed: false,
     kill: () => undefined,
   });
 

@@ -137,14 +137,16 @@ export class ACPSession {
 
     void this.runtimeHandle.closed
       .then(() => {
-        if (this.stopKind === 'error') return;
+        if (this.stopKind === 'error' || this.isStopped) return;
 
-        this.kill();
+        this.isStopped = true;
         void this.markSessionStopped('idle').catch((e: unknown) => {
           this.logger.error(e, 'Failed to update session status on close');
         });
       })
       .catch(async (error: unknown) => {
+        if (this.isStopped) return;
+        this.isStopped = true;
         this.logger.error(error, 'Connection closed with error');
         await this.handleError(error);
       });

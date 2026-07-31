@@ -1,9 +1,22 @@
-import type { RegistryAgent } from '@agentctl/shared';
+import os from 'node:os';
+import type { RegistryAgent, ACPConfigOption } from '@agentctl/shared';
 import type { ProviderData } from '../provider.js';
 import type { BinaryInstaller } from './binary-installer.js';
 import type { ProviderStore } from './provider-store.js';
+import type { PersistentAgentConnectionManager } from './persistent-connection.js';
 import type { AgentRuntime, AgentProbeResult } from '../../acp/types.js';
-import { isAuthRequiredError } from '../../acp/runtime.js';
+import { isAuthRequiredError, extractConfigOptionsFromSessionResult } from '../../acp/runtime.js';
+export function resolveNpxPackageSpec(pkg: string, version?: string): string {
+  if (!pkg) return '';
+  const lastAtIndex = pkg.lastIndexOf('@');
+  if (lastAtIndex > 0) {
+    return pkg;
+  }
+  if (!version) {
+    return pkg;
+  }
+  return `${pkg}@${version}`;
+}
 
 export interface LaunchResolved {
   command: string;
@@ -36,7 +49,12 @@ export class ProviderLauncher {
   constructor(
     private store: ProviderStore,
     private installer: BinaryInstaller,
+    private connectionManager?: PersistentAgentConnectionManager,
   ) {}
+
+  setConnectionManager(cm: PersistentAgentConnectionManager): void {
+    this.connectionManager = cm;
+  }
 
   invalidateProbe(providerId: string): void {
     this.probeCache.delete(providerId);
@@ -45,7 +63,7 @@ export class ProviderLauncher {
   async isBinaryOnPath(command: string): Promise<boolean> {
     const fs = await import('node:fs');
     const path = await import('node:path');
-    const os = await import('node:os');
+    const osModule = await import('node:os');
     const pathEnv = process.env.PATH ?? '';
     const pathDirs = pathEnv.split(path.delimiter);
     for (const dir of pathDirs) {
@@ -53,12 +71,12 @@ export class ProviderLauncher {
       try {
         if (fs.existsSync(fullPath)) {
           const stats = fs.statSync(fullPath);
-          if (os.platform() === 'win32' || (stats.mode & 0o111) !== 0) {
+          if (osModule.platform() === 'win32' || (stats.mode & 0o111) !== 0) {
             return true;
           }
         }
       } catch {
-        // ignore
+        // Ignore check errors for invalid paths
       }
     }
     return false;
@@ -79,7 +97,7 @@ export class ProviderLauncher {
           command: 'npx',
           args: [
             '-y',
-            `${agent.distribution.npx.package}@0.0.0 - ${agent.version}`,
+            resolveNpxPackageSpec(agent.distribution.npx.package, agent.version),
             ...(agent.distribution.npx.args ?? []),
           ],
           env: {
@@ -102,10 +120,18 @@ export class ProviderLauncher {
           },
         };
       }
+      return {
+        command: agent.id,
+        args: [],
+        env: {
+          ...proxy,
+          ...rawLaunchEnv,
+          ...rawCustomEnv,
+        },
+      };
     }
 
-    const commandStr = provider.command;
-    let command = commandStr;
+    let command = provider.command;
     const args = JSON.parse(provider.launchArgs || '[]') as string[];
 
     const binEntry = agent?.distribution.binary?.[process.platform];
@@ -135,9 +161,47 @@ export class ProviderLauncher {
     const cached = this.probeCache.get(providerId);
     if (cached) return cached;
 
-    const promise = (async () => {
+    const promise = (async (): Promise<AgentProbeResult> => {
       const row = this.store.get(providerId);
       if (!row) throw new Error(`Provider ${providerId} not found`);
+
+      if (this.connectionManager && row.authState === 'authenticated') {
+        try {
+          const persistent = await this.connectionManager.getConnection(providerId);
+          const conn = persistent.connection as unknown as {
+            newSession?: (p: unknown) => Promise<unknown>;
+          };
+          if (typeof conn.newSession === 'function') {
+            const sessionResult = (await conn.newSession({
+              cwd: os.tmpdir(),
+              mcpServers: [],
+            })) as Parameters<typeof extractConfigOptionsFromSessionResult>[0];
+            const configOptions = extractConfigOptionsFromSessionResult(sessionResult);
+            const probeResult: AgentProbeResult = {
+              status: 'ready',
+              configOptions,
+              authMethods: row.authMethods
+                ? (JSON.parse(row.authMethods) as AgentProbeResult['authMethods'])
+                : [],
+              supportsDynamicModel: configOptions.some(
+                (opt) => opt.id === 'model' || opt.id === 'selectedModel',
+              ),
+              supportsDynamicConfig: configOptions.length > 0,
+              supportsLogout: row.supportsLogout,
+              modes: row.modes ? (JSON.parse(row.modes) as string[]) : [],
+            };
+            this.store.update(providerId, {
+              configOptions: JSON.stringify(configOptions),
+              supportsDynamicModel: probeResult.supportsDynamicModel,
+              supportsDynamicConfig: probeResult.supportsDynamicConfig,
+              authState: 'authenticated',
+            });
+            return probeResult;
+          }
+        } catch {
+          // If persistent connection probe fails, fall back to runtime.probe
+        }
+      }
 
       const launch = this.resolveLaunch(row, agent);
       let result: AgentProbeResult;
@@ -145,20 +209,38 @@ export class ProviderLauncher {
         result = await runtime.probe(launch.command, launch.args, launch.env);
       } catch (err: unknown) {
         if (isAuthRequiredError(err)) {
-          this.store.setAuthState(providerId, 'needs_auth');
+          if (row.authState !== 'authenticated') {
+            this.store.setAuthState(providerId, 'needs_auth');
+          }
+          const existingConfigOpts = row.configOptions
+            ? (JSON.parse(row.configOptions) as ACPConfigOption[])
+            : [];
           const fallbackResult: AgentProbeResult = {
-            status: 'needs_auth',
-            configOptions: [],
-            authMethods: [],
-            supportsDynamicModel: false,
-            supportsDynamicConfig: false,
-            supportsLogout: false,
+            status: row.authState === 'authenticated' ? 'ready' : 'needs_auth',
+            configOptions: existingConfigOpts,
+            authMethods: row.authMethods
+              ? (JSON.parse(row.authMethods) as AgentProbeResult['authMethods'])
+              : [],
+            supportsDynamicModel: row.supportsDynamicModel,
+            supportsDynamicConfig: row.supportsDynamicConfig,
+            supportsLogout: row.supportsLogout,
           };
           return fallbackResult;
         }
-        this.store.setAuthState(providerId, 'error');
+        if (row.authState !== 'authenticated') {
+          this.store.setAuthState(providerId, 'error');
+        }
         throw err;
       }
+
+      const nextAuthState =
+        result.status === 'needs_auth' && row.authState !== 'authenticated'
+          ? 'needs_auth'
+          : row.authState === 'authenticated'
+            ? 'authenticated'
+            : result.status === 'needs_auth'
+              ? 'needs_auth'
+              : 'authenticated';
 
       this.store.update(providerId, {
         configOptions: JSON.stringify(result.configOptions),
@@ -167,7 +249,7 @@ export class ProviderLauncher {
         supportsDynamicConfig: result.supportsDynamicConfig,
         supportsLogout: result.supportsLogout ?? false,
         modes: JSON.stringify(result.modes ?? []),
-        authState: result.status === 'needs_auth' ? 'needs_auth' : 'authenticated',
+        authState: nextAuthState,
       });
 
       return result;

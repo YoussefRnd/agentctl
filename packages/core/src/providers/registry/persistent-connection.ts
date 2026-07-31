@@ -11,7 +11,7 @@ import {
   type AnyMessage,
   type Client,
 } from '@agentclientprotocol/sdk';
-import type { ProviderData } from '../provider.js';
+import type { ProviderLauncher } from './provider-launcher.js';
 import type { ProviderStore } from './provider-store.js';
 import type { RegistryFetcher } from './registry-fetcher.js';
 import { parseRegistryAgents } from '../provider-registry.js';
@@ -28,7 +28,6 @@ import type {
 } from '../../acp/types.js';
 import { type Logger, noopLogger } from '../../logger.js';
 import { TerminalManager } from '../../acp/protocol/terminal-manager.js';
-import { type RegistryAgent } from '@agentctl/shared';
 
 const PERSISTENT_CONNECTION_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -46,6 +45,7 @@ export interface PersistentConnection {
   supportsDeleteSession?: boolean;
   supportsListSessions?: boolean;
   supportsAdditionalDirectories?: boolean;
+  supportsLoadSession?: boolean;
   terminalManager: TerminalManager;
 }
 
@@ -55,48 +55,6 @@ export interface ActiveSession {
   options: RuntimeOptions;
   callbacks: SessionCallbacks;
 }
-
-function pickProxyEnv(source: NodeJS.ProcessEnv): Record<string, string> {
-  const proxyEnv: Record<string, string> = {};
-  const PROXY_ENV_VARS = [
-    'HTTP_PROXY',
-    'HTTPS_PROXY',
-    'NO_PROXY',
-    'http_proxy',
-    'https_proxy',
-    'no_proxy',
-  ] as const;
-  for (const key of PROXY_ENV_VARS) {
-    const value = source[key];
-    if (typeof value === 'string' && value.length > 0) {
-      proxyEnv[key] = value;
-    }
-  }
-  return proxyEnv;
-}
-
-function findBinaryOnPath(command: string): string | null {
-  const pathEnv = process.env.PATH ?? '';
-  const pathDirs = pathEnv.split(path.delimiter);
-  for (const dir of pathDirs) {
-    const fullPath = path.join(dir, command);
-    try {
-      if (fs.existsSync(fullPath)) {
-        const stats = fs.statSync(fullPath);
-        if (os.platform() === 'win32' || (stats.mode & 0o111) !== 0) {
-          return fullPath;
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
-
-const packageToBinaryMap: Record<string, string[]> = {
-  '@anthropic-ai/claude-code': ['claude', 'claude-code'],
-};
 
 function wrapDebug(stream: Stream, debugLog: AcpDebugLog): Stream {
   const { readable, writable } = stream;
@@ -141,18 +99,35 @@ export class PersistentAgentConnectionManager {
   constructor(
     private store: ProviderStore,
     private fetcher: RegistryFetcher,
+    private launcher: ProviderLauncher,
     private logger: Logger = noopLogger,
   ) {}
 
-  registerActiveSession(acpSessionId: string, session: ActiveSession) {
+  registerActiveSession(acpSessionId: string, session: ActiveSession, providerId?: string) {
     this.activeSessions.set(acpSessionId, session);
+    if (providerId) {
+      const conn = this.connections.get(providerId);
+      if (conn) {
+        conn.sessions.set(acpSessionId, { sessionId: acpSessionId, createdAt: Date.now() });
+      }
+    } else {
+      for (const conn of this.connections.values()) {
+        conn.sessions.set(acpSessionId, { sessionId: acpSessionId, createdAt: Date.now() });
+      }
+    }
   }
 
   unregisterActiveSession(acpSessionId: string) {
     this.activeSessions.delete(acpSessionId);
-    for (const [termId, sessId] of this.terminalToSession.entries()) {
+    for (const conn of this.connections.values()) {
+      conn.sessions.delete(acpSessionId);
+    }
+    for (const [termId, sessId] of Array.from(this.terminalToSession.entries())) {
       if (sessId === acpSessionId) {
         this.terminalToSession.delete(termId);
+        for (const conn of this.connections.values()) {
+          conn.terminalManager.release(termId);
+        }
       }
     }
   }
@@ -168,7 +143,7 @@ export class PersistentAgentConnectionManager {
   }
 
   getProviderIdByCommand(command: string): string | undefined {
-    return this.store.listAll().find((p) => p.command === command)?.id;
+    return this.store.listAll().find((p) => p.id === command || p.command === command)?.id;
   }
 
   async getConnection(providerId: string): Promise<PersistentConnection> {
@@ -187,7 +162,7 @@ export class PersistentAgentConnectionManager {
     const agent = agents.find((a) => a.id === providerId);
     if (!agent) throw new Error(`Registry agent data not found for ${providerId}`);
 
-    const launch = resolveLaunch(provider, agent);
+    const launch = this.launcher.resolveLaunch(provider, agent);
     return await this.createPersistentConnection(providerId, launch);
   }
 
@@ -228,7 +203,7 @@ export class PersistentAgentConnectionManager {
         return session;
       };
 
-      return {
+      const handlers = {
         async sessionUpdate(n: SessionNotification) {
           const acpSessionId = n.sessionId;
           if (!acpSessionId) return;
@@ -399,7 +374,34 @@ export class PersistentAgentConnectionManager {
           }
           return Promise.resolve({});
         },
-      } as unknown as Client;
+      };
+
+      return new Proxy(handlers, {
+        get(target, prop, receiver) {
+          if (typeof prop === 'string') {
+            const canonical = prop.includes('.') ? prop.replace(/\./g, '/') : prop;
+            if (canonical in target) {
+              return Reflect.get(target, canonical, receiver) as unknown;
+            }
+            if (prop in target) {
+              return Reflect.get(target, prop, receiver) as unknown;
+            }
+            return (params: unknown) => {
+              logger.debug({ params }, `Generic fallback handler for ${prop}`);
+              if (
+                (prop.endsWith('session_notification') || prop.endsWith('sessionUpdate')) &&
+                params &&
+                typeof params === 'object' &&
+                'sessionId' in params
+              ) {
+                return handlers.sessionUpdate(params as SessionNotification);
+              }
+              return Promise.resolve({});
+            };
+          }
+          return Reflect.get(target, prop, receiver) as unknown;
+        },
+      }) as unknown as Client;
     }, stream);
 
     terminalManager.on('output', (event) => {
@@ -426,7 +428,7 @@ export class PersistentAgentConnectionManager {
 
     const acpInitRes = await initializeAcpConnection(connection, {
       transport,
-      timeoutMs: 60_000,
+      timeoutMs: 120_000,
     });
     const parsedCapabilities = acpInitRes.parsedCapabilities;
     const agentCaps = (acpInitRes.initResult as { agentCapabilities?: { prompt?: unknown } })
@@ -446,6 +448,7 @@ export class PersistentAgentConnectionManager {
       supportsDeleteSession: parsedCapabilities.supportsDeleteSession,
       supportsListSessions: parsedCapabilities.supportsListSessions,
       supportsAdditionalDirectories: parsedCapabilities.supportsAdditionalDirectories,
+      supportsLoadSession: parsedCapabilities.supportsLoadSession,
       terminalManager,
     };
 
@@ -457,6 +460,33 @@ export class PersistentAgentConnectionManager {
         { providerId, code, signal },
         `Persistent agent process exited for provider ${providerId}`,
       );
+
+      const exitReason = String(code ?? signal ?? 'unknown');
+      const sessionsToNotify: ActiveSession[] = [];
+      for (const [acpSessionId, session] of this.activeSessions.entries()) {
+        if (persistentConn.sessions.has(acpSessionId) || persistentConn.sessions.size === 0) {
+          sessionsToNotify.push(session);
+        }
+      }
+
+      for (const session of sessionsToNotify) {
+        void (async () => {
+          try {
+            await session.callbacks.onEvent({
+              type: 'status',
+              status: 'error',
+              title: `Agent process exited with code ${exitReason}`,
+            });
+          } catch (err) {
+            logger.warn(
+              { err, acpSessionId: session.acpSessionId },
+              'Failed to emit exit status event for session',
+            );
+          }
+        })();
+        this.unregisterActiveSession(session.acpSessionId);
+      }
+
       this.closeConnection(providerId);
     });
 
@@ -517,34 +547,4 @@ export class PersistentAgentConnectionManager {
       this.closeConnection(providerId);
     }
   }
-}
-
-function resolveLaunch(
-  provider: ProviderData,
-  agent: RegistryAgent,
-): { command: string; args: string[]; env: Record<string, string> } {
-  let command = provider.command;
-  let args = JSON.parse(provider.launchArgs || '[]') as string[];
-  const launchEnv = JSON.parse(provider.launchEnv || '{}') as Record<string, string>;
-  const customEnv = JSON.parse(provider.customEnv || '{}') as Record<string, string>;
-
-  if (command === 'npx' || command === 'uvx') {
-    const candidateBinaries = packageToBinaryMap[agent.id] ?? [agent.id];
-    for (const bin of candidateBinaries) {
-      const foundPath = findBinaryOnPath(bin);
-      if (foundPath) {
-        command = foundPath;
-        args = [];
-        break;
-      }
-    }
-  }
-
-  const mergedEnv = {
-    ...pickProxyEnv(process.env),
-    ...launchEnv,
-    ...customEnv,
-  };
-
-  return { command, args, env: mergedEnv };
 }

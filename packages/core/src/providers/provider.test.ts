@@ -1,5 +1,6 @@
 import { test, expect } from 'vitest';
 import { Provider } from './provider.js';
+import { resolveNpxPackageSpec } from './registry/provider-launcher.js';
 import type { providers } from '../db/schema.js';
 
 function row(
@@ -38,4 +39,14 @@ test('Provider.toDiscovery exposes registry distribution', () => {
   expect(discovery.agent?.distribution).toEqual({
     npx: { package: 'foo', args: [], env: {} },
   });
+});
+
+test('resolveNpxPackageSpec formats package specifiers correctly without duplication', () => {
+  expect(resolveNpxPackageSpec('grok', '0.2.111')).toBe('grok@0.2.111');
+  expect(resolveNpxPackageSpec('@xai-official/grok', '0.2.111')).toBe('@xai-official/grok@0.2.111');
+  expect(resolveNpxPackageSpec('@xai-official/grok@0.2.111', '0.2.111')).toBe(
+    '@xai-official/grok@0.2.111',
+  );
+  expect(resolveNpxPackageSpec('grok@0.2.111', '0.2.111')).toBe('grok@0.2.111');
+  expect(resolveNpxPackageSpec('pkg')).toBe('pkg');
 });

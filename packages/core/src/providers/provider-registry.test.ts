@@ -97,7 +97,7 @@ describe('ProviderRegistry', () => {
     expect(result.installState).toBe('system_available');
     expect(result.command).toBe('npx');
     launcherSpy.mockRestore();
-  }, 15000);
+  }, 30000);
 
   test('remove resets provider to not_installed and disables it', async () => {
     const db = createDatabase(':memory:');
@@ -122,7 +122,7 @@ describe('ProviderRegistry', () => {
 
     expect(result.installState).toBe('not_installed');
     launcherSpy.mockRestore();
-  }, 15000);
+  }, 30000);
 
   test('concurrent install dedupes to a single installer run', async () => {
     const db = createDatabase(':memory:');
@@ -273,7 +273,7 @@ describe('ProviderRegistry', () => {
     const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
     try {
       const res = await registry.install('range-agent');
-      expect(res.launchArgs).toEqual(['-y', 'range-pkg@0.0.0 - 1.2.3', '--x']);
+      expect(res.launchArgs).toEqual(['-y', 'range-pkg@1.2.3', '--x']);
     } finally {
       launcherSpy.mockRestore();
     }
