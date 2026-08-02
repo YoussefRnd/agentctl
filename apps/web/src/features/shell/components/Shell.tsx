@@ -18,6 +18,7 @@ interface ShellProps {
   sidebar?: ReactNode;
   aside?: ReactNode;
   isAsideOpen?: boolean;
+  isAsideMaximized?: boolean;
   onCloseAside?: () => void;
   onExpandAside?: () => void;
   isMobileSidebarOpen?: boolean;
@@ -30,6 +31,7 @@ export function Shell({
   sidebar,
   aside,
   isAsideOpen = true,
+  isAsideMaximized = false,
   onCloseAside,
   onExpandAside,
   isMobileSidebarOpen = false,
@@ -68,30 +70,6 @@ export function Shell({
     }
   }, [isAsideOpen, asidePanelRef]);
 
-  useEffect(() => {
-    const handleZoomKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      const { view } = window.electronAPI ?? {};
-      if (!view) return;
-
-      if (e.key === '=' || e.key === '+') {
-        e.preventDefault();
-        view.zoomIn();
-      } else if (e.key === '-') {
-        e.preventDefault();
-        view.zoomOut();
-      } else if (e.key === '0') {
-        e.preventDefault();
-        view.zoomReset();
-      }
-    };
-
-    window.addEventListener('keydown', handleZoomKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleZoomKeyDown);
-    };
-  }, []);
-
   return (
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
       <ProgressBar />
@@ -99,57 +77,63 @@ export function Shell({
       <TitleBar nav={nav} />
 
       <div className="relative z-10 min-h-0 w-full flex-1 overflow-hidden p-3">
-        <Group defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged}>
-          {sidebar && (
-            <Panel
-              id="sidebar"
-              defaultSize="17%"
-              minSize="10%"
-              maxSize="25%"
-              collapsible
-              collapsedSize="0%"
-              className="hidden lg:block"
-            >
-              <GlassPanel
-                className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
-                intensity="high"
-              >
-                {sidebar}
-              </GlassPanel>
-            </Panel>
-          )}
-
-          {sidebar && <Separator className="hidden w-3 shrink-0 cursor-col-resize lg:block" />}
-
-          <Panel id="main" minSize="30%">
-            <main className="relative flex h-full min-w-0 flex-col overflow-hidden">
-              <GlassPanel
-                className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
-                intensity="high"
-              >
-                <div className="relative flex flex-1 flex-col overflow-hidden">{children}</div>
-              </GlassPanel>
-            </main>
-          </Panel>
-
-          {aside && (
-            <>
-              <Separator className="w-3 shrink-0 cursor-col-resize" />
+        {isAsideMaximized && aside ? (
+          <div className="bg-background border-border/20 absolute inset-3 z-30 flex flex-col overflow-hidden rounded-lg border shadow-2xl backdrop-blur-xl">
+            {aside}
+          </div>
+        ) : (
+          <Group defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged}>
+            {sidebar && (
               <Panel
-                id="aside"
-                panelRef={asidePanelRef}
-                defaultSize="30%"
-                minSize="15%"
-                maxSize="50%"
+                id="sidebar"
+                defaultSize="17%"
+                minSize="10%"
+                maxSize="25%"
                 collapsible
                 collapsedSize="0%"
-                onResize={handleAsideResize}
+                className="hidden lg:block"
               >
-                {aside}
+                <GlassPanel
+                  className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
+                  intensity="high"
+                >
+                  {sidebar}
+                </GlassPanel>
               </Panel>
-            </>
-          )}
-        </Group>
+            )}
+
+            {sidebar && <Separator className="hidden w-3 shrink-0 cursor-col-resize lg:block" />}
+
+            <Panel id="main" minSize="30%">
+              <main className="relative flex h-full min-w-0 flex-col overflow-hidden">
+                <GlassPanel
+                  className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
+                  intensity="high"
+                >
+                  <div className="relative flex flex-1 flex-col overflow-hidden">{children}</div>
+                </GlassPanel>
+              </main>
+            </Panel>
+
+            {aside && (
+              <>
+                <Separator className="w-3 shrink-0 cursor-col-resize" />
+                <Panel
+                  id="aside"
+                  panelRef={asidePanelRef}
+                  defaultSize="30%"
+                  minSize="15%"
+                  maxSize="50%"
+                  collapsible
+                  collapsedSize="0%"
+                  onResize={handleAsideResize}
+                >
+                  {aside}
+                </Panel>
+              </>
+            )}
+          </Group>
+        )}
 
         {sidebar && onCloseMobileSidebar && (
           <>

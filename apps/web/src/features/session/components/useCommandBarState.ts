@@ -167,6 +167,20 @@ export function useCommandBarState({
     };
   }, [isPickerOpen]);
 
+  useEffect(() => {
+    const handleEditPrompt = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        setInput(customEvent.detail);
+        textareaRef.current?.focus();
+      }
+    };
+    window.addEventListener('agentctl:edit-prompt', handleEditPrompt);
+    return () => {
+      window.removeEventListener('agentctl:edit-prompt', handleEditPrompt);
+    };
+  }, []);
+
   const handleAttachClick = () => {
     fileInputRef.current?.click();
   };

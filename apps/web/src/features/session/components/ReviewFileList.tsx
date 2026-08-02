@@ -87,20 +87,22 @@ export function ReviewFileList({
             <div className="border-border/10 bg-surface-secondary/20 sticky top-0 z-10 flex w-full items-center justify-between border-y px-4 py-1.5 backdrop-blur-md">
               <button
                 type="button"
-                onClick={() => { onToggleSection(fileState); }}
+                onClick={() => {
+                  onToggleSection(fileState);
+                }}
                 aria-expanded={!isSectionCollapsed}
                 className="flex cursor-pointer items-center gap-3 transition-opacity hover:opacity-80"
               >
                 <div
                   className={`h-1.5 w-1.5 rounded-full ${stateSectionColor[fileState]} opacity-60 shadow-[0_0_8px_currentColor]`}
                 />
-                <span className="text-text-muted/40 text-[10px] font-black tracking-[0.2em] uppercase">
+                <span className="text-text-muted/60 text-xs font-semibold capitalize">
                   {fileState}
                 </span>
-                <span className="text-text-muted/20 text-[9px] font-black tabular-nums">
+                <span className="text-text-muted/40 text-[10px] font-semibold tabular-nums">
                   {entries.length}
                 </span>
-                <div className="text-text-muted/20">
+                <div className="text-text-muted/40">
                   {isSectionCollapsed ? (
                     <ChevronRight className="h-3.5 w-3.5" />
                   ) : (
@@ -113,8 +115,11 @@ export function ReviewFileList({
                 <button
                   type="button"
                   disabled={isUnstagingAll}
-                  onClick={(e) => { e.stopPropagation(); onUnstageAll(); }}
-                  className="text-accent hover:text-accent/80 cursor-pointer text-[8px] font-black tracking-wider uppercase transition-colors disabled:opacity-40"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUnstageAll();
+                  }}
+                  className="text-accent hover:text-accent/80 cursor-pointer text-xs font-medium transition-colors disabled:opacity-40"
                 >
                   {isUnstagingAll ? 'Unstaging...' : 'Unstage All'}
                 </button>
@@ -123,8 +128,11 @@ export function ReviewFileList({
                 <button
                   type="button"
                   disabled={isStagingAll}
-                  onClick={(e) => { e.stopPropagation(); onStageAll(); }}
-                  className="text-accent hover:text-accent/80 cursor-pointer text-[8px] font-black tracking-wider uppercase transition-colors disabled:opacity-40"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStageAll();
+                  }}
+                  className="text-accent hover:text-accent/80 cursor-pointer text-xs font-medium transition-colors disabled:opacity-40"
                 >
                   {isStagingAll ? 'Staging...' : 'Stage All'}
                 </button>
@@ -150,7 +158,9 @@ export function ReviewFileList({
                     >
                       <button
                         type="button"
-                        onClick={() => { onToggleFile(file.path); }}
+                        onClick={() => {
+                          onToggleFile(file.path);
+                        }}
                         aria-expanded={!collapsed}
                         className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 border-0 bg-transparent p-0 text-left"
                       >
@@ -158,18 +168,18 @@ export function ReviewFileList({
                           className={`h-3.5 w-3.5 shrink-0 ${stateColorMini[file.state]}`}
                         />
                         <div className="flex min-w-0 flex-1 flex-col">
-                          <span className="text-text-main/80 truncate font-mono text-[11px] font-bold">
+                          <span className="text-text-main/80 truncate font-mono text-xs font-medium">
                             {fileName}
                           </span>
                           {dirPath && (
-                            <span className="text-text-muted/20 truncate font-mono text-[8px] tracking-tighter">
+                            <span className="text-text-muted/40 truncate font-mono text-[10px]">
                               {dirPath}/
                             </span>
                           )}
                         </div>
                       </button>
 
-                      <div className="flex shrink-0 items-center gap-1.5 font-mono text-[8px] font-bold">
+                      <div className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] font-semibold">
                         {stats.additions > 0 && (
                           <span className="text-success/80">+{stats.additions}</span>
                         )}
@@ -181,8 +191,11 @@ export function ReviewFileList({
                       {onStage && (file.state === 'modified' || file.state === 'untracked') && (
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); onStage(file.path); }}
-                          className="bg-accent/15 text-accent/80 hover:bg-accent/25 h-5 shrink-0 cursor-pointer rounded px-1.5 text-[7px] font-black tracking-wider uppercase transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onStage(file.path);
+                          }}
+                          className="bg-accent/15 text-accent/90 hover:bg-accent/25 h-6 shrink-0 cursor-pointer rounded px-2 text-xs font-medium transition-colors"
                         >
                           Stage
                         </button>
@@ -190,18 +203,26 @@ export function ReviewFileList({
                       {onUnstage && file.state === 'staged' && (
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); onUnstage(file.path); }}
-                          className="bg-accent/15 text-accent/80 hover:bg-accent/25 h-5 shrink-0 cursor-pointer rounded px-1.5 text-[7px] font-black tracking-wider uppercase transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onUnstage(file.path);
+                          }}
+                          className="bg-accent/15 text-accent/90 hover:bg-accent/25 h-6 shrink-0 cursor-pointer rounded px-2 text-xs font-medium transition-colors"
                         >
                           Unstage
                         </button>
                       )}
                       {onRevert &&
-                        (file.state === 'modified' || file.state === 'deleted' || file.state === 'staged') && (
+                        (file.state === 'modified' ||
+                          file.state === 'deleted' ||
+                          file.state === 'staged') && (
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); onRevert(file.path); }}
-                            className="bg-danger/10 text-danger/70 hover:bg-danger/20 h-5 shrink-0 cursor-pointer rounded px-1.5 text-[7px] font-black tracking-wider uppercase transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRevert(file.path);
+                            }}
+                            className="bg-danger/10 text-danger/80 hover:bg-danger/20 h-6 shrink-0 cursor-pointer rounded px-2 text-xs font-medium transition-colors"
                           >
                             Revert
                           </button>
@@ -209,7 +230,9 @@ export function ReviewFileList({
 
                       <button
                         type="button"
-                        onClick={() => { onToggleFile(file.path); }}
+                        onClick={() => {
+                          onToggleFile(file.path);
+                        }}
                         aria-expanded={!collapsed}
                         className="text-text-muted/20 hover:text-text-muted/50 cursor-pointer border-0 bg-transparent p-0 transition-colors"
                       >
@@ -231,12 +254,16 @@ export function ReviewFileList({
                           showHeader={false}
                           onStage={
                             onStage && (file.state === 'modified' || file.state === 'untracked')
-                              ? () => { onStage(file.path); }
+                              ? () => {
+                                  onStage(file.path);
+                                }
                               : undefined
                           }
                           onRevert={
                             onRevert && (file.state === 'modified' || file.state === 'deleted')
-                              ? () => { onRevert(file.path); }
+                              ? () => {
+                                  onRevert(file.path);
+                                }
                               : undefined
                           }
                         />

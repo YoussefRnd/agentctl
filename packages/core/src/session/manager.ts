@@ -897,40 +897,44 @@ export class SessionManager {
       throw new Error('Cannot rewind a running session. Wait for the agent to finish.');
     }
 
-    const event = await this.eventStore.getEventWithMetadata(sessionId, eventId);
-    if (!event) {
-      throw new Error(`Event not found: ${String(eventId)}`);
-    }
-
-    const metadata = event.metadata as { snapshotHash?: string } | undefined;
-
-    if (mode === 'files') {
-      if (!metadata?.snapshotHash) {
-        throw new Error(
-          'No snapshot hash available for file rewind. This project may not be a git repo.',
-        );
+    if (mode !== 'fork') {
+      const event = await this.eventStore.getEventWithMetadata(sessionId, eventId);
+      if (!event) {
+        throw new Error(`Event not found: ${String(eventId)}`);
       }
 
-      const snapshotService = this.stateMachine.getSnapshotService();
-      const projectPath =
-        sessionRecord.mode === 'worktree' ? sessionRecord.worktreePath : sessionRecord.project.path;
+      const metadata = event.metadata as { snapshotHash?: string } | undefined;
 
-      const patches = await snapshotService.diff(projectPath, metadata.snapshotHash);
-
-      const modifiedPatches = patches.filter(
-        (p) => p.status === 'modified' || p.status === 'added',
-      );
-      if (modifiedPatches.length > 0) {
-        const git = simpleGit(projectPath);
-        const changedFiles = modifiedPatches.map((p) => p.path);
-        try {
-          await git.raw(['stash', 'push', '--', ...changedFiles]);
-        } catch {
-          // If stash fails (no changes to stash), continue
+      if (mode === 'files') {
+        if (!metadata?.snapshotHash) {
+          throw new Error(
+            'No snapshot hash available for file rewind. This project may not be a git repo.',
+          );
         }
-      }
 
-      await snapshotService.revertFiles(projectPath, metadata.snapshotHash, patches);
+        const snapshotService = this.stateMachine.getSnapshotService();
+        const projectPath =
+          sessionRecord.mode === 'worktree'
+            ? sessionRecord.worktreePath
+            : sessionRecord.project.path;
+
+        const patches = await snapshotService.diff(projectPath, metadata.snapshotHash);
+
+        const modifiedPatches = patches.filter(
+          (p) => p.status === 'modified' || p.status === 'added',
+        );
+        if (modifiedPatches.length > 0) {
+          const git = simpleGit(projectPath);
+          const changedFiles = modifiedPatches.map((p) => p.path);
+          try {
+            await git.raw(['stash', 'push', '--', ...changedFiles]);
+          } catch {
+            // If stash fails (no changes to stash), continue
+          }
+        }
+
+        await snapshotService.revertFiles(projectPath, metadata.snapshotHash, patches);
+      }
     }
 
     if (mode === 'fork') {

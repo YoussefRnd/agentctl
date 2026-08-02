@@ -16,15 +16,15 @@ const modeIcon: Record<RewindMode, typeof RotateCcw> = {
 };
 
 const modeLabel: Record<RewindMode, string> = {
-  conversation: 'Rewind Conversation',
-  files: 'Rewind Conversation + Files',
-  fork: 'Fork From This Point',
+  conversation: 'Rewind conversation',
+  files: 'Rewind conversation + files',
+  fork: 'Fork from this point',
 };
 
 const actionVerb: Record<RewindMode, string> = {
-  conversation: 'REWIND',
-  files: 'REWIND',
-  fork: 'FORK',
+  conversation: 'Rewind',
+  files: 'Rewind',
+  fork: 'Fork',
 };
 
 interface RewindConfirmDialogProps {
@@ -52,27 +52,28 @@ export function RewindConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-surface/80 ring-border/20 max-w-sm rounded-xl border-none p-0 shadow-2xl ring-1 backdrop-blur-[32px]">
+      <DialogContent className="max-w-sm overflow-hidden rounded-2xl p-0">
         <div className="p-5">
           <DialogHeader className="mb-4">
             <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 ring-1 ring-white/10">
               <IconComponent className="text-text-muted h-4 w-4" />
             </div>
-            <DialogTitle>REWIND SESSION</DialogTitle>
+            <DialogTitle>Rewind session</DialogTitle>
             <DialogDescription>{modeLabel[mode]}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            <div className="text-text-muted text-[10px] leading-relaxed font-bold tracking-tight">
+            <div className="text-text-muted text-xs leading-relaxed font-normal">
               {mode === 'fork' ? (
                 <p>
                   A new session will be created with the first{' '}
-                  <strong className="text-text-main">{String(messageCount)}</strong> messages. The
-                  original session is unchanged.
+                  <strong className="text-text-main font-semibold">{String(messageCount)}</strong>{' '}
+                  messages. The original session is unchanged.
                 </p>
               ) : (
                 <p>
-                  <strong className="text-text-main">{String(messageCount)}</strong> messages
+                  <strong className="text-text-main font-semibold">{String(messageCount)}</strong>{' '}
+                  messages
                   {mode === 'files' && fileCount !== undefined
                     ? ` and ${String(fileCount)} files`
                     : ''}{' '}
@@ -83,8 +84,8 @@ export function RewindConfirmDialog({
 
             {error && (
               <div className="border-danger/20 bg-danger/5 rounded-md border p-2">
-                <span className="text-danger label-3xs">ERROR: </span>
-                <span className="text-text-muted text-[10px] font-bold">{error}</span>
+                <span className="text-danger text-xs font-semibold">Error: </span>
+                <span className="text-text-muted text-xs">{error}</span>
               </div>
             )}
           </div>
@@ -97,16 +98,16 @@ export function RewindConfirmDialog({
               onOpenChange(false);
             }}
             disabled={isLoading}
-            className="h-8 px-3 label-2xs"
+            className="h-8 px-3 text-xs font-medium"
           >
-            CANCEL
+            Cancel
           </Button>
           <Button
             onClick={onConfirm}
             disabled={isLoading}
-            className="h-8 px-4 label-2xs"
+            className="bg-accent text-brand-crust h-8 px-4 text-xs font-medium hover:opacity-90"
           >
-            {isLoading ? 'REWINDING...' : actionVerb[mode]}
+            {isLoading ? 'Rewinding...' : actionVerb[mode]}
           </Button>
         </div>
       </DialogContent>

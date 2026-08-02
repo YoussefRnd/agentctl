@@ -34,6 +34,7 @@ interface CommandBarToolbarProps {
   handleSubmit: () => void;
   isRunning: boolean;
   onCancel: () => void;
+  onOpenAuthModal?: () => void;
 }
 
 export function CommandBarToolbar({
@@ -56,6 +57,7 @@ export function CommandBarToolbar({
   handleSubmit,
   isRunning,
   onCancel,
+  onOpenAuthModal,
 }: CommandBarToolbarProps) {
   return (
     <div className="flex items-center justify-between px-4 py-3">
@@ -71,6 +73,7 @@ export function CommandBarToolbar({
           resolvedId={resolvedId}
           handleProviderSelect={handleProviderSelect}
           sessionId={sessionId}
+          onOpenAuthModal={onOpenAuthModal}
         />
 
         <ThinkingEffortSelector

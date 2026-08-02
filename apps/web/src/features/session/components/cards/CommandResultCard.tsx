@@ -70,20 +70,14 @@ export const CommandResultCard = memo(function CommandResultCard({
           </div>
           <div className="text-text-muted/40 group-hover/command:text-text-main shrink-0 transition-colors">
             <ChevronRight
-              className={cn(
-                'h-3 w-3 transition-transform duration-150',
-                open && 'rotate-90',
-              )}
+              className={cn('h-3 w-3 transition-transform duration-150', open && 'rotate-90')}
             />
           </div>
         </Card>
       </button>
 
       {open && (
-        <Card
-          status={isError ? 'error' : 'default'}
-          className="animate-in fade-in slide-in-from-top-1 hover:border-border/30 mt-2 p-4 duration-200"
-        >
+        <Card status={isError ? 'error' : 'default'} className="hover:border-border/30 mt-2 p-4">
           <div className="space-y-3">
             <div className="flex flex-col gap-1.5">
               <span className="text-text-muted text-[10px] font-bold tracking-widest uppercase">

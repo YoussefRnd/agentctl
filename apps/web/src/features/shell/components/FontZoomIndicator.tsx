@@ -1,16 +1,11 @@
 import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import { cn } from '@agentctl/ui';
-import type { FontConfig } from '@agentctl/shared';
-import { useTempFontZoom } from '../../../hooks/useTempFontZoom';
+import { useFontZoom } from '../../../hooks/useFontZoom';
 import { LABELS } from '../../../hooks/fontZoomLogic';
 
-interface FontZoomIndicatorProps {
-  fontConfig?: FontConfig;
-}
-
-export function FontZoomIndicator({ fontConfig }: FontZoomIndicatorProps) {
-  const { context, size, visible } = useTempFontZoom(fontConfig);
+export function FontZoomIndicator() {
+  const { context, size, visible } = useFontZoom();
 
   return createPortal(
     <div

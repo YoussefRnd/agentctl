@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Dropdown } from '@agentctl/ui';
+import { requestFontZoom, requestFontZoomReset } from '../../../hooks/useFontZoom';
 import type { UpdateState } from '../../../electron';
 
 interface AppMenuProps {
@@ -53,13 +54,7 @@ function Item({
   );
 }
 
-function SubMenu({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function SubMenu({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Dropdown.Sub>
       <Dropdown.SubTrigger>
@@ -83,7 +78,6 @@ export function AppMenu({
   const navigate = useNavigate();
   const win = typeof window !== 'undefined' ? window.electronAPI?.win : undefined;
   const edit = typeof window !== 'undefined' ? window.electronAPI?.edit : undefined;
-  const view = typeof window !== 'undefined' ? window.electronAPI?.view : undefined;
 
   const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
   const mod = isMac ? '⌘' : 'Ctrl+';
@@ -102,7 +96,7 @@ export function AppMenu({
         <button
           type="button"
           aria-label="Menu"
-          className="app-region-no-drag text-text-muted hover:bg-white/5 hover:text-text-main flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors"
+          className="app-region-no-drag text-text-muted hover:text-text-main flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/5"
         >
           <MenuIcon className="h-4 w-4" />
         </button>
@@ -110,10 +104,20 @@ export function AppMenu({
       <Dropdown.Portal>
         <Dropdown.Content align="start" side="bottom" className="min-w-[200px]">
           <SubMenu label="File">
-            <Item icon={FilePlus} onSelect={() => { void navigate('/'); }}>
+            <Item
+              icon={FilePlus}
+              onSelect={() => {
+                void navigate('/');
+              }}
+            >
               New Session
             </Item>
-            <Item icon={Settings} onSelect={() => { void navigate('/settings'); }}>
+            <Item
+              icon={Settings}
+              onSelect={() => {
+                void navigate('/settings');
+              }}
+            >
               Preferences
             </Item>
             <Dropdown.Separator />
@@ -156,22 +160,31 @@ export function AppMenu({
               Toggle Developer Tools
             </Item>
             <Dropdown.Separator />
-            <Item icon={ZoomIn} shortcut={`${mod}=`} onSelect={() => view?.zoomIn()}>
+            <Item
+              icon={ZoomIn}
+              shortcut={`${mod}=`}
+              onSelect={() => {
+                requestFontZoom(1);
+              }}
+            >
               Zoom In
             </Item>
-            <Item icon={ZoomOut} shortcut={`${mod}-`} onSelect={() => view?.zoomOut()}>
+            <Item
+              icon={ZoomOut}
+              shortcut={`${mod}-`}
+              onSelect={() => {
+                requestFontZoom(-1);
+              }}
+            >
               Zoom Out
             </Item>
-            <Item onSelect={() => view?.zoomReset()}>Reset Zoom</Item>
+            <Item onSelect={requestFontZoomReset}>Reset Zoom</Item>
             <Dropdown.Separator />
             <Item icon={Maximize} onSelect={() => win?.toggleFullscreen()}>
               Toggle Full Screen
             </Item>
             <Dropdown.Separator />
-            <Item
-              icon={controlsVisible ? EyeOff : Eye}
-              onSelect={onToggleControls}
-            >
+            <Item icon={controlsVisible ? EyeOff : Eye} onSelect={onToggleControls}>
               {controlsVisible ? 'Hide Window Controls' : 'Show Window Controls'}
             </Item>
           </SubMenu>

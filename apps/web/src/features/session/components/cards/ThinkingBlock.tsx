@@ -35,7 +35,10 @@ export function ThinkingBlock({
   const prevShowThinkingRef = useRef(showThinking);
 
   useEffect(() => {
-    if (isCompleted !== prevIsCompletedRef.current || showThinking !== prevShowThinkingRef.current) {
+    if (
+      isCompleted !== prevIsCompletedRef.current ||
+      showThinking !== prevShowThinkingRef.current
+    ) {
       prevIsCompletedRef.current = isCompleted;
       prevShowThinkingRef.current = showThinking;
       if (!showThinking) {
@@ -98,19 +101,14 @@ export function ThinkingBlock({
       </button>
 
       {isOpen && (
-        <div id="activity-details" className="animate-in fade-in relative mt-2 ml-1 duration-200">
+        <div id="activity-details" className="relative mt-2 ml-1">
           <div>
-            {events.map((e, i) => {
+            {events.map((e) => {
               const isLastStreaming = isStreaming && e.id === events[events.length - 1].id;
 
               if (e.type === 'text' && 'role' in e.data && e.data.role === 'thought') {
                 return (
-                  <TimelineEvent
-                    key={e.id}
-                    dotColor="bg-accent"
-                    isPulsing={isLastStreaming}
-                    index={i}
-                  >
+                  <TimelineEvent key={e.id} dotColor="bg-accent" isPulsing={isLastStreaming}>
                     <div className="text-text-muted/95 prose prose-invert prose-p:my-1.5 prose-pre:bg-surface-secondary/40 prose-pre:border prose-pre:border-border/30 prose-pre:rounded-md max-w-none text-[13.5px] leading-relaxed tracking-tight select-text">
                       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
                         {(e.data as { content: string }).content}
@@ -139,12 +137,7 @@ export function ThinkingBlock({
                   : getToolMeta(payload.kind, toolName).dotColor;
 
                 return (
-                  <TimelineEvent
-                    key={e.id}
-                    dotColor={dynamicDotColor}
-                    isPulsing={isLastStreaming}
-                    index={i}
-                  >
+                  <TimelineEvent key={e.id} dotColor={dynamicDotColor} isPulsing={isLastStreaming}>
                     <ToolCallCard tool={toolName} payload={payload} isStreaming={isLastStreaming} />
                   </TimelineEvent>
                 );

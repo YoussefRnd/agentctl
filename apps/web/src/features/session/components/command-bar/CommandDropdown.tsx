@@ -39,15 +39,13 @@ export function CommandDropdown<T extends string>({
           'data-[state=open]:bg-accent/20 data-[state=open]:text-accent data-[state=open]:border-accent/50',
         )
       : cn(
-          'group text-text-muted hover:text-text-main flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors duration-200',
+          'group text-text-muted hover:text-text-main flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors duration-200',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent',
           'disabled:pointer-events-none disabled:opacity-40',
         );
 
   const textClass =
-    variant === 'toolbar'
-      ? 'max-w-[150px] truncate text-[10px] font-bold tracking-widest uppercase'
-      : 'max-w-[150px] truncate';
+    variant === 'toolbar' ? 'max-w-[150px] truncate text-xs font-medium' : 'max-w-[150px] truncate';
 
   const ChevronIcon = side === 'top' ? ChevronUp : ChevronDown;
 

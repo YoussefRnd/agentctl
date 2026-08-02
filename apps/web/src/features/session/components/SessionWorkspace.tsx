@@ -11,11 +11,15 @@ const sidebarElement = <Sidebar />;
 export function SessionWorkspace() {
   const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>('status');
   const [isWorkbenchOpen, setIsWorkbenchOpen] = useState(true);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+      if (e.key === 'Escape' && isMaximized) {
+        e.preventDefault();
+        setIsMaximized(false);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault();
         setIsWorkbenchOpen((prev) => !prev);
       }
@@ -24,7 +28,7 @@ export function SessionWorkspace() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [isMaximized]);
 
   const headerElement = useMemo(
     () => (
@@ -42,8 +46,18 @@ export function SessionWorkspace() {
   );
 
   const workbenchElement = useMemo(
-    () => <Workbench isOpen={isWorkbenchOpen} tab={workbenchTab} onTabChange={setWorkbenchTab} />,
-    [isWorkbenchOpen, workbenchTab],
+    () => (
+      <Workbench
+        isOpen={isWorkbenchOpen}
+        tab={workbenchTab}
+        onTabChange={setWorkbenchTab}
+        isMaximized={isMaximized}
+        onToggleMaximize={() => {
+          setIsMaximized((prev) => !prev);
+        }}
+      />
+    ),
+    [isWorkbenchOpen, workbenchTab, isMaximized],
   );
 
   return (
@@ -52,8 +66,10 @@ export function SessionWorkspace() {
       sidebar={sidebarElement}
       aside={workbenchElement}
       isAsideOpen={isWorkbenchOpen}
+      isAsideMaximized={isMaximized}
       onCloseAside={() => {
         setIsWorkbenchOpen(false);
+        setIsMaximized(false);
       }}
       onExpandAside={() => {
         setIsWorkbenchOpen(true);

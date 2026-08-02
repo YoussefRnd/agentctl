@@ -28,11 +28,6 @@ export interface ElectronAPI {
     paste: () => void;
     selectAll: () => void;
   };
-  view: {
-    zoomIn: () => void;
-    zoomOut: () => void;
-    zoomReset: () => void;
-  };
   update: {
     getState: () => Promise<UpdateState>;
     onUpdate: (callback: (state: UpdateState) => void) => () => void;
@@ -120,17 +115,6 @@ const api: ElectronAPI = {
     },
     selectAll: () => {
       ipcRenderer.send('edit:select-all');
-    },
-  },
-  view: {
-    zoomIn: () => {
-      ipcRenderer.send('view:zoom-in');
-    },
-    zoomOut: () => {
-      ipcRenderer.send('view:zoom-out');
-    },
-    zoomReset: () => {
-      ipcRenderer.send('view:zoom-reset');
     },
   },
   update: {

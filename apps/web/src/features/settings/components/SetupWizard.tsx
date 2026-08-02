@@ -5,7 +5,16 @@ import { useProviders } from '../../../hooks/useProviders';
 import { useSettings } from '../../../hooks/useSettings';
 import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
 import { Terminal, AlertOctagon } from 'lucide-react';
-import { Card, Button, Switch, Select } from '@agentctl/ui';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  Button,
+  Switch,
+  Select,
+} from '@agentctl/ui';
 import { ChecklistItem } from './SetupWizardChecklistItem';
 import { SetupWizardProviderRow } from './SetupWizardProviderRow';
 
@@ -67,49 +76,44 @@ export function SetupWizard() {
   };
 
   return (
-    <div className="bg-background/85 fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4 backdrop-blur-md">
-      <Card
-        intensity="high"
-        className="relative z-10 flex w-full max-w-lg flex-col space-y-4 rounded-3xl p-6 shadow-2xl"
-      >
-        <div className="text-center">
-          <h1 className="text-text-main text-lg font-black tracking-widest uppercase">
-            INITIAL_SETUP::AI_PIPELINE
-          </h1>
-          <p className="text-text-muted mt-1 text-[9px] font-bold tracking-widest uppercase opacity-60">
-            Readiness Checklist and Configuration
-          </p>
-        </div>
+    <Dialog open={showWizard}>
+      <DialogContent showCloseButton={false} className="max-w-lg rounded-2xl p-6 shadow-2xl">
+        <DialogHeader className="text-center sm:text-center">
+          <DialogTitle className="text-text-main text-lg font-semibold">
+            Initial setup: AI pipeline
+          </DialogTitle>
+          <DialogDescription className="text-text-muted mt-1 text-xs opacity-70">
+            Readiness checklist and configuration
+          </DialogDescription>
+        </DialogHeader>
 
         {settings?.registrySyncError && (
           <div className="bg-danger/10 border-danger/25 animate-in fade-in space-y-2 rounded-xl border p-3.5 text-left">
-            <div className="text-danger flex items-center gap-1.5 text-[10px] font-black tracking-wider uppercase">
+            <div className="text-danger flex items-center gap-1.5 text-xs font-semibold">
               <AlertOctagon className="h-4 w-4" />
-              Registry Sync Failure
+              Registry sync failure
             </div>
-            <div className="text-text-main/90 font-mono text-[9.5px] leading-relaxed font-bold uppercase">
+            <div className="text-text-main/90 font-mono text-xs leading-relaxed">
               {settings.registrySyncError}
             </div>
           </div>
         )}
 
         <div className="bg-surface-secondary/15 border-border/10 space-y-3 rounded-2xl border p-4">
-          <h3 className="text-text-main text-[9.5px] font-black tracking-widest uppercase opacity-85">
-            Readiness Checklist
-          </h3>
+          <h3 className="text-text-main text-xs font-semibold opacity-90">Readiness checklist</h3>
           <ul className="space-y-2.5">
             <ChecklistItem
-              label="Agent Registry Synced"
+              label="Agent registry synced"
               checked={registryOk}
               error={settings?.registrySyncError ? 'Registry sync failed' : undefined}
             />
-            <ChecklistItem label="At Least One Agent Enabled" checked={atLeastOneEnabled} />
+            <ChecklistItem label="At least one agent enabled" checked={atLeastOneEnabled} />
             <ChecklistItem
-              label="Authentication Resolved"
+              label="Authentication resolved"
               checked={authOk}
               warning={!allEnabledReady && authDeferred ? 'Deferred' : undefined}
             />
-            <ChecklistItem label="Default Agent Selected" checked={defaultSelected} />
+            <ChecklistItem label="Default agent selected" checked={defaultSelected} />
           </ul>
         </div>
 
@@ -120,7 +124,7 @@ export function SetupWizard() {
             <Switch id="deferAuth" checked={authDeferred} onCheckedChange={setAuthDeferred} />
             <label
               htmlFor="deferAuth"
-              className="text-text-main cursor-pointer text-[9.5px] font-bold tracking-wide uppercase"
+              className="text-text-main cursor-pointer text-xs font-medium"
             >
               Defer authentication for now (I will configure API keys later)
             </label>
@@ -129,11 +133,8 @@ export function SetupWizard() {
 
         {enabledProviders.length > 0 && (
           <div className="bg-surface-secondary/10 border-border/10 space-y-1.5 rounded-xl border p-3.5">
-            <label
-              htmlFor="defaultProvider"
-              className="text-text-muted text-[8px] font-black tracking-widest uppercase"
-            >
-              Default Provider
+            <label htmlFor="defaultProvider" className="text-text-muted text-xs font-medium">
+              Default provider
             </label>
             <Select
               value={settings?.defaultProviderId ?? ''}
@@ -180,10 +181,10 @@ export function SetupWizard() {
             onClick={() => {
               void markDone();
             }}
-            className="text-text-muted label-3xs inline-flex items-center gap-1.5 transition-colors hover:text-white"
+            className="text-text-muted inline-flex items-center gap-1.5 text-xs transition-colors hover:text-white"
           >
             <Terminal className="h-3 w-3" />
-            ADVANCED_CONFIGURATION
+            Advanced configuration
           </Link>
         </div>
 
@@ -193,12 +194,12 @@ export function SetupWizard() {
               void markDone();
             }}
             disabled={!isReady}
-            className="label-2xs h-9 w-full px-4"
+            className="bg-accent text-brand-crust h-9 w-full px-4 text-xs font-medium hover:opacity-90"
           >
-            INITIALIZATION_COMPLETE
+            Complete setup
           </Button>
         </div>
-      </Card>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

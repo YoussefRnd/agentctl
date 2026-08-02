@@ -2,15 +2,15 @@ import { memo, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { Square } from 'lucide-react';
+import { api } from '@agentctl/api-client';
 import { StreamingDots } from '@/shared/StreamingDots';
 import { ProviderIconUrl } from '@/shared/ProviderIcon';
 import { SubagentBlock } from './SubagentBlock';
 import { ThinkingBlock } from './ThinkingBlock';
+import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 import type { SubagentGroup } from './subagentBlockUtils';
-import type {
-  ACPEventRow,
-  ACPEventToolCallData,
-} from '@agentctl/shared';
+import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
 import { useSession } from '../../../../contexts/SessionContext';
 import { useProviders } from '../../../../hooks/useProviders';
 
@@ -49,13 +49,14 @@ const AgentResponseComponent = function AgentResponse({
   isActive = false,
   selectedProviderId,
 }: AgentResponseProps) {
-  const { sessionId } = useSession();
+  const { sessionId, sessionData } = useSession();
   const { providers } = useProviders(sessionId);
 
   const providerIcon = useMemo(() => {
     if (!selectedProviderId) return null;
     return providers.find((p) => p.id === selectedProviderId)?.agent?.icon ?? null;
   }, [providers, selectedProviderId]);
+
   const { activityEvents, responseEvent, subagentGroups } = useMemo(() => {
     const activity: ACPEventRow[] = [];
     let response: ACPEventRow | undefined;
@@ -170,6 +171,8 @@ const AgentResponseComponent = function AgentResponse({
   }, [events]);
 
   const hasActivity = activityEvents.length > 0;
+  const isRunning = sessionData?.session.status === 'running';
+  const showStopButton = (isStreaming || isActive) && isRunning;
 
   return (
     <div data-font-ctx="chat" className="group/agent relative flex flex-col gap-2 py-3">
@@ -209,11 +212,29 @@ const AgentResponseComponent = function AgentResponse({
           )}
 
           {responseEvent && (
-            <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 animate-in fade-in slide-in-from-top-1 max-w-none text-[15px] leading-7 tracking-normal duration-300">
-              <ReactMarkdown rehypePlugins={REHYPE_PLUGINS}>
+            <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 max-w-none text-[15px] leading-7 tracking-normal">
+              <ReactMarkdown rehypePlugins={REHYPE_PLUGINS} components={{ pre: MarkdownCodeBlock }}>
                 {(responseEvent.data as { content: string }).content}
               </ReactMarkdown>
               {isStreaming && <StreamingDots />}
+            </div>
+          )}
+
+          {showStopButton && (
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (sessionId) {
+                    void api.cancelSession({ params: { id: sessionId }, body: {} });
+                  }
+                }}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-400 shadow-sm transition-all hover:bg-rose-500/20 active:scale-95"
+                title="Stop generation"
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+                <span>Stop generation</span>
+              </button>
             </div>
           )}
         </div>

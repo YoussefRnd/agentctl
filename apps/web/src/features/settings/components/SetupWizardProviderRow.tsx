@@ -44,12 +44,12 @@ export function SetupWizardProviderRow({
         <div className="flex min-w-0 items-center gap-2.5">
           <ProviderIcon provider={provider} size="sm" />
           <div className="min-w-0">
-            <div className="text-text-main label-xs truncate">{provider.label}</div>
-            <div className="text-text-muted mt-0.5 text-[8px] font-black tracking-widest uppercase opacity-45">
+            <div className="text-text-main truncate text-xs font-semibold">{provider.label}</div>
+            <div className="text-text-muted mt-0.5 text-[10px] font-medium opacity-60">
               {provider.installState === 'not_installed'
-                ? 'SUPPORTED'
+                ? 'Supported'
                 : provider.authState === 'authenticated'
-                  ? 'ACTIVE'
+                  ? 'Active'
                   : (provider.authState ?? provider.installState ?? 'unknown').replace('_', ' ')}
             </div>
           </div>
@@ -63,13 +63,9 @@ export function SetupWizardProviderRow({
               return (
                 <div key={key} className="space-y-1">
                   <div className="flex items-baseline justify-between">
-                    <label className="text-text-muted text-[8px] font-black tracking-widest uppercase">
-                      {key}
-                    </label>
+                    <label className="text-text-muted font-mono text-xs font-medium">{key}</label>
                     {errorMsg && (
-                      <span className="text-danger text-[8px] font-bold tracking-tight uppercase">
-                        {errorMsg}
-                      </span>
+                      <span className="text-danger text-xs font-normal">{errorMsg}</span>
                     )}
                   </div>
                   <Input
@@ -78,7 +74,7 @@ export function SetupWizardProviderRow({
                     onChange={(e) => {
                       onEnvChange(provider.id, key, e.target.value);
                     }}
-                    className={`!h-8 w-full !text-[11px] ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
+                    className={`!h-8 w-full font-mono !text-xs ${errorMsg ? 'border-danger/40 focus:border-danger/60' : ''}`}
                   />
                 </div>
               );
@@ -93,9 +89,9 @@ export function SetupWizardProviderRow({
                     isUpdatingConfig ||
                     envKeys.some((key) => validateApiKey(key, keysValues[key]) !== null)
                   }
-                  className="h-7 px-3 text-[9px] font-bold tracking-widest"
+                  className="bg-accent text-brand-crust h-7 px-3 text-xs font-medium hover:opacity-90"
                 >
-                  {isUpdatingConfig ? 'CONNECTING...' : 'SAVE_CONFIG'}
+                  {isUpdatingConfig ? 'Connecting...' : 'Save configuration'}
                 </Button>
               </div>
             )}

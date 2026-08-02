@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, utilityProcess, Menu, Tray, nativeImage, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  utilityProcess,
+  Menu,
+  Tray,
+  nativeImage,
+  shell,
+} from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -206,7 +215,7 @@ function createTrayIcon(): Electron.NativeImage {
   }
   // Fallback: 16x16 solid-color PNG data URL
   return nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMklEQVQ4T2NkYPj/n4EBBJgYKAEMFAMMFAEMFAMMFAEMFAMMFAEMFAMMFAEMFAMMFAAMFAMADP0L/wQnGGQAAAAASUVORK5CYII='
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMklEQVQ4T2NkYPj/n4EBBJgYKAEMFAMMFAEMFAMMFAEMFAMMFAEMFAMMFAEMFAMMFAAMFAMADP0L/wQnGGQAAAAASUVORK5CYII=',
   );
 }
 
@@ -288,7 +297,11 @@ function registerWindowIpcHandlers() {
   ipcMain.on('win:open-external', (_event, url: string) => {
     try {
       const parsed = new URL(url);
-      if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:') {
+      if (
+        parsed.protocol === 'http:' ||
+        parsed.protocol === 'https:' ||
+        parsed.protocol === 'mailto:'
+      ) {
         void shell.openExternal(url);
       }
     } catch {
@@ -325,23 +338,6 @@ function registerWindowIpcHandlers() {
   });
   ipcMain.on('edit:select-all', () => {
     mainWindow?.webContents.selectAll();
-  });
-
-  const ZOOM_STEP = 0.5;
-  const ZOOM_MIN = -3;
-  const ZOOM_MAX = 3;
-  ipcMain.on('view:zoom-in', () => {
-    if (!mainWindow) return;
-    const next = Math.min(ZOOM_MAX, mainWindow.webContents.getZoomLevel() + ZOOM_STEP);
-    mainWindow.webContents.setZoomLevel(next);
-  });
-  ipcMain.on('view:zoom-out', () => {
-    if (!mainWindow) return;
-    const next = Math.max(ZOOM_MIN, mainWindow.webContents.getZoomLevel() - ZOOM_STEP);
-    mainWindow.webContents.setZoomLevel(next);
-  });
-  ipcMain.on('view:zoom-reset', () => {
-    mainWindow?.webContents.setZoomLevel(0);
   });
 
   ipcMain.on('app:quit', () => {
@@ -510,10 +506,6 @@ if (!app.requestSingleInstanceLock()) {
           { role: 'reload' },
           { role: 'forceReload' },
           { role: 'toggleDevTools' },
-          { type: 'separator' },
-          { role: 'zoomIn' },
-          { role: 'zoomOut' },
-          { role: 'resetZoom' },
           { type: 'separator' },
           { role: 'togglefullscreen' },
         ],

@@ -63,7 +63,7 @@ export function ApprovalModeSelector({
     return (
       <div className="text-text-muted/60 flex h-8 items-center gap-1.5 rounded-full border border-transparent px-3">
         <Shield className="h-3.5 w-3.5" />
-        <span className="text-[10px] font-bold tracking-widest uppercase">...</span>
+        <span className="text-xs font-medium">...</span>
       </div>
     );
   }

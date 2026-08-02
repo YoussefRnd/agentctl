@@ -26,11 +26,6 @@ interface ElectronAPI {
     paste: () => void;
     selectAll: () => void;
   };
-  view: {
-    zoomIn: () => void;
-    zoomOut: () => void;
-    zoomReset: () => void;
-  };
   update: {
     getState: () => Promise<UpdateState>;
     onUpdate: (callback: (state: UpdateState) => void) => () => void;

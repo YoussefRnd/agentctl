@@ -79,14 +79,11 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
   }, []);
 
   return (
-    <GlassPanel
-
-      className="animate-in fade-in zoom-in-95 w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl"
-    >
+    <GlassPanel className="animate-in fade-in zoom-in-95 w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl">
       <div className="border-border/40 bg-surface-secondary/20 flex items-center justify-between border-b px-4 py-3">
-        <div className="text-text-muted flex items-center gap-2 truncate caption-xs">
+        <div className="text-text-muted flex items-center gap-2 truncate text-xs">
           <Folder className="h-4 w-4" />
-          <span className="truncate">{currentPath ?? 'SCANNING_FS...'}</span>
+          <span className="truncate">{currentPath ?? 'Scanning file system...'}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -122,21 +119,21 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         ) : error ? (
           <div className="flex h-full flex-col items-center justify-center p-4 text-center">
             <AlertCircle className="text-danger mb-2 h-6 w-6 opacity-30" />
-            <p className="text-text-main text-[11px] font-black uppercase">{error}</p>
+            <p className="text-text-main text-xs font-medium">{error}</p>
             <Button
               onClick={() => {
                 void explore(currentPath ?? undefined);
               }}
               variant="outline"
-              className="mt-4"
+              className="mt-4 text-xs font-medium"
             >
-              RETRY_SCAN
+              Retry scan
             </Button>
           </div>
         ) : folders.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center p-4 text-center opacity-30">
+          <div className="flex h-full flex-col items-center justify-center p-4 text-center opacity-40">
             <Folder className="text-text-muted mb-2 h-6 w-6" />
-            <p className="text-[10px] font-bold tracking-widest uppercase">DIRECTORY_EMPTY</p>
+            <p className="text-xs font-medium">Directory is empty</p>
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -160,12 +157,12 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                     )}
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-text-main text-[12px] font-bold tracking-tight uppercase">
+                    <span className="text-text-main text-xs font-semibold tracking-tight">
                       {f.name}
                     </span>
                     {f.isRepo && (
-                      <span className="text-accent/60 mt-0.5 text-[8px] font-black tracking-widest uppercase">
-                        REPO
+                      <span className="text-accent/70 mt-0.5 text-[10px] font-medium">
+                        Git repo
                       </span>
                     )}
                   </div>
@@ -176,9 +173,9 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                     onSelect(f.path);
                   }}
                   size="sm"
-                  className="h-7 px-3 text-[9px] opacity-0 transition-opacity group-hover:opacity-100"
+                  className="h-7 px-3 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100"
                 >
-                  MOUNT
+                  Open
                 </Button>
               </button>
             ))}
@@ -186,8 +183,8 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         )}
       </div>
 
-      <div className="border-border/40 text-text-muted bg-surface-secondary/10 flex items-center justify-between border-t px-4 py-2.5 label-3xs">
-        <span className="opacity-50">CLICK_FOLDER_TO_EXPLORE_/_CLICK_MOUNT_TO_SELECT</span>
+      <div className="border-border/40 text-text-muted bg-surface-secondary/10 flex items-center justify-between border-t px-4 py-2.5 text-[11px]">
+        <span className="opacity-60">Click a folder to explore, or click Open to select</span>
       </div>
     </GlassPanel>
   );

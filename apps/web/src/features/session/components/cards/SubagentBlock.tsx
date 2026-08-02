@@ -48,14 +48,12 @@ function SubagentCard({
   onToggle,
   isStreaming,
   now,
-  animated,
 }: {
   group: SubagentGroup;
   isOpen: boolean;
   onToggle: () => void;
   isStreaming?: boolean;
   now: Date | null;
-  animated?: boolean;
 }) {
   const data = group.subagentEvent.data as ACPEventSubagentUpdateData;
   const childEvents = group.childEvents;
@@ -89,11 +87,7 @@ function SubagentCard({
   );
 
   return (
-    <div
-      className={`border-border/30 hover:border-accent/20 group mb-2 rounded-lg border bg-white/[0.02] transition-colors ${
-        animated ? 'animate-in fade-in slide-in-from-top-1 duration-150' : ''
-      }`}
-    >
+    <div className="border-border/30 hover:border-accent/20 group mb-2 rounded-lg border bg-white/[0.02] transition-colors">
       <button
         type="button"
         aria-expanded={isOpen}
@@ -177,7 +171,7 @@ function SubagentCard({
         <div className="overflow-hidden">
           {childEvents.length > 0 && (
             <div className="border-border/20 mr-3 ml-12 border-t pb-2 pl-2">
-              {childEvents.map((e, i) => {
+              {childEvents.map((e) => {
                 const isLastStreaming =
                   isStreaming && e.id === childEvents[childEvents.length - 1].id;
                 const isChildFailed = e.type === 'tool_call' && e.data.status === 'failed';
@@ -189,7 +183,6 @@ function SubagentCard({
                       key={e.id}
                       dotColor={textData.role === 'thought' ? 'bg-accent' : 'bg-text-muted/30'}
                       isPulsing={isLastStreaming}
-                      index={i}
                     >
                       <span
                         className={`text-text-muted/80 text-[13px] leading-relaxed select-text ${
@@ -216,7 +209,6 @@ function SubagentCard({
                         isFailedTool ? 'bg-rose-500' : getToolMeta(payload.kind, toolName).dotColor
                       }
                       isPulsing={isLastStreaming}
-                      index={i}
                     >
                       <div
                         className={isFailedTool ? 'border-l-2 border-rose-500/50 pl-2' : undefined}
@@ -246,8 +238,6 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
   const [forceAllOpen, setForceAllOpen] = useState<boolean | undefined>(undefined);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [now, setNow] = useState<Date | null>(null);
-  const [animatedIds, setAnimatedIds] = useState<Set<string>>(new Set());
-  const seenIds = useRef<Set<string>>(new Set());
 
   const sorted = useMemo(() => sortSubagentGroups(subagentGroups), [subagentGroups]);
 
@@ -272,22 +262,6 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
       clearInterval(id);
     };
   }, [hasRunning]);
-
-  useEffect(() => {
-    for (const g of sorted) {
-      const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
-      const subId = data.subagentId;
-
-      if (!seenIds.current.has(subId)) {
-        seenIds.current.add(subId);
-        setAnimatedIds((prev) => {
-          const next = new Set(prev);
-          next.add(subId);
-          return next;
-        });
-      }
-    }
-  }, [sorted]);
 
   const prevStatuses = useRef<Map<string, string>>(new Map());
 
@@ -414,7 +388,6 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
               }}
               isStreaming={isStreaming && isOpen}
               now={now}
-              animated={animatedIds.has(subId)}
             />
           </div>
         );

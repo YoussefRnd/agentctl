@@ -724,6 +724,48 @@ describe('SessionManager tests', () => {
     expect(getEventWithMetadata).toHaveBeenCalledWith('session-1', 99);
   });
 
+  test('rewind fork mode does not require the event to exist and forks the full history', async () => {
+    const manager = new SessionManager(
+      mockDb,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
+    const getEventWithMetadata = vi.fn(() => Promise.resolve(null));
+    Object.defineProperty(manager, 'eventStore', {
+      value: { getEventWithMetadata },
+    });
+    Object.defineProperty(manager, 'db', {
+      value: {
+        query: mockDb.query,
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              orderBy: () =>
+                Promise.resolve([
+                  { id: 1, type: 'text' },
+                  { id: 2, type: 'text' },
+                ]),
+            }),
+          }),
+        }),
+      },
+    });
+    const createForkSession = vi.fn(() => Promise.resolve('fork-1'));
+    Object.defineProperty(manager, 'createForkSession', { value: createForkSession });
+
+    const result = await manager.rewindSession('session-1', 999999999, 'fork');
+
+    expect(result).toEqual({ forkSessionId: 'fork-1' });
+    expect(getEventWithMetadata).not.toHaveBeenCalled();
+    expect(createForkSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }), [
+      { id: 1, type: 'text' },
+      { id: 2, type: 'text' },
+    ]);
+  });
+
   test('SessionManager deleteSession calls runtime deleteAgentSession if agentSessionId is present', async () => {
     let deletedAgentSessionId = '';
     const spyRuntime: AgentRuntime = {

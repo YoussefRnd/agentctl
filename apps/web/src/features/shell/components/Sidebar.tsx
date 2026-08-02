@@ -8,6 +8,8 @@ import {
   deleteProject,
   deleteSession,
   archiveSession,
+  renameSession,
+  rewindSession,
 } from '@agentctl/api-client';
 import { useState, useEffect, useRef } from 'react';
 import { ConfirmationModal, SearchBar, Switch, Tooltip } from '@agentctl/ui';
@@ -113,6 +115,33 @@ export function Sidebar() {
     });
   };
 
+  const handleRenameSession = (sessionId: string, currentTitle: string) => {
+    const newTitle = window.prompt('Rename session:', currentTitle);
+    if (newTitle?.trim() && newTitle.trim() !== currentTitle) {
+      void execute(`rename-session-${sessionId}`, () => renameSession(sessionId, newTitle.trim()), {
+        successMessage: 'Session renamed',
+        errorMessage: 'Failed to rename session',
+      }).then((result) => {
+        if (result) {
+          void queryClient.invalidateQueries({ queryKey: ['projects'] });
+          void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        }
+      });
+    }
+  };
+
+  const handleForkSession = (sessionId: string, title: string) => {
+    void execute(`fork-session-${sessionId}`, () => rewindSession(sessionId, 999999999, 'fork'), {
+      successMessage: `Session "${title}" forked`,
+      errorMessage: 'Failed to fork session',
+    }).then((result) => {
+      if (result?.forkSessionId) {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void navigate(`/sessions/${result.forkSessionId}`);
+      }
+    });
+  };
+
   const filteredProjects = useFilteredProjects(projects, { searchQuery, showArchived });
   const toggleProject = (id: string) => {
     setCollapsedProjects((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }));
@@ -124,8 +153,8 @@ export function Sidebar() {
       className="relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent"
     >
       <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center border-b px-4">
-        <span className="text-text-main text-[10px] font-black tracking-[0.2em] uppercase opacity-45 select-none">
-          WORKSPACE
+        <span className="text-text-main text-[10px] font-bold opacity-45 select-none">
+          Workspace
         </span>
       </div>
 
@@ -152,9 +181,7 @@ export function Sidebar() {
         </div>
 
         <div className="flex items-center justify-between">
-          <h3 className="text-text-main text-[9px] font-semibold tracking-[0.15em] uppercase opacity-30">
-            Projects
-          </h3>
+          <h3 className="text-text-main text-[9px] font-semibold opacity-30">Projects</h3>
           <div className="relative flex items-center gap-1.5">
             <Tooltip content="Filter and Sort">
               <button
@@ -179,7 +206,7 @@ export function Sidebar() {
                   }}
                 />
                 <div className="border-border/80 bg-surface-secondary/95 animate-in fade-in slide-in-from-top-2 absolute top-full right-0 z-40 mt-1 w-48 rounded-xl border p-2.5 font-mono text-[10px] shadow-2xl backdrop-blur-md duration-200">
-                  <div className="text-text-muted mb-1.5 px-2 text-[8px] font-semibold tracking-[0.12em] uppercase opacity-40">
+                  <div className="text-text-muted mb-1.5 px-2 text-[8px] font-semibold opacity-40">
                     Sort by
                   </div>
                   <div className="space-y-0.5">
@@ -195,10 +222,10 @@ export function Sidebar() {
                       >
                         <span>
                           {opt === 'lastActive'
-                            ? 'LAST ACTIVE'
+                            ? 'Last active'
                             : opt === 'name'
-                              ? 'NAME (A-Z)'
-                              : 'DATE CREATED'}
+                              ? 'Name (A-Z)'
+                              : 'Date created'}
                         </span>
                         {sortBy === opt && <span className="text-brand-mauve text-[9px]">●</span>}
                       </button>
@@ -207,18 +234,19 @@ export function Sidebar() {
 
                   <div className="border-border/30 my-2 border-t" />
 
-                  <div className="text-text-muted mb-1.5 px-2 text-[8px] font-semibold tracking-[0.12em] uppercase opacity-40">
+                  <div className="text-text-muted mb-1.5 px-2 text-[8px] font-semibold opacity-40">
                     Filter
                   </div>
                   <div className="space-y-1">
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSettings({ gitOnly: !gitOnly });
                       }}
                       className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${gitOnly ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
                     >
-                      <span>GIT REPOS ONLY</span>
+                      <span>Git repos only</span>
                       <Switch
                         checked={gitOnly}
                         size="sm"
@@ -228,12 +256,13 @@ export function Sidebar() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSettings({ showArchived: !showArchived });
                       }}
                       className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${showArchived ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
                     >
-                      <span>SHOW ARCHIVED SESSIONS</span>
+                      <span>Show archived sessions</span>
                       <Switch
                         checked={showArchived}
                         size="sm"
@@ -282,6 +311,8 @@ export function Sidebar() {
                 handleCreateSession={handleCreateSession}
                 handleArchiveSession={handleArchiveSession}
                 handleDeleteSession={handleDeleteSession}
+                handleRenameSession={handleRenameSession}
+                handleForkSession={handleForkSession}
               />
             ))}
           </div>
@@ -291,7 +322,7 @@ export function Sidebar() {
       <div className="border-border/50 relative z-10 mt-auto border-t p-2">
         <Link
           to="/settings"
-          className="text-text-muted hover:text-brand-mauve hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-bold tracking-tighter uppercase transition-all"
+          className="text-text-muted hover:text-brand-mauve hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-medium transition-all"
         >
           <Settings className="h-3.5 w-3.5" />
           Settings

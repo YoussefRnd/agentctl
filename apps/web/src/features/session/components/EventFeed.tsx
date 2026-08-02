@@ -28,7 +28,7 @@ export function EventFeed({
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const { sessionData } = useSession();
-  const { streamingEventId, queuedMessages, dequeueMessage } = useSessionStream();
+  const { streamingEventId } = useSessionStream();
   const isSessionError = sessionData?.session.status === 'error';
 
   const groupedEvents = useMemo(() => {
@@ -176,7 +176,7 @@ export function EventFeed({
                     commandStatus?: string;
                   };
                   return (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 my-2 duration-500 ease-out">
+                    <div className="my-2">
                       <CommandResultCard
                         command={data.command ?? 'unknown'}
                         args={data.args}
@@ -193,7 +193,7 @@ export function EventFeed({
                   };
                   if (!data.elicitation) return null;
                   return (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 my-2 duration-500 ease-out">
+                    <div className="my-2">
                       <ElicitationCard
                         elicitation={data.elicitation}
                         onRespond={(id, resp) => {
@@ -212,7 +212,7 @@ export function EventFeed({
                   );
                 })()
               ) : group.type === 'agent' ? (
-                <div className="animate-in fade-in slide-in-from-bottom-2 my-2 duration-500 ease-out">
+                <div className="my-2">
                   <AgentResponse
                     events={group.events}
                     isStreaming={group.isStreaming}
@@ -223,7 +223,7 @@ export function EventFeed({
                 (() => {
                   const { event: e, isStreaming } = group;
                   return (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 my-2 duration-500 ease-out">
+                    <div className="my-2">
                       <TextCard
                         content={(e.data as { content: string }).content}
                         variant="user"
@@ -288,29 +288,6 @@ export function EventFeed({
                   </div>
                 </div>
               )}
-              {queuedMessages.map((msg, index) => (
-                <div key={msg.id} className="mx-auto max-w-[800px] px-6 pb-4">
-                  <div className="animate-in fade-in slide-in-from-bottom-2 border-accent/40 group relative my-2 flex items-start justify-between rounded-r-lg border-l-2 border-dashed bg-white/[0.01] py-2 pl-4 duration-500 ease-out hover:bg-white/[0.02]">
-                    <div className="min-w-0 flex-1 pr-16">
-                      <span className="text-accent mb-1 block text-[10px] font-bold tracking-wider uppercase">
-                        Queued (#{index + 1})
-                      </span>
-                      <p className="text-text-muted/80 text-[14px] whitespace-pre-wrap">
-                        {msg.text}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        dequeueMessage(msg.id);
-                      }}
-                      className="cursor-pointer rounded border border-rose-500/20 bg-rose-500/5 px-2 py-1 text-[10px] font-extrabold text-rose-400 uppercase transition-all select-none hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ))}
             </>
           ),
         }}

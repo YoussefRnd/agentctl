@@ -11,10 +11,10 @@ export interface FontConfig {
 }
 
 export const DEFAULT_FONT_CONFIG: FontConfig = {
-  ui:       { family: 'Geist',           size: 14 },
-  buffer:   { family: 'JetBrains Mono',  size: 13 },
-  terminal: { family: 'JetBrains Mono',  size: 12 },
-  chat:     { family: 'JetBrains Mono',  size: 13 },
+  ui: { family: 'Geist', size: 13 },
+  buffer: { family: 'JetBrains Mono', size: 13 },
+  terminal: { family: 'JetBrains Mono', size: 12 },
+  chat: { family: 'JetBrains Mono', size: 13 },
 };
 
 export function isValidFontSize(size: unknown): size is number {

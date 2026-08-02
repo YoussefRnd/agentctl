@@ -2,7 +2,6 @@ import type { FontConfig } from '@agentctl/shared';
 
 export const SIZE_MIN = 8;
 export const SIZE_MAX = 72;
-export const DELTA_THRESHOLD = 20;
 
 export type FontContextKey = keyof FontConfig;
 
@@ -19,12 +18,6 @@ export const ALL_CONTEXT_KEYS: readonly FontContextKey[] = [
   'terminal',
   'chat',
 ] as const;
-
-export type Offsets = Record<FontContextKey, number>;
-
-export function createEmptyOffsets(): Offsets {
-  return { ui: 0, buffer: 0, terminal: 0, chat: 0 };
-}
 
 /**
  * Wheel deltaMode constants (mirrors WheelEvent.DOM_DELTA_* so this module
@@ -64,34 +57,10 @@ export function consumeDeltaSteps(
 }
 
 /**
- * Apply N steps to an offset against a base size, clamping the *displayed size*
- * to [min, max] AND keeping the offset itself within the achievable range so
- * it never drifts out of bounds when the base changes later.
+ * Clamp a font size to [min, max].
  */
 export function clampSize(size: number, min = SIZE_MIN, max = SIZE_MAX): number {
   return Math.min(max, Math.max(min, size));
-}
-
-/**
- * Compute the new offset for a context given a step count, the current base
- * size and the previous offset. The offset is clamped so that base + offset
- * always stays in [min, max]; this prevents offset drift when the user's
- * persisted base changes mid-session.
- */
-export function applySteps(
-  steps: number,
-  base: number,
-  prevOffset: number,
-  min = SIZE_MIN,
-  max = SIZE_MAX,
-): { offset: number; size: number } {
-  const minOffset = min - base;
-  const maxOffset = max - base;
-  let next = prevOffset + steps;
-  if (next < minOffset) next = minOffset;
-  if (next > maxOffset) next = maxOffset;
-  const size = clampSize(base + next, min, max);
-  return { offset: next, size };
 }
 
 /**
@@ -101,4 +70,41 @@ export function applySteps(
  */
 export function resolveContextKey(value: unknown): FontContextKey | null {
   return typeof value === 'string' && value in LABELS ? (value as FontContextKey) : null;
+}
+
+/**
+ * Map a keydown event (shape only, DOM-free) to a zoom action:
+ * 1 = zoom in, -1 = zoom out, 0 = reset, null = not a zoom shortcut.
+ */
+export function keyboardStepFor(e: {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+}): 1 | -1 | 0 | null {
+  if (!e.ctrlKey && !e.metaKey) return null;
+  if (e.key === '=' || e.key === '+') return 1;
+  if (e.key === '-') return -1;
+  if (e.key === '0') return 0;
+  return null;
+}
+
+/**
+ * Contexts to scale together: chat prose and terminal code stay in sync.
+ */
+export function resolveTargetContexts(rawCtx: FontContextKey): FontContextKey[] {
+  return rawCtx === 'chat' || rawCtx === 'terminal' ? ['chat', 'terminal'] : [rawCtx];
+}
+
+/**
+ * Gate ctrl/meta wheel events so they only count as a deliberate zoom gesture.
+ * Touchpads can misfire pinch detection during plain two-finger scrolling
+ * (emitted as ctrl+wheel bursts interleaved with normal scroll events).
+ * A real pinch or Ctrl+wheel zoom has no plain scroll event in between.
+ */
+export function shouldProcessZoomWheel(
+  lastPlainWheelAt: number | null,
+  now: number,
+  gapMs: number,
+): boolean {
+  return lastPlainWheelAt === null || now - lastPlainWheelAt >= gapMs;
 }

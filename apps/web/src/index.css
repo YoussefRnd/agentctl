@@ -8,7 +8,7 @@
 
 html {
   font-family: var(--font-ui-family, 'Geist') !important;
-  font-size: var(--font-ui-size, 14px) !important;
+  font-size: var(--font-ui-size, 13px) !important;
 }
 
 [data-font-ctx='buffer'] {
@@ -49,46 +49,32 @@ html {
 }
 
 .label-3xs {
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 600;
 }
 .label-2xs {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
 }
 .label-xs {
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 600;
 }
 .label-sm {
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 600;
 }
 .caption-3xs {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 500;
 }
 .caption-2xs {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 500;
 }
 .caption-xs {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 @layer utilities {

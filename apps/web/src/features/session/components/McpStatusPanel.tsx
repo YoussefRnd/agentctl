@@ -1,71 +1,82 @@
-import { useState } from 'react';
-import { useMcpServers } from '../../../hooks/useMcpServers';
+import { useMcpServers, type McpServerData } from '../../../hooks/useMcpServers';
 
-export function McpStatusPanel() {
-  const { mcpServers, isLoading } = useMcpServers();
-  const [isOpen, setIsOpen] = useState(true);
+export interface McpStatusPanelProps {
+  servers?: McpServerData[];
+  isLoading?: boolean;
+}
 
-  if (isLoading || mcpServers.length === 0) return null;
+export function McpStatusPanel({
+  servers: customServers,
+  isLoading: customIsLoading,
+}: McpStatusPanelProps = {}) {
+  const { mcpServers: hookServers, isLoading: hookIsLoading } = useMcpServers();
+
+  const mcpServers = customServers ?? hookServers;
+  const isLoading = customIsLoading ?? hookIsLoading;
+
+  if (isLoading) {
+    return (
+      <div className="text-text-muted flex items-center justify-center py-4 text-xs font-normal">
+        Loading MCP servers...
+      </div>
+    );
+  }
+
+  if (mcpServers.length === 0) {
+    return (
+      <div className="border-border/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center">
+        <p className="text-text-muted text-xs font-normal">No MCP servers configured</p>
+      </div>
+    );
+  }
 
   return (
-    <section className="mt-8">
-      <button
-        type="button"
-        onClick={() => {
-          setIsOpen(!isOpen);
-        }}
-        aria-expanded={isOpen}
-        className="text-text-muted/30 hover:text-text-main mb-5 flex w-full cursor-pointer items-center justify-between border-none bg-transparent p-0 text-[10px] font-black tracking-[0.3em] uppercase transition-colors"
-      >
-        <span>MCP</span>
-        <span className="text-[8px] select-none">{isOpen ? '▼' : '▶'}</span>
-      </button>
+    <div className="space-y-2 select-none">
+      {mcpServers.map((server) => {
+        const errorText = server.error;
+        let indicator = (
+          <div className="bg-surface-tertiary/40 text-text-muted/50 ring-border/20 flex h-5 w-5 items-center justify-center rounded-full ring-1">
+            <span className="bg-text-muted/40 h-1.5 w-1.5 rounded-full" />
+          </div>
+        );
+        let statusLabel = 'Disabled';
+        let statusClass = 'text-text-muted/70';
 
-      {isOpen && (
-        <div className="space-y-3 pl-1 select-none">
-          {mcpServers.map((server) => {
-            const errorText = server.error;
-            let indicator = (
-              <div className="bg-surface-tertiary/30 text-text-muted/20 ring-border/10 flex h-5 w-5 items-center justify-center rounded-full ring-1">
-                <span className="bg-text-muted/20 h-1.5 w-1.5 rounded-full" />
+        if (server.enabled) {
+          if (server.status === 'connected') {
+            indicator = (
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
               </div>
             );
-            let statusLabel = 'Disabled';
-
-            if (server.enabled) {
-              if (server.status === 'connected') {
-                indicator = (
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                  </div>
-                );
-                statusLabel = 'Connected';
-              } else {
-                indicator = (
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/20">
-                    <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
-                  </div>
-                );
-                statusLabel = errorText ?? 'Disconnected';
-              }
-            }
-
-            return (
-              <div key={server.id} className="flex items-center gap-3.5 px-1 py-0.5">
-                <div className="shrink-0">{indicator}</div>
-                <div className="flex min-w-0 flex-1 items-baseline gap-2">
-                  <span className="text-text-main font-mono text-[11px] font-bold tracking-tight">
-                    {server.name}
-                  </span>
-                  <span className="text-text-muted/40 truncate font-mono text-[9px] font-normal italic">
-                    {statusLabel}
-                  </span>
-                </div>
+            statusLabel = 'Connected';
+            statusClass = 'text-emerald-400/90 font-medium';
+          } else {
+            indicator = (
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
               </div>
             );
-          })}
-        </div>
-      )}
-    </section>
+            statusLabel = errorText ?? 'Disconnected';
+            statusClass = 'text-rose-400/90 font-medium';
+          }
+        }
+
+        return (
+          <div
+            key={server.id}
+            className="border-border/10 bg-surface-secondary/10 hover:bg-surface-secondary/20 flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors"
+          >
+            <div className="shrink-0">{indicator}</div>
+            <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2">
+              <span className="text-text-main truncate font-mono text-xs font-medium">
+                {server.name}
+              </span>
+              <span className={`truncate font-mono text-xs ${statusClass}`}>{statusLabel}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

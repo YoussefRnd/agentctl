@@ -60,12 +60,12 @@ function SlashCommandsDropdown({
               {cmd.description}
             </span>
             {cmd.category && (
-              <span className="text-text-muted bg-surface-secondary/40 border-border shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-semibold tracking-wider uppercase opacity-50 group-hover/item:opacity-85">
+              <span className="text-text-muted bg-surface-secondary/40 border-border shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium opacity-70 group-hover/item:opacity-90">
                 {cmd.category}
               </span>
             )}
             {cmd.input?.hint && (
-              <span className="text-text-muted bg-surface-secondary border-border shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold tracking-tighter uppercase opacity-40 group-hover/item:opacity-80">
+              <span className="text-text-muted bg-surface-secondary border-border shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium opacity-60 group-hover/item:opacity-90">
                 {cmd.input.hint}
               </span>
             )}
@@ -108,6 +108,7 @@ function CommandInputHint({ showSlashMenu, matchingCommand }: CommandInputHintPr
 }
 
 interface CommandInputComposerProps {
+  hasQueuedMessages?: boolean;
   disabled?: boolean;
   input: string;
   handleInputChange: (val: string) => void;
@@ -135,6 +136,7 @@ interface CommandInputComposerProps {
 }
 
 export function CommandInputComposer({
+  hasQueuedMessages,
   disabled,
   input,
   handleInputChange,
@@ -176,6 +178,7 @@ export function CommandInputComposer({
         data-font-ctx="buffer"
         className={cn(
           'bg-brand-mantle border-border/30 flex flex-col overflow-visible rounded-xl border transition-all duration-300',
+          hasQueuedMessages && 'rounded-t-none border-t-0',
           disabled ? 'opacity-30' : 'opacity-100',
           isFocused
             ? 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'

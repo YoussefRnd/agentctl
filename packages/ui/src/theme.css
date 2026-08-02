@@ -267,11 +267,11 @@
 
   /* High Density Input */
   .terminal-input {
-    @apply border-border h-8 rounded-md border bg-transparent px-2 font-mono text-[12px] transition-all outline-none focus:border-white/40 focus:ring-1 focus:ring-white/10;
+    @apply border-border focus:border-border-active focus:ring-accent/20 h-8 rounded-md border bg-transparent px-2 font-mono text-[12px] transition-all outline-none focus:ring-1;
   }
 
   .terminal-button {
-    @apply bg-text-main text-background font-accent h-8 rounded-md px-3 text-[11px] font-black tracking-tight transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30;
+    @apply bg-text-main text-background font-accent h-8 rounded-md px-3 text-[11px] font-semibold tracking-tight transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30;
   }
 
   .status-glow {
@@ -284,7 +284,7 @@
 
   .font-context-ui {
     font-family: var(--font-ui-family, 'Geist');
-    font-size: var(--font-ui-size, 14px);
+    font-size: var(--font-ui-size, 13px);
   }
   .font-context-buffer {
     font-family: var(--font-buffer-family, 'JetBrains Mono');

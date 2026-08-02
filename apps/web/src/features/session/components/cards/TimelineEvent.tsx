@@ -3,16 +3,10 @@ import type { ReactNode } from 'react';
 interface TimelineEventProps {
   dotColor: string;
   isPulsing?: boolean;
-  index: number;
   children: ReactNode;
 }
 
-export function TimelineEvent({
-  dotColor,
-  isPulsing = false,
-  index,
-  children,
-}: TimelineEventProps) {
+export function TimelineEvent({ dotColor, isPulsing = false, children }: TimelineEventProps) {
   return (
     <div className="group/timeline-event relative flex w-full gap-3 py-2.5">
       {/* Left column for track and dot (automatically stretches to 100% row height) */}
@@ -34,12 +28,7 @@ export function TimelineEvent({
       </div>
 
       {/* Content wrapper */}
-      <div
-        className="animate-in fade-in min-w-0 flex-1 duration-200"
-        style={{ animationDelay: `${String(index * 30)}ms`, animationFillMode: 'both' }}
-      >
-        {children}
-      </div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

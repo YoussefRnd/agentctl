@@ -162,6 +162,8 @@ interface SessionStreamContextValue {
   queuedMessages: QueuedMessage[];
   enqueueMessage: (text: string, attachmentIds?: string[]) => void;
   dequeueMessage: (id: string) => void;
+  reorderQueuedMessages: (newQueue: QueuedMessage[]) => void;
+  moveQueuedMessage: (index: number, direction: 'up' | 'down') => void;
 }
 
 const SessionStreamContext = createContext<SessionStreamContextValue | null>(null);
@@ -188,6 +190,21 @@ export function SessionStreamProvider({
 
   const dequeueMessage = (id: string) => {
     setQueuedMessages((prev) => prev.filter((msg) => msg.id !== id));
+  };
+
+  const reorderQueuedMessages = (newQueue: QueuedMessage[]) => {
+    setQueuedMessages(newQueue);
+  };
+
+  const moveQueuedMessage = (index: number, direction: 'up' | 'down') => {
+    setQueuedMessages((prev) => {
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.splice(targetIndex, 0, item);
+      return next;
+    });
   };
 
   const sessionState = useSyncExternalStore(
@@ -268,6 +285,8 @@ export function SessionStreamProvider({
       queuedMessages,
       enqueueMessage,
       dequeueMessage,
+      reorderQueuedMessages,
+      moveQueuedMessage,
     }),
     [
       events,

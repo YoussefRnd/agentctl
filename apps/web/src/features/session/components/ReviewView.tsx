@@ -5,11 +5,7 @@ import { ConfirmationModal } from '@agentctl/ui';
 import { ReviewHeader, type ReviewFile, type FileState } from './ReviewHeader';
 import { ReviewMergeDialog } from './ReviewMergeDialog';
 import { useReviewViewState } from '../hooks/useReviewViewState';
-import {
-  ReviewClosedState,
-  ReviewLoadingState,
-  ReviewEmptyState,
-} from './ReviewStates';
+import { ReviewClosedState, ReviewLoadingState, ReviewEmptyState } from './ReviewStates';
 import { ReviewFileList } from './ReviewFileList';
 import { ReviewCommitInput } from './ReviewCommitInput';
 import { useSession } from '../../../contexts/SessionContext';
@@ -37,7 +33,6 @@ export function ReviewView() {
 
   const files = reviewData.files;
   const sessionStatus = sessionData?.session.status;
-  const taskSlug = sessionData?.session.taskSlug;
   const sessionMode = sessionData?.session.mode;
 
   const onStage = stageFile;
@@ -110,6 +105,25 @@ export function ReviewView() {
     }, initial);
   }, [parsedFiles]);
 
+  const handleSelectFile = useCallback(
+    (path: string) => {
+      const file = parsedFiles.find((f) => f.path === path);
+      if (file && state.collapsedSections[file.state]) {
+        toggleSection(file.state);
+      }
+      if (state.collapsedFiles[path]) {
+        toggleFileCollapse(path);
+      }
+      setTimeout(() => {
+        const el = document.getElementById(`diff-block-${path}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 50);
+    },
+    [parsedFiles, state.collapsedSections, state.collapsedFiles, toggleSection, toggleFileCollapse],
+  );
+
   const handleMergeSubmit = () => {
     void onMerge(state.commitMessage);
     dispatch({ type: 'SET_MERGE_DIALOG_OPEN', payload: false });
@@ -156,7 +170,7 @@ export function ReviewView() {
         isMerging={isMerging}
         isDiscarding={isDiscarding}
         onOpenMergeDialog={() => {
-          dispatch({ type: 'RESET_COMMIT_MESSAGE', payload: taskSlug ?? 'implements features' });
+          dispatch({ type: 'SET_MERGE_DIALOG_OPEN', payload: true });
         }}
         onOpenDiscardModal={() => {
           dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: true });
@@ -169,19 +183,24 @@ export function ReviewView() {
         onSearchChange={(q) => {
           dispatch({ type: 'SET_SEARCH_QUERY', payload: q });
         }}
-        onNextDiff={() => { scrollToDiff('next'); }}
-        onPrevDiff={() => { scrollToDiff('prev'); }}
+        onNextDiff={() => {
+          scrollToDiff('next');
+        }}
+        onPrevDiff={() => {
+          scrollToDiff('prev');
+        }}
         allCollapsed={allCollapsed}
         onToggleAll={onToggleAll}
+        onSelectFile={handleSelectFile}
       />
 
       {sessionMode === 'local' && (
-        <div className="border-accent/15 bg-accent/5 text-text-main/80 mx-4 mt-3 flex flex-col gap-1.5 rounded border px-3 py-2.5 text-[10px] transition-all select-none">
-          <div className="text-accent flex items-center gap-2 font-black tracking-widest uppercase">
+        <div className="border-accent/15 bg-accent/5 text-text-main/80 mx-4 mt-3 flex flex-col gap-1.5 rounded border px-3 py-2.5 text-xs transition-all select-none">
+          <div className="text-accent flex items-center gap-2 font-semibold">
             <span className="bg-accent inline-block h-1.5 w-1.5 rounded-full shadow-[0_0_8px_currentColor]" />
-            Local Session Scope (Snapshot)
+            Local session scope (Snapshot)
           </div>
-          <div className="text-[9px] leading-relaxed opacity-90">
+          <div className="text-[11px] leading-relaxed opacity-90">
             Only changes made since this local session was initialized are shown and committed.
             Pre-existing untracked or modified changes in your repository are protected and
             preserved.
@@ -200,21 +219,51 @@ export function ReviewView() {
           viewMode={state.viewMode}
           onToggleSection={toggleSection}
           onToggleFile={toggleFileCollapse}
-          onStage={(p) => { void onStage(p); }}
-          onUnstage={(p) => { void onUnstage(p); }}
-          onRevert={(p) => { void onRevert(p); }}
-          onStageAll={() => { void onStageAll(); }}
-          onUnstageAll={() => { void onUnstageAll(); }}
+          onStage={(p) => {
+            void onStage(p);
+          }}
+          onUnstage={(p) => {
+            void onUnstage(p);
+          }}
+          onRevert={(p) => {
+            void onRevert(p);
+          }}
+          onStageAll={() => {
+            void onStageAll();
+          }}
+          onUnstageAll={() => {
+            void onUnstageAll();
+          }}
           isStagingAll={isStagingAll}
           isUnstagingAll={isUnstagingAll}
         />
       )}
 
-      {stagedCount > 0 && (
+      {activeFiles.length > 0 && (
         <ReviewCommitInput
           stagedCount={stagedCount}
-          onCommit={(msg) => { void onCommitChanges(msg); }}
+          onCommit={(msg) => {
+            void onCommitChanges(msg);
+          }}
           isCommitting={isCommitting}
+          onStageAll={() => {
+            void onStageAll();
+          }}
+          onUnstageAll={() => {
+            void onUnstageAll();
+          }}
+          onMergeSession={() => {
+            dispatch({ type: 'SET_MERGE_DIALOG_OPEN', payload: true });
+          }}
+          onDiscardChanges={() => {
+            dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: true });
+          }}
+          isStagingAll={isStagingAll}
+          isUnstagingAll={isUnstagingAll}
+          isMerging={isMerging}
+          isDiscarding={isDiscarding}
+          hasUnstaged={grouped.modified.length > 0 || grouped.untracked.length > 0}
+          hasChanges={activeFiles.length > 0}
         />
       )}
 

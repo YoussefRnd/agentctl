@@ -1,6 +1,6 @@
 import { memo, useRef } from 'react';
 import { Button } from './Button.js';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './Dialog.js';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './Dialog.js';
 
 export interface ConfirmationModalProps {
   isOpen: boolean;
@@ -10,7 +10,7 @@ export interface ConfirmationModalProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
-  type?: 'brand-red' | 'brand-peach' | 'info';
+  type?: 'brand-red' | 'brand-peach' | 'info' | 'danger' | 'warning' | 'accent';
 }
 
 export const ConfirmationModal = memo(function ConfirmationModal({
@@ -19,54 +19,56 @@ export const ConfirmationModal = memo(function ConfirmationModal({
   message,
   onConfirm,
   onCancel,
-  confirmText = 'PROCEED',
-  cancelText = 'CANCEL',
+  confirmText = 'Proceed',
+  cancelText = 'Cancel',
   type = 'info',
 }: ConfirmationModalProps) {
   const confirmedRef = useRef(false);
 
-  const typeColorClass =
-    type === 'brand-red'
-      ? 'text-brand-red'
-      : type === 'brand-peach'
-        ? 'text-brand-peach'
-        : 'text-brand-mauve';
+  const isDestructive = type === 'brand-red' || type === 'danger';
+  const isWarning = type === 'brand-peach' || type === 'warning';
 
-  const confirmButtonClass =
-    type === 'brand-red'
-      ? 'bg-brand-red text-white hover:bg-brand-red/90'
-      : type === 'brand-peach'
-        ? 'bg-brand-peach text-white hover:bg-brand-peach/90'
-        : 'bg-brand-mauve text-white hover:bg-brand-mauve/90';
+  const typeColorClass = isDestructive ? 'text-danger' : isWarning ? 'text-warning' : 'text-accent';
+
+  const confirmButtonClass = isDestructive
+    ? 'bg-danger text-white hover:bg-danger/90'
+    : isWarning
+      ? 'bg-warning text-white hover:bg-warning/90'
+      : 'bg-accent text-brand-crust hover:opacity-90';
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !confirmedRef.current) onCancel(); confirmedRef.current = false; }}>
-      <DialogContent showCloseButton={false} className="max-w-sm p-5 font-mono text-[11px]">
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !confirmedRef.current) onCancel();
+        confirmedRef.current = false;
+      }}
+    >
+      <DialogContent showCloseButton={false} className="max-w-sm p-5">
         <DialogHeader>
-          <DialogTitle className={typeColorClass}>
-            :: {title}
-          </DialogTitle>
+          <DialogTitle className={typeColorClass}>{title}</DialogTitle>
         </DialogHeader>
 
-        <p className="text-text-main/80 mb-6 leading-relaxed font-bold tracking-tight uppercase">
-          {message}
-        </p>
+        <p className="text-text-main/80 my-2 text-xs leading-relaxed font-normal">{message}</p>
 
-        <div className="flex justify-end gap-2.5">
+        <DialogFooter className="mt-4 flex items-center justify-end gap-2">
           <Button
             variant="ghost"
             onClick={onCancel}
-            className="text-text-muted hover:text-text-main h-9 cursor-pointer px-4 font-black tracking-tight uppercase transition-all"
+            className="text-text-muted hover:text-text-main h-8 px-3 text-xs font-medium transition-colors"
           >
             {cancelText}
           </Button>
           <Button
-            onClick={() => { confirmedRef.current = true; onConfirm(); }}
-            className={`h-9 cursor-pointer px-4 font-black tracking-tight uppercase transition-all active:scale-95 ${confirmButtonClass}`}
+            onClick={() => {
+              confirmedRef.current = true;
+              onConfirm();
+            }}
+            className={`h-8 px-4 text-xs font-medium transition-all active:scale-95 ${confirmButtonClass}`}
           >
             {confirmText}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

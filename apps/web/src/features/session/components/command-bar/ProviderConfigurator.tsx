@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Zap, Brain, Settings, ChevronUp } from 'lucide-react';
+import { Zap, Brain, Settings, ChevronUp, AlertCircle } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent, cn } from '@agentctl/ui';
 import { ProviderPicker } from '../ProviderPicker';
 import { CommandDropdown } from './CommandDropdown';
@@ -20,6 +20,7 @@ export function ProviderPickerTrigger({
   resolvedId,
   handleProviderSelect,
   sessionId,
+  onOpenAuthModal,
 }: {
   isLoading: boolean;
   isOpen: boolean;
@@ -31,61 +32,105 @@ export function ProviderPickerTrigger({
   resolvedId: string | null;
   handleProviderSelect: (id: string, modelId?: string) => void;
   sessionId: string | null;
+  onOpenAuthModal?: () => void;
 }) {
+  const needsAuth = activeProvider?.authState === 'needs_auth';
+
+  const modelOption = activeProvider?.configOptions?.find(
+    (opt) => opt.id === 'model' || opt.id === 'selectedModel',
+  );
+  const currentModelValue = selectedModelId ?? modelOption?.currentValue;
+  const matchingModel = modelOption?.options?.find((o) => o.value === currentModelValue);
+  const modelLabel =
+    matchingModel?.name ?? (typeof currentModelValue === 'string' ? currentModelValue : null);
+
+  const providerLabel = activeProvider?.label ?? selectedProviderLabel;
+  const badgeLabel = isLoading
+    ? 'Loading...'
+    : modelLabel && modelLabel !== providerLabel
+      ? `${providerLabel} · ${modelLabel}`
+      : providerLabel;
+
   return (
     <div className="relative">
-      <Popover open={isOpen} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={isLoading}
-            aria-label="Select AI provider"
-            aria-expanded={isOpen}
-            className={cn(
-              'focus-visible:ring-accent/50 flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
-              isOpen
-                ? 'bg-accent/20 text-accent border-accent/50'
-                : 'hover:bg-text-main/5 text-text-muted hover:text-text-main',
-              isLoading && 'pointer-events-none opacity-50',
-            )}
-          >
-            {isLoading ? (
-              <div className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
-            ) : activeProvider?.agent?.icon ? (
-              <img src={activeProvider.agent.icon} alt="" className="h-3.5 w-3.5 object-contain" />
-            ) : (
-              <Zap
-                className={cn('h-3.5 w-3.5 transition-all duration-200', isOpen && 'fill-accent')}
-              />
-            )}
-            <span className="max-w-[120px] truncate text-[10px] font-bold tracking-widest uppercase">
-              {isLoading ? '...' : (selectedModelId ?? selectedProviderLabel)}
-            </span>
-            <ChevronUp
-              className={cn('h-3 w-3 transition-transform duration-200', isOpen && 'rotate-180')}
-            />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          side="top"
-          avoidCollisions={false}
-          className="border-border w-[480px] overflow-hidden rounded-md p-0"
+      {needsAuth ? (
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={() => {
+            if (onOpenAuthModal) {
+              onOpenAuthModal();
+            } else {
+              onOpenChange(!isOpen);
+            }
+          }}
+          className={cn(
+            'flex h-8 items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-3 text-xs font-medium text-amber-300 transition-all duration-200 hover:bg-amber-500/25 focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
+            isLoading && 'pointer-events-none opacity-50',
+          )}
         >
-          <ProviderPicker
-            key={isOpen ? 'open' : 'closed'}
-            sessionId={sessionId}
-            isOpen={isOpen}
-            onClose={() => {
-              onOpenChange(false);
-            }}
-            providers={providers}
-            selectedId={resolvedId}
-            selectedModelId={selectedModelId ?? null}
-            onSelect={handleProviderSelect}
-          />
-        </PopoverContent>
-      </Popover>
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <span className="max-w-[200px] truncate text-xs font-medium">
+            {providerLabel} · Needs API key
+          </span>
+        </button>
+      ) : (
+        <Popover open={isOpen} onOpenChange={onOpenChange}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              disabled={isLoading}
+              aria-label="Select AI provider"
+              aria-expanded={isOpen}
+              className={cn(
+                'focus-visible:ring-accent/50 flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-all duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
+                isOpen
+                  ? 'bg-accent/20 text-accent border-accent/50'
+                  : 'border-border/40 bg-surface-secondary/50 text-text-main hover:bg-surface-secondary hover:border-border/60',
+                isLoading && 'pointer-events-none opacity-50',
+              )}
+            >
+              {isLoading ? (
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
+              ) : activeProvider?.agent?.icon ? (
+                <img
+                  src={activeProvider.agent.icon}
+                  alt=""
+                  className="h-3.5 w-3.5 object-contain"
+                />
+              ) : (
+                <Zap
+                  className={cn('h-3.5 w-3.5 transition-all duration-200', isOpen && 'fill-accent')}
+                />
+              )}
+              <span className="max-w-[220px] truncate text-xs font-medium">{badgeLabel}</span>
+              <ChevronUp
+                className={cn('h-3 w-3 transition-transform duration-200', isOpen && 'rotate-180')}
+              />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            side="top"
+            avoidCollisions={false}
+            className="border-border w-[480px] overflow-hidden rounded-md p-0"
+          >
+            <ProviderPicker
+              key={isOpen ? 'open' : 'closed'}
+              sessionId={sessionId}
+              isOpen={isOpen}
+              onClose={() => {
+                onOpenChange(false);
+              }}
+              providers={providers}
+              selectedId={resolvedId}
+              selectedModelId={selectedModelId ?? null}
+              onSelect={handleProviderSelect}
+              onOpenAuthModal={onOpenAuthModal}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }
@@ -173,9 +218,7 @@ export function ThinkingEffortSelector({
               isMaxEffort ? 'text-accent' : 'text-text-muted',
             )}
           />
-          <span className="max-w-[150px] truncate text-[10px] font-bold tracking-widest uppercase">
-            {activeOptionName}
-          </span>
+          <span className="max-w-[150px] truncate text-xs font-medium">{activeOptionName}</span>
           <ChevronUp
             className={cn(
               'text-text-muted/50 h-3 w-3 transition-transform duration-200',

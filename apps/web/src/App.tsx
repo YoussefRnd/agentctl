@@ -9,13 +9,15 @@ import { SetupWizard } from './features/settings/components/SetupWizard';
 import { SettingsPage } from './features/settings/components/SettingsPage';
 import { useSettings } from './hooks/useSettings';
 import { FontZoomIndicator } from './features/shell/components/FontZoomIndicator';
+import { FontConfigApplier } from './features/shell/components/FontConfigApplier';
 
 export function App() {
   const { settings } = useSettings();
 
   return (
     <>
-      <FontZoomIndicator fontConfig={settings?.fontConfig} />
+      <FontConfigApplier fontConfig={settings?.fontConfig} />
+      <FontZoomIndicator />
       <SetupWizard />
       <Routes>
         <Route path="/login" element={<LoginView />} />

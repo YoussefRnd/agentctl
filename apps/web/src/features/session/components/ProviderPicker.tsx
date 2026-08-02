@@ -13,6 +13,7 @@ interface ProviderPickerProps {
   providers: ProviderDiscovery[];
   isOpen: boolean;
   onClose?: () => void;
+  onOpenAuthModal?: () => void;
 }
 
 export function ProviderPicker({
@@ -23,6 +24,7 @@ export function ProviderPicker({
   providers,
   isOpen,
   onClose: _onClose,
+  onOpenAuthModal,
 }: ProviderPickerProps) {
   const {
     updateProviderConfig,
@@ -173,6 +175,7 @@ export function ProviderPicker({
               login={login}
               handleSaveAndConnect={handleSaveAndConnect}
               onSelect={onSelect}
+              onOpenAuthModal={onOpenAuthModal}
             />
           ) : models.length === 0 ? (
             <div className="p-2">
@@ -189,10 +192,8 @@ export function ProviderPicker({
                   }}
                   className="border-border/20 hover:bg-text-main/5 flex w-full flex-col rounded-lg border p-3 text-left transition-all"
                 >
-                  <div className="text-text-main text-[11px] font-black tracking-wider uppercase">
-                    {activeProvider.label}
-                  </div>
-                  <div className="text-text-muted caption-3xs">DEFAULT CONFIG</div>
+                  <div className="text-text-main text-xs font-semibold">{activeProvider.label}</div>
+                  <div className="text-text-muted text-[11px] font-normal">Default config</div>
                 </button>
               )}
             </div>
@@ -216,11 +217,11 @@ export function ProviderPicker({
                 >
                   <div className="min-w-0">
                     <div
-                      className={`truncate text-[11px] font-bold tracking-wider uppercase ${isSelected ? 'text-accent' : 'text-text-main'}`}
+                      className={`truncate text-xs font-medium ${isSelected ? 'text-accent' : 'text-text-main'}`}
                     >
                       {model.name}
                     </div>
-                    <div className="text-text-muted/50 text-[9px] font-bold tracking-tighter uppercase">
+                    <div className="text-text-muted/60 text-[11px] font-normal">
                       {activeProvider.label}
                     </div>
                   </div>
@@ -294,6 +295,7 @@ function ProviderSetupPanel({
   login,
   handleSaveAndConnect,
   onSelect,
+  onOpenAuthModal,
 }: {
   activeProvider: ProviderDiscovery;
   envKeys: string[];
@@ -307,6 +309,7 @@ function ProviderSetupPanel({
   login: (args: { providerId: string; methodId: string }) => void;
   handleSaveAndConnect: () => void;
   onSelect: (providerId: string, modelId?: string) => void;
+  onOpenAuthModal?: () => void;
 }) {
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const authMethods = activeProvider.authMethods;
@@ -340,7 +343,11 @@ function ProviderSetupPanel({
               type="button"
               onClick={() => {
                 if (method.id === 'api_key') {
-                  setShowApiKeyInput((prev) => !prev);
+                  if (onOpenAuthModal) {
+                    onOpenAuthModal();
+                  } else {
+                    setShowApiKeyInput((prev) => !prev);
+                  }
                 } else {
                   login({ providerId: activeProvider.id, methodId: method.id });
                 }
@@ -360,7 +367,11 @@ function ProviderSetupPanel({
             <button
               type="button"
               onClick={() => {
-                setShowApiKeyInput((prev) => !prev);
+                if (onOpenAuthModal) {
+                  onOpenAuthModal();
+                } else {
+                  setShowApiKeyInput((prev) => !prev);
+                }
               }}
               disabled={isPending}
               className={`border-border/40 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/80 flex h-8 w-full items-center justify-center rounded-lg border px-3 text-xs font-medium transition-all disabled:opacity-30 ${
@@ -369,7 +380,7 @@ function ProviderSetupPanel({
                   : ''
               }`}
             >
-              API Key
+              API key
             </button>
           )}
         </div>
@@ -381,10 +392,10 @@ function ProviderSetupPanel({
               return (
                 <div key={key} className="space-y-1">
                   <div className="flex items-baseline justify-between">
-                    <label htmlFor={key} className="text-text-muted label-3xs">
+                    <label htmlFor={key} className="text-text-muted font-mono text-xs">
                       {key}
                     </label>
-                    {errorMsg && <span className="text-danger caption-3xs">{errorMsg}</span>}
+                    {errorMsg && <span className="text-danger text-[11px]">{errorMsg}</span>}
                   </div>
                   <input
                     id={key}
@@ -404,7 +415,7 @@ function ProviderSetupPanel({
                         },
                       });
                     }}
-                    className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-sans text-[11px] transition-all duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
+                    className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-mono text-xs transition-all duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
                   />
                 </div>
               );
@@ -413,9 +424,9 @@ function ProviderSetupPanel({
               type="button"
               onClick={handleSaveAndConnect}
               disabled={isPending || envKeys.some((key) => getKeyError(key) !== null)}
-              className="bg-accent text-brand-crust flex h-8 w-full items-center justify-center rounded-lg text-center text-[10px] font-bold tracking-wider uppercase transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
+              className="bg-accent text-brand-crust flex h-8 w-full items-center justify-center rounded-lg text-center text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
             >
-              {isPending ? 'CONNECTING...' : 'SAVE AND CONNECT'}
+              {isPending ? 'Connecting...' : 'Save and connect'}
             </button>
           </div>
         )}
@@ -425,9 +436,9 @@ function ProviderSetupPanel({
           onClick={() => {
             onSelect(activeProvider.id);
           }}
-          className="border-border/30 text-text-muted hover:bg-text-main/5 hover:text-text-main mt-1 flex h-7 w-full items-center justify-center rounded-lg border text-center text-[10px] font-medium transition-all"
+          className="border-border/30 text-text-muted hover:bg-text-main/5 hover:text-text-main mt-1 flex h-7 w-full items-center justify-center rounded-lg border text-center text-xs font-medium transition-all"
         >
-          Select Provider
+          Select provider
         </button>
       </div>
     </div>

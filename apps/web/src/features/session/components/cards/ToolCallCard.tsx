@@ -255,7 +255,7 @@ export const ToolCallCard = memo(function ToolCallCard({
       {open && (
         <Card
           status={isFailed ? 'error' : 'default'}
-          className="animate-in fade-in slide-in-from-top-1 hover:border-border/20 mt-1.5 p-2.5 duration-200"
+          className="liquid-glass hover:border-border/20 mt-1.5 p-2.5"
         >
           <ToolArgumentsViewer name={tool} args={args} />
         </Card>
