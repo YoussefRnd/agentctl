@@ -54,7 +54,7 @@ export function UpdateToast() {
   const { border, icon: Icon, iconColor } = STYLES[toast.kind];
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[60]">
+    <div className="pointer-events-none fixed top-4 right-4 z-[60]">
       <div
         className={`bg-surface/90 border ${border} pointer-events-auto flex items-center gap-2.5 rounded-xl px-4 py-2.5 shadow-2xl backdrop-blur-xl`}
       >

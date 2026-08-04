@@ -3,7 +3,9 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { cn } from '../utils.js';
 
 export const Dropdown = {
-  Root: DropdownMenuPrimitive.Root,
+  Root: ({ modal = false, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) => (
+    <DropdownMenuPrimitive.Root modal={modal} {...props} />
+  ),
   Trigger: DropdownMenuPrimitive.Trigger,
   Portal: DropdownMenuPrimitive.Portal,
   Content: ({
@@ -29,14 +31,20 @@ export const Dropdown = {
       {...props}
     />
   ),
-  Separator: ({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) => (
+  Separator: ({
+    className,
+    ...props
+  }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) => (
     <DropdownMenuPrimitive.Separator
       className={cn('my-1 h-px bg-white/10', className)}
       {...props}
     />
   ),
   Sub: DropdownMenuPrimitive.Sub,
-  SubTrigger: ({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) => (
+  SubTrigger: ({
+    className,
+    ...props
+  }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) => (
     <DropdownMenuPrimitive.SubTrigger
       className={cn(
         'flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-[11px] font-bold outline-none hover:bg-white/5 focus:bg-white/5 data-[state=open]:bg-white/5',

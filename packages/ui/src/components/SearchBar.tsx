@@ -26,7 +26,7 @@ export function SearchBar({
         value={value}
         onChange={onChange}
         className={cn(
-          'border-border/30 bg-surface-secondary/35 placeholder:text-text-muted/50 focus:bg-surface-secondary/60 focus:border-accent/50 text-text-main h-9 w-full rounded-lg border pr-10 pl-9 text-[12px] transition-all focus:outline-none',
+          'border-border/30 bg-surface-secondary/35 placeholder:text-text-muted/50 focus:bg-surface-secondary/60 focus:border-accent/50 text-text-main h-9 w-full rounded-lg border pr-14 pl-9 text-[12px] transition-all focus:outline-none',
           className,
         )}
         {...props}

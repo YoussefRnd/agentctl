@@ -1,40 +1,32 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from '../../../contexts/SessionContext';
-import { api } from '@agentctl/api-client';
 import { useProviders } from '../../../hooks/useProviders';
-import { useActionDispatcher } from '../../../hooks/useActionDispatcher';
 import { useAttachments } from '../../../hooks/useAttachments';
-import { useMcpTools } from '../../../hooks/useMcpServers';
+import { useSessionActions } from '../../../hooks/useSessionActions';
+import type { ProviderDiscovery } from '@agentctl/shared';
 
-const CLIENT_COMMANDS = [
-  {
-    name: 'mcp',
-    description: 'Manage MCP servers and integrations',
-    category: 'client',
-  },
-] as const;
-
-interface CommandInfo {
+export interface CommandInfo {
   name: string;
   description?: string;
   input?: { hint?: string };
   category?: string;
 }
 
-export function useCommandBarState({
-  onSend,
-  disabled,
-  propSelectedProviderId,
-  onProviderSelect,
-  initialInput,
-}: {
-  onSend: (val: string, attachmentIds?: string[]) => void;
-  disabled?: boolean;
-  propSelectedProviderId?: string | null;
-  onProviderSelect?: (id: string, modelId?: string) => void;
-  initialInput?: string;
-}) {
+const DEFAULT_COMMANDS: CommandInfo[] = [
+  { name: 'clear', description: 'Clear the current conversation view', category: 'Session' },
+  { name: 'mcp', description: 'Manage MCP server tools & status', category: 'System' },
+  { name: 'plan', description: 'View structured task execution plan', category: 'Agent' },
+  { name: 'compact', description: 'Compact conversation history', category: 'Session' },
+];
+
+export function useCommandBarState(
+  onSend: (value: string, attachmentIds?: string[]) => void,
+  disabled?: boolean,
+  selectedProviderId?: string,
+  selectedModelId?: string,
+  onProviderSelect?: (providerId: string, modelId?: string) => void,
+  initialInput?: string,
+) {
   const {
     sessionId,
     sessionData,
@@ -49,137 +41,112 @@ export function useCommandBarState({
     isUpdatingAgentPersona,
     setSessionConfigOption,
     isUpdatingConfigOption,
-    updateProvider,
     isLoadingSession,
   } = useSession();
+
+  const { handleCancel } = useSessionActions();
   const { providers, isLoadingProviders } = useProviders(sessionId);
-  const { execute } = useActionDispatcher();
-  const { tools: mcpTools } = useMcpTools();
+
+  const {
+    attachments,
+    addFiles,
+    removeAttachment,
+    retryAttachment,
+    readyAttachmentIds,
+    isAnyUploading,
+  } = useAttachments(sessionId);
+
+  const installedProviders = useMemo(
+    () => providers.filter((p) => p.installState !== 'not_installed'),
+    [providers],
+  );
+
   const [input, setInput] = useState('');
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
 
-  const handleInputChange = useCallback((value: string) => {
-    setInput(value);
-    setActiveCommandIndex(0);
-  }, []);
-
-  const isRunning = sessionData?.session.status === 'running';
-
-  const handleCancel = useCallback(() => {
-    if (!sessionId) return;
-    void api.cancelSession({ params: { id: sessionId }, body: {} });
-  }, [sessionId]);
-
-  const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  const availableCommands = sessionData?.session.availableCommands ?? [];
-  const mcpCommandList = mcpTools.map((t) => ({
-    name: `${t.serverId}:${t.name.split('__')[1] ?? t.name}`,
-    description: t.description ?? 'MCP Tool',
-    category: 'mcp',
-  }));
-  const combinedCommands: CommandInfo[] = [
-    ...availableCommands,
-    ...mcpCommandList,
-    ...CLIENT_COMMANDS,
-  ];
-
-  const showSlashMenu =
-    input.startsWith('/') && !input.includes(' ') && combinedCommands.length > 0;
-
-  const filteredCommands = showSlashMenu
-    ? combinedCommands.filter((cmd) =>
-        cmd.name.toLowerCase().startsWith(input.slice(1).toLowerCase()),
-      )
-    : [];
-
-  const parsedCommandParts = input.startsWith('/') ? input.slice(1).split(' ') : [];
-  const typedCommandName = parsedCommandParts[0];
-  const matchingCommand =
-    !showSlashMenu && typedCommandName
-      ? combinedCommands.find((c) => c.name.toLowerCase() === typedCommandName.toLowerCase())
-      : undefined;
-
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const { attachments, addFiles, removeAttachment, clearAll, readyAttachmentIds, isAnyUploading } =
-    useAttachments(sessionId);
-
-  const selectedId = propSelectedProviderId ?? null;
-
-  const installedProviders = providers.filter((p) => p.installState !== 'not_installed');
-  const firstId = installedProviders[0]?.id ?? null;
-  const resolvedId = selectedId ?? firstId;
-  const activeProvider = installedProviders.find((p) => p.id === resolvedId);
-  const selectedProviderLabel =
-    activeProvider !== undefined ? activeProvider.label : 'Select provider';
-
-  const handleSubmit = useCallback(() => {
-    const hasText = input.trim().length > 0;
-    const hasAttachments = readyAttachmentIds.length > 0;
-    if ((!hasText && !hasAttachments) || disabled || isAnyUploading) return;
-
-    onSend(input, readyAttachmentIds.length > 0 ? readyAttachmentIds : undefined);
-    handleInputChange('');
-    clearAll();
-  }, [input, readyAttachmentIds, disabled, isAnyUploading, onSend, clearAll, handleInputChange]);
-
-  const handleProviderSelect = (id: string, modelId?: string) => {
-    if (onProviderSelect) {
-      onProviderSelect(id, modelId);
-    } else {
-      void execute(
-        'switch-provider',
-        async () => {
-          await updateProvider(id, modelId);
-        },
-        { successMessage: `Switched to ${id}` },
-      );
-    }
-    setIsPickerOpen(false);
-  };
-
   useEffect(() => {
-    if (initialInput !== undefined) {
+    if (initialInput && initialInput.trim().length > 0) {
       setInput(initialInput);
     }
   }, [initialInput]);
 
+  const isRunning = sessionData?.session.status === 'running';
+
+  const commands = DEFAULT_COMMANDS;
+  const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleInputChange = useCallback((val: string) => {
+    setInput(val);
+    setActiveCommandIndex(0);
+  }, []);
+
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${String(textareaRef.current.scrollHeight)}px`;
-    }
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${String(Math.min(textarea.scrollHeight, 240))}px`;
   }, [input]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isPickerOpen) {
-        setIsPickerOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isPickerOpen]);
+  const isSlashCommand = input.startsWith('/') && !input.includes('\n');
+  const slashQuery = isSlashCommand ? input.slice(1).toLowerCase() : '';
 
-  useEffect(() => {
-    const handleEditPrompt = (e: Event) => {
-      const customEvent = e as CustomEvent<string>;
-      if (customEvent.detail) {
-        setInput(customEvent.detail);
-        textareaRef.current?.focus();
-      }
-    };
-    window.addEventListener('agentctl:edit-prompt', handleEditPrompt);
-    return () => {
-      window.removeEventListener('agentctl:edit-prompt', handleEditPrompt);
-    };
-  }, []);
+  const filteredCommands = useMemo<CommandInfo[]>(() => {
+    if (!isSlashCommand) return [];
+    return commands.filter(
+      (cmd: CommandInfo) =>
+        cmd.name.toLowerCase().includes(slashQuery) ||
+        (cmd.description?.toLowerCase().includes(slashQuery) ?? false),
+    );
+  }, [isSlashCommand, commands, slashQuery]);
+
+  const matchingCommand = useMemo<CommandInfo | undefined>(() => {
+    if (!isSlashCommand) return undefined;
+    const parts = input.slice(1).split(' ');
+    const cmdName = parts[0].toLowerCase();
+    return commands.find((cmd: CommandInfo) => cmd.name.toLowerCase() === cmdName);
+  }, [isSlashCommand, input, commands]);
+
+  const showSlashMenu = isSlashCommand && filteredCommands.length > 0 && !input.includes(' ');
+
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+
+  const activeProvider = useMemo<ProviderDiscovery | undefined>(() => {
+    if (!selectedProviderId) return installedProviders[0];
+    return installedProviders.find((p) => p.id === selectedProviderId) ?? installedProviders[0];
+  }, [installedProviders, selectedProviderId]);
+
+  const resolvedId = activeProvider?.id ?? selectedProviderId ?? '';
+
+  const selectedProviderLabel = useMemo(() => {
+    if (!activeProvider) return selectedProviderId ?? 'Select Agent';
+    const providerName = activeProvider.label;
+    const modelLabel = selectedModelId ?? undefined;
+    return modelLabel ? `${providerName} · ${modelLabel}` : providerName;
+  }, [activeProvider, selectedProviderId, selectedModelId]);
+
+  const handleSubmit = useCallback(() => {
+    const trimmed = input.trim();
+    if (!trimmed && readyAttachmentIds.length === 0) return;
+    if (disabled || isAnyUploading) return;
+
+    onSend(trimmed, readyAttachmentIds.length > 0 ? readyAttachmentIds : undefined);
+    setInput('');
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+  }, [input, readyAttachmentIds, disabled, isAnyUploading, onSend]);
+
+  const handleProviderSelect = useCallback(
+    (providerId: string, modelId?: string) => {
+      onProviderSelect?.(providerId, modelId);
+      setIsPickerOpen(false);
+    },
+    [onProviderSelect],
+  );
 
   const handleAttachClick = () => {
     fileInputRef.current?.click();
@@ -210,8 +177,21 @@ export function useCommandBarState({
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
-      const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
-      if (files.length > 0) addFiles(files);
+      const files = Array.from(e.dataTransfer.files);
+      const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+      const nonImageFiles = files.filter((f) => !f.type.startsWith('image/'));
+
+      if (nonImageFiles.length > 0) {
+        void import('sonner').then(({ toast }) => {
+          toast.error(
+            `Unsupported file format: ${nonImageFiles.map((f) => f.name).join(', ')}. Only images (PNG, JPEG, GIF, WebP) are supported.`,
+          );
+        });
+      }
+
+      if (imageFiles.length > 0) {
+        addFiles(imageFiles);
+      }
     },
     [addFiles],
   );
@@ -264,6 +244,9 @@ export function useCommandBarState({
     fileInputRef,
     attachments,
     removeAttachment,
+    retryAttachment,
+    readyAttachmentIds,
+    isAnyUploading,
     resolvedId,
     activeProvider,
     selectedProviderLabel,

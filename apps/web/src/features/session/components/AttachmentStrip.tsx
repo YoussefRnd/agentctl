@@ -5,6 +5,7 @@ import type { PendingAttachment } from '../../../hooks/useAttachments';
 interface AttachmentStripProps {
   attachments: PendingAttachment[];
   onRemove: (localId: string) => void;
+  onRetry: (localId: string) => void;
 }
 
 function formatSize(bytes: number): string {
@@ -13,7 +14,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function AttachmentStrip({ attachments, onRemove }: AttachmentStripProps) {
+export function AttachmentStrip({ attachments, onRemove, onRetry }: AttachmentStripProps) {
   if (attachments.length === 0) return null;
 
   return (
@@ -50,18 +51,32 @@ export function AttachmentStrip({ attachments, onRemove }: AttachmentStripProps)
             </svg>
           )}
 
-          {/* Error: red tint overlay + retry icon */}
+          {/* Error: red tint overlay + retry button */}
           {attachment.state === 'error' && (
-            <button
-              type="button"
-              onClick={() => {
-                onRemove(attachment.localId);
-              }}
-              className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-sm bg-red-500/40"
-              aria-label="Retry upload"
-            >
-              <RefreshCw className="h-4 w-4 text-white" />
-            </button>
+            <div className="absolute inset-0 flex items-center justify-center rounded-sm bg-red-500/50">
+              <button
+                type="button"
+                onClick={() => {
+                  onRetry(attachment.localId);
+                }}
+                className="flex h-full w-1/2 cursor-pointer items-center justify-center text-white hover:bg-black/20"
+                aria-label="Retry upload"
+                title="Retry upload"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onRemove(attachment.localId);
+                }}
+                className="flex h-full w-1/2 cursor-pointer items-center justify-center text-white hover:bg-black/20"
+                aria-label="Remove failed attachment"
+                title="Remove attachment"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           )}
 
           {/* Ready: remove button in top-right corner */}

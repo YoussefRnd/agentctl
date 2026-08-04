@@ -16,9 +16,12 @@ export const ApprovalCard = memo(function ApprovalCard({
 }) {
   const approveButtonRef = useRef<HTMLButtonElement>(null);
   const denyButtonRef = useRef<HTMLButtonElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    approveButtonRef.current?.focus();
+    // Focus Deny button on mount so hitting Enter/Space accidentally
+    // safely denies the action rather than auto-approving.
+    denyButtonRef.current?.focus();
   }, []);
 
   const request = data.request as
@@ -37,14 +40,14 @@ export const ApprovalCard = memo(function ApprovalCard({
 
   const toolCall = request?.toolCall;
 
-  // Button styles directly extracted from UI library to support TypeScript refs on standard button elements
   const btnBase =
-    'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
+    'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
   const btnSolid = 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]';
   const btnGhost = 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main';
 
   return (
     <div
+      ref={containerRef}
       role="presentation"
       aria-labelledby="approval-title"
       aria-live="polite"
@@ -118,7 +121,7 @@ export const ApprovalCard = memo(function ApprovalCard({
             onClick={() => {
               onDeny(eventId);
             }}
-            className={`${btnBase} ${btnGhost} text-text-muted hover:text-danger h-8 px-4 text-[10px] font-bold tracking-widest uppercase`}
+            className={`${btnBase} ${btnGhost} text-text-muted hover:text-danger h-8 px-4 text-[10px] font-bold tracking-widest uppercase focus:ring-rose-500/50`}
           >
             Deny
           </button>

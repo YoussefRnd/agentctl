@@ -76,8 +76,15 @@ export function SetupWizard() {
   };
 
   return (
-    <Dialog open={showWizard}>
-      <DialogContent showCloseButton={false} className="max-w-lg rounded-2xl p-6 shadow-2xl">
+    <Dialog
+      open={showWizard}
+      onOpenChange={(open) => {
+        if (!open) {
+          void markDone();
+        }
+      }}
+    >
+      <DialogContent showCloseButton={true} className="max-w-lg rounded-2xl p-6 shadow-2xl">
         <DialogHeader className="text-center sm:text-center">
           <DialogTitle className="text-text-main text-lg font-semibold">
             Initial setup: AI pipeline
@@ -190,11 +197,20 @@ export function SetupWizard() {
 
         <div className="border-border/10 flex justify-end gap-2 border-t pt-4">
           <Button
+            variant="ghost"
+            onClick={() => {
+              void markDone();
+            }}
+            className="text-text-muted hover:text-text-main h-9 px-4 text-xs font-medium"
+          >
+            Skip for now
+          </Button>
+          <Button
             onClick={() => {
               void markDone();
             }}
             disabled={!isReady}
-            className="bg-accent text-brand-crust h-9 w-full px-4 text-xs font-medium hover:opacity-90"
+            className="bg-accent text-brand-crust h-9 flex-1 px-4 text-xs font-medium hover:opacity-90"
           >
             Complete setup
           </Button>

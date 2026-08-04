@@ -1,55 +1,88 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ACPEventRow } from '@agentctl/shared';
-import { EventFeed } from './EventFeed';
-import { CommandBar } from './CommandBar';
-import { ApprovalCard } from './cards/ApprovalCard';
-import { RewindConfirmDialog } from './RewindConfirmDialog';
+import { useQueryClient } from '@tanstack/react-query';
+import { MoreHorizontal, Pencil, Archive, Trash2, Check, X, GitBranch } from 'lucide-react';
+import { ConfirmationModal, Dropdown } from '@agentctl/ui';
+import { toast } from 'sonner';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import { useProviders } from '../../../hooks/useProviders';
-import { useQueryClient } from '@tanstack/react-query';
+import { CommandBar } from './CommandBar';
+import { EventFeed } from './EventFeed';
+import { ApprovalCard } from './cards/ApprovalCard';
+import { RewindConfirmDialog } from './RewindConfirmDialog';
 import {
-  restoreSession,
-  rewindSession,
   archiveSession,
   deleteSession,
   renameSession,
+  rewindSession,
+  restoreSession,
 } from '@agentctl/api-client';
-import { toast } from 'sonner';
+import type { ACPEventRow } from '@agentctl/shared';
 import type { RewindMode } from './RewindMenu';
-import { MoreHorizontal, Pencil, Archive, Trash2, Check } from 'lucide-react';
-import { useActionDispatcher } from '../../../hooks/useActionDispatcher';
-import { Dropdown } from '@agentctl/ui';
 
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
   const { events, isLoadingEvents, isConnected } = useSessionStream();
+  const { handleSend, handleApprove, handleDeny } = useSessionActions();
+  const { switchProvider, isSwitching } = useProviders(sessionId);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const { handleSend, handleApprove, handleDeny } = useSessionActions();
-  const { switchProvider, isSwitching } = useProviders(sessionId);
-
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
-  const { execute } = useActionDispatcher();
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [, setPendingActionKey] = useState<string | null>(null);
 
-  const handleRenameSubmit = (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (!editTitleValue.trim()) return;
-    void execute(
-      `rename-session-${sessionId}`,
-      () => renameSession(sessionId, editTitleValue.trim()),
-      {
-        successMessage: 'Session renamed',
-        errorMessage: 'Failed to rename session',
-      },
-    ).then((result) => {
+  const execute = async <T,>(
+    actionKey: string,
+    action: () => Promise<T>,
+    options?: { successMessage?: string; errorMessage?: string },
+  ): Promise<T | null> => {
+    setPendingActionKey(actionKey);
+    try {
+      const result = await action();
+      if (options?.successMessage) {
+        toast.success(options.successMessage);
+      }
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (options?.errorMessage ?? 'Action failed');
+      toast.error(msg);
+      return null;
+    } finally {
+      setPendingActionKey(null);
+    }
+  };
+
+  const handleRenameSubmit = (e?: React.SyntheticEvent) => {
+    if (e) e.preventDefault();
+    if (!editTitleValue.trim() || editTitleValue.trim() === sessionData?.session.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+    const newTitle = editTitleValue.trim();
+    setIsEditingTitle(false);
+    void execute(`rename-session-${sessionId}`, () => renameSession(sessionId, newTitle), {
+      successMessage: 'Session renamed',
+      errorMessage: 'Failed to rename session',
+    }).then((result) => {
       if (result) {
         void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        setIsEditingTitle(false);
+      }
+    });
+  };
+
+  const handleForkClick = () => {
+    const title = sessionData?.session.title ?? 'Untitled session';
+    void execute(`fork-session-${sessionId}`, () => rewindSession(sessionId, 999999999, 'fork'), {
+      successMessage: `Session "${title}" forked`,
+      errorMessage: 'Failed to fork session',
+    }).then((result) => {
+      if (result?.forkSessionId) {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void navigate(`/sessions/${result.forkSessionId}`);
       }
     });
   };
@@ -67,8 +100,11 @@ export function MainFeed() {
   };
 
   const handleDeleteClick = () => {
-    if (!window.confirm('Are you sure you want to permanently delete this session?')) return;
+    setIsDeleteConfirmOpen(true);
+  };
 
+  const handleDeleteConfirm = () => {
+    setIsDeleteConfirmOpen(false);
     void execute(`delete-session-${sessionId}`, () => deleteSession(sessionId), {
       successMessage: 'Session deleted',
       errorMessage: 'Failed to delete session',
@@ -195,12 +231,17 @@ export function MainFeed() {
     }
   })();
 
+  const sessionDisplayTitle =
+    sessionData?.session.title && sessionData.session.title.trim().length > 0
+      ? sessionData.session.title
+      : 'Untitled session';
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-transparent">
       {/* Session Header */}
       <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center justify-between border-b px-6 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <div className="relative flex h-2 w-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="relative flex h-2 w-2 shrink-0">
             {statusConfig.animate && (
               <span
                 className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${statusConfig.color} ${statusConfig.animate}`}
@@ -209,49 +250,74 @@ export function MainFeed() {
             <span className={`relative inline-flex h-2 w-2 rounded-full ${statusConfig.color}`} />
           </div>
           {isEditingTitle ? (
-            <form onSubmit={handleRenameSubmit} className="flex items-center gap-1.5">
+            <form onSubmit={handleRenameSubmit} className="flex min-w-0 items-center gap-1.5">
               <input
                 type="text"
-                className="bg-surface/50 border-border/40 text-text-main focus:border-accent rounded border px-2 py-0.5 text-[12px] font-bold outline-none"
+                className="bg-surface/50 border-border/40 text-text-main focus:border-accent max-w-[280px] rounded border px-2 py-0.5 text-[12px] font-bold outline-none sm:max-w-[400px]"
                 value={editTitleValue}
                 onChange={(e) => {
                   setEditTitleValue(e.target.value);
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setIsEditingTitle(false);
+                  }
+                }}
                 autoFocus
                 onBlur={() => {
-                  setTimeout(() => {
-                    setIsEditingTitle(false);
-                  }, 200);
+                  handleRenameSubmit();
                 }}
               />
               <button
                 type="submit"
-                className="text-accent hover:text-accent/80 p-0.5 transition-colors"
+                className="text-accent hover:text-accent/80 shrink-0 p-0.5 transition-colors"
+                title="Save title"
               >
                 <Check className="h-3.5 w-3.5" />
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingTitle(false);
+                }}
+                className="text-text-muted hover:text-text-main shrink-0 p-0.5 transition-colors"
+                title="Cancel"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </form>
           ) : (
-            <span className="text-text-main text-[13px] font-bold tracking-tight">
-              {status === 'error' ? '[crashed] ' : ''}
-              {sessionData?.session.title ?? `session·${sessionId.slice(0, 8)}`}
-            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditingTitle(true);
+                setEditTitleValue(sessionData?.session.title ?? '');
+              }}
+              className="text-text-main hover:text-accent flex min-w-0 cursor-pointer items-center gap-1.5 text-[13px] font-bold tracking-tight transition-colors"
+              title="Click to rename session"
+            >
+              <span className="max-w-[240px] truncate sm:max-w-[380px] md:max-w-[500px]">
+                {status === 'error' ? '[crashed] ' : ''}
+                {sessionDisplayTitle}
+              </span>
+              <Pencil className="h-3 w-3 shrink-0 opacity-0 transition-opacity hover:opacity-100" />
+            </button>
           )}
         </div>
 
-        {/* More actions dropdown */}
+        {/* More actions dropdown matching sidebar */}
         <Dropdown.Root>
           <Dropdown.Trigger asChild>
             <button
               type="button"
-              className="text-text-muted hover:text-text-main hover:bg-surface-secondary/40 rounded-lg p-1.5 transition-all outline-none"
+              className="text-text-muted hover:text-text-main hover:bg-surface-secondary/40 cursor-pointer rounded-lg p-1.5 transition-all outline-none"
               aria-label="Session options"
             >
               <MoreHorizontal className="h-4 w-4" />
             </button>
           </Dropdown.Trigger>
           <Dropdown.Portal>
-            <Dropdown.Content align="end" className="w-36">
+            <Dropdown.Content align="end" className="w-40">
               <Dropdown.Item
                 className="hover:bg-surface-tertiary text-text-main flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors"
                 onSelect={() => {
@@ -260,17 +326,28 @@ export function MainFeed() {
                 }}
               >
                 <Pencil className="h-3.5 w-3.5 opacity-60" />
-                Rename
+                <span>Rename</span>
               </Dropdown.Item>
               <Dropdown.Item
                 className="hover:bg-surface-tertiary text-text-main flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors"
                 onSelect={() => {
-                  handleArchiveClick();
+                  handleForkClick();
                 }}
               >
-                <Archive className="h-3.5 w-3.5 opacity-60" />
-                Archive
+                <GitBranch className="h-3.5 w-3.5 opacity-60" />
+                <span>Fork session</span>
               </Dropdown.Item>
+              {sessionData?.session.status !== 'archived' && (
+                <Dropdown.Item
+                  className="hover:bg-brand-peach/10 text-brand-peach flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors"
+                  onSelect={() => {
+                    handleArchiveClick();
+                  }}
+                >
+                  <Archive className="h-3.5 w-3.5 opacity-60" />
+                  <span>Archive</span>
+                </Dropdown.Item>
+              )}
               <Dropdown.Item
                 className="hover:bg-brand-red/10 text-brand-red flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors"
                 onSelect={() => {
@@ -278,7 +355,7 @@ export function MainFeed() {
                 }}
               >
                 <Trash2 className="h-3.5 w-3.5 opacity-65" />
-                Delete
+                <span>Delete</span>
               </Dropdown.Item>
             </Dropdown.Content>
           </Dropdown.Portal>
@@ -333,9 +410,22 @@ export function MainFeed() {
         )}
       </main>
 
+      <ConfirmationModal
+        isOpen={isDeleteConfirmOpen}
+        title="Delete session"
+        message="Permanently delete this session and all its logs? This cannot be undone."
+        type="brand-red"
+        confirmText="Delete session"
+        cancelText="Cancel"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => {
+          setIsDeleteConfirmOpen(false);
+        }}
+      />
+
       <RewindConfirmDialog
         open={confirmRewind !== null}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) {
             setConfirmRewind(null);
             setRewindError(null);

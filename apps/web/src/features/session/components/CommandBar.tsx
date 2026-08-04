@@ -10,6 +10,7 @@ import { ProviderAuthModal } from './ProviderAuthModal';
 interface ControlBarProps {
   onSend: (val: string, attachmentIds?: string[]) => void;
   disabled?: boolean;
+  disabledReason?: string;
   selectedProviderId?: string | null;
   selectedModelId?: string | null;
   onProviderSelect?: (id: string, modelId?: string) => void;
@@ -22,6 +23,7 @@ const ACCEPTED_IMAGE_TYPES = 'image/png,image/jpeg,image/gif,image/webp';
 export function CommandBar({
   onSend,
   disabled,
+  disabledReason,
   selectedProviderId: propSelectedProviderId,
   selectedModelId: propSelectedModelId,
   onProviderSelect,
@@ -63,6 +65,7 @@ export function CommandBar({
     fileInputRef,
     attachments,
     removeAttachment,
+    retryAttachment,
     resolvedId,
     activeProvider,
     selectedProviderLabel,
@@ -74,13 +77,14 @@ export function CommandBar({
     handleDrop,
     canSend,
     handleSelectCommand,
-  } = useCommandBarState({
+  } = useCommandBarState(
     onSend,
     disabled,
-    propSelectedProviderId,
+    propSelectedProviderId ?? undefined,
+    propSelectedModelId ?? undefined,
     onProviderSelect,
     initialInput,
-  });
+  );
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const { queuedMessages } = useSessionStream();
@@ -112,6 +116,7 @@ export function CommandBar({
         <CommandInputComposer
           hasQueuedMessages={hasQueuedMessages}
           disabled={disabled}
+          disabledReason={disabledReason}
           input={input}
           handleInputChange={handleInputChange}
           isFocused={isFocused}
@@ -130,6 +135,7 @@ export function CommandBar({
           matchingCommand={matchingCommand}
           attachments={attachments}
           removeAttachment={removeAttachment}
+          retryAttachment={retryAttachment}
           placeholder={placeholder}
           status={sessionData?.session.status}
         >

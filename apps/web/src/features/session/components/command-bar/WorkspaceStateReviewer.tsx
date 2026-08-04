@@ -33,7 +33,7 @@ export function ContextWindowPopover({
   sessionData: SessionWithCapabilities | null;
   isLoading: boolean;
 }) {
-  const [isHovered, setIsHovered] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   if (isLoading || !sessionData?.session) return null;
 
@@ -50,21 +50,24 @@ export function ContextWindowPopover({
   return (
     <div
       onMouseEnter={() => {
-        setIsHovered(true);
+        setIsOpen(true);
       }}
       onMouseLeave={() => {
-        setIsHovered(false);
+        setIsOpen(false);
       }}
       className="relative flex items-center"
     >
-      <Popover open={isHovered}>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
+            onClick={() => {
+              setIsOpen((prev) => !prev);
+            }}
             className={cn(
-              'group border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 items-center justify-center overflow-hidden rounded-full border text-[10px] font-bold tracking-wider transition-all duration-300 focus-visible:ring-2 focus-visible:outline-none',
+              'group border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border text-[10px] font-bold tracking-wider transition-all duration-300 focus-visible:ring-2 focus-visible:outline-none',
               'w-8 gap-0 px-0',
-              'data-[state=open]:bg-accent/10 data-[state=open]:text-accent data-[state=open]:border-accent/40 data-[state=open]:w-16 data-[state=open]:gap-1.5 data-[state=open]:px-3',
+              isOpen && 'bg-accent/10 text-accent border-accent/40 w-16 gap-1.5 px-3',
             )}
           >
             <svg className="h-5 w-5 shrink-0 -rotate-90" viewBox="0 0 20 20">
@@ -96,8 +99,7 @@ export function ContextWindowPopover({
             <span
               className={cn(
                 'shrink-0 transition-all duration-300',
-                'w-0 overflow-hidden opacity-0',
-                'group-data-[state=open]:w-auto group-data-[state=open]:overflow-visible group-data-[state=open]:opacity-100',
+                isOpen ? 'w-auto overflow-visible opacity-100' : 'w-0 overflow-hidden opacity-0',
               )}
             >
               {Math.round(usagePercent)}%
@@ -108,7 +110,7 @@ export function ContextWindowPopover({
           <div className="flex flex-col gap-3 font-sans text-xs">
             <div className="flex flex-col gap-1">
               <span className="text-text-muted/45 text-[9px] font-bold tracking-[0.2em] uppercase">
-                ::CONTEXT_WINDOW
+                Context window
               </span>
               <div className="text-text-muted mt-0.5 flex items-baseline justify-between text-[11px] font-semibold">
                 <span className="font-mono">
@@ -166,7 +168,7 @@ export function ContextWindowPopover({
                 {usageBreakdown?.history !== undefined && (
                   <div className="flex flex-col">
                     <span className="text-text-muted/45 text-[8px] font-bold tracking-[0.15em] uppercase">
-                      ::HISTORY
+                      History
                     </span>
                     <span className="text-text-main font-mono text-[10.5px] font-bold">
                       {formatTokens(usageBreakdown.history)}
@@ -176,7 +178,7 @@ export function ContextWindowPopover({
                 {usageBreakdown?.files !== undefined && (
                   <div className="flex flex-col">
                     <span className="text-text-muted/45 text-[8px] font-bold tracking-[0.15em] uppercase">
-                      ::KNOWLEDGE
+                      Knowledge
                     </span>
                     <span className="text-text-main font-mono text-[10.5px] font-bold">
                       {formatTokens(usageBreakdown.files)}
@@ -186,7 +188,7 @@ export function ContextWindowPopover({
                 {estimatedCost !== undefined && (
                   <div className="flex flex-col">
                     <span className="text-text-muted/45 text-[8px] font-bold tracking-[0.15em] uppercase">
-                      ::COST
+                      Cost
                     </span>
                     <span className="text-text-main font-mono text-[10.5px] font-bold">
                       ${estimatedCost.toFixed(3)}
@@ -196,7 +198,7 @@ export function ContextWindowPopover({
                 {turnsRemaining !== undefined && (
                   <div className="flex flex-col">
                     <span className="text-text-muted/45 text-[8px] font-bold tracking-[0.15em] uppercase">
-                      ::TURNS_LEFT
+                      Turns left
                     </span>
                     <span className="text-text-main font-mono text-[10.5px] font-bold">
                       ~{turnsRemaining}

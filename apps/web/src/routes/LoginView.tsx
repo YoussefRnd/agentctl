@@ -2,9 +2,11 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@agentctl/api-client';
 import { GlassPanel, Input, Button } from '@agentctl/ui';
+import { Eye, EyeOff, ShieldAlert } from 'lucide-react';
 
 export function LoginView() {
   const [key, setKey] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const navigate = useNavigate();
@@ -32,13 +34,13 @@ export function LoginView() {
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <GlassPanel className="animate-in fade-in zoom-in w-full max-w-sm p-6 shadow-2xl duration-300">
+      <GlassPanel className="animate-in fade-in zoom-in w-full max-w-sm rounded-2xl p-6 shadow-2xl duration-300">
         <div className="mb-6 text-center">
-          <h1 className="mb-1 text-2xl font-black tracking-widest text-white uppercase">
-            AGENTCTL::AUTH
+          <h1 className="text-text-main mb-1 text-xl font-bold tracking-tight">
+            AgentCtl Authentication
           </h1>
-          <p className="text-text-muted caption-2xs">
-            ENTER_DECRYPT_KEY_TO_ACCESS_WORKSPACE
+          <p className="text-text-muted text-xs opacity-75">
+            Enter your secret access key to unlock the workspace
           </p>
         </div>
 
@@ -46,40 +48,53 @@ export function LoginView() {
           <div>
             <label
               htmlFor="login-key"
-              className="text-text-muted mb-1.5 block label-3xs"
+              className="text-text-muted mb-1.5 block text-xs font-semibold"
             >
-              SECRET_ACCESS_KEY
+              Secret access key
             </label>
-            <Input
-              id="login-key"
-              type="password"
-              value={key}
-              onChange={(e) => {
-                setKey(e.target.value);
-              }}
-              placeholder="••••••••••••••••"
-              className="!h-10 w-full text-center tracking-[0.5em]"
-              required
-            />
+            <div className="relative">
+              <Input
+                id="login-key"
+                type={showPassword ? 'text' : 'password'}
+                value={key}
+                onChange={(e) => {
+                  setKey(e.target.value);
+                }}
+                placeholder="Paste your access key..."
+                className="!h-10 w-full pr-10 font-mono text-sm"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPassword(!showPassword);
+                }}
+                className="text-text-muted hover:text-text-main absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer p-1 transition-colors"
+                title={showPassword ? 'Hide key' : 'Show key'}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           {error && (
-            <div className="border-surface-tertiary bg-surface-secondary text-danger rounded-md border p-2 text-center text-[10px] font-bold uppercase">
-              ERROR::ACCESS_DENIED::{error}
+            <div className="border-danger/30 bg-danger/10 text-danger flex items-center justify-center gap-2 rounded-xl border p-3 text-center text-xs font-medium">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
           <Button
             type="submit"
             disabled={isLoading || !key.trim()}
-            className="!h-10 w-full text-[12px] font-black"
+            className="!h-10 w-full text-xs font-bold"
           >
-            {isLoading ? 'VERIFYING...' : 'UNLOCK_WORKSPACE'}
+            {isLoading ? 'Verifying...' : 'Unlock workspace'}
           </Button>
         </form>
 
-        <p className="text-text-muted/40 mt-6 text-center text-[9px] font-bold tracking-tighter uppercase">
-          Check server stdout for the one-time access key.
+        <p className="text-text-muted/60 mt-6 text-center text-[11px] leading-relaxed">
+          Check server terminal output for your one-time access key.
         </p>
       </GlassPanel>
     </div>

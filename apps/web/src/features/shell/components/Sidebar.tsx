@@ -1,52 +1,87 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Plus, Settings, ListFilter } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, ListFilter, Settings, AlertCircle, RefreshCw, Layers } from 'lucide-react';
+import type { SidebarProject } from '@agentctl/api-client';
 import {
   apiClient,
   createProjectSession,
-  type SidebarProject,
   deleteProject,
-  deleteSession,
   archiveSession,
+  deleteSession,
   renameSession,
   rewindSession,
 } from '@agentctl/api-client';
-import { useState, useEffect, useRef } from 'react';
 import { ConfirmationModal, SearchBar, Switch, Tooltip } from '@agentctl/ui';
-import { useFilteredProjects } from '../hooks/useFilteredProjects.js';
-import { useActionDispatcher } from '../../../hooks/useActionDispatcher';
-import { useActionStore } from '../../../hooks/useActionStore';
-import { useProjectStore } from '../../../contexts/ProjectContext';
+import { toast } from 'sonner';
 import { ProjectItem } from './ProjectItem';
+import { RenameSessionDialog } from './RenameSessionDialog';
+import { useFilteredProjects } from '../hooks/useFilteredProjects';
 
-export function Sidebar() {
-  const { sessionId: activeSessionId } = useParams();
-  const navigate = useNavigate();
+interface SidebarProps {
+  activeSessionId?: string;
+}
+
+export function Sidebar({ activeSessionId }: SidebarProps) {
   const queryClient = useQueryClient();
-  const { execute } = useActionDispatcher();
-  const pendingActions = useActionStore((state) => state.pendingActions);
-  const { settings, setSettings } = useProjectStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const sessionMatch = /\/sessions\/([^/]+)/.exec(location.pathname);
+  const currentActiveSessionId = activeSessionId ?? sessionMatch?.[1];
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
+
+  const isMac =
+    typeof window !== 'undefined' &&
+    (navigator.platform.toUpperCase().includes('MAC') || navigator.userAgent.includes('Mac'));
+
+  const execute = async <T,>(
+    actionKey: string,
+    action: () => Promise<T>,
+    options?: { successMessage?: string; errorMessage?: string },
+  ): Promise<T | null> => {
+    setPendingActions((prev) => new Set(prev).add(actionKey));
+    try {
+      const result = await action();
+      if (options?.successMessage) {
+        toast.success(options.successMessage);
+      }
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (options?.errorMessage ?? 'Action failed');
+      toast.error(msg);
+      return null;
+    } finally {
+      setPendingActions((prev) => {
+        const next = new Set(prev);
+        next.delete(actionKey);
+        return next;
+      });
+    }
+  };
+
+  const [settings, setSettingsState] = useState<{
+    sortBy: 'lastActive' | 'name' | 'createdAt';
+    gitOnly: boolean;
+    showArchived: boolean;
+  }>({
+    sortBy: 'lastActive',
+    gitOnly: false,
+    showArchived: false,
+  });
+
+  const setSettings = (patch: Partial<typeof settings>) => {
+    setSettingsState((prev) => ({ ...prev, ...patch }));
+  };
+
   const { sortBy, gitOnly, showArchived } = settings;
 
-  const [collapsedProjects, setCollapsedProjects] = useState<Partial<Record<string, boolean>>>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
-
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -57,13 +92,31 @@ export function Sidebar() {
     type?: 'brand-red' | 'brand-peach' | 'info';
   } | null>(null);
 
-  const { data: projects = [], isLoading } = useQuery({
+  const {
+    data: projects = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['projects', sortBy, gitOnly],
     queryFn: () =>
       apiClient.fetch<SidebarProject[]>(
         `/api/projects?sortBy=${sortBy}&gitOnly=${gitOnly ? 'true' : 'false'}`,
       ),
   });
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const handleCreateSession = (projectId: string) => {
     void execute(`create-session-${projectId}`, () => createProjectSession(projectId), {
@@ -96,7 +149,7 @@ export function Sidebar() {
     }).then((result) => {
       if (result) {
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        if (activeSessionId === sessionId) {
+        if (currentActiveSessionId === sessionId) {
           void navigate('/');
         }
       }
@@ -116,18 +169,24 @@ export function Sidebar() {
   };
 
   const handleRenameSession = (sessionId: string, currentTitle: string) => {
-    const newTitle = window.prompt('Rename session:', currentTitle);
-    if (newTitle?.trim() && newTitle.trim() !== currentTitle) {
-      void execute(`rename-session-${sessionId}`, () => renameSession(sessionId, newTitle.trim()), {
+    setRenameTarget({ id: sessionId, title: currentTitle });
+  };
+
+  const handleRenameConfirm = (newTitle: string) => {
+    const target = renameTarget;
+    if (!target) return;
+    if (newTitle.trim() !== target.title) {
+      void execute(`rename-session-${target.id}`, () => renameSession(target.id, newTitle.trim()), {
         successMessage: 'Session renamed',
         errorMessage: 'Failed to rename session',
       }).then((result) => {
         if (result) {
           void queryClient.invalidateQueries({ queryKey: ['projects'] });
-          void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+          void queryClient.invalidateQueries({ queryKey: ['session', target.id] });
         }
       });
     }
+    setRenameTarget(null);
   };
 
   const handleForkSession = (sessionId: string, title: string) => {
@@ -144,21 +203,27 @@ export function Sidebar() {
 
   const filteredProjects = useFilteredProjects(projects, { searchQuery, showArchived });
   const toggleProject = (id: string) => {
-    setCollapsedProjects((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }));
+    setCollapsedProjects((prev) => ({ ...prev, [id]: !(prev[id] ?? false) }));
   };
+
+  const totalSessionsCount = filteredProjects.reduce((acc, p) => acc + p.sessions.length, 0);
 
   return (
     <aside
       aria-label="Main Sidebar"
       className="relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent"
     >
-      <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center border-b px-4">
-        <span className="text-text-main text-[10px] font-bold opacity-45 select-none">
-          Workspace
-        </span>
+      {/* Sidebar Header */}
+      <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <Layers className="text-brand-mauve h-4 w-4" />
+          <span className="text-text-main text-[12px] font-bold tracking-tight select-none">
+            Workspace
+          </span>
+        </div>
       </div>
 
-      <div className="mt-4 mb-2 space-y-6 px-4">
+      <div className="mt-4 mb-2 space-y-4 px-4">
         <div className="relative">
           <SearchBar
             ref={searchInputRef}
@@ -173,15 +238,25 @@ export function Sidebar() {
           />
           {!searchQuery && (
             <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center opacity-60 transition-opacity">
-              <kbd className="bg-surface-secondary/80 border-border/50 text-text-muted rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold">
-                ⌘K
+              <kbd className="bg-surface-secondary/80 border-border/50 text-text-muted rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold">
+                {isMac ? '⌘K' : 'Ctrl+K'}
               </kbd>
             </div>
           )}
         </div>
 
         <div className="flex items-center justify-between">
-          <h3 className="text-text-main text-[9px] font-semibold opacity-30">Projects</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-text-main text-[10px] font-semibold tracking-wider uppercase opacity-40">
+              Projects
+            </h3>
+            {searchQuery && (
+              <span className="text-brand-mauve bg-brand-mauve/10 py-0.2 rounded px-1.5 font-mono text-[10px] font-bold">
+                {totalSessionsCount} found
+              </span>
+            )}
+          </div>
+
           <div className="relative flex items-center gap-1.5">
             <Tooltip content="Filter and Sort">
               <button
@@ -189,7 +264,7 @@ export function Sidebar() {
                 onClick={() => {
                   setIsFilterMenuOpen(!isFilterMenuOpen);
                 }}
-                className={`hover:text-brand-mauve text-text-muted hover:bg-surface-secondary/40 rounded-sm border border-transparent p-1 transition-all hover:scale-105 active:scale-95 ${isFilterMenuOpen ? 'text-brand-mauve bg-brand-mauve/10 border-brand-mauve/20' : ''}`}
+                className={`hover:text-brand-mauve text-text-muted hover:bg-surface-secondary/40 cursor-pointer rounded-sm border border-transparent p-1 transition-all hover:scale-105 active:scale-95 ${isFilterMenuOpen ? 'text-brand-mauve bg-brand-mauve/10 border-brand-mauve/20' : ''}`}
               >
                 <ListFilter className="h-3.5 w-3.5" />
               </button>
@@ -205,8 +280,8 @@ export function Sidebar() {
                     setIsFilterMenuOpen(false);
                   }}
                 />
-                <div className="border-border/80 bg-surface-secondary/95 animate-in fade-in slide-in-from-top-2 absolute top-full right-0 z-40 mt-1 w-48 rounded-xl border p-2.5 font-mono text-[10px] shadow-2xl backdrop-blur-md duration-200">
-                  <div className="text-text-muted mb-1.5 px-2 text-[8px] font-semibold opacity-40">
+                <div className="border-border/80 bg-surface-secondary/95 animate-in fade-in slide-in-from-top-2 absolute top-full right-0 z-40 mt-1 w-52 rounded-xl border p-2.5 font-sans text-[11px] shadow-2xl backdrop-blur-md duration-200">
+                  <div className="text-text-muted mb-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase opacity-50">
                     Sort by
                   </div>
                   <div className="space-y-0.5">
@@ -218,7 +293,7 @@ export function Sidebar() {
                           setSettings({ sortBy: opt });
                           setIsFilterMenuOpen(false);
                         }}
-                        className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${sortBy === opt ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
+                        className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${sortBy === opt ? 'text-brand-mauve font-bold' : 'text-text-muted hover:text-text-main font-medium'}`}
                       >
                         <span>
                           {opt === 'lastActive'
@@ -227,14 +302,14 @@ export function Sidebar() {
                               ? 'Name (A-Z)'
                               : 'Date created'}
                         </span>
-                        {sortBy === opt && <span className="text-brand-mauve text-[9px]">●</span>}
+                        {sortBy === opt && <span className="text-brand-mauve text-[10px]">●</span>}
                       </button>
                     ))}
                   </div>
 
                   <div className="border-border/30 my-2 border-t" />
 
-                  <div className="text-text-muted mb-1.5 px-2 text-[8px] font-semibold opacity-40">
+                  <div className="text-text-muted mb-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase opacity-50">
                     Filter
                   </div>
                   <div className="space-y-1">
@@ -244,7 +319,7 @@ export function Sidebar() {
                         e.stopPropagation();
                         setSettings({ gitOnly: !gitOnly });
                       }}
-                      className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${gitOnly ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
+                      className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${gitOnly ? 'text-brand-mauve font-bold' : 'text-text-muted hover:text-text-main font-medium'}`}
                     >
                       <span>Git repos only</span>
                       <Switch
@@ -260,7 +335,7 @@ export function Sidebar() {
                         e.stopPropagation();
                         setSettings({ showArchived: !showArchived });
                       }}
-                      className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${showArchived ? 'text-brand-mauve font-black' : 'text-text-muted hover:text-text-main font-bold'}`}
+                      className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${showArchived ? 'text-brand-mauve font-bold' : 'text-text-muted hover:text-text-main font-medium'}`}
                     >
                       <span>Show archived sessions</span>
                       <Switch
@@ -291,41 +366,67 @@ export function Sidebar() {
         {isLoading ? (
           <div className="space-y-3 p-3">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="bg-text-main/5 h-2 w-full animate-pulse rounded-full" />
+              <div key={i} className="bg-text-main/5 h-2.5 w-full animate-pulse rounded-full" />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="bg-danger/10 border-danger/20 my-2 space-y-2.5 rounded-xl border p-3.5 text-center">
+            <div className="text-danger flex items-center justify-center gap-1.5 text-xs font-semibold">
+              <AlertCircle className="h-4 w-4" />
+              Failed to load projects
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                void refetch();
+              }}
+              className="bg-danger/20 hover:bg-danger/30 border-danger/30 text-danger inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1 text-[11px] font-bold transition-all"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry
+            </button>
+          </div>
+        ) : filteredProjects.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <p className="text-text-muted/60 text-xs font-medium">No matching projects</p>
           </div>
         ) : (
           <div className="space-y-1.5">
-            {filteredProjects.map((proj) => (
-              <ProjectItem
-                key={proj.id}
-                proj={proj}
-                activeSessionId={activeSessionId}
-                isCollapsed={collapsedProjects[proj.id] ?? true}
-                searchQuery={searchQuery}
-                isCreatingSession={pendingActions.has(`create-session-${proj.id}`)}
-                pendingActions={pendingActions}
-                toggleProject={toggleProject}
-                setConfirmConfig={setConfirmConfig}
-                handleDeleteProject={handleDeleteProject}
-                handleCreateSession={handleCreateSession}
-                handleArchiveSession={handleArchiveSession}
-                handleDeleteSession={handleDeleteSession}
-                handleRenameSession={handleRenameSession}
-                handleForkSession={handleForkSession}
-              />
-            ))}
+            {filteredProjects.map((proj) => {
+              const hasActiveSession = proj.sessions.some((s) => s.id === currentActiveSessionId);
+              const isCollapsed = collapsedProjects[proj.id] ?? !hasActiveSession;
+
+              return (
+                <ProjectItem
+                  key={proj.id}
+                  proj={proj}
+                  activeSessionId={currentActiveSessionId}
+                  isCollapsed={isCollapsed}
+                  searchQuery={searchQuery}
+                  isCreatingSession={pendingActions.has(`create-session-${proj.id}`)}
+                  pendingActions={pendingActions}
+                  toggleProject={toggleProject}
+                  setConfirmConfig={setConfirmConfig}
+                  handleDeleteProject={handleDeleteProject}
+                  handleCreateSession={handleCreateSession}
+                  handleArchiveSession={handleArchiveSession}
+                  handleDeleteSession={handleDeleteSession}
+                  handleRenameSession={handleRenameSession}
+                  handleForkSession={handleForkSession}
+                />
+              );
+            })}
           </div>
         )}
       </div>
 
-      <div className="border-border/50 relative z-10 mt-auto border-t p-2">
+      <div className="border-border/40 relative z-10 mt-auto border-t p-2">
         <Link
           to="/settings"
-          className="text-text-muted hover:text-brand-mauve hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-sm p-1.5 text-[10px] font-medium transition-all"
+          className="text-text-muted hover:text-brand-mauve hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-lg p-2 text-[11px] font-medium transition-all"
         >
-          <Settings className="h-3.5 w-3.5" />
-          Settings
+          <Settings className="h-4 w-4" />
+          <span>Settings</span>
         </Link>
       </div>
 
@@ -345,6 +446,15 @@ export function Sidebar() {
         confirmText={confirmConfig?.confirmText}
         cancelText={confirmConfig?.cancelText}
         type={confirmConfig?.type}
+      />
+
+      <RenameSessionDialog
+        open={renameTarget !== null}
+        currentTitle={renameTarget?.title ?? ''}
+        onConfirm={handleRenameConfirm}
+        onCancel={() => {
+          setRenameTarget(null);
+        }}
       />
     </aside>
   );

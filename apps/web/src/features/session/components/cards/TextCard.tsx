@@ -7,7 +7,7 @@ import { RewindMenu } from '../RewindMenu';
 import type { RewindMode } from '../RewindMenu';
 import { useSession } from '../../../../contexts/SessionContext';
 import { StreamingDots } from '@/shared/StreamingDots';
-import { Popover, PopoverTrigger, PopoverContent, Card } from '@agentctl/ui';
+import { Popover, PopoverTrigger, PopoverContent, Card, Tooltip } from '@agentctl/ui';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 
 type Role = 'provider' | 'user';
@@ -56,8 +56,8 @@ export const TextCard = memo(function TextCard({
 
   if (variant === 'user') {
     return (
-      <div data-font-ctx="chat" className="group/card flex justify-end py-3">
-        <div className="flex max-w-[85%] flex-col items-end gap-2 sm:max-w-[75%]">
+      <div data-font-ctx="chat" className="group/card flex justify-end py-2">
+        <div className="flex max-w-[85%] flex-col items-end gap-1.5 sm:max-w-[75%]">
           {attachments && attachments.length > 0 && (
             <div className="flex flex-wrap justify-end gap-2">
               {attachments.map((att) => (
@@ -74,59 +74,54 @@ export const TextCard = memo(function TextCard({
               ))}
             </div>
           )}
-          <div className="group/bubble relative flex w-full justify-end">
+          <div className="group/bubble relative flex w-full flex-col items-end">
             {content && (
-              <Card className="text-text-main relative px-4 py-3 text-[14px] leading-relaxed">
+              <Card className="text-text-main relative px-4 py-3 text-[14px] leading-relaxed shadow-sm">
                 {content}
               </Card>
             )}
 
-            {/* Subtle hover quick-action bar */}
-            <div className="border-border/40 bg-surface-primary/95 absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-md border p-1 opacity-0 shadow-sm backdrop-blur-sm transition-opacity duration-200 group-hover/bubble:opacity-100 group-hover/card:opacity-100 focus-within:opacity-100">
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 cursor-pointer items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors"
-                title="Copy text"
-                aria-label="Copy text"
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    <span className="text-[11px] text-emerald-400">Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    <span className="text-[11px]">Copy</span>
-                  </>
-                )}
-              </button>
+            {/* Quick action bar anchored cleanly below user message bubble */}
+            <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100 focus-within:opacity-100">
+              <Tooltip content={copied ? 'Copied to clipboard' : 'Copy message'}>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                  aria-label="Copy message"
+                >
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </Tooltip>
 
-              <button
-                type="button"
-                onClick={handleEdit}
-                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 cursor-pointer items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors"
-                title="Edit prompt"
-                aria-label="Edit prompt"
-              >
-                <Pencil className="h-3 w-3" />
-                <span className="text-[11px]">Edit</span>
-              </button>
+              <Tooltip content="Edit prompt">
+                <button
+                  type="button"
+                  onClick={handleEdit}
+                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                  aria-label="Edit prompt"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
 
               {eventId && onRewind && (
                 <Popover open={showMenu} onOpenChange={setShowMenu}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 cursor-pointer items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors"
-                      aria-label="Rewind or fork options"
-                      title="Rewind or fork options"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                      <span className="text-[11px]">Rewind</span>
-                    </button>
-                  </PopoverTrigger>
+                  <Tooltip content="Rewind or fork session">
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                        aria-label="Rewind or fork options"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                    </PopoverTrigger>
+                  </Tooltip>
                   <PopoverContent
                     align="end"
                     side="bottom"
@@ -171,41 +166,36 @@ export const TextCard = memo(function TextCard({
         </div>
 
         <div className="group/provider-content relative min-w-0 flex-1">
-          {/* Subtle hover quick-action bar for provider text */}
-          <div className="border-border/40 bg-surface-primary/95 absolute -top-2 right-0 z-10 flex items-center gap-0.5 rounded-md border p-1 opacity-0 shadow-sm backdrop-blur-sm transition-opacity duration-200 group-hover/provider:opacity-100 focus-within:opacity-100">
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 cursor-pointer items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors"
-              title="Copy text"
-              aria-label="Copy text"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-3 w-3 text-emerald-400" />
-                  <span className="text-[11px] text-emerald-400">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3 w-3" />
-                  <span className="text-[11px]">Copy</span>
-                </>
-              )}
-            </button>
+          {/* Quick-action toolbar for provider response */}
+          <div className="mb-1 flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-200 group-hover/provider:opacity-100 focus-within:opacity-100">
+            <Tooltip content={copied ? 'Copied to clipboard' : 'Copy response'}>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                aria-label="Copy response"
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </Tooltip>
 
             {eventId && onRewind && (
               <Popover open={showMenu} onOpenChange={setShowMenu}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 cursor-pointer items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors"
-                    aria-label="Rewind or fork options"
-                    title="Rewind or fork options"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    <span className="text-[11px]">Rewind</span>
-                  </button>
-                </PopoverTrigger>
+                <Tooltip content="Rewind or fork session">
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                      aria-label="Rewind or fork options"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                </Tooltip>
                 <PopoverContent
                   align="end"
                   side="bottom"

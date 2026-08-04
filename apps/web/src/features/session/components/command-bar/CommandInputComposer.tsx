@@ -110,6 +110,7 @@ function CommandInputHint({ showSlashMenu, matchingCommand }: CommandInputHintPr
 interface CommandInputComposerProps {
   hasQueuedMessages?: boolean;
   disabled?: boolean;
+  disabledReason?: string;
   input: string;
   handleInputChange: (val: string) => void;
   isFocused: boolean;
@@ -128,6 +129,7 @@ interface CommandInputComposerProps {
   matchingCommand?: CommandInfo;
   attachments: PendingAttachment[];
   removeAttachment: (id: string) => void;
+  retryAttachment: (id: string) => void;
   placeholder?: string;
   status?: string;
   isUnauthenticated?: boolean;
@@ -138,6 +140,7 @@ interface CommandInputComposerProps {
 export function CommandInputComposer({
   hasQueuedMessages,
   disabled,
+  disabledReason,
   input,
   handleInputChange,
   isFocused,
@@ -156,12 +159,19 @@ export function CommandInputComposer({
   matchingCommand,
   attachments,
   removeAttachment,
+  retryAttachment,
   placeholder,
   status,
   isUnauthenticated,
   authPanelContent,
   children,
 }: CommandInputComposerProps) {
+  const getPlaceholder = () => {
+    if (disabled) return disabledReason ?? 'Connecting to session...';
+    if (status === 'running') return 'Type a message to queue...';
+    return placeholder ?? 'Ask a question or type / for commands...';
+  };
+
   return (
     <>
       <SlashCommandsDropdown
@@ -179,7 +189,7 @@ export function CommandInputComposer({
         className={cn(
           'bg-brand-mantle border-border/30 flex flex-col overflow-visible rounded-xl border transition-all duration-300',
           hasQueuedMessages && 'rounded-t-none border-t-0',
-          disabled ? 'opacity-30' : 'opacity-100',
+          disabled ? 'opacity-55' : 'opacity-100',
           isFocused
             ? 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'
             : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
@@ -205,83 +215,83 @@ export function CommandInputComposer({
               >
                 <Plus className="h-4 w-4" />
               </button>
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={input}
-                onChange={(e) => {
-                  handleInputChange(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (showSlashMenu && filteredCommands.length > 0) {
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      const nextIndex = (activeCommandIndex + 1) % filteredCommands.length;
-                      setActiveCommandIndex(nextIndex);
-                      commandRefs.current[nextIndex]?.scrollIntoView({
-                        block: 'nearest',
-                        behavior: 'smooth',
-                      });
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      const prevIndex =
-                        (activeCommandIndex - 1 + filteredCommands.length) %
-                        filteredCommands.length;
-                      setActiveCommandIndex(prevIndex);
-                      commandRefs.current[prevIndex]?.scrollIntoView({
-                        block: 'nearest',
-                        behavior: 'smooth',
-                      });
-                    } else if (e.key === 'Enter' || e.key === 'Tab') {
-                      const selected = filteredCommands[activeCommandIndex];
-                      const completedText = '/' + selected.name + (selected.input ? ' ' : '');
-
-                      if (input === completedText) {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleSubmit();
-                        }
-                      } else {
+              <div className="min-w-0 flex-1">
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => {
+                    handleInputChange(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (showSlashMenu && filteredCommands.length > 0) {
+                      if (e.key === 'ArrowDown') {
                         e.preventDefault();
-                        handleInputChange(completedText);
+                        const nextIndex = (activeCommandIndex + 1) % filteredCommands.length;
+                        setActiveCommandIndex(nextIndex);
+                        commandRefs.current[nextIndex]?.scrollIntoView({
+                          block: 'nearest',
+                          behavior: 'smooth',
+                        });
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        const prevIndex =
+                          (activeCommandIndex - 1 + filteredCommands.length) %
+                          filteredCommands.length;
+                        setActiveCommandIndex(prevIndex);
+                        commandRefs.current[prevIndex]?.scrollIntoView({
+                          block: 'nearest',
+                          behavior: 'smooth',
+                        });
+                      } else if (e.key === 'Enter' || e.key === 'Tab') {
+                        const selected = filteredCommands[activeCommandIndex];
+                        const completedText = '/' + selected.name + (selected.input ? ' ' : '');
+
+                        if (input === completedText) {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSubmit();
+                          }
+                        } else {
+                          e.preventDefault();
+                          handleInputChange(completedText);
+                        }
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        handleInputChange(input.replace('/', ''));
                       }
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleInputChange(input.replace('/', ''));
+                    } else {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmit();
+                      }
                     }
-                  } else {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSubmit();
-                    }
-                  }
-                }}
-                onFocus={() => {
-                  setIsFocused(true);
-                }}
-                onBlur={() => {
-                  setIsFocused(false);
-                }}
-                onPaste={handlePaste}
-                placeholder={
-                  status === 'running'
-                    ? 'Type a message to queue...'
-                    : disabled
-                      ? 'Processing...'
-                      : placeholder
-                }
-                aria-label="Command input"
-                className="placeholder:text-text-muted/30 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full resize-none border-none bg-transparent p-0 pt-[3px] font-sans text-[15px] leading-relaxed outline-none focus:ring-0 focus:outline-none"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                disabled={disabled}
-              />
+                  }}
+                  onFocus={() => {
+                    setIsFocused(true);
+                  }}
+                  onBlur={() => {
+                    setIsFocused(false);
+                  }}
+                  onPaste={handlePaste}
+                  placeholder={getPlaceholder()}
+                  aria-label="Command input"
+                  className="placeholder:text-text-muted/40 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full resize-none border-none bg-transparent p-0 pt-[3px] font-sans text-[15px] leading-relaxed outline-none focus:ring-0 focus:outline-none"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  disabled={disabled}
+                />
+              </div>
             </div>
 
             {/* Attachment strip — only visible when there are files */}
             {attachments.length > 0 && (
               <>
                 <div className="bg-border/20 mx-5 h-px" />
-                <AttachmentStrip attachments={attachments} onRemove={removeAttachment} />
+                <AttachmentStrip
+                  attachments={attachments}
+                  onRemove={removeAttachment}
+                  onRetry={retryAttachment}
+                />
               </>
             )}
           </>

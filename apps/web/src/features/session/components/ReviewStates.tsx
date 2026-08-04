@@ -1,4 +1,4 @@
-import { Search, AlertCircle } from 'lucide-react';
+import { Search, AlertCircle, Ban, CheckCircle2 } from 'lucide-react';
 import { ReviewCleanState } from '../components/ReviewCleanState';
 
 export function ReviewEmptyState({ searchQuery }: { searchQuery: string }) {
@@ -60,10 +60,12 @@ export function ReviewLoadingState() {
 export function ReviewClosedState({ sessionStatus }: { sessionStatus?: string }) {
   return (
     <div className="bg-surface-secondary/5 flex h-full flex-col items-center justify-center p-6 text-center">
-      <div className="bg-surface-secondary/20 border-border/10 ring-surface-secondary/5 mb-4 rounded-xl border p-4 shadow-2xl ring-1">
-        <span className="text-[40px] leading-none drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] filter">
-          {sessionStatus === 'merged' ? '✨' : '扫'}
-        </span>
+      <div className="bg-surface-secondary/20 border-border/10 ring-surface-secondary/5 mb-4 flex items-center justify-center rounded-xl border p-4 shadow-2xl ring-1">
+        {sessionStatus === 'merged' ? (
+          <CheckCircle2 className="text-brand-teal h-10 w-10 drop-shadow-[0_0_10px_rgba(45,226,176,0.3)]" />
+        ) : (
+          <Ban className="text-text-muted/60 h-10 w-10" />
+        )}
       </div>
       <h3 className="text-text-main mb-2 text-[14px] font-black tracking-[0.4em] uppercase">
         Session {sessionStatus}

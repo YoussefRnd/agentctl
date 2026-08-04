@@ -1,4 +1,5 @@
 import { ApiError } from '../api-error.js';
+import { redirectToLogin } from '../api-client.js';
 
 export interface UploadAttachmentResult {
   attachmentId: string;
@@ -48,9 +49,7 @@ export function uploadAttachment(
 
     xhr.onload = () => {
       if (xhr.status === 401) {
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
+        redirectToLogin();
         reject(new ApiError('Unauthorized', 401));
         return;
       }

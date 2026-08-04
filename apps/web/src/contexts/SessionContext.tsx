@@ -7,7 +7,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import type { ACPEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
 import { sessionStore } from '@agentctl/shared';
 import { api } from '@agentctl/api-client';
@@ -175,6 +176,7 @@ export function SessionStreamProvider({
   sessionId: string;
   children: ReactNode;
 }) {
+  const queryClient = useQueryClient();
   const {
     events,
     isLoading: isLoadingEvents,
@@ -230,11 +232,31 @@ export function SessionStreamProvider({
           },
         })
         .catch((err: unknown) => {
-          // eslint-disable-next-line no-console
-          console.error('Failed to send queued message:', err);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          toast.error('Failed to send queued message', {
+            description: errorMessage,
+            action: {
+              label: 'Re-send',
+              onClick: () => {
+                enqueueMessage(nextMessage.text, nextMessage.attachmentIds);
+              },
+            },
+          });
+          const cleaned = (
+            queryClient.getQueryData<ACPEventRow[]>(['events', sessionId]) ?? []
+          ).filter(
+            (e) =>
+              !(
+                e.id < 0 &&
+                e.type === 'text' &&
+                (e.data as { role?: string }).role === 'user' &&
+                (e.data as { content?: string }).content === nextMessage.text
+              ),
+          );
+          queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], cleaned);
         });
     }
-  }, [sessionData?.session.status, queuedMessages, sessionId]);
+  }, [sessionData?.session.status, queuedMessages, sessionId, queryClient]);
 
   const planItems = useMemo(() => {
     const planMap = new Map<string, boolean>();

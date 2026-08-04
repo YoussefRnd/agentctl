@@ -21,6 +21,7 @@ export interface UseAttachmentsReturn {
   attachments: PendingAttachment[];
   addFiles: (files: FileList | File[]) => void;
   removeAttachment: (localId: string) => void;
+  retryAttachment: (localId: string) => void;
   clearAll: () => void;
   readyAttachmentIds: string[];
   isAnyUploading: boolean;
@@ -49,6 +50,32 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
   const patchAttachment = useCallback((localId: string, patch: Partial<PendingAttachment>) => {
     setAttachments((prev) => prev.map((a) => (a.localId === localId ? { ...a, ...patch } : a)));
   }, []);
+
+  // -------------------------------------------------------------------------
+  // uploadFile — shared by addFiles and retryAttachment
+  // -------------------------------------------------------------------------
+
+  const uploadFile = useCallback(
+    (localId: string, file: File) => {
+      patchAttachment(localId, { state: 'uploading', progress: 0, errorMessage: undefined });
+
+      uploadAttachment(sessionId, file, (pct: number) => {
+        patchAttachment(localId, { progress: pct });
+      })
+        .then(({ attachmentId }: { attachmentId: string }) => {
+          patchAttachment(localId, {
+            state: 'ready',
+            attachmentId,
+            progress: 100,
+          });
+        })
+        .catch((err: unknown) => {
+          const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+          patchAttachment(localId, { state: 'error', errorMessage });
+        });
+    },
+    [sessionId, patchAttachment],
+  );
 
   // -------------------------------------------------------------------------
   // addFiles
@@ -87,25 +114,24 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
 
       // Kick off uploads after state is committed.
       for (const attachment of newAttachments) {
-        const { localId, file } = attachment;
-
-        uploadAttachment(sessionId, file, (pct: number) => {
-          patchAttachment(localId, { progress: pct });
-        })
-          .then(({ attachmentId }: { attachmentId: string }) => {
-            patchAttachment(localId, {
-              state: 'ready',
-              attachmentId,
-              progress: 100,
-            });
-          })
-          .catch((err: unknown) => {
-            const errorMessage = err instanceof Error ? err.message : 'Upload failed';
-            patchAttachment(localId, { state: 'error', errorMessage });
-          });
+        uploadFile(attachment.localId, attachment.file);
       }
     },
-    [sessionId, patchAttachment],
+    [uploadFile],
+  );
+
+  // -------------------------------------------------------------------------
+  // retryAttachment
+  // -------------------------------------------------------------------------
+
+  const retryAttachment = useCallback(
+    (localId: string) => {
+      const target = attachments.find((a) => a.localId === localId);
+      if (target) {
+        uploadFile(target.localId, target.file);
+      }
+    },
+    [attachments, uploadFile],
   );
 
   // -------------------------------------------------------------------------
@@ -176,6 +202,7 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
     attachments,
     addFiles,
     removeAttachment,
+    retryAttachment,
     clearAll,
     readyAttachmentIds,
     isAnyUploading,

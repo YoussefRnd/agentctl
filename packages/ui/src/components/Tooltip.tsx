@@ -4,52 +4,78 @@ import { cn } from '../utils.js';
 
 interface TooltipProps {
   content: React.ReactNode;
-  children: React.ReactElement;
+  children: React.ReactNode;
   className?: string;
+  side?: 'top' | 'right' | 'bottom' | 'left';
+  align?: 'start' | 'center' | 'end';
+  delayDuration?: number;
 }
 
-export function Tooltip({ content, children, className }: TooltipProps) {
+export function Tooltip({
+  content,
+  children,
+  className,
+  side = 'top',
+  align = 'center',
+  delayDuration = 150,
+}: TooltipProps) {
   const [open, setOpen] = React.useState(false);
-  const child = children as React.ReactElement<{
-    onMouseEnter?: (e: React.MouseEvent) => void;
-    onMouseLeave?: (e: React.MouseEvent) => void;
-    onFocus?: (e: React.FocusEvent) => void;
-    onBlur?: (e: React.FocusEvent) => void;
-  }>;
+  const timerRef = React.useRef<number | null>(null);
+
+  const handleOpen = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+    timerRef.current = window.setTimeout(() => {
+      setOpen(true);
+    }, delayDuration);
+  };
+
+  const handleClose = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+    setOpen(false);
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  if (!content) return <>{children}</>;
 
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen} modal={false}>
       <PopoverPrimitive.Trigger asChild>
-        {React.cloneElement(child, {
-          onMouseEnter: (e: React.MouseEvent) => {
-            setOpen(true);
-            child.props.onMouseEnter?.(e);
-          },
-          onMouseLeave: (e: React.MouseEvent) => {
-            setOpen(false);
-            child.props.onMouseLeave?.(e);
-          },
-          onFocus: (e: React.FocusEvent) => {
-            setOpen(true);
-            child.props.onFocus?.(e);
-          },
-          onBlur: (e: React.FocusEvent) => {
-            setOpen(false);
-            child.props.onBlur?.(e);
-          },
-        })}
+        <span
+          className="inline-flex"
+          onMouseEnter={handleOpen}
+          onMouseLeave={handleClose}
+          onFocus={handleOpen}
+          onBlur={handleClose}
+          onClick={handleClose}
+        >
+          {children}
+        </span>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          side="top"
-          align="center"
+          side={side}
+          align={align}
           sideOffset={6}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
           }}
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+          }}
           className={cn(
-            'bg-surface-secondary/95 border border-border/30 text-text-main pointer-events-none z-[1000] rounded-md px-2 py-1 font-sans text-[9px] font-bold tracking-wider whitespace-nowrap uppercase shadow-xl backdrop-blur-sm transition-all duration-150 ease-out outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-            className
+            'bg-surface-secondary/95 border-border/30 text-text-main data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 pointer-events-none z-[1000] rounded-md border px-2 py-1 font-sans text-[10px] font-semibold tracking-wide whitespace-nowrap shadow-xl backdrop-blur-sm transition-all duration-150 ease-out outline-none',
+            className,
           )}
         >
           {content}

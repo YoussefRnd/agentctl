@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useMemo } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
-import { Brain } from 'lucide-react';
+import { Brain, RefreshCw } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { TextCard } from './cards/TextCard';
 import { AgentResponse } from './cards/AgentResponse';
 import { CommandResultCard } from './cards/CommandResultCard';
@@ -27,9 +28,10 @@ export function EventFeed({
 }: EventFeedProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const { sessionData } = useSession();
+  const { sessionData, sessionId } = useSession();
   const { streamingEventId } = useSessionStream();
   const isSessionError = sessionData?.session.status === 'error';
+  const queryClient = useQueryClient();
 
   const groupedEvents = useMemo(() => {
     const result: (
@@ -124,10 +126,10 @@ export function EventFeed({
               <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-text-main text-[12px] font-semibold tracking-[0.1em] uppercase">
+              <h3 className="text-text-main text-[12px] font-semibold tracking-wide uppercase">
                 Connecting...
               </h3>
-              <p className="text-text-muted/40 text-[10px] tracking-wide">
+              <p className="text-text-muted/60 text-[11px] tracking-wide">
                 Establishing session uplink
               </p>
             </div>
@@ -140,10 +142,10 @@ export function EventFeed({
       <div className="flex h-full items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="space-y-2">
-            <h3 className="text-text-main text-[13px] font-semibold tracking-[0.1em] uppercase">
+            <h3 className="text-text-main text-[13px] font-semibold tracking-wide">
               Session ready
             </h3>
-            <p className="text-text-muted/50 text-[11px] tracking-wide">Send a message to begin.</p>
+            <p className="text-text-muted/60 text-[12px]">Send a message to begin.</p>
           </div>
         </div>
       </div>
@@ -263,26 +265,28 @@ export function EventFeed({
                         <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/25 bg-rose-500/8 text-rose-400">
                           <Brain className="h-4 w-4" />
                         </div>
-                        <span className="text-[11px] font-bold tracking-[0.2em] text-rose-400 uppercase">
-                          Connection failed
+                        <span className="text-[11px] font-bold tracking-wider text-rose-400 uppercase">
+                          Agent Connection Interrupted
                         </span>
                       </div>
-                      <p className="text-text-muted/80 text-[12px] leading-relaxed">
-                        The agent runtime process crashed or failed to resuscitate.
+                      <p className="text-text-muted/90 text-[12px] leading-relaxed">
+                        The agent process exited unexpectedly. Type a message in the input below to
+                        resuscitate the session, or reconnect the stream.
                       </p>
-                      <div className="mt-1 flex items-center gap-4">
+                      <div className="mt-1 flex items-center gap-3">
                         <button
                           type="button"
                           onClick={() => {
-                            window.location.reload();
+                            void queryClient.invalidateQueries({
+                              queryKey: ['session', sessionId],
+                            });
+                            void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
                           }}
-                          className="cursor-pointer rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 text-[10px] font-bold tracking-wider text-rose-300 uppercase transition-all hover:bg-rose-500/20"
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/15 px-3 py-1.5 text-[11px] font-bold text-rose-300 transition-all hover:bg-rose-500/25"
                         >
-                          Retry Connection
+                          <RefreshCw className="h-3 w-3" />
+                          Reconnect Stream
                         </button>
-                        <span className="text-text-muted/40 text-[10px] font-medium">
-                          (Or type a message to attempt resuscitation)
-                        </span>
                       </div>
                     </Card>
                   </div>
