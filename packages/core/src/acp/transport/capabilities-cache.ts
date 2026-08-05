@@ -47,7 +47,7 @@ export class FileCacheStorage implements CacheStorage {
 
 export function getCacheKey(command: string, args: string[], env: Record<string, string>): string {
   const data = JSON.stringify({ command, args, env });
-  return crypto.createHash('sha256').update(data).digest('hex');
+  return crypto.hash('sha256', data);
 }
 
 export function sessionSupportsDelete(caps: unknown): boolean {

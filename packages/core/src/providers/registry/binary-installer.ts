@@ -36,27 +36,12 @@ async function extractArchive(archivePath: string, destDir: string): Promise<voi
 }
 
 async function computeSha256(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-    stream.on('data', (c) => {
-      hash.update(c);
-    });
-    stream.on('end', () => {
-      resolve(hash.digest('hex'));
-    });
-    stream.on('error', reject);
-  });
+  const content = await fs.promises.readFile(filePath);
+  return crypto.hash('sha256', content);
 }
 
 async function copyDir(src: string, dest: string): Promise<void> {
-  await fs.promises.mkdir(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, entry.name);
-    const d = path.join(dest, entry.name);
-    if (entry.isDirectory()) await copyDir(s, d);
-    else await fs.promises.copyFile(s, d);
-  }
+  await fs.promises.cp(src, dest, { recursive: true });
 }
 
 export async function removeDirWithRetry(

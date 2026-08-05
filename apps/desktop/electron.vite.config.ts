@@ -14,7 +14,7 @@ function copyDrizzlePlugin() {
         fs.mkdirSync(dest, { recursive: true });
         fs.cpSync(src, dest, { recursive: true });
       }
-    }
+    },
   };
 }
 
@@ -23,7 +23,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin(), copyDrizzlePlugin()],
     build: {
       rollupOptions: {
-        external: ['electron', 'better-sqlite3', 'sodium-native'],
+        external: ['electron', 'sodium-native'],
         input: {
           index: path.resolve(__dirname, 'src/main/index.ts'),
           'server-process': path.resolve(__dirname, 'src/main/server-process.ts'),

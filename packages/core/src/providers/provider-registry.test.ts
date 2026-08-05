@@ -78,6 +78,13 @@ describe('ProviderRegistry', () => {
     const registry = new ProviderRegistry(db, noopLogger);
     const reg = registry as unknown as { launcher: ProviderLauncher };
     const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    const probeSpy = vi.spyOn(reg.launcher, 'probe').mockResolvedValue({
+      status: 'ready',
+      configOptions: [],
+      authMethods: [],
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    });
     const agent: RegistryAgent = {
       id: 'npx-agent',
       name: 'NPX Agent',
@@ -97,6 +104,7 @@ describe('ProviderRegistry', () => {
     expect(result.installState).toBe('system_available');
     expect(result.command).toBe('npx');
     launcherSpy.mockRestore();
+    probeSpy.mockRestore();
   }, 30000);
 
   test('remove resets provider to not_installed and disables it', async () => {
@@ -104,6 +112,13 @@ describe('ProviderRegistry', () => {
     const registry = new ProviderRegistry(db, noopLogger);
     const reg = registry as unknown as { launcher: ProviderLauncher };
     const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    const probeSpy = vi.spyOn(reg.launcher, 'probe').mockResolvedValue({
+      status: 'ready',
+      configOptions: [],
+      authMethods: [],
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    });
     const agent: RegistryAgent = {
       id: 'npx-agent',
       name: 'NPX Agent',
@@ -122,6 +137,7 @@ describe('ProviderRegistry', () => {
 
     expect(result.installState).toBe('not_installed');
     launcherSpy.mockRestore();
+    probeSpy.mockRestore();
   }, 30000);
 
   test('concurrent install dedupes to a single installer run', async () => {
@@ -150,6 +166,13 @@ describe('ProviderRegistry', () => {
     );
 
     const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    const probeSpy = vi.spyOn(reg.launcher, 'probe').mockResolvedValue({
+      status: 'ready',
+      configOptions: [],
+      authMethods: [],
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    });
 
     const [a, b] = await Promise.all([
       registry.install('dup-agent'),
@@ -160,6 +183,7 @@ describe('ProviderRegistry', () => {
     expect(b.id).toBe('dup-agent');
     spy.mockRestore();
     launcherSpy.mockRestore();
+    probeSpy.mockRestore();
   }, 15000);
 
   test('install falls back to npx when no binary for current platform', async () => {
@@ -185,6 +209,13 @@ describe('ProviderRegistry', () => {
     const archSpy = vi.spyOn(os, 'arch').mockReturnValue('x64');
     const reg = registry as unknown as { launcher: ProviderLauncher };
     const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    const probeSpy = vi.spyOn(reg.launcher, 'probe').mockResolvedValue({
+      status: 'ready',
+      configOptions: [],
+      authMethods: [],
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    });
     try {
       const res = await registry.install('fb-agent');
       expect(res.installState).toBe('system_available');
@@ -193,6 +224,7 @@ describe('ProviderRegistry', () => {
       platformSpy.mockRestore();
       archSpy.mockRestore();
       launcherSpy.mockRestore();
+      probeSpy.mockRestore();
     }
   }, 30000);
 
@@ -244,6 +276,13 @@ describe('ProviderRegistry', () => {
     await registry.sync();
     const reg = registry as unknown as { launcher: ProviderLauncher };
     const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    const probeSpy = vi.spyOn(reg.launcher, 'probe').mockResolvedValue({
+      status: 'ready',
+      configOptions: [],
+      authMethods: [],
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    });
     try {
       const spy = vi.spyOn(registry, 'install');
       const res = await registry.ensureProviderReady('lazy-agent');
@@ -251,6 +290,7 @@ describe('ProviderRegistry', () => {
       expect(res.installState).toBe('system_available');
     } finally {
       launcherSpy.mockRestore();
+      probeSpy.mockRestore();
       fetchSpy.mockRestore();
     }
   }, 15000);
@@ -271,11 +311,19 @@ describe('ProviderRegistry', () => {
       .values({ data: JSON.stringify({ version: '1', agents: [agent] }), fetchedAt: new Date() });
     const reg = registry as unknown as { launcher: ProviderLauncher };
     const launcherSpy = vi.spyOn(reg.launcher, 'isBinaryOnPath').mockResolvedValue(true);
+    const probeSpy = vi.spyOn(reg.launcher, 'probe').mockResolvedValue({
+      status: 'ready',
+      configOptions: [],
+      authMethods: [],
+      supportsDynamicModel: false,
+      supportsDynamicConfig: false,
+    });
     try {
       const res = await registry.install('range-agent');
       expect(res.launchArgs).toEqual(['-y', 'range-pkg@1.2.3', '--x']);
     } finally {
       launcherSpy.mockRestore();
+      probeSpy.mockRestore();
     }
   }, 15000);
 });

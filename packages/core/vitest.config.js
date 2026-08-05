@@ -4,6 +4,5 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     exclude: ['node_modules', 'dist'],
-    globalSetup: ['./vitest.globalSetup.mjs'],
   },
 });

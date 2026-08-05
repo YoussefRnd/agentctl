@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import Database from 'better-sqlite3';
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
+import { DatabaseSync } from 'node:sqlite';
 import * as schema from './schema.js';
 export * from './schema.js';
 export * from './zod-schemas.js';
@@ -27,15 +28,15 @@ function findWorkspaceRoot(startDir: string): string {
   return startDir;
 }
 
-// Load env variables as early as possible so that DATABASE_URL is available
 const workspaceRoot = findWorkspaceRoot(process.cwd());
 const envPath = path.join(workspaceRoot, '.env');
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
 }
 
-export function createDatabase(dbPath: string) {
-  // Ensure directory exists if it's a file path
+export type CoreDatabase = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
+
+export function createDatabase(dbPath: string): CoreDatabase {
   if (dbPath !== ':memory:') {
     const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) {
@@ -43,11 +44,64 @@ export function createDatabase(dbPath: string) {
     }
   }
 
-  const sqlite = new Database(dbPath);
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
+  const sqlite = new DatabaseSync(dbPath);
+  sqlite.exec('PRAGMA journal_mode = WAL;');
+  sqlite.exec('PRAGMA foreign_keys = ON;');
 
-  const db = drizzle(sqlite, { schema });
+  /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return */
+  const adapted = {
+    prepare(sql: string) {
+      const stmt = sqlite.prepare(sql);
+      const createWrapped = (isRaw = false) => ({
+        raw(mode = true) {
+          return createWrapped(mode);
+        },
+        all(...args: any[]) {
+          if (isRaw) stmt.setReturnArrays(true);
+          try {
+            return stmt.all(...args);
+          } finally {
+            if (isRaw) stmt.setReturnArrays(false);
+          }
+        },
+        get(...args: any[]) {
+          if (isRaw) stmt.setReturnArrays(true);
+          try {
+            return stmt.get(...args);
+          } finally {
+            if (isRaw) stmt.setReturnArrays(false);
+          }
+        },
+        run(...args: any[]) {
+          return stmt.run(...args);
+        },
+      });
+      return createWrapped(false);
+    },
+    exec(sql: string) {
+      sqlite.exec(sql);
+      return adapted;
+    },
+    pragma(pragmaSql: string) {
+      sqlite.exec(`PRAGMA ${pragmaSql};`);
+    },
+    transaction(fn: (...args: any[]) => any) {
+      return (...args: any[]) => {
+        sqlite.exec('BEGIN TRANSACTION;');
+        try {
+          const result = fn(...args);
+          sqlite.exec('COMMIT;');
+          return result;
+        } catch (err) {
+          sqlite.exec('ROLLBACK;');
+          throw err;
+        }
+      };
+    },
+  };
+
+  const db = drizzle(adapted as any, { schema });
+  /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return */
 
   migrate(db, { migrationsFolder: path.join(__dirname, '../../drizzle') });
 
@@ -68,4 +122,4 @@ export function getDbPath(): string {
   return path.join(os.homedir(), '.agentctl', 'agentctl.db');
 }
 
-export const db = createDatabase(getDbPath());
+export const db: CoreDatabase = createDatabase(getDbPath());
