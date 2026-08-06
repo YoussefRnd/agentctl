@@ -1,31 +1,15 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
-import fs from 'node:fs';
-import path from 'node:path';
-import {
-  ClientSideConnection,
-  ndJsonStream,
-  type SessionNotification,
-  type RequestPermissionRequest,
-  type Stream,
-  type AnyMessage,
-  type Client,
-} from '@agentclientprotocol/sdk';
+import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type { ProviderLauncher } from './provider-launcher.js';
 import type { ProviderStore } from './provider-store.js';
 import type { RegistryFetcher } from './registry-fetcher.js';
 import { parseRegistryAgents } from '../provider-registry.js';
 import { ProcessStreamTransport, cleanEnv } from '../../acp/transport/process-transport.js';
-import { resolveAllowedPath } from '../../acp/transport/path-security.js';
-import { parseNotificationToEvents } from '../../acp/protocol/events.js';
-import { AcpDebugLog } from '../../acp/runtime.js';
+import { createClientHandlers } from '../../acp/protocol/client-handlers.js';
+import { AcpDebugLog, wrapDebug } from '../../acp/transport/stream-debug.js';
 import { initializeAcpConnection } from '../../acp/transport/capabilities-cache.js';
-import type {
-  SessionCallbacks,
-  RuntimeOptions,
-  PermissionToolCall,
-  DomainPermissionRequest,
-} from '../../acp/types.js';
+import type { SessionCallbacks, RuntimeOptions } from '../../acp/types.js';
 import { type Logger, noopLogger } from '../../logger.js';
 import { TerminalManager } from '../../acp/protocol/terminal-manager.js';
 
@@ -54,41 +38,6 @@ export interface ActiveSession {
   localSessionId: string;
   options: RuntimeOptions;
   callbacks: SessionCallbacks;
-}
-
-function wrapDebug(stream: Stream, debugLog: AcpDebugLog): Stream {
-  const { readable, writable } = stream;
-  const reader = readable.getReader();
-  const loggedReadable = new ReadableStream<AnyMessage>({
-    async pull(controller) {
-      const { value, done } = await reader.read();
-      if (done) {
-        controller.close();
-        return;
-      }
-      debugLog.recordLine('incoming', JSON.stringify(value));
-      controller.enqueue(value);
-    },
-    cancel(reason) {
-      return reader.cancel(reason);
-    },
-  });
-
-  const writer = writable.getWriter();
-  const loggedWritable = new WritableStream<AnyMessage>({
-    async write(chunk) {
-      debugLog.recordLine('outgoing', JSON.stringify(chunk));
-      await writer.write(chunk);
-    },
-    close() {
-      return writer.close();
-    },
-    abort(reason) {
-      return writer.abort(reason);
-    },
-  });
-
-  return { readable: loggedReadable, writable: loggedWritable };
 }
 
 export class PersistentAgentConnectionManager {
@@ -182,7 +131,9 @@ export class PersistentAgentConnectionManager {
 
     const transport = new ProcessStreamTransport(child, this.logger);
     const rawStream = ndJsonStream(transport.stdin, transport.stdout);
-    const stream = wrapDebug(rawStream, debugLog);
+    const stream = wrapDebug(rawStream, (direction, message) => {
+      debugLog.recordLine(direction === 'send' ? 'outgoing' : 'incoming', JSON.stringify(message));
+    });
 
     child.stderr.on('data', (data: Buffer) => {
       debugLog.recordLine('stderr', data.toString());
@@ -190,218 +141,34 @@ export class PersistentAgentConnectionManager {
 
     const terminalManager = new TerminalManager(this.logger);
 
-    const connection = new ClientSideConnection((_connectionInstance) => {
-      const getSessionContext = (params: { sessionId?: string } | undefined) => {
-        const acpSessionId = params?.sessionId;
-        if (!acpSessionId) {
-          throw new Error('Missing sessionId in request');
-        }
-        const session = activeSessions.get(acpSessionId);
-        if (!session) {
-          throw new Error(`Session ${acpSessionId} not found or inactive`);
-        }
-        return session;
-      };
-
-      const handlers = {
-        async sessionUpdate(n: SessionNotification) {
-          const acpSessionId = n.sessionId;
-          if (!acpSessionId) return;
+    const connection = new ClientSideConnection(() => {
+      const handlers = createClientHandlers({
+        // Per-request session resolution overrides this default; only used
+        // by handlers that never resolve a session (none today).
+        cwd: process.cwd(),
+        terminalManager,
+        logger,
+        mcpGateway: undefined,
+        resolveSession: (params?: { sessionId?: string }) => {
+          const acpSessionId = params?.sessionId;
+          if (!acpSessionId) {
+            throw new Error('Missing sessionId in request');
+          }
           const session = activeSessions.get(acpSessionId);
           if (!session) {
-            debugLog.recordLine(
-              'incoming',
-              `Ignoring sessionUpdate for inactive session: ${acpSessionId}`,
-            );
-            return;
+            throw new Error(`Session ${acpSessionId} not found or inactive`);
           }
-          const events = parseNotificationToEvents(n);
-          for (const event of events) {
-            await session.callbacks.onEvent(event);
-          }
-        },
-        async requestPermission(r: RequestPermissionRequest) {
-          const session = getSessionContext(r);
-          const toolCall = r.toolCall as unknown as PermissionToolCall;
-          const rawInput = toolCall.rawInput as Record<string, unknown> | undefined;
-
-          let parsedName = typeof toolCall.name === 'string' ? toolCall.name : '';
-          if (!parsedName && toolCall.toolCallId) {
-            parsedName = toolCall.toolCallId.split('__')[0];
-          }
-          if (!parsedName) {
-            parsedName = typeof toolCall.kind === 'string' ? toolCall.kind : 'tool';
-          }
-
-          let parsedArgs = toolCall.arguments;
-          if (!parsedArgs) {
-            if (rawInput && typeof rawInput === 'object') {
-              if (rawInput.arguments && typeof rawInput.arguments === 'object') {
-                parsedArgs = rawInput.arguments as Record<string, unknown>;
-              } else {
-                const rest = { ...rawInput };
-                delete rest.name;
-                delete rest.arguments;
-                parsedArgs = rest;
-              }
-            }
-          }
-          if (!parsedArgs) {
-            const locations = toolCall.locations;
-            const primaryPath =
-              locations?.[0]?.path ??
-              (typeof toolCall.title === 'string' ? toolCall.title : undefined);
-            if (primaryPath) {
-              parsedArgs = {
-                path: primaryPath,
-                TargetFile: primaryPath,
-                AbsolutePath: primaryPath,
-              };
-            }
-          }
-
-          const domainReq: DomainPermissionRequest = {
-            permissionId: toolCall.toolCallId ?? '',
-            description: typeof toolCall.title === 'string' ? toolCall.title : '',
-            options: r.options.map((opt) => ({
-              optionId: opt.optionId,
-              label: opt.name,
-              kind: opt.kind,
-            })),
-            toolCall: {
-              name: parsedName,
-              arguments: parsedArgs,
-              toolCallId: toolCall.toolCallId,
+          return {
+            callbacks: session.callbacks,
+            cwd: session.options.cwd,
+            additionalDirectories: session.options.additionalDirectories,
+            onTerminalCreated: (terminalId) => {
+              terminalToSession.set(terminalId, session.acpSessionId);
             },
           };
-          const domainResp = await session.callbacks.onRequestPermission(domainReq);
-          if (domainResp.allowed && domainResp.optionId) {
-            return {
-              outcome: { outcome: 'selected', optionId: domainResp.optionId },
-            };
-          }
-          return { outcome: { outcome: 'cancelled' } };
         },
-        async 'fs.readTextFile'(p: { sessionId: string; path: string }) {
-          const session = getSessionContext(p);
-          const absPath = resolveAllowedPath(
-            p.path,
-            session.options.cwd,
-            session.options.additionalDirectories,
-          );
-          const content = fs.readFileSync(absPath, 'utf8');
-          return Promise.resolve({ content });
-        },
-        async 'fs.writeTextFile'(p: { sessionId: string; path: string; content: string }) {
-          const session = getSessionContext(p);
-          const absPath = resolveAllowedPath(
-            p.path,
-            session.options.cwd,
-            session.options.additionalDirectories,
-            true,
-          );
-          fs.mkdirSync(path.dirname(absPath), { recursive: true });
-          fs.writeFileSync(absPath, p.content, 'utf8');
-          return Promise.resolve({});
-        },
-        async 'terminal/create'(p: {
-          sessionId: string;
-          command: string;
-          args?: string[];
-          cwd?: string;
-          env?: Record<string, string>;
-          outputByteLimit?: number;
-        }) {
-          const session = getSessionContext(p);
-          const terminalCwd = resolveAllowedPath(
-            p.cwd ?? session.options.cwd,
-            session.options.cwd,
-            session.options.additionalDirectories,
-          );
-          const terminalId = terminalManager.spawn({
-            command: p.command,
-            args: p.args,
-            cwd: terminalCwd,
-            env: p.env,
-            outputByteLimit: p.outputByteLimit,
-          });
-          terminalToSession.set(terminalId, session.acpSessionId);
-          await session.callbacks.onEvent({
-            type: 'terminal_created',
-            terminalId,
-            command: p.command,
-          });
-          return Promise.resolve({ terminalId });
-        },
-        async 'terminal/release'(p: { sessionId: string; terminalId: string }) {
-          terminalManager.release(p.terminalId);
-          terminalToSession.delete(p.terminalId);
-          return Promise.resolve({});
-        },
-        async 'terminal/output'(p: { sessionId: string; terminalId: string }) {
-          const term = terminalManager.getTerminal(p.terminalId);
-          if (!term) {
-            return Promise.reject(new Error(`Terminal not found: ${p.terminalId}`));
-          }
-          const exitStatus = term.hasExited
-            ? { exitCode: term.exitCode, signal: term.signal as NodeJS.Signals | null }
-            : undefined;
-          return Promise.resolve({
-            output: term.output,
-            truncated: term.truncated,
-            ...(exitStatus ? { exitStatus } : {}),
-          });
-        },
-        async 'terminal/wait_for_exit'(p: { sessionId: string; terminalId: string }) {
-          const term = terminalManager.getTerminal(p.terminalId);
-          if (!term) {
-            return Promise.reject(new Error(`Terminal not found: ${p.terminalId}`));
-          }
-          const res = await term.closed;
-          return Promise.resolve({
-            exitCode: res.exitCode,
-            signal: res.signal as NodeJS.Signals | null,
-          });
-        },
-        async 'terminal/kill'(p: { sessionId: string; terminalId: string }) {
-          terminalManager.kill(p.terminalId);
-          return Promise.resolve({});
-        },
-        async 'terminal/write'(p: { sessionId: string; terminalId: string; data: string }) {
-          const ok = terminalManager.write(p.terminalId, p.data);
-          if (!ok) {
-            return Promise.reject(new Error(`Failed to write to terminal ${p.terminalId}`));
-          }
-          return Promise.resolve({});
-        },
-      };
-
-      return new Proxy(handlers, {
-        get(target, prop, receiver) {
-          if (typeof prop === 'string') {
-            const canonical = prop.includes('.') ? prop.replace(/\./g, '/') : prop;
-            if (canonical in target) {
-              return Reflect.get(target, canonical, receiver) as unknown;
-            }
-            if (prop in target) {
-              return Reflect.get(target, prop, receiver) as unknown;
-            }
-            return (params: unknown) => {
-              logger.debug({ params }, `Generic fallback handler for ${prop}`);
-              if (
-                (prop.endsWith('session_notification') || prop.endsWith('sessionUpdate')) &&
-                params &&
-                typeof params === 'object' &&
-                'sessionId' in params
-              ) {
-                return handlers.sessionUpdate(params as SessionNotification);
-              }
-              return Promise.resolve({});
-            };
-          }
-          return Reflect.get(target, prop, receiver) as unknown;
-        },
-      }) as unknown as Client;
+      });
+      return handlers;
     }, stream);
 
     terminalManager.on('output', (event) => {

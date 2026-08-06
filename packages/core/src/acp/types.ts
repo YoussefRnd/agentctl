@@ -7,7 +7,42 @@ import type {
   SessionMetrics,
   ElicitationRequest,
   ElicitationResponse,
+  SessionStatus,
 } from '@agentctl/shared';
+
+/**
+ * Minimal event-store surface used by the ACP layer. Implemented by
+ * SessionEventStore. Keeps acp/ decoupled from session/event-store.
+ */
+export interface SessionEventStoreLike {
+  append(
+    sessionId: string,
+    type: string,
+    data: unknown,
+    parentEventId?: number | null,
+    metadata?: unknown,
+  ): Promise<number>;
+  getEvent(eventId: number): Promise<{ id: number; type: string; data: unknown } | null>;
+  update(eventId: number, data: unknown, metadata?: unknown): Promise<void>;
+}
+
+/**
+ * Minimal status-transition surface used by the ACP layer. Implemented by
+ * SessionStateMachine. Keeps acp/ decoupled from session/state-machine.
+ */
+/** Minimal git-snapshot surface used for turn metadata. */
+export interface SnapshotServiceLike {
+  track(cwd: string): Promise<string | undefined>;
+}
+
+export interface SessionStatusTransitioner {
+  transitionTo(
+    sessionId: string,
+    targetState: SessionStatus,
+    context?: Record<string, unknown>,
+  ): Promise<void>;
+  getSnapshotService?(): SnapshotServiceLike | undefined;
+}
 
 export interface ACPConnectionHandle {
   child: ChildProcess;
@@ -149,6 +184,11 @@ export interface PromptResult {
   userMessageId?: string | null;
 }
 
+export interface McpGatewayLike {
+  getTools(): Promise<{ name: string; inputSchema?: Record<string, unknown> }[]>;
+  callTool(serverId: string, toolName: string, args: Record<string, unknown>): Promise<unknown>;
+}
+
 export interface AgentRuntimeHandle {
   acpSessionId: string | null;
   closed: Promise<void>;
@@ -173,6 +213,10 @@ export interface AgentRuntimeHandle {
   }): Promise<{ sessions: unknown[]; nextCursor?: string }>;
   logout?(): Promise<void>;
   writeTerminalInput?(terminalId: string, data: string): boolean;
+  /** Fork the agent-side session. Returns the new acp session id, or null when unsupported. */
+  forkSession?(acpSessionId: string): Promise<string | null>;
+  /** Raw ACP extension request passthrough. */
+  sendRequest?(method: string, params: Record<string, unknown>): Promise<unknown>;
 }
 
 export interface RuntimeOptions {
@@ -188,13 +232,15 @@ export interface RuntimeOptions {
   existingAgentSessionId?: string | null;
   mcpServers?: McpServer[];
   additionalDirectories?: string[];
-  mcpGateway?: unknown;
+  mcpGateway?: McpGatewayLike;
 }
 
 export interface SessionCallbacks {
   onEvent: (event: DomainAgentEvent) => Promise<void> | void;
   onRequestPermission: (request: DomainPermissionRequest) => Promise<DomainPermissionResponse>;
   onRequestElicitation?: (request: ElicitationRequest) => Promise<ElicitationResponse>;
+  /** Agent notified that it completed an elicitation; client should release any pending state. */
+  onElicitationCompleted?: (elicitationId: string) => Promise<void> | void;
 }
 
 export interface AgentProbeResult {

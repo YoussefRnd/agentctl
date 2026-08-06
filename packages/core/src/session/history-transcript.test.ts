@@ -3,7 +3,7 @@ import { createDatabase } from '../db/index.js';
 import { SessionEventStore } from './event-store.js';
 import { projects, sessions } from '../db/schema.js';
 import { buildConversationHistoryTranscript } from './history-transcript.js';
-import type { DbClient } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 
 describe('buildConversationHistoryTranscript', () => {
   let db: DbClient;

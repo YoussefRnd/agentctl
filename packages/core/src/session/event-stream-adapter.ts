@@ -1,8 +1,7 @@
 import { StreamBuffer } from '../acp/transport/stream-buffer.js';
-import type { SessionEventStore } from './event-store.js';
+import type { SessionEventStoreLike, SnapshotServiceLike } from '../acp/types.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
-import type { SnapshotService } from '../git/snapshot-service.js';
 
 export class EventStreamAdapter {
   private currentMessage = '';
@@ -20,10 +19,10 @@ export class EventStreamAdapter {
 
   constructor(
     private sessionId: string,
-    private eventStore: SessionEventStore,
+    private eventStore: SessionEventStoreLike,
     private logger: Logger = noopLogger,
     private cwd?: string,
-    private snapshotService?: SnapshotService,
+    private snapshotService?: SnapshotServiceLike,
   ) {
     this.textBuffer = new StreamBuffer(async () => {
       if (this.messageEventId) {

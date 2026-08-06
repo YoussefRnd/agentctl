@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { DbClient } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import { mcpServers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { Logger } from '../logger.js';

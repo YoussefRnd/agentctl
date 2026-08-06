@@ -1,6 +1,7 @@
 import { test, it, expect, describe, vi } from 'vitest';
 import { SessionManager, resolveAgentSessionId, type IEventBus } from './manager.js';
-import type { DbClient, ACPSession } from '../acp/session-client.js';
+import type { ACPSession } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
 import { Provider } from '../providers/provider.js';

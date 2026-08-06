@@ -10,13 +10,15 @@ import type {
 } from '../types.js';
 
 export class FileCacheStorage implements CacheStorage {
+  private static readonly TTL_MS = 60 * 60 * 1000; // 1 hour
+
   constructor(private readonly manifestFilePath: string) {}
 
-  private readManifest(): Record<string, AgentProbeResult> {
+  private readManifest(): Record<string, { ts?: number; result?: AgentProbeResult }> {
     try {
       if (fs.existsSync(this.manifestFilePath)) {
         const content = fs.readFileSync(this.manifestFilePath, 'utf8');
-        return JSON.parse(content) as Record<string, AgentProbeResult>;
+        return JSON.parse(content) as Record<string, { ts?: number; result?: AgentProbeResult }>;
       }
     } catch {
       // Ignore reading errors, return empty
@@ -26,7 +28,13 @@ export class FileCacheStorage implements CacheStorage {
 
   async get(key: string): Promise<AgentProbeResult | null> {
     const manifest = this.readManifest();
-    return Promise.resolve(manifest[key] ?? null);
+    const entry = manifest[key];
+    // Record index access can be undefined at runtime even though the
+    // declared type omits undefined (noUncheckedIndexedAccess is off).
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (!entry?.result) return null;
+    if (!entry.ts || Date.now() - entry.ts > FileCacheStorage.TTL_MS) return null;
+    return Promise.resolve(entry.result);
   }
 
   async set(key: string, value: AgentProbeResult): Promise<void> {
@@ -36,7 +44,7 @@ export class FileCacheStorage implements CacheStorage {
         fs.mkdirSync(dir, { recursive: true });
       }
       const manifest = this.readManifest();
-      manifest[key] = value;
+      manifest[key] = { result: value, ts: Date.now() };
       fs.writeFileSync(this.manifestFilePath, JSON.stringify(manifest, null, 2), 'utf8');
     } catch {
       // Ignore write errors

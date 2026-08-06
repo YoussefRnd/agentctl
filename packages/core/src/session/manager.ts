@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { eq, asc, inArray } from 'drizzle-orm';
 import { simpleGit } from 'simple-git';
-import type { ACPSession, DbClient } from '../acp/session-client.js';
+import type { ACPSession } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import type { AgentRuntime } from '../acp/types.js';
 import { DefaultAgentRuntime } from '../acp/runtime.js';
 import type { Logger } from '../logger.js';

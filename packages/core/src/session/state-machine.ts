@@ -3,7 +3,8 @@ import { sessions, mcpServers } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
 import type { SessionStatus, ThinkingEffort } from '@agentctl/shared';
-import { ACPSession, type DbClient } from '../acp/session-client.js';
+import { ACPSession } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import type { SessionEventStore } from './event-store.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
@@ -277,6 +278,11 @@ export class SessionStateMachine {
               return await session.requestElicitation(req);
             }
             return { action: 'cancel' };
+          },
+          onElicitationCompleted: (elicitationId) => {
+            if (session) {
+              session.cancelElicitation(elicitationId);
+            }
           },
         },
       );

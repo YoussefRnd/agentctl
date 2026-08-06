@@ -1,5 +1,5 @@
 import { eq, asc, inArray } from 'drizzle-orm';
-import type { DbClient } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import type { WorkspaceManager, Workspace as WorkspaceHandle } from './worktree-manager.js';
 import { sessions, projects, acpEvents } from '../db/schema.js';
 import type { SnapshotService } from './snapshot-service.js';

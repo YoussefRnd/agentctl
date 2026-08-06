@@ -9,7 +9,7 @@ import { simpleGit } from 'simple-git';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import type { DbClient } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import { SnapshotService } from './snapshot-service.js';
 
 describe('SessionWorkspace Integration Tests (Mock-Free)', () => {

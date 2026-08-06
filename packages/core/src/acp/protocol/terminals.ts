@@ -1,7 +1,7 @@
-import path from 'node:path';
 import type { TerminalManager } from './terminal-manager.js';
 import type { Logger } from '../../logger.js';
 import type { DomainAgentEvent } from '../types.js';
+import { resolveAllowedPath } from '../transport/path-security.js';
 
 export interface CreateTerminalParams {
   command: string;
@@ -19,18 +19,24 @@ export interface BuiltinBashParams {
   cwd?: string;
 }
 
+function resolveTerminalCwd(
+  requested: string | undefined,
+  sessionCwd: string,
+  additionalDirectories: string[] = [],
+): string {
+  if (!requested) return sessionCwd;
+  return resolveAllowedPath(requested, sessionCwd, additionalDirectories);
+}
+
 export async function handleTerminalCreate(
   p: CreateTerminalParams,
   terminalManager: TerminalManager,
   sessionCwd: string,
   logger: Logger,
   onEvent: (e: DomainAgentEvent) => void | Promise<void>,
+  additionalDirectories: string[] = [],
 ): Promise<{ terminalId: string }> {
-  const terminalCwd = p.cwd
-    ? path.isAbsolute(p.cwd)
-      ? p.cwd
-      : path.resolve(sessionCwd, p.cwd)
-    : sessionCwd;
+  const terminalCwd = resolveTerminalCwd(p.cwd, sessionCwd, additionalDirectories);
   logger.debug(`Terminal create requested for ${p.command} in ${terminalCwd}`);
   const terminalId = terminalManager.spawn({
     command: p.command,
@@ -122,12 +128,9 @@ export async function handleBuiltinBash(
   terminalManager: TerminalManager,
   sessionCwd: string,
   logger: Logger,
+  additionalDirectories: string[] = [],
 ): Promise<{ terminalId?: string; output: string; exitCode: number | null }> {
-  const resolvedCwd = p.cwd
-    ? path.isAbsolute(p.cwd)
-      ? p.cwd
-      : path.resolve(sessionCwd, p.cwd)
-    : sessionCwd;
+  const resolvedCwd = resolveTerminalCwd(p.cwd, sessionCwd, additionalDirectories);
   logger.debug(`builtin/bash: ${p.command} in ${resolvedCwd} (pty: ${String(p.pty)})`);
   const terminalId = terminalManager.spawn({
     command: p.command,

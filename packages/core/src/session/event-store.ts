@@ -1,6 +1,6 @@
 import { eq, and, desc, gte, sql } from 'drizzle-orm';
 import { acpEvents, sessions } from '../db/schema.js';
-import type { DbClient } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import type { IEventBus } from './manager.js';
 import type { ACPEvent } from '@agentctl/shared';
 

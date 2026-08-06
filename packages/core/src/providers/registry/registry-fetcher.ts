@@ -4,7 +4,7 @@ import os from 'node:os';
 import { desc, lt, eq } from 'drizzle-orm';
 import { registrySchema, type RegistryAgent } from '@agentctl/shared';
 import { registrySnapshots } from '../../db/schema.js';
-import type { DbClient } from '../../acp/session-client.js';
+import type { DbClient } from '../../db/index.js';
 import { type Logger, noopLogger } from '../../logger.js';
 
 const CDN_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';

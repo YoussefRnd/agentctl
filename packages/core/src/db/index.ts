@@ -36,6 +36,8 @@ if (fs.existsSync(envPath)) {
 
 export type CoreDatabase = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
+export type DbClient = CoreDatabase;
+
 export function createDatabase(dbPath: string): CoreDatabase {
   if (dbPath !== ':memory:') {
     const dir = path.dirname(dbPath);

@@ -3,25 +3,24 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { sessions, providers, mcpServers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import type { createDatabase } from '../db/index.js';
+import type { DbClient } from '../db/index.js';
 import { type Logger, noopLogger } from '../logger.js';
-import type { SessionEventStore } from '../session/event-store.js';
 import type {
   DomainPermissionRequest,
   DomainPermissionResponse,
   DomainAgentEvent,
   AgentRuntimeHandle,
+  McpGatewayLike,
+  SessionEventStoreLike,
+  SessionStatusTransitioner,
 } from './types.js';
 
-import type { SessionStateMachine } from '../session/state-machine.js';
-import { EventStreamAdapter } from '../session/event-stream-adapter.js';
-import type { McpGateway } from '../mcp/mcp-gateway.js';
+import { SessionProjector } from '../session/session-projector.js';
 import { ElicitationStore } from '../session/elicitation-store.js';
 import { PermissionEngine } from '../security/permission-engine.js';
+import { getBestPermissionOption, isPersistentPermissionOption } from './protocol/permissions.js';
 
 import type { ElicitationRequest, ElicitationResponse } from '@agentctl/shared';
-
-export type DbClient = ReturnType<typeof createDatabase>;
 
 interface ParsedUsageMetrics {
   inputTokens?: number;
@@ -29,6 +28,10 @@ interface ParsedUsageMetrics {
   totalTokens?: number;
   contextLimit?: number;
   cost?: { amount: number; currency: string };
+}
+
+function isDeniedOption(optionId?: string): boolean {
+  return optionId ? /deny|reject|cancel|block|no/i.test(optionId) : false;
 }
 
 function parseUsageMetrics(usage: unknown): ParsedUsageMetrics | null {
@@ -79,10 +82,10 @@ export class ACPSession {
   private isStopped = false;
   private stopKind: 'idle' | 'error' | null = null;
 
-  private eventStreamAdapter: EventStreamAdapter;
+  private projector: SessionProjector;
 
   public async flushAll(): Promise<void> {
-    await this.eventStreamAdapter.flushAll();
+    await this.projector.flushAll();
   }
 
   get isDead(): boolean {
@@ -93,19 +96,20 @@ export class ACPSession {
     public sessionId: string,
     private runtimeHandle: AgentRuntimeHandle,
     private db: DbClient,
-    public eventStore: SessionEventStore,
+    public eventStore: SessionEventStoreLike,
     private cwd: string,
-    private stateMachine?: SessionStateMachine,
+    private stateMachine?: SessionStatusTransitioner,
     private logger: Logger = noopLogger,
-    private mcpGateway?: McpGateway,
+    private mcpGateway?: McpGatewayLike,
   ) {
     this.acpSessionId = runtimeHandle.acpSessionId;
-    this.eventStreamAdapter = new EventStreamAdapter(
+    this.projector = new SessionProjector(
       sessionId,
+      db,
       eventStore,
       logger,
       cwd,
-      stateMachine?.getSnapshotService(),
+      stateMachine?.getSnapshotService?.(),
     );
 
     // Persist available agent personas from initialization
@@ -327,9 +331,9 @@ export class ACPSession {
             promptText = `[System Notification: The user manually executed the tool "${executed.toolName}" with args: "${executed.args}". Result:\n---\n${executed.result}\n---\nAnalyze this output and answer the user's request.]`;
 
             // Persist user command
-            await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+            await this.projector.startTurn(text, resolvedAttachmentsMeta, promptTokens);
             // Yield result to user timeline feed
-            await this.eventStreamAdapter.appendText(
+            await this.projector.appendText(
               `\n\n*Manual Tool Execution Result [${executed.toolName}]:*\n\`\`\`json\n${executed.result}\n\`\`\`\n`,
             );
             await this.flushAll();
@@ -338,11 +342,9 @@ export class ACPSession {
           isManualMcp = true;
           const msg = err instanceof Error ? err.message : String(err);
           // Persist user command
-          await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+          await this.projector.startTurn(text, resolvedAttachmentsMeta, promptTokens);
           // Stream execution error to UI
-          await this.eventStreamAdapter.appendText(
-            `\n\n*Manual Tool Execution Error:*\n> ${msg}\n`,
-          );
+          await this.projector.appendText(`\n\n*Manual Tool Execution Error:*\n> ${msg}\n`);
           await this.flushAll();
 
           // Emit turn_end status event
@@ -367,7 +369,7 @@ export class ACPSession {
 
       if (!isManualMcp) {
         // Persist user message immediately so it shows up in history
-        await this.eventStreamAdapter.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+        await this.projector.startTurn(text, resolvedAttachmentsMeta, promptTokens);
       }
 
       let nativelyLoadsSkills = false;
@@ -473,39 +475,6 @@ export class ACPSession {
     }
   }
 
-  private getBestOption(options?: { optionId: string; label?: string }[]): string | undefined {
-    if (!options || options.length === 0) return undefined;
-
-    const negativeKeywords = ['deny', 'cancel', 'reject', 'block', 'no'];
-    const positiveOptions = options.filter((o) => {
-      const id = o.optionId.toLowerCase();
-      const label = (o.label ?? '').toLowerCase();
-      return !negativeKeywords.some((neg) => id.includes(neg) || label.includes(neg));
-    });
-
-    if (positiveOptions.length === 0) {
-      return options[0].optionId;
-    }
-
-    let best = positiveOptions.find((o) => {
-      const id = o.optionId.toLowerCase();
-      return id.includes('always') || id.includes('session') || id.includes('forever');
-    });
-
-    if (!best) {
-      const positiveKeywords = ['allow', 'approve', 'yes', 'grant', 'confirm', 'ok'];
-      best = positiveOptions.find((o) => {
-        const id = o.optionId.toLowerCase();
-        const label = (o.label ?? '').toLowerCase();
-        return positiveKeywords.some((pos) => id.includes(pos) || label.includes(pos));
-      });
-    }
-
-    best ??= positiveOptions[0];
-
-    return best.optionId;
-  }
-
   resolvePermission(permissionId: string, response: DomainPermissionResponse): void {
     const resolve = this.pendingApprovals.get(permissionId);
     if (resolve) {
@@ -513,12 +482,17 @@ export class ACPSession {
       this.pendingRequests.delete(permissionId);
 
       let finalResponse = response;
-      if (response.allowed && request) {
+      if (finalResponse.allowed && isDeniedOption(finalResponse.optionId)) {
+        // UI options like reject_once must never map onto a positive
+        // agent option below.
+        finalResponse = { allowed: false };
+      }
+      if (finalResponse.allowed && request) {
         const reqOptions = request.options;
         if (reqOptions && reqOptions.length > 0) {
           const hasOption = reqOptions.some((o) => o.optionId === response.optionId);
           if (!hasOption) {
-            const bestOptionId = this.getBestOption(reqOptions);
+            const bestOptionId = getBestPermissionOption(reqOptions);
             finalResponse = {
               allowed: true,
               optionId: bestOptionId ?? reqOptions[0].optionId,
@@ -533,11 +507,20 @@ export class ACPSession {
       }
 
       if (finalResponse.allowed) {
-        this.permissionEngine.applyOutcome({
-          option_id: finalResponse.optionId ?? 'allow_once',
-          option_kind: finalResponse.optionId === 'allow_always' ? 'allow_always' : 'allow_once',
-          params: (response as { params?: Record<string, unknown> }).params,
-        });
+        // Persistent agent-native options (allow_always / allow-session /
+        // allow forever, ...) map onto pattern grants so the engine can
+        // auto-approve subsequent matching calls.
+        if (isPersistentPermissionOption(finalResponse.optionId) && request) {
+          this.permissionEngine.grantForDomainRequest(request);
+        } else {
+          this.permissionEngine.applyOutcome({
+            option_id: finalResponse.optionId ?? 'allow_once',
+            option_kind: isPersistentPermissionOption(finalResponse.optionId)
+              ? 'allow_always'
+              : 'allow_once',
+            params: (response as { params?: Record<string, unknown> }).params,
+          });
+        }
       }
 
       resolve(finalResponse);
@@ -715,203 +698,7 @@ export class ACPSession {
 
   public async handleDomainEvent(event: DomainAgentEvent): Promise<void> {
     try {
-      switch (event.type) {
-        case 'tool_call':
-          await this.eventStreamAdapter.registerToolCall(event.call, event.isUpdate);
-          break;
-        case 'text':
-          await this.eventStreamAdapter.appendText(event.text);
-          break;
-        case 'thought':
-          await this.eventStreamAdapter.appendThought(event.text);
-          break;
-        case 'status':
-          await this.eventStore.append(
-            this.sessionId,
-            'status',
-            {
-              status: event.status,
-              title: event.title,
-            },
-            null,
-          );
-          break;
-        case 'usage_update':
-          await this.db
-            .update(sessions)
-            .set({
-              totalTokens: event.used,
-              contextLimit: event.size,
-              estimatedCost: event.cost ? event.cost.amount : 0.0,
-              updatedAt: new Date(),
-            })
-            .where(eq(sessions.id, this.sessionId));
-
-          await this.eventStore.append(
-            this.sessionId,
-            'status',
-            {
-              status: 'usage_update',
-              totalTokens: event.used,
-              contextLimit: event.size,
-            },
-            null,
-          );
-          break;
-        case 'available_commands_update':
-          await this.db
-            .update(sessions)
-            .set({
-              availableCommands: JSON.stringify(event.commands),
-              updatedAt: new Date(),
-            })
-            .where(eq(sessions.id, this.sessionId));
-
-          await this.eventStore.append(
-            this.sessionId,
-            'status',
-            {
-              status: 'available_commands_update',
-              availableCommands: event.commands,
-            },
-            null,
-          );
-          break;
-        case 'plan_update': {
-          const sanitizedPlan = Array.isArray(event.plan)
-            ? event.plan.map((item) => ({
-                name: item.name || 'unnamed task',
-                status: ['pending', 'in_progress', 'completed'].includes(item.status)
-                  ? item.status
-                  : 'pending',
-                isCompleted: item.isCompleted,
-                priority: item.priority,
-              }))
-            : [];
-
-          await this.db
-            .update(sessions)
-            .set({
-              plan: JSON.stringify(sanitizedPlan),
-              updatedAt: new Date(),
-            })
-            .where(eq(sessions.id, this.sessionId));
-
-          await this.eventStore.append(
-            this.sessionId,
-            'plan_update',
-            {
-              plan: sanitizedPlan,
-            },
-            null,
-          );
-          break;
-        }
-        case 'metrics_update':
-          await this.db
-            .update(sessions)
-            .set({
-              sessionMetrics: JSON.stringify(event.metrics),
-              updatedAt: new Date(),
-            })
-            .where(eq(sessions.id, this.sessionId));
-          break;
-        case 'config_option_update':
-          await this.db
-            .update(sessions)
-            .set({
-              sessionConfigOptions: JSON.stringify(event.configOptions),
-              updatedAt: new Date(),
-            })
-            .where(eq(sessions.id, this.sessionId));
-
-          await this.eventStore.append(
-            this.sessionId,
-            'status',
-            {
-              status: 'config_option_update',
-              configOptions: event.configOptions,
-            },
-            null,
-          );
-          break;
-        case 'terminal_created':
-          await this.eventStore.append(
-            this.sessionId,
-            'terminal_created',
-            {
-              terminalId: event.terminalId,
-              command: event.command,
-            },
-            null,
-          );
-          break;
-        case 'terminal_output':
-          await this.eventStore.append(
-            this.sessionId,
-            'terminal_output',
-            {
-              terminalId: event.terminalId,
-              data: event.data,
-            },
-            null,
-          );
-          break;
-        case 'terminal_exit':
-          await this.eventStore.append(
-            this.sessionId,
-            'terminal_exit',
-            {
-              terminalId: event.terminalId,
-              code: event.code,
-            },
-            null,
-          );
-          break;
-        case 'mode_update': {
-          const acpMode = event.modeId;
-
-          await this.db
-            .update(sessions)
-            .set({
-              agentPersona: acpMode,
-              updatedAt: new Date(),
-            })
-            .where(eq(sessions.id, this.sessionId));
-
-          await this.eventStore.append(
-            this.sessionId,
-            'status',
-            {
-              status: 'mode_update',
-              modeId: event.modeId,
-            },
-            null,
-          );
-          break;
-        }
-        case 'session_info_update': {
-          const updateObj: Record<string, unknown> = {
-            updatedAt: new Date(),
-          };
-          if (typeof event.title === 'string') {
-            updateObj.title = event.title;
-          }
-          await this.db.update(sessions).set(updateObj).where(eq(sessions.id, this.sessionId));
-
-          await this.eventStore.append(
-            this.sessionId,
-            'status',
-            {
-              status: 'session_info_update',
-              title: event.title,
-              updatedAt: event.updatedAt,
-            },
-            null,
-          );
-          break;
-        }
-      }
+      await this.projector.handleDomainEvent(event);
     } catch (error) {
       await this.handleError(error).catch((e: unknown) => {
         this.logger.error(e, 'Failed to handle error in handleDomainEvent');
@@ -924,7 +711,7 @@ export class ACPSession {
   ): Promise<DomainPermissionResponse> {
     try {
       const permissionId = request.toolCall.toolCallId ?? Math.random().toString(36).substring(7);
-      const parentId = this.eventStreamAdapter.getCurrentParentEventId();
+      const parentId = this.projector.getCurrentParentEventId();
 
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, this.sessionId),
@@ -1035,7 +822,7 @@ export class ACPSession {
 
         const reqOptions = request.options;
         if (reqOptions && reqOptions.length > 0) {
-          const bestOptionId = this.getBestOption(reqOptions);
+          const bestOptionId = getBestPermissionOption(reqOptions);
           return {
             allowed: true,
             optionId: bestOptionId ?? reqOptions[0].optionId,

@@ -1,5 +1,5 @@
 import { eq, asc, inArray, and } from 'drizzle-orm';
-import type { DbClient } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import { acpEvents } from '../db/schema.js';
 
 export interface HistoryTranscriptOptions {

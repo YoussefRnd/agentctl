@@ -9,7 +9,7 @@ import {
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentRuntime } from '../acp/types.js';
 import { createAgentConnection, DefaultAgentRuntime, isAuthRequiredError } from '../acp/index.js';
-import type { DbClient } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
 import { BinaryInstaller } from './registry/binary-installer.js';

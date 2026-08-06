@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { providers, systemSettings } from '../../db/schema.js';
-import type { DbClient } from '../../acp/session-client.js';
+import type { DbClient } from '../../db/index.js';
 import type { ProviderData } from '../provider.js';
 
 export class ProviderStore {

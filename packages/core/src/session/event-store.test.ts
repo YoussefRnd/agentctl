@@ -1,6 +1,6 @@
 import { test, expect, describe, vi } from 'vitest';
 import { SessionEventStore } from './event-store.js';
-import type { DbClient } from '../acp/session-client.js';
+import type { DbClient } from '../db/index.js';
 import type { IEventBus } from './manager.js';
 
 describe('SessionEventStore', () => {
