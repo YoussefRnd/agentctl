@@ -168,36 +168,31 @@ export class ProviderLauncher {
       if (this.connectionManager && row.authState === 'authenticated') {
         try {
           const persistent = await this.connectionManager.getConnection(providerId);
-          const conn = persistent.connection as unknown as {
-            newSession?: (p: unknown) => Promise<unknown>;
+          const sessionResult = await persistent.connection.newSession({
+            cwd: os.tmpdir(),
+            mcpServers: [],
+          });
+          const configOptions = extractConfigOptionsFromSessionResult(sessionResult);
+          const probeResult: AgentProbeResult = {
+            status: 'ready',
+            configOptions,
+            authMethods: row.authMethods
+              ? (JSON.parse(row.authMethods) as AgentProbeResult['authMethods'])
+              : [],
+            supportsDynamicModel: configOptions.some(
+              (opt) => opt.id === 'model' || opt.id === 'selectedModel',
+            ),
+            supportsDynamicConfig: configOptions.length > 0,
+            supportsLogout: row.supportsLogout,
+            modes: row.modes ? (JSON.parse(row.modes) as string[]) : [],
           };
-          if (typeof conn.newSession === 'function') {
-            const sessionResult = (await conn.newSession({
-              cwd: os.tmpdir(),
-              mcpServers: [],
-            })) as Parameters<typeof extractConfigOptionsFromSessionResult>[0];
-            const configOptions = extractConfigOptionsFromSessionResult(sessionResult);
-            const probeResult: AgentProbeResult = {
-              status: 'ready',
-              configOptions,
-              authMethods: row.authMethods
-                ? (JSON.parse(row.authMethods) as AgentProbeResult['authMethods'])
-                : [],
-              supportsDynamicModel: configOptions.some(
-                (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-              ),
-              supportsDynamicConfig: configOptions.length > 0,
-              supportsLogout: row.supportsLogout,
-              modes: row.modes ? (JSON.parse(row.modes) as string[]) : [],
-            };
-            this.store.update(providerId, {
-              configOptions: JSON.stringify(configOptions),
-              supportsDynamicModel: probeResult.supportsDynamicModel,
-              supportsDynamicConfig: probeResult.supportsDynamicConfig,
-              authState: 'authenticated',
-            });
-            return probeResult;
-          }
+          this.store.update(providerId, {
+            configOptions: JSON.stringify(configOptions),
+            supportsDynamicModel: probeResult.supportsDynamicModel,
+            supportsDynamicConfig: probeResult.supportsDynamicConfig,
+            authState: 'authenticated',
+          });
+          return probeResult;
         } catch {
           // If persistent connection probe fails, fall back to runtime.probe
         }

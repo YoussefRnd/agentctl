@@ -1,4 +1,4 @@
-import { eq, asc, inArray, and } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
 import { acpEvents } from '../db/schema.js';
 
@@ -16,13 +16,7 @@ export async function buildConversationHistoryTranscript(
   const rows = await db
     .select()
     .from(acpEvents)
-    .where(
-      and(
-        eq(acpEvents.sessionId, sessionId),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        inArray(acpEvents.type as any, ['user_message', 'text']),
-      ),
-    )
+    .where(and(eq(acpEvents.sessionId, sessionId), eq(acpEvents.type, 'text')))
     .orderBy(asc(acpEvents.id));
 
   const conversationEntries: { role: 'User' | 'Assistant'; text: string }[] = [];
@@ -38,13 +32,10 @@ export async function buildConversationHistoryTranscript(
       const textVal = (data.content ?? data.text)?.trim();
       if (!textVal) continue;
 
-      const typeStr = row.type as string;
-      if (data.role === 'user' || typeStr === 'user_message') {
+      if (data.role === 'user') {
         conversationEntries.push({ role: 'User', text: textVal });
-      } else if (data.role === 'provider' || data.role === 'assistant' || typeStr === 'text') {
-        if (data.role !== 'thought') {
-          conversationEntries.push({ role: 'Assistant', text: textVal });
-        }
+      } else if (data.role !== 'thought') {
+        conversationEntries.push({ role: 'Assistant', text: textVal });
       }
     } catch {
       // Ignore unparseable event data

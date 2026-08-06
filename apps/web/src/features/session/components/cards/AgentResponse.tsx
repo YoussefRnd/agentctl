@@ -11,6 +11,7 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 import type { SubagentGroup } from './subagentBlockUtils';
 import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
+import { isACPEventText, isACPEventToolCall, isACPEventSubagentUpdate } from '@agentctl/shared';
 import { useSession } from '../../../../contexts/SessionContext';
 import { useProviders } from '../../../../hooks/useProviders';
 
@@ -65,7 +66,7 @@ const AgentResponseComponent = function AgentResponse({
     const nativelyEmitted = new Map<string, ACPEventRow[]>();
 
     for (const e of events) {
-      if (e.type === 'tool_call') {
+      if (isACPEventToolCall(e)) {
         const tcData = e.data;
         if (tcData.toolCallId && hasSubagentArgs(tcData)) {
           const group = toolCallGroups.get(tcData.toolCallId);
@@ -77,17 +78,17 @@ const AgentResponseComponent = function AgentResponse({
         }
       }
 
-      if (e.type === 'subagent_update') {
-        const data = e.data as { subagentId: string };
+      if (isACPEventSubagentUpdate(e)) {
+        const data = e.data;
         if (!nativelyEmitted.has(data.subagentId)) {
           nativelyEmitted.set(data.subagentId, []);
         }
       } else if (e.parentEventId != null) {
         const parentData = events.find(
-          (pe) => pe.id === e.parentEventId && pe.type === 'subagent_update',
+          (pe) => pe.id === e.parentEventId && isACPEventSubagentUpdate(pe),
         );
-        if (parentData) {
-          const data = parentData.data as { subagentId: string };
+        if (parentData && isACPEventSubagentUpdate(parentData)) {
+          const data = parentData.data;
           const children = nativelyEmitted.get(data.subagentId);
           if (children) {
             children.push(e);
@@ -96,18 +97,18 @@ const AgentResponseComponent = function AgentResponse({
         }
       }
 
-      if (e.type === 'tool_call') {
+      if (isACPEventToolCall(e)) {
         const tcData = e.data;
         if (tcData.toolCallId && toolCallGroups.has(tcData.toolCallId)) {
           continue;
         }
       }
 
-      if (e.type === 'text' && 'role' in e.data && e.data.role === 'provider') {
+      if (isACPEventText(e) && e.data.role === 'provider') {
         response = e;
       } else if (
-        (e.type === 'text' && 'role' in e.data && e.data.role === 'thought') ||
-        e.type === 'tool_call' ||
+        (isACPEventText(e) && e.data.role === 'thought') ||
+        isACPEventToolCall(e) ||
         e.type === 'approval_request'
       ) {
         activity.push(e);

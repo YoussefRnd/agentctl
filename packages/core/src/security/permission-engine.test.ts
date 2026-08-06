@@ -51,9 +51,9 @@ describe('PermissionEngine', () => {
 
     const sdkRequest = {
       toolCall: {
-        name: 'terminal',
-        arguments: { command: 'git status' },
         toolCallId: 't123',
+        title: 'Terminal',
+        rawInput: { name: 'terminal', arguments: { command: 'git status' } },
       },
       options: [
         { optionId: 'allow_once', name: 'Allow Once' },
@@ -71,9 +71,9 @@ describe('PermissionEngine', () => {
 
     const sdkRequest = {
       toolCall: {
-        name: 'terminal',
-        arguments: { command: 'git commit' },
         toolCallId: 't456',
+        title: 'Terminal',
+        rawInput: { name: 'terminal', arguments: { command: 'git commit' } },
       },
       options: [{ optionId: 'allow_once', name: 'Allow Once' }],
     } as unknown as RequestPermissionRequest;

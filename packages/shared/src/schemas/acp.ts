@@ -189,3 +189,40 @@ export const acpEventRowSchema = z.intersection(
 );
 
 export type ACPEventRow = z.infer<typeof acpEventRowSchema>;
+
+// Type Guard Utilities
+export function isACPEvent(event: unknown): event is ACPEvent {
+  return acpEventSchema.safeParse(event).success;
+}
+
+export function isACPEventRow(event: unknown): event is ACPEventRow {
+  return acpEventRowSchema.safeParse(event).success;
+}
+
+export function isACPEventText(event: ACPEvent): event is Extract<ACPEvent, { type: 'text' }> {
+  return event.type === 'text';
+}
+
+export function isACPEventToolCall(
+  event: ACPEvent,
+): event is Extract<ACPEvent, { type: 'tool_call' }> {
+  return event.type === 'tool_call';
+}
+
+export function isACPEventPlanUpdate(
+  event: ACPEvent,
+): event is Extract<ACPEvent, { type: 'plan_update' }> {
+  return event.type === 'plan_update';
+}
+
+export function isACPEventModeUpdate(
+  event: ACPEvent,
+): event is Extract<ACPEvent, { type: 'mode_update' }> {
+  return event.type === 'mode_update';
+}
+
+export function isACPEventSubagentUpdate(
+  event: ACPEvent,
+): event is Extract<ACPEvent, { type: 'subagent_update' }> {
+  return event.type === 'subagent_update';
+}

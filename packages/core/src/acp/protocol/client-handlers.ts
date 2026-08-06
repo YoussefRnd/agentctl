@@ -1,7 +1,7 @@
 import type {
   Client,
   CompleteElicitationNotification,
-  CreateElicitationResponse,
+  ElicitationContentValue,
 } from '@agentclientprotocol/sdk';
 import type { ElicitationRequest } from '@agentctl/shared';
 import type { Logger } from '../../logger.js';
@@ -63,9 +63,32 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
 
   return {
     async sessionUpdate(n) {
-      const session = ctx.resolveSession(n);
-      for (const event of parseNotificationToEvents(n)) {
-        await session.callbacks.onEvent(event);
+      try {
+        const session = ctx.resolveSession(n);
+        for (const event of parseNotificationToEvents(n)) {
+          await session.callbacks.onEvent(event);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('not found or inactive')) {
+          logger.debug(
+            {
+              sessionId: n.sessionId,
+              sessionUpdate: n.update.sessionUpdate,
+            },
+            'Ignoring ACP session update notification for inactive or closed session',
+          );
+          return;
+        }
+        logger.error(
+          {
+            err,
+            method: 'session/update',
+            sessionId: n.sessionId,
+            sessionUpdate: n.update.sessionUpdate,
+          },
+          'Failed to process ACP session update notification',
+        );
       }
     },
 
@@ -150,14 +173,24 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       if (session.callbacks.onRequestElicitation) {
         const resp = await session.callbacks.onRequestElicitation(req);
         if (resp.action === 'submit') {
-          return {
-            action: 'submit' as const,
-            values: resp.values,
-          } as unknown as CreateElicitationResponse;
+          const content: Record<string, ElicitationContentValue> = {};
+          for (const [key, value] of Object.entries(resp.values ?? {})) {
+            if (value === null || value === undefined) continue;
+            if (
+              typeof value === 'string' ||
+              typeof value === 'number' ||
+              typeof value === 'boolean'
+            ) {
+              content[key] = value;
+            } else if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
+              content[key] = value;
+            }
+          }
+          return { action: 'accept', content };
         }
-        return { action: 'cancel' as const };
+        return { action: 'cancel' };
       }
-      return { action: 'cancel' as const };
+      return { action: 'cancel' };
     },
 
     async unstable_completeElicitation(n: CompleteElicitationNotification) {
@@ -232,23 +265,27 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       return {};
     },
 
-    async extNotification(method, params) {
-      logger.debug({ method, params }, 'ACP extension notification');
-      // params may be undefined at runtime: the SDK forwards raw notification
-      // params without validation for extension notifications.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (params == null) {
-        return;
-      }
-      if (
-        (method.endsWith('session_notification') || method.endsWith('sessionUpdate')) &&
-        'sessionId' in params
-      ) {
-        const session = ctx.resolveSession({ sessionId: String(params.sessionId) });
-        const update = params.update as { sessionUpdate?: string } | undefined;
-        if (update?.sessionUpdate) {
-          await session.callbacks.onEvent({ type: 'status', status: update.sessionUpdate });
+    async extNotification(method, rawParams) {
+      try {
+        const params = rawParams as Record<string, unknown> | undefined;
+        logger.debug({ method, params }, 'ACP extension notification');
+        if (params && method.includes('session') && 'sessionId' in params) {
+          const session = ctx.resolveSession({ sessionId: String(params.sessionId) });
+          const update = params.update as { sessionUpdate?: string } | undefined;
+          if (update?.sessionUpdate) {
+            await session.callbacks.onEvent({ type: 'status', status: update.sessionUpdate });
+          }
         }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('not found or inactive')) {
+          logger.debug(
+            { method },
+            'Ignoring ACP extension notification for inactive or closed session',
+          );
+          return;
+        }
+        logger.error({ err, method }, 'Failed to process ACP extension notification');
       }
     },
   };

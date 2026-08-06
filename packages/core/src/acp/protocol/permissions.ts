@@ -1,62 +1,37 @@
 import type { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
-import type {
-  DomainPermissionRequest,
-  DomainPermissionResponse,
-  PermissionToolCall,
-} from '../types.js';
+import type { DomainPermissionRequest, DomainPermissionResponse } from '../types.js';
+import { toolArgumentsFrom, toolNameFrom } from './tool-call-utils.js';
 
 /**
  * Maps a raw ACP request_permission request into the domain shape used by
  * approval policy and the UI. Single canonical implementation.
  */
 export function parsePermissionRequest(r: RequestPermissionRequest): DomainPermissionRequest {
-  const toolCall = r.toolCall as unknown as PermissionToolCall;
-  const rawInput = toolCall.rawInput as Record<string, unknown> | undefined;
-
-  let parsedName = typeof toolCall.name === 'string' ? toolCall.name : '';
-  if (!parsedName && toolCall.toolCallId) {
-    parsedName = toolCall.toolCallId.split('__')[0];
-  }
-  if (!parsedName) {
-    parsedName = typeof toolCall.kind === 'string' ? toolCall.kind : 'tool';
-  }
-
-  let parsedArgs = toolCall.arguments;
-  if (!parsedArgs) {
-    if (rawInput && typeof rawInput === 'object') {
-      if (rawInput.arguments && typeof rawInput.arguments === 'object') {
-        parsedArgs = rawInput.arguments as Record<string, unknown>;
-      } else {
-        const rest = { ...rawInput };
-        delete rest.name;
-        delete rest.arguments;
-        parsedArgs = rest;
+  const toolCall = r.toolCall;
+  const parsedArgs =
+    toolArgumentsFrom(toolCall.rawInput) ??
+    (() => {
+      const primaryPath = toolCall.locations?.[0]?.path ?? toolCall.title ?? undefined;
+      if (primaryPath) {
+        return {
+          path: primaryPath,
+          TargetFile: primaryPath,
+          AbsolutePath: primaryPath,
+        };
       }
-    }
-  }
-  if (!parsedArgs) {
-    const locations = toolCall.locations;
-    const primaryPath =
-      locations?.[0]?.path ?? (typeof toolCall.title === 'string' ? toolCall.title : undefined);
-    if (primaryPath) {
-      parsedArgs = {
-        path: primaryPath,
-        TargetFile: primaryPath,
-        AbsolutePath: primaryPath,
-      };
-    }
-  }
+      return undefined;
+    })();
 
   return {
-    permissionId: toolCall.toolCallId ?? '',
-    description: typeof toolCall.title === 'string' ? toolCall.title : '',
+    permissionId: toolCall.toolCallId,
+    description: toolCall.title ?? undefined,
     options: r.options.map((opt) => ({
       optionId: opt.optionId,
       label: opt.name,
       kind: opt.kind,
     })),
     toolCall: {
-      name: parsedName,
+      name: toolNameFrom(toolCall),
       arguments: parsedArgs,
       toolCallId: toolCall.toolCallId,
     },

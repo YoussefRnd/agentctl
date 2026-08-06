@@ -44,15 +44,31 @@ export interface SessionStatusTransitioner {
   getSnapshotService?(): SnapshotServiceLike | undefined;
 }
 
+/**
+ * Abstract connection surface decoupling core domain services from concrete ACP SDK connection classes.
+ */
+export interface IAcpClientConnection {
+  initialize(params?: unknown): Promise<unknown>;
+  newSession(params?: unknown): Promise<unknown>;
+  authenticate(params?: unknown): Promise<unknown>;
+  loadSession?(params?: unknown): Promise<unknown>;
+  resumeSession?(params?: unknown): Promise<unknown>;
+  closeSession?(params?: unknown): Promise<unknown>;
+  cancel?(params?: unknown): Promise<unknown>;
+  prompt?(params?: unknown): Promise<unknown>;
+  setSessionConfigOption?(params?: unknown): Promise<unknown>;
+  setSessionMode?(params?: unknown): Promise<unknown>;
+  unstable_setSessionModel?(params?: unknown): Promise<unknown>;
+  unstable_forkSession?(params?: unknown): Promise<unknown>;
+  unstable_logout?(params?: unknown): Promise<unknown>;
+  extMethod?(method: string, params?: unknown): Promise<unknown>;
+  listSessions?(params?: unknown): Promise<unknown>;
+  closed: Promise<void>;
+}
+
 export interface ACPConnectionHandle {
   child: ChildProcess;
-  connection: Pick<
-    ClientSideConnection,
-    'initialize' | 'newSession' | 'authenticate' | 'closed'
-  > & {
-    logout?: (params: Record<string, unknown>) => Promise<unknown>;
-    sendRequest?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-  };
+  connection: IAcpClientConnection;
 }
 
 export interface AgentStreamTransport {
@@ -109,8 +125,8 @@ export type DomainAgentEvent = (
         kind?: string;
         locations?: { path?: string; line?: number }[];
         content?: ToolCallContent[];
-        rawInput?: Record<string, unknown>;
-        rawOutput?: Record<string, unknown>;
+        rawInput?: unknown;
+        rawOutput?: unknown;
       };
       isUpdate: boolean;
     }
@@ -274,23 +290,13 @@ export interface AgentRuntime {
 export class AuthRequiredError extends Error {
   constructor(
     message: string,
-    public connection: ClientSideConnection,
+    public connection: IAcpClientConnection,
     public child: ChildProcess,
     public configOptions: ACPConfigOption[] = [],
   ) {
     super(message);
     this.name = 'AuthRequiredError';
   }
-}
-
-export interface PermissionToolCall {
-  name?: string;
-  toolCallId?: string;
-  kind?: string;
-  title?: string;
-  locations?: { path?: string }[];
-  arguments?: Record<string, unknown>;
-  rawInput?: unknown;
 }
 
 export interface IConnectionManager {
@@ -318,6 +324,7 @@ export interface IConnectionManager {
     },
     providerId?: string,
   ): void;
+  unregisterActiveSession?(acpSessionId: string): void;
 }
 
 export interface AcpParsedCapabilities {

@@ -75,13 +75,21 @@ export class SessionProjector {
           null,
         );
         break;
-      case 'usage_update':
+      case 'usage_update': {
+        const metricsPayload = {
+          totalTokens: event.used,
+          contextLimit: event.size,
+          cost: event.cost ?? null,
+          lastUpdated: new Date().toISOString(),
+        };
+
         await this.db
           .update(sessions)
           .set({
             totalTokens: event.used,
             contextLimit: event.size,
             estimatedCost: event.cost ? event.cost.amount : 0.0,
+            sessionMetrics: JSON.stringify(metricsPayload),
             updatedAt: new Date(),
           })
           .where(eq(sessions.id, this.sessionId));
@@ -93,10 +101,12 @@ export class SessionProjector {
             status: 'usage_update',
             totalTokens: event.used,
             contextLimit: event.size,
+            cost: event.cost ?? undefined,
           },
           null,
         );
         break;
+      }
       case 'available_commands_update':
         await this.db
           .update(sessions)

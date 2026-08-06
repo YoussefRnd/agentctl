@@ -26,7 +26,7 @@ import type {
 } from './types.js';
 import { AuthRequiredError } from './types.js';
 import { ProcessStreamTransport, cleanEnv } from './transport/process-transport.js';
-import { wrapDebug } from './transport/stream-debug.js';
+import { wrapDebug, formatAcpMessageLog } from './transport/stream-debug.js';
 import {
   FileCacheStorage,
   getCacheKey,
@@ -366,6 +366,20 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
       try {
         if (options.existingAgentSessionId && (supportsLoadSession || supportsResumeSession)) {
+          acpSessionId = options.existingAgentSessionId;
+          if (isPersistent && self.connectionManager) {
+            self.connectionManager.registerActiveSession(
+              acpSessionId,
+              {
+                acpSessionId,
+                localSessionId: options.existingAgentSessionId,
+                options,
+                callbacks,
+              },
+              providerId,
+            );
+          }
+
           if (supportsLoadSession) {
             newSessionResult = await withTimeout(
               connection.loadSession({
@@ -385,7 +399,6 @@ export class DefaultAgentRuntime implements AgentRuntime {
               'resuming ACP session',
             );
           }
-          acpSessionId = options.existingAgentSessionId;
         } else {
           const created = await withTimeout(
             connection.newSession(baseSessionParams),
@@ -394,8 +407,23 @@ export class DefaultAgentRuntime implements AgentRuntime {
           );
           newSessionResult = created;
           acpSessionId = created.sessionId;
+          if (isPersistent && self.connectionManager) {
+            self.connectionManager.registerActiveSession(
+              acpSessionId,
+              {
+                acpSessionId,
+                localSessionId: options.existingAgentSessionId ?? '',
+                options,
+                callbacks,
+              },
+              providerId,
+            );
+          }
         }
       } catch (err: unknown) {
+        if (isPersistent && acpSessionId && self.connectionManager) {
+          self.connectionManager.unregisterActiveSession?.(acpSessionId);
+        }
         const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
         if (error.code === 'auth_required') {
           throw new AuthRequiredError(
@@ -602,9 +630,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
                 mcpServers: [],
               });
 
-              configOptions = extractConfigOptionsFromSessionResult(
-                sessionResult as Parameters<typeof extractConfigOptionsFromSessionResult>[0],
-              );
+              configOptions = extractConfigOptionsFromSessionResult(sessionResult);
 
               const hasAlternateModels = (sessionResult.models?.availableModels ?? []).length > 0;
               supportsDynamicModel = hasAlternateModels;
@@ -714,8 +740,10 @@ export class DefaultAgentRuntime implements AgentRuntime {
     }
 
     return wrapDebug(stream, (direction, message) => {
-      const parsed = message as { method?: string; id?: unknown };
-      this.logger.debug({ direction, method: parsed.method, id: parsed.id }, 'ACP message');
+      this.logger.debug(
+        formatAcpMessageLog(direction === 'send' ? 'send' : 'recv', message),
+        'ACP Frame',
+      );
     });
   }
 }
@@ -725,11 +753,11 @@ export function extractConfigOptionsFromSessionResult(sessionResult: {
   models?: {
     availableModels?: { modelId: string; name: string; description?: string | null }[];
     currentModelId?: string;
-  };
+  } | null;
   modes?: {
     availableModes?: { id: string; name: string; description?: string | null }[];
     currentModeId?: string;
-  };
+  } | null;
 }): ACPConfigOption[] {
   const configOptions: ACPConfigOption[] = [];
   if (Array.isArray(sessionResult.configOptions) && sessionResult.configOptions.length > 0) {

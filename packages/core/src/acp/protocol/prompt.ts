@@ -23,7 +23,7 @@ export function buildPromptBlocks(params: PromptBuildParams): ContentBlock[] {
           text: params.embeddedContext,
           mimeType: 'text/markdown',
         },
-      } as unknown as ContentBlock);
+      });
     } else {
       const combinedText = params.text
         ? `${params.text}\n\n---\n${params.embeddedContext}`

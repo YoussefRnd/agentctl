@@ -7,7 +7,7 @@ import type { RegistryFetcher } from './registry-fetcher.js';
 import { parseRegistryAgents } from '../provider-registry.js';
 import { ProcessStreamTransport, cleanEnv } from '../../acp/transport/process-transport.js';
 import { createClientHandlers } from '../../acp/protocol/client-handlers.js';
-import { AcpDebugLog, wrapDebug } from '../../acp/transport/stream-debug.js';
+import { AcpDebugLog, wrapDebug, formatAcpMessageLog } from '../../acp/transport/stream-debug.js';
 import { initializeAcpConnection } from '../../acp/transport/capabilities-cache.js';
 import type { SessionCallbacks, RuntimeOptions } from '../../acp/types.js';
 import { type Logger, noopLogger } from '../../logger.js';
@@ -133,6 +133,12 @@ export class PersistentAgentConnectionManager {
     const rawStream = ndJsonStream(transport.stdin, transport.stdout);
     const stream = wrapDebug(rawStream, (direction, message) => {
       debugLog.recordLine(direction === 'send' ? 'outgoing' : 'incoming', JSON.stringify(message));
+      if (process.env.AGENTCTL_ACP_DEBUG === '1') {
+        this.logger.debug(
+          formatAcpMessageLog(direction === 'send' ? 'send' : 'recv', message),
+          'ACP Frame',
+        );
+      }
     });
 
     child.stderr.on('data', (data: Buffer) => {

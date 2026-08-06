@@ -7,6 +7,7 @@ import { AgentResponse } from './cards/AgentResponse';
 import { CommandResultCard } from './cards/CommandResultCard';
 import { ElicitationCard } from './cards/ElicitationCard';
 import type { ACPEventRow, ElicitationItem } from '@agentctl/shared';
+import { isACPEventText } from '@agentctl/shared';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { Card } from '@agentctl/ui';
 import type { RewindMode } from './RewindMenu';
@@ -80,7 +81,7 @@ export function EventFeed({
         continue;
       }
 
-      const isUser = e.type === 'text' && 'role' in e.data && e.data.role === 'user';
+      const isUser = isACPEventText(e) && e.data.role === 'user';
 
       if (isUser) {
         currentAgentTurn = null;

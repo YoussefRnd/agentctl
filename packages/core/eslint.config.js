@@ -16,4 +16,27 @@ export default [
       },
     },
   },
+  {
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    ignores: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/db/index.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'TSAsExpression > TSAsExpression[typeAnnotation.type="TSUnknownKeyword"]',
+          message:
+            'Avoid double casts through unknown (`as unknown as X`). Narrow via type guards or use the SDK type directly.',
+        },
+        {
+          selector: 'TSAsExpression > TSAnyKeyword',
+          message: 'Avoid `as any` casts. Use a type guard or the SDK type directly.',
+        },
+        {
+          selector: 'TSTypeAnnotation > TSAnyKeyword',
+          message:
+            'Avoid `any` type annotations. Use unknown + narrowing or the SDK type directly.',
+        },
+      ],
+    },
+  },
 ];

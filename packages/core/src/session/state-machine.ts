@@ -200,7 +200,9 @@ export class SessionStateMachine {
   ): Promise<ACPSession> {
     this.logger.info(
       { sessionId, command, args, worktreePath, existingAgentSessionId },
-      'Starting new agent session via state machine',
+      existingAgentSessionId
+        ? 'Resuscitating existing agent session runtime via state machine'
+        : 'Starting new agent session via state machine',
     );
 
     let session: ACPSession | undefined;

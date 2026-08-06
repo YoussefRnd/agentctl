@@ -1,13 +1,14 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
-import { acpEvents } from '@agentctl/core/db';
+import { acpEvents, acpEventDbRowSchema } from '@agentctl/core/db';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { ACPEventRow } from '@agentctl/shared';
-import { acpEventRowSchema } from '@agentctl/shared';
+import { acpEventRowSchema, isACPEventRow } from '@agentctl/shared';
 import { AppError } from '../errors/app-error.js';
 
-function parseEventRow(row: typeof acpEvents.$inferSelect): ACPEventRow {
+function parseEventRow(rawRow: typeof acpEvents.$inferSelect): ACPEventRow {
+  const row = acpEventDbRowSchema.parse(rawRow);
   const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
   const metadata: unknown = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : undefined;
   return acpEventRowSchema.parse({
@@ -22,18 +23,21 @@ function formatSSEEvent(event: ACPEventRow): string {
 }
 
 function parseBusEvent(raw: unknown): ACPEventRow {
-  const row = raw as typeof acpEvents.$inferSelect & { createdAt: Date };
-  const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-  const metadata: unknown = row.metadata
-    ? typeof row.metadata === 'string'
-      ? JSON.parse(row.metadata)
-      : row.metadata
-    : undefined;
-  return acpEventRowSchema.parse({
-    ...row,
-    data,
-    metadata: metadata ?? undefined,
-  });
+  if (isACPEventRow(raw)) {
+    return raw;
+  }
+  if (typeof raw === 'object' && raw !== null) {
+    const rec = raw as Record<string, unknown>;
+    const data: unknown = typeof rec.data === 'string' ? JSON.parse(rec.data) : rec.data;
+    const metadata: unknown =
+      typeof rec.metadata === 'string' ? JSON.parse(rec.metadata) : rec.metadata;
+    return acpEventRowSchema.parse({
+      ...rec,
+      data,
+      metadata: metadata ?? undefined,
+    });
+  }
+  return acpEventRowSchema.parse(raw);
 }
 
 export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {

@@ -42,44 +42,33 @@ export class AuthProvider {
     }
 
     const initialAuthState = row.authState;
-    const authParams: Record<string, unknown> = { methodId };
-    if (Object.keys(params).length > 0) {
-      authParams._meta = params;
-    }
+    const authParams = Object.keys(params).length > 0 ? { methodId, _meta: params } : { methodId };
 
     if (this.connectionManager) {
       try {
         const persistent = await this.connectionManager.getConnection(providerId);
-        const connWithAuth = persistent.connection as unknown as {
-          authenticate?: (p: unknown) => Promise<unknown>;
-          newSession?: (p: unknown) => Promise<unknown>;
-        };
-        if (typeof connWithAuth.authenticate === 'function') {
-          await connWithAuth.authenticate(authParams);
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
+        await persistent.connection.authenticate(authParams);
+        await new Promise((resolve) => setTimeout(resolve, 500));
         this.store.setAuthState(providerId, 'authenticated');
         this.launcher.invalidateProbe(providerId);
 
-        if (typeof connWithAuth.newSession === 'function') {
-          try {
-            const sessionResult = (await connWithAuth.newSession({
-              cwd: os.tmpdir(),
-              mcpServers: [],
-            })) as Parameters<typeof extractConfigOptionsFromSessionResult>[0];
-            const configOptions = extractConfigOptionsFromSessionResult(sessionResult);
-            if (configOptions.length > 0) {
-              this.store.update(providerId, {
-                configOptions: JSON.stringify(configOptions),
-                supportsDynamicModel: configOptions.some(
-                  (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-                ),
-                supportsDynamicConfig: true,
-              });
-            }
-          } catch {
-            // Ignore error extracting sessionResult post-login
+        try {
+          const sessionResult = await persistent.connection.newSession({
+            cwd: os.tmpdir(),
+            mcpServers: [],
+          });
+          const configOptions = extractConfigOptionsFromSessionResult(sessionResult);
+          if (configOptions.length > 0) {
+            this.store.update(providerId, {
+              configOptions: JSON.stringify(configOptions),
+              supportsDynamicModel: configOptions.some(
+                (opt) => opt.id === 'model' || opt.id === 'selectedModel',
+              ),
+              supportsDynamicConfig: true,
+            });
           }
+        } catch {
+          // Ignore error extracting sessionResult post-login
         }
         return;
       } catch (err) {
@@ -101,13 +90,8 @@ export class AuthProvider {
           clientInfo: { name: 'agentctl-login', title: 'Agentctl', version: '1.0.0' },
         });
       }
-      const connWithAuth = connection as unknown as {
-        authenticate?: (p: unknown) => Promise<unknown>;
-      };
-      if (typeof connWithAuth.authenticate === 'function') {
-        await connWithAuth.authenticate(authParams);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+      await connection.authenticate(authParams);
+      await new Promise((resolve) => setTimeout(resolve, 500));
       this.store.setAuthState(providerId, 'authenticated');
       this.launcher.invalidateProbe(providerId);
     } catch (err) {
@@ -133,14 +117,10 @@ export class AuthProvider {
     if (this.connectionManager) {
       try {
         const persistent = await this.connectionManager.getConnection(providerId);
-        const connWithLogout = persistent.connection as unknown as {
-          logout?: (p: unknown) => Promise<unknown>;
-          sendRequest?: (m: string, p: unknown) => Promise<unknown>;
-        };
-        if (typeof connWithLogout.logout === 'function') {
-          await connWithLogout.logout({});
-        } else if (typeof connWithLogout.sendRequest === 'function') {
-          await connWithLogout.sendRequest('logout', {});
+        try {
+          await persistent.connection.unstable_logout({});
+        } catch {
+          // Logout may be unsupported by the agent; nothing further to attempt
         }
       } catch {
         // Ignore logout errors
@@ -155,11 +135,7 @@ export class AuthProvider {
     const launch = this.launcher.resolveLaunch(row, agent);
     const connRes = createConnection(launch.command, launch.args, launch.env);
     const child = connRes.child;
-    const connection = connRes.connection as unknown as {
-      initialize?: (p: unknown) => Promise<unknown>;
-      logout?: (p: unknown) => Promise<unknown>;
-      sendRequest?: (m: string, p: unknown) => Promise<unknown>;
-    };
+    const connection = connRes.connection;
 
     try {
       if (typeof connection.initialize === 'function') {
@@ -169,10 +145,8 @@ export class AuthProvider {
           clientInfo: { name: 'agentctl-logout', title: 'Agentctl', version: '1.0.0' },
         });
       }
-      if (typeof connection.logout === 'function') {
-        await connection.logout({});
-      } else if (typeof connection.sendRequest === 'function') {
-        await connection.sendRequest('logout', {});
+      if (typeof connection.unstable_logout === 'function') {
+        await connection.unstable_logout({});
       }
     } catch {
       // Ignore errors on logout

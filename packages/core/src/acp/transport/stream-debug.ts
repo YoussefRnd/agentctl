@@ -49,3 +49,25 @@ export function wrapDebug(stream: Stream, sink: DebugSink): Stream {
 
   return { readable: loggedReadable, writable: loggedWritable };
 }
+
+export function formatAcpMessageLog(direction: 'send' | 'recv', message: unknown) {
+  if (!message || typeof message !== 'object') {
+    return { direction };
+  }
+  const msg = message as Record<string, unknown>;
+  const params = (msg.params && typeof msg.params === 'object' ? msg.params : {}) as Record<
+    string,
+    unknown
+  >;
+  const update = (
+    params.update && typeof params.update === 'object' ? params.update : {}
+  ) as Record<string, unknown>;
+
+  return {
+    direction,
+    method: typeof msg.method === 'string' ? msg.method : undefined,
+    id: msg.id,
+    sessionId: typeof params.sessionId === 'string' ? params.sessionId : undefined,
+    sessionUpdate: typeof update.sessionUpdate === 'string' ? update.sessionUpdate : undefined,
+  };
+}

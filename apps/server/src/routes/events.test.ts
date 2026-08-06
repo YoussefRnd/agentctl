@@ -196,15 +196,14 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     });
 
     // Publish an event to eventBus to see if it is received
-    const testEvent = {
+    const testEvent: ACPEventRow = {
       id: 123,
       sessionId,
-      type: 'text' as const,
-      data: JSON.stringify({ content: 'Hello from stream' }),
-      metadata: '{}',
+      type: 'text',
+      data: { content: 'Hello from stream' },
       createdAt: new Date(),
     };
-    app.eventBus.publish(testEvent as unknown as ACPEventRow);
+    app.eventBus.publish(testEvent);
 
     const body = await promise;
     expect(body).toContain(':\n\n');

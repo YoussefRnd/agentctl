@@ -44,6 +44,11 @@ export class TerminalManager extends EventEmitter {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
+    const closed = Promise.withResolvers<{
+      exitCode: number | null;
+      signal: string | null;
+    }>();
+
     const termRecord: TerminalProcess = {
       terminalId,
       child,
@@ -52,25 +57,21 @@ export class TerminalManager extends EventEmitter {
       signal: null,
       hasExited: false,
       truncated: false,
-      closed: null as unknown as Promise<{ exitCode: number | null; signal: string | null }>,
+      closed: closed.promise,
     };
 
-    termRecord.closed = new Promise<{ exitCode: number | null; signal: string | null }>(
-      (resolve) => {
-        child.on('exit', (code, signal) => {
-          termRecord.exitCode = code;
-          termRecord.signal = signal;
-          termRecord.hasExited = true;
-          this.emit('exit', { terminalId, code });
-          resolve({ exitCode: code, signal });
-        });
-        child.on('error', (err) => {
-          this.emit('error', { terminalId, error: err });
-          termRecord.hasExited = true;
-          resolve({ exitCode: null, signal: null });
-        });
-      },
-    );
+    child.on('exit', (code, signal) => {
+      termRecord.exitCode = code;
+      termRecord.signal = signal;
+      termRecord.hasExited = true;
+      this.emit('exit', { terminalId, code });
+      closed.resolve({ exitCode: code, signal });
+    });
+    child.on('error', (err) => {
+      this.emit('error', { terminalId, error: err });
+      termRecord.hasExited = true;
+      closed.resolve({ exitCode: null, signal: null });
+    });
 
     const outputByteLimit = options.outputByteLimit ?? 10 * 1024 * 1024;
 

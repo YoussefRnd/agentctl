@@ -127,12 +127,14 @@ export class ACPSession {
 
     this.runtimeHandle.onProcessError((err) => {
       this.logger.error(err, `Child process error in session ${this.sessionId}`);
+      this.rejectPendingApprovals();
       void this.handleError(err).catch((e: unknown) => {
         this.logger.error(e, 'Failed to handle error');
       });
     });
 
     this.runtimeHandle.onProcessExit(() => {
+      this.rejectPendingApprovals();
       if (this.stopKind === 'error') return;
 
       void this.markSessionStopped('idle').catch((e: unknown) => {
@@ -142,6 +144,7 @@ export class ACPSession {
 
     void this.runtimeHandle.closed
       .then(() => {
+        this.rejectPendingApprovals();
         if (this.stopKind === 'error' || this.isStopped) return;
 
         this.isStopped = true;
@@ -150,11 +153,20 @@ export class ACPSession {
         });
       })
       .catch(async (error: unknown) => {
+        this.rejectPendingApprovals();
         if (this.isStopped) return;
         this.isStopped = true;
         this.logger.error(error, 'Connection closed with error');
         await this.handleError(error);
       });
+  }
+
+  private rejectPendingApprovals(): void {
+    for (const [, resolve] of this.pendingApprovals.entries()) {
+      resolve({ allowed: false });
+    }
+    this.pendingApprovals.clear();
+    this.pendingRequests.clear();
   }
 
   private loadSkills(cwd: string): string {
