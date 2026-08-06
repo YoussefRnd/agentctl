@@ -1,1 +1,1 @@
-export * from './permission-pattern-manager.js';
+export * from './permission-engine.js';

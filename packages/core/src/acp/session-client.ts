@@ -17,7 +17,8 @@ import type { SessionStateMachine } from '../session/state-machine.js';
 import { EventStreamAdapter } from '../session/event-stream-adapter.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
 import { ElicitationStore } from '../session/elicitation-store.js';
-import { PermissionPatternManager } from '../security/permission-pattern-manager.js';
+import { PermissionEngine } from '../security/permission-engine.js';
+
 import type { ElicitationRequest, ElicitationResponse } from '@agentctl/shared';
 
 export type DbClient = ReturnType<typeof createDatabase>;
@@ -72,7 +73,7 @@ function parseUsageMetrics(usage: unknown): ParsedUsageMetrics | null {
 export class ACPSession {
   public acpSessionId: string | null = null;
   public elicitationStore = new ElicitationStore();
-  public permissionPatternManager = new PermissionPatternManager();
+  public permissionEngine = new PermissionEngine();
   private pendingApprovals = new Map<string, (response: DomainPermissionResponse) => void>();
   private pendingRequests = new Map<string, DomainPermissionRequest>();
   private isStopped = false;
@@ -532,7 +533,7 @@ export class ACPSession {
       }
 
       if (finalResponse.allowed) {
-        this.permissionPatternManager.applyOutcome({
+        this.permissionEngine.applyOutcome({
           option_id: finalResponse.optionId ?? 'allow_once',
           option_kind: finalResponse.optionId === 'allow_always' ? 'allow_always' : 'allow_once',
           params: (response as { params?: Record<string, unknown> }).params,
@@ -932,7 +933,7 @@ export class ACPSession {
       const toolName = request.toolCall.name;
       const toolArgs = request.toolCall.arguments ?? {};
 
-      if (this.permissionPatternManager.isToolCallApproved(toolName, toolArgs)) {
+      if (this.permissionEngine.isToolCallApproved(toolName, toolArgs)) {
         await this.eventStore.append(
           this.sessionId,
           'approval_request',
@@ -1055,10 +1056,7 @@ export class ACPSession {
           .where(eq(sessions.id, this.sessionId));
       }
 
-      const permissionOptions = this.permissionPatternManager.buildPermissionOptions(
-        toolName,
-        toolArgs,
-      );
+      const permissionOptions = this.permissionEngine.buildPermissionOptions(toolName, toolArgs);
 
       const eventId = await this.eventStore.append(
         this.sessionId,

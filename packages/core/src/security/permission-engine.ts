@@ -1,3 +1,4 @@
+import type { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
 import type {
   PermissionOption,
   PermissionOptionChoice,
@@ -5,6 +6,11 @@ import type {
   PermissionPattern,
   SelectedPermissionOutcome,
 } from '@agentctl/shared';
+import type {
+  DomainPermissionRequest,
+  DomainPermissionResponse,
+  PermissionToolCall,
+} from '../acp/types.js';
 
 export interface PatternGrantOptions {
   maxUses?: number;
@@ -21,8 +27,125 @@ export interface ExportedPermissions {
   grantedPatterns: GrantedPatternData[];
 }
 
-export class PermissionPatternManager {
+export interface EvaluationResult {
+  autoApproved: boolean;
+  response?: RequestPermissionResponse;
+  domainRequest?: DomainPermissionRequest;
+  uiOptions?: PermissionOptions;
+}
+
+export function parsePermissionRequest(r: RequestPermissionRequest): DomainPermissionRequest {
+  const toolCall = r.toolCall as unknown as PermissionToolCall;
+  const rawInput = toolCall.rawInput as Record<string, unknown> | undefined;
+
+  let parsedName = typeof toolCall.name === 'string' ? toolCall.name : '';
+  if (!parsedName && toolCall.toolCallId) {
+    parsedName = toolCall.toolCallId.split('__')[0];
+  }
+  if (!parsedName) {
+    parsedName = typeof toolCall.kind === 'string' ? toolCall.kind : 'tool';
+  }
+
+  let parsedArgs = toolCall.arguments;
+  if (!parsedArgs) {
+    if (rawInput && typeof rawInput === 'object') {
+      if (rawInput.arguments && typeof rawInput.arguments === 'object') {
+        parsedArgs = rawInput.arguments as Record<string, unknown>;
+      } else {
+        const rest = { ...rawInput };
+        delete rest.name;
+        delete rest.arguments;
+        parsedArgs = rest;
+      }
+    }
+  }
+  if (!parsedArgs) {
+    const locations = toolCall.locations;
+    const primaryPath =
+      locations?.[0]?.path ?? (typeof toolCall.title === 'string' ? toolCall.title : undefined);
+    if (primaryPath) {
+      parsedArgs = {
+        path: primaryPath,
+        TargetFile: primaryPath,
+        AbsolutePath: primaryPath,
+      };
+    }
+  }
+
+  return {
+    permissionId: toolCall.toolCallId ?? '',
+    description: typeof toolCall.title === 'string' ? toolCall.title : '',
+    options: r.options.map((opt) => ({
+      optionId: opt.optionId,
+      label: opt.name,
+    })),
+    toolCall: {
+      name: parsedName,
+      arguments: parsedArgs,
+      toolCallId: toolCall.toolCallId,
+    },
+  };
+}
+
+export function formatPermissionOutcome(
+  domainResp: DomainPermissionResponse,
+): RequestPermissionResponse {
+  if (domainResp.allowed && domainResp.optionId) {
+    return {
+      outcome: { outcome: 'selected', optionId: domainResp.optionId },
+    };
+  }
+  return { outcome: { outcome: 'cancelled' } };
+}
+
+export function getBestPermissionOption(
+  options?: { optionId: string; label?: string }[],
+): string | undefined {
+  if (!options || options.length === 0) return undefined;
+
+  const negativeKeywords = ['deny', 'cancel', 'reject', 'block', 'no'];
+  const positiveOptions = options.filter((o) => {
+    const id = o.optionId.toLowerCase();
+    const label = (o.label ?? '').toLowerCase();
+    return !negativeKeywords.some((neg) => id.includes(neg) || label.includes(neg));
+  });
+
+  if (positiveOptions.length === 0) {
+    return options[0].optionId;
+  }
+
+  let best = positiveOptions.find((o) => {
+    const id = o.optionId.toLowerCase();
+    return id.includes('always') || id.includes('session') || id.includes('forever');
+  });
+
+  if (!best) {
+    const positiveKeywords = ['allow', 'approve', 'yes', 'grant', 'confirm', 'ok'];
+    best = positiveOptions.find((o) => {
+      const id = o.optionId.toLowerCase();
+      const label = (o.label ?? '').toLowerCase();
+      return positiveKeywords.some((pos) => id.includes(pos) || label.includes(pos));
+    });
+  }
+
+  best ??= positiveOptions[0];
+
+  return best.optionId;
+}
+
+export class PermissionEngine {
   private grantedPatterns = new Map<string, GrantedPatternData>();
+
+  constructor(initialPatterns?: GrantedPatternData[]) {
+    if (initialPatterns) {
+      for (const p of initialPatterns) {
+        this.grantPattern(p.pattern, {
+          maxUses: p.usesRemaining,
+          expiresAt: p.expiresAt,
+        });
+      }
+    }
+  }
 
   grantPattern(pattern: string, options?: PatternGrantOptions): void {
     this.grantedPatterns.set(pattern, {
@@ -46,7 +169,7 @@ export class PermissionPatternManager {
     return true;
   }
 
-  exportPatterns(): ExportedPermissions {
+  exportState(): ExportedPermissions {
     const active: GrantedPatternData[] = [];
     const now = Date.now();
     for (const [, data] of this.grantedPatterns.entries()) {
@@ -57,7 +180,7 @@ export class PermissionPatternManager {
     return { grantedPatterns: active };
   }
 
-  importPatterns(data: ExportedPermissions): void {
+  importState(data: ExportedPermissions): void {
     if (!Array.isArray(data.grantedPatterns)) return;
     for (const entry of data.grantedPatterns) {
       if (typeof entry.pattern === 'string') {
@@ -98,6 +221,38 @@ export class PermissionPatternManager {
       }
       return false;
     });
+  }
+
+  evaluateRequest(acpRequest: RequestPermissionRequest): EvaluationResult {
+    const domainReq = parsePermissionRequest(acpRequest);
+    const toolName = domainReq.toolCall.name;
+    const toolArgs = domainReq.toolCall.arguments ?? {};
+
+    if (this.isToolCallApproved(toolName, toolArgs)) {
+      const bestOptionId = getBestPermissionOption(domainReq.options);
+      const response: RequestPermissionResponse = bestOptionId
+        ? { outcome: { outcome: 'selected', optionId: bestOptionId } }
+        : {
+            outcome: {
+              outcome: 'selected',
+              optionId: acpRequest.options[0]?.optionId ?? 'allow_once',
+            },
+          };
+
+      return {
+        autoApproved: true,
+        response,
+        domainRequest: domainReq,
+      };
+    }
+
+    const uiOptions = this.buildPermissionOptions(toolName, toolArgs);
+
+    return {
+      autoApproved: false,
+      domainRequest: domainReq,
+      uiOptions,
+    };
   }
 
   buildPermissionOptions(toolName: string, args: Record<string, unknown>): PermissionOptions {
@@ -167,6 +322,31 @@ export class PermissionPatternManager {
         this.grantPattern(p);
       }
     }
+  }
+
+  resolveOutcome(
+    _permissionId: string,
+    selectedOptionId: string,
+    outcomeParams?: { patterns?: string[] },
+  ): RequestPermissionResponse {
+    if (selectedOptionId === 'allow_always' && outcomeParams?.patterns) {
+      for (const p of outcomeParams.patterns) {
+        this.grantPattern(p);
+      }
+    }
+
+    const isDenied =
+      selectedOptionId.toLowerCase().includes('deny') ||
+      selectedOptionId.toLowerCase().includes('reject') ||
+      selectedOptionId.toLowerCase().includes('cancel');
+
+    if (!isDenied) {
+      return {
+        outcome: { outcome: 'selected', optionId: selectedOptionId },
+      };
+    }
+
+    return { outcome: { outcome: 'cancelled' } };
   }
 
   private extractTargets(toolName: string, args: Record<string, unknown>): string[] {
