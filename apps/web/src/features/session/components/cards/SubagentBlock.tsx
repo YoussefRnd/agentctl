@@ -171,9 +171,12 @@ function SubagentCard({
         <div className="overflow-hidden">
           {childEvents.length > 0 && (
             <div className="border-border/20 mr-3 ml-12 border-t pb-2 pl-2">
-              {childEvents.map((e) => {
-                const isLastStreaming =
-                  isStreaming && e.id === childEvents[childEvents.length - 1].id;
+              {childEvents.map((e, index) => {
+                const childTotal = childEvents.length;
+                const isOnly = childTotal === 1;
+                const isFirst = index === 0;
+                const isLast = index === childTotal - 1;
+                const isLastStreaming = isStreaming && index === childTotal - 1;
                 const isChildFailed = e.type === 'tool_call' && e.data.status === 'failed';
 
                 if (e.type === 'text' && 'content' in e.data) {
@@ -183,6 +186,9 @@ function SubagentCard({
                       key={e.id}
                       dotColor={textData.role === 'thought' ? 'bg-accent' : 'bg-text-muted/30'}
                       isPulsing={isLastStreaming}
+                      isFirst={isFirst}
+                      isLast={isLast}
+                      isOnly={isOnly}
                     >
                       <span
                         className={`text-text-muted/80 text-[13px] leading-relaxed select-text ${
@@ -209,6 +215,9 @@ function SubagentCard({
                         isFailedTool ? 'bg-rose-500' : getToolMeta(payload.kind, toolName).dotColor
                       }
                       isPulsing={isLastStreaming}
+                      isFirst={isFirst}
+                      isLast={isLast}
+                      isOnly={isOnly}
                     >
                       <div
                         className={isFailedTool ? 'border-l-2 border-rose-500/50 pl-2' : undefined}
