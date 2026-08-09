@@ -3,19 +3,50 @@ import type { ReactNode } from 'react';
 interface TimelineEventProps {
   dotColor: string;
   isPulsing?: boolean;
+  isFirst?: boolean;
+  isLast?: boolean;
+  isOnly?: boolean;
   children: ReactNode;
 }
 
-export function TimelineEvent({ dotColor, isPulsing = false, children }: TimelineEventProps) {
+export function TimelineEvent({
+  dotColor,
+  isPulsing = false,
+  isFirst = false,
+  isLast = false,
+  isOnly = false,
+  children,
+}: TimelineEventProps) {
   return (
     <div className="group/timeline-event relative flex w-full gap-3 py-2.5">
-      {/* Left column for track and dot (automatically stretches to 100% row height) */}
-      <div className="relative w-3 shrink-0 select-none">
-        {/* Track line segment centered horizontally */}
-        <div className="bg-accent/15 absolute top-0 bottom-0 left-1/2 w-[1px] -translate-x-1/2" />
+      {/* Left gutter container */}
+      <div className="relative w-5 shrink-0 select-none">
+        {/* Top vertical trunk line */}
+        {!isOnly && !isFirst && (
+          <div
+            data-testid="timeline-top-trunk"
+            className="border-border/30 absolute top-0 bottom-1/2 left-[9px] w-px border-l"
+          />
+        )}
 
-        {/* Glowing dot centered horizontally and positioned at top offset */}
-        <div className="absolute top-[10px] left-1/2 z-10 flex h-1.5 w-1.5 -translate-x-1/2 items-center justify-center overflow-visible">
+        {/* Bottom vertical trunk line */}
+        {!isOnly && !isLast && (
+          <div
+            data-testid="timeline-bottom-trunk"
+            className="border-border/30 absolute top-1/2 bottom-0 left-[9px] w-px border-l"
+          />
+        )}
+
+        {/* Horizontal branch arm for last item curve (└─) */}
+        {!isOnly && isLast && (
+          <div
+            data-testid="timeline-branch-arm"
+            className="border-border/30 absolute top-0 bottom-1/2 left-[9px] w-2 rounded-bl-sm border-b border-l"
+          />
+        )}
+
+        {/* Centered node dot */}
+        <div className="absolute top-1/2 left-[9px] z-10 flex h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
           {isPulsing && (
             <span
               className={`animate-pulse-scale absolute h-3.5 w-3.5 rounded-full opacity-35 ${dotColor} shrink-0`}
