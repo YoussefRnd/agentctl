@@ -88,6 +88,11 @@ export class ACPSession {
     await this.projector.flushAll();
   }
 
+  /** Full-content snapshots of in-flight streaming events (SSE resync). */
+  public getLiveEventSnapshots(): ReturnType<SessionProjector['getTransientSnapshots']> {
+    return this.projector.getTransientSnapshots();
+  }
+
   get isDead(): boolean {
     return this.isStopped;
   }

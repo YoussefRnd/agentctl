@@ -34,6 +34,7 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
       type: string;
       data: string;
       createdAt: Date;
+      delta?: string;
     }[] = [];
     const eventBus = {
       publish: (evt: {
@@ -42,6 +43,7 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
         type: string;
         data: string;
         createdAt: Date;
+        delta?: string;
       }) => {
         publishedEvents.push(evt);
       },
@@ -83,6 +85,7 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
     const session = new ACPSession('sess-obs', fakeRuntimeHandle, db, eventStore, '/tmp/proj-obs');
 
     // Set up what happens during runtime handle prompt
+    let snapshotsMidStream: ReturnType<ACPSession['getLiveEventSnapshots']> = [];
     promptCallback = async () => {
       // 1. Send thought chunks
       await session.handleDomainEvent({ type: 'thought', text: 'Thinking' });
@@ -92,6 +95,9 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
       // 2. Send text chunks
       await session.handleDomainEvent({ type: 'text', text: 'Hello' });
       await session.handleDomainEvent({ type: 'text', text: ' world' });
+
+      // 3. Capture transient snapshots while events are still in flight
+      snapshotsMidStream = session.getLiveEventSnapshots();
     };
 
     // Execute prompt
@@ -139,22 +145,37 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
     );
     expect((JSON.parse(providerEvent.data) as Record<string, unknown>).content).toBe('Hello world');
 
-    // Verify instant publishing via eventBus
-    // We should see published events on the eventBus for each chunk addition!
-    // Event bus should show the growth:
+    // Verify instant publishing via eventBus: one publish PER CHUNK,
+    // DB writes happen silently (no publish on flush).
     const thoughtPublishes = publishedEvents.filter((e) => {
       const parsed = JSON.parse(e.data) as Record<string, unknown>;
       return parsed.role === 'thought';
     });
 
-    // One append publish + one final DB flush update = 2 publishes
-    expect(thoughtPublishes.length).toBe(2);
+    // 3 chunks -> 3 publishes (append + 2 transient), flush is silent
+    expect(thoughtPublishes.length).toBe(3);
+    // First chunk goes through the persisted append path: full content, no delta
     expect((JSON.parse(thoughtPublishes[0].data) as Record<string, unknown>).content).toBe(
       'Thinking',
     );
-    expect((JSON.parse(thoughtPublishes[1].data) as Record<string, unknown>).content).toBe(
-      'Thinking about logic',
+    expect(thoughtPublishes[0].delta).toBeUndefined();
+    // Subsequent chunks ride the transient path: wire-only delta, empty content
+    expect((JSON.parse(thoughtPublishes[1].data) as Record<string, unknown>).content).toBe('');
+    expect(thoughtPublishes[1].delta).toBe(' about');
+    expect((JSON.parse(thoughtPublishes[2].data) as Record<string, unknown>).content).toBe('');
+    expect(thoughtPublishes[2].delta).toBe(' logic');
+
+    const providerPublishes = publishedEvents.filter((e) => {
+      const parsed = JSON.parse(e.data) as Record<string, unknown>;
+      return parsed.role === 'provider';
+    });
+    expect(providerPublishes.length).toBe(2);
+    expect((JSON.parse(providerPublishes[0].data) as Record<string, unknown>).content).toBe(
+      'Hello',
     );
+    expect(providerPublishes[0].delta).toBeUndefined();
+    expect((JSON.parse(providerPublishes[1].data) as Record<string, unknown>).content).toBe('');
+    expect(providerPublishes[1].delta).toBe(' world');
 
     // Verify metadata presence (timing and token estimates)
     const userMetadata = JSON.parse(userEvent.metadata ?? '{}') as Record<string, unknown>;
@@ -167,5 +188,28 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
     const providerMetadata = JSON.parse(providerEvent.metadata ?? '{}') as Record<string, unknown>;
     expect(providerMetadata.durationMs).toBeDefined();
     expect(providerMetadata.completionTokens).toBe(Math.ceil('Hello world'.length / 4));
+
+    // Verify transient snapshots: full content, no delta, available mid-stream
+    expect(snapshotsMidStream.length).toBe(2);
+    const snapThought = snapshotsMidStream.find((s) => {
+      const parsed = JSON.parse(s.data) as Record<string, unknown>;
+      return parsed.role === 'thought';
+    });
+    const snapProvider = snapshotsMidStream.find((s) => {
+      const parsed = JSON.parse(s.data) as Record<string, unknown>;
+      return parsed.role === 'provider';
+    });
+    expect(snapThought).toBeDefined();
+    expect(snapProvider).toBeDefined();
+    expect((JSON.parse(snapThought?.data ?? '{}') as Record<string, unknown>).content).toBe(
+      'Thinking about logic',
+    );
+    expect((JSON.parse(snapProvider?.data ?? '{}') as Record<string, unknown>).content).toBe(
+      'Hello world',
+    );
+    expect(snapThought).not.toHaveProperty('delta');
+    expect(snapProvider).not.toHaveProperty('delta');
+    expect(snapThought?.id).toBe(thoughtEvent.id);
+    expect(snapProvider?.id).toBe(providerEvent.id);
   });
 });

@@ -185,6 +185,12 @@ export const acpEventRowSchema = z.intersection(
     sessionId: z.uuid(),
     parentEventId: z.number().nullable().optional(),
     metadata: acpEventMetadataSchema.optional(),
+    /**
+     * Wire-only field carried on transient (non-persisted) streaming events.
+     * When present, the client appends `delta` to the existing event content
+     * instead of replacing it. Persisted rows never include this field.
+     */
+    delta: z.string().optional(),
   }),
 );
 

@@ -49,6 +49,10 @@ export class SessionProjector {
     return this.adapter.getCurrentParentEventId();
   }
 
+  getTransientSnapshots(): ReturnType<EventStreamAdapter['getTransientSnapshots']> {
+    return this.adapter.getTransientSnapshots();
+  }
+
   setCurrentParentEventId(id: number | null): void {
     this.adapter.setCurrentParentEventId(id);
   }

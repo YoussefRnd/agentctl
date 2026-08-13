@@ -3,6 +3,7 @@ import { acpEvents, sessions } from '../db/schema.js';
 import type { DbClient } from '../db/index.js';
 import type { IEventBus } from './manager.js';
 import type { ACPEvent } from '@agentctl/shared';
+import type { ACPEventDbRow } from '../db/zod-schemas.js';
 
 interface TokenMetadata {
   promptTokens?: number;
@@ -62,6 +63,15 @@ export class SessionEventStore {
       .where(eq(sessions.id, sessionId));
   }
 
+  /**
+   * Publish-only: sends the row to the bus without persisting it (transient
+   * live update). When `delta` is provided the payload carries wire-only delta
+   * semantics: consumers append it to the existing event instead of replacing.
+   */
+  publishTransient(event: ACPEventDbRow, delta?: string): void {
+    this.eventBus.publish(delta !== undefined ? { ...event, delta } : event);
+  }
+
   async append(
     sessionId: string,
     type: ACPEvent['type'],
@@ -94,6 +104,19 @@ export class SessionEventStore {
   }
 
   async update(eventId: number, data: unknown, metadata?: unknown): Promise<void> {
+    await this.performUpdate(eventId, data, metadata, true);
+  }
+
+  async updateSilently(eventId: number, data: unknown, metadata?: unknown): Promise<void> {
+    await this.performUpdate(eventId, data, metadata, false);
+  }
+
+  private async performUpdate(
+    eventId: number,
+    data: unknown,
+    metadata?: unknown,
+    shouldPublish = true,
+  ): Promise<void> {
     const existing = await this.getEventWithMetadataFull(eventId);
     const oldTokens = existing ? extractTokens(existing.metadata) : 0;
     const newTokens = extractTokens(metadata);
@@ -121,15 +144,19 @@ export class SessionEventStore {
       .where(eq(acpEvents.id, eventId))
       .returning();
 
-    const first = updated[0];
-    this.eventBus.publish({
-      ...first,
-      createdAt: new Date(first.createdAt),
-    });
+    const first = updated.length > 0 ? updated[0] : undefined;
+    if (shouldPublish && first) {
+      this.eventBus.publish({
+        ...first,
+        createdAt: new Date(first.createdAt),
+      });
+    }
 
-    void this.incrementTotalTokens(first.sessionId, delta).catch(() => {
-      // ignore token refresh failure
-    });
+    if (first) {
+      void this.incrementTotalTokens(first.sessionId, delta).catch(() => {
+        // ignore token refresh failure
+      });
+    }
   }
 
   private async getEventWithMetadataFull(

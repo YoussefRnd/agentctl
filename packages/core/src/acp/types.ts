@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import type { ClientSideConnection, McpServer } from '@agentclientprotocol/sdk';
+import type { ACPEventDbRow } from '../db/zod-schemas.js';
 import type {
   AuthMethod,
   ThinkingEffort,
@@ -24,6 +25,8 @@ export interface SessionEventStoreLike {
   ): Promise<number>;
   getEvent(eventId: number): Promise<{ id: number; type: string; data: unknown } | null>;
   update(eventId: number, data: unknown, metadata?: unknown): Promise<void>;
+  updateSilently(eventId: number, data: unknown, metadata?: unknown): Promise<void>;
+  publishTransient(event: ACPEventDbRow, delta?: string): void;
 }
 
 /**

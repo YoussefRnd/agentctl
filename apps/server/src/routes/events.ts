@@ -134,7 +134,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
         }
       }
 
-      // 5. Subscribe to live events
+      // 6. Subscribe to live events
       const unsubscribe = fastify.eventBus.subscribe(id, (raw) => {
         if (reply.raw.destroyed) return;
         try {
@@ -145,14 +145,31 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
         }
       });
 
-      // 6. Keep-alive heartbeat pings
+      // 7. Resync in-flight streaming events after replay: replay rows from
+      //    the DB may lag the live transient stream (silent batched flushes),
+      //    so emit full-content snapshots for events still streaming. Clients
+      //    use these as the base before applying new deltas. Snapshot content
+      //    is >= every chunk published before it (computed at emission), so
+      //    any delta already delivered is folded into the replacement.
+      const snapshots = session.getLiveEventSnapshots();
+      for (const snap of snapshots) {
+        if (reply.raw.destroyed) return;
+        try {
+          const parsed = parseBusEvent(snap);
+          reply.raw.write(formatSSEEvent(parsed));
+        } catch (err: unknown) {
+          fastify.log.error(err, 'Failed to write transient snapshot to stream');
+        }
+      }
+
+      // 8. Keep-alive heartbeat pings
       const heartbeatInterval = setInterval(() => {
         if (!reply.raw.destroyed) {
           reply.raw.write(':\n\n');
         }
       }, 15000);
 
-      // 7. Unsubscribe and cleanup when connection closes
+      // 9. Unsubscribe and cleanup when connection closes
       request.raw.on('close', () => {
         clearInterval(heartbeatInterval);
         unsubscribe();

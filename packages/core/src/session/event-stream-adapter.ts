@@ -1,5 +1,6 @@
 import { StreamBuffer } from '../acp/transport/stream-buffer.js';
 import type { SessionEventStoreLike, SnapshotServiceLike } from '../acp/types.js';
+import type { ACPEventDbRow } from '../db/zod-schemas.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 
@@ -28,7 +29,7 @@ export class EventStreamAdapter {
       if (this.messageEventId) {
         const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
         const completionTokens = Math.ceil(this.currentMessage.length / 4);
-        await this.eventStore.update(
+        await this.eventStore.updateSilently(
           this.messageEventId,
           { content: this.currentMessage, role: 'provider' },
           { durationMs, completionTokens },
@@ -40,7 +41,7 @@ export class EventStreamAdapter {
       if (this.thoughtEventId) {
         const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
         const completionTokens = Math.ceil(this.currentThought.length / 4);
-        await this.eventStore.update(
+        await this.eventStore.updateSilently(
           this.thoughtEventId,
           { content: this.currentThought, role: 'thought' },
           { durationMs, completionTokens },
@@ -93,6 +94,10 @@ export class EventStreamAdapter {
     const completionTokens = Math.ceil(this.currentMessage.length / 4);
     if (this.messageEventId) {
       this.textBuffer.append(text);
+      this.publishTransient(this.messageEventId, 'text', { content: '', role: 'provider' }, text, {
+        durationMs: this.messageStartTime ? Date.now() - this.messageStartTime : 0,
+        completionTokens,
+      });
     } else {
       this.messageStartTime = Date.now();
       this.messageEventId = await this.eventStore.append(
@@ -113,6 +118,10 @@ export class EventStreamAdapter {
     const completionTokens = Math.ceil(this.currentThought.length / 4);
     if (this.thoughtEventId) {
       this.thoughtBuffer.append(text);
+      this.publishTransient(this.thoughtEventId, 'text', { content: '', role: 'thought' }, text, {
+        durationMs: this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0,
+        completionTokens,
+      });
     } else {
       this.thoughtStartTime = Date.now();
       this.thoughtEventId = await this.eventStore.append(
@@ -126,6 +135,68 @@ export class EventStreamAdapter {
         { durationMs: 0, completionTokens },
       );
     }
+  }
+
+  private publishTransient(
+    eventId: number,
+    type: 'text',
+    data: Record<string, unknown>,
+    delta: string,
+    metadata: Record<string, unknown>,
+  ): void {
+    const parentId = this.currentParentEventId ?? null;
+    const row: ACPEventDbRow = {
+      id: eventId,
+      sessionId: this.sessionId,
+      parentEventId: parentId,
+      type,
+      data: JSON.stringify(data),
+      metadata: JSON.stringify(metadata),
+      createdAt: new Date(),
+    };
+    try {
+      this.eventStore.publishTransient(row, delta);
+    } catch (err: unknown) {
+      this.logger.error(err, 'Failed to publish transient streaming event');
+    }
+  }
+
+  /**
+   * Full-content snapshots of in-flight streaming events, used by the SSE
+   * layer to resync clients after a replay (replay rows may lag the live
+   * transient stream). Guaranteed >= the last persisted row for the same id.
+   */
+  getTransientSnapshots(): ACPEventDbRow[] {
+    const snapshots: ACPEventDbRow[] = [];
+    if (this.messageEventId !== null && this.currentMessage.length > 0) {
+      snapshots.push({
+        id: this.messageEventId,
+        sessionId: this.sessionId,
+        parentEventId: this.currentParentEventId ?? null,
+        type: 'text',
+        data: JSON.stringify({ content: this.currentMessage, role: 'provider' }),
+        metadata: JSON.stringify({
+          durationMs: this.messageStartTime ? Date.now() - this.messageStartTime : 0,
+          completionTokens: Math.ceil(this.currentMessage.length / 4),
+        }),
+        createdAt: new Date(),
+      });
+    }
+    if (this.thoughtEventId !== null && this.currentThought.length > 0) {
+      snapshots.push({
+        id: this.thoughtEventId,
+        sessionId: this.sessionId,
+        parentEventId: this.currentParentEventId ?? null,
+        type: 'text',
+        data: JSON.stringify({ content: this.currentThought, role: 'thought' }),
+        metadata: JSON.stringify({
+          durationMs: this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0,
+          completionTokens: Math.ceil(this.currentThought.length / 4),
+        }),
+        createdAt: new Date(),
+      });
+    }
+    return snapshots;
   }
 
   async registerToolCall(call: unknown, isUpdate: boolean): Promise<void> {

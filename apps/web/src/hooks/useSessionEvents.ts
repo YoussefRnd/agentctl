@@ -64,10 +64,47 @@ export function useSessionEvents(sessionId: string | null) {
           for (const evt of newEvents) {
             const idx = idToIndex.get(evt.id);
             if (idx !== undefined) {
-              result[idx] = evt; // update in-place
+              const existing = result[idx];
+              // Transient streaming events carry a wire-only `delta`: append
+              // it to the existing event content instead of replacing (which
+              // would otherwise hold only the last chunk).
+              const delta = (evt as { delta?: string }).delta;
+              if (
+                delta !== undefined &&
+                evt.type === 'text' &&
+                existing.type === 'text' &&
+                existing.data.role === evt.data.role &&
+                typeof existing.data.content === 'string'
+              ) {
+                result[idx] = {
+                  ...existing,
+                  data: {
+                    ...existing.data,
+                    content: existing.data.content + delta,
+                  },
+                };
+              } else {
+                result[idx] = evt; // update in-place (full row)
+              }
             } else {
               idToIndex.set(evt.id, result.length);
-              result.push(evt); // append new
+              // Defensive: transient delta for an unseen id carries no base;
+              // materialize the chunk so the event is never rendered empty.
+              const delta = (evt as { delta?: string }).delta;
+              const materialized =
+                delta !== undefined && evt.type === 'text'
+                  ? {
+                      ...evt,
+                      data: {
+                        ...evt.data,
+                        content:
+                          typeof evt.data.content === 'string' && evt.data.content.length > 0
+                            ? evt.data.content
+                            : delta,
+                      },
+                    }
+                  : evt;
+              result.push(materialized); // append new
             }
           }
           return result;
