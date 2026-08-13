@@ -1,4 +1,4 @@
-import { useState, memo, useEffect } from 'react';
+import { useState, memo, useEffect, useRef, type ReactElement } from 'react';
 import {
   Terminal,
   ChevronRight,
@@ -6,13 +6,21 @@ import {
   Search,
   Settings,
   AlertCircle,
+  Check,
   Trash2,
+  Diff,
+  Files,
 } from 'lucide-react';
+import { StreamingDots } from '@/shared/StreamingDots';
 import { getToolMeta } from '@/utils/toolColors';
 import type { ACPEventToolCallData } from '@agentctl/shared';
-import { Card } from '@agentctl/ui';
 
-function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string, unknown> }) {
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1000) return `${String(durationMs)}ms`;
+  return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
+function getContextSnippet(name: string, args: Record<string, unknown>): string | undefined {
   if (
     name.includes('file') ||
     name.includes('view') ||
@@ -27,41 +35,7 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
           : typeof args.path === 'string'
             ? args.path
             : '';
-    const content =
-      typeof args.CodeContent === 'string'
-        ? args.CodeContent
-        : typeof args.ReplacementContent === 'string'
-          ? args.ReplacementContent
-          : '';
-
-    return (
-      <div className="space-y-2">
-        {filePath && (
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <FileText className="text-brand-green/80 h-3.5 w-3.5" />
-            <span className="text-text-muted/80">Target Path:</span>
-            <code className="bg-surface-secondary/70 text-text-main border-border/30 rounded-md border px-2 py-0.5 font-mono text-[10.5px] break-all select-all">
-              {filePath}
-            </code>
-          </div>
-        )}
-        {content && (
-          <div className="border-border/25 bg-surface-secondary/20 mt-2 overflow-hidden rounded-xl border shadow-sm">
-            <div className="bg-surface-secondary/60 border-border/20 text-text-muted flex items-center justify-between border-b px-3 py-1.5 text-[9px] font-bold tracking-wider uppercase">
-              <div className="flex items-center gap-1 select-none">
-                <span className="h-2 w-2 rounded-full bg-red-500/60" />
-                <span className="h-2 w-2 rounded-full bg-yellow-500/60" />
-                <span className="h-2 w-2 rounded-full bg-green-500/60" />
-              </div>
-              <span className="font-mono">Code Buffer</span>
-            </div>
-            <pre className="text-text-main/90 no-scrollbar max-h-60 overflow-x-auto bg-black/10 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
-              {content}
-            </pre>
-          </div>
-        )}
-      </div>
-    );
+    return filePath || undefined;
   }
 
   if (name.includes('search') || name.includes('grep')) {
@@ -71,29 +45,7 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
         : typeof args.query === 'string'
           ? args.query
           : '';
-    const path = typeof args.SearchPath === 'string' ? args.SearchPath : '';
-
-    return (
-      <div className="space-y-2">
-        {query && (
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <Search className="text-brand-blue/80 h-3.5 w-3.5" />
-            <span className="text-text-muted/80">Search Query:</span>
-            <code className="bg-surface-secondary/70 text-text-main border-border/30 rounded-md border px-2 py-0.5 font-mono text-[10.5px] select-all">
-              {query}
-            </code>
-          </div>
-        )}
-        {path && (
-          <div className="flex flex-wrap items-center gap-2 pl-5.5 text-[11px]">
-            <span className="text-text-muted/80">Within Path:</span>
-            <span className="text-text-main font-mono text-[10.5px] break-all select-all">
-              {path}
-            </span>
-          </div>
-        )}
-      </div>
-    );
+    return query || undefined;
   }
 
   if (name.includes('command') || name.includes('shell') || name.includes('run')) {
@@ -103,73 +55,138 @@ function ToolArgumentsViewer({ name, args }: { name: string; args: Record<string
         : typeof args.command === 'string'
           ? args.command
           : '';
-    return (
-      <div className="bg-surface-secondary/35 border-border/25 overflow-hidden rounded-xl border font-mono text-[11px] leading-relaxed shadow-sm">
-        <div className="bg-surface-secondary/70 border-border/20 flex items-center justify-between border-b px-3.5 py-2">
-          <div className="flex items-center gap-1 select-none">
-            <span className="h-2 w-2 rounded-full bg-red-500/60" />
-            <span className="h-2 w-2 rounded-full bg-yellow-500/60" />
-            <span className="h-2 w-2 rounded-full bg-green-500/60" />
-          </div>
-          <div className="text-text-muted/80 flex items-center gap-1.5 font-sans text-[9px] font-bold tracking-wider uppercase">
-            <Terminal className="text-brand-peach/90 h-3 w-3" />
-            <span>Terminal</span>
-          </div>
-        </div>
-        <div className="flex items-start gap-1.5 bg-black/10 p-3.5 select-text">
-          <span className="text-brand-peach/60 font-bold select-none">$</span>
-          <span className="text-text-main/90 font-mono break-all whitespace-pre-wrap">{cmd}</span>
-        </div>
-      </div>
-    );
+    return cmd || undefined;
   }
 
-  const keys = Object.keys(args).filter((k) => k !== 'toolCallId' && k !== 'name');
-  if (keys.length > 0) {
-    return (
-      <div className="space-y-3.5 text-[11px] leading-relaxed">
-        {keys.map((key) => {
-          const val = args[key];
-          const isLongValue = typeof val === 'string' && (val.length > 60 || val.includes('\n'));
-          const keyLabel = key
-            .replace(/([A-Z])/g, ' $1')
-            .replace(/_/g, ' ')
-            .trim()
-            .toUpperCase();
+  return undefined;
+}
 
-          if (isLongValue) {
-            return (
-              <div key={key} className="space-y-1">
-                <span className="text-text-muted/65 text-[9px] font-bold tracking-wider uppercase select-none">
-                  {keyLabel}
-                </span>
-                <div className="border-border/20 overflow-hidden rounded-xl border bg-black/15 shadow-sm">
-                  <pre className="text-text-main/90 overflow-x-auto p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
-                    {val}
-                  </pre>
-                </div>
-              </div>
-            );
-          }
+function DiffBlock({ block }: { block: Record<string, unknown> }) {
+  const path = typeof block.path === 'string' ? block.path : 'file';
+  const oldText = typeof block.oldText === 'string' ? block.oldText : null;
+  const newText = typeof block.newText === 'string' ? block.newText : '';
 
-          const displayVal =
-            typeof val === 'object' && val !== null ? JSON.stringify(val) : String(val);
-          return (
-            <div key={key} className="flex flex-wrap items-baseline gap-2">
-              <span className="text-text-muted/65 inline-block min-w-[100px] text-[9px] font-bold tracking-wider uppercase select-none">
-                {keyLabel}:
-              </span>
-              <span className="bg-surface-secondary/40 text-text-main border-border/10 rounded border px-1.5 py-0.5 font-mono text-[10.5px] break-all select-all">
-                {displayVal}
-              </span>
-            </div>
-          );
-        })}
+  return (
+    <div className="border-border/20 overflow-hidden rounded-lg border bg-black/15">
+      <div className="bg-surface-secondary/60 border-border/20 flex items-center gap-1.5 border-b px-3 py-1.5">
+        <Diff className="text-accent h-3 w-3 shrink-0" />
+        <span className="text-text-muted font-mono text-[10px] break-all">{path}</span>
       </div>
-    );
+      <div className="no-scrollbar max-h-60 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed">
+        {oldText?.split('\n').map((line, i) => (
+          <div key={`o-${String(i)}`} className="whitespace-pre-wrap text-rose-400/80">
+            - {line}
+          </div>
+        ))}
+        {newText.split('\n').map((line, i) => (
+          <div key={`n-${String(i)}`} className="whitespace-pre-wrap text-emerald-400/80">
+            + {line}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContentBlock({ block }: { block: Record<string, unknown> }) {
+  const type = block.type;
+
+  if (type === 'diff') {
+    return <DiffBlock block={block} />;
   }
 
-  return <div className="text-text-muted/50 py-1 text-[11px] italic">No arguments provided</div>;
+  if (type === 'terminal') {
+    return null;
+  }
+
+  const inner = block.content as { text?: string } | undefined;
+  const text = typeof inner?.text === 'string' ? inner.text : '';
+  if (text.length === 0) return null;
+
+  return (
+    <div className="text-text-muted/90 max-h-60 overflow-y-auto text-[12px] leading-relaxed whitespace-pre-wrap select-text">
+      {text}
+    </div>
+  );
+}
+
+function LocationsView({ locations }: { locations: { path?: string; line?: number }[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Files className="text-text-muted/60 h-3.5 w-3.5 shrink-0" />
+      {locations.map((loc, i) => (
+        <code
+          key={i}
+          className="bg-surface-secondary/70 text-text-main border-border/25 rounded-md border px-2 py-0.5 font-mono text-[10.5px] break-all select-all"
+        >
+          {loc.path}
+          {typeof loc.line === 'number' ? `:${String(loc.line)}` : ''}
+        </code>
+      ))}
+    </div>
+  );
+}
+
+function RawOutputView({ rawOutput }: { rawOutput: unknown }) {
+  let text: string;
+  if (typeof rawOutput === 'string') {
+    text = rawOutput;
+  } else if (rawOutput !== null && rawOutput !== undefined) {
+    text = JSON.stringify(rawOutput, null, 2);
+  } else {
+    return null;
+  }
+  if (text.length === 0) return null;
+
+  return (
+    <div className="border-border/20 overflow-hidden rounded-lg border bg-black/15">
+      <div className="bg-surface-secondary/60 text-text-muted border-border/20 border-b px-3 py-1.5 text-[9px] font-bold tracking-wider uppercase">
+        Output
+      </div>
+      <pre className="no-scrollbar max-h-60 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
+        {text}
+      </pre>
+    </div>
+  );
+}
+
+function hasToolCallDetails(call: ACPEventToolCallData): boolean {
+  const blocks = Array.isArray(call.content) ? (call.content as Record<string, unknown>[]) : [];
+  if (blocks.some((b) => b.type !== 'terminal')) return true;
+  return (call.locations?.length ?? 0) > 0 || call.rawOutput !== undefined;
+}
+
+function ToolCallDetails({ call }: { call: ACPEventToolCallData }) {
+  const contentBlocks = Array.isArray(call.content)
+    ? (call.content as Record<string, unknown>[])
+    : [];
+  const locations = call.locations ?? [];
+  const rawOutput = call.rawOutput;
+
+  if (contentBlocks.length > 0) {
+    const rendered: (ReactElement | null)[] = contentBlocks.map((block, i) => (
+      <ContentBlock key={i} block={block} />
+    ));
+    const anyRendered = rendered.some((el) => el !== null);
+    if (anyRendered) {
+      return (
+        <div className="space-y-2.5">
+          {rendered}
+          {locations.length > 0 && <LocationsView locations={locations} />}
+        </div>
+      );
+    }
+  }
+
+  if (locations.length > 0) {
+    return <LocationsView locations={locations} />;
+  }
+
+  if (rawOutput !== undefined) {
+    return <RawOutputView rawOutput={rawOutput} />;
+  }
+
+  return null;
 }
 
 function ToolIcon({ icon, className }: { icon: string; className: string }) {
@@ -184,21 +201,25 @@ export const ToolCallCard = memo(function ToolCallCard({
   tool,
   payload,
   isStreaming = false,
+  durationMs,
 }: {
   tool: string;
   payload: ACPEventToolCallData;
   isStreaming?: boolean;
+  durationMs?: number | null;
 }) {
   const [open, setOpen] = useState(false);
+  const userToggledRef = useRef(false);
 
-  // Auto-expand tool calls while streaming/active, but allow user to toggle after
+  // Auto-expand while streaming, collapse when streaming ends unless user toggled manually
   useEffect(() => {
-    if (isStreaming) {
-      setOpen(true);
+    if (!userToggledRef.current) {
+      setOpen(isStreaming);
     }
   }, [isStreaming]);
 
   const args = payload.arguments ?? {};
+  const hasDetails = hasToolCallDetails(payload);
 
   const status = payload.status;
   const isFailed = status === 'failed';
@@ -217,49 +238,76 @@ export const ToolCallCard = memo(function ToolCallCard({
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (c) => c.toUpperCase());
 
+  const contextSnippet = getContextSnippet(tool, args);
+
+  const toggle = () => {
+    userToggledRef.current = true;
+    setOpen((v) => !v);
+  };
+
   return (
     <div data-font-ctx="terminal" className="group/tool w-full py-0.5">
-      <button
-        type="button"
-        className="focus-visible:ring-accent/40 focus-visible:ring-offset-background flex w-full cursor-pointer items-center rounded-lg border-none bg-transparent text-left outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1"
-        onClick={() => {
-          setOpen(!open);
-        }}
+      <div
+        className={`overflow-hidden rounded-lg border transition-colors ${
+          isFailed ? 'border-rose-500/25 bg-rose-500/5' : 'border-border/25 bg-surface-secondary/30'
+        }`}
       >
-        <Card
-          status={isFailed ? 'error' : isPending ? 'pending' : 'default'}
-          className="flex-1 flex-row items-center justify-between px-2.5 py-1.5 backdrop-blur-[1px]"
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          disabled={!hasDetails}
+          className="focus-visible:ring-accent/40 focus-visible:ring-offset-background flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1 disabled:cursor-default"
         >
-          <div className="flex min-w-0 items-center gap-2">
-            <div
-              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ${isStreaming ? 'scale-105' : 'group-hover/tool:scale-105'} ${iconBgBorder}`}
-            >
-              {isFailed ? (
-                <AlertCircle className="h-3 w-3 text-rose-500" />
-              ) : (
-                <ToolIcon icon={toolMeta.icon} className={`h-3 w-3 ${toolMeta.color}`} />
-              )}
-            </div>
-            <span className="text-text-main truncate text-[11px] font-bold tracking-tight">
-              {titleText}
-            </span>
+          <div
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ${isStreaming ? 'scale-105' : 'group-hover/tool:scale-105'} ${iconBgBorder}`}
+          >
+            {isFailed ? (
+              <AlertCircle className="h-3 w-3 text-rose-500" />
+            ) : (
+              <ToolIcon icon={toolMeta.icon} className={`h-3 w-3 ${toolMeta.color}`} />
+            )}
           </div>
-          <div className="text-text-muted/40 group-hover/tool:text-text-main ml-2 shrink-0 transition-colors">
-            <ChevronRight
-              className={`h-3 w-3 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
-            />
-          </div>
-        </Card>
-      </button>
 
-      {open && (
-        <Card
-          status={isFailed ? 'error' : 'default'}
-          className="liquid-glass hover:border-border/20 mt-1.5 p-2.5"
-        >
-          <ToolArgumentsViewer name={tool} args={args} />
-        </Card>
-      )}
+          <span className="text-text-main truncate text-[11px] font-bold tracking-tight">
+            {titleText}
+          </span>
+
+          {contextSnippet && (
+            <span className="text-text-muted/55 min-w-0 flex-1 truncate font-mono text-[10.5px]">
+              {contextSnippet}
+            </span>
+          )}
+
+          <span className="ml-auto flex shrink-0 items-center gap-2 pl-2">
+            {isStreaming && <StreamingDots className="ml-0" />}
+            {!isStreaming && isFailed && <AlertCircle className="h-3.5 w-3.5 text-rose-500" />}
+            {!isStreaming && !isFailed && isPending && (
+              <span className="bg-text-muted/40 h-1.5 w-1.5 rounded-full" />
+            )}
+            {!isStreaming && !isFailed && !isPending && (
+              <Check className="text-brand-green h-3.5 w-3.5 shrink-0 stroke-[3]" />
+            )}
+            {!isStreaming && durationMs != null && durationMs > 0 && (
+              <span className="text-text-muted/40 shrink-0 font-mono text-[10px] tabular-nums">
+                {formatDuration(durationMs)}
+              </span>
+            )}
+            {hasDetails ? (
+              <ChevronRight
+                className={`text-text-muted/40 group-hover/tool:text-text-main h-3 w-3 shrink-0 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
+                aria-hidden={true}
+              />
+            ) : null}
+          </span>
+        </button>
+
+        {open && hasDetails && (
+          <div className="border-border/20 border-t px-3 py-2.5">
+            <ToolCallDetails call={payload} />
+          </div>
+        )}
+      </div>
     </div>
   );
 });

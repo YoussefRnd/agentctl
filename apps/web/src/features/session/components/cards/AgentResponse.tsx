@@ -1,14 +1,10 @@
 import { memo, useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import { Square } from 'lucide-react';
-import { api } from '@agentctl/api-client';
 import { StreamingDots } from '@/shared/StreamingDots';
 import { ProviderIconUrl } from '@/shared/ProviderIcon';
 import { SubagentBlock } from './SubagentBlock';
 import { ThinkingBlock } from './ThinkingBlock';
-import { MarkdownCodeBlock } from './MarkdownCodeBlock';
+import { ActivityTimeline } from './ActivityTimeline';
+import { StreamingMarkdown } from './StreamingMarkdown';
 import type { SubagentGroup } from './subagentBlockUtils';
 import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
 import { isACPEventText, isACPEventToolCall, isACPEventSubagentUpdate } from '@agentctl/shared';
@@ -42,15 +38,13 @@ interface AgentResponseProps {
   selectedProviderId?: string | null;
 }
 
-const REHYPE_PLUGINS = [remarkGfm, rehypeHighlight];
-
 const AgentResponseComponent = function AgentResponse({
   events,
   isStreaming = false,
   isActive = false,
   selectedProviderId,
 }: AgentResponseProps) {
-  const { sessionId, sessionData } = useSession();
+  const { sessionId } = useSession();
   const { providers } = useProviders(sessionId);
 
   const providerIcon = useMemo(() => {
@@ -58,8 +52,9 @@ const AgentResponseComponent = function AgentResponse({
     return providers.find((p) => p.id === selectedProviderId)?.agent?.icon ?? null;
   }, [providers, selectedProviderId]);
 
-  const { activityEvents, responseEvent, subagentGroups } = useMemo(() => {
-    const activity: ACPEventRow[] = [];
+  const { thoughtEvents, toolEvents, responseEvent, subagentGroups } = useMemo(() => {
+    const thoughts: ACPEventRow[] = [];
+    const tools: ACPEventRow[] = [];
     let response: ACPEventRow | undefined;
 
     const toolCallGroups = new Map<string, ACPEventRow[]>();
@@ -106,12 +101,10 @@ const AgentResponseComponent = function AgentResponse({
 
       if (isACPEventText(e) && e.data.role === 'provider') {
         response = e;
-      } else if (
-        (isACPEventText(e) && e.data.role === 'thought') ||
-        isACPEventToolCall(e) ||
-        e.type === 'approval_request'
-      ) {
-        activity.push(e);
+      } else if (isACPEventText(e) && e.data.role === 'thought') {
+        thoughts.push(e);
+      } else if (isACPEventToolCall(e) || e.type === 'approval_request') {
+        tools.push(e);
       }
     }
 
@@ -168,12 +161,17 @@ const AgentResponseComponent = function AgentResponse({
       });
     }
 
-    return { activityEvents: activity, responseEvent: response, subagentGroups: groups };
+    return {
+      thoughtEvents: thoughts,
+      toolEvents: tools,
+      responseEvent: response,
+      subagentGroups: groups,
+    };
   }, [events]);
 
-  const hasActivity = activityEvents.length > 0;
-  const isRunning = sessionData?.session.status === 'running';
-  const showStopButton = (isStreaming || isActive) && isRunning;
+  const hasActivity = thoughtEvents.length > 0 || toolEvents.length > 0;
+  const isInitialThinking =
+    !hasActivity && !responseEvent && subagentGroups.length === 0 && (isStreaming || isActive);
 
   return (
     <div data-font-ctx="chat" className="group/agent relative flex flex-col gap-2 py-3">
@@ -192,13 +190,18 @@ const AgentResponseComponent = function AgentResponse({
         </div>
 
         <div className="min-w-0 flex-1">
-          {hasActivity && (
-            <div className="mt-[10px] mb-4">
-              <ThinkingBlock
-                events={activityEvents}
-                isStreaming={isStreaming}
-                isActive={isActive}
-              />
+          {(hasActivity || isInitialThinking) && (
+            <div className="mt-1 mb-3 space-y-3">
+              {(thoughtEvents.length > 0 || isInitialThinking) && (
+                <ThinkingBlock
+                  events={thoughtEvents}
+                  isStreaming={isStreaming}
+                  isActive={isActive}
+                />
+              )}
+              {toolEvents.length > 0 && (
+                <ActivityTimeline events={toolEvents} isStreaming={isStreaming} />
+              )}
             </div>
           )}
 
@@ -214,28 +217,11 @@ const AgentResponseComponent = function AgentResponse({
 
           {responseEvent && (
             <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 max-w-none text-[15px] leading-7 tracking-normal">
-              <ReactMarkdown rehypePlugins={REHYPE_PLUGINS} components={{ pre: MarkdownCodeBlock }}>
-                {(responseEvent.data as { content: string }).content}
-              </ReactMarkdown>
+              <StreamingMarkdown
+                content={(responseEvent.data as { content: string }).content}
+                isStreaming={isStreaming}
+              />
               {isStreaming && <StreamingDots />}
-            </div>
-          )}
-
-          {showStopButton && (
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (sessionId) {
-                    void api.cancelSession({ params: { id: sessionId }, body: {} });
-                  }
-                }}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-400 shadow-sm transition-all hover:bg-rose-500/20 active:scale-95"
-                title="Stop generation"
-              >
-                <Square className="h-3.5 w-3.5 fill-current" />
-                <span>Stop generation</span>
-              </button>
             </div>
           )}
         </div>

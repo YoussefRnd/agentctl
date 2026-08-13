@@ -1,20 +1,21 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
 import { ChevronRight } from 'lucide-react';
 import { Spinner } from '@/components/ui/Spinner';
+import { StreamingDots } from '@/shared/StreamingDots';
 import { useSettings } from '@/hooks/useSettings';
 import { useSession } from '@/contexts/SessionContext';
-import { ToolCallCard } from './ToolCallCard';
-import { TimelineEvent } from './TimelineEvent';
-import { getToolMeta } from '@/utils/toolColors';
-import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
+import { StreamingMarkdown } from './StreamingMarkdown';
+import type { ACPEventRow } from '@agentctl/shared';
 
 interface ThinkingBlockProps {
   events: ACPEventRow[];
   isStreaming?: boolean;
   isActive?: boolean;
+}
+
+function formatTokens(count: number): string {
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+  return String(count);
 }
 
 export function ThinkingBlock({
@@ -31,21 +32,21 @@ export function ThinkingBlock({
   const isCompleted = !isActive || !isSessionActive;
 
   const [isOpen, setIsOpen] = useState(() => !isCompleted && showThinking);
-  const prevIsCompletedRef = useRef(isCompleted);
+  const userToggledRef = useRef(false);
   const prevShowThinkingRef = useRef(showThinking);
 
   useEffect(() => {
-    if (
-      isCompleted !== prevIsCompletedRef.current ||
-      showThinking !== prevShowThinkingRef.current
-    ) {
-      prevIsCompletedRef.current = isCompleted;
+    if (showThinking !== prevShowThinkingRef.current) {
       prevShowThinkingRef.current = showThinking;
       if (!showThinking) {
         setIsOpen(false);
-      } else {
-        setIsOpen(!isCompleted);
+      } else if (!isCompleted) {
+        setIsOpen(true);
       }
+      return;
+    }
+    if (isCompleted && !userToggledRef.current) {
+      setIsOpen(false);
     }
   }, [isCompleted, showThinking]);
 
@@ -65,15 +66,21 @@ export function ThinkingBlock({
   }, [events]);
 
   const label = useMemo(() => {
-    if (!isCompleted) return 'Thinking...';
+    if (!isCompleted) return 'Thinking';
     const dur =
       totalDurationMs > 1000
         ? `${(totalDurationMs / 1000).toFixed(1)}s`
         : `${String(totalDurationMs)}ms`;
     const parts = [`Thought for ${dur}`];
-    if (totalTokens > 0) parts.push(`${String(totalTokens)} tokens`);
+    if (totalTokens > 0) parts.push(`${formatTokens(totalTokens)} tokens`);
     return parts.join(' · ');
   }, [isCompleted, totalDurationMs, totalTokens]);
+
+  const toggle = () => {
+    if (events.length === 0) return;
+    userToggledRef.current = true;
+    setIsOpen((v) => !v);
+  };
 
   return (
     <div className="group/activity w-full py-0.5">
@@ -81,71 +88,47 @@ export function ThinkingBlock({
         type="button"
         aria-expanded={isOpen}
         aria-controls="activity-details"
-        onClick={() => {
-          setIsOpen((v) => !v);
-        }}
-        className="text-text-muted/70 hover:text-text-main focus-visible:ring-accent/40 focus-visible:ring-offset-background flex cursor-pointer items-center gap-2 rounded-sm py-1 text-[13px] font-medium tracking-wide transition-colors outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1"
+        onClick={toggle}
+        className="border-border/30 bg-surface-secondary/30 text-text-muted/80 hover:text-text-main hover:border-border/50 focus-visible:ring-accent/40 focus-visible:ring-offset-background flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-medium tracking-wide transition-all outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1"
       >
         <Spinner done={isCompleted} />
 
         <span>{label}</span>
 
-        {!isCompleted && (
-          <span className="bg-accent/40 inline-block h-3.5 w-1.5 animate-pulse align-middle" />
-        )}
+        {!isCompleted && <StreamingDots className="ml-0.5" />}
 
-        <ChevronRight
-          className={`h-3 w-3 opacity-60 transition-transform duration-150 group-hover/activity:opacity-100 ${isOpen ? 'rotate-90' : ''}`}
-          aria-hidden={true}
-        />
+        {events.length > 0 && (
+          <ChevronRight
+            className={`h-3 w-3 opacity-60 transition-transform duration-150 group-hover/activity:opacity-100 ${isOpen ? 'rotate-90' : ''}`}
+            aria-hidden={true}
+          />
+        )}
       </button>
 
       {isOpen && (
-        <div id="activity-details" className="relative mt-2 ml-1">
-          <div>
-            {events.map((e) => {
-              const isLastStreaming = isStreaming && e.id === events[events.length - 1].id;
-
-              if (e.type === 'text' && 'role' in e.data && e.data.role === 'thought') {
-                return (
-                  <TimelineEvent key={e.id} dotColor="bg-accent" isPulsing={isLastStreaming}>
-                    <div className="text-text-muted/95 prose prose-invert prose-p:my-1.5 prose-pre:bg-surface-secondary/40 prose-pre:border prose-pre:border-border/30 prose-pre:rounded-md max-w-none text-[13.5px] leading-relaxed tracking-tight select-text">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                        {(e.data as { content: string }).content}
-                      </ReactMarkdown>
-                      {isLastStreaming && (
-                        <span className="bg-accent/40 ml-1 inline-block h-3 w-1 animate-pulse align-middle" />
-                      )}
-                    </div>
-                  </TimelineEvent>
-                );
-              }
-
-              if (e.type === 'tool_call' || e.type === 'approval_request') {
-                const reqData = e.data as {
-                  name?: string;
-                  request?: { toolCall?: { name?: string; arguments?: Record<string, unknown> } };
-                };
-                const toolName = reqData.request?.toolCall?.name ?? reqData.name ?? 'tool';
-                const payload = (
-                  e.type === 'approval_request' ? (reqData.request?.toolCall ?? reqData) : e.data
-                ) as ACPEventToolCallData;
-
-                const isFailed = payload.status === 'failed';
-                const dynamicDotColor = isFailed
-                  ? 'bg-rose-500'
-                  : getToolMeta(payload.kind, toolName).dotColor;
-
-                return (
-                  <TimelineEvent key={e.id} dotColor={dynamicDotColor} isPulsing={isLastStreaming}>
-                    <ToolCallCard tool={toolName} payload={payload} isStreaming={isLastStreaming} />
-                  </TimelineEvent>
-                );
-              }
-
-              return null;
-            })}
-          </div>
+        <div
+          id="activity-details"
+          className="animate-in fade-in slide-in-from-top-1 mt-2 space-y-2 duration-150"
+        >
+          {events.map((e) => {
+            const isLastStreaming = isStreaming && e.id === events[events.length - 1].id;
+            return (
+              <div
+                key={e.id}
+                className="border-accent/30 bg-surface-secondary/25 rounded-r-lg border-l-2 py-2 pr-3 pl-3"
+              >
+                <div className="text-text-muted/95 prose prose-invert prose-p:my-1.5 prose-pre:bg-surface-secondary/40 prose-pre:border prose-pre:border-border/30 prose-pre:rounded-md max-w-none text-[13px] leading-relaxed tracking-tight select-text">
+                  <StreamingMarkdown
+                    content={(e.data as { content: string }).content}
+                    isStreaming={isLastStreaming}
+                  />
+                  {isLastStreaming && (
+                    <span className="bg-accent/40 ml-1 inline-block h-3 w-1 animate-pulse align-middle" />
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

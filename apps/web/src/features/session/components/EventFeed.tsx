@@ -1,6 +1,6 @@
-import { useRef, useState, useCallback, useMemo } from 'react';
+import { useRef, useState, useCallback, useMemo, useEffect } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
-import { Brain, RefreshCw } from 'lucide-react';
+import { Brain, RefreshCw, ArrowDown } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { TextCard } from './cards/TextCard';
 import { AgentResponse } from './cards/AgentResponse';
@@ -101,8 +101,21 @@ export function EventFeed({
         }
       }
     }
+
+    if (isSessionRunning) {
+      const lastGroup = result[result.length - 1];
+      if (lastGroup.type === 'user') {
+        result.push({
+          type: 'agent',
+          events: [],
+          isStreaming: true,
+          id: 'agent-turn-optimistic',
+        });
+      }
+    }
+
     return result;
-  }, [events, streamingEventId]);
+  }, [events, streamingEventId, isSessionRunning]);
 
   const latestAgentGroupId = useMemo(() => {
     if (groupedEvents.length === 0) return null;
@@ -112,6 +125,22 @@ export function EventFeed({
     }
     return null;
   }, [groupedEvents]);
+
+  // Pin to bottom while response is generating
+  useEffect(() => {
+    if (autoScroll && (isSessionRunning || streamingEventId != null)) {
+      const timer = requestAnimationFrame(() => {
+        virtuosoRef.current?.scrollToIndex({
+          index: Math.max(0, groupedEvents.length - 1),
+          align: 'end',
+          behavior: 'auto',
+        });
+      });
+      return () => {
+        cancelAnimationFrame(timer);
+      };
+    }
+  }, [events, autoScroll, isSessionRunning, streamingEventId, groupedEvents.length]);
 
   const atBottomStateChange = useCallback((atBottom: boolean) => {
     setAutoScroll(atBottom);
@@ -166,7 +195,7 @@ export function EventFeed({
         data={groupedEvents}
         defaultItemHeight={100}
         initialTopMostItemIndex={groupedEvents.length > 0 ? groupedEvents.length - 1 : 0}
-        followOutput={autoScroll ? 'smooth' : false}
+        followOutput={(isAtBottom) => (isAtBottom && autoScroll ? 'auto' : false)}
         atBottomStateChange={atBottomStateChange}
         itemContent={(index, group) => (
           <div className="mx-auto max-w-[800px] px-6">
@@ -301,16 +330,18 @@ export function EventFeed({
       {!autoScroll && (
         <button
           type="button"
-          className="group text-text-main hover:bg-accent hover:text-background absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2 text-[10px] font-medium tracking-wide shadow-sm backdrop-blur-xl transition-all hover:scale-105 active:scale-95"
+          className="group border-accent/40 bg-surface-tertiary/95 text-accent hover:border-accent hover:bg-accent hover:text-surface-dark absolute bottom-6 left-1/2 z-50 flex h-9 w-9 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border shadow-xl backdrop-blur-xl transition-all duration-200 hover:scale-110 active:scale-95"
+          title="Scroll to bottom"
           onClick={() => {
             setAutoScroll(true);
             virtuosoRef.current?.scrollToIndex({
               index: groupedEvents.length - 1,
+              align: 'end',
               behavior: 'smooth',
             });
           }}
         >
-          <span className="opacity-60 group-hover:opacity-100">Scroll to bottom</span>
+          <ArrowDown className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5" />
         </button>
       )}
     </div>
