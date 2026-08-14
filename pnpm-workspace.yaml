@@ -1,6 +1,6 @@
 packages:
-  - ./apps/*
-  - ./packages/*
+  - apps/*
+  - packages/*
 # TypeScript 7 (native tsc) + TypeScript 6 (JS API for eslint / tooling).
 # Keep both until TS 7.1+ ships a stable programmatic API and the ecosystem
 # (typescript-eslint, etc.) can consume it directly.
