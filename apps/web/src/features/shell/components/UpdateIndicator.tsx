@@ -24,12 +24,14 @@ export function UpdateIndicator({ state, onInstall }: UpdateIndicatorProps) {
       onClick={onInstall}
       disabled={downloading}
       title={downloaded ? `Restart to install v${state.version}` : `Downloading update…`}
-      className="app-region-no-drag inline-flex items-center gap-1.5 rounded-md bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/25 disabled:cursor-default disabled:opacity-80"
+      className="app-region-no-drag bg-accent/15 text-accent hover:bg-accent/25 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-80"
     >
       {downloading ? (
         <>
           <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-          <span>{'percent' in state ? `${Math.round(state.percent).toString()}%` : 'Downloading…'}</span>
+          <span>
+            {'percent' in state ? `${Math.round(state.percent).toString()}%` : 'Downloading…'}
+          </span>
         </>
       ) : (
         <>

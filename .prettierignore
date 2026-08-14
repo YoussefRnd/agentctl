@@ -1,0 +1,26 @@
+# Dependencies & Package Managers
+node_modules/
+.pnpm-store/
+pnpm-lock.yaml
+
+# Build Outputs & Bundles
+dist/
+out/
+release/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Database Migrations & Snapshots
+drizzle/
+*.sqlite
+*.sqlite-journal
+*.db
+
+# Environment & Logs
+.env
+.env.*
+*.log
+
+# Git
+.git/

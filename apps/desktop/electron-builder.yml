@@ -9,8 +9,8 @@ files:
   - out/**/*
   - package.json
   - drizzle/**/*
-  - "!node_modules/**/{test,tests,__tests__}/**"
-  - "!node_modules/**/*.d.ts"
+  - '!node_modules/**/{test,tests,__tests__}/**'
+  - '!node_modules/**/*.d.ts'
 
 # Rebuild native modules for Electron
 npmRebuild: true
@@ -27,7 +27,7 @@ win:
     - target: nsis
       arch:
         - x64
-  artifactName: "${productName}-${version}-Windows-Setup.${ext}"
+  artifactName: '${productName}-${version}-Windows-Setup.${ext}'
 
 nsis:
   oneClick: false
@@ -40,12 +40,12 @@ mac:
       arch:
         - x64
         - arm64
-  artifactName: "${productName}-${version}-Mac-${arch}.${ext}"
+  artifactName: '${productName}-${version}-Mac-${arch}.${ext}'
 
 # ─── Linux ───
 linux:
   target:
     - target: AppImage
-  artifactName: "${productName}-${version}-Linux-${arch}.${ext}"
+  artifactName: '${productName}-${version}-Linux-${arch}.${ext}'
   category: Development
   syncDesktopName: true

@@ -45,15 +45,28 @@ export function McpSettings() {
   });
 
   const validate = (): boolean => {
-    if (!formState.name) { toast.error('Name is required.'); return false; }
-    if (formState.type === 'local' && !formState.command) { toast.error('Command is required for local servers.'); return false; }
-    if (formState.type === 'remote' && !formState.url) { toast.error('URL is required for remote servers.'); return false; }
+    if (!formState.name) {
+      toast.error('Name is required.');
+      return false;
+    }
+    if (formState.type === 'local' && !formState.command) {
+      toast.error('Command is required for local servers.');
+      return false;
+    }
+    if (formState.type === 'remote' && !formState.url) {
+      toast.error('URL is required for remote servers.');
+      return false;
+    }
     return true;
   };
 
   const handleSaveNew = () => {
     if (!validate()) return;
-    const generatedId = formState.name.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '-').replace(/[\s_-]+/g, '-');
+    const generatedId = formState.name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/[\s_-]+/g, '-');
     addMcpServer({ id: generatedId, ...buildServerPayload(), enabled: true, autoApprove: false });
     handleResetForm();
   };
@@ -87,7 +100,7 @@ export function McpSettings() {
     serverId: string,
     toolPermissions: string | null | undefined,
     toolName: string,
-    val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit'
+    val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit',
   ) => {
     const updatedJson = updateToolOverride(toolPermissions, toolName, val);
     updateMcpServer({ id: serverId, toolPermissions: updatedJson });
@@ -102,14 +115,14 @@ export function McpSettings() {
           <h1 className="text-text-main text-2xl font-black tracking-widest uppercase">
             SETTINGS::MODEL_CONTEXT_PROTOCOL
           </h1>
-          <p className="text-text-muted mt-1 caption-xs opacity-60">
-            MANAGE MCP INTEGRATIONS
-          </p>
+          <p className="text-text-muted caption-xs mt-1 opacity-60">MANAGE MCP INTEGRATIONS</p>
         </div>
         {!showForm && (
           <Button
             variant="outline"
-            onClick={() => { setIsAddingNew(true); }}
+            onClick={() => {
+              setIsAddingNew(true);
+            }}
             className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-9 items-center gap-2 rounded-xl border px-4 text-[11px] font-bold tracking-widest uppercase"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -123,7 +136,13 @@ export function McpSettings() {
           <McpServerForm
             formState={formState}
             onChange={setFormState}
-            onSave={editingId ? () => { handleSaveEdit(editingId); } : handleSaveNew}
+            onSave={
+              editingId
+                ? () => {
+                    handleSaveEdit(editingId);
+                  }
+                : handleSaveNew
+            }
             onCancel={handleResetForm}
             isEditing={!!editingId}
           />
@@ -142,16 +161,29 @@ export function McpSettings() {
                 key={server.id}
                 server={server}
                 isExpanded={expandedServers[server.id] ?? false}
-                onToggleExpand={() => { toggleServerExpanded(server.id); }}
-                onToggleEnabled={(checked) => { handleToggle(server, checked); }}
-                onEdit={() => { handleStartEdit(server); }}
+                onToggleExpand={() => {
+                  toggleServerExpanded(server.id);
+                }}
+                onToggleEnabled={(checked) => {
+                  handleToggle(server, checked);
+                }}
+                onEdit={() => {
+                  handleStartEdit(server);
+                }}
                 onDelete={() => {
                   if (confirm(`Are you sure you want to delete ${server.name}?`)) {
                     deleteMcpServer(server.id);
                   }
                 }}
-                onUpdatePolicy={(val) => { updateMcpServer({ id: server.id, approvalPolicy: val as McpServerData['approvalPolicy'] }); }}
-                onUpdateToolPermission={(toolName, val) => { handleToolOverride(server.id, server.toolPermissions, toolName, val); }}
+                onUpdatePolicy={(val) => {
+                  updateMcpServer({
+                    id: server.id,
+                    approvalPolicy: val as McpServerData['approvalPolicy'],
+                  });
+                }}
+                onUpdateToolPermission={(toolName, val) => {
+                  handleToolOverride(server.id, server.toolPermissions, toolName, val);
+                }}
               />
             ))}
 
@@ -169,7 +201,9 @@ export function McpSettings() {
                   </p>
                 </div>
                 <Button
-                  onClick={() => { setIsAddingNew(true); }}
+                  onClick={() => {
+                    setIsAddingNew(true);
+                  }}
                   className="bg-accent hover:bg-accent/80 text-brand-crust mt-2 flex h-8 items-center gap-1 rounded-xl px-4 text-[10px] font-extrabold tracking-widest uppercase"
                 >
                   <Plus className="h-3.5 w-3.5 stroke-[3]" />

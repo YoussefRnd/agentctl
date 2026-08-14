@@ -8,7 +8,10 @@ export function UpdateSettingsCard() {
   const [version, setVersion] = useState<string>('');
 
   useEffect(() => {
-    void window.electronAPI?.getAppVersion().then(setVersion).catch(() => undefined);
+    void window.electronAPI
+      ?.getAppVersion()
+      .then(setVersion)
+      .catch(() => undefined);
   }, []);
 
   const updatable =

@@ -77,7 +77,7 @@ export function formatKeyValuesJson(jsonStr: string | null | undefined): string 
 
 export function getToolOverride(
   toolPermissionsJson: string | null | undefined,
-  toolName: string
+  toolName: string,
 ): 'always_prompt' | 'auto_approve' | 'deny' | 'inherit' {
   if (!toolPermissionsJson) return 'inherit';
   try {
@@ -95,7 +95,7 @@ export function getToolOverride(
 export function updateToolOverride(
   toolPermissionsJson: string | null | undefined,
   toolName: string,
-  val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit'
+  val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit',
 ): string {
   let overridesMap: Record<string, string> = {};
   if (toolPermissionsJson) {
@@ -106,15 +106,13 @@ export function updateToolOverride(
       } else {
         overridesMap = {};
       }
-  } catch {
-    /* ignore parse errors */
-  }
+    } catch {
+      /* ignore parse errors */
+    }
   }
 
   if (val === 'inherit') {
-    overridesMap = Object.fromEntries(
-      Object.entries(overridesMap).filter(([k]) => k !== toolName),
-    );
+    overridesMap = Object.fromEntries(Object.entries(overridesMap).filter(([k]) => k !== toolName));
   } else {
     overridesMap[toolName] = val;
   }

@@ -40,9 +40,7 @@ export function formatDuration(
   return `${String(Math.floor(seconds))}s`;
 }
 
-export function formatPeek(
-  childEvents: ACPEventRow[] | null | undefined,
-): string {
+export function formatPeek(childEvents: ACPEventRow[] | null | undefined): string {
   if (!childEvents || childEvents.length === 0) return 'Spawning…';
   const last = childEvents[childEvents.length - 1];
 
@@ -51,7 +49,7 @@ export function formatPeek(
     const toolName = tcData.name;
     const args = tcData.arguments;
     const firstStrArg = args
-      ? (Object.values(args).find((v): v is string => typeof v === 'string'))
+      ? Object.values(args).find((v): v is string => typeof v === 'string')
       : undefined;
     const peek = firstStrArg ? `${toolName} ${firstStrArg}` : toolName;
     return peek.length > 80 ? `${peek.slice(0, 77)}…` : peek;
@@ -70,9 +68,7 @@ export interface DotsResult {
   overflow?: number;
 }
 
-export function buildProgressDots(
-  childEvents: ACPEventRow[] | null | undefined,
-): DotsResult[] {
+export function buildProgressDots(childEvents: ACPEventRow[] | null | undefined): DotsResult[] {
   if (!childEvents) return [];
   const tcEvents = childEvents.filter((e) => e.type === 'tool_call');
   if (tcEvents.length === 0) return [];

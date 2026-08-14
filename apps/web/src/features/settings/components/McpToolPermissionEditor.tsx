@@ -4,7 +4,10 @@ interface McpToolPermissionEditorProps {
   toolName: string;
   description: string | null | undefined;
   toolPermissions: string | null | undefined;
-  onUpdateOverride: (toolName: string, val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit') => void;
+  onUpdateOverride: (
+    toolName: string,
+    val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit',
+  ) => void;
 }
 
 const overrideOptions = [
@@ -42,8 +45,10 @@ export function McpToolPermissionEditor({
             key={opt.value}
             id={`mcp-tool-override-${toolName}-${opt.value}`}
             type="button"
-            onClick={() => { onUpdateOverride(shortName, opt.value); }}
-            className={`cursor-pointer rounded-lg px-2.5 py-1 label-3xs transition-all ${
+            onClick={() => {
+              onUpdateOverride(shortName, opt.value);
+            }}
+            className={`label-3xs cursor-pointer rounded-lg px-2.5 py-1 transition-all ${
               currentOverride === opt.value
                 ? 'bg-accent text-brand-crust shadow-sm'
                 : 'text-text-muted hover:text-text-main hover:bg-white/5'

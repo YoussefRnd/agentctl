@@ -14,7 +14,10 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!window.electronAPI?.update) return;
-    void window.electronAPI.update.getState().then(setState).catch(() => undefined);
+    void window.electronAPI.update
+      .getState()
+      .then(setState)
+      .catch(() => undefined);
     return window.electronAPI.update.onUpdate(setState);
   }, []);
 

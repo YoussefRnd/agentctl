@@ -14,7 +14,10 @@ interface McpServerCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onUpdatePolicy: (policy: string) => void;
-  onUpdateToolPermission: (toolName: string, val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit') => void;
+  onUpdateToolPermission: (
+    toolName: string,
+    val: 'always_prompt' | 'auto_approve' | 'deny' | 'inherit',
+  ) => void;
 }
 
 export function McpServerCard({
@@ -105,12 +108,11 @@ export function McpServerCard({
 
         <div
           className="flex items-center gap-3"
-          onClick={(e) => { e.stopPropagation(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
         >
-          <Switch
-            checked={server.enabled}
-            onCheckedChange={onToggleEnabled}
-          />
+          <Switch checked={server.enabled} onCheckedChange={onToggleEnabled} />
           <ChevronDown
             className={`text-text-muted h-3.5 w-3.5 transition-transform duration-300 ${
               isExpanded ? 'text-text-main rotate-180' : ''
@@ -120,7 +122,10 @@ export function McpServerCard({
       </button>
 
       {isExpanded && (
-        <div id={`mcp-server-content-${server.id}`} className="animate-in fade-in slide-in-from-top-1 border-border/10 bg-surface-secondary/5 space-y-4 border-t p-4">
+        <div
+          id={`mcp-server-content-${server.id}`}
+          className="animate-in fade-in slide-in-from-top-1 border-border/10 bg-surface-secondary/5 space-y-4 border-t p-4"
+        >
           <div className="border-border/55 bg-surface-secondary/20 flex flex-col gap-3 rounded-xl border p-4 select-none">
             <div className="flex items-center justify-between">
               <div>
@@ -128,7 +133,8 @@ export function McpServerCard({
                   DEFAULT_APPROVAL_POLICY
                 </p>
                 <p className="text-text-muted mt-0.5 text-[9.5px] font-bold tracking-tight uppercase opacity-65">
-                  Default action for new or unconfigured tools from this server in auto-approve mode.
+                  Default action for new or unconfigured tools from this server in auto-approve
+                  mode.
                 </p>
               </div>
               <Select
@@ -164,9 +170,7 @@ export function McpServerCard({
             </div>
             {server.type === 'local' && (
               <div className="space-y-1">
-                <strong className="text-text-muted label-3xs opacity-45">
-                  ARGUMENTS
-                </strong>
+                <strong className="text-text-muted label-3xs opacity-45">ARGUMENTS</strong>
                 <pre className="text-text-main bg-surface-secondary/30 border-border/25 overflow-x-auto rounded-xl border p-2.5 font-mono text-[10px] whitespace-pre-wrap">
                   {formatArgumentsJson(server.launchArgs) || 'None'}
                 </pre>
@@ -196,7 +200,10 @@ export function McpServerCard({
           <div className="border-border/5 flex items-center justify-end gap-2 border-t pt-3.5">
             <Button
               variant="ghost"
-              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
               className="border-border/20 hover:bg-surface-secondary/40 text-text-muted hover:text-text-main flex h-8 items-center gap-1.5 border px-3 text-[10px] font-bold tracking-widest uppercase"
             >
               <Edit2 className="h-3 w-3" />

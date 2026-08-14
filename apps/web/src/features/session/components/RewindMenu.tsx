@@ -144,7 +144,7 @@ export function RewindMenu({
                   ? 'cursor-not-allowed border-transparent opacity-35'
                   : isFocused
                     ? 'border-border/40 bg-surface-secondary/30 cursor-pointer'
-                    : 'border-border/10 bg-surface-secondary/[0.02] cursor-pointer hover:border-border/30 hover:bg-surface-secondary/20'
+                    : 'border-border/10 bg-surface-secondary/[0.02] hover:border-border/30 hover:bg-surface-secondary/20 cursor-pointer'
               }`}
               onClick={() => {
                 if (!opt.disabled) handleItemClick(opt.mode);
@@ -162,7 +162,7 @@ export function RewindMenu({
                 <ItemIcon className="text-text-muted h-3 w-3" aria-hidden="true" />
               </div>
               <div className="min-w-0">
-                <div className="text-text-main truncate text-[12px] font-medium leading-snug">
+                <div className="text-text-main truncate text-[12px] leading-snug font-medium">
                   {opt.label}
                 </div>
                 <div className="text-text-muted truncate text-[10px] leading-tight">

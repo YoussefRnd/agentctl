@@ -25,7 +25,9 @@ export interface Logger {
   debug: LogFn;
 }
 
-const noop = () => { return; };
+const noop = () => {
+  return;
+};
 
 /** Silent logger — used as the default when no logger is injected. */
 export const noopLogger: Logger = {

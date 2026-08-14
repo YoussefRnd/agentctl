@@ -12,8 +12,16 @@ interface McpServerFormProps {
 
 type Setter = <K extends keyof McpFormState>(key: K, value: McpFormState[K]) => void;
 
-export function McpServerForm({ formState, onChange, onSave, onCancel, isEditing }: McpServerFormProps) {
-  const set: Setter = (key, value) => { onChange({ ...formState, [key]: value }); };
+export function McpServerForm({
+  formState,
+  onChange,
+  onSave,
+  onCancel,
+  isEditing,
+}: McpServerFormProps) {
+  const set: Setter = (key, value) => {
+    onChange({ ...formState, [key]: value });
+  };
 
   return (
     <Card className="border-accent/20 bg-accent/5 space-y-5 rounded-2xl border p-5">
@@ -40,21 +48,23 @@ export function McpServerForm({ formState, onChange, onSave, onCancel, isEditing
             id="mcp-name"
             placeholder="Name"
             value={formState.name}
-            onChange={(e) => { set('name', e.target.value); }}
+            onChange={(e) => {
+              set('name', e.target.value);
+            }}
             className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-xl border text-xs"
           />
         </div>
 
         <div className="space-y-1">
-          <span className="text-text-muted block label-3xs opacity-70">
-            Server Type
-          </span>
+          <span className="text-text-muted label-3xs block opacity-70">Server Type</span>
           <div className="border-border/30 bg-surface/40 flex w-fit gap-1 rounded-xl border p-1">
             {(['local', 'remote'] as const).map((type) => (
               <button
                 key={type}
                 type="button"
-                onClick={() => { set('type', type); }}
+                onClick={() => {
+                  set('type', type);
+                }}
                 className={`cursor-pointer rounded-lg px-4 py-1 text-center text-[10px] font-bold tracking-wider uppercase transition-all ${
                   formState.type === type
                     ? 'bg-accent text-brand-crust font-black shadow-sm'
@@ -77,7 +87,9 @@ export function McpServerForm({ formState, onChange, onSave, onCancel, isEditing
                 id="mcp-command"
                 placeholder="Command (e.g. npx)"
                 value={formState.command}
-                onChange={(e) => { set('command', e.target.value); }}
+                onChange={(e) => {
+                  set('command', e.target.value);
+                }}
                 className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-xl border font-mono text-xs"
               />
             </div>
@@ -90,7 +102,9 @@ export function McpServerForm({ formState, onChange, onSave, onCancel, isEditing
                 id="mcp-args"
                 placeholder="Arguments (e.g. --debug)"
                 value={formState.args}
-                onChange={(e) => { set('args', e.target.value); }}
+                onChange={(e) => {
+                  set('args', e.target.value);
+                }}
                 className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-xl border font-mono text-xs"
               />
             </div>
@@ -103,7 +117,9 @@ export function McpServerForm({ formState, onChange, onSave, onCancel, isEditing
                 id="mcp-env"
                 placeholder="KEY=VALUE (one per line)"
                 value={formState.env}
-                onChange={(e) => { set('env', e.target.value); }}
+                onChange={(e) => {
+                  set('env', e.target.value);
+                }}
                 className="bg-surface-secondary/30 border-border/40 focus:border-accent/40 max-h-[120px] min-h-[60px] w-full rounded-xl border p-3 font-mono text-xs focus:outline-none"
               />
             </div>
@@ -118,7 +134,9 @@ export function McpServerForm({ formState, onChange, onSave, onCancel, isEditing
                 id="mcp-url"
                 placeholder="URL (e.g. https://...)"
                 value={formState.url}
-                onChange={(e) => { set('url', e.target.value); }}
+                onChange={(e) => {
+                  set('url', e.target.value);
+                }}
                 className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-xl border font-mono text-xs"
               />
             </div>
@@ -131,7 +149,9 @@ export function McpServerForm({ formState, onChange, onSave, onCancel, isEditing
                 id="mcp-headers"
                 placeholder="Authorization=Bearer xyz (one per line)"
                 value={formState.headers}
-                onChange={(e) => { set('headers', e.target.value); }}
+                onChange={(e) => {
+                  set('headers', e.target.value);
+                }}
                 className="bg-surface-secondary/30 border-border/40 focus:border-accent/40 max-h-[120px] min-h-[60px] w-full rounded-xl border p-3 font-mono text-xs focus:outline-none"
               />
             </div>
@@ -141,12 +161,17 @@ export function McpServerForm({ formState, onChange, onSave, onCancel, isEditing
 
       <div className="border-border/10 flex items-center justify-between border-t pt-4">
         <div className="flex items-center gap-3 select-none">
-          <label htmlFor="mcp-form-approval-policy" className="text-text-muted text-[10px] font-bold tracking-wider uppercase">
+          <label
+            htmlFor="mcp-form-approval-policy"
+            className="text-text-muted text-[10px] font-bold tracking-wider uppercase"
+          >
             Approval Policy
           </label>
           <Select
             value={formState.approvalPolicy}
-            onChange={(val) => { set('approvalPolicy', val as McpFormState['approvalPolicy']); }}
+            onChange={(val) => {
+              set('approvalPolicy', val as McpFormState['approvalPolicy']);
+            }}
             options={approvalPolicyOptions}
             className="w-48"
           />

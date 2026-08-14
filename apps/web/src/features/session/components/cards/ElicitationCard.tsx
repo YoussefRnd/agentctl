@@ -111,7 +111,9 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                           : ''
                       }
                       disabled={!isPending || disabled}
-                      onChange={(val) => { handleInputChange(field.id, val); }}
+                      onChange={(val) => {
+                        handleInputChange(field.id, val);
+                      }}
                       placeholder="Select option..."
                       options={
                         field.options?.map((opt) => ({
@@ -126,7 +128,9 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                         type="checkbox"
                         checked={Boolean(formValues[field.id])}
                         disabled={!isPending || disabled}
-                        onChange={(e) => { handleInputChange(field.id, e.target.checked); }}
+                        onChange={(e) => {
+                          handleInputChange(field.id, e.target.checked);
+                        }}
                         className="border-border bg-surface text-accent focus:ring-accent/20 rounded"
                       />
                       <span>Enable {field.label}</span>
@@ -141,12 +145,12 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                           : ''
                       }
                       disabled={!isPending || disabled}
-                      onChange={(e) =>
-                        { handleInputChange(
+                      onChange={(e) => {
+                        handleInputChange(
                           field.id,
                           field.type === 'number' ? Number(e.target.value) : e.target.value,
-                        ); }
-                      }
+                        );
+                      }}
                       placeholder={`Enter ${field.label.toLowerCase()}...`}
                     />
                   )}
@@ -191,7 +195,14 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
           <Button variant="ghost" size="sm" onClick={handleCancel} disabled={disabled}>
             Cancel
           </Button>
-          <Button variant="solid" size="sm" onClick={() => { handleSubmit(); }} disabled={disabled}>
+          <Button
+            variant="solid"
+            size="sm"
+            onClick={() => {
+              handleSubmit();
+            }}
+            disabled={disabled}
+          >
             {isForm ? 'Submit' : 'Mark Completed'}
           </Button>
         </CardFooter>
