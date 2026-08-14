@@ -11,7 +11,7 @@ import {
   Check,
   AlertTriangle,
 } from 'lucide-react';
-import type { parseDiff } from '../../../utils/diff-parser';
+import type { parseDiff } from '../../../shared/lib/diff-parser';
 
 const stateIcons: Record<FileState, LucideIcon> = {
   untracked: FilePlus,

@@ -11,8 +11,7 @@ import {
   Diff,
   Files,
 } from 'lucide-react';
-import { StreamingDots } from '@/shared/StreamingDots';
-import { getToolMeta } from '@/utils/toolColors';
+import { StreamingDots, getToolMeta } from '@/shared';
 import type { ACPEventToolCallData } from '@agentctl/shared';
 
 function formatDuration(durationMs: number): string {

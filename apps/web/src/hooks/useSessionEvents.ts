@@ -4,7 +4,7 @@ import type { ACPEventRow } from '@agentctl/shared';
 import { SessionEngine } from '@agentctl/shared';
 
 import { apiClient } from '@agentctl/api-client';
-import { getApiBaseUrl } from '../lib/api-base-url';
+import { getApiBaseUrl } from '../shared/lib/api-base-url';
 
 const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
   return apiClient.fetch<ACPEventRow[]>(`/api/sessions/${sessionId}/events`);

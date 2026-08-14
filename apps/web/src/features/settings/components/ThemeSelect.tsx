@@ -1,4 +1,4 @@
-import type { ThemeEntry } from '../../../data/theme-registry';
+import type { ThemeEntry } from '../../../shared/lib/theme-registry';
 import { Select } from '@agentctl/ui';
 
 interface ThemeSelectProps {

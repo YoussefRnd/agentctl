@@ -1,6 +1,5 @@
 import { memo, useMemo } from 'react';
-import { StreamingDots } from '@/shared/StreamingDots';
-import { ProviderIconUrl } from '@/shared/ProviderIcon';
+import { StreamingDots, ProviderIconUrl } from '@/shared';
 import { SubagentBlock } from './SubagentBlock';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ActivityTimeline } from './ActivityTimeline';

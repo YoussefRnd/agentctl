@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { TimelineEvent } from './TimelineEvent';
 import { ToolCallCard } from './ToolCallCard';
-import { getToolMeta } from '@/utils/toolColors';
+import { getToolMeta } from '@/shared/lib/toolColors';
 import {
   formatDuration,
   formatPeek,

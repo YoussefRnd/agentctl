@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { DiffLine as DiffLineType } from '../../../../utils/diff-parser';
+import type { DiffLine as DiffLineType } from '../../../../shared/lib/diff-parser';
 
 interface DiffLineProps {
   line: DiffLineType;

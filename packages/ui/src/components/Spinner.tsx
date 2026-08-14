@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
+import { cn } from '../utils';
 
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -25,15 +26,25 @@ function useSpinnerFrame(interval = 80, done = false) {
   return FRAMES[frame];
 }
 
-export function Spinner({ done = false }: { done?: boolean }) {
+export interface SpinnerProps {
+  done?: boolean;
+  className?: string;
+}
+
+export function Spinner({ done = false, className }: SpinnerProps) {
   const frame = useSpinnerFrame(80, done);
 
   if (done) {
-    return <Check className="text-brand-green h-3.5 w-3.5 shrink-0 stroke-[3]" />;
+    return <Check className={cn('text-brand-green h-3.5 w-3.5 shrink-0 stroke-[3]', className)} />;
   }
 
   return (
-    <span className="text-accent inline-block shrink-0 font-mono text-[13px] leading-none select-none">
+    <span
+      className={cn(
+        'text-accent inline-block shrink-0 font-mono text-[13px] leading-none select-none',
+        className,
+      )}
+    >
       {frame}
     </span>
   );

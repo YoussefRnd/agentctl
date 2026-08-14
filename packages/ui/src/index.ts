@@ -10,4 +10,7 @@ export * from './components/Popover.js';
 export * from './components/Tooltip.js';
 export * from './components/SearchBar.js';
 export * from './components/Select.js';
+export * from './components/Skeleton.js';
+export * from './components/Badge.js';
+export * from './components/Spinner.js';
 export * from './utils.js';

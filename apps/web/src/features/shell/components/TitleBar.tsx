@@ -1,6 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AppMenu } from './AppMenu';
 import { TitleBarWindowControls } from './TitleBarWindowControls';
 import { UpdateIndicator } from './UpdateIndicator';
 import { useUpdate } from '../hooks/useUpdate';
@@ -14,8 +13,12 @@ export function TitleBar({ nav }: TitleBarProps) {
   const hasWinApi = typeof window !== 'undefined' && !!window.electronAPI?.win;
 
   const [isMaximized, setIsMaximized] = useState(false);
-  const [controls, setControls] = useState<{ minimize: boolean; maximize: boolean; close: boolean } | null>(null);
-  const [controlsPref, setControlsPref] = useState<'auto' | 'show' | 'hide'>(
+  const [controls, setControls] = useState<{
+    minimize: boolean;
+    maximize: boolean;
+    close: boolean;
+  } | null>(null);
+  const [controlsPref] = useState<'auto' | 'show' | 'hide'>(
     () =>
       (typeof window !== 'undefined'
         ? (localStorage.getItem('agentctl:windowControls') as 'auto' | 'show' | 'hide' | null)
@@ -31,7 +34,10 @@ export function TitleBar({ nav }: TitleBarProps) {
 
   useEffect(() => {
     if (!window.electronAPI?.getWindowControls) return;
-    void window.electronAPI.getWindowControls().then(setControls).catch(() => undefined);
+    void window.electronAPI
+      .getWindowControls()
+      .then(setControls)
+      .catch(() => undefined);
   }, []);
 
   const wmAllows = !!controls && (controls.minimize || controls.maximize || controls.close);
@@ -39,47 +45,28 @@ export function TitleBar({ nav }: TitleBarProps) {
     controlsPref === 'show'
       ? { minimize: true, maximize: true, close: true }
       : (controls ?? { minimize: false, maximize: false, close: false });
-  const showWindowControls = !isMac && controlsPref !== 'hide' && (controlsPref === 'show' || wmAllows);
-  const controlsVisible = !isMac && showWindowControls;
+  const showWindowControls =
+    !isMac && controlsPref !== 'hide' && (controlsPref === 'show' || wmAllows);
 
-  const toggleControls = () => {
-    const next: 'auto' | 'show' | 'hide' = controlsVisible ? 'hide' : 'show';
-    setControlsPref(next);
-    localStorage.setItem('agentctl:windowControls', next);
-  };
-
-  const { state: update, install: installUpdate, check: checkUpdates } = useUpdate();
+  const { state: update, install: installUpdate } = useUpdate();
 
   return (
-    <div className="relative z-40 border-border/50 border-b bg-background/50 backdrop-blur-xl">
-      <div className="app-region-drag flex h-14 items-center gap-3 px-3">
+    <div className="border-border/40 bg-background/80 relative z-40 border-b backdrop-blur-xl">
+      <div className="app-region-drag flex h-11 items-center gap-4 px-3">
         {isMac && <div className="w-[72px] shrink-0" />}
 
-        <AppMenu
-          controlsVisible={controlsVisible}
-          onToggleControls={toggleControls}
-          update={update}
-          onUpdateInstall={installUpdate}
-          onCheckUpdates={checkUpdates}
-        />
-
-        <div className="hidden items-center lg:flex">
+        {/* Brand Anchor */}
+        <div className="flex shrink-0 items-center">
           <Link
             to="/"
-            className="app-region-no-drag text-text-main font-sans text-[12px] font-black tracking-[0.4em] uppercase transition-opacity hover:opacity-80"
+            className="app-region-no-drag text-text-main flex items-center gap-2 text-[13px] font-semibold tracking-tight transition-opacity hover:opacity-80"
           >
-            AGENTCTL
-          </Link>
-        </div>
-        <div className="flex shrink-0 items-center pl-2 lg:hidden">
-          <Link
-            to="/"
-            className="app-region-no-drag text-text-main font-sans text-[12px] font-black tracking-[0.4em] uppercase transition-opacity hover:opacity-80"
-          >
-            AGENTCTL
+            <span className="text-brand-mauve font-mono text-[14px]">✦</span>
+            <span>agentctl</span>
           </Link>
         </div>
 
+        {/* Dynamic Center/Nav Region */}
         <div className="app-region-no-drag flex h-full min-w-0 flex-1 items-center">{nav}</div>
 
         {update.status !== 'idle' && <UpdateIndicator state={update} onInstall={installUpdate} />}

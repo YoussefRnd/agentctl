@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ListFilter, Settings, AlertCircle, RefreshCw, Layers } from 'lucide-react';
+import { Plus, AlertCircle, RefreshCw } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import {
   apiClient,
@@ -12,10 +12,13 @@ import {
   renameSession,
   rewindSession,
 } from '@agentctl/api-client';
-import { ConfirmationModal, SearchBar, Switch, Tooltip } from '@agentctl/ui';
+import { ConfirmationModal, Tooltip, Badge } from '@agentctl/ui';
 import { toast } from 'sonner';
 import { ProjectItem } from './ProjectItem';
 import { RenameSessionDialog } from './RenameSessionDialog';
+import { SidebarSearch } from './SidebarSearch';
+import { SidebarFilterMenu, type SortByOption } from './SidebarFilterMenu';
+import { SidebarFooter } from './SidebarFooter';
 import { useFilteredProjects } from '../hooks/useFilteredProjects';
 
 interface SidebarProps {
@@ -65,7 +68,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   };
 
   const [settings, setSettingsState] = useState<{
-    sortBy: 'lastActive' | 'name' | 'createdAt';
+    sortBy: SortByOption;
     gitOnly: boolean;
     showArchived: boolean;
   }>({
@@ -79,7 +82,6 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   };
 
   const { sortBy, gitOnly, showArchived } = settings;
-
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; title: string } | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -213,37 +215,16 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       aria-label="Main Sidebar"
       className="relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent"
     >
-      {/* Sidebar Header */}
-      <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center justify-between border-b px-4 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <Layers className="text-brand-mauve h-4 w-4" />
-          <span className="text-text-main text-[12px] font-bold tracking-tight select-none">
-            Workspace
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-4 mb-2 space-y-4 px-4">
-        <div className="relative">
-          <SearchBar
-            ref={searchInputRef}
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-            }}
-            onClear={() => {
-              setSearchQuery('');
-            }}
-          />
-          {!searchQuery && (
-            <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center opacity-60 transition-opacity">
-              <kbd className="bg-surface-secondary/80 border-border/50 text-text-muted rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold">
-                {isMac ? '⌘K' : 'Ctrl+K'}
-              </kbd>
-            </div>
-          )}
-        </div>
+      <div className="mt-3 mb-2 space-y-3 px-3">
+        <SidebarSearch
+          ref={searchInputRef}
+          value={searchQuery}
+          onChange={setSearchQuery}
+          onClear={() => {
+            setSearchQuery('');
+          }}
+          isMac={isMac}
+        />
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -251,104 +232,26 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
               Projects
             </h3>
             {searchQuery && (
-              <span className="text-brand-mauve bg-brand-mauve/10 py-0.2 rounded px-1.5 font-mono text-[10px] font-bold">
+              <Badge variant="accent" size="sm" className="font-mono font-bold">
                 {totalSessionsCount} found
-              </span>
+              </Badge>
             )}
           </div>
 
-          <div className="relative flex items-center gap-1.5">
-            <Tooltip content="Filter and Sort">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsFilterMenuOpen(!isFilterMenuOpen);
-                }}
-                className={`hover:text-brand-mauve text-text-muted hover:bg-surface-secondary/40 cursor-pointer rounded-sm border border-transparent p-1 transition-all hover:scale-105 active:scale-95 ${isFilterMenuOpen ? 'text-brand-mauve bg-brand-mauve/10 border-brand-mauve/20' : ''}`}
-              >
-                <ListFilter className="h-3.5 w-3.5" />
-              </button>
-            </Tooltip>
-
-            {isFilterMenuOpen && (
-              <>
-                <button
-                  type="button"
-                  aria-label="Close filter menu"
-                  className="fixed inset-0 z-30 cursor-default border-none bg-transparent outline-none"
-                  onClick={() => {
-                    setIsFilterMenuOpen(false);
-                  }}
-                />
-                <div className="border-border/80 bg-surface-secondary/95 animate-in fade-in slide-in-from-top-2 absolute top-full right-0 z-40 mt-1 w-52 rounded-xl border p-2.5 font-sans text-[11px] shadow-2xl backdrop-blur-md duration-200">
-                  <div className="text-text-muted mb-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase opacity-50">
-                    Sort by
-                  </div>
-                  <div className="space-y-0.5">
-                    {(['lastActive', 'name', 'createdAt'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setSettings({ sortBy: opt });
-                          setIsFilterMenuOpen(false);
-                        }}
-                        className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${sortBy === opt ? 'text-brand-mauve font-bold' : 'text-text-muted hover:text-text-main font-medium'}`}
-                      >
-                        <span>
-                          {opt === 'lastActive'
-                            ? 'Last active'
-                            : opt === 'name'
-                              ? 'Name (A-Z)'
-                              : 'Date created'}
-                        </span>
-                        {sortBy === opt && <span className="text-brand-mauve text-[10px]">●</span>}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="border-border/30 my-2 border-t" />
-
-                  <div className="text-text-muted mb-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase opacity-50">
-                    Filter
-                  </div>
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSettings({ gitOnly: !gitOnly });
-                      }}
-                      className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${gitOnly ? 'text-brand-mauve font-bold' : 'text-text-muted hover:text-text-main font-medium'}`}
-                    >
-                      <span>Git repos only</span>
-                      <Switch
-                        checked={gitOnly}
-                        size="sm"
-                        aria-label="Git repos only"
-                        className="pointer-events-none"
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSettings({ showArchived: !showArchived });
-                      }}
-                      className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${showArchived ? 'text-brand-mauve font-bold' : 'text-text-muted hover:text-text-main font-medium'}`}
-                    >
-                      <span>Show archived sessions</span>
-                      <Switch
-                        checked={showArchived}
-                        size="sm"
-                        aria-label="Show archived sessions"
-                        className="pointer-events-none"
-                      />
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
+          <div className="flex items-center gap-1.5">
+            <SidebarFilterMenu
+              isOpen={isFilterMenuOpen}
+              onToggle={() => {
+                setIsFilterMenuOpen(!isFilterMenuOpen);
+              }}
+              onClose={() => {
+                setIsFilterMenuOpen(false);
+              }}
+              sortBy={sortBy}
+              gitOnly={gitOnly}
+              showArchived={showArchived}
+              onSettingsChange={setSettings}
+            />
 
             <Tooltip content="Add Project">
               <Link
@@ -420,15 +323,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
         )}
       </div>
 
-      <div className="border-border/40 relative z-10 mt-auto border-t p-2">
-        <Link
-          to="/settings"
-          className="text-text-muted hover:text-brand-mauve hover:bg-surface-secondary group flex w-full items-center gap-2 rounded-lg p-2 text-[11px] font-medium transition-all"
-        >
-          <Settings className="h-4 w-4" />
-          <span>Settings</span>
-        </Link>
-      </div>
+      <SidebarFooter />
 
       <ConfirmationModal
         isOpen={!!confirmConfig?.isOpen}

@@ -31,7 +31,10 @@ export function useProviderEnvKeys(
   const hasChanges = useMemo(() => {
     return envKeys.some((key) => {
       const current = keysValues[key];
-      return current !== (localCustomEnvs ? (provider.customEnv[key] || '') : (provider.customEnv[key] ?? ''));
+      return (
+        current !==
+        (localCustomEnvs ? provider.customEnv[key] || '' : (provider.customEnv[key] ?? ''))
+      );
     });
   }, [envKeys, keysValues, provider, localCustomEnvs]);
 

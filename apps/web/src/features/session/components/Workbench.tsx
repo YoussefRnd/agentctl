@@ -2,7 +2,7 @@ import { StatusPane } from './StatusPane';
 import { ReviewView } from './ReviewView';
 import { WorktreesPane } from './WorktreesPane';
 import { useSession } from '../../../contexts/SessionContext';
-import { GlassPanel } from '@agentctl/ui';
+import { GlassPanel, Badge } from '@agentctl/ui';
 import { Maximize2, Minimize2 } from 'lucide-react';
 
 export type WorkbenchTab = 'status' | 'changes' | 'worktrees';
@@ -55,11 +55,13 @@ export function Workbench({
                     {t === 'status' ? 'Status' : t === 'changes' ? 'Changes' : 'Worktrees'}
                   </span>
                   {t === 'changes' && changesCount > 0 && (
-                    <span className="bg-surface-accent/20 ring-accent/20 relative z-10 flex h-4 min-w-4 items-center justify-center rounded-full px-1.5 ring-1">
-                      <span className="text-accent text-[10px] font-semibold tabular-nums">
-                        {changesCount}
-                      </span>
-                    </span>
+                    <Badge
+                      variant="accent"
+                      size="sm"
+                      className="relative z-10 font-bold tabular-nums"
+                    >
+                      {changesCount}
+                    </Badge>
                   )}
                   {tab === t && (
                     <div className="bg-surface-accent ring-accent/20 absolute inset-0 rounded-md ring-1" />

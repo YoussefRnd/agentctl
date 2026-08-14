@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Zap, RefreshCw } from 'lucide-react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
-import { ProviderIcon } from '@/shared/ProviderIcon';
+import { ProviderIcon } from '@/shared';
 import { useProviders } from '../../../hooks/useProviders';
 
 interface ProviderPickerProps {

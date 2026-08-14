@@ -1,5 +1,5 @@
 import { Input, Button } from '@agentctl/ui';
-import { ProviderIcon } from '@/shared/ProviderIcon';
+import { ProviderIcon } from '@/shared';
 import { getProviderEnvKeys, validateApiKey, type ProviderDiscovery } from '@agentctl/shared';
 
 interface SetupWizardProviderRowProps {

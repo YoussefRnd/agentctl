@@ -1,7 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
-import { StreamingDots } from '@/shared/StreamingDots';
+import { Spinner, StreamingDots } from '@/shared';
 import { useSettings } from '@/hooks/useSettings';
 import { useSession } from '@/contexts/SessionContext';
 import { StreamingMarkdown } from './StreamingMarkdown';

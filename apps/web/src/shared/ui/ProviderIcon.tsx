@@ -14,12 +14,19 @@ const sizeMap = {
   lg: { container: 'h-10 w-10 p-2', img: 'h-6 w-6', icon: 'h-5 w-5', letter: 'text-xl' },
 };
 
-export function ProviderIcon({ provider, size = 'md', showFallbackIcon = true, className = '' }: ProviderIconProps) {
+export function ProviderIcon({
+  provider,
+  size = 'md',
+  showFallbackIcon = true,
+  className = '',
+}: ProviderIconProps) {
   const s = sizeMap[size];
 
   if (provider.agent?.icon) {
     return (
-      <div className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}>
+      <div
+        className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}
+      >
         <img src={provider.agent.icon} alt="" className={`object-contain ${s.img}`} />
       </div>
     );
@@ -27,14 +34,18 @@ export function ProviderIcon({ provider, size = 'md', showFallbackIcon = true, c
 
   if (provider.id.includes('claude')) {
     return (
-      <div className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}>
+      <div
+        className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}
+      >
         <span className={`text-text-main font-bold ${s.letter}`}>C</span>
       </div>
     );
   }
 
   return (
-    <div className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}>
+    <div
+      className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}
+    >
       {showFallbackIcon && <Terminal className={`text-text-main ${s.icon}`} />}
     </div>
   );

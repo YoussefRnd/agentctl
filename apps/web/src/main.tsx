@@ -11,7 +11,7 @@ import { App } from './App';
 import { AppErrorBoundary } from './features/shell/components/AppErrorBoundary';
 import './index.css';
 import 'highlight.js/styles/github-dark.css';
-import { initApiBaseUrl } from './lib/api-base-url';
+import { initApiBaseUrl } from './shared/lib/api-base-url';
 
 const isElectron = !!window.electronAPI;
 const Router = isElectron ? HashRouter : BrowserRouter;

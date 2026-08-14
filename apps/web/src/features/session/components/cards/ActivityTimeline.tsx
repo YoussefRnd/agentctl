@@ -1,7 +1,7 @@
 import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
 import { TimelineEvent } from './TimelineEvent';
 import { ToolCallCard } from './ToolCallCard';
-import { getToolMeta } from '@/utils/toolColors';
+import { getToolMeta } from '@/shared/lib/toolColors';
 
 interface ActivityTimelineProps {
   events: ACPEventRow[];

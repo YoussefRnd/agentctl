@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { parseDiff } from '../../../utils/diff-parser';
+import { parseDiff } from '../../../shared/lib/diff-parser';
 import { matchSorter } from 'match-sorter';
 import { ConfirmationModal } from '@agentctl/ui';
 import { ReviewHeader, type ReviewFile, type FileState } from './ReviewHeader';

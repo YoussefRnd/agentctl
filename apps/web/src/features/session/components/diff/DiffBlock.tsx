@@ -1,5 +1,5 @@
 import { useMemo, memo } from 'react';
-import type { DiffHunk } from '../../../../utils/diff-parser';
+import type { DiffHunk } from '../../../../shared/lib/diff-parser';
 import { DiffLine } from './DiffLine';
 import { ChevronDown, ChevronRight, CheckSquare } from 'lucide-react';
 
@@ -88,7 +88,7 @@ export const DiffBlock = memo(function DiffBlock({
               <button
                 type="button"
                 onClick={onRevert}
-                className="border-danger/20 bg-danger/5 text-danger hover:bg-danger/10 flex h-6 cursor-pointer items-center rounded-md border px-2 label-3xs transition-all"
+                className="border-danger/20 bg-danger/5 text-danger hover:bg-danger/10 label-3xs flex h-6 cursor-pointer items-center rounded-md border px-2 transition-all"
               >
                 Revert
               </button>
@@ -97,7 +97,7 @@ export const DiffBlock = memo(function DiffBlock({
               <button
                 type="button"
                 onClick={onStage}
-                className="bg-accent text-brand-crust flex h-6 cursor-pointer items-center rounded-md px-2 label-3xs shadow-[0_0_10px_rgba(203,166,247,0.2)] transition-all hover:opacity-90"
+                className="bg-accent text-brand-crust label-3xs flex h-6 cursor-pointer items-center rounded-md px-2 shadow-[0_0_10px_rgba(203,166,247,0.2)] transition-all hover:opacity-90"
               >
                 Stage
               </button>

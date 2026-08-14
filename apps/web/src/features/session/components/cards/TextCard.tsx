@@ -6,7 +6,7 @@ import { Sparkles, RotateCcw, Copy, Check, Pencil } from 'lucide-react';
 import { RewindMenu } from '../RewindMenu';
 import type { RewindMode } from '../RewindMenu';
 import { useSession } from '../../../../contexts/SessionContext';
-import { StreamingDots } from '@/shared/StreamingDots';
+import { StreamingDots } from '@/shared';
 import { Popover, PopoverTrigger, PopoverContent, Card, Tooltip } from '@agentctl/ui';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { isLightTheme } from '../data/theme-registry';
+import { isLightTheme } from '../shared/lib/theme-registry';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 

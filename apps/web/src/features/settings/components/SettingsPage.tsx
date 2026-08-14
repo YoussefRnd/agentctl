@@ -7,7 +7,7 @@ import { Button, Switch, Select, Card } from '@agentctl/ui';
 import { type FontConfig } from '@agentctl/shared';
 import { useSettings } from '../../../hooks/useSettings';
 import { McpSettings } from './McpSettings';
-import { getLightThemes, getDarkThemes } from '../../../data/theme-registry';
+import { getLightThemes, getDarkThemes } from '../../../shared/lib/theme-registry';
 import { ThemeSelect } from './ThemeSelect';
 import { FontSettingsPanel } from './FontSettingsPanel';
 import { UpdateSettingsCard } from './UpdateSettingsCard';
@@ -26,7 +26,9 @@ export function SettingsPage() {
   }
 
   if (activeTab === 'general') {
-    const enabledProviders = providersApi.providers.filter((p) => p.installState !== 'not_installed');
+    const enabledProviders = providersApi.providers.filter(
+      (p) => p.installState !== 'not_installed',
+    );
 
     return (
       <div className="relative mx-auto h-full w-full max-w-4xl overflow-y-auto p-6">
@@ -34,7 +36,7 @@ export function SettingsPage() {
           <h1 className="text-text-main text-2xl font-black tracking-widest uppercase">
             SETTINGS::GENERAL
           </h1>
-          <p className="text-text-muted mt-1 caption-xs opacity-60">
+          <p className="text-text-muted caption-xs mt-1 opacity-60">
             CONFIGURE_GENERAL_APPLICATION_PREFERENCES
           </p>
         </div>
@@ -147,7 +149,7 @@ export function SettingsPage() {
             <h2 className="text-text-main mb-3 text-lg font-black tracking-widest uppercase">
               FONTS
             </h2>
-            <p className="text-text-muted mt-1 mb-4 caption-xs opacity-60">
+            <p className="text-text-muted caption-xs mt-1 mb-4 opacity-60">
               PER_CONTEXT_FONT_FAMILY_AND_SIZE
             </p>
             <FontSettingsPanel
@@ -165,7 +167,7 @@ export function SettingsPage() {
             <h2 className="text-text-main mb-3 text-lg font-black tracking-widest uppercase">
               UPDATES
             </h2>
-            <p className="text-text-muted mt-1 mb-4 caption-xs opacity-60">
+            <p className="text-text-muted caption-xs mt-1 mb-4 opacity-60">
               APPLICATION_UPDATE_STATUS_AND_CONTROLS
             </p>
             <UpdateSettingsCard />
@@ -182,7 +184,7 @@ export function SettingsPage() {
           <h1 className="text-text-main text-2xl font-black tracking-widest uppercase">
             SETTINGS::PROVIDERS
           </h1>
-          <p className="text-text-muted mt-1 caption-xs opacity-60">
+          <p className="text-text-muted caption-xs mt-1 opacity-60">
             CONFIGURE_ACTIVE_AI_PROVIDER_PIPELINES
           </p>
         </div>

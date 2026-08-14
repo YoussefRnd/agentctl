@@ -1,6 +1,6 @@
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { Download, Trash2, KeyRound, Loader2, ExternalLink, LogOut } from 'lucide-react';
-import { ProviderIcon } from '../../../shared/ProviderIcon';
+import { ProviderIcon } from '@/shared';
 import { Card, Button } from '@agentctl/ui';
 
 function GithubIcon({ className }: { className?: string }) {
@@ -56,32 +56,34 @@ export function RegistryCard({
   const canLogout = provider.supportsLogout && provider.authState === 'authenticated';
 
   return (
-    <Card className="rounded-xl border border-border/20 bg-surface-secondary/5 p-4 flex flex-col gap-2.5 transition-all duration-300 hover:border-border/35 hover:bg-surface-secondary/10">
+    <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-all duration-300">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <ProviderIcon provider={provider} size="sm" className="shrink-0" />
-          <div className="min-w-0 flex items-baseline gap-2">
-            <h3 className="text-text-main text-[13.5px] font-bold tracking-tight">
-              {name}
-            </h3>
-            <span className="text-text-muted text-[10.5px] font-mono opacity-70 ml-2">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h3 className="text-text-main text-[13.5px] font-bold tracking-tight">{name}</h3>
+            <span className="text-text-muted ml-2 font-mono text-[10.5px] opacity-70">
               v{provider.version ?? '0.0.1'}
             </span>
             {authStatus && !notInstalled && (
-              <span className={`text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full ${authStatus.className}`}>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase ${authStatus.className}`}
+              >
                 {authStatus.label}
               </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex shrink-0 items-center gap-1.5">
           {canLogout && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { onLogout(provider.id); }}
-              className="flex items-center gap-1 px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase h-8 rounded-lg"
+              onClick={() => {
+                onLogout(provider.id);
+              }}
+              className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
             >
               <LogOut className="h-3 w-3" />
               Logout
@@ -92,8 +94,10 @@ export function RegistryCard({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { onAuth(provider); }}
-              className="flex items-center gap-1 px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase h-8 rounded-lg"
+              onClick={() => {
+                onAuth(provider);
+              }}
+              className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
             >
               <KeyRound className="h-3 w-3" />
               Configure
@@ -105,8 +109,10 @@ export function RegistryCard({
               variant="outline"
               size="sm"
               disabled={isInstalling}
-              onClick={() => { onInstall(provider.id); }}
-              className="flex items-center gap-1 px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase h-8 rounded-lg"
+              onClick={() => {
+                onInstall(provider.id);
+              }}
+              className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
             >
               {isInstalling ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -120,8 +126,10 @@ export function RegistryCard({
               variant="outline"
               size="sm"
               disabled={isRemoving}
-              onClick={() => { onRemove(provider.id); }}
-              className="flex items-center gap-1 px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase h-8 rounded-lg text-red-400 hover:text-red-300 border-red-500/10 hover:bg-red-500/5"
+              onClick={() => {
+                onRemove(provider.id);
+              }}
+              className="flex h-8 items-center gap-1 rounded-lg border-red-500/10 px-3 py-1.5 text-[10.5px] font-bold tracking-wide text-red-400 uppercase hover:bg-red-500/5 hover:text-red-300"
             >
               {isRemoving ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -138,7 +146,7 @@ export function RegistryCard({
         {provider.description ?? 'No description available for this agent provider.'}
       </p>
 
-      <div className="flex items-center justify-end gap-2 text-[10.5px] text-text-muted mt-1 opacity-70">
+      <div className="text-text-muted mt-1 flex items-center justify-end gap-2 text-[10.5px] opacity-70">
         <span className="font-mono">ID: {subtitle}</span>
 
         {repositoryUrl && (
@@ -146,7 +154,7 @@ export function RegistryCard({
             href={repositoryUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-text-main transition-colors p-0.5 ml-1"
+            className="hover:text-text-main ml-1 p-0.5 transition-colors"
             title="Repository"
           >
             <GithubIcon className="h-3.5 w-3.5" />
@@ -158,7 +166,7 @@ export function RegistryCard({
             href={websiteUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-text-main transition-colors p-0.5"
+            className="hover:text-text-main p-0.5 transition-colors"
             title="Website"
           >
             <ExternalLink className="h-3.5 w-3.5" />

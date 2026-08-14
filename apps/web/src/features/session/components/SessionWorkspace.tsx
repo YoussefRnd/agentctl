@@ -40,9 +40,10 @@ export function SessionWorkspace() {
           setIsWorkbenchOpen((prev) => !prev);
         }}
         isWorkbenchOpen={isWorkbenchOpen}
+        onSelectWorkbenchTab={setWorkbenchTab}
       />
     ),
-    [isWorkbenchOpen],
+    [isWorkbenchOpen, setWorkbenchTab],
   );
 
   const workbenchElement = useMemo(
