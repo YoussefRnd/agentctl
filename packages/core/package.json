@@ -45,7 +45,6 @@
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch",
-    "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
@@ -71,7 +70,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@agentctl/eslint-config": "workspace:*",
     "@agentctl/tsconfig": "workspace:*",
     "@types/node": "^25.9.5",
     "@typescript/native": "catalog:",
