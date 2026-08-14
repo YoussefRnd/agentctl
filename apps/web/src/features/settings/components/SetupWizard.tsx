@@ -65,7 +65,7 @@ export function SetupWizard() {
     setLocalCustomEnvs((prev) => ({
       ...prev,
       [providerId]: {
-        ...(prev[providerId] ?? {}),
+        ...prev[providerId],
         [key]: value,
       },
     }));

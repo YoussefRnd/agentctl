@@ -410,7 +410,7 @@ function ProviderSetupPanel({
                       setLocalCustomEnvs({
                         ...localCustomEnvs,
                         [activeProvider.id]: {
-                          ...(localCustomEnvs[activeProvider.id] ?? {}),
+                          ...localCustomEnvs[activeProvider.id],
                           [key]: e.target.value,
                         },
                       });

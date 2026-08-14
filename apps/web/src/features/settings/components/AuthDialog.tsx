@@ -58,15 +58,13 @@ export function AuthDialog({ provider, onClose, onSaveEnv, onRefresh }: AuthDial
                     <div key={method.id} className="space-y-2">
                       {(method.vars ?? []).map((v) => (
                         <div key={v.name} className="space-y-1">
-                          <label className="text-text-muted label-3xs">
-                            {v.label ?? v.name}
-                          </label>
+                          <label className="text-text-muted label-3xs">{v.label ?? v.name}</label>
                           <Input
                             type="password"
                             value={customEnv[v.name] ?? ''}
-                            onChange={(e) =>
-                              { setCustomEnv({ ...customEnv, [v.name]: e.target.value }); }
-                            }
+                            onChange={(e) => {
+                              setCustomEnv({ ...customEnv, [v.name]: e.target.value });
+                            }}
                             placeholder={v.name}
                           />
                         </div>
@@ -77,7 +75,8 @@ export function AuthDialog({ provider, onClose, onSaveEnv, onRefresh }: AuthDial
                   return (
                     <div key={method.id} className="space-y-2">
                       <p className="text-text-muted text-[11px] leading-relaxed">
-                        Run <code className="text-text-main font-mono">{provider.command} login</code>{' '}
+                        Run{' '}
+                        <code className="text-text-main font-mono">{provider.command} login</code>{' '}
                         in your terminal, then refresh.
                       </p>
                       <Button
@@ -93,8 +92,6 @@ export function AuthDialog({ provider, onClose, onSaveEnv, onRefresh }: AuthDial
                     </div>
                   );
                 }
-
-                return null;
               })}
             </div>
 

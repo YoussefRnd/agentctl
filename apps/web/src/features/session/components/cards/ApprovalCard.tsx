@@ -48,7 +48,7 @@ export const ApprovalCard = memo(function ApprovalCard({
   return (
     <div
       ref={containerRef}
-      role="presentation"
+      role="region"
       aria-labelledby="approval-title"
       aria-live="polite"
       tabIndex={-1}

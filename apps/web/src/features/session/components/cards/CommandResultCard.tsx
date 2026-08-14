@@ -31,6 +31,7 @@ export const CommandResultCard = memo(function CommandResultCard({
     <div data-font-ctx="terminal" className="group/command w-full py-1">
       <button
         type="button"
+        aria-label="Toggle command output"
         className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent text-left select-none"
         onClick={() => {
           setOpen(!open);
