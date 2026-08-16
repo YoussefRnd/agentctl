@@ -119,7 +119,7 @@ export class SessionEventStore {
   ): Promise<void> {
     const existing = await this.getEventWithMetadataFull(eventId);
     const oldTokens = existing ? extractTokens(existing.metadata) : 0;
-    const newTokens = extractTokens(metadata);
+    const newTokens = metadata === undefined ? oldTokens : extractTokens(metadata);
     const delta = newTokens - oldTokens;
 
     let mergedData = data;

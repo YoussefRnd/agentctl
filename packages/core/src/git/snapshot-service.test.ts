@@ -7,9 +7,11 @@ import { SnapshotService } from './snapshot-service.js';
 describe('SnapshotService', () => {
   let service: SnapshotService;
   let tempProjectDir: string;
+  let snapshotDir: string;
 
   beforeEach(async () => {
-    service = new SnapshotService();
+    snapshotDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'snap-store-test-'));
+    service = new SnapshotService(snapshotDir);
     tempProjectDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'snap-test-'));
     const { execSync } = await import('node:child_process');
     execSync('git init', { cwd: tempProjectDir });
@@ -21,6 +23,7 @@ describe('SnapshotService', () => {
   afterEach(async () => {
     await fs.promises.rm(tempProjectDir, { recursive: true, force: true }).catch(() => undefined);
     service.cleanup();
+    await fs.promises.rm(snapshotDir, { recursive: true, force: true }).catch(() => undefined);
   });
 
   describe('track', () => {

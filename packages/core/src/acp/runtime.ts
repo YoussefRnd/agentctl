@@ -1,13 +1,14 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
 import {
   ClientSideConnection,
   ndJsonStream,
   type NewSessionResponse,
   type ResumeSessionResponse,
   type LoadSessionResponse,
+  type AgentCapabilities,
   type SessionConfigOption,
   type Stream,
 } from '@agentclientprotocol/sdk';
@@ -180,6 +181,8 @@ export class DefaultAgentRuntime implements AgentRuntime {
     let supportsListSessions = false;
     let supportsAdditionalDirectories = false;
     let supportsLoadSession = false;
+    let supportsImage = false;
+    let supportsAudio = false;
     let supportsEmbeddedContext = false;
 
     const handle: AgentRuntimeHandle = {
@@ -200,19 +203,18 @@ export class DefaultAgentRuntime implements AgentRuntime {
           text,
           attachments,
           embeddedContext,
+          supportsImage,
+          supportsAudio,
           supportsEmbeddedContext,
         });
 
-        const messageId = crypto.randomUUID();
         const response = await connection.prompt({
           sessionId: this.acpSessionId ?? '',
           prompt: promptParts,
-          messageId,
         });
         return {
           stopReason: response.stopReason,
           usage: response.usage ?? undefined,
-          userMessageId: response.userMessageId ?? undefined,
         };
       },
       async authenticate(methodId: string): Promise<void> {
@@ -247,10 +249,11 @@ export class DefaultAgentRuntime implements AgentRuntime {
         }
       },
       async updateModel(modelId: string): Promise<void> {
-        if (this.acpSessionId) {
-          await connection.unstable_setSessionModel({
+        if (this.acpSessionId && options.resolvedModelConfigId) {
+          await connection.setSessionConfigOption({
             sessionId: this.acpSessionId,
-            modelId,
+            configId: options.resolvedModelConfigId,
+            value: modelId,
           });
         }
       },
@@ -305,7 +308,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
         return { sessions: result.sessions, nextCursor: result.nextCursor ?? undefined };
       },
       async logout(): Promise<void> {
-        await connection.unstable_logout({});
+        await connection.logout({});
       },
       writeTerminalInput(terminalId: string, data: string): boolean {
         if (isPersistent && self.connectionManager) {
@@ -339,6 +342,9 @@ export class DefaultAgentRuntime implements AgentRuntime {
         supportsListSessions = !!persistentConn.supportsListSessions;
         supportsAdditionalDirectories = !!persistentConn.supportsAdditionalDirectories;
         supportsLoadSession = !!persistentConn.supportsLoadSession;
+        supportsImage = !!persistentConn.supportsImage;
+        supportsAudio = !!persistentConn.supportsAudio;
+        supportsEmbeddedContext = !!persistentConn.supportsEmbeddedContext;
       } else {
         const { parsedCapabilities } = await initializeAcpConnection(connection, {
           transport,
@@ -351,6 +357,8 @@ export class DefaultAgentRuntime implements AgentRuntime {
         supportsListSessions = parsedCapabilities.supportsListSessions;
         supportsAdditionalDirectories = parsedCapabilities.supportsAdditionalDirectories;
         supportsLoadSession = parsedCapabilities.supportsLoadSession;
+        supportsImage = parsedCapabilities.supportsImage;
+        supportsAudio = parsedCapabilities.supportsAudio;
         supportsEmbeddedContext = parsedCapabilities.supportsEmbeddedContext;
       }
       let newSessionResult:
@@ -464,15 +472,6 @@ export class DefaultAgentRuntime implements AgentRuntime {
       const finalSessionId = handle.acpSessionId;
       if (finalSessionId) {
         if (
-          options.supportsDynamicModel &&
-          options.selectedModel &&
-          options.selectedModel !== 'default'
-        ) {
-          await connection.unstable_setSessionModel({
-            sessionId: finalSessionId,
-            modelId: options.selectedModel,
-          });
-        } else if (
           options.selectedModel &&
           options.selectedModel !== 'default' &&
           options.resolvedModelConfigId
@@ -594,7 +593,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
           let supportsDynamicModel = false;
           let supportsDynamicConfig = false;
           let authMethods: AgentProbeResult['authMethods'] = [];
-          let agentCapabilities: { auth?: { logout?: boolean } } | undefined;
+          let agentCapabilities: AgentCapabilities | undefined;
           let modes: string[] | undefined;
 
           try {
@@ -602,41 +601,25 @@ export class DefaultAgentRuntime implements AgentRuntime {
               clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
             });
 
-            const typedInit = initResult as {
-              agentCapabilities?: {
-                auth?: { logout?: boolean };
-                configOptions?: ACPConfigOption[];
-              };
-              authMethods?: AgentProbeResult['authMethods'];
-            };
-            agentCapabilities = typedInit.agentCapabilities;
-            authMethods = typedInit.authMethods ?? [];
+            agentCapabilities = initResult.agentCapabilities;
+            authMethods = (initResult.authMethods ?? []).map((method) => ({
+              id: method.id,
+              name: method.name,
+              type: 'agent' as const,
+              description: method.description ?? null,
+            }));
 
-            const advertisedOptions = typedInit.agentCapabilities?.configOptions;
+            const sessionResult = await connection.newSession({
+              cwd: os.tmpdir(),
+              mcpServers: [],
+            });
 
-            if (advertisedOptions && advertisedOptions.length > 0) {
-              // Prefer capabilities advertised during initialize: avoids
-              // creating a real agent session just to probe.
-              configOptions = advertisedOptions;
-              supportsDynamicModel = advertisedOptions.some(
-                (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-              );
-              supportsDynamicConfig = true;
-              const modeOption = advertisedOptions.find((opt) => opt.id === 'mode');
-              modes = modeOption?.options?.map((opt) => opt.value);
-            } else {
-              const sessionResult = await connection.newSession({
-                cwd: os.tmpdir(),
-                mcpServers: [],
-              });
-
-              configOptions = extractConfigOptionsFromSessionResult(sessionResult);
-
-              const hasAlternateModels = (sessionResult.models?.availableModels ?? []).length > 0;
-              supportsDynamicModel = hasAlternateModels;
-              supportsDynamicConfig = configOptions.length > 0;
-              modes = sessionResult.modes?.availableModes.map((m) => m.id);
-            }
+            configOptions = extractConfigOptionsFromSessionResult(sessionResult);
+            supportsDynamicModel = configOptions.some(
+              (option) => option.id === 'model' || option.id === 'selectedModel',
+            );
+            supportsDynamicConfig = configOptions.length > 0;
+            modes = sessionResult.modes?.availableModes.map((mode) => mode.id);
           } catch (err: unknown) {
             if (isAuthRequiredError(err)) {
               status = 'needs_auth';

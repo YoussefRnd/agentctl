@@ -106,30 +106,31 @@ export class PermissionEngine {
     if (targets.length === 0) return false;
 
     const now = Date.now();
+    for (const [pattern, data] of this.grantedPatterns) {
+      const expired = data.expiresAt !== undefined && now > data.expiresAt;
+      const exhausted = data.usesRemaining !== undefined && data.usesRemaining <= 0;
+      if (expired || exhausted) this.grantedPatterns.delete(pattern);
+    }
 
-    return targets.every((target) => {
-      for (const [pattern, data] of this.grantedPatterns.entries()) {
-        if (data.expiresAt && now > data.expiresAt) {
-          this.grantedPatterns.delete(pattern);
-          continue;
-        }
-        if (data.usesRemaining !== undefined && data.usesRemaining <= 0) {
-          this.grantedPatterns.delete(pattern);
-          continue;
-        }
-
+    const matchedGrants = new Set<GrantedPatternData>();
+    const allTargetsMatch = targets.every((target) => {
+      for (const [pattern, data] of this.grantedPatterns) {
         if (this.matchPattern(pattern, toolName, target)) {
-          if (data.usesRemaining !== undefined) {
-            data.usesRemaining -= 1;
-            if (data.usesRemaining <= 0) {
-              this.grantedPatterns.delete(pattern);
-            }
-          }
+          matchedGrants.add(data);
           return true;
         }
       }
       return false;
     });
+
+    if (!allTargetsMatch) return false;
+
+    for (const grant of matchedGrants) {
+      if (grant.usesRemaining === undefined) continue;
+      grant.usesRemaining -= 1;
+      if (grant.usesRemaining <= 0) this.grantedPatterns.delete(grant.pattern);
+    }
+    return true;
   }
 
   evaluateRequest(acpRequest: RequestPermissionRequest): EvaluationResult {

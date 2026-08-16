@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { PROTOCOL_VERSION, type ClientSideConnection } from '@agentclientprotocol/sdk';
+import {
+  PROTOCOL_VERSION,
+  type ClientCapabilities,
+  type ClientSideConnection,
+  type InitializeResponse,
+} from '@agentclientprotocol/sdk';
 import type {
   CacheStorage,
   AgentProbeResult,
@@ -80,19 +85,20 @@ export function parseAcpCapabilities(agentCapabilities: unknown): AcpParsedCapab
     | {
         sessionCapabilities?: Record<string, unknown>;
         loadSession?: boolean;
-        promptCapabilities?: { embeddedContext?: boolean };
+        promptCapabilities?: { image?: boolean; audio?: boolean; embeddedContext?: boolean };
       }
     | undefined;
   const caps = agentCapsObj?.sessionCapabilities;
-  const supportsResume = !!caps?.resume;
-  const supportsLoad = Boolean(agentCapsObj?.loadSession) || Boolean(caps?.load) || supportsResume;
+  const supportsResume = Boolean(caps?.resume);
   return {
     supportsResumeSession: supportsResume,
     supportsCloseSession: !!caps?.close,
     supportsDeleteSession: sessionSupportsDelete(caps),
     supportsListSessions: !!caps?.list,
     supportsAdditionalDirectories: !!caps?.additionalDirectories,
-    supportsLoadSession: supportsLoad,
+    supportsLoadSession: Boolean(agentCapsObj?.loadSession),
+    supportsImage: Boolean(agentCapsObj?.promptCapabilities?.image),
+    supportsAudio: Boolean(agentCapsObj?.promptCapabilities?.audio),
     supportsEmbeddedContext: Boolean(agentCapsObj?.promptCapabilities?.embeddedContext),
   };
 }
@@ -128,9 +134,10 @@ export async function initializeAcpConnection(
     title: 'Agentctl',
     version: '1.0.0',
   };
-  const clientCapabilities = options.clientCapabilities ?? {
+  const clientCapabilities: ClientCapabilities = options.clientCapabilities ?? {
     terminal: true,
     fs: { readTextFile: true, writeTextFile: true },
+    elicitation: { form: {}, url: {} },
     _meta: { builtin: { bash: true }, session: { model: true } },
   };
 
@@ -154,7 +161,13 @@ export async function initializeAcpConnection(
     ? await withTimeout(racePromise, options.timeoutMs, 'initializing ACP connection')
     : await racePromise;
 
-  const initResult = rawResult as { agentCapabilities?: unknown };
+  const initResult = rawResult as InitializeResponse;
+  if (initResult.protocolVersion !== PROTOCOL_VERSION) {
+    options.transport?.kill();
+    throw new Error(
+      `Unsupported ACP protocol version ${String(initResult.protocolVersion)}; expected ${String(PROTOCOL_VERSION)}`,
+    );
+  }
   const parsedCapabilities = parseAcpCapabilities(initResult.agentCapabilities);
 
   return { initResult, parsedCapabilities };

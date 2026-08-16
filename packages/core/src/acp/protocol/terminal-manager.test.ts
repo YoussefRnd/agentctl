@@ -57,6 +57,34 @@ describe('TerminalManager', () => {
     expect(code).not.toBe(0); // Should be null or signal-related code
   });
 
+  it('reports spawn failures without emitting the special error event', async () => {
+    const terminalError = new Promise<{ terminalId: string; error: Error }>((resolve) => {
+      manager.once('terminalError', (event: { terminalId: string; error: Error }) =>
+        resolve(event),
+      );
+    });
+
+    const terminalId = manager.spawn({ command: `missing-agentctl-command-${Date.now()}` });
+    const [event, result] = await Promise.all([terminalError, manager.wait(terminalId)]);
+
+    expect(event.terminalId).toBe(terminalId);
+    expect(event.error).toBeInstanceOf(Error);
+    expect(result).toEqual({ exitCode: null, signal: null });
+  });
+
+  it('truncates output on a valid UTF-8 character boundary', async () => {
+    const terminalId = manager.spawn({
+      command: 'node',
+      args: ['-e', 'process.stdout.write("🙂🙂")'],
+      outputByteLimit: 5,
+    });
+
+    await manager.wait(terminalId);
+    const terminal = manager.getTerminal(terminalId);
+    expect(terminal?.output).toBe('🙂');
+    expect(terminal?.output).not.toContain('�');
+  });
+
   it('should support writing data to standard input', async () => {
     return new Promise<void>((resolve, reject) => {
       const terminalId = manager.spawn({

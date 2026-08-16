@@ -118,7 +118,7 @@ export class AuthProvider {
       try {
         const persistent = await this.connectionManager.getConnection(providerId);
         try {
-          await persistent.connection.unstable_logout({});
+          await persistent.connection.logout({});
         } catch {
           // Logout may be unsupported by the agent; nothing further to attempt
         }
@@ -145,8 +145,8 @@ export class AuthProvider {
           clientInfo: { name: 'agentctl-logout', title: 'Agentctl', version: '1.0.0' },
         });
       }
-      if (typeof connection.unstable_logout === 'function') {
-        await connection.unstable_logout({});
+      if (typeof connection.logout === 'function') {
+        await connection.logout({});
       }
     } catch {
       // Ignore errors on logout

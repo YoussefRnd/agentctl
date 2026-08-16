@@ -23,13 +23,15 @@ export interface PersistentConnection {
   idleTimer: NodeJS.Timeout | null;
   sessions: Map<string, { sessionId: string; createdAt: number }>;
   debugLog: AcpDebugLog;
-  promptCapabilities?: unknown;
   supportsResumeSession?: boolean;
   supportsCloseSession?: boolean;
   supportsDeleteSession?: boolean;
   supportsListSessions?: boolean;
   supportsAdditionalDirectories?: boolean;
   supportsLoadSession?: boolean;
+  supportsImage?: boolean;
+  supportsAudio?: boolean;
+  supportsEmbeddedContext?: boolean;
   terminalManager: TerminalManager;
 }
 
@@ -204,8 +206,6 @@ export class PersistentAgentConnectionManager {
       timeoutMs: 120_000,
     });
     const parsedCapabilities = acpInitRes.parsedCapabilities;
-    const agentCaps = (acpInitRes.initResult as { agentCapabilities?: { prompt?: unknown } })
-      .agentCapabilities;
 
     const persistentConn: PersistentConnection = {
       connection,
@@ -215,13 +215,15 @@ export class PersistentAgentConnectionManager {
       idleTimer: null,
       sessions: new Map(),
       debugLog,
-      promptCapabilities: agentCaps?.prompt,
       supportsResumeSession: parsedCapabilities.supportsResumeSession,
       supportsCloseSession: parsedCapabilities.supportsCloseSession,
       supportsDeleteSession: parsedCapabilities.supportsDeleteSession,
       supportsListSessions: parsedCapabilities.supportsListSessions,
       supportsAdditionalDirectories: parsedCapabilities.supportsAdditionalDirectories,
       supportsLoadSession: parsedCapabilities.supportsLoadSession,
+      supportsImage: parsedCapabilities.supportsImage,
+      supportsAudio: parsedCapabilities.supportsAudio,
+      supportsEmbeddedContext: parsedCapabilities.supportsEmbeddedContext,
       terminalManager,
     };
 

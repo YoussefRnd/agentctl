@@ -33,6 +33,22 @@ describe('PermissionEngine', () => {
     expect(engine.isToolCallApproved('bash', { command: 'git status' })).toBe(false); // expired
   });
 
+  test('does not consume grants when one request target is denied', () => {
+    const engine = new PermissionEngine();
+    engine.grantPattern('tool:/allowed', { maxUses: 1 });
+
+    expect(engine.isToolCallApproved('tool', { path: '/allowed', command: 'denied' })).toBe(false);
+    expect(engine.isToolCallApproved('tool', { path: '/allowed' })).toBe(true);
+  });
+
+  test('counts one approved tool call as one grant use', () => {
+    const engine = new PermissionEngine();
+    engine.grantPattern('tool:*', { maxUses: 1 });
+
+    expect(engine.isToolCallApproved('tool', { path: '/a', command: 'echo ok' })).toBe(true);
+    expect(engine.isToolCallApproved('tool', { path: '/b' })).toBe(false);
+  });
+
   test('exports and imports state', () => {
     const engine1 = new PermissionEngine();
     engine1.grantPattern('read_file:/src/*', { maxUses: 5 });

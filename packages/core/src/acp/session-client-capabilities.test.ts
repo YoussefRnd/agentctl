@@ -8,19 +8,11 @@ describe('parseAcpCapabilities', () => {
     expect(caps.supportsResumeSession).toBe(false);
   });
 
-  test('parses loadSession when sessionCapabilities.load is true', () => {
+  test('keeps load and resume capabilities independent', () => {
     const caps = parseAcpCapabilities({
-      sessionCapabilities: { load: true },
+      sessionCapabilities: { load: true, resume: true },
     });
-    expect(caps.supportsLoadSession).toBe(true);
-    expect(caps.supportsResumeSession).toBe(false);
-  });
-
-  test('parses loadSession when sessionCapabilities.resume is true', () => {
-    const caps = parseAcpCapabilities({
-      sessionCapabilities: { resume: true },
-    });
-    expect(caps.supportsLoadSession).toBe(true);
+    expect(caps.supportsLoadSession).toBe(false);
     expect(caps.supportsResumeSession).toBe(true);
   });
 
@@ -42,6 +34,8 @@ describe('parseAcpCapabilities', () => {
       supportsListSessions: false,
       supportsAdditionalDirectories: false,
       supportsLoadSession: false,
+      supportsImage: false,
+      supportsAudio: false,
       supportsEmbeddedContext: false,
     });
 
@@ -52,6 +46,8 @@ describe('parseAcpCapabilities', () => {
       supportsListSessions: false,
       supportsAdditionalDirectories: false,
       supportsLoadSession: false,
+      supportsImage: false,
+      supportsAudio: false,
       supportsEmbeddedContext: false,
     });
 
@@ -62,6 +58,8 @@ describe('parseAcpCapabilities', () => {
       supportsListSessions: false,
       supportsAdditionalDirectories: false,
       supportsLoadSession: false,
+      supportsImage: false,
+      supportsAudio: false,
       supportsEmbeddedContext: false,
     });
   });
@@ -69,7 +67,7 @@ describe('parseAcpCapabilities', () => {
   test('correctly parses all capability fields', () => {
     const caps = parseAcpCapabilities({
       loadSession: true,
-      promptCapabilities: { embeddedContext: true },
+      promptCapabilities: { image: true, audio: true, embeddedContext: true },
       sessionCapabilities: {
         resume: true,
         close: true,
@@ -86,6 +84,8 @@ describe('parseAcpCapabilities', () => {
       supportsListSessions: true,
       supportsAdditionalDirectories: true,
       supportsLoadSession: true,
+      supportsImage: true,
+      supportsAudio: true,
       supportsEmbeddedContext: true,
     });
   });

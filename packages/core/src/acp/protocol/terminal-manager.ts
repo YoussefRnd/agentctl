@@ -12,6 +12,11 @@ export interface TerminalOptions {
   outputByteLimit?: number;
 }
 
+export interface TerminalErrorEvent {
+  terminalId: string;
+  error: Error;
+}
+
 export interface TerminalProcess {
   terminalId: string;
   child: ChildProcess;
@@ -67,8 +72,9 @@ export class TerminalManager extends EventEmitter {
       this.emit('exit', { terminalId, code });
       closed.resolve({ exitCode: code, signal });
     });
-    child.on('error', (err) => {
-      this.emit('error', { terminalId, error: err });
+    child.on('error', (error) => {
+      this.logger.error({ terminalId, error }, 'Terminal process failed');
+      this.emit('terminalError', { terminalId, error } satisfies TerminalErrorEvent);
       termRecord.hasExited = true;
       closed.resolve({ exitCode: null, signal: null });
     });
@@ -78,8 +84,9 @@ export class TerminalManager extends EventEmitter {
     const applyOutputLimit = () => {
       const buf = Buffer.from(termRecord.output, 'utf8');
       if (buf.length > outputByteLimit) {
-        const sliced = buf.subarray(buf.length - outputByteLimit);
-        termRecord.output = sliced.toString('utf8');
+        let start = buf.length - outputByteLimit;
+        while (start < buf.length && (buf[start]! & 0xc0) === 0x80) start += 1;
+        termRecord.output = buf.subarray(start).toString('utf8');
         termRecord.truncated = true;
       }
     };

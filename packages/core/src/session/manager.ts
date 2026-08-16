@@ -692,7 +692,14 @@ export class SessionManager {
 
     let advertisedOptions: ACPConfigOption[];
     try {
-      advertisedOptions = JSON.parse(sessionRecord.sessionConfigOptions) as ACPConfigOption[];
+      const parsed =
+        typeof sessionRecord.sessionConfigOptions === 'string'
+          ? JSON.parse(sessionRecord.sessionConfigOptions)
+          : sessionRecord.sessionConfigOptions;
+      if (!Array.isArray(parsed)) {
+        throw new Error();
+      }
+      advertisedOptions = parsed as ACPConfigOption[];
     } catch {
       throw new Error(`Session ${sessionId} has invalid advertised config options`);
     }
@@ -705,7 +712,7 @@ export class SessionManager {
         throw new Error(`Config option ${configId} does not support boolean values`);
       }
     } else {
-      if (!option.options?.some((candidate) => candidate.value === value)) {
+      if (!option.options?.some((candidate: { value: string }) => candidate.value === value)) {
         throw new Error(`Invalid value for config option ${configId}: ${value}`);
       }
     }

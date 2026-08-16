@@ -1,5 +1,10 @@
 import type { ChildProcess } from 'node:child_process';
-import type { ClientSideConnection, McpServer } from '@agentclientprotocol/sdk';
+import type {
+  ClientCapabilities,
+  ClientSideConnection,
+  McpServer,
+  StopReason,
+} from '@agentclientprotocol/sdk';
 import type { ACPEventDbRow } from '../db/zod-schemas.js';
 import type {
   AuthMethod,
@@ -61,9 +66,8 @@ export interface IAcpClientConnection {
   prompt?(params?: unknown): Promise<unknown>;
   setSessionConfigOption?(params?: unknown): Promise<unknown>;
   setSessionMode?(params?: unknown): Promise<unknown>;
-  unstable_setSessionModel?(params?: unknown): Promise<unknown>;
   unstable_forkSession?(params?: unknown): Promise<unknown>;
-  unstable_logout?(params?: unknown): Promise<unknown>;
+  logout?(params?: unknown): Promise<unknown>;
   extMethod?(method: string, params?: unknown): Promise<unknown>;
   listSessions?(params?: unknown): Promise<unknown>;
   closed: Promise<void>;
@@ -198,7 +202,7 @@ export type DomainAgentEvent = (
 ) & { _meta?: Record<string, unknown> };
 
 export interface PromptResult {
-  stopReason: string;
+  stopReason: StopReason;
   usage?: Record<string, unknown> | null;
   userMessageId?: string | null;
 }
@@ -314,6 +318,9 @@ export interface IConnectionManager {
     supportsListSessions?: boolean;
     supportsAdditionalDirectories?: boolean;
     supportsLoadSession?: boolean;
+    supportsImage?: boolean;
+    supportsAudio?: boolean;
+    supportsEmbeddedContext?: boolean;
   }>;
   closeSession(providerId: string, sessionId: string): Promise<void>;
   writeTerminalInput(terminalId: string, data: string): boolean;
@@ -337,12 +344,14 @@ export interface AcpParsedCapabilities {
   supportsListSessions: boolean;
   supportsAdditionalDirectories: boolean;
   supportsLoadSession: boolean;
+  supportsImage: boolean;
+  supportsAudio: boolean;
   supportsEmbeddedContext: boolean;
 }
 
 export interface InitializeAcpConnectionOptions {
   clientInfo?: { name: string; title?: string; version: string };
-  clientCapabilities?: Record<string, unknown>;
+  clientCapabilities?: ClientCapabilities;
   timeoutMs?: number;
   transport?: AgentStreamTransport;
 }

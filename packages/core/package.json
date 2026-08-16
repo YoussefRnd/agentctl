@@ -60,7 +60,7 @@
     "src"
   ],
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.21.1",
+    "@agentclientprotocol/sdk": "latest",
     "@agentctl/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",

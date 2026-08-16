@@ -28,17 +28,26 @@ function cachedRealpath(p: string): string {
   return resolved;
 }
 
+function canonicalizeWritePath(targetPath: string): string {
+  let existingAncestor = targetPath;
+  while (!fs.existsSync(existingAncestor)) {
+    const parent = path.dirname(existingAncestor);
+    if (parent === existingAncestor) break;
+    existingAncestor = parent;
+  }
+
+  const canonicalAncestor = cachedRealpath(existingAncestor);
+  return path.join(canonicalAncestor, path.relative(existingAncestor, targetPath));
+}
+
 export function resolveAllowedPath(
   requestedPath: string,
   cwd: string,
   additionalDirectories: string[] = [],
-  _allowWrite = false,
+  allowWrite = false,
 ): string {
-  const resolved = path.isAbsolute(requestedPath)
-    ? requestedPath
-    : path.resolve(cwd, requestedPath);
-
-  const canonical = cachedRealpath(resolved);
+  const resolved = path.resolve(cwd, requestedPath);
+  const canonical = allowWrite ? canonicalizeWritePath(resolved) : cachedRealpath(resolved);
   const roots = [cachedRealpath(cwd), ...additionalDirectories.map((d) => cachedRealpath(d))];
 
   const isWithin = roots.some((root) => {

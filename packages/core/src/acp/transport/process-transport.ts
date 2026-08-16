@@ -86,7 +86,7 @@ export class ProcessStreamTransport implements AgentStreamTransport {
 
       if (signal === 'SIGTERM') {
         setTimeout(() => {
-          if (!this.child.killed && this.child.exitCode === null) {
+          if (this.child.exitCode === null && this.child.signalCode === null) {
             this.logger.warn(
               `Process did not exit on SIGTERM, sending SIGKILL to PID ${String(this.child.pid)}`,
             );
@@ -151,7 +151,7 @@ export function createAgentConnection(
           outcome: { outcome: 'selected', optionId: 'allow-once' },
         });
       },
-      async 'fs.readTextFile'(p: { path: string }) {
+      async readTextFile(p: { path: string }) {
         const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(os.tmpdir(), p.path);
         if (!fs.existsSync(absPath)) {
           throw new Error(`File not found: ${absPath}`);
@@ -159,7 +159,7 @@ export function createAgentConnection(
         const content = fs.readFileSync(absPath, 'utf8');
         return Promise.resolve({ content });
       },
-      async 'fs.writeTextFile'(p: { path: string; content: string }) {
+      async writeTextFile(p: { path: string; content: string }) {
         const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(os.tmpdir(), p.path);
         const dir = path.dirname(absPath);
         if (!fs.existsSync(dir)) {
