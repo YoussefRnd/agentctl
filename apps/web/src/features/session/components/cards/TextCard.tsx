@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -24,8 +24,8 @@ interface TextCardProps {
   }[];
   eventId?: number;
   hasGitRepo?: boolean;
-  isSessionRunning?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
+  onEditSubmit?: (eventId: number, newContent: string) => void;
 }
 
 export const TextCard = memo(function TextCard({
@@ -35,12 +35,29 @@ export const TextCard = memo(function TextCard({
   attachments,
   eventId,
   hasGitRepo,
-  isSessionRunning,
   onRewind,
+  onEditSubmit,
 }: TextCardProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftContent, setDraftContent] = useState(content);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { sessionId } = useSession();
+
+  useEffect(() => {
+    setDraftContent(content);
+  }, [content]);
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      const textarea = textareaRef.current;
+      textarea.style.height = 'auto';
+      textarea.style.height = `${String(Math.min(textarea.scrollHeight, 360))}px`;
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+    }
+  }, [isEditing]);
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(content);
@@ -50,8 +67,23 @@ export const TextCard = memo(function TextCard({
     }, 2000);
   };
 
-  const handleEdit = () => {
-    window.dispatchEvent(new CustomEvent('agentctl:edit-prompt', { detail: content }));
+  const handleStartEdit = () => {
+    setDraftContent(content);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setDraftContent(content);
+  };
+
+  const handleSaveEdit = () => {
+    const trimmed = draftContent.trim();
+    if (!trimmed) return;
+    setIsEditing(false);
+    if (eventId && onEditSubmit) {
+      onEditSubmit(eventId, trimmed);
+    }
   };
 
   if (variant === 'user') {
@@ -75,72 +107,120 @@ export const TextCard = memo(function TextCard({
             </div>
           )}
           <div className="group/bubble relative flex w-full flex-col items-end">
-            {content && (
-              <Card className="text-text-main relative px-4 py-3 text-[14px] leading-relaxed shadow-sm">
-                {content}
-              </Card>
-            )}
+            {isEditing ? (
+              <div className="border-border/70 bg-surface/90 focus-within:border-accent/50 focus-within:ring-accent/20 w-full min-w-[280px] rounded-2xl border p-3 shadow-lg backdrop-blur-md transition-all focus-within:ring-1 sm:min-w-[380px]">
+                <textarea
+                  ref={textareaRef}
+                  value={draftContent}
+                  onChange={(e) => {
+                    setDraftContent(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${String(Math.min(e.target.scrollHeight, 360))}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      handleCancelEdit();
+                    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      handleSaveEdit();
+                    }
+                  }}
+                  rows={Math.max(2, Math.min(8, draftContent.split('\n').length))}
+                  className="text-text-main placeholder:text-text-muted/40 max-h-[360px] w-full resize-none bg-transparent leading-relaxed outline-none"
+                  placeholder="Edit your prompt..."
+                />
+                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/5 pt-2">
+                  <span className="text-text-muted/40 hidden text-[11px] select-none sm:inline">
+                    Esc to cancel • ⌘Enter to submit
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary/60 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEdit}
+                      disabled={!draftContent.trim()}
+                      className="bg-accent text-brand-crust hover:bg-accent/90 cursor-pointer rounded-lg px-3 py-1 text-xs font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Save &amp; Submit
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {content && (
+                  <Card className="text-text-main relative px-4 py-3 leading-relaxed shadow-sm">
+                    {content}
+                  </Card>
+                )}
 
-            {/* Quick action bar anchored cleanly below user message bubble */}
-            <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100 focus-within:opacity-100">
-              <Tooltip content={copied ? 'Copied to clipboard' : 'Copy message'}>
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
-                  aria-label="Copy message"
-                >
-                  {copied ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-400" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              </Tooltip>
-
-              <Tooltip content="Edit prompt">
-                <button
-                  type="button"
-                  onClick={handleEdit}
-                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
-                  aria-label="Edit prompt"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip>
-
-              {eventId && onRewind && (
-                <Popover open={showMenu} onOpenChange={setShowMenu}>
-                  <Tooltip content="Rewind or fork session">
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
-                        aria-label="Rewind or fork options"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      </button>
-                    </PopoverTrigger>
+                {/* Quick action bar anchored cleanly below user message bubble */}
+                <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100 focus-within:opacity-100">
+                  <Tooltip content={copied ? 'Copied to clipboard' : 'Copy message'}>
+                    <button
+                      type="button"
+                      onClick={handleCopy}
+                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                      aria-label="Copy message"
+                    >
+                      {copied ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                   </Tooltip>
-                  <PopoverContent
-                    align="end"
-                    side="bottom"
-                    sideOffset={4}
-                    className="w-[260px] overflow-hidden p-0"
-                  >
-                    <RewindMenu
-                      eventId={eventId}
-                      hasGitRepo={hasGitRepo ?? false}
-                      isSessionRunning={isSessionRunning ?? false}
-                      onRewind={onRewind}
-                      onClose={() => {
-                        setShowMenu(false);
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
+
+                  <Tooltip content="Edit prompt">
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                      aria-label="Edit prompt"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
+
+                  {eventId && onRewind && (
+                    <Popover open={showMenu} onOpenChange={setShowMenu}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                          aria-label="Rewind or fork options"
+                          title="Rewind or fork session"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="end"
+                        side="bottom"
+                        sideOffset={4}
+                        className="w-[260px] overflow-hidden p-0"
+                      >
+                        <RewindMenu
+                          eventId={eventId}
+                          hasGitRepo={hasGitRepo ?? false}
+                          onRewind={onRewind}
+                          onClose={() => {
+                            setShowMenu(false);
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -185,17 +265,16 @@ export const TextCard = memo(function TextCard({
 
             {eventId && onRewind && (
               <Popover open={showMenu} onOpenChange={setShowMenu}>
-                <Tooltip content="Rewind or fork session">
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
-                      aria-label="Rewind or fork options"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                </Tooltip>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                    aria-label="Rewind or fork options"
+                    title="Rewind or fork session"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
                 <PopoverContent
                   align="end"
                   side="bottom"
@@ -205,7 +284,6 @@ export const TextCard = memo(function TextCard({
                   <RewindMenu
                     eventId={eventId}
                     hasGitRepo={hasGitRepo ?? false}
-                    isSessionRunning={isSessionRunning ?? false}
                     onRewind={onRewind}
                     onClose={() => {
                       setShowMenu(false);

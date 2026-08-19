@@ -1,7 +1,7 @@
 import { useMemo, memo } from 'react';
 import type { DiffHunk } from '../../../../shared/lib/diff-parser';
 import { DiffLine } from './DiffLine';
-import { ChevronDown, ChevronRight, CheckSquare } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckSquare, ExternalLink } from 'lucide-react';
 
 interface DiffBlockProps {
   path: string;
@@ -10,6 +10,7 @@ interface DiffBlockProps {
   onToggleCollapse?: () => void;
   onStage?: () => void;
   onRevert?: () => void;
+  onOpenFile?: () => void;
   viewMode?: 'inline' | 'split';
   showHeader?: boolean;
 }
@@ -21,6 +22,7 @@ export const DiffBlock = memo(function DiffBlock({
   onToggleCollapse,
   onStage,
   onRevert,
+  onOpenFile,
   viewMode = 'inline',
   showHeader = true,
 }: DiffBlockProps) {
@@ -83,7 +85,18 @@ export const DiffBlock = memo(function DiffBlock({
             </div>
           </button>
 
-          <div className="flex shrink-0 items-center gap-2 opacity-40 transition-opacity group-hover:opacity-100">
+          <div className="flex shrink-0 items-center gap-1.5 opacity-40 transition-opacity group-hover:opacity-100">
+            {onOpenFile && (
+              <button
+                type="button"
+                onClick={onOpenFile}
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                title="Open file in editor"
+                aria-label="Open file in editor"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </button>
+            )}
             {onRevert && (
               <button
                 type="button"

@@ -295,8 +295,8 @@
     font-size: var(--font-terminal-size, 12px);
   }
   .font-context-chat {
-    font-family: var(--font-chat-family, 'JetBrains Mono');
-    font-size: var(--font-chat-size, 13px);
+    font-family: var(--font-chat-family, 'Geist');
+    font-size: var(--font-chat-size, 15px);
   }
 }
 

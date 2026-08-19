@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
 import {
   Folder,
-  FolderOpen,
+  FolderGit2,
   Plus,
   ChevronRight,
-  ChevronDown,
   Loader2,
   Trash2,
   Archive,
@@ -59,100 +58,90 @@ export function ProjectItem({
   handleForkSession,
 }: ProjectItemProps) {
   const showSessions = searchQuery ? true : !isCollapsed;
-  const hasActiveInProject = !isCollapsed && proj.sessions.some((s) => s.id === activeSessionId);
+  const isGit = proj.sessions.some((s) => s.mode === 'worktree');
+  const FolderIcon = isGit ? FolderGit2 : Folder;
 
   return (
-    <div className="space-y-1">
-      {/* Project Folder Row */}
-      <div
-        className={`group flex items-center justify-between rounded-lg px-2.5 py-1.5 transition-all duration-200 ${
-          hasActiveInProject ? 'bg-surface-secondary/70 shadow-xs' : 'hover:bg-surface-secondary/40'
-        } [@media(pointer:coarse)]:px-3 [@media(pointer:coarse)]:py-2.5`}
-      >
+    <div className="space-y-0.5">
+      {/* Project Workspace Header Row */}
+      <div className="group hover:bg-surface-secondary/40 flex items-center justify-between rounded-md px-2 py-1 transition-colors duration-150">
         <button
           type="button"
           aria-expanded={!isCollapsed}
           onClick={() => {
             toggleProject(proj.id);
           }}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left font-normal outline-none"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left font-normal outline-none"
         >
-          <span className="flex w-3 shrink-0 justify-center">
-            {isCollapsed ? (
-              <ChevronRight className="text-text-muted group-hover:text-text-main h-3.5 w-3.5 opacity-60 transition-colors" />
-            ) : (
-              <ChevronDown className="text-accent h-3.5 w-3.5 opacity-90 transition-colors" />
-            )}
-          </span>
-          {isCollapsed ? (
-            <Folder className="text-text-muted group-hover:text-brand-mauve h-3.5 w-3.5 shrink-0 transition-colors" />
-          ) : (
-            <FolderOpen className="text-brand-mauve h-3.5 w-3.5 shrink-0 transition-transform duration-200" />
-          )}
-          <span className="text-text-main truncate text-[12px] font-bold tracking-tight opacity-90 [@media(pointer:coarse)]:text-[13px]">
+          <ChevronRight
+            className={`text-text-muted/50 group-hover:text-text-main h-3 w-3 shrink-0 transition-transform duration-150 ${
+              isCollapsed ? '' : 'rotate-90'
+            }`}
+          />
+          <FolderIcon className="text-text-muted group-hover:text-text-main h-3.5 w-3.5 shrink-0 transition-colors" />
+          <span className="text-text-main/90 group-hover:text-text-main truncate text-xs font-semibold tracking-tight">
             {proj.name}
           </span>
         </button>
 
-        <div className="flex items-center gap-1 pr-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100">
-          <Tooltip content="Remove project">
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+          <Tooltip content="New session">
             <button
               type="button"
-              className="hover:text-brand-red text-text-muted/60 hover:bg-brand-red/10 cursor-pointer rounded p-0.5 hover:scale-105 active:scale-95 disabled:opacity-50"
+              className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 cursor-pointer items-center justify-center rounded transition-colors disabled:opacity-50"
+              disabled={isCreatingSession}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleCreateSession(proj.id);
+              }}
+              aria-label="New session"
+            >
+              {isCreatingSession ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Plus className="h-3 w-3" />
+              )}
+            </button>
+          </Tooltip>
+
+          <Tooltip content="Remove workspace">
+            <button
+              type="button"
+              className="text-text-muted/60 hover:text-danger hover:bg-danger/10 flex h-5 w-5 cursor-pointer items-center justify-center rounded transition-colors disabled:opacity-50"
               disabled={pendingActions.has(`delete-project-${proj.id}`)}
               onClick={(event) => {
                 event.stopPropagation();
                 setConfirmConfig({
                   isOpen: true,
-                  title: 'Remove project',
-                  message: `Are you sure you want to remove project "${proj.name}"? This will stop and clean up all its sessions, but will not delete your local files.`,
+                  title: 'Remove workspace',
+                  message: `Are you sure you want to remove workspace "${proj.name}"? This will stop and clean up all its sessions, but will not delete your local files.`,
                   type: 'brand-red',
-                  confirmText: 'Remove project',
+                  confirmText: 'Remove workspace',
                   onConfirm: () => {
                     handleDeleteProject(proj.id, proj.name);
                     setConfirmConfig(null);
                   },
                 });
               }}
+              aria-label="Remove workspace"
             >
               {pendingActions.has(`delete-project-${proj.id}`) ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </Tooltip>
-
-          <Tooltip content="New session">
-            <button
-              type="button"
-              className="hover:text-brand-mauve text-text-muted/60 hover:bg-brand-mauve/10 cursor-pointer rounded p-0.5 hover:scale-105 active:scale-95 disabled:opacity-50"
-              disabled={isCreatingSession}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleCreateSession(proj.id);
-              }}
-            >
-              {isCreatingSession ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Plus className="h-3.5 w-3.5" />
+                <Trash2 className="h-3 w-3" />
               )}
             </button>
           </Tooltip>
         </div>
       </div>
 
-      {/* Nested Sessions Hierarchy */}
+      {/* Sessions List */}
       {showSessions && (
         <div
-          className="grid overflow-hidden transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          className="grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
           style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}
         >
-          <div className="relative min-h-0 min-w-0 space-y-1 pr-1 pl-4.5">
-            {/* Vertical connector line */}
-            <div className="bg-border/25 absolute top-0 bottom-3 left-3 w-[1px]" />
-
+          <div className="min-h-0 min-w-0 space-y-0.5 pl-3.5">
             {proj.sessions.map((s) => {
               const sessionTitle = s.title || s.taskSlug || s.branch || 'Untitled session';
               const isPending =
@@ -164,29 +153,46 @@ export function ProjectItem({
               const isActive = activeSessionId === s.id;
 
               return (
-                <div key={s.id} className="relative flex items-center">
-                  {/* Curved branch connector line */}
-                  <div className="border-border/25 pointer-events-none absolute top-1/2 left-[-6px] h-3.5 w-3 -translate-y-1/2 rounded-bl-md border-b border-l" />
-
+                <div key={s.id} className="group/session relative flex items-center">
                   <div
-                    className={`group/session relative flex w-full items-center justify-between rounded-lg border py-1 pr-1.5 pl-3 text-[12px] transition-all duration-200 ${
+                    className={`flex w-full min-w-0 items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors duration-100 ${
                       isActive
-                        ? 'border-accent/40 bg-accent/15 text-accent ring-accent/30 font-semibold shadow-[0_0_16px_rgba(203,166,247,0.22)] ring-1'
-                        : 'text-text-muted hover:border-border/30 hover:bg-surface-secondary/50 hover:text-text-main border-transparent'
-                    } min-w-0 [@media(pointer:coarse)]:text-[13px]`}
+                        ? 'bg-surface-secondary text-text-main font-medium'
+                        : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/50'
+                    }`}
                   >
                     <Link
                       to={`/sessions/${s.id}`}
-                      className="flex min-w-0 flex-1 items-center gap-2 py-0.5"
+                      className="flex min-w-0 flex-1 items-center gap-2"
                     >
+                      {/* Status indicator dot */}
+                      {s.status === 'running' ? (
+                        <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        </span>
+                      ) : s.status === 'needs_attention' ? (
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                      ) : s.status === 'error' ? (
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" />
+                      ) : (
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                            isActive ? 'bg-accent' : 'bg-text-muted/30'
+                          }`}
+                        />
+                      )}
+
                       <span
-                        className={`truncate tracking-tight ${s.status === 'archived' ? 'line-through opacity-50' : ''}`}
+                        className={`truncate tracking-tight ${
+                          s.status === 'archived' ? 'line-through opacity-40' : ''
+                        }`}
                       >
                         {sessionTitle}
                       </span>
                     </Link>
 
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-0.5">
                       <Dropdown.Root>
                         <Tooltip content="Session options">
                           <Dropdown.Trigger asChild>
@@ -197,16 +203,16 @@ export function ProjectItem({
                               onClick={(e) => {
                                 e.stopPropagation();
                               }}
-                              className={`cursor-pointer rounded p-1 transition-all ${
+                              className={`flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-all ${
                                 isActive
-                                  ? 'text-accent/80 hover:text-accent hover:bg-accent/20'
-                                  : 'text-text-muted/60 hover:text-text-main hover:bg-surface-secondary/80'
-                              } opacity-70 group-hover/session:opacity-100 focus-visible:opacity-100 disabled:opacity-50 data-[state=open]:opacity-100 [@media(pointer:coarse)]:opacity-100`}
+                                  ? 'text-text-main hover:bg-surface-secondary'
+                                  : 'text-text-muted hover:text-text-main hover:bg-surface-secondary'
+                              } opacity-0 group-hover/session:opacity-100 focus-visible:opacity-100 disabled:opacity-50 data-[state=open]:opacity-100`}
                             >
                               {isPending ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                <MoreHorizontal className="h-3.5 w-3.5" />
+                                <MoreHorizontal className="h-3 w-3" />
                               )}
                             </button>
                           </Dropdown.Trigger>

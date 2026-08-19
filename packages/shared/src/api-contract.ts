@@ -121,6 +121,35 @@ export const apiContract = {
     },
     summary: 'Open project and session',
   },
+  getAvailableEditors: {
+    method: 'GET',
+    path: '/api/editor/available',
+    responses: {
+      200: z.array(z.string()),
+    },
+    summary: 'List available editors detected on host system',
+  },
+  openInEditor: {
+    method: 'POST',
+    path: '/api/editor/open',
+    body: z.object({
+      editor: z.string(),
+      path: z.string(),
+    }),
+    responses: {
+      200: z.object({
+        success: z.boolean(),
+        editor: z.string(),
+      }),
+      400: z.object({
+        message: z.string(),
+      }),
+      500: z.object({
+        message: z.string(),
+      }),
+    },
+    summary: 'Launch external editor, file manager, or terminal',
+  },
   getProviders: {
     method: 'GET',
     path: '/api/providers',

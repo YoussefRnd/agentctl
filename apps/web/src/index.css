@@ -22,8 +22,8 @@ html {
 }
 
 [data-font-ctx='chat'] {
-  font-family: var(--font-chat-family, 'JetBrains Mono') !important;
-  font-size: var(--font-chat-size, 13px) !important;
+  font-family: var(--font-chat-family, 'Geist') !important;
+  font-size: var(--font-chat-size, 15px) !important;
 }
 
 /* Premium Syntax Highlighting & Code Block styling overrides */

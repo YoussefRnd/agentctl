@@ -10,6 +10,7 @@ import {
   FileCode,
   Check,
   AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import type { parseDiff } from '../../../shared/lib/diff-parser';
 
@@ -51,6 +52,7 @@ interface ReviewFileListProps {
   onStage?: (path: string) => void;
   onUnstage?: (path: string) => void;
   onRevert?: (path: string) => void;
+  onOpenFile?: (path: string) => void;
   onStageAll?: () => void;
   onUnstageAll?: () => void;
   isStagingAll?: boolean;
@@ -68,6 +70,7 @@ export function ReviewFileList({
   onStage,
   onUnstage,
   onRevert,
+  onOpenFile,
   onStageAll,
   onUnstageAll,
   isStagingAll,
@@ -188,6 +191,21 @@ export function ReviewFileList({
                         )}
                       </div>
 
+                      {onOpenFile && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenFile(file.path);
+                          }}
+                          className="text-text-muted/40 hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
+                          title="Open file in editor"
+                          aria-label="Open file in editor"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      )}
+
                       {onStage && (file.state === 'modified' || file.state === 'untracked') && (
                         <button
                           type="button"
@@ -263,6 +281,13 @@ export function ReviewFileList({
                             onRevert && (file.state === 'modified' || file.state === 'deleted')
                               ? () => {
                                   onRevert(file.path);
+                                }
+                              : undefined
+                          }
+                          onOpenFile={
+                            onOpenFile
+                              ? () => {
+                                  onOpenFile(file.path);
                                 }
                               : undefined
                           }

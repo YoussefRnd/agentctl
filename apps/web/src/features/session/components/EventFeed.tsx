@@ -18,6 +18,7 @@ interface EventFeedProps {
   hasGitRepo?: boolean;
   isSessionRunning?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
+  onEditSubmit?: (eventId: number, newContent: string) => void;
 }
 
 export function EventFeed({
@@ -26,6 +27,7 @@ export function EventFeed({
   hasGitRepo,
   isSessionRunning,
   onRewind,
+  onEditSubmit,
 }: EventFeedProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -262,8 +264,8 @@ export function EventFeed({
                         isStreaming={isStreaming}
                         eventId={e.id}
                         hasGitRepo={hasGitRepo}
-                        isSessionRunning={isSessionRunning}
                         onRewind={onRewind}
+                        onEditSubmit={onEditSubmit}
                         attachments={
                           (
                             e.data as {

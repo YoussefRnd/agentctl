@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
@@ -20,6 +20,10 @@ export function MainFeed() {
   const { switchProvider, isSwitching } = useProviders(sessionId);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const locationInitialPrompt = (location.state as { initialPrompt?: string } | null)
+    ?.initialPrompt;
 
   const handleProviderSelect = (providerId: string, modelId?: string) => {
     switchProvider(providerId, modelId, sessionData);
@@ -40,15 +44,23 @@ export function MainFeed() {
   const handleRewindRequest = useCallback(
     (eventId: number, mode: RewindMode) => {
       const eventIndex = events.findIndex((e) => e.id === eventId);
-      if (eventIndex === -1) return;
-      const messageCount = mode === 'fork' ? eventIndex + 1 : events.length - eventIndex;
+      const messageCount =
+        eventIndex === -1
+          ? mode === 'fork'
+            ? events.length
+            : 1
+          : mode === 'fork'
+            ? eventIndex + 1
+            : events.length - eventIndex;
 
-      const event = events[eventIndex];
+      const event = eventIndex !== -1 ? events[eventIndex] : null;
       const content =
-        event.type === 'text' && 'content' in event.data
+        event && event.type === 'text' && 'content' in event.data
           ? (event.data as { content: string }).content
           : '';
-      setRewindInput(content);
+      if (content) {
+        setRewindInput(content);
+      }
 
       setConfirmRewind({ eventId, mode, messageCount });
       setRewindError(null);
@@ -82,6 +94,25 @@ export function MainFeed() {
       setIsRewinding(false);
     }
   }, [confirmRewind, sessionId, queryClient, navigate]);
+
+  const handleEditAndSubmit = useCallback(
+    async (eventId: number, newContent: string) => {
+      const trimmed = newContent.trim();
+      if (!trimmed) return;
+      try {
+        await rewindSession(sessionId, eventId, 'conversation');
+        await handleSend(trimmed);
+        toast.success('Prompt updated and restarted');
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to update prompt');
+      }
+    },
+    [sessionId, handleSend, queryClient],
+  );
 
   const lastEvent = events[events.length - 1] as ACPEventRow | undefined;
 
@@ -157,6 +188,7 @@ export function MainFeed() {
             hasGitRepo={sessionData?.session.project?.repoRoot != null}
             isSessionRunning={sessionData?.session.status === 'running'}
             onRewind={handleRewindRequest}
+            onEditSubmit={handleEditAndSubmit}
           />
         )}
       </main>
@@ -200,7 +232,7 @@ export function MainFeed() {
           selectedProviderId={sessionData?.session.selectedProvider}
           selectedModelId={sessionData?.session.selectedModel}
           onProviderSelect={handleProviderSelect}
-          initialInput={rewindInput}
+          initialInput={rewindInput || locationInitialPrompt}
         />
       </div>
     </div>

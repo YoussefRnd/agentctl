@@ -9,6 +9,8 @@ import { ReviewClosedState, ReviewLoadingState, ReviewEmptyState } from './Revie
 import { ReviewFileList } from './ReviewFileList';
 import { ReviewCommitInput } from './ReviewCommitInput';
 import { useSession } from '../../../contexts/SessionContext';
+import { openInEditor } from '@agentctl/api-client';
+import { toast } from 'sonner';
 
 export function ReviewView() {
   const {
@@ -157,6 +159,30 @@ export function ReviewView() {
     }
   }, [allCollapsed, expandAll, collapseAll, parsedFiles]);
 
+  const worktreePath = sessionData?.session.worktreePath || '';
+
+  const handleOpenFile = useCallback(
+    async (filePath: string) => {
+      if (!worktreePath) return;
+      const preferredEditor =
+        (typeof window !== 'undefined'
+          ? localStorage.getItem('agentctl:preferred-editor')
+          : null) ?? 'cursor';
+      const fullPath = worktreePath.endsWith('/')
+        ? `${worktreePath}${filePath}`
+        : `${worktreePath}/${filePath}`;
+
+      try {
+        await openInEditor(preferredEditor, fullPath);
+        const fileName = filePath.split('/').pop() ?? filePath;
+        toast.success(`Opened ${fileName}`);
+      } catch {
+        toast.error(`Could not open file in editor`);
+      }
+    },
+    [worktreePath],
+  );
+
   if (isClosed) return <ReviewClosedState sessionStatus={sessionStatus} />;
   if (isLoading) return <ReviewLoadingState />;
 
@@ -227,6 +253,9 @@ export function ReviewView() {
           }}
           onRevert={(p) => {
             void onRevert(p);
+          }}
+          onOpenFile={(p) => {
+            void handleOpenFile(p);
           }}
           onStageAll={() => {
             void onStageAll();

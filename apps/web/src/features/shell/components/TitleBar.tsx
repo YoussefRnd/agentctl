@@ -1,14 +1,17 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { PanelLeft } from 'lucide-react';
 import { TitleBarWindowControls } from './TitleBarWindowControls';
 import { UpdateIndicator } from './UpdateIndicator';
 import { useUpdate } from '../hooks/useUpdate';
+import { Tooltip } from '@agentctl/ui';
 
 interface TitleBarProps {
   nav: ReactNode;
+  onToggleSidebar?: () => void;
 }
 
-export function TitleBar({ nav }: TitleBarProps) {
+export function TitleBar({ nav, onToggleSidebar }: TitleBarProps) {
   const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
   const hasWinApi = typeof window !== 'undefined' && !!window.electronAPI?.win;
 
@@ -51,35 +54,51 @@ export function TitleBar({ nav }: TitleBarProps) {
   const { state: update, install: installUpdate } = useUpdate();
 
   return (
-    <div className="border-border/40 bg-background/80 relative z-40 border-b backdrop-blur-xl">
-      <div className="app-region-drag flex h-11 items-center gap-4 px-3">
+    <div className="border-border/30 bg-surface-secondary/80 relative z-40 border-b backdrop-blur-xl">
+      <div className="app-region-drag flex h-10 items-center justify-between gap-3 px-3">
         {isMac && <div className="w-[72px] shrink-0" />}
 
-        {/* Brand Anchor */}
-        <div className="flex shrink-0 items-center">
+        {/* Left: Sidebar Toggle & Text Brand */}
+        <div className="flex shrink-0 items-center gap-2">
+          {onToggleSidebar && (
+            <Tooltip content="Toggle Sidebar (⌘B)">
+              <button
+                type="button"
+                onClick={onToggleSidebar}
+                className="app-region-no-drag text-text-muted hover:text-text-main hover:bg-surface flex h-6 w-6 cursor-pointer items-center justify-center rounded-md transition-colors"
+                aria-label="Toggle Sidebar"
+              >
+                <PanelLeft className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          )}
+
           <Link
             to="/"
-            className="app-region-no-drag text-text-main flex items-center gap-2 text-[13px] font-semibold tracking-tight transition-opacity hover:opacity-80"
+            className="app-region-no-drag text-text-main hover:text-accent flex items-center text-xs font-bold tracking-tight transition-colors"
           >
-            <span className="text-brand-mauve font-mono text-[14px]">✦</span>
-            <span>agentctl</span>
+            Agentctl
           </Link>
         </div>
 
         {/* Dynamic Center/Nav Region */}
-        <div className="app-region-no-drag flex h-full min-w-0 flex-1 items-center">{nav}</div>
+        <div className="app-region-no-drag flex h-full min-w-0 flex-1 items-center justify-between">
+          {nav}
+        </div>
 
-        {update.status !== 'idle' && <UpdateIndicator state={update} onInstall={installUpdate} />}
+        <div className="app-region-no-drag flex items-center gap-2">
+          {update.status !== 'idle' && <UpdateIndicator state={update} onInstall={installUpdate} />}
 
-        {showWindowControls && window.electronAPI?.win && (
-          <TitleBarWindowControls
-            controls={effectiveControls}
-            isMaximized={isMaximized}
-            onMinimize={() => window.electronAPI?.win.minimize()}
-            onMaximize={() => window.electronAPI?.win.maximize()}
-            onClose={() => window.electronAPI?.win.close()}
-          />
-        )}
+          {showWindowControls && window.electronAPI?.win && (
+            <TitleBarWindowControls
+              controls={effectiveControls}
+              isMaximized={isMaximized}
+              onMinimize={() => window.electronAPI?.win.minimize()}
+              onMaximize={() => window.electronAPI?.win.maximize()}
+              onClose={() => window.electronAPI?.win.close()}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

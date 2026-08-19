@@ -11,19 +11,20 @@ interface SidebarSearchProps {
 export const SidebarSearch = forwardRef<HTMLInputElement, SidebarSearchProps>(
   function SidebarSearch({ value, onChange, onClear, isMac }, ref) {
     return (
-      <div className="relative">
+      <div className="group/search relative">
         <SearchBar
           ref={ref}
-          placeholder="Search..."
+          placeholder="Search sessions..."
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
           }}
           onClear={onClear}
+          className="bg-surface/50 border-border/40 hover:border-border/70 focus-within:border-accent/50 focus-within:bg-surface/80 h-8 rounded-lg text-xs transition-all"
         />
         {!value && (
-          <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center opacity-60 transition-opacity">
-            <kbd className="bg-surface-secondary/80 border-border/50 text-text-muted rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold">
+          <div className="pointer-events-none absolute top-1/2 right-2.5 flex -translate-y-1/2 items-center opacity-40 transition-opacity group-focus-within/search:opacity-0 group-hover/search:opacity-70">
+            <kbd className="bg-surface-secondary/90 border-border/40 text-text-muted rounded px-1 py-0.5 font-mono text-[9px] font-medium tracking-tight">
               {isMac ? '⌘K' : 'Ctrl+K'}
             </kbd>
           </div>

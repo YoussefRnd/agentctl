@@ -213,9 +213,9 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   return (
     <aside
       aria-label="Main Sidebar"
-      className="relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent"
+      className="relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent select-none"
     >
-      <div className="mt-3 mb-2 space-y-3 px-3">
+      <div className="space-y-2.5 px-3 pt-3 pb-2">
         <SidebarSearch
           ref={searchInputRef}
           value={searchQuery}
@@ -226,19 +226,23 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
           isMac={isMac}
         />
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-text-main text-[10px] font-semibold tracking-wider uppercase opacity-40">
-              Projects
-            </h3>
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-text-muted/60 text-[10px] font-bold tracking-wider uppercase">
+              Workspaces
+            </span>
             {searchQuery && (
-              <Badge variant="accent" size="sm" className="font-mono font-bold">
-                {totalSessionsCount} found
+              <Badge
+                variant="accent"
+                size="sm"
+                className="px-1 py-0 font-mono text-[9px] font-semibold"
+              >
+                {totalSessionsCount}
               </Badge>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5">
             <SidebarFilterMenu
               isOpen={isFilterMenuOpen}
               onToggle={() => {
@@ -253,10 +257,11 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
               onSettingsChange={setSettings}
             />
 
-            <Tooltip content="Add Project">
+            <Tooltip content="Add workspace">
               <Link
                 to="/"
-                className="hover:text-brand-mauve text-text-muted hover:bg-brand-mauve/10 flex items-center justify-center rounded-sm border border-transparent p-1 transition-all hover:scale-105 active:scale-95"
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 items-center justify-center rounded-lg border border-transparent transition-all"
+                aria-label="Add workspace"
               >
                 <Plus className="h-3.5 w-3.5" />
               </Link>
@@ -265,36 +270,52 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
         </div>
       </div>
 
-      <div className="mt-2 flex-1 overflow-y-auto px-3 pb-8">
+      <div className="flex-1 overflow-y-auto px-2.5 pb-6">
         {isLoading ? (
-          <div className="space-y-3 p-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="bg-text-main/5 h-2.5 w-full animate-pulse rounded-full" />
+          <div className="space-y-3 p-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="space-y-1.5">
+                <div className="bg-surface-secondary/60 h-7 w-3/4 animate-pulse rounded-lg" />
+                <div className="ml-4 space-y-1">
+                  <div className="bg-surface-secondary/40 h-6 w-5/6 animate-pulse rounded-md" />
+                  <div className="bg-surface-secondary/30 h-6 w-2/3 animate-pulse rounded-md" />
+                </div>
+              </div>
             ))}
           </div>
         ) : isError ? (
-          <div className="bg-danger/10 border-danger/20 my-2 space-y-2.5 rounded-xl border p-3.5 text-center">
-            <div className="text-danger flex items-center justify-center gap-1.5 text-xs font-semibold">
-              <AlertCircle className="h-4 w-4" />
-              Failed to load projects
+          <div className="bg-danger/5 border-danger/20 my-3 space-y-2 rounded-xl border p-3 text-center">
+            <div className="text-danger flex items-center justify-center gap-1.5 text-xs font-medium">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Failed to load workspaces
             </div>
             <button
               type="button"
               onClick={() => {
                 void refetch();
               }}
-              className="bg-danger/20 hover:bg-danger/30 border-danger/30 text-danger inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1 text-[11px] font-bold transition-all"
+              className="bg-danger/10 hover:bg-danger/20 text-danger inline-flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors"
             >
               <RefreshCw className="h-3 w-3" />
               Retry
             </button>
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <p className="text-text-muted/60 text-xs font-medium">No matching projects</p>
+          <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+            <p className="text-text-muted/60 text-xs font-medium">
+              {searchQuery ? 'No matching sessions' : 'No workspaces yet'}
+            </p>
+            {!searchQuery && (
+              <Link
+                to="/"
+                className="text-accent hover:text-accent/80 mt-2 text-xs font-medium underline underline-offset-2 transition-colors"
+              >
+                Add your first project
+              </Link>
+            )}
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {filteredProjects.map((proj) => {
               const hasActiveSession = proj.sessions.some((s) => s.id === currentActiveSessionId);
               const isCollapsed = collapsedProjects[proj.id] ?? !hasActiveSession;

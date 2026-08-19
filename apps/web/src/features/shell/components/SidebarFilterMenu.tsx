@@ -1,4 +1,4 @@
-import { ListFilter } from 'lucide-react';
+import { ListFilter, Check } from 'lucide-react';
 import { Switch, Tooltip } from '@agentctl/ui';
 
 export type SortByOption = 'lastActive' | 'name' | 'createdAt';
@@ -27,14 +27,15 @@ export function SidebarFilterMenu({
   onSettingsChange,
 }: SidebarFilterMenuProps) {
   return (
-    <div className="relative flex items-center gap-1.5">
-      <Tooltip content="Filter and Sort">
+    <div className="relative flex items-center">
+      <Tooltip content="Filter & Sort">
         <button
           type="button"
           onClick={onToggle}
-          className={`hover:text-brand-mauve text-text-muted hover:bg-surface-secondary/40 cursor-pointer rounded-sm border border-transparent p-1 transition-all hover:scale-105 active:scale-95 ${
-            isOpen ? 'text-brand-mauve bg-brand-mauve/10 border-brand-mauve/20' : ''
+          className={`hover:text-text-main text-text-muted hover:bg-surface-secondary/70 flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-all ${
+            isOpen ? 'text-accent bg-accent/10 border-accent/30' : 'border-transparent'
           }`}
+          aria-label="Filter & Sort"
         >
           <ListFilter className="h-3.5 w-3.5" />
         </button>
@@ -48,56 +49,52 @@ export function SidebarFilterMenu({
             className="fixed inset-0 z-30 cursor-default border-none bg-transparent outline-none"
             onClick={onClose}
           />
-          <div className="border-border/80 bg-surface-secondary/95 animate-in fade-in slide-in-from-top-2 absolute top-full right-0 z-40 mt-1 w-52 rounded-xl border p-2.5 font-sans text-[11px] shadow-2xl backdrop-blur-md duration-200">
-            <div className="text-text-muted mb-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase opacity-50">
+          <div className="border-border/70 bg-surface/95 animate-in fade-in slide-in-from-top-1.5 absolute top-full right-0 z-40 mt-1.5 w-52 rounded-xl border p-2 font-sans text-xs shadow-2xl backdrop-blur-xl duration-150">
+            <div className="text-text-muted/60 mb-1 px-2 text-[10px] font-semibold tracking-wider uppercase">
               Sort by
             </div>
             <div className="space-y-0.5">
-              {(['lastActive', 'name', 'createdAt'] as const).map((opt) => (
+              {(
+                [
+                  { id: 'lastActive', label: 'Last active' },
+                  { id: 'name', label: 'Project name' },
+                  { id: 'createdAt', label: 'Date created' },
+                ] as const
+              ).map((opt) => (
                 <button
-                  key={opt}
+                  key={opt.id}
                   type="button"
                   onClick={() => {
-                    onSettingsChange({ sortBy: opt });
+                    onSettingsChange({ sortBy: opt.id });
                     onClose();
                   }}
-                  className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${
-                    sortBy === opt
-                      ? 'text-brand-mauve font-bold'
-                      : 'text-text-muted hover:text-text-main font-medium'
+                  className={`hover:bg-surface-secondary/80 flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
+                    sortBy === opt.id
+                      ? 'text-accent font-semibold'
+                      : 'text-text-muted hover:text-text-main font-normal'
                   }`}
                 >
-                  <span>
-                    {opt === 'lastActive'
-                      ? 'Last active'
-                      : opt === 'name'
-                        ? 'Name (A-Z)'
-                        : 'Date created'}
-                  </span>
-                  {sortBy === opt && <span className="text-brand-mauve text-[10px]">●</span>}
+                  <span>{opt.label}</span>
+                  {sortBy === opt.id && <Check className="text-accent h-3.5 w-3.5" />}
                 </button>
               ))}
             </div>
 
-            <div className="border-border/30 my-2 border-t" />
+            <div className="border-border/30 my-1.5 border-t" />
 
-            <div className="text-text-muted mb-1.5 px-2 text-[10px] font-semibold tracking-wider uppercase opacity-50">
+            <div className="text-text-muted/60 mb-1 px-2 text-[10px] font-semibold tracking-wider uppercase">
               Filter
             </div>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onSettingsChange({ gitOnly: !gitOnly });
                 }}
-                className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${
-                  gitOnly
-                    ? 'text-brand-mauve font-bold'
-                    : 'text-text-muted hover:text-text-main font-medium'
-                }`}
+                className="hover:bg-surface-secondary/80 text-text-muted hover:text-text-main flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors"
               >
-                <span>Git repos only</span>
+                <span>Git repositories only</span>
                 <Switch
                   checked={gitOnly}
                   size="sm"
@@ -111,13 +108,9 @@ export function SidebarFilterMenu({
                   e.stopPropagation();
                   onSettingsChange({ showArchived: !showArchived });
                 }}
-                className={`hover:bg-surface-tertiary flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${
-                  showArchived
-                    ? 'text-brand-mauve font-bold'
-                    : 'text-text-muted hover:text-text-main font-medium'
-                }`}
+                className="hover:bg-surface-secondary/80 text-text-muted hover:text-text-main flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors"
               >
-                <span>Show archived sessions</span>
+                <span>Show archived</span>
                 <Switch
                   checked={showArchived}
                   size="sm"

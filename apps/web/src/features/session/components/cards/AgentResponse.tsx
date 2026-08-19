@@ -215,7 +215,7 @@ const AgentResponseComponent = function AgentResponse({
           )}
 
           {responseEvent && (
-            <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 max-w-none text-[15px] leading-7 tracking-normal">
+            <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 max-w-none leading-relaxed">
               <StreamingMarkdown
                 content={(responseEvent.data as { content: string }).content}
                 isStreaming={isStreaming}

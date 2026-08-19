@@ -902,7 +902,13 @@ export class SessionManager {
     }
 
     if (sessionRecord.status === 'running') {
-      throw new Error('Cannot rewind a running session. Wait for the agent to finish.');
+      if (mode !== 'fork') {
+        this.stateMachine.stopSession(sessionId);
+        await this.db
+          .update(sessions)
+          .set({ status: 'idle', updatedAt: new Date() })
+          .where(eq(sessions.id, sessionId));
+      }
     }
 
     if (mode !== 'fork') {

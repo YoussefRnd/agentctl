@@ -37,6 +37,7 @@ export function Shell({
   isMobileSidebarOpen = false,
   onCloseMobileSidebar,
 }: ShellProps) {
+  const sidebarPanelRef = usePanelRef();
   const asidePanelRef = usePanelRef();
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: 'shell-layout',
@@ -60,6 +61,37 @@ export function Shell({
     [onCloseAside, onExpandAside],
   );
 
+  const handleToggleSidebar = useCallback(() => {
+    const panel = sidebarPanelRef.current;
+    if (panel) {
+      if (panel.isCollapsed()) {
+        panel.expand();
+      } else {
+        panel.collapse();
+      }
+    }
+  }, [sidebarPanelRef]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        const target = e.target as HTMLElement | null;
+        if (
+          target &&
+          (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+        ) {
+          return;
+        }
+        e.preventDefault();
+        handleToggleSidebar();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleToggleSidebar]);
+
   useEffect(() => {
     const panel = asidePanelRef.current;
     if (!panel) return;
@@ -74,7 +106,7 @@ export function Shell({
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
       <ProgressBar />
 
-      <TitleBar nav={nav} />
+      <TitleBar nav={nav} onToggleSidebar={sidebar ? handleToggleSidebar : undefined} />
 
       <div className="relative z-10 min-h-0 w-full flex-1 overflow-hidden p-3">
         {isAsideMaximized && aside ? (
@@ -86,6 +118,7 @@ export function Shell({
             {sidebar && (
               <Panel
                 id="sidebar"
+                panelRef={sidebarPanelRef}
                 defaultSize="17%"
                 minSize="10%"
                 maxSize="25%"

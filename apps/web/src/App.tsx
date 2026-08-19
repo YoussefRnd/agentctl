@@ -24,7 +24,17 @@ export function App() {
         <Route
           path="/"
           element={
-            <Shell nav={null} sidebar={<Sidebar />}>
+            <Shell
+              nav={
+                <div className="flex h-full w-full items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-text-muted/40">/</span>
+                    <span className="text-text-muted font-medium">Workspaces</span>
+                  </div>
+                </div>
+              }
+              sidebar={<Sidebar />}
+            >
               <NewProjectPalette />
             </Shell>
           }
@@ -32,7 +42,17 @@ export function App() {
         <Route
           path="/settings"
           element={
-            <Shell nav={null} sidebar={<SettingsSidebar />}>
+            <Shell
+              nav={
+                <div className="flex h-full w-full items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-text-muted/40">/</span>
+                    <span className="text-text-muted font-medium">Settings</span>
+                  </div>
+                </div>
+              }
+              sidebar={<SettingsSidebar />}
+            >
               <SettingsPage />
             </Shell>
           }

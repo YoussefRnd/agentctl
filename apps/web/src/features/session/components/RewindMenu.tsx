@@ -6,7 +6,6 @@ export type RewindMode = 'conversation' | 'files' | 'fork';
 interface RewindMenuProps {
   eventId: number;
   hasGitRepo: boolean;
-  isSessionRunning: boolean;
   onRewind: (eventId: number, mode: RewindMode) => void;
   onClose: () => void;
 }
@@ -19,13 +18,7 @@ interface MenuOption {
   disabled: boolean;
 }
 
-export function RewindMenu({
-  eventId,
-  hasGitRepo,
-  isSessionRunning,
-  onRewind,
-  onClose,
-}: RewindMenuProps) {
+export function RewindMenu({ eventId, hasGitRepo, onRewind, onClose }: RewindMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const options = useMemo<MenuOption[]>(
     () => [
@@ -34,24 +27,24 @@ export function RewindMenu({
         label: 'Rewind Conversation',
         icon: RotateCcw,
         description: 'Remove messages after this point. Files unchanged.',
-        disabled: isSessionRunning,
+        disabled: false,
       },
       {
         mode: 'files',
         label: 'Rewind + Files',
         icon: Undo2,
         description: 'Remove messages and restore files to this point.',
-        disabled: isSessionRunning || !hasGitRepo,
+        disabled: !hasGitRepo,
       },
       {
         mode: 'fork',
         label: 'Fork From Here',
         icon: GitBranch,
         description: 'Create a new session from this point. Original unchanged.',
-        disabled: isSessionRunning,
+        disabled: false,
       },
     ],
-    [isSessionRunning, hasGitRepo],
+    [hasGitRepo],
   );
 
   const enabledIndices = useMemo(

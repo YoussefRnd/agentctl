@@ -67,8 +67,37 @@ export function useCommandBarState(
   useEffect(() => {
     if (initialInput && initialInput.trim().length > 0) {
       setInput(initialInput);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+          textarea.focus();
+          textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+        }
+      });
     }
   }, [initialInput]);
+
+  useEffect(() => {
+    const handleEditPrompt = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (typeof customEvent.detail === 'string') {
+        setInput(customEvent.detail);
+        setActiveCommandIndex(0);
+        requestAnimationFrame(() => {
+          const textarea = textareaRef.current;
+          if (textarea) {
+            textarea.focus();
+            textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+            textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        });
+      }
+    };
+    window.addEventListener('agentctl:edit-prompt', handleEditPrompt);
+    return () => {
+      window.removeEventListener('agentctl:edit-prompt', handleEditPrompt);
+    };
+  }, []);
 
   const isRunning = sessionData?.session.status === 'running';
 

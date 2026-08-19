@@ -14,6 +14,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { AppError } from '../errors/app-error.js';
+import { launchEditorProcess, detectAvailableEditors } from '../utils/launch-editor.js';
 
 export default fp(async (fastify) => {
   const s = initServer();
@@ -243,6 +244,31 @@ export default fp(async (fastify) => {
           project: { id: project.id, name: project.name, path: project.path },
           session: session,
           created: true,
+        },
+      };
+    },
+    getAvailableEditors: async () => {
+      const available = await detectAvailableEditors();
+      return {
+        status: 200 as const,
+        body: available,
+      };
+    },
+    openInEditor: async ({ body }) => {
+      const result = await launchEditorProcess(body.editor, body.path);
+      if (!result.success) {
+        return {
+          status: 500 as const,
+          body: {
+            message: result.error ?? `Failed to launch ${body.editor}`,
+          },
+        };
+      }
+      return {
+        status: 200 as const,
+        body: {
+          success: true,
+          editor: body.editor,
         },
       };
     },

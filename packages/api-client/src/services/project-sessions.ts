@@ -360,3 +360,26 @@ export async function sendTerminalInput(
   }
   return res.body;
 }
+
+export { EDITORS, type EditorId, type EditorDefinition } from '@agentctl/shared';
+
+export async function openInEditor(
+  editor: string,
+  targetPath: string,
+): Promise<{ success: boolean; editor: string }> {
+  const res = await api.openInEditor({
+    body: { editor, path: targetPath },
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to launch editor: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
+export async function getAvailableEditors(): Promise<string[]> {
+  const res = await api.getAvailableEditors();
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to get available editors: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
