@@ -41,6 +41,46 @@ export interface Workspace {
   revertFile(filePath: string): Promise<void>;
 }
 
+export function parsePorcelainWorktrees(output: string): ListedWorktree[] {
+  const fields = output.split('\0');
+  const worktrees: ListedWorktree[] = [];
+  let currentPath: string | null = null;
+  let currentBranch: string | null = null;
+  let isPrunable = false;
+
+  const flush = () => {
+    if (currentPath !== null && !isPrunable) {
+      worktrees.push({
+        path: currentPath,
+        branch: currentBranch ?? 'HEAD',
+      });
+    }
+    currentPath = null;
+    currentBranch = null;
+    isPrunable = false;
+  };
+
+  for (const field of fields) {
+    if (field === '') {
+      flush();
+    } else if (field.startsWith('worktree ')) {
+      currentPath = field.slice('worktree '.length).trim();
+    } else if (field.startsWith('branch refs/heads/')) {
+      currentBranch = field.slice('branch refs/heads/'.length).trim();
+    } else if (field.startsWith('branch ')) {
+      const fullBranch = field.slice('branch '.length).trim();
+      currentBranch = fullBranch.startsWith('refs/heads/') ? fullBranch.slice(11) : fullBranch;
+    } else if (field === 'detached') {
+      currentBranch = 'HEAD';
+    } else if (field === 'prunable' || field.startsWith('prunable ')) {
+      isPrunable = true;
+    }
+  }
+  flush();
+
+  return worktrees;
+}
+
 export class WorkspaceManager {
   private baseDir = path.join(os.homedir(), '.agentctl', 'worktrees');
 
@@ -159,6 +199,13 @@ export class WorkspaceManager {
       // Reusing slot!
       const wtGit = simpleGit(storagePath);
       const currentBranch = (await wtGit.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+      const currentHead = (await wtGit.raw(['rev-parse', 'HEAD'])).trim();
+
+      if (currentHead && currentBranch.startsWith('agentctl/')) {
+        await wtGit
+          .raw(['update-ref', 'refs/agentctl/pre-refresh', currentHead])
+          .catch(() => undefined);
+      }
 
       // Force clean it
       await wtGit.raw(['reset', '--hard']).catch(() => undefined);
@@ -191,22 +238,22 @@ export class WorkspaceManager {
   }
 
   private async listWorktrees(repoPath: string): Promise<ListedWorktree[]> {
-    const output = await simpleGit(repoPath).raw(['worktree', 'list', '--porcelain']);
-    const lines = output.split('\n');
-    const worktrees: ListedWorktree[] = [];
+    const output = await simpleGit(repoPath).raw(['worktree', 'list', '--porcelain', '-z']);
+    const parsed = parsePorcelainWorktrees(output);
 
-    let currentPath = '';
-    for (const line of lines) {
-      if (line.startsWith('worktree ')) {
-        currentPath = line.substring(9).trim();
-      } else if (line.startsWith('branch ')) {
-        const fullBranch = line.substring(7).trim();
-        const branch = fullBranch.startsWith('refs/heads/') ? fullBranch.substring(11) : fullBranch;
-        worktrees.push({ path: currentPath, branch });
+    // Verify paths exist on disk to filter out pruned/missing worktrees
+    const validWorktrees: ListedWorktree[] = [];
+    for (const wt of parsed) {
+      const exists = await fs
+        .stat(wt.path)
+        .then((s) => s.isDirectory())
+        .catch(() => false);
+      if (exists) {
+        validWorktrees.push(wt);
       }
     }
 
-    return worktrees;
+    return validWorktrees;
   }
 
   private async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
@@ -739,6 +786,43 @@ export class WorkspaceManager {
     });
   }
 
+  async refreshBranch(
+    repoPath: string,
+    worktreePath: string,
+    targetRef: string,
+  ): Promise<{ moved: boolean; headCommit: string }> {
+    return await this.gitMutex.run(repoPath, async () => {
+      const git = simpleGit(worktreePath);
+      const headCommit = (await git.revparse(['HEAD'])).trim();
+      const targetCommit = (await git.revparse([targetRef])).trim();
+
+      if (headCommit === targetCommit) {
+        return { moved: false, headCommit };
+      }
+
+      const status = await git.status();
+      if (!status.isClean()) {
+        throw new Error('Cannot refresh branch: worktree has uncommitted changes');
+      }
+
+      const mergeBase = (
+        await git.raw(['merge-base', headCommit, targetCommit]).catch(() => '')
+      ).trim();
+      const isAncestor = mergeBase.length > 0 && mergeBase === headCommit;
+
+      if (!isAncestor) {
+        // Record previous commit so nothing is lost if upstream was rewritten (rebase/squash/amend)
+        await git.raw(['update-ref', 'refs/agentctl/pre-refresh', headCommit]);
+        await git.raw(['reset', '--merge', targetCommit]);
+      } else {
+        await git.raw(['merge', '--ff-only', targetCommit]);
+      }
+
+      const newHead = (await git.revparse(['HEAD'])).trim();
+      return { moved: true, headCommit: newHead };
+    });
+  }
+
   async pull(
     repoPath: string,
     worktreePath: string,
@@ -750,8 +834,64 @@ export class WorkspaceManager {
         if (remotes.length === 0) {
           throw new Error('No git remotes configured for this repository');
         }
-        const result = await git.pull();
-        return { success: true, output: JSON.stringify(result) };
+
+        const branchSummary = await git.branchLocal();
+        const currentBranch = branchSummary.current;
+        if (!currentBranch || currentBranch === 'HEAD') {
+          throw new Error('Cannot pull from detached HEAD');
+        }
+
+        const status = await git.status();
+        if (!status.isClean()) {
+          throw new Error('Cannot pull: worktree has uncommitted changes');
+        }
+
+        const beforeCommit = (await git.revparse(['HEAD'])).trim();
+        const remoteName = remotes[0].name;
+
+        // Fetch remote updates
+        await git.fetch(remoteName, currentBranch).catch(async () => {
+          await git.fetch();
+        });
+
+        const remoteTrackingRef = `${remoteName}/${currentBranch}`;
+        let targetCommit: string | null = null;
+        try {
+          targetCommit = (await git.revparse([remoteTrackingRef])).trim();
+        } catch {
+          // Tracking ref might not be directly resolveable
+        }
+
+        if (targetCommit) {
+          if (beforeCommit === targetCommit) {
+            return { success: true, output: 'Already up to date.' };
+          }
+
+          const mergeBase = (
+            await git.raw(['merge-base', beforeCommit, targetCommit]).catch(() => '')
+          ).trim();
+          const isAncestor = mergeBase.length > 0 && mergeBase === beforeCommit;
+
+          if (isAncestor) {
+            await git.raw(['merge', '--ff-only', targetCommit]);
+          } else {
+            // Upstream was rewritten (rebase, squash, or amend)
+            // Preserve the pre-refresh commit under refs/agentctl/pre-refresh
+            await git.raw(['update-ref', 'refs/agentctl/pre-refresh', beforeCommit]);
+            // Lossless merge reset
+            await git.raw(['reset', '--merge', targetCommit]);
+          }
+        } else {
+          // Fallback to ff-only pull
+          const pullResult = await git.pull(['--ff-only']);
+          return { success: true, output: JSON.stringify(pullResult) };
+        }
+
+        const afterCommit = (await git.revparse(['HEAD'])).trim();
+        return {
+          success: true,
+          output: `Successfully updated from ${beforeCommit.slice(0, 7)} to ${afterCommit.slice(0, 7)}`,
+        };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         throw new Error(`Git pull failed: ${message}`);
