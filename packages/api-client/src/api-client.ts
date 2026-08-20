@@ -6,8 +6,44 @@ export function setApiBaseUrl(url: string) {
   apiBaseUrl = url;
 }
 
+export function extractAndPersistUrlToken(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const url = new URL(window.location.href);
+    let token = url.searchParams.get('token');
+
+    // Also check hash query params if hash routing is used (e.g. #/?token=...)
+    if (!token && window.location.hash.includes('token=')) {
+      const hashParts = window.location.hash.split('?');
+      if (hashParts[1]) {
+        const hashParams = new URLSearchParams(hashParts[1]);
+        token = hashParams.get('token');
+      }
+    }
+
+    if (token) {
+      localStorage.setItem('agentctl_token', token);
+
+      // Strip token from URL to prevent accidental sharing
+      url.searchParams.delete('token');
+      const cleanUrl = url.pathname + (url.search ? url.search : '') + url.hash;
+      window.history.replaceState({}, document.title, cleanUrl);
+      return token;
+    }
+  } catch {
+    // Ignore URL parsing errors
+  }
+
+  return null;
+}
+
 export function redirectToLogin() {
   if (typeof window === 'undefined') return;
+
+  // In Electron Desktop, never redirect to login
+  if ('electronAPI' in window) return;
+
   if (window.location.protocol === 'file:' || window.location.hash.length > 0) {
     if (!window.location.hash.includes('/login')) {
       window.location.hash = '#/login';
@@ -26,6 +62,12 @@ export const apiClient = {
     const headers = new Headers(options.headers);
     if (hasBody && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
+    }
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('agentctl_token');
+      if (token && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
     }
 
     try {
@@ -92,6 +134,12 @@ export const apiClient = {
     const headers = new Headers(options.headers);
     if (hasBody && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
+    }
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('agentctl_token');
+      if (token && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
     }
 
     try {

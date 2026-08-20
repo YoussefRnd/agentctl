@@ -17,6 +17,7 @@ import { EventBus } from './utils/event-bus.js';
 import { AppError } from './errors/app-error.js';
 import type { FastifyError } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
+import { AuthManager } from '@agentctl/core';
 import { SessionService } from './services/session-service.js';
 
 export interface AppDependencies {
@@ -24,6 +25,7 @@ export interface AppDependencies {
   worktreeManager?: WorktreeManager;
   providerRegistry?: ProviderRegistry;
   sessionManager?: SessionManager;
+  authManager?: AuthManager;
   env?: ReturnType<typeof parseServerEnv>;
   embedded?: boolean;
 }
@@ -36,9 +38,11 @@ declare module 'fastify' {
     providerRegistry: ProviderRegistry;
     sessionManager: SessionManager;
     sessionService: SessionService;
+    authManager: AuthManager;
     eventBus: EventBus;
     config: ReturnType<typeof parseServerEnv>;
     mcpGateway: McpGateway;
+    embedded: boolean;
   }
 }
 
@@ -88,15 +92,19 @@ export async function buildApp(deps: AppDependencies = {}) {
     fastify.log,
   );
 
+  const authManager = deps.authManager ?? new AuthManager();
+
   fastify.decorate('db', db);
   fastify.decorate('gitMutex', gitMutex);
   fastify.decorate('worktreeManager', worktreeManager);
   fastify.decorate('providerRegistry', providerRegistry);
   fastify.decorate('sessionManager', sessionManager);
   fastify.decorate('sessionService', sessionService);
+  fastify.decorate('authManager', authManager);
   fastify.decorate('eventBus', eventBus);
   fastify.decorate('config', config);
   fastify.decorate('mcpGateway', mcpGateway);
+  fastify.decorate('embedded', deps.embedded ?? false);
 
   // Sync provider metadata in the background on startup (lazy probing on session demand)
   void providerRegistry.sync().catch((err: unknown) => {
@@ -112,6 +120,7 @@ export async function buildApp(deps: AppDependencies = {}) {
 
   fastify.addHook('onClose', async () => {
     await fastify.sessionManager.stopAll();
+    providerRegistry.dispose();
     await mcpGateway.stop();
   });
 
@@ -159,19 +168,24 @@ export async function buildApp(deps: AppDependencies = {}) {
     : ['http://localhost:5173', 'http://localhost:5174'];
 
   await fastify.register(cors, {
-    origin: isProd
-      ? (origin, cb) => {
-          if (!origin) {
-            cb(null, true);
-            return;
+    origin:
+      isProd && !deps.embedded
+        ? (origin, cb) => {
+            if (!origin) {
+              cb(null, true);
+              return;
+            }
+            if (
+              allowedOrigins.includes(origin) ||
+              origin.startsWith('http://localhost:') ||
+              origin.startsWith('http://127.0.0.1:')
+            ) {
+              cb(null, true);
+              return;
+            }
+            cb(new Error('Not allowed by CORS'), false);
           }
-          if (allowedOrigins.includes(origin)) {
-            cb(null, true);
-            return;
-          }
-          cb(new Error('Not allowed by CORS'), false);
-        }
-      : true,
+        : true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [

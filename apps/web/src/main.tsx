@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, HashRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient, setApiBaseUrl } from '@agentctl/api-client';
+import { queryClient, setApiBaseUrl, extractAndPersistUrlToken } from '@agentctl/api-client';
 import { ThemeProvider } from './contexts/ThemeProvider';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { UpdateProvider } from './contexts/UpdateContext';
@@ -67,6 +67,7 @@ if (rootElement) {
   }
 
   async function bootstrap(element: HTMLElement) {
+    extractAndPersistUrlToken();
     const baseUrl = await initApiBaseUrl();
     setApiBaseUrl(baseUrl);
 
@@ -74,14 +75,17 @@ if (rootElement) {
     if (isElectron && window.electronAPI?.getServerSecret) {
       try {
         const secret = await window.electronAPI.getServerSecret();
-        const res = await fetch(`${baseUrl}/api/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ secret }),
-          credentials: 'include',
-        });
-        if (res.ok) {
+        if (secret) {
           localStorage.setItem('agentctl_token', secret);
+          await fetch(`${baseUrl}/api/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${secret}`,
+            },
+            body: JSON.stringify({ secret }),
+            credentials: 'include',
+          });
         }
       } catch {
         // Auto-login failed — user lands on login page

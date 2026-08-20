@@ -1,41 +1,45 @@
 /// <reference types="electron" />
 
 import { buildApp } from '@agentctl/server/app';
+import { registerGracefulShutdown } from '@agentctl/server/lifecycle';
 import { Config } from '@agentctl/core/config';
-import crypto from 'node:crypto';
 
 async function startServer() {
   process.env.NODE_ENV = 'production';
-  // Load environment — in packaged app, DATABASE_URL won't be set,
-  // so getDbPath() falls back to ~/.agentctl/agentctl.db
   const env = Config.load();
 
-  // Auto-generate a secret for production builds
-  if (env.AGENTCTL_SECRET === 'dev-secret') {
-    env.AGENTCTL_SECRET = crypto.randomBytes(16).toString('hex');
-  }
-
-  // Use port 0 to get a random available port
+  // Dynamic port allocation
   env.PORT = 0;
 
   const fastify = await buildApp({ env, embedded: true });
 
+  // Standardized graceful shutdown for desktop embedded server
+  const shutdown = registerGracefulShutdown(fastify, { timeoutMs: 4000 });
+
+  if (process.parentPort) {
+    process.parentPort.on('message', (msg: { data?: { type?: string } }) => {
+      if (msg?.data?.type === 'shutdown') {
+        void shutdown('IPC shutdown');
+      }
+    });
+  }
+
   const host = '127.0.0.1';
   await fastify.listen({ port: env.PORT, host });
 
-  // Get the actual port assigned by the OS
   const address = fastify.server.address();
   const port = typeof address === 'object' && address ? address.port : env.PORT;
+  const startupToken = fastify.authManager.getStartupToken();
 
-  // Notify the main process that the server is ready
+  // Notify the main Electron process that the server is ready
   process.parentPort.postMessage({
     type: 'ready',
     port,
-    secret: env.AGENTCTL_SECRET,
+    secret: startupToken,
   });
 
-  fastify.log.info(`Embedded server listening on ${host}:${port.toString()}`);
-  fastify.log.info(`one-time login key: ${env.AGENTCTL_SECRET}`);
+  fastify.log.info(`Embedded server listening on http://${host}:${port.toString()}`);
+  fastify.log.info(`Startup pairing token: ${startupToken}`);
 }
 
 startServer().catch((err: unknown) => {

@@ -11,7 +11,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./app": "./src/app.ts"
+    "./app": "./src/app.ts",
+    "./lifecycle": "./src/utils/lifecycle.ts"
   },
   "dependencies": {
     "@agentctl/core": "workspace:*",

@@ -3,6 +3,7 @@ export * from './acp/index.js';
 export * from './session/index.js';
 export * from './providers/index.js';
 export * from './security/index.js';
+export * from './auth/index.js';
 export * from './mcp/index.js';
 export * from './db/index.js';
 export * from './db/schema.js';

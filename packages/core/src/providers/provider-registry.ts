@@ -841,4 +841,8 @@ export class ProviderRegistry {
       agent,
     };
   }
+
+  dispose(): void {
+    this.connectionManager.closeAll();
+  }
 }

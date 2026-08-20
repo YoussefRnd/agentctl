@@ -2,30 +2,62 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@agentctl/api-client';
 import { GlassPanel, Input, Button } from '@agentctl/ui';
-import { Eye, EyeOff, ShieldAlert } from 'lucide-react';
+import { KeyRound, ShieldAlert, Laptop } from 'lucide-react';
 
 export function LoginView() {
   const [key, setKey] = React.useState('');
-  const [showPassword, setShowPassword] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    if (window.electronAPI) {
+      void navigate('/', { replace: true });
+    }
+  }, [navigate]);
+
   const handleSubmit = (e: React.SyntheticEvent) => {
     e.preventDefault();
+    const tokenInput = key.trim();
+    if (!tokenInput) return;
+
     setIsLoading(true);
     setError(null);
 
     void (async () => {
       try {
-        await apiClient.fetch('/api/login', {
-          method: 'POST',
-          body: JSON.stringify({ secret: key }),
-        });
-        localStorage.setItem('agentctl_token', key);
+        const res = await apiClient.fetch<{ sessionToken?: string; sessionId?: string }>(
+          '/api/auth/pairing/consume',
+          {
+            method: 'POST',
+            body: JSON.stringify({ pairingToken: tokenInput }),
+          },
+        );
+
+        if (res?.sessionToken) {
+          localStorage.setItem('agentctl_token', res.sessionToken);
+        } else {
+          localStorage.setItem('agentctl_token', tokenInput);
+        }
+
         void navigate('/');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Invalid login key');
+      } catch {
+        // Fallback to traditional /api/login
+        try {
+          localStorage.setItem('agentctl_token', tokenInput);
+          await apiClient.fetch('/api/login', {
+            method: 'POST',
+            body: JSON.stringify({ secret: tokenInput }),
+          });
+          void navigate('/');
+        } catch (err) {
+          localStorage.removeItem('agentctl_token');
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Invalid or expired pairing code. Please generate a new link.',
+          );
+        }
       } finally {
         setIsLoading(false);
       }
@@ -35,50 +67,42 @@ export function LoginView() {
   return (
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
       <GlassPanel className="animate-in fade-in zoom-in w-full max-w-sm rounded-2xl p-6 shadow-2xl duration-300">
-        <div className="mb-6 text-center">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <div className="bg-accent/15 text-accent mb-3 flex h-11 w-11 items-center justify-center rounded-xl">
+            <KeyRound className="h-5 w-5" />
+          </div>
           <h1 className="text-text-main mb-1 text-xl font-bold tracking-tight">
-            AgentCtl Authentication
+            Pair with Agentctl
           </h1>
-          <p className="text-text-muted text-xs opacity-75">
-            Enter your secret access key to unlock the workspace
+          <p className="text-text-muted text-xs leading-relaxed opacity-75">
+            Enter the one-time pairing code from your server terminal or desktop app to connect.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
-              htmlFor="login-key"
+              htmlFor="pairing-key"
               className="text-text-muted mb-1.5 block text-xs font-semibold"
             >
-              Secret access key
+              One-time pairing code
             </label>
-            <div className="relative">
-              <Input
-                id="login-key"
-                type={showPassword ? 'text' : 'password'}
-                value={key}
-                onChange={(e) => {
-                  setKey(e.target.value);
-                }}
-                placeholder="Paste your access key..."
-                className="!h-10 w-full pr-10 font-mono text-sm"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPassword(!showPassword);
-                }}
-                className="text-text-muted hover:text-text-main absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer p-1 transition-colors"
-                title={showPassword ? 'Hide key' : 'Show key'}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
+            <Input
+              id="pairing-key"
+              type="text"
+              value={key}
+              onChange={(e) => {
+                setKey(e.target.value);
+              }}
+              placeholder="Paste pairing code..."
+              className="!h-10 w-full font-mono text-xs"
+              autoFocus
+              required
+            />
           </div>
 
           {error && (
-            <div className="border-danger/30 bg-danger/10 text-danger flex items-center justify-center gap-2 rounded-xl border p-3 text-center text-xs font-medium">
+            <div className="border-danger/30 bg-danger/10 text-danger flex items-center gap-2 rounded-xl border p-3 text-left text-xs font-medium">
               <ShieldAlert className="h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -89,13 +113,14 @@ export function LoginView() {
             disabled={isLoading || !key.trim()}
             className="!h-10 w-full text-xs font-bold"
           >
-            {isLoading ? 'Verifying...' : 'Unlock workspace'}
+            {isLoading ? 'Pairing device...' : 'Connect device'}
           </Button>
         </form>
 
-        <p className="text-text-muted/60 mt-6 text-center text-[11px] leading-relaxed">
-          Check server terminal output for your one-time access key.
-        </p>
+        <div className="border-border/30 text-text-muted mt-6 flex items-center justify-center gap-2 border-t pt-4 text-[11px] opacity-70">
+          <Laptop className="h-3.5 w-3.5" />
+          <span>Desktop & local development connect automatically</span>
+        </div>
       </GlassPanel>
     </div>
   );

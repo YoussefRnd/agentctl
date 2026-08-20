@@ -550,6 +550,14 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     tray?.destroy();
     tray = null;
-    serverProcess?.kill();
+    if (serverProcess) {
+      try {
+        serverProcess.postMessage({ type: 'shutdown' });
+      } catch {
+        // process may have already exited
+      }
+      serverProcess.kill();
+      serverProcess = null;
+    }
   });
 }
