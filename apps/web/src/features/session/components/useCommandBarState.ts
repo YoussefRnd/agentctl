@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from '../../../contexts/SessionContext';
 import { useProviders } from '../../../hooks/useProviders';
 import { useAttachments } from '../../../hooks/useAttachments';
+import { useContextAutocomplete } from '../../../hooks/useContextAutocomplete';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import type { ProviderDiscovery } from '@agentctl/shared';
 
@@ -106,6 +107,13 @@ export function useCommandBarState(
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const contextAutocomplete = useContextAutocomplete({
+    sessionId,
+    input,
+    setInput,
+    textareaRef,
+  });
+
   const handleInputChange = useCallback((val: string) => {
     setInput(val);
     setActiveCommandIndex(0);
@@ -156,18 +164,30 @@ export function useCommandBarState(
     return modelLabel ? `${providerName} · ${modelLabel}` : providerName;
   }, [activeProvider, selectedProviderId, selectedModelId]);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
-    if (!trimmed && readyAttachmentIds.length === 0) return;
+    const hasContext = contextAutocomplete.attachedContexts.length > 0;
+    if (!trimmed && readyAttachmentIds.length === 0 && !hasContext) return;
     if (disabled || isAnyUploading) return;
 
-    onSend(trimmed, readyAttachmentIds.length > 0 ? readyAttachmentIds : undefined);
+    let finalPrompt = trimmed;
+    if (hasContext) {
+      const resolved = await contextAutocomplete.resolveAttachedContexts();
+      if (resolved?.formattedContent) {
+        finalPrompt = trimmed
+          ? `${trimmed}\n\n${resolved.formattedContent}`
+          : resolved.formattedContent;
+      }
+      contextAutocomplete.clearAttachedContexts();
+    }
+
+    onSend(finalPrompt, readyAttachmentIds.length > 0 ? readyAttachmentIds : undefined);
     setInput('');
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [input, readyAttachmentIds, disabled, isAnyUploading, onSend]);
+  }, [input, contextAutocomplete, readyAttachmentIds, disabled, isAnyUploading, onSend]);
 
   const handleProviderSelect = useCallback(
     (providerId: string, modelId?: string) => {
@@ -226,7 +246,11 @@ export function useCommandBarState(
   );
 
   const canSend =
-    !disabled && !isAnyUploading && (input.trim().length > 0 || readyAttachmentIds.length > 0);
+    !disabled &&
+    !isAnyUploading &&
+    (input.trim().length > 0 ||
+      readyAttachmentIds.length > 0 ||
+      contextAutocomplete.attachedContexts.length > 0);
 
   const handleSelectCommand = useCallback(
     (cmd: CommandInfo) => {
@@ -287,5 +311,6 @@ export function useCommandBarState(
     handleDrop,
     canSend,
     handleSelectCommand,
+    contextAutocomplete,
   };
 }

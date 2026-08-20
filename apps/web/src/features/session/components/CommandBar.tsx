@@ -77,6 +77,7 @@ export function CommandBar({
     handleDrop,
     canSend,
     handleSelectCommand,
+    contextAutocomplete,
   } = useCommandBarState(
     onSend,
     disabled,
@@ -136,6 +137,7 @@ export function CommandBar({
           attachments={attachments}
           removeAttachment={removeAttachment}
           retryAttachment={retryAttachment}
+          contextAutocomplete={contextAutocomplete}
           placeholder={placeholder}
           status={sessionData?.session.status}
         >

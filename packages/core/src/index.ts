@@ -11,4 +11,5 @@ export * from './db/zod-schemas.js';
 export * from './git/index.js';
 export { SessionEngine, projectStore, sessionStore } from '@agentctl/shared';
 export * from './config/index.js';
+export * from './context/context-service.js';
 export * from './logger.js';

@@ -2,7 +2,10 @@ import React from 'react';
 import { Plus } from 'lucide-react';
 import { cn } from '@agentctl/ui';
 import { AttachmentStrip } from '../AttachmentStrip';
+import { ContextDropdown } from './ContextDropdown';
+import { ContextChipStrip } from './ContextChipStrip';
 import type { PendingAttachment } from '../../../../hooks/useAttachments';
+import type { UseContextAutocompleteReturn } from '../../../../hooks/useContextAutocomplete';
 
 interface CommandInfo {
   name: string;
@@ -130,6 +133,7 @@ interface CommandInputComposerProps {
   attachments: PendingAttachment[];
   removeAttachment: (id: string) => void;
   retryAttachment: (id: string) => void;
+  contextAutocomplete?: UseContextAutocompleteReturn;
   placeholder?: string;
   status?: string;
   isUnauthenticated?: boolean;
@@ -160,6 +164,7 @@ export function CommandInputComposer({
   attachments,
   removeAttachment,
   retryAttachment,
+  contextAutocomplete,
   placeholder,
   status,
   isUnauthenticated,
@@ -169,7 +174,7 @@ export function CommandInputComposer({
   const getPlaceholder = () => {
     if (disabled) return disabledReason ?? 'Connecting to session...';
     if (status === 'running') return 'Type a message to queue...';
-    return placeholder ?? 'Ask a question or type / for commands...';
+    return placeholder ?? 'Ask a question, type @ for context, or / for commands...';
   };
 
   return (
@@ -181,6 +186,18 @@ export function CommandInputComposer({
         commandRefs={commandRefs}
         onSelectCommand={handleSelectCommand}
       />
+
+      {contextAutocomplete && (
+        <ContextDropdown
+          isOpen={contextAutocomplete.isOpen}
+          items={contextAutocomplete.items}
+          isLoading={contextAutocomplete.isLoading}
+          activeIndex={contextAutocomplete.activeIndex}
+          onSelectItem={contextAutocomplete.selectItem}
+          filterType={contextAutocomplete.filterType}
+          setFilterType={contextAutocomplete.setFilterType}
+        />
+      )}
 
       <CommandInputHint showSlashMenu={showSlashMenu} matchingCommand={matchingCommand} />
 
@@ -203,8 +220,16 @@ export function CommandInputComposer({
           authPanelContent
         ) : (
           <>
+            {/* Context chips for @ file/git attachments */}
+            {contextAutocomplete && contextAutocomplete.attachedContexts.length > 0 && (
+              <ContextChipStrip
+                contexts={contextAutocomplete.attachedContexts}
+                onRemove={contextAutocomplete.removeAttachedContext}
+              />
+            )}
+
             {/* Input row */}
-            <div className="flex w-full items-start gap-3 px-5 pt-5 pb-4">
+            <div className="flex w-full items-start gap-3 px-5 pt-4 pb-4">
               <button
                 type="button"
                 disabled={disabled}
@@ -224,6 +249,11 @@ export function CommandInputComposer({
                     handleInputChange(e.target.value);
                   }}
                   onKeyDown={(e) => {
+                    if (contextAutocomplete?.isOpen) {
+                      const handled = contextAutocomplete.handleKeyDown(e);
+                      if (handled) return;
+                    }
+
                     if (showSlashMenu && filteredCommands.length > 0) {
                       if (e.key === 'ArrowDown') {
                         e.preventDefault();
@@ -261,6 +291,23 @@ export function CommandInputComposer({
                         handleInputChange(input.replace('/', ''));
                       }
                     } else {
+                      if (e.key === 'Backspace' && input === '') {
+                        if (
+                          contextAutocomplete &&
+                          contextAutocomplete.attachedContexts.length > 0
+                        ) {
+                          e.preventDefault();
+                          const last =
+                            contextAutocomplete.attachedContexts[
+                              contextAutocomplete.attachedContexts.length - 1
+                            ];
+                          if (last) {
+                            contextAutocomplete.removeAttachedContext(last.id);
+                          }
+                          return;
+                        }
+                      }
+
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         handleSubmit();
