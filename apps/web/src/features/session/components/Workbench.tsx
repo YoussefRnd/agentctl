@@ -1,11 +1,12 @@
 import { StatusPane } from './StatusPane';
 import { ReviewView } from './ReviewView';
 import { WorktreesPane } from './WorktreesPane';
+import { InteractiveTerminal } from './workbench/InteractiveTerminal';
 import { useSession } from '../../../contexts/SessionContext';
 import { GlassPanel, Badge } from '@agentctl/ui';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, Terminal } from 'lucide-react';
 
-export type WorkbenchTab = 'status' | 'changes' | 'worktrees';
+export type WorkbenchTab = 'status' | 'changes' | 'terminal' | 'worktrees';
 
 interface WorkbenchProps {
   isOpen: boolean;
@@ -36,7 +37,7 @@ export function Workbench({
           {/* Enhanced Tab Navigation */}
           <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center justify-between border-b px-2">
             <div className="flex flex-1 items-center gap-1">
-              {(['status', 'changes', 'worktrees'] as const).map((t) => (
+              {(['status', 'changes', 'terminal', 'worktrees'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -51,8 +52,15 @@ export function Workbench({
                     onTabChange(t);
                   }}
                 >
-                  <span className="relative z-10">
-                    {t === 'status' ? 'Status' : t === 'changes' ? 'Changes' : 'Worktrees'}
+                  <span className="relative z-10 flex items-center gap-1">
+                    {t === 'terminal' && <Terminal className="h-3 w-3 opacity-80" />}
+                    {t === 'status'
+                      ? 'Status'
+                      : t === 'changes'
+                        ? 'Changes'
+                        : t === 'terminal'
+                          ? 'Terminal'
+                          : 'Worktrees'}
                   </span>
                   {t === 'changes' && changesCount > 0 && (
                     <Badge
@@ -89,8 +97,9 @@ export function Workbench({
 
           <div className="bg-surface-secondary/5 min-h-0 flex-1 overflow-hidden" role="tabpanel">
             {tab === 'status' && <StatusPane />}
-            {tab === 'worktrees' && <WorktreesPane />}
             {tab === 'changes' && <ReviewView />}
+            {tab === 'terminal' && <InteractiveTerminal />}
+            {tab === 'worktrees' && <WorktreesPane />}
           </div>
         </div>
       </GlassPanel>

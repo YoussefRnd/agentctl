@@ -87,3 +87,17 @@ html {
     app-region: no-drag;
   }
 }
+
+/* Xterm Custom Styles */
+.xterm {
+  padding: 2px 4px;
+  font-feature-settings:
+    'liga' 1,
+    'calt' 1;
+  font-variant-ligatures: normal;
+  text-rendering: optimizeLegibility;
+}
+
+.xterm-viewport {
+  background-color: transparent !important;
+}

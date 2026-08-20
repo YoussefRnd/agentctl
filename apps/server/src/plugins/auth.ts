@@ -72,9 +72,19 @@ export default fp((fastify) => {
       }
     }
 
-    // 5. Check URL query token (for pairing links)
+    // 5. Check URL query token (for WebSockets / EventSource / Pairing links)
     const queryToken = parsedUrl.searchParams.get('token');
     if (queryToken) {
+      if (queryToken === authManager.getStartupToken()) {
+        return Promise.resolve();
+      }
+      const validation = authManager.validateSessionToken(queryToken);
+      if (validation.valid) {
+        return Promise.resolve();
+      }
+      if (isDev && queryToken === 'dev-secret') {
+        return Promise.resolve();
+      }
       try {
         const result = authManager.consumePairingToken(queryToken, {
           userAgent: request.headers['user-agent'],

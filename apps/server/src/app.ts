@@ -18,7 +18,10 @@ import { AppError } from './errors/app-error.js';
 import type { FastifyError } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
 import { AuthManager } from '@agentctl/core';
+import websocket from '@fastify/websocket';
 import { SessionService } from './services/session-service.js';
+import { InteractiveTerminalService } from './services/terminal-service.js';
+import { terminalRoutes } from './routes/terminal.js';
 
 export interface AppDependencies {
   db?: typeof defaultDb;
@@ -26,6 +29,7 @@ export interface AppDependencies {
   providerRegistry?: ProviderRegistry;
   sessionManager?: SessionManager;
   authManager?: AuthManager;
+  terminalService?: InteractiveTerminalService;
   env?: ReturnType<typeof parseServerEnv>;
   embedded?: boolean;
 }
@@ -39,6 +43,7 @@ declare module 'fastify' {
     sessionManager: SessionManager;
     sessionService: SessionService;
     authManager: AuthManager;
+    terminalService: InteractiveTerminalService;
     eventBus: EventBus;
     config: ReturnType<typeof parseServerEnv>;
     mcpGateway: McpGateway;
@@ -93,6 +98,7 @@ export async function buildApp(deps: AppDependencies = {}) {
   );
 
   const authManager = deps.authManager ?? new AuthManager();
+  const terminalService = deps.terminalService ?? new InteractiveTerminalService(fastify.log);
 
   fastify.decorate('db', db);
   fastify.decorate('gitMutex', gitMutex);
@@ -101,6 +107,7 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.decorate('sessionManager', sessionManager);
   fastify.decorate('sessionService', sessionService);
   fastify.decorate('authManager', authManager);
+  fastify.decorate('terminalService', terminalService);
   fastify.decorate('eventBus', eventBus);
   fastify.decorate('config', config);
   fastify.decorate('mcpGateway', mcpGateway);
@@ -121,6 +128,7 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.addHook('onClose', async () => {
     await fastify.sessionManager.stopAll();
     providerRegistry.dispose();
+    terminalService.closeAll();
     await mcpGateway.stop();
   });
 
@@ -216,6 +224,7 @@ export async function buildApp(deps: AppDependencies = {}) {
   await fastify.register(authPlugin);
 
   // Register other plugins
+  await fastify.register(websocket);
   await fastify.register(worktreePlugin);
   await fastify.register(sessionManagerPlugin);
   await fastify.register(tsRestPlugin);
@@ -223,6 +232,7 @@ export async function buildApp(deps: AppDependencies = {}) {
   // Register routes
   await fastify.register(authRoutes, { prefix: '/api' });
   await fastify.register(eventsRoutes, { prefix: '/api' });
+  await fastify.register(terminalRoutes, { prefix: '/api' });
 
   // Basic route to verify server is up
   fastify.get('/health', () => {
