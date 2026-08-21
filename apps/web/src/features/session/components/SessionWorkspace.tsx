@@ -15,6 +15,19 @@ export function SessionWorkspace() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
+    const handleSwitchTab = (e: CustomEvent<{ tab: WorkbenchTab }>) => {
+      if (e.detail?.tab) {
+        setWorkbenchTab(e.detail.tab);
+        setIsWorkbenchOpen(true);
+      }
+    };
+    window.addEventListener('agentctl:switch-tab', handleSwitchTab as EventListener);
+    return () => {
+      window.removeEventListener('agentctl:switch-tab', handleSwitchTab as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isMaximized) {
         e.preventDefault();

@@ -63,7 +63,14 @@ function SlashCommandsDropdown({
               {cmd.description}
             </span>
             {cmd.category && (
-              <span className="text-text-muted bg-surface-secondary/40 border-border shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium opacity-70 group-hover/item:opacity-90">
+              <span
+                className={cn(
+                  'shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium opacity-70 group-hover/item:opacity-90',
+                  cmd.category === 'Skill'
+                    ? 'border-accent/30 bg-accent/10 text-accent'
+                    : 'border-border bg-surface-secondary/40 text-text-muted',
+                )}
+              >
                 {cmd.category}
               </span>
             )}

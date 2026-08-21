@@ -13,13 +13,6 @@ export interface CommandInfo {
   category?: string;
 }
 
-const DEFAULT_COMMANDS: CommandInfo[] = [
-  { name: 'clear', description: 'Clear the current conversation view', category: 'Session' },
-  { name: 'mcp', description: 'Manage MCP server tools & status', category: 'System' },
-  { name: 'plan', description: 'View structured task execution plan', category: 'Agent' },
-  { name: 'compact', description: 'Compact conversation history', category: 'Session' },
-];
-
 export function useCommandBarState(
   onSend: (value: string, attachmentIds?: string[]) => void,
   disabled?: boolean,
@@ -102,7 +95,33 @@ export function useCommandBarState(
 
   const isRunning = sessionData?.session.status === 'running';
 
-  const commands = DEFAULT_COMMANDS;
+  // Read authoritative slash commands advertised over ACP by the agent, merged with client shortcuts
+  const commands = useMemo<CommandInfo[]>(() => {
+    const acpList = sessionData?.session.availableCommands ?? [];
+    const agentCommands: CommandInfo[] = acpList.map((cmd) => ({
+      name: cmd.name,
+      description: cmd.description,
+      input: cmd.input ? { hint: cmd.input.hint } : undefined,
+      category: 'Agent',
+    }));
+
+    const localShortcuts: CommandInfo[] = [
+      { name: 'terminal', description: 'Switch workbench view to Terminal', category: 'View' },
+      { name: 'mcp', description: 'Open MCP Server Tools & Status modal', category: 'System' },
+    ];
+
+    const seen = new Set<string>();
+    const merged: CommandInfo[] = [];
+
+    for (const cmd of [...agentCommands, ...localShortcuts]) {
+      if (!seen.has(cmd.name)) {
+        seen.add(cmd.name);
+        merged.push(cmd);
+      }
+    }
+
+    return merged;
+  }, [sessionData?.session.availableCommands]);
   const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -170,12 +189,30 @@ export function useCommandBarState(
     if (!trimmed && readyAttachmentIds.length === 0 && !hasContext) return;
     if (disabled || isAnyUploading) return;
 
+    // Check for purely functional view actions (e.g. /terminal, /mcp)
+    if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
+      const cmdName = trimmed.slice(1).toLowerCase();
+      if (cmdName === 'terminal') {
+        window.dispatchEvent(
+          new CustomEvent('agentctl:switch-tab', { detail: { tab: 'terminal' } }),
+        );
+        setInput('');
+        return;
+      }
+      if (cmdName === 'mcp') {
+        window.dispatchEvent(new CustomEvent('agentctl:open-mcp'));
+        setInput('');
+        return;
+      }
+    }
+
     let finalPrompt = trimmed;
+
     if (hasContext) {
       const resolved = await contextAutocomplete.resolveAttachedContexts();
       if (resolved?.formattedContent) {
-        finalPrompt = trimmed
-          ? `${trimmed}\n\n${resolved.formattedContent}`
+        finalPrompt = finalPrompt
+          ? `${finalPrompt}\n\n${resolved.formattedContent}`
           : resolved.formattedContent;
       }
       contextAutocomplete.clearAttachedContexts();

@@ -48,8 +48,12 @@ export async function resolveContext(
   sessionId: string,
   items: ContextItemReference[],
 ): Promise<ResolvedContextResult> {
-  return apiClient.fetch<ResolvedContextResult>(`/api/sessions/${sessionId}/context/resolve`, {
-    method: 'POST',
-    body: JSON.stringify({ items }),
-  });
+  const response = await apiClient.fetch<ResolvedContextResult>(
+    `/api/sessions/${sessionId}/context/resolve`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    },
+  );
+  return response;
 }
