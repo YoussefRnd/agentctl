@@ -24,13 +24,6 @@ export interface ZoomIndicatorState {
 
 const HIDDEN_INDICATOR: ZoomIndicatorState = { context: 'ui', size: 0, visible: false };
 
-let zoomListeners: ((steps: number) => void)[] = [];
-
-/** Dispatch a zoom request from outside the hook (e.g. menu items). 0 = reset. */
-export function requestFontZoom(steps: number): void {
-  for (const listener of zoomListeners) listener(steps);
-}
-
 /**
  * Trackpad & Font Zoom Hook.
  *
@@ -160,21 +153,10 @@ export function useFontZoom(): ZoomIndicatorState {
       applyZoom(action, lastContextRef.current);
     };
 
-    const onZoomRequest = (steps: number) => {
-      if (steps === 0) {
-        resetAll();
-        return;
-      }
-      applyZoom(steps, lastContextRef.current);
-    };
-
-    zoomListeners.push(onZoomRequest);
-
     document.addEventListener('wheel', onWheel, { passive: false });
     document.addEventListener('keydown', onKeyDown);
 
     return () => {
-      zoomListeners = zoomListeners.filter((listener) => listener !== onZoomRequest);
       document.removeEventListener('wheel', onWheel);
       document.removeEventListener('keydown', onKeyDown);
       clearTimeout(hideTimerId);

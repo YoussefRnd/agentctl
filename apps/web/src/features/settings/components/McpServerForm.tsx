@@ -65,7 +65,7 @@ export function McpServerForm({
                 onClick={() => {
                   set('type', type);
                 }}
-                className={`cursor-pointer rounded-lg px-4 py-1 text-center text-[10px] font-bold tracking-wider uppercase transition-all ${
+                className={`cursor-pointer rounded-lg px-4 py-1 text-center text-[10px] font-bold tracking-wider uppercase transition-colors ${
                   formState.type === type
                     ? 'bg-accent text-brand-crust font-black shadow-sm'
                     : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/40'

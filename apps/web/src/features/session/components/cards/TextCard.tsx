@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useEffect } from 'react';
+import { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -28,6 +28,15 @@ interface TextCardProps {
   onEditSubmit?: (eventId: number, newContent: string) => void;
 }
 
+function autoFocusTextarea(textarea: HTMLTextAreaElement | null) {
+  if (textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = `${String(Math.min(textarea.scrollHeight, 360))}px`;
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+  }
+}
+
 export const TextCard = memo(function TextCard({
   content,
   variant = 'provider',
@@ -42,18 +51,7 @@ export const TextCard = memo(function TextCard({
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draftContent, setDraftContent] = useState(content);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { sessionId } = useSession();
-
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      const textarea = textareaRef.current;
-      textarea.style.height = 'auto';
-      textarea.style.height = `${String(Math.min(textarea.scrollHeight, 360))}px`;
-      textarea.focus();
-      textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-    }
-  }, [isEditing]);
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(content);
@@ -91,7 +89,7 @@ export const TextCard = memo(function TextCard({
               {attachments.map((att) => (
                 <div
                   key={att.attachmentId}
-                  className="group/img border-border bg-surface-secondary hover:border-accent/30 relative overflow-hidden rounded-lg border transition-all duration-200"
+                  className="group/img border-border bg-surface-secondary hover:border-accent/30 relative overflow-hidden rounded-lg border transition-colors duration-200"
                 >
                   <img
                     src={`/api/sessions/${sessionId}/attachments/${att.attachmentId}`}
@@ -104,10 +102,11 @@ export const TextCard = memo(function TextCard({
           )}
           <div className="group/bubble relative flex w-full flex-col items-end">
             {isEditing ? (
-              <div className="border-border/70 bg-surface/90 focus-within:border-accent/50 focus-within:ring-accent/20 w-full min-w-[280px] rounded-2xl border p-3 shadow-lg backdrop-blur-md transition-all focus-within:ring-1 sm:min-w-[380px]">
+              <div className="border-border/70 bg-surface/90 focus-within:border-accent/50 focus-within:ring-accent/20 w-full min-w-[280px] rounded-2xl border p-3 shadow-lg backdrop-blur-md transition-colors focus-within:ring-1 sm:min-w-[380px]">
                 <textarea
-                  ref={textareaRef}
+                  ref={autoFocusTextarea}
                   value={draftContent}
+                  aria-label="Edit message prompt"
                   onChange={(e) => {
                     setDraftContent(e.target.value);
                     e.target.style.height = 'auto';
@@ -142,7 +141,7 @@ export const TextCard = memo(function TextCard({
                       type="button"
                       onClick={handleSaveEdit}
                       disabled={!draftContent.trim()}
-                      className="bg-accent text-brand-crust hover:bg-accent/90 cursor-pointer rounded-lg px-3 py-1 text-xs font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                      className="bg-accent text-brand-crust hover:bg-accent/90 cursor-pointer rounded-lg px-3 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Save &amp; Submit
                     </button>
@@ -229,7 +228,7 @@ export const TextCard = memo(function TextCard({
       <div className="flex items-start gap-3">
         <div className="mt-1 shrink-0">
           <div
-            className={`border-border bg-surface-secondary/50 flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 ${
+            className={`border-border bg-surface-secondary/50 flex h-8 w-8 items-center justify-center rounded-lg border transition-colors duration-300 ${
               isStreaming
                 ? 'border-accent/40 bg-accent/5'
                 : 'group-hover/provider:border-border-hover'

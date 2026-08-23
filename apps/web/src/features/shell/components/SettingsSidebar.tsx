@@ -20,7 +20,7 @@ export function SettingsSidebar() {
           </div>
           <Link
             to="/settings"
-            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-all ${
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-colors ${
               activeTab === 'providers'
                 ? 'bg-surface-accent text-accent border-border-active border'
                 : 'text-text-muted hover:text-accent hover:bg-surface-secondary/50 border border-transparent'
@@ -31,7 +31,7 @@ export function SettingsSidebar() {
           </Link>
           <Link
             to="/settings?tab=mcp"
-            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-all ${
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-colors ${
               activeTab === 'mcp'
                 ? 'bg-surface-accent text-accent border-border-active border'
                 : 'text-text-muted hover:text-accent hover:bg-surface-secondary/50 border border-transparent'
@@ -42,7 +42,7 @@ export function SettingsSidebar() {
           </Link>
           <Link
             to="/settings?tab=general"
-            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-all ${
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-colors ${
               activeTab === 'general'
                 ? 'bg-surface-accent text-accent border-border-active border'
                 : 'text-text-muted hover:text-accent hover:bg-surface-secondary/50 border border-transparent'

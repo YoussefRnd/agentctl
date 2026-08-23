@@ -80,7 +80,7 @@ export function ReviewHeader({
               onClick={() => {
                 setIsIndexOpen((prev) => !prev);
               }}
-              className="border-border/15 bg-surface-tertiary/20 text-text-main hover:text-accent hover:border-accent/30 flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-all"
+              className="border-border/15 bg-surface-tertiary/20 text-text-main hover:text-accent hover:border-accent/30 flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors"
               title="Jump to changed file"
             >
               <FileCode className="text-text-muted h-3.5 w-3.5" />
@@ -90,8 +90,10 @@ export function ReviewHeader({
 
             {isIndexOpen && (
               <>
-                <div
-                  className="fixed inset-0 z-20"
+                <button
+                  type="button"
+                  aria-label="Close changed files menu"
+                  className="fixed inset-0 z-20 cursor-default bg-transparent"
                   onClick={() => {
                     setIsIndexOpen(false);
                   }}
@@ -142,7 +144,7 @@ export function ReviewHeader({
             <button
               type="button"
               onClick={onPrevDiff}
-              className="text-text-muted/60 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-7 w-7 cursor-pointer items-center justify-center border-r transition-all"
+              className="text-text-muted/60 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-7 w-7 cursor-pointer items-center justify-center border-r transition-colors"
               title="Previous change"
             >
               <ChevronUp className="h-3.5 w-3.5" />
@@ -150,7 +152,7 @@ export function ReviewHeader({
             <button
               type="button"
               onClick={onNextDiff}
-              className="text-text-muted/60 hover:text-accent hover:bg-surface-tertiary/20 flex h-7 w-7 cursor-pointer items-center justify-center transition-all"
+              className="text-text-muted/60 hover:text-accent hover:bg-surface-tertiary/20 flex h-7 w-7 cursor-pointer items-center justify-center transition-colors"
               title="Next change"
             >
               <ChevronDown className="h-3.5 w-3.5" />
@@ -164,7 +166,7 @@ export function ReviewHeader({
               onClick={() => {
                 if (viewMode !== 'inline') onToggleViewMode();
               }}
-              className={`flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-all ${
+              className={`flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors ${
                 viewMode === 'inline'
                   ? 'bg-surface-accent text-accent shadow-xs'
                   : 'text-text-muted/60 hover:text-text-muted'
@@ -179,7 +181,7 @@ export function ReviewHeader({
               onClick={() => {
                 if (viewMode !== 'split') onToggleViewMode();
               }}
-              className={`flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-all ${
+              className={`flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors ${
                 viewMode === 'split'
                   ? 'bg-surface-accent text-accent shadow-xs'
                   : 'text-text-muted/60 hover:text-text-muted'
@@ -196,7 +198,7 @@ export function ReviewHeader({
             <button
               type="button"
               onClick={onToggleAll}
-              className="border-border/10 bg-surface-tertiary/20 text-text-muted/60 hover:text-accent hover:border-accent/20 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition-all"
+              className="border-border/10 bg-surface-tertiary/20 text-text-muted/60 hover:text-accent hover:border-accent/20 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition-colors"
               title={allCollapsed ? 'Expand all' : 'Collapse all'}
             >
               <ChevronsUpDown className="h-3.5 w-3.5" />
@@ -210,7 +212,7 @@ export function ReviewHeader({
             type="button"
             disabled={files.length === 0 || !!isMerging || !!isDiscarding}
             onClick={onOpenDiscardModal}
-            className="border-danger/20 bg-danger/10 text-danger hover:bg-danger/20 flex h-7 cursor-pointer items-center rounded-md border px-2.5 text-xs font-medium transition-all disabled:cursor-default disabled:opacity-20"
+            className="border-danger/20 bg-danger/10 text-danger hover:bg-danger/20 flex h-7 cursor-pointer items-center rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-20"
           >
             Discard Changes
           </button>
@@ -218,7 +220,7 @@ export function ReviewHeader({
             type="button"
             disabled={files.length === 0 || !!isMerging || !!isDiscarding}
             onClick={onOpenMergeDialog}
-            className="bg-accent text-brand-crust flex h-7 cursor-pointer items-center rounded-md px-3 text-xs font-medium transition-all hover:opacity-90 disabled:cursor-default disabled:opacity-20"
+            className="bg-accent text-brand-crust flex h-7 cursor-pointer items-center rounded-md px-3 text-xs font-medium transition-colors hover:opacity-90 disabled:cursor-default disabled:opacity-20"
           >
             Merge Session
           </button>

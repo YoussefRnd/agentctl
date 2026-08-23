@@ -57,10 +57,12 @@ interface FontPickerProps {
 
 export function FontPicker({ value, onChange, className }: FontPickerProps) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState(value);
+  const [userQuery, setUserQuery] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+
+  const query = userQuery ?? value;
 
   const filtered = query
     ? FONTS.filter((f) => score(f, query) > 0)
@@ -69,11 +71,10 @@ export function FontPicker({ value, onChange, className }: FontPickerProps) {
     : FONTS.slice(0, 12);
 
   useEffect(() => {
-    setQuery(value);
-  }, [value]);
-
-  useEffect(() => {
-    if (!open) setSelectedIndex(-1);
+    if (!open) {
+      setSelectedIndex(-1);
+      setUserQuery(null);
+    }
   }, [open]);
 
   useEffect(() => {
@@ -90,7 +91,7 @@ export function FontPicker({ value, onChange, className }: FontPickerProps) {
 
   const select = (font: string) => {
     onChange(font);
-    setQuery(font);
+    setUserQuery(null);
     setOpen(false);
     inputRef.current?.blur();
   };
@@ -125,15 +126,16 @@ export function FontPicker({ value, onChange, className }: FontPickerProps) {
         ref={inputRef}
         type="text"
         value={query}
+        aria-label="Font family name"
         onChange={(e) => {
-          setQuery(e.target.value);
+          setUserQuery(e.target.value);
           setOpen(true);
         }}
         onFocus={() => {
           setOpen(true);
         }}
         onKeyDown={onKeyDown}
-        className="border-border text-text-main h-8 w-full rounded-md border bg-transparent px-2.5 font-mono text-[12px] transition-all outline-none focus:border-white/40"
+        className="border-border text-text-main h-8 w-full rounded-md border bg-transparent px-2.5 font-mono text-[12px] transition-colors outline-none focus:border-white/40"
         placeholder="Font name..."
       />
       {open && filtered.length > 0 && (

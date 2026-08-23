@@ -41,7 +41,7 @@ export const ApprovalCard = memo(function ApprovalCard({
   const toolCall = request?.toolCall;
 
   const btnBase =
-    'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
+    'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-colors focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
   const btnSolid = 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]';
   const btnGhost = 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main';
 
@@ -66,7 +66,7 @@ export const ApprovalCard = memo(function ApprovalCard({
           approveButtonRef.current?.focus();
         }
       }}
-      className="animate-in fade-in zoom-in-95 duration-300"
+      className="animate-in fade-in zoom-in-95"
     >
       <GlassPanel
         intensity="high"

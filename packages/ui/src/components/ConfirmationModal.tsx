@@ -64,7 +64,7 @@ export const ConfirmationModal = memo(function ConfirmationModal({
               confirmedRef.current = true;
               onConfirm();
             }}
-            className={`h-8 px-4 text-xs font-medium transition-all active:scale-95 ${confirmButtonClass}`}
+            className={`h-8 px-4 text-xs font-medium transition-colors active:scale-95 ${confirmButtonClass}`}
           >
             {confirmText}
           </Button>

@@ -1,10 +1,10 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, FolderClosed, Terminal, Copy, Check } from 'lucide-react';
 import { Dropdown, Tooltip } from '@agentctl/ui';
 import { openInEditor, getAvailableEditors, EDITORS } from '@agentctl/api-client';
 import { toast } from 'sonner';
-import { getEditorBrandIcon } from './EditorIcons';
+import { EditorBrandIcon } from './EditorIcons';
 
 const PREFERRED_EDITOR_KEY = 'agentctl:preferred-editor';
 
@@ -22,7 +22,8 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
   const installedCodeEditors = useMemo(() => {
     const codeEditors = EDITORS.filter((e) => e.commands !== null);
     if (availableEditorIds.length === 0) return codeEditors;
-    return codeEditors.filter((e) => availableEditorIds.includes(e.id));
+    const availableSet = new Set(availableEditorIds);
+    return codeEditors.filter((e) => availableSet.has(e.id));
   }, [availableEditorIds]);
 
   const [preferredEditor, setPreferredEditor] = useState<string>(() => {
@@ -33,32 +34,32 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
     return 'cursor';
   });
 
-  // Keep preferredEditor synchronized with installed editors
-  useEffect(() => {
-    if (installedCodeEditors.length > 0) {
-      const isInstalled = installedCodeEditors.some((e) => e.id === preferredEditor);
-      if (!isInstalled && preferredEditor !== 'file-manager' && preferredEditor !== 'terminal') {
-        const fallback = installedCodeEditors[0].id;
-        setPreferredEditor(fallback);
-      }
+  const effectiveEditor = useMemo(() => {
+    if (
+      preferredEditor === 'file-manager' ||
+      preferredEditor === 'terminal' ||
+      installedCodeEditors.some((e) => e.id === preferredEditor)
+    ) {
+      return preferredEditor;
     }
-  }, [installedCodeEditors, preferredEditor]);
+    return installedCodeEditors[0]?.id ?? 'file-manager';
+  }, [preferredEditor, installedCodeEditors]);
 
   const activeOption = useMemo(() => {
-    if (preferredEditor === 'file-manager') {
+    if (effectiveEditor === 'file-manager') {
       return { id: 'file-manager', label: 'File Manager' };
     }
-    if (preferredEditor === 'terminal') {
+    if (effectiveEditor === 'terminal') {
       return { id: 'terminal', label: 'Terminal' };
     }
     return (
-      installedCodeEditors.find((e) => e.id === preferredEditor) ??
+      installedCodeEditors.find((e) => e.id === effectiveEditor) ??
       installedCodeEditors[0] ?? {
         id: 'file-manager',
         label: 'File Manager',
       }
     );
-  }, [preferredEditor, installedCodeEditors]);
+  }, [effectiveEditor, installedCodeEditors]);
 
   const handleLaunch = useCallback(
     async (editorId: string) => {
@@ -85,7 +86,7 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
         if (editorId === 'vscode' || editorId === 'cursor') {
           const scheme = editorId === 'vscode' ? 'vscode' : 'cursor';
           const uri = `${scheme}://file/${encodeURI(targetPath.startsWith('/') ? targetPath : `/${targetPath}`)}`;
-          window.open(uri, '_blank');
+          window.open(uri, '_blank', 'noopener,noreferrer');
           toast.success(`Opening in ${editorName}...`);
         } else {
           toast.error(`Could not launch ${editorName}`);
@@ -103,10 +104,8 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
 
   if (!targetPath) return null;
 
-  const ActiveBrandIcon = getEditorBrandIcon(activeOption.id);
-
   return (
-    <div className="border-border/30 bg-surface/50 hover:border-border/60 hover:bg-surface/80 flex h-7 items-center rounded-lg border transition-all">
+    <div className="border-border/30 bg-surface/50 hover:border-border/60 hover:bg-surface/80 flex h-7 items-center rounded-lg border transition-colors">
       {/* Primary 1-Click Action with Brand Icon */}
       <Tooltip content={`Open in ${activeOption.label}`}>
         <button
@@ -121,7 +120,7 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
           ) : activeOption.id === 'terminal' ? (
             <Terminal className="h-3.5 w-3.5 opacity-80" />
           ) : (
-            <ActiveBrandIcon className="h-3.5 w-3.5 shrink-0" />
+            <EditorBrandIcon editorId={activeOption.id} className="h-3.5 w-3.5 shrink-0" />
           )}
           <span className="truncate">Open in {activeOption.label}</span>
         </button>
@@ -149,7 +148,6 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
 
                 {installedCodeEditors.map((editor) => {
                   const isSelected = editor.id === preferredEditor;
-                  const ItemBrandIcon = getEditorBrandIcon(editor.id);
 
                   return (
                     <Dropdown.Item
@@ -165,7 +163,7 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
                         ) : (
                           <div className="h-3 w-3 shrink-0" />
                         )}
-                        <ItemBrandIcon className="h-3.5 w-3.5 shrink-0" />
+                        <EditorBrandIcon editorId={editor.id} className="h-3.5 w-3.5 shrink-0" />
                         <span>{editor.label}</span>
                       </div>
                       {editor.badge && (

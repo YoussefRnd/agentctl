@@ -3,43 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
+import { splitStreamingContent, type StreamingContentSegment } from './streamingMarkdownUtils';
 
-export interface StreamingContentSegment {
-  type: 'text' | 'code';
-  value: string;
-}
+export type { StreamingContentSegment };
 
 const REHYPE_PLUGINS = [remarkGfm, rehypeHighlight];
-
-const MAX_LANGUAGE_TAG_LENGTH = 25;
-
-function stripLanguageTag(code: string): string {
-  const newlineIdx = code.indexOf('\n');
-  if (newlineIdx === -1) return code;
-  const firstLine = code.slice(0, newlineIdx);
-  if (
-    firstLine.length === 0 ||
-    (firstLine.length < MAX_LANGUAGE_TAG_LENGTH && !firstLine.includes(' '))
-  ) {
-    return code.slice(newlineIdx + 1);
-  }
-  return code;
-}
-
-export function splitStreamingContent(content: string): StreamingContentSegment[] {
-  const segments: StreamingContentSegment[] = [];
-  const parts = content.split('```');
-  for (let i = 0; i < parts.length; i += 1) {
-    const part = parts[i] ?? '';
-    if (part.length === 0) continue;
-    if (i % 2 === 0) {
-      segments.push({ type: 'text', value: part });
-    } else {
-      segments.push({ type: 'code', value: stripLanguageTag(part) });
-    }
-  }
-  return segments;
-}
 
 interface StreamingMarkdownProps {
   content: string;
@@ -50,11 +18,11 @@ function StreamingBody({ content }: { content: string }) {
   const segments = splitStreamingContent(content);
   return (
     <>
-      {segments.map((segment, i) =>
+      {segments.map((segment) =>
         segment.type === 'code' ? (
-          <MarkdownCodeBlock key={i}>{segment.value}</MarkdownCodeBlock>
+          <MarkdownCodeBlock key={segment.key}>{segment.value}</MarkdownCodeBlock>
         ) : (
-          <span key={i} className="whitespace-pre-wrap">
+          <span key={segment.key} className="whitespace-pre-wrap">
             {segment.value}
           </span>
         ),

@@ -48,7 +48,7 @@ export function McpToolPermissionEditor({
             onClick={() => {
               onUpdateOverride(shortName, opt.value);
             }}
-            className={`label-3xs cursor-pointer rounded-lg px-2.5 py-1 transition-all ${
+            className={`label-3xs cursor-pointer rounded-lg px-2.5 py-1 transition-colors ${
               currentOverride === opt.value
                 ? 'bg-accent text-brand-crust shadow-sm'
                 : 'text-text-muted hover:text-text-main hover:bg-white/5'

@@ -45,7 +45,7 @@ function SlashCommandsDropdown({
               onSelectCommand(cmd);
             }}
             className={cn(
-              'group/item flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-all duration-200',
+              'group/item flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors duration-200',
               isActive
                 ? 'bg-accent/15 text-accent border-accent/20 border'
                 : 'text-text-main hover:bg-surface-secondary/80 hover:text-text-main border border-transparent',
@@ -117,20 +117,25 @@ function CommandInputHint({ showSlashMenu, matchingCommand }: CommandInputHintPr
   );
 }
 
-interface CommandInputComposerProps {
+export interface CommandInputComposerFlags {
   hasQueuedMessages?: boolean;
   disabled?: boolean;
+  isFocused?: boolean;
+  showSlashMenu?: boolean;
+  isUnauthenticated?: boolean;
+}
+
+interface CommandInputComposerProps {
+  flags?: CommandInputComposerFlags;
   disabledReason?: string;
   input: string;
   handleInputChange: (val: string) => void;
-  isFocused: boolean;
   setIsFocused: (focused: boolean) => void;
   handleSubmit: () => void;
   handlePaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   handleDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   handleAttachClick: () => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  showSlashMenu: boolean;
   filteredCommands: CommandInfo[];
   activeCommandIndex: number;
   setActiveCommandIndex: (index: number) => void;
@@ -143,25 +148,21 @@ interface CommandInputComposerProps {
   contextAutocomplete?: UseContextAutocompleteReturn;
   placeholder?: string;
   status?: string;
-  isUnauthenticated?: boolean;
   authPanelContent?: React.ReactNode;
   children?: React.ReactNode;
 }
 
 export function CommandInputComposer({
-  hasQueuedMessages,
-  disabled,
+  flags = {},
   disabledReason,
   input,
   handleInputChange,
-  isFocused,
   setIsFocused,
   handleSubmit,
   handlePaste,
   handleDrop,
   handleAttachClick,
   textareaRef,
-  showSlashMenu,
   filteredCommands,
   activeCommandIndex,
   setActiveCommandIndex,
@@ -174,10 +175,16 @@ export function CommandInputComposer({
   contextAutocomplete,
   placeholder,
   status,
-  isUnauthenticated,
   authPanelContent,
   children,
 }: CommandInputComposerProps) {
+  const {
+    hasQueuedMessages = false,
+    disabled = false,
+    isFocused = false,
+    showSlashMenu = false,
+    isUnauthenticated = false,
+  } = flags;
   const getPlaceholder = () => {
     if (disabled) return disabledReason ?? 'Connecting to session...';
     if (status === 'running') return 'Type a message to queue...';
@@ -211,7 +218,7 @@ export function CommandInputComposer({
       <div
         data-font-ctx="buffer"
         className={cn(
-          'bg-brand-mantle border-border/30 flex flex-col overflow-visible rounded-xl border transition-all duration-300',
+          'bg-brand-mantle border-border/30 flex flex-col overflow-visible rounded-xl border transition-colors duration-300',
           hasQueuedMessages && 'rounded-t-none border-t-0',
           disabled ? 'opacity-55' : 'opacity-100',
           isFocused
@@ -241,7 +248,7 @@ export function CommandInputComposer({
                 type="button"
                 disabled={disabled}
                 onClick={handleAttachClick}
-                className="text-text-muted hover:text-accent hover:bg-accent/10 focus-visible:ring-accent/50 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
+                className="text-text-muted hover:text-accent hover:bg-accent/10 focus-visible:ring-accent/50 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
                 title="Attach image"
                 aria-label="Attach image"
               >

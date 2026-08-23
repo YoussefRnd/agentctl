@@ -13,7 +13,7 @@ export const Switch = ({ className, size = 'md', ref, ...props }: SwitchProps) =
     <SwitchPrimitive.Root
       ref={ref}
       className={cn(
-        'focus-visible:ring-accent/40 relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 transition-all duration-300 ease-out select-none focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40',
+        'focus-visible:ring-accent/40 relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors duration-300 ease-out select-none focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40',
         isSm ? 'h-4 w-8' : 'h-5 w-9',
         'data-[state=checked]:bg-accent data-[state=checked]:border-accent',
         'data-[state=unchecked]:bg-surface-secondary/40 data-[state=unchecked]:border-border/30 data-[state=unchecked]:hover:bg-surface-secondary/60 data-[state=unchecked]:hover:border-border/40',

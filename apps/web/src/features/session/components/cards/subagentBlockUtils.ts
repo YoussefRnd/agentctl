@@ -94,7 +94,7 @@ const STATUS_PRIORITY: Record<string, number> = {
 };
 
 export function sortSubagentGroups(groups: SubagentGroup[]): SubagentGroup[] {
-  return [...groups].sort((a, b) => {
+  return groups.toSorted((a, b) => {
     const dataA = a.subagentEvent.data as { status: string };
     const dataB = b.subagentEvent.data as { status: string };
     const priA = STATUS_PRIORITY[dataA.status] ?? 3;

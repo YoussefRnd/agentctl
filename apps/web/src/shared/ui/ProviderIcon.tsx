@@ -25,7 +25,7 @@ export function ProviderIcon({
   if (provider.agent?.icon) {
     return (
       <div
-        className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}
+        className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-colors ${s.container} ${className}`}
       >
         <img src={provider.agent.icon} alt="" className={`object-contain ${s.img}`} />
       </div>
@@ -35,7 +35,7 @@ export function ProviderIcon({
   if (provider.id.includes('claude')) {
     return (
       <div
-        className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}
+        className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-colors ${s.container} ${className}`}
       >
         <span className={`text-text-main font-bold ${s.letter}`}>C</span>
       </div>
@@ -44,7 +44,7 @@ export function ProviderIcon({
 
   return (
     <div
-      className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-all ${s.container} ${className}`}
+      className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-colors ${s.container} ${className}`}
     >
       {showFallbackIcon && <Terminal className={`text-text-main ${s.icon}`} />}
     </div>

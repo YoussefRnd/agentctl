@@ -42,7 +42,7 @@ export const DiffBlock = memo(function DiffBlock({
   const dirPath = path.substring(0, path.lastIndexOf('/'));
 
   return (
-    <div className="group border-border/10 bg-surface-secondary/5 hover:border-border/20 hover:bg-surface-secondary/10 overflow-hidden rounded-lg border backdrop-blur-md transition-all duration-300">
+    <div className="group border-border/10 bg-surface-secondary/5 hover:border-border/20 hover:bg-surface-secondary/10 overflow-hidden rounded-lg border backdrop-blur-md transition-colors duration-300">
       {showHeader && (
         <header className="border-border/10 bg-surface/40 group-hover:bg-surface/50 sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-2.5 backdrop-blur-2xl transition-colors select-none">
           <button
@@ -101,7 +101,7 @@ export const DiffBlock = memo(function DiffBlock({
               <button
                 type="button"
                 onClick={onRevert}
-                className="border-danger/20 bg-danger/5 text-danger hover:bg-danger/10 label-3xs flex h-6 cursor-pointer items-center rounded-md border px-2 transition-all"
+                className="border-danger/20 bg-danger/5 text-danger hover:bg-danger/10 label-3xs flex h-6 cursor-pointer items-center rounded-md border px-2 transition-colors"
               >
                 Revert
               </button>
@@ -110,7 +110,7 @@ export const DiffBlock = memo(function DiffBlock({
               <button
                 type="button"
                 onClick={onStage}
-                className="bg-accent text-brand-crust label-3xs flex h-6 cursor-pointer items-center rounded-md px-2 shadow-[0_0_10px_rgba(203,166,247,0.2)] transition-all hover:opacity-90"
+                className="bg-accent text-brand-crust label-3xs flex h-6 cursor-pointer items-center rounded-md px-2 shadow-[0_0_10px_rgba(203,166,247,0.2)] transition-colors hover:opacity-90"
               >
                 Stage
               </button>
@@ -131,7 +131,7 @@ export const DiffBlock = memo(function DiffBlock({
                   <button
                     type="button"
                     onClick={onStage}
-                    className="bg-accent/10 text-accent hover:bg-accent/20 flex h-5 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[8px] font-black opacity-0 transition-all group-hover/hunk:opacity-100"
+                    className="bg-accent/10 text-accent hover:bg-accent/20 flex h-5 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[8px] font-black opacity-0 transition-colors group-hover/hunk:opacity-100"
                     title="Stage Hunk"
                   >
                     <CheckSquare className="h-3 w-3" />

@@ -2,17 +2,22 @@ import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { cn } from '../utils.js';
 
-export const Dropdown = {
-  Root: ({ modal = false, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) => (
-    <DropdownMenuPrimitive.Root modal={modal} {...props} />
-  ),
-  Trigger: DropdownMenuPrimitive.Trigger,
-  Portal: DropdownMenuPrimitive.Portal,
-  Content: ({
-    className,
-    sideOffset = 4,
-    ...props
-  }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) => (
+export function DropdownRoot({
+  modal = false,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root modal={modal} {...props} />;
+}
+
+export const DropdownTrigger = DropdownMenuPrimitive.Trigger;
+export const DropdownPortal = DropdownMenuPrimitive.Portal;
+
+export function DropdownContent({
+  className,
+  sideOffset = 4,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  return (
     <DropdownMenuPrimitive.Content
       sideOffset={sideOffset}
       className={cn(
@@ -21,8 +26,14 @@ export const Dropdown = {
       )}
       {...props}
     />
-  ),
-  Item: ({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Item>) => (
+  );
+}
+
+export function DropdownItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Item>) {
+  return (
     <DropdownMenuPrimitive.Item
       className={cn(
         'flex cursor-pointer items-center rounded-md px-2 py-1.5 text-[11px] font-bold outline-none hover:bg-white/5 focus:bg-white/5',
@@ -30,21 +41,28 @@ export const Dropdown = {
       )}
       {...props}
     />
-  ),
-  Separator: ({
-    className,
-    ...props
-  }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) => (
+  );
+}
+
+export function DropdownSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return (
     <DropdownMenuPrimitive.Separator
       className={cn('my-1 h-px bg-white/10', className)}
       {...props}
     />
-  ),
-  Sub: DropdownMenuPrimitive.Sub,
-  SubTrigger: ({
-    className,
-    ...props
-  }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) => (
+  );
+}
+
+export const DropdownSub = DropdownMenuPrimitive.Sub;
+
+export function DropdownSubTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) {
+  return (
     <DropdownMenuPrimitive.SubTrigger
       className={cn(
         'flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-[11px] font-bold outline-none hover:bg-white/5 focus:bg-white/5 data-[state=open]:bg-white/5',
@@ -52,19 +70,36 @@ export const Dropdown = {
       )}
       {...props}
     />
-  ),
-  SubContent: ({
-    className,
-    sideOffset = 2,
-    ...props
-  }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) => (
+  );
+}
+
+export function DropdownSubContent({
+  className,
+  sideOffset = 2,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+  return (
     <DropdownMenuPrimitive.SubContent
       sideOffset={sideOffset}
       className={cn(
-        'liquid-glass z-dropdown animate-in fade-in zoom-in-95 min-w-44 rounded-md p-1',
+        'liquid-glass z-dropdown animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 min-w-32 rounded-md p-1',
         className,
       )}
       {...props}
     />
-  ),
-};
+  );
+}
+
+export function Dropdown(props: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root {...props} />;
+}
+
+Dropdown.Root = DropdownRoot;
+Dropdown.Trigger = DropdownTrigger;
+Dropdown.Portal = DropdownPortal;
+Dropdown.Content = DropdownContent;
+Dropdown.Item = DropdownItem;
+Dropdown.Separator = DropdownSeparator;
+Dropdown.Sub = DropdownSub;
+Dropdown.SubTrigger = DropdownSubTrigger;
+Dropdown.SubContent = DropdownSubContent;

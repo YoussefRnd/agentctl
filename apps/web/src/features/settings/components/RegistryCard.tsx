@@ -49,14 +49,12 @@ export function RegistryCard({
   const name = provider.agent?.name ?? provider.label;
   const subtitle = provider.agent?.id ?? provider.id;
   const notInstalled = provider.installState === 'not_installed';
-  const hasAuth = !!provider.agent?.authMethods && provider.agent.authMethods.length > 0;
   const repositoryUrl = provider.agent?.repository;
   const websiteUrl = provider.agent?.website;
   const authStatus = provider.authState ? authStateConfig[provider.authState] : undefined;
-  const canLogout = provider.supportsLogout && provider.authState === 'authenticated';
 
   return (
-    <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-all duration-300">
+    <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-colors duration-300">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <ProviderIcon provider={provider} size="sm" className="shrink-0" />
@@ -75,71 +73,15 @@ export function RegistryCard({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
-          {canLogout && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onLogout(provider.id);
-              }}
-              className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
-            >
-              <LogOut className="h-3 w-3" />
-              Logout
-            </Button>
-          )}
-
-          {hasAuth && !notInstalled && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onAuth(provider);
-              }}
-              className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
-            >
-              <KeyRound className="h-3 w-3" />
-              Configure
-            </Button>
-          )}
-
-          {notInstalled ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isInstalling}
-              onClick={() => {
-                onInstall(provider.id);
-              }}
-              className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
-            >
-              {isInstalling ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Download className="h-3 w-3" />
-              )}
-              Install
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isRemoving}
-              onClick={() => {
-                onRemove(provider.id);
-              }}
-              className="flex h-8 items-center gap-1 rounded-lg border-red-500/10 px-3 py-1.5 text-[10.5px] font-bold tracking-wide text-red-400 uppercase hover:bg-red-500/5 hover:text-red-300"
-            >
-              {isRemoving ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Trash2 className="h-3 w-3" />
-              )}
-              Remove
-            </Button>
-          )}
-        </div>
+        <RegistryCardActions
+          provider={provider}
+          onInstall={onInstall}
+          onRemove={onRemove}
+          onAuth={onAuth}
+          onLogout={onLogout}
+          isInstalling={isInstalling}
+          isRemoving={isRemoving}
+        />
       </div>
 
       <p className="text-text-muted text-[11px] leading-relaxed opacity-85">
@@ -174,5 +116,99 @@ export function RegistryCard({
         )}
       </div>
     </Card>
+  );
+}
+
+function InstallButton({ isInstalling, onClick }: { isInstalling: boolean; onClick: () => void }) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={isInstalling}
+      onClick={onClick}
+      className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
+    >
+      {isInstalling ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <Download className="h-3 w-3" />
+      )}
+      Install
+    </Button>
+  );
+}
+
+function RemoveButton({ isRemoving, onClick }: { isRemoving: boolean; onClick: () => void }) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={isRemoving}
+      onClick={onClick}
+      className="flex h-8 items-center gap-1 rounded-lg border-red-500/10 px-3 py-1.5 text-[10.5px] font-bold tracking-wide text-red-400 uppercase hover:bg-red-500/5 hover:text-red-300"
+    >
+      {isRemoving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+      Remove
+    </Button>
+  );
+}
+
+function RegistryCardActions({
+  provider,
+  onInstall,
+  onRemove,
+  onAuth,
+  onLogout,
+  isInstalling,
+  isRemoving,
+}: {
+  provider: ProviderDiscovery;
+  onInstall: (id: string) => void;
+  onRemove: (id: string) => void;
+  onAuth: (provider: ProviderDiscovery) => void;
+  onLogout: (id: string) => void;
+  isInstalling: boolean;
+  isRemoving: boolean;
+}) {
+  const notInstalled = provider.installState === 'not_installed';
+  const hasAuth = !!provider.agent?.authMethods && provider.agent.authMethods.length > 0;
+  const canLogout = provider.supportsLogout && provider.authState === 'authenticated';
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      {canLogout && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            onLogout(provider.id);
+          }}
+          className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
+        >
+          <LogOut className="h-3 w-3" />
+          Logout
+        </Button>
+      )}
+
+      {hasAuth && !notInstalled && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            onAuth(provider);
+          }}
+          className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
+        >
+          <KeyRound className="h-3 w-3" />
+          Configure
+        </Button>
+      )}
+
+      {notInstalled ? (
+        <InstallButton isInstalling={isInstalling} onClick={() => onInstall(provider.id)} />
+      ) : (
+        <RemoveButton isRemoving={isRemoving} onClick={() => onRemove(provider.id)} />
+      )}
+    </div>
   );
 }

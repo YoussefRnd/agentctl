@@ -5,9 +5,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import '@xterm/xterm/css/xterm.css';
 import { getApiBaseUrl } from '../../../../shared/lib/api-base-url';
+import { getAuthToken } from '@agentctl/api-client';
 import { useSession } from '../../../../contexts/SessionContext';
-import { RotateCcw, Trash2 } from 'lucide-react';
-import { Button } from '@agentctl/ui';
+import { TerminalHeader } from './TerminalHeader';
 
 const NERD_FONT_FAMILY = [
   '"JetBrainsMono Nerd Font"',
@@ -34,19 +34,19 @@ export function InteractiveTerminal() {
   const [shellName, setShellName] = useState<string>('sh');
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
+  const [connectKey, setConnectKey] = useState<number>(0);
+  const reconnect = useCallback(() => {
+    setConnectKey((k) => k + 1);
+  }, []);
+
   const sendResize = useCallback((cols: number, rows: number) => {
     if (socketRef.current?.readyState === WebSocket.OPEN && cols > 0 && rows > 0) {
       socketRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
     }
   }, []);
 
-  const connect = useCallback(() => {
+  useEffect(() => {
     if (!sessionId) return;
-
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
-    }
 
     setStatus('connecting');
 
@@ -66,13 +66,15 @@ export function InteractiveTerminal() {
       wsUrl = `${protocol}//${host}/api/sessions/${sessionId}/terminal/ws`;
     }
 
-    const token = localStorage.getItem('agentctl_token');
+    const token = getAuthToken();
     if (token) {
       wsUrl += `?token=${encodeURIComponent(token)}`;
     }
 
+    let ws: WebSocket | null = null;
+
     try {
-      const ws = new WebSocket(wsUrl);
+      ws = new WebSocket(wsUrl);
       socketRef.current = ws;
 
       ws.onopen = () => {
@@ -117,7 +119,16 @@ export function InteractiveTerminal() {
     } catch {
       setStatus('disconnected');
     }
-  }, [sessionId, sendResize]);
+
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+      if (socketRef.current === ws) {
+        socketRef.current = null;
+      }
+    };
+  }, [sessionId, connectKey, sendResize]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -132,92 +143,56 @@ export function InteractiveTerminal() {
       term = new Terminal({
         cursorBlink: true,
         cursorStyle: 'block',
-        cursorInactiveStyle: 'outline',
-        fontSize: 12.5,
+        fontSize: 12,
+        lineHeight: 1.25,
         fontFamily: NERD_FONT_FAMILY,
-        letterSpacing: 0,
-        lineHeight: 1.2,
-        scrollback: 10000,
-        smoothScrollDuration: 100, // VS Code fluid smooth pixel scrolling
-        allowTransparency: true,
-        macOptionIsMeta: true,
-        altClickMovesCursor: true,
-        drawBoldTextInBrightColors: true,
         theme: {
           background: '#090a0f',
-          foreground: '#e2e8f0',
-          cursor: '#a855f7',
-          cursorAccent: '#ffffff',
-          selectionBackground: 'rgba(168, 85, 247, 0.35)',
-          black: '#1e2029',
-          red: '#f87171',
-          green: '#4ade80',
-          yellow: '#facc15',
-          blue: '#60a5fa',
-          magenta: '#c084fc',
-          cyan: '#38bdf8',
-          white: '#f8fafc',
-          brightBlack: '#64748b',
-          brightRed: '#ef4444',
-          brightGreen: '#22c55e',
-          brightYellow: '#eab308',
-          brightBlue: '#3b82f6',
-          brightMagenta: '#a855f7',
-          brightCyan: '#06b6d4',
-          brightWhite: '#ffffff',
+          foreground: '#cdd6f4',
+          cursor: '#f5e0dc',
+          cursorAccent: '#11111b',
+          selectionBackground: '#45475a',
+          black: '#45475a',
+          red: '#f38ba8',
+          green: '#a6e3a1',
+          yellow: '#f9e2af',
+          blue: '#89b4fa',
+          magenta: '#cba6f7',
+          cyan: '#94e2d5',
+          white: '#bac2de',
+          brightBlack: '#585b70',
+          brightRed: '#f38ba8',
+          brightGreen: '#a6e3a1',
+          brightYellow: '#f9e2af',
+          brightBlue: '#89b4fa',
+          brightMagenta: '#cba6f7',
+          brightCyan: '#94e2d5',
+          brightWhite: '#a6adc8',
         },
+        convertEol: true,
+        allowTransparency: true,
+        scrollback: 5000,
       });
 
       fitAddon = new FitAddon();
-      const webLinksAddon = new WebLinksAddon();
-
       term.loadAddon(fitAddon);
-      term.loadAddon(webLinksAddon);
+      term.loadAddon(new WebLinksAddon());
 
       term.open(terminalRef.current);
 
-      // Hardware accelerated GPU canvas glyph atlas
       try {
         canvasAddon = new CanvasAddon();
         term.loadAddon(canvasAddon);
       } catch {
-        // Graceful fallback to DOM renderer
+        // Fallback to standard DOM renderer
       }
-
-      fitAddon.fit();
 
       xtermInstance.current = term;
       fitAddonRef.current = fitAddon;
 
-      // Smart Keyboard handler: Copy on selection with Ctrl+C, paste with Ctrl+V
-      term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-
-        // Copy when text is selected
-        if (isCtrlOrCmd && event.key.toLowerCase() === 'c' && event.type === 'keydown') {
-          if (term?.hasSelection()) {
-            const selection = term.getSelection();
-            void navigator.clipboard.writeText(selection);
-            return false; // Prevent sending \x03 to shell
-          }
-        }
-
-        // Paste with Ctrl+V / Cmd+V
-        if (isCtrlOrCmd && event.key.toLowerCase() === 'v' && event.type === 'keydown') {
-          void navigator.clipboard.readText().then((text) => {
-            if (text && socketRef.current?.readyState === WebSocket.OPEN) {
-              socketRef.current.send(JSON.stringify({ type: 'input', data: text }));
-            }
-          });
-          return false;
-        }
-
-        return true;
-      });
-
       term.onData((data) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({ type: 'input', data }));
+          socketRef.current.send(JSON.stringify({ type: 'data', data }));
         }
       });
 
@@ -225,17 +200,20 @@ export function InteractiveTerminal() {
         sendResize(cols, rows);
       });
 
+      requestAnimationFrame(() => {
+        fitAddon?.fit();
+        if (term) {
+          sendResize(term.cols, term.rows);
+        }
+      });
+
       resizeObserver = new ResizeObserver(() => {
-        if (resizeRaf) cancelAnimationFrame(resizeRaf);
+        if (resizeRaf) {
+          cancelAnimationFrame(resizeRaf);
+        }
         resizeRaf = requestAnimationFrame(() => {
           try {
-            if (
-              terminalRef.current &&
-              terminalRef.current.clientWidth > 0 &&
-              terminalRef.current.clientHeight > 0 &&
-              fitAddonRef.current &&
-              xtermInstance.current
-            ) {
+            if (fitAddonRef.current && xtermInstance.current) {
               fitAddonRef.current.fit();
               sendResize(xtermInstance.current.cols, xtermInstance.current.rows);
             }
@@ -246,7 +224,6 @@ export function InteractiveTerminal() {
       });
 
       resizeObserver.observe(terminalRef.current);
-      connect();
     } catch (err) {
       console.error('Failed to initialize xterm:', err);
     }
@@ -274,18 +251,14 @@ export function InteractiveTerminal() {
       }
       xtermInstance.current = null;
       fitAddonRef.current = null;
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
-      }
     };
-  }, [connect, sendResize]);
+  }, [sendResize]);
 
   const handleRestart = () => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: 'restart' }));
     } else {
-      connect();
+      reconnect();
     }
   };
 
@@ -295,69 +268,13 @@ export function InteractiveTerminal() {
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-[#090a0f]">
-      {/* Sleek Minimal Top Bar */}
-      <div className="border-border/20 bg-surface-secondary/15 flex h-8 shrink-0 items-center justify-between border-b px-2.5 text-xs">
-        {/* Left: Shell Badge + Subtle Dot */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${
-                status === 'connected'
-                  ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]'
-                  : status === 'connecting'
-                    ? 'animate-pulse bg-amber-400'
-                    : 'bg-rose-500'
-              }`}
-              title={
-                status === 'connected'
-                  ? 'Connected'
-                  : status === 'connecting'
-                    ? 'Connecting...'
-                    : 'Disconnected'
-              }
-            />
-            <span className="text-text-muted/80 font-mono text-[11px] font-medium tracking-tight">
-              {shellName}
-            </span>
-          </div>
-
-          {status === 'disconnected' && (
-            <span className="text-[10px] font-medium text-rose-400 opacity-80">(Disconnected)</span>
-          )}
-        </div>
-
-        {/* Right: Minimal Icon Actions */}
-        <div className="flex items-center gap-1">
-          {status === 'disconnected' && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={connect}
-              className="!h-5 !px-2 text-[10px]"
-            >
-              Reconnect
-            </Button>
-          )}
-          <button
-            type="button"
-            onClick={handleRestart}
-            title="Restart shell process"
-            className="text-text-muted/60 hover:text-text-main hover:bg-surface-tertiary/30 flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
-            aria-label="Restart shell"
-          >
-            <RotateCcw className="h-3 w-3" />
-          </button>
-          <button
-            type="button"
-            onClick={handleClear}
-            title="Clear scrollback"
-            className="text-text-muted/60 hover:text-text-main hover:bg-surface-tertiary/30 flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
-            aria-label="Clear terminal"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
-        </div>
-      </div>
+      <TerminalHeader
+        status={status}
+        shellName={shellName}
+        reconnect={reconnect}
+        handleRestart={handleRestart}
+        handleClear={handleClear}
+      />
 
       {/* Terminal View Container */}
       <div

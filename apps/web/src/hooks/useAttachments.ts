@@ -161,30 +161,19 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
     });
   }, []);
 
-  const prevSessionIdRef = useRef(sessionId);
+  const attachmentsRef = useRef(attachments);
 
   useEffect(() => {
-    if (sessionId !== prevSessionIdRef.current) {
-      prevSessionIdRef.current = sessionId;
-      setAttachments((prev) => {
-        for (const attachment of prev) {
-          URL.revokeObjectURL(attachment.objectUrl);
-        }
-        return [];
-      });
-    }
-  }, [sessionId]);
+    attachmentsRef.current = attachments;
+  }, [attachments]);
 
   useEffect(() => {
     return () => {
-      setAttachments((prev) => {
-        for (const attachment of prev) {
-          URL.revokeObjectURL(attachment.objectUrl);
-        }
-        return prev;
-      });
+      for (const attachment of attachmentsRef.current) {
+        URL.revokeObjectURL(attachment.objectUrl);
+      }
     };
-  }, []);
+  }, [sessionId]);
 
   // -------------------------------------------------------------------------
   // Derived state

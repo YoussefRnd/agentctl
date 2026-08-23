@@ -18,9 +18,9 @@ describe('chat cards rendered inside the virtualized feed', () => {
 });
 
 describe('TimelineEvent tree and branch connectors', () => {
-  it('renders no trunks for isOnly', () => {
+  it('renders no trunks for position="only"', () => {
     const html = renderToString(
-      <TimelineEvent dotColor="bg-blue-400" isOnly>
+      <TimelineEvent dotColor="bg-blue-400" position="only">
         <span>single event</span>
       </TimelineEvent>,
     );
@@ -29,9 +29,9 @@ describe('TimelineEvent tree and branch connectors', () => {
     expect(html).not.toContain('data-testid="timeline-branch-arm"');
   });
 
-  it('renders bottom trunk only for isFirst', () => {
+  it('renders bottom trunk only for position="first"', () => {
     const html = renderToString(
-      <TimelineEvent dotColor="bg-blue-400" isFirst>
+      <TimelineEvent dotColor="bg-blue-400" position="first">
         <span>first event</span>
       </TimelineEvent>,
     );
@@ -42,7 +42,7 @@ describe('TimelineEvent tree and branch connectors', () => {
 
   it('renders both top and bottom trunks for middle item', () => {
     const html = renderToString(
-      <TimelineEvent dotColor="bg-blue-400">
+      <TimelineEvent dotColor="bg-blue-400" position="middle">
         <span>middle event</span>
       </TimelineEvent>,
     );
@@ -51,9 +51,9 @@ describe('TimelineEvent tree and branch connectors', () => {
     expect(html).not.toContain('data-testid="timeline-branch-arm"');
   });
 
-  it('renders top trunk and branch arm for isLast', () => {
+  it('renders top trunk and branch arm for position="last"', () => {
     const html = renderToString(
-      <TimelineEvent dotColor="bg-blue-400" isLast>
+      <TimelineEvent dotColor="bg-blue-400" position="last">
         <span>last event</span>
       </TimelineEvent>,
     );

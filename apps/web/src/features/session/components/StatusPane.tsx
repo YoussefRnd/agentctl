@@ -41,7 +41,7 @@ export function StatusPane() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
         {/* Accordion Card 1: Execution plan */}
-        <div className="bg-surface-secondary/10 border-border/20 overflow-hidden rounded-xl border shadow-sm transition-all duration-200">
+        <div className="bg-surface-secondary/10 border-border/20 overflow-hidden rounded-xl border shadow-sm transition-colors duration-200">
           <button
             type="button"
             onClick={() => {
@@ -72,7 +72,7 @@ export function StatusPane() {
         </div>
 
         {/* Accordion Card 2: MCP servers */}
-        <div className="bg-surface-secondary/10 border-border/20 overflow-hidden rounded-xl border shadow-sm transition-all duration-200">
+        <div className="bg-surface-secondary/10 border-border/20 overflow-hidden rounded-xl border shadow-sm transition-colors duration-200">
           <button
             type="button"
             onClick={() => {

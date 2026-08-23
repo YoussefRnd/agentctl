@@ -31,14 +31,14 @@ export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
 
   return (
     <div className="space-y-2.5">
-      {plan.map((item: StructuredPlanItem, index: number) => {
+      {plan.map((item: StructuredPlanItem) => {
         const isCompleted = item.status === 'completed' || item.isCompleted;
         const isInProgress = item.status === 'in_progress';
 
         return (
           <div
-            key={`${item.name}-${String(index)}`}
-            className={`group flex items-start gap-3 rounded-lg border p-3 transition-all duration-200 ${
+            key={item.name}
+            className={`group flex items-start gap-3 rounded-lg border p-3 transition-colors duration-200 ${
               isInProgress
                 ? 'bg-surface-accent/20 border-accent/30 ring-accent/20 ring-1'
                 : isCompleted

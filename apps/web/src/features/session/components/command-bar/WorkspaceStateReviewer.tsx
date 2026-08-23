@@ -65,7 +65,7 @@ export function ContextWindowPopover({
               setIsOpen((prev) => !prev);
             }}
             className={cn(
-              'group border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border text-[10px] font-bold tracking-wider transition-all duration-300 focus-visible:ring-2 focus-visible:outline-none',
+              'group border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border text-[10px] font-bold tracking-wider transition-colors duration-300 focus-visible:ring-2 focus-visible:outline-none',
               'w-8 gap-0 px-0',
               isOpen && 'bg-accent/10 text-accent border-accent/40 w-16 gap-1.5 px-3',
             )}
@@ -83,7 +83,7 @@ export function ContextWindowPopover({
                 cy="10"
                 r={radius}
                 className={cn(
-                  'fill-none transition-all duration-300',
+                  'fill-none transition-colors duration-300',
                   usagePercent > 90
                     ? 'stroke-danger'
                     : usagePercent > 70
@@ -98,7 +98,7 @@ export function ContextWindowPopover({
             </svg>
             <span
               className={cn(
-                'shrink-0 transition-all duration-300',
+                'shrink-0 transition-colors duration-300',
                 isOpen ? 'w-auto overflow-visible opacity-100' : 'w-0 overflow-hidden opacity-0',
               )}
             >
@@ -155,7 +155,7 @@ export function ContextWindowPopover({
                 </div>
               ) : (
                 <div
-                  className="bg-accent absolute top-0 left-0 h-full rounded-full transition-all duration-300"
+                  className="bg-accent absolute top-0 left-0 h-full rounded-full transition-colors duration-300"
                   style={{ width: `${String(usagePercent)}%` }}
                 />
               )}
@@ -287,7 +287,7 @@ export function CommandBarFooter({
                     },
                   );
                 }}
-                className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-6 w-6 cursor-pointer items-center justify-center border-r transition-all disabled:opacity-30"
+                className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-6 w-6 cursor-pointer items-center justify-center border-r transition-colors disabled:opacity-30"
                 title="Pull from Remote"
               >
                 <ArrowDown className="h-3 w-3" />
@@ -309,7 +309,7 @@ export function CommandBarFooter({
                     },
                   );
                 }}
-                className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 flex h-6 w-6 cursor-pointer items-center justify-center transition-all disabled:opacity-30"
+                className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 flex h-6 w-6 cursor-pointer items-center justify-center transition-colors disabled:opacity-30"
                 title="Push to Remote"
               >
                 <ArrowUp className="h-3 w-3" />

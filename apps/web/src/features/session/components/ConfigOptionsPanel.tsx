@@ -20,15 +20,16 @@ export function ConfigOptionsPanel({
   );
 
   const groupedOptions = useMemo(() => {
+    const filterSet = new Set(filterCategories);
     const groups: Record<string, ACPConfigOption[]> = {};
-    configOptions.forEach((opt) => {
+    for (const opt of configOptions) {
       const cat = opt.category ?? 'other';
       // Filter out if category OR id is in the list
-      if (filterCategories.includes(cat) || filterCategories.includes(opt.id)) return;
+      if (filterSet.has(cat) || filterSet.has(opt.id)) continue;
 
       groups[cat] ??= [];
       groups[cat].push(opt);
-    });
+    }
     return groups;
   }, [configOptions, filterCategories]);
 
@@ -42,7 +43,7 @@ export function ConfigOptionsPanel({
   };
 
   return (
-    <div className="animate-in fade-in slide-in-from-top-2 mb-6 duration-500">
+    <div className="animate-in fade-in slide-in-from-top-2 mb-6">
       <div className="mb-3">
         <h3 className="text-text-muted/45 text-[9px] font-bold tracking-[0.2em] uppercase">
           ::AGENT_CONFIGURATION
@@ -90,13 +91,17 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
   return (
     <div className="group relative">
       <div className="mb-1 flex items-baseline justify-between">
-        <label className="text-text-muted/80 group-hover:text-text-main text-[10px] font-bold transition-colors">
+        <label
+          htmlFor={`config-${option.id}`}
+          className="text-text-muted/80 group-hover:text-text-main text-[10px] font-bold transition-colors"
+        >
           {option.name}
         </label>
         {isUpdating && <Loader2 size={10} className="text-accent animate-spin" />}
       </div>
 
       <Select
+        id={`config-${option.id}`}
         value={typeof option.currentValue === 'string' ? option.currentValue : ''}
         onChange={onChange}
         disabled={disabled}

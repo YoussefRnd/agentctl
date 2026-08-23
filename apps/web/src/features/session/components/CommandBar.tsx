@@ -115,19 +115,21 @@ export function CommandBar({
         }}
       >
         <CommandInputComposer
-          hasQueuedMessages={hasQueuedMessages}
-          disabled={disabled}
+          flags={{
+            hasQueuedMessages,
+            disabled,
+            isFocused,
+            showSlashMenu,
+          }}
           disabledReason={disabledReason}
           input={input}
           handleInputChange={handleInputChange}
-          isFocused={isFocused}
           setIsFocused={setIsFocused}
           handleSubmit={handleSubmit}
           handlePaste={handlePaste}
           handleDrop={handleDrop}
           handleAttachClick={handleAttachClick}
           textareaRef={textareaRef}
-          showSlashMenu={showSlashMenu}
           filteredCommands={filteredCommands}
           activeCommandIndex={activeCommandIndex}
           setActiveCommandIndex={setActiveCommandIndex}
@@ -161,15 +163,17 @@ export function CommandBar({
             sessionData={sessionData}
             setApprovalMode={setApprovalMode}
             setAgentPersona={setAgentPersona}
-            isUpdatingAgentPersona={isUpdatingAgentPersona}
             handleSetConfigOption={setSessionConfigOption}
-            isUpdatingConfigOption={isUpdatingConfigOption}
-            canSend={canSend}
             handleSubmit={handleSubmit}
-            isRunning={isRunning}
             onCancel={handleCancel}
             onOpenAuthModal={() => {
               setIsAuthModalOpen(true);
+            }}
+            flags={{
+              isUpdatingAgentPersona,
+              isUpdatingConfigOption,
+              canSend,
+              isRunning,
             }}
           />
         </CommandInputComposer>

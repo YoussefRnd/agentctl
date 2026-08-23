@@ -12,9 +12,11 @@ const syntaxHighlight = (content: string) => {
     /(\/\/.*|\/\*[\s\S]*?\*\/|'.*?'|".*?"|`.*?`|\b(?:function|const|let|var|return|if|else|import|from|export|default|class|interface|type|extends|implements|new|await|async|switch|case|break|try|catch)\b)/g;
 
   const parts = content.split(regex);
-  return parts.map((part, i) => {
+  let offset = 0;
+  return parts.map((part) => {
     if (!part) return null;
-    const key = `${String(i)}-${part.slice(0, 10)}`;
+    const key = `part-${String(offset)}`;
+    offset += part.length;
     if (part.startsWith('//') || part.startsWith('/*')) {
       return (
         <span key={key} className="text-text-muted/40 italic">
@@ -103,7 +105,7 @@ export const DiffLine = memo(function DiffLine({
 
   return (
     <div
-      className={`flex font-mono text-[10px] leading-relaxed ${bgColor} group border-l-2 transition-all duration-150 ${isAdded ? 'border-success/30' : isRemoved ? 'border-danger/30' : 'border-transparent'}`}
+      className={`flex font-mono text-[10px] leading-relaxed ${bgColor} group border-l-2 transition-colors duration-150 ${isAdded ? 'border-success/30' : isRemoved ? 'border-danger/30' : 'border-transparent'}`}
     >
       {!hideRemoved && (
         <div className="text-text-muted/20 group-hover:text-text-muted/40 w-9 shrink-0 pr-1.5 text-right font-bold tracking-tighter select-none">

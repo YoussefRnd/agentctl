@@ -177,7 +177,7 @@ const AgentResponseComponent = function AgentResponse({
       <div className="flex items-start gap-3">
         <div className="mt-1 shrink-0">
           <div
-            className={`border-border bg-surface-secondary/50 flex h-8 w-8 items-center justify-center rounded-lg border transition-all duration-300 ${
+            className={`border-border bg-surface-secondary/50 flex h-8 w-8 items-center justify-center rounded-lg border transition-colors duration-300 ${
               isStreaming ? 'border-accent/40 bg-accent/5' : 'group-hover/agent:border-border/80'
             }`}
           >

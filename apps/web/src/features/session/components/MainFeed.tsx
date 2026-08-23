@@ -125,7 +125,7 @@ export function MainFeed() {
   if (!sessionId) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-transparent p-6 text-center">
-        <div className="animate-in fade-in zoom-in w-full max-w-md space-y-4 duration-1000">
+        <div className="animate-in fade-in zoom-in w-full max-w-md space-y-4">
           <div className="space-y-2.5">
             <div className="text-accent/50 inline-block rounded-full border border-white/5 bg-white/4 px-4 py-1 text-[10px] font-medium">
               Standby
@@ -165,7 +165,7 @@ export function MainFeed() {
                 }
               })();
             }}
-            className="bg-warning/20 hover:bg-warning/30 border-warning/40 hover:border-warning/60 rounded border px-3 py-1 text-xs font-medium transition-all"
+            className="bg-warning/20 hover:bg-warning/30 border-warning/40 hover:border-warning/60 rounded border px-3 py-1 text-xs font-medium transition-colors"
           >
             Restore Session
           </button>
@@ -213,7 +213,7 @@ export function MainFeed() {
       <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-6 pb-4">
         {approvalEvent && (
           <div className="pb-4">
-            <div className="animate-in slide-in-from-bottom-4 duration-500">
+            <div className="animate-in slide-in-from-bottom-4">
               <ApprovalCard
                 eventId={approvalEvent.id}
                 data={approvalEvent.data}

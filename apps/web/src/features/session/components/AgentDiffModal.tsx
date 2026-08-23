@@ -121,12 +121,14 @@ export function AgentDiffModal({
               onClick={() => void refetch()}
               className="text-text-muted hover:text-text-main hover:bg-surface-secondary/40 flex h-7 w-7 items-center justify-center rounded-md transition-colors"
               title="Refresh Diffs"
+              aria-label="Refresh diffs"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close diff modal"
               className="text-text-muted hover:text-text-main rounded-md p-1 transition-colors"
             >
               <X className="h-4 w-4" />

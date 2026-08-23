@@ -24,7 +24,7 @@ export function QueuedMessagesPillStack() {
         {queuedMessages.map((msg, index) => (
           <div
             key={msg.id}
-            className="group/pill border-border/40 bg-surface-secondary/60 hover:bg-surface-secondary hover:border-border/80 flex items-center justify-between gap-3 rounded-lg border px-3 py-1.5 transition-all"
+            className="group/pill border-border/40 bg-surface-secondary/60 hover:bg-surface-secondary hover:border-border/80 flex items-center justify-between gap-3 rounded-lg border px-3 py-1.5 transition-colors"
           >
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
               <span className="bg-accent/15 text-accent shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] font-bold">

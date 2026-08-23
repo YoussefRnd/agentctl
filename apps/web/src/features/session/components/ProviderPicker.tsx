@@ -142,7 +142,7 @@ export function ProviderPicker({
               type="text"
               aria-label="Filter models"
               placeholder="Filter models..."
-              className="border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border pr-3 pl-9 font-sans text-[11px] transition-all duration-200 outline-none focus:ring-1"
+              className="border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border pr-3 pl-9 font-sans text-[11px] transition-colors duration-200 outline-none focus:ring-1"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -151,6 +151,7 @@ export function ProviderPicker({
           </div>
           <button
             type="button"
+            aria-label="Refresh provider models"
             onClick={() => {
               refreshProvider(activeProvider.id);
             }}
@@ -190,7 +191,7 @@ export function ProviderPicker({
                   onClick={() => {
                     onSelect(activeProvider.id);
                   }}
-                  className="border-border/20 hover:bg-text-main/5 flex w-full flex-col rounded-lg border p-3 text-left transition-all"
+                  className="border-border/20 hover:bg-text-main/5 flex w-full flex-col rounded-lg border p-3 text-left transition-colors"
                 >
                   <div className="text-text-main text-xs font-semibold">{activeProvider.label}</div>
                   <div className="text-text-muted text-[11px] font-normal">Default config</div>
@@ -209,7 +210,7 @@ export function ProviderPicker({
                   onClick={() => {
                     onSelect(activeProvider.id, model.value);
                   }}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-all ${
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors ${
                     isSelected
                       ? 'bg-accent/15 text-accent'
                       : 'text-text-muted hover:bg-text-main/5 hover:text-text-main'
@@ -251,35 +252,34 @@ function ProviderSidebar({
 }: ProviderSidebarProps) {
   return (
     <div className="border-border/30 bg-surface-secondary/20 flex w-12 shrink-0 flex-col items-center gap-2 border-r py-2">
-      {providers
-        .filter((p) => p.installState !== 'not_installed')
-        .map((p) => {
-          const isSelected = p.id === internalProviderId;
-          const needsAuth = p.authState === 'needs_auth';
+      {providers.map((p) => {
+        if (p.installState === 'not_installed') return null;
+        const isSelected = p.id === internalProviderId;
+        const needsAuth = p.authState === 'needs_auth';
 
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                setInternalProviderIdOverride(p.id);
-                setSearch('');
-              }}
-              title={p.label}
-              aria-label={p.label}
-              className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
-                isSelected
-                  ? 'bg-accent/15 border-accent/30 text-accent'
-                  : 'text-text-muted hover:bg-text-main/5 hover:text-text-main border-transparent'
-              }`}
-            >
-              <ProviderIcon provider={p} size="sm" className="border-none bg-transparent" />
-              {needsAuth && !isSelected && (
-                <div className="bg-warning status-glow absolute top-0 right-0 h-1.5 w-1.5 rounded-full" />
-              )}
-            </button>
-          );
-        })}
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => {
+              setInternalProviderIdOverride(p.id);
+              setSearch('');
+            }}
+            title={p.label}
+            aria-label={p.label}
+            className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+              isSelected
+                ? 'bg-accent/15 border-accent/30 text-accent'
+                : 'text-text-muted hover:bg-text-main/5 hover:text-text-main border-transparent'
+            }`}
+          >
+            <ProviderIcon provider={p} size="sm" className="border-none bg-transparent" />
+            {needsAuth && !isSelected && (
+              <div className="bg-warning status-glow absolute top-0 right-0 h-1.5 w-1.5 rounded-full" />
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -353,7 +353,7 @@ function ProviderSetupPanel({
                 }
               }}
               disabled={isPending}
-              className={`flex h-8 w-full items-center justify-center rounded-lg px-3 text-xs font-medium transition-all disabled:opacity-30 ${
+              className={`flex h-8 w-full items-center justify-center rounded-lg px-3 text-xs font-medium transition-colors disabled:opacity-30 ${
                 idx === 0
                   ? 'bg-accent text-brand-crust font-semibold hover:opacity-90 active:scale-[0.98]'
                   : 'border-border/40 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/80 border'
@@ -374,7 +374,7 @@ function ProviderSetupPanel({
                 }
               }}
               disabled={isPending}
-              className={`border-border/40 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/80 flex h-8 w-full items-center justify-center rounded-lg border px-3 text-xs font-medium transition-all disabled:opacity-30 ${
+              className={`border-border/40 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/80 flex h-8 w-full items-center justify-center rounded-lg border px-3 text-xs font-medium transition-colors disabled:opacity-30 ${
                 !hasAuthMethods
                   ? 'bg-accent text-brand-crust border-none font-semibold hover:opacity-90'
                   : ''
@@ -415,7 +415,7 @@ function ProviderSetupPanel({
                         },
                       });
                     }}
-                    className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-mono text-xs transition-all duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
+                    className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-mono text-xs transition-colors duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
                   />
                 </div>
               );
@@ -424,7 +424,7 @@ function ProviderSetupPanel({
               type="button"
               onClick={handleSaveAndConnect}
               disabled={isPending || envKeys.some((key) => getKeyError(key) !== null)}
-              className="bg-accent text-brand-crust flex h-8 w-full items-center justify-center rounded-lg text-center text-xs font-semibold transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
+              className="bg-accent text-brand-crust flex h-8 w-full items-center justify-center rounded-lg text-center text-xs font-semibold transition-colors hover:opacity-90 active:scale-[0.98] disabled:opacity-30"
             >
               {isPending ? 'Connecting...' : 'Save and connect'}
             </button>
@@ -436,7 +436,7 @@ function ProviderSetupPanel({
           onClick={() => {
             onSelect(activeProvider.id);
           }}
-          className="border-border/30 text-text-muted hover:bg-text-main/5 hover:text-text-main mt-1 flex h-7 w-full items-center justify-center rounded-lg border text-center text-xs font-medium transition-all"
+          className="border-border/30 text-text-muted hover:bg-text-main/5 hover:text-text-main mt-1 flex h-7 w-full items-center justify-center rounded-lg border text-center text-xs font-medium transition-colors"
         >
           Select provider
         </button>

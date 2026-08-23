@@ -27,14 +27,16 @@ interface CommandBarToolbarProps {
   sessionData: SessionWithCapabilities | null;
   setApprovalMode: (approvalMode: 'review' | 'auto_approve' | 'yolo') => Promise<void>;
   setAgentPersona: (persona: string) => Promise<void>;
-  isUpdatingAgentPersona: boolean;
   handleSetConfigOption: (id: string, value: string) => Promise<void>;
-  isUpdatingConfigOption: boolean;
-  canSend: boolean;
   handleSubmit: () => void;
-  isRunning: boolean;
   onCancel: () => void;
   onOpenAuthModal?: () => void;
+  flags: {
+    isUpdatingAgentPersona: boolean;
+    isUpdatingConfigOption: boolean;
+    canSend: boolean;
+    isRunning: boolean;
+  };
 }
 
 export function CommandBarToolbar({
@@ -50,14 +52,11 @@ export function CommandBarToolbar({
   sessionData,
   setApprovalMode,
   setAgentPersona,
-  isUpdatingAgentPersona,
   handleSetConfigOption,
-  isUpdatingConfigOption,
-  canSend,
   handleSubmit,
-  isRunning,
   onCancel,
   onOpenAuthModal,
+  flags: { isUpdatingAgentPersona, isUpdatingConfigOption, canSend, isRunning },
 }: CommandBarToolbarProps) {
   return (
     <div className="flex items-center justify-between px-4 py-3">

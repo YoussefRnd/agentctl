@@ -3,7 +3,12 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, HashRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient, setApiBaseUrl, extractAndPersistUrlToken } from '@agentctl/api-client';
+import {
+  queryClient,
+  setApiBaseUrl,
+  extractAndPersistUrlToken,
+  setAuthToken,
+} from '@agentctl/api-client';
 import { ThemeProvider } from './contexts/ThemeProvider';
 import { ProjectProvider } from './contexts/ProjectContext';
 import { UpdateProvider } from './contexts/UpdateContext';
@@ -76,7 +81,7 @@ if (rootElement) {
       try {
         const secret = await window.electronAPI.getServerSecret();
         if (secret) {
-          localStorage.setItem('agentctl_token', secret);
+          setAuthToken(secret);
           await fetch(`${baseUrl}/api/login`, {
             method: 'POST',
             headers: {

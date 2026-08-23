@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import {
   apiClient,
@@ -14,7 +14,7 @@ import {
 } from '@agentctl/api-client';
 import { ConfirmationModal, Tooltip, Badge } from '@agentctl/ui';
 import { toast } from 'sonner';
-import { ProjectItem } from './ProjectItem';
+import { SidebarProjectList } from './SidebarProjectList';
 import { RenameSessionDialog } from './RenameSessionDialog';
 import { SidebarSearch } from './SidebarSearch';
 import { SidebarFilterMenu, type SortByOption } from './SidebarFilterMenu';
@@ -260,7 +260,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
             <Tooltip content="Add workspace">
               <Link
                 to="/"
-                className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 items-center justify-center rounded-lg border border-transparent transition-all"
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 items-center justify-center rounded-lg border border-transparent transition-colors"
                 aria-label="Add workspace"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -271,77 +271,24 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2.5 pb-6">
-        {isLoading ? (
-          <div className="space-y-3 p-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="space-y-1.5">
-                <div className="bg-surface-secondary/60 h-7 w-3/4 animate-pulse rounded-lg" />
-                <div className="ml-4 space-y-1">
-                  <div className="bg-surface-secondary/40 h-6 w-5/6 animate-pulse rounded-md" />
-                  <div className="bg-surface-secondary/30 h-6 w-2/3 animate-pulse rounded-md" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : isError ? (
-          <div className="bg-danger/5 border-danger/20 my-3 space-y-2 rounded-xl border p-3 text-center">
-            <div className="text-danger flex items-center justify-center gap-1.5 text-xs font-medium">
-              <AlertCircle className="h-3.5 w-3.5" />
-              Failed to load workspaces
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                void refetch();
-              }}
-              className="bg-danger/10 hover:bg-danger/20 text-danger inline-flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors"
-            >
-              <RefreshCw className="h-3 w-3" />
-              Retry
-            </button>
-          </div>
-        ) : filteredProjects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
-            <p className="text-text-muted/60 text-xs font-medium">
-              {searchQuery ? 'No matching sessions' : 'No workspaces yet'}
-            </p>
-            {!searchQuery && (
-              <Link
-                to="/"
-                className="text-accent hover:text-accent/80 mt-2 text-xs font-medium underline underline-offset-2 transition-colors"
-              >
-                Add your first project
-              </Link>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {filteredProjects.map((proj) => {
-              const hasActiveSession = proj.sessions.some((s) => s.id === currentActiveSessionId);
-              const isCollapsed = collapsedProjects[proj.id] ?? !hasActiveSession;
-
-              return (
-                <ProjectItem
-                  key={proj.id}
-                  proj={proj}
-                  activeSessionId={currentActiveSessionId}
-                  isCollapsed={isCollapsed}
-                  searchQuery={searchQuery}
-                  isCreatingSession={pendingActions.has(`create-session-${proj.id}`)}
-                  pendingActions={pendingActions}
-                  toggleProject={toggleProject}
-                  setConfirmConfig={setConfirmConfig}
-                  handleDeleteProject={handleDeleteProject}
-                  handleCreateSession={handleCreateSession}
-                  handleArchiveSession={handleArchiveSession}
-                  handleDeleteSession={handleDeleteSession}
-                  handleRenameSession={handleRenameSession}
-                  handleForkSession={handleForkSession}
-                />
-              );
-            })}
-          </div>
-        )}
+        <SidebarProjectList
+          isLoading={isLoading}
+          isError={isError}
+          refetch={refetch}
+          filteredProjects={filteredProjects}
+          searchQuery={searchQuery}
+          currentActiveSessionId={currentActiveSessionId}
+          collapsedProjects={collapsedProjects}
+          pendingActions={pendingActions}
+          toggleProject={toggleProject}
+          setConfirmConfig={setConfirmConfig}
+          handleDeleteProject={handleDeleteProject}
+          handleCreateSession={handleCreateSession}
+          handleArchiveSession={handleArchiveSession}
+          handleDeleteSession={handleDeleteSession}
+          handleRenameSession={handleRenameSession}
+          handleForkSession={handleForkSession}
+        />
       </div>
 
       <SidebarFooter />

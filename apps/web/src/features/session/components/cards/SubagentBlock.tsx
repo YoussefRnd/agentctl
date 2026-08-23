@@ -164,7 +164,7 @@ function SubagentCard({
       </button>
 
       <div
-        className={`grid transition-all duration-150 ${
+        className={`grid transition-colors duration-150 ${
           isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}
       >
@@ -186,9 +186,7 @@ function SubagentCard({
                       key={e.id}
                       dotColor={textData.role === 'thought' ? 'bg-accent' : 'bg-text-muted/30'}
                       isPulsing={isLastStreaming}
-                      isFirst={isFirst}
-                      isLast={isLast}
-                      isOnly={isOnly}
+                      position={isOnly ? 'only' : isFirst ? 'first' : isLast ? 'last' : 'middle'}
                     >
                       <span
                         className={`text-text-muted/80 text-[13px] leading-relaxed select-text ${
@@ -215,9 +213,7 @@ function SubagentCard({
                         isFailedTool ? 'bg-rose-500' : getToolMeta(payload.kind, toolName).dotColor
                       }
                       isPulsing={isLastStreaming}
-                      isFirst={isFirst}
-                      isLast={isLast}
-                      isOnly={isOnly}
+                      position={isOnly ? 'only' : isFirst ? 'first' : isLast ? 'last' : 'middle'}
                     >
                       <div
                         className={isFailedTool ? 'border-l-2 border-rose-500/50 pl-2' : undefined}
@@ -245,7 +241,7 @@ function SubagentCard({
 export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentBlockProps) {
   const [openMap, setOpenMap] = useState<Partial<Record<string, boolean>>>({});
   const [forceAllOpen, setForceAllOpen] = useState<boolean | undefined>(undefined);
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const focusedIndexRef = useRef(0);
   const [now, setNow] = useState<Date | null>(null);
 
   const sorted = useMemo(() => sortSubagentGroups(subagentGroups), [subagentGroups]);
@@ -272,21 +268,6 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
     };
   }, [hasRunning]);
 
-  const prevStatuses = useRef<Map<string, string>>(new Map());
-
-  useEffect(() => {
-    for (const g of sorted) {
-      const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
-      const subId = data.subagentId;
-      const prevStatus = prevStatuses.current.get(subId);
-      prevStatuses.current.set(subId, data.status);
-
-      if (data.status === 'failed' && prevStatus !== 'failed') {
-        setOpenMap((prev) => ({ ...prev, [subId]: true }));
-      }
-    }
-  }, [sorted]);
-
   const toggleOne = useCallback((subId: string) => {
     setForceAllOpen(undefined);
     setOpenMap((prev) => ({ ...prev, [subId]: !prev[subId] }));
@@ -305,7 +286,7 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
   const allExpanded = sorted.every((g) => {
     const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
     const subId = data.subagentId;
-    return openMap[subId] ?? forceAllOpen ?? false;
+    return openMap[subId] ?? (data.status === 'failed' ? true : (forceAllOpen ?? false));
   });
 
   const handleKeyDown = useCallback(
@@ -313,13 +294,13 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
       const max = sorted.length - 1;
       if (max < 0) return;
 
-      const safeIndex = Math.min(focusedIndex, max);
+      const safeIndex = Math.min(focusedIndexRef.current, max);
 
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         const dir = e.key === 'ArrowUp' ? -1 : 1;
         const next = Math.max(0, Math.min(max, safeIndex + dir));
-        setFocusedIndex(next);
+        focusedIndexRef.current = next;
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         const data = sorted[safeIndex].subagentEvent.data as ACPEventSubagentUpdateData;
@@ -330,21 +311,20 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
         collapseAll();
       }
     },
-    [sorted, focusedIndex, toggleOne, expandAll, collapseAll],
+    [sorted, toggleOne, expandAll, collapseAll],
   );
 
-  // Only auto-scroll when a new running subagent appears (sortedKey includes a new running id)
-  const runningIds = useMemo(
-    () =>
-      sorted
-        .filter((g) => {
-          const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
-          return data.status === 'running' || data.status === 'spawning';
-        })
-        .map((g) => (g.subagentEvent.data as ACPEventSubagentUpdateData).subagentId)
-        .join(','),
-    [sorted],
-  );
+  // Only auto-scroll when a new running subagent appears (single pass)
+  const runningIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const g of sorted) {
+      const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
+      if (data.status === 'running' || data.status === 'spawning') {
+        ids.push(data.subagentId);
+      }
+    }
+    return ids.join(',');
+  }, [sorted]);
 
   useEffect(() => {
     if (!runningIds) return;
@@ -381,7 +361,8 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
       {sorted.map((group) => {
         const data = group.subagentEvent.data as ACPEventSubagentUpdateData;
         const subId = data.subagentId;
-        const isOpen = openMap[subId] ?? forceAllOpen ?? false;
+        const isOpen =
+          openMap[subId] ?? (data.status === 'failed' ? true : (forceAllOpen ?? false));
         const isRunningSub = data.status === 'running' || data.status === 'spawning';
         return (
           <div key={subId} data-sortable-subagent={isRunningSub ? 'running' : undefined}>

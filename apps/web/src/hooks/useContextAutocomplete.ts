@@ -31,58 +31,48 @@ export interface UseContextAutocompleteReturn {
   handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean; // returns true if handled
 }
 
+function getAtMatchRange(input: string, textarea: HTMLTextAreaElement | null) {
+  const cursorPos = textarea ? textarea.selectionStart || input.length : input.length;
+  const textBeforeCursor = input.slice(0, cursorPos);
+  const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+  if (lastAtIndex !== -1) {
+    const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' ';
+    if (charBeforeAt === ' ' || charBeforeAt === '\n' || lastAtIndex === 0) {
+      const queryText = textBeforeCursor.slice(lastAtIndex + 1);
+      if (!queryText.includes(' ') && !queryText.includes('\n')) {
+        return {
+          start: lastAtIndex,
+          end: cursorPos,
+          query: queryText,
+        };
+      }
+    }
+  }
+  return null;
+}
+
 export function useContextAutocomplete({
   sessionId,
   input,
   setInput,
   textareaRef,
 }: UseContextAutocompleteProps): UseContextAutocompleteReturn {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
   const [items, setItems] = useState<ContextItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [filterType, setFilterType] = useState<'all' | ContextItemType>('all');
   const [attachedContexts, setAttachedContexts] = useState<ContextItem[]>([]);
-  const [atMatchRange, setAtMatchRange] = useState<{
-    start: number;
-    end: number;
-    query: string;
-  } | null>(null);
+
+  const atMatchRange = getAtMatchRange(input, textareaRef.current);
+  const isOpen = Boolean(sessionId && atMatchRange && !isDismissed);
+
+  const setIsOpen = useCallback((open: boolean) => {
+    setIsDismissed(!open);
+  }, []);
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Detect '@' trigger near cursor or end of input
-  useEffect(() => {
-    if (!textareaRef.current || !sessionId) {
-      setIsOpen(false);
-      return;
-    }
-
-    const cursorPos = textareaRef.current.selectionStart || input.length;
-    const textBeforeCursor = input.slice(0, cursorPos);
-    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
-    // Only trigger if @ is at start of line or preceded by whitespace
-    if (lastAtIndex !== -1) {
-      const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' ';
-      if (charBeforeAt === ' ' || charBeforeAt === '\n' || lastAtIndex === 0) {
-        const queryText = textBeforeCursor.slice(lastAtIndex + 1);
-        // Do not trigger if query contains whitespace or newline
-        if (!queryText.includes(' ') && !queryText.includes('\n')) {
-          setAtMatchRange({
-            start: lastAtIndex,
-            end: cursorPos,
-            query: queryText,
-          });
-          setIsOpen(true);
-          return;
-        }
-      }
-    }
-
-    setIsOpen(false);
-    setAtMatchRange(null);
-  }, [input, sessionId, textareaRef]);
 
   // Fetch search suggestions when open
   useEffect(() => {
@@ -139,9 +129,8 @@ export function useContextAutocomplete({
       }
 
       setIsOpen(false);
-      setAtMatchRange(null);
     },
-    [atMatchRange, input, setInput, textareaRef],
+    [atMatchRange, input, setIsOpen, setInput, textareaRef],
   );
 
   const removeAttachedContext = useCallback((id: string) => {
@@ -205,7 +194,7 @@ export function useContextAutocomplete({
 
       return false;
     },
-    [isOpen, items, activeIndex, selectItem],
+    [isOpen, items, activeIndex, selectItem, setIsOpen],
   );
 
   return {

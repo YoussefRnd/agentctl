@@ -37,9 +37,7 @@ export function ActivityTimeline({ events, isStreaming = false }: ActivityTimeli
             key={e.id}
             dotColor={dynamicDotColor}
             isPulsing={isLastStreaming}
-            isFirst={isFirst}
-            isLast={isLast}
-            isOnly={isOnly}
+            position={isOnly ? 'only' : isFirst ? 'first' : isLast ? 'last' : 'middle'}
           >
             <ToolCallCard
               tool={toolName}

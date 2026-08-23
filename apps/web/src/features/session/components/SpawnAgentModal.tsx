@@ -30,9 +30,12 @@ export function SpawnAgentModal({ isOpen, onClose, onSuccess }: SpawnAgentModalP
   // Focus prompt on open
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         promptRef.current?.focus();
       }, 50);
+      return () => {
+        clearTimeout(timer);
+      };
     }
   }, [isOpen]);
 
@@ -110,6 +113,7 @@ export function SpawnAgentModal({ isOpen, onClose, onSuccess }: SpawnAgentModalP
           </div>
           <button
             type="button"
+            aria-label="Close modal"
             onClick={onClose}
             className="text-text-muted hover:text-text-main rounded-md p-1 transition-colors"
           >
@@ -134,7 +138,7 @@ export function SpawnAgentModal({ isOpen, onClose, onSuccess }: SpawnAgentModalP
               onKeyDown={handleKeyDown}
               placeholder="What should this agent work on in parallel? (e.g. Write unit tests for auth routes)"
               required
-              className="border-border/30 bg-surface-secondary/40 text-text-main placeholder:text-text-muted/40 focus:border-accent/40 focus:bg-surface-secondary/80 w-full resize-none rounded-lg border p-3 text-xs transition-all outline-none"
+              className="border-border/30 bg-surface-secondary/40 text-text-main placeholder:text-text-muted/40 focus:border-accent/40 focus:bg-surface-secondary/80 w-full resize-none rounded-lg border p-3 text-xs transition-colors outline-none"
             />
           </div>
 
@@ -152,7 +156,7 @@ export function SpawnAgentModal({ isOpen, onClose, onSuccess }: SpawnAgentModalP
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Auth tests"
-                className="border-border/30 bg-surface-secondary/40 text-text-main placeholder:text-text-muted/40 focus:border-accent/40 focus:bg-surface-secondary/80 h-[34px] w-full rounded-lg border px-3 text-xs transition-all outline-none"
+                className="border-border/30 bg-surface-secondary/40 text-text-main placeholder:text-text-muted/40 focus:border-accent/40 focus:bg-surface-secondary/80 h-[34px] w-full rounded-lg border px-3 text-xs transition-colors outline-none"
               />
             </div>
 
@@ -164,7 +168,7 @@ export function SpawnAgentModal({ isOpen, onClose, onSuccess }: SpawnAgentModalP
                 <Dropdown.Trigger asChild>
                   <button
                     type="button"
-                    className="border-border/30 bg-surface-secondary/40 hover:bg-surface-secondary/60 text-text-main focus:border-accent/40 flex h-[34px] w-full cursor-pointer items-center justify-between rounded-lg border px-3 text-xs transition-all outline-none"
+                    className="border-border/30 bg-surface-secondary/40 hover:bg-surface-secondary/60 text-text-main focus:border-accent/40 flex h-[34px] w-full cursor-pointer items-center justify-between rounded-lg border px-3 text-xs transition-colors outline-none"
                   >
                     <span className="truncate">
                       {activeProvider?.label || activeProvider?.id || 'Default Provider'}
@@ -218,7 +222,7 @@ export function SpawnAgentModal({ isOpen, onClose, onSuccess }: SpawnAgentModalP
                 <Dropdown.Trigger asChild>
                   <button
                     type="button"
-                    className="border-border/30 bg-surface-secondary/40 hover:bg-surface-secondary/60 text-text-main focus:border-accent/40 flex h-[34px] w-full cursor-pointer items-center justify-between rounded-lg border px-3 text-xs transition-all outline-none"
+                    className="border-border/30 bg-surface-secondary/40 hover:bg-surface-secondary/60 text-text-main focus:border-accent/40 flex h-[34px] w-full cursor-pointer items-center justify-between rounded-lg border px-3 text-xs transition-colors outline-none"
                   >
                     <span className="truncate">
                       {availableModels.find((m) => m.id === selectedModel)?.name || 'Default Model'}

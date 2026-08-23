@@ -32,7 +32,7 @@ export function SidebarFilterMenu({
         <button
           type="button"
           onClick={onToggle}
-          className={`hover:text-text-main text-text-muted hover:bg-surface-secondary/70 flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-all ${
+          className={`hover:text-text-main text-text-muted hover:bg-surface-secondary/70 flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-colors ${
             isOpen ? 'text-accent bg-accent/10 border-accent/30' : 'border-transparent'
           }`}
           aria-label="Filter & Sort"
@@ -49,7 +49,7 @@ export function SidebarFilterMenu({
             className="fixed inset-0 z-30 cursor-default border-none bg-transparent outline-none"
             onClick={onClose}
           />
-          <div className="border-border/70 bg-surface/95 animate-in fade-in slide-in-from-top-1.5 absolute top-full right-0 z-40 mt-1.5 w-52 rounded-xl border p-2 font-sans text-xs shadow-2xl backdrop-blur-xl duration-150">
+          <div className="border-border/70 bg-surface/95 animate-in fade-in slide-in-from-top-1.5 absolute top-full right-0 z-40 mt-1.5 w-52 rounded-xl border p-2 font-sans text-xs shadow-2xl backdrop-blur-xl">
             <div className="text-text-muted/60 mb-1 px-2 text-[10px] font-semibold tracking-wider uppercase">
               Sort by
             </div>

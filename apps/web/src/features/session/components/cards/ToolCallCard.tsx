@@ -72,16 +72,22 @@ function DiffBlock({ block }: { block: Record<string, unknown> }) {
         <span className="text-text-muted font-mono text-[10px] break-all">{path}</span>
       </div>
       <div className="no-scrollbar max-h-60 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed">
-        {oldText?.split('\n').map((line, i) => (
-          <div key={`o-${String(i)}`} className="whitespace-pre-wrap text-rose-400/80">
-            - {line}
+        {oldText && (
+          <div className="whitespace-pre-wrap text-rose-400/80">
+            {oldText
+              .split('\n')
+              .map((line) => `- ${line}`)
+              .join('\n')}
           </div>
-        ))}
-        {newText.split('\n').map((line, i) => (
-          <div key={`n-${String(i)}`} className="whitespace-pre-wrap text-emerald-400/80">
-            + {line}
+        )}
+        {newText && (
+          <div className="whitespace-pre-wrap text-emerald-400/80">
+            {newText
+              .split('\n')
+              .map((line) => `+ ${line}`)
+              .join('\n')}
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
@@ -150,9 +156,28 @@ function RawOutputView({ rawOutput }: { rawOutput: unknown }) {
 }
 
 function hasToolCallDetails(call: ACPEventToolCallData): boolean {
-  const blocks = Array.isArray(call.content) ? (call.content as Record<string, unknown>[]) : [];
-  if (blocks.some((b) => b.type !== 'terminal')) return true;
+  const contentBlocks = Array.isArray(call.content) ? call.content : [];
+  if (
+    contentBlocks.some(
+      (b) =>
+        b &&
+        typeof b === 'object' &&
+        ((b as Record<string, unknown>).type === 'diff' ||
+          (b as Record<string, unknown>).type === 'terminal'),
+    )
+  )
+    return true;
   return (call.locations?.length ?? 0) > 0 || call.rawOutput !== undefined;
+}
+
+function getBlockKey(block: Record<string, unknown>): string {
+  if (typeof block.id === 'string') return block.id;
+  if (typeof block.path === 'string') return `path-${block.path}`;
+  if (typeof block.type === 'string') {
+    const snippet = typeof block.newText === 'string' ? block.newText.slice(0, 16) : '';
+    return `type-${block.type}-${snippet}`;
+  }
+  return JSON.stringify(block).slice(0, 32);
 }
 
 function ToolCallDetails({ call }: { call: ACPEventToolCallData }) {
@@ -163,9 +188,10 @@ function ToolCallDetails({ call }: { call: ACPEventToolCallData }) {
   const rawOutput = call.rawOutput;
 
   if (contentBlocks.length > 0) {
-    const rendered: (ReactElement | null)[] = contentBlocks.map((block, i) => (
-      <ContentBlock key={i} block={block} />
-    ));
+    const rendered: (ReactElement | null)[] = contentBlocks.map((block) => {
+      const blockKey = getBlockKey(block);
+      return <ContentBlock key={blockKey} block={block} />;
+    });
     const anyRendered = rendered.some((el) => el !== null);
     if (anyRendered) {
       return (

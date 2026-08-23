@@ -1,13 +1,7 @@
 import { useState } from 'react';
 
-interface ReviewCommitInputProps {
-  stagedCount: number;
-  onCommit: (message: string) => void;
+export interface ReviewCommitStatus {
   isCommitting?: boolean;
-  onStageAll?: () => void;
-  onUnstageAll?: () => void;
-  onMergeSession?: () => void;
-  onDiscardChanges?: () => void;
   isStagingAll?: boolean;
   isUnstagingAll?: boolean;
   isMerging?: boolean;
@@ -16,21 +10,34 @@ interface ReviewCommitInputProps {
   hasChanges?: boolean;
 }
 
+interface ReviewCommitInputProps {
+  stagedCount: number;
+  onCommit: (message: string) => void;
+  onStageAll?: () => void;
+  onUnstageAll?: () => void;
+  onMergeSession?: () => void;
+  onDiscardChanges?: () => void;
+  status?: ReviewCommitStatus;
+}
+
 export function ReviewCommitInput({
   stagedCount,
   onCommit,
-  isCommitting,
   onStageAll,
   onUnstageAll,
   onMergeSession,
   onDiscardChanges,
-  isStagingAll,
-  isUnstagingAll,
-  isMerging,
-  isDiscarding,
-  hasUnstaged,
-  hasChanges = true,
+  status = {},
 }: ReviewCommitInputProps) {
+  const {
+    isCommitting,
+    isStagingAll,
+    isUnstagingAll,
+    isMerging,
+    isDiscarding,
+    hasUnstaged,
+    hasChanges = true,
+  } = status;
   const [localCommitMessage, setLocalCommitMessage] = useState('');
 
   const handleCommit = () => {
@@ -57,7 +64,7 @@ export function ReviewCommitInput({
           }}
           placeholder="Commit message..."
           aria-label="Commit message"
-          className="border-border/15 bg-surface/20 text-text-main placeholder:text-text-muted/40 focus:border-accent/40 flex-1 rounded-md border px-3 py-1.5 text-xs font-normal transition-all outline-none"
+          className="border-border/15 bg-surface/20 text-text-main placeholder:text-text-muted/40 focus:border-accent/40 flex-1 rounded-md border px-3 py-1.5 text-xs font-normal transition-colors outline-none"
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleCommit();
           }}
@@ -66,7 +73,7 @@ export function ReviewCommitInput({
           type="button"
           disabled={!localCommitMessage.trim() || isCommitting}
           onClick={handleCommit}
-          className="bg-accent text-brand-crust h-8 shrink-0 cursor-pointer rounded-md px-3 text-xs font-medium transition-all hover:opacity-90 disabled:opacity-30"
+          className="bg-accent text-brand-crust h-8 shrink-0 cursor-pointer rounded-md px-3 text-xs font-medium transition-colors hover:opacity-90 disabled:opacity-30"
         >
           {isCommitting ? 'Committing...' : 'Commit'}
         </button>
@@ -79,7 +86,7 @@ export function ReviewCommitInput({
               type="button"
               disabled={!hasUnstaged || isStagingAll}
               onClick={onStageAll}
-              className="border-border/15 bg-surface-tertiary/20 text-text-muted hover:text-text-main hover:bg-surface-tertiary/30 h-7 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-all disabled:cursor-default disabled:opacity-30"
+              className="border-border/15 bg-surface-tertiary/20 text-text-muted hover:text-text-main hover:bg-surface-tertiary/30 h-7 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-30"
             >
               {isStagingAll ? 'Staging...' : 'Stage All'}
             </button>
@@ -89,7 +96,7 @@ export function ReviewCommitInput({
               type="button"
               disabled={stagedCount === 0 || isUnstagingAll}
               onClick={onUnstageAll}
-              className="border-border/15 bg-surface-tertiary/20 text-text-muted hover:text-text-main hover:bg-surface-tertiary/30 h-7 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-all disabled:cursor-default disabled:opacity-30"
+              className="border-border/15 bg-surface-tertiary/20 text-text-muted hover:text-text-main hover:bg-surface-tertiary/30 h-7 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-30"
             >
               {isUnstagingAll ? 'Unstaging...' : 'Unstage All'}
             </button>
@@ -102,7 +109,7 @@ export function ReviewCommitInput({
               type="button"
               disabled={!hasChanges || (isMerging ?? false) || (isDiscarding ?? false)}
               onClick={onDiscardChanges}
-              className="border-danger/20 bg-danger/10 text-danger hover:bg-danger/20 h-7 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-all disabled:cursor-default disabled:opacity-30"
+              className="border-danger/20 bg-danger/10 text-danger hover:bg-danger/20 h-7 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-30"
             >
               Discard Changes
             </button>
@@ -112,7 +119,7 @@ export function ReviewCommitInput({
               type="button"
               disabled={!hasChanges || (isMerging ?? false) || (isDiscarding ?? false)}
               onClick={onMergeSession}
-              className="bg-accent/15 text-accent border-accent/30 hover:bg-accent/25 h-7 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-all disabled:cursor-default disabled:opacity-30"
+              className="bg-accent/15 text-accent border-accent/30 hover:bg-accent/25 h-7 cursor-pointer rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-30"
             >
               {isMerging ? 'Merging...' : 'Merge Session'}
             </button>

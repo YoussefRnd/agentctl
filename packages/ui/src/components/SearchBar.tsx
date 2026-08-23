@@ -26,7 +26,7 @@ export function SearchBar({
         value={value}
         onChange={onChange}
         className={cn(
-          'border-border/30 bg-surface-secondary/35 placeholder:text-text-muted/50 focus:bg-surface-secondary/60 focus:border-accent/50 text-text-main h-9 w-full rounded-lg border pr-14 pl-9 text-[12px] transition-all focus:outline-none',
+          'border-border/30 bg-surface-secondary/35 placeholder:text-text-muted/50 focus:bg-surface-secondary/60 focus:border-accent/50 text-text-main h-9 w-full rounded-lg border pr-14 pl-9 text-[12px] transition-colors focus:outline-none',
           className,
         )}
         {...props}
@@ -34,6 +34,7 @@ export function SearchBar({
       {value && onClear && (
         <button
           type="button"
+          aria-label="Clear search"
           onClick={onClear}
           className="hover:bg-surface-secondary/80 text-text-muted/60 hover:text-text-main absolute top-1/2 right-2 z-10 -translate-y-1/2 cursor-pointer rounded-sm p-1 transition-colors"
         >

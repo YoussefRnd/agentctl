@@ -1,22 +1,23 @@
 import type { ReactNode } from 'react';
 
+export type TimelinePosition = 'first' | 'last' | 'only' | 'middle';
+
 interface TimelineEventProps {
   dotColor: string;
   isPulsing?: boolean;
-  isFirst?: boolean;
-  isLast?: boolean;
-  isOnly?: boolean;
+  position?: TimelinePosition;
   children: ReactNode;
 }
 
 export function TimelineEvent({
   dotColor,
   isPulsing = false,
-  isFirst = false,
-  isLast = false,
-  isOnly = false,
+  position = 'middle',
   children,
 }: TimelineEventProps) {
+  const isFirst = position === 'first';
+  const isLast = position === 'last';
+  const isOnly = position === 'only';
   return (
     <div className="group/timeline-event relative flex w-full gap-3 py-2.5">
       {/* Left gutter container */}

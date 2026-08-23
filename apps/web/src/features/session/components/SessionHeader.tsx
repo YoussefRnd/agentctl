@@ -5,15 +5,13 @@ import {
   Menu,
   PanelRight,
   Pencil,
-  Check,
-  X,
   MoreHorizontal,
   GitBranch,
   Archive,
   Trash2,
   FileCode,
 } from 'lucide-react';
-import { Dropdown, ConfirmationModal, Tooltip } from '@agentctl/ui';
+import { Dropdown, Tooltip } from '@agentctl/ui';
 import {
   renameSession,
   archiveSession,
@@ -25,6 +23,8 @@ import {
 import { toast } from 'sonner';
 import { useSession } from '../../../contexts/SessionContext';
 import { OpenInPicker } from './OpenInPicker';
+import { SessionHeaderTitle } from './SessionHeaderTitle';
+import { SessionHeaderDialogs } from './SessionHeaderDialogs';
 import type { WorkbenchTab } from './Workbench';
 
 interface SessionHeaderProps {
@@ -176,7 +176,7 @@ export function SessionHeader({
 
       {/* Center Zone: Prominent Command & Session Bar */}
       <div className="flex min-w-0 flex-1 items-center justify-center px-2">
-        <div className="border-border/30 bg-surface/50 hover:border-border/60 hover:bg-surface/80 flex h-7.5 max-w-[440px] min-w-[200px] items-center justify-between gap-2 rounded-lg border px-2.5 transition-all">
+        <div className="border-border/30 bg-surface/50 hover:border-border/60 hover:bg-surface/80 flex h-7.5 max-w-[440px] min-w-[200px] items-center justify-between gap-2 rounded-lg border px-2.5 transition-colors">
           {/* Status Indicator Dot */}
           <div
             className="relative flex h-2 w-2 shrink-0 items-center justify-center"
@@ -192,84 +192,16 @@ export function SessionHeader({
             />
           </div>
 
-          {/* Editable Session Title & Project Subtext */}
-          {isEditingTitle ? (
-            <form
-              onSubmit={(e) => {
-                void handleRenameSubmit(e);
-              }}
-              className="flex min-w-0 flex-1 items-center gap-1.5"
-            >
-              <input
-                ref={(el) => {
-                  if (el) {
-                    el.focus();
-                    el.select();
-                  }
-                }}
-                type="text"
-                className="bg-surface border-border text-text-main focus:border-accent w-full rounded border px-1.5 py-0.5 text-xs font-medium outline-none"
-                value={editTitleValue}
-                onChange={(e) => {
-                  setEditTitleValue(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setIsEditingTitle(false);
-                  }
-                }}
-                onBlur={() => {
-                  void handleRenameSubmit();
-                }}
-              />
-              <button
-                type="submit"
-                className="text-accent hover:text-accent/80 shrink-0 p-0.5 transition-colors"
-                title="Save title"
-              >
-                <Check className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEditingTitle(false);
-                }}
-                className="text-text-muted hover:text-text-main shrink-0 p-0.5 transition-colors"
-                title="Cancel"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </form>
-          ) : (
-            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-              <div
-                onDoubleClick={() => {
-                  setIsEditingTitle(true);
-                  setEditTitleValue(rawTitle);
-                }}
-                className="group flex min-w-0 cursor-pointer items-center gap-1.5"
-                title="Double click to rename"
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditingTitle(true);
-                    setEditTitleValue(rawTitle);
-                  }}
-                  className="text-text-main hover:text-accent flex min-w-0 cursor-pointer items-center gap-1 text-xs font-semibold tracking-tight transition-colors"
-                >
-                  <span className="truncate">{sessionDisplayTitle}</span>
-                  <Pencil className="h-2.5 w-2.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
-                </button>
-              </div>
-
-              {projectName && (
-                <span className="text-text-muted/50 hidden shrink-0 text-xs font-normal sm:inline">
-                  · {projectName}
-                </span>
-              )}
-            </div>
-          )}
+          <SessionHeaderTitle
+            isEditingTitle={isEditingTitle}
+            editTitleValue={editTitleValue}
+            setEditTitleValue={setEditTitleValue}
+            setIsEditingTitle={setIsEditingTitle}
+            handleRenameSubmit={handleRenameSubmit}
+            rawTitle={rawTitle}
+            sessionDisplayTitle={sessionDisplayTitle}
+            projectName={projectName}
+          />
 
           {/* Session Options Menu */}
           <Dropdown.Root>
@@ -331,10 +263,8 @@ export function SessionHeader({
 
       {/* Right Action Suite: Open in IDE + Changes Pill + Inspector Toggle */}
       <div className="flex shrink-0 items-center gap-1.5">
-        {/* Open in IDE Split Button */}
         {worktreePath && <OpenInPicker targetPath={worktreePath} />}
 
-        {/* Quick Review / Changes Pill */}
         {changesCount > 0 && (
           <button
             type="button"
@@ -349,7 +279,6 @@ export function SessionHeader({
           </button>
         )}
 
-        {/* Inspector / Workbench Toggle */}
         <Tooltip content="Toggle Inspector (⌘\)">
           <button
             type="button"
@@ -366,39 +295,15 @@ export function SessionHeader({
         </Tooltip>
       </div>
 
-      {/* Archive Modal */}
-      {isArchiving && (
-        <ConfirmationModal
-          isOpen={isArchiving}
-          onCancel={() => {
-            setIsArchiving(false);
-          }}
-          onConfirm={() => {
-            void handleArchive();
-          }}
-          title="Archive Session"
-          message={`Are you sure you want to archive "${sessionDisplayTitle}"? It will be hidden from the active sidebar.`}
-          confirmText="Archive"
-          type="brand-peach"
-        />
-      )}
-
-      {/* Delete Modal */}
-      {isDeleting && (
-        <ConfirmationModal
-          isOpen={isDeleting}
-          onCancel={() => {
-            setIsDeleting(false);
-          }}
-          onConfirm={() => {
-            void handleDelete();
-          }}
-          title="Delete Session"
-          message={`Are you sure you want to permanently delete "${sessionDisplayTitle}"? This cannot be undone.`}
-          confirmText="Delete"
-          type="brand-red"
-        />
-      )}
+      <SessionHeaderDialogs
+        isArchiving={isArchiving}
+        setIsArchiving={setIsArchiving}
+        handleArchive={handleArchive}
+        isDeleting={isDeleting}
+        setIsDeleting={setIsDeleting}
+        handleDelete={handleDelete}
+        sessionDisplayTitle={sessionDisplayTitle}
+      />
     </div>
   );
 }

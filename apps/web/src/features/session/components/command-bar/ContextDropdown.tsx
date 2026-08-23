@@ -21,6 +21,22 @@ interface ContextDropdownProps {
   setFilterType: (type: 'all' | ContextItemType) => void;
 }
 
+function renderDropdownIcon(type: ContextItemType, id: string) {
+  if (type === 'file') {
+    return <FileCode className="h-4 w-4 shrink-0 text-cyan-400" />;
+  }
+  if (type === 'folder') {
+    return <Folder className="h-4 w-4 shrink-0 text-amber-400" />;
+  }
+  if (type === 'git') {
+    if (id === 'git:diff') return <GitPullRequest className="h-4 w-4 shrink-0 text-purple-400" />;
+    if (id === 'git:staged') return <GitBranch className="h-4 w-4 shrink-0 text-emerald-400" />;
+    if (id === 'git:log') return <GitCommit className="h-4 w-4 shrink-0 text-blue-400" />;
+    return <GitBranch className="h-4 w-4 shrink-0 text-purple-400" />;
+  }
+  return <Sparkles className="text-accent h-4 w-4 shrink-0" />;
+}
+
 export function ContextDropdown({
   isOpen,
   items,
@@ -43,22 +59,6 @@ export function ContextDropdown({
 
   if (!isOpen) return null;
 
-  const renderIcon = (type: ContextItemType, id: string) => {
-    if (type === 'file') {
-      return <FileCode className="h-4 w-4 shrink-0 text-cyan-400" />;
-    }
-    if (type === 'folder') {
-      return <Folder className="h-4 w-4 shrink-0 text-amber-400" />;
-    }
-    if (type === 'git') {
-      if (id === 'git:diff') return <GitPullRequest className="h-4 w-4 shrink-0 text-purple-400" />;
-      if (id === 'git:staged') return <GitBranch className="h-4 w-4 shrink-0 text-emerald-400" />;
-      if (id === 'git:log') return <GitCommit className="h-4 w-4 shrink-0 text-blue-400" />;
-      return <GitBranch className="h-4 w-4 shrink-0 text-purple-400" />;
-    }
-    return <Sparkles className="text-accent h-4 w-4 shrink-0" />;
-  };
-
   return (
     <div className="border-border/40 bg-brand-mantle/95 absolute bottom-full left-0 z-50 mb-3 flex max-h-80 w-full flex-col overflow-hidden rounded-xl border p-1.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
       {/* Top Filter Category Tabs */}
@@ -73,7 +73,7 @@ export function ContextDropdown({
               type="button"
               onClick={() => setFilterType(tab)}
               className={cn(
-                'rounded px-2 py-0.5 text-[10px] font-medium capitalize transition-all duration-150',
+                'rounded px-2 py-0.5 text-[10px] font-medium capitalize transition-colors duration-150',
                 filterType === tab
                   ? 'bg-accent/20 text-accent font-semibold'
                   : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary/50',
@@ -108,13 +108,13 @@ export function ContextDropdown({
                 type="button"
                 onClick={() => onSelectItem(item)}
                 className={cn(
-                  'group/item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-all duration-150',
+                  'group/item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150',
                   isActive
                     ? 'bg-accent/15 border-accent/30 text-text-main border shadow-sm'
                     : 'hover:bg-surface-secondary/60 text-text-muted hover:text-text-main border border-transparent',
                 )}
               >
-                {renderIcon(item.type, item.id)}
+                {renderDropdownIcon(item.type, item.id)}
 
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span

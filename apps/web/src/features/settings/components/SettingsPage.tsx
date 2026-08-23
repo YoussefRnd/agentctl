@@ -62,7 +62,7 @@ export function SettingsPage() {
                   onClick={() => {
                     setThemeMode(mode);
                   }}
-                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-all ${
+                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-colors ${
                     themeMode === mode
                       ? 'bg-accent text-brand-crust shadow-sm'
                       : 'text-text-muted hover:text-text-main hover:bg-surface/60'

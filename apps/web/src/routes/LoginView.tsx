@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiClient } from '@agentctl/api-client';
+import { apiClient, setAuthToken, clearAuthToken } from '@agentctl/api-client';
 import { GlassPanel, Input, Button } from '@agentctl/ui';
 import { KeyRound, ShieldAlert, Laptop } from 'lucide-react';
 
@@ -16,7 +16,7 @@ export function LoginView() {
     }
   }, [navigate]);
 
-  const handleSubmit = (e: React.SyntheticEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const tokenInput = key.trim();
     if (!tokenInput) return;
@@ -26,7 +26,8 @@ export function LoginView() {
 
     void (async () => {
       try {
-        const res = await apiClient.fetch<{ sessionToken?: string; sessionId?: string }>(
+        // Try pairing token consumption first
+        const res = await apiClient.fetch<{ sessionToken?: string; user?: unknown }>(
           '/api/auth/pairing/consume',
           {
             method: 'POST',
@@ -35,23 +36,23 @@ export function LoginView() {
         );
 
         if (res?.sessionToken) {
-          localStorage.setItem('agentctl_token', res.sessionToken);
+          setAuthToken(res.sessionToken);
         } else {
-          localStorage.setItem('agentctl_token', tokenInput);
+          setAuthToken(tokenInput);
         }
 
         void navigate('/');
       } catch {
         // Fallback to traditional /api/login
         try {
-          localStorage.setItem('agentctl_token', tokenInput);
+          setAuthToken(tokenInput);
           await apiClient.fetch('/api/login', {
             method: 'POST',
             body: JSON.stringify({ secret: tokenInput }),
           });
           void navigate('/');
         } catch (err) {
-          localStorage.removeItem('agentctl_token');
+          clearAuthToken();
           setError(
             err instanceof Error
               ? err.message
@@ -66,7 +67,7 @@ export function LoginView() {
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <GlassPanel className="animate-in fade-in zoom-in w-full max-w-sm rounded-2xl p-6 shadow-2xl duration-300">
+      <GlassPanel className="animate-in fade-in zoom-in w-full max-w-sm rounded-2xl p-6 shadow-2xl">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="bg-accent/15 text-accent mb-3 flex h-11 w-11 items-center justify-center rounded-xl">
             <KeyRound className="h-5 w-5" />

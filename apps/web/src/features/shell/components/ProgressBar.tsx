@@ -39,7 +39,7 @@ export function ProgressBar() {
   return (
     <div className="fixed top-0 right-0 left-0 z-[9999] h-[2px] w-full overflow-hidden bg-transparent">
       <div
-        className="bg-accent h-full shadow-[0_0_10px_rgba(202,158,230,0.5)] transition-all duration-300 ease-out"
+        className="bg-accent h-full shadow-[0_0_10px_rgba(202,158,230,0.5)] transition-colors duration-300 ease-out"
         style={{ width: `${progress.toString()}%` }}
       />
     </div>

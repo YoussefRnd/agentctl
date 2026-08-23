@@ -1,4 +1,4 @@
-import { Search, AlertCircle, Ban, CheckCircle2 } from 'lucide-react';
+import { Search, Ban, CheckCircle2 } from 'lucide-react';
 import { ReviewCleanState } from '../components/ReviewCleanState';
 
 export function ReviewEmptyState({ searchQuery }: { searchQuery: string }) {

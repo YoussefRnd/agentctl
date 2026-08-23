@@ -141,7 +141,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
               <button
                 key={f.path}
                 type="button"
-                className="group hover:bg-surface-secondary/60 flex w-full cursor-pointer items-center justify-between rounded-xl border-none bg-transparent px-3 py-2 text-left transition-all"
+                className="group hover:bg-surface-secondary/60 flex w-full cursor-pointer items-center justify-between rounded-xl border-none bg-transparent px-3 py-2 text-left transition-colors"
                 onClick={() => {
                   void explore(f.path);
                 }}

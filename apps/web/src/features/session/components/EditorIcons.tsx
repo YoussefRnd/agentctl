@@ -2,13 +2,13 @@ import React, { type SVGProps, useId } from 'react';
 
 export type IconProps = SVGProps<SVGSVGElement>;
 
-export const CursorIcon: React.FC<IconProps> = ({ className, ...props }) => (
+const CursorIcon: React.FC<IconProps> = ({ className, ...props }) => (
   <svg {...props} viewBox="0 0 466.73 532.09" fill="currentColor" className={className}>
     <path d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z" />
   </svg>
 );
 
-export const VisualStudioCodeIcon: React.FC<IconProps> = (props) => {
+const VisualStudioCodeIcon: React.FC<IconProps> = (props) => {
   const id = useId();
   const maskId = `${id}-vscode-mask`;
 
@@ -40,7 +40,7 @@ export const VisualStudioCodeIcon: React.FC<IconProps> = (props) => {
   );
 };
 
-export const VisualStudioCodeInsidersIcon: React.FC<IconProps> = (props) => {
+const VisualStudioCodeInsidersIcon: React.FC<IconProps> = (props) => {
   const id = useId();
   const maskId = `${id}-vscode-insiders-mask`;
 
@@ -72,7 +72,7 @@ export const VisualStudioCodeInsidersIcon: React.FC<IconProps> = (props) => {
   );
 };
 
-export const ZedIcon: React.FC<IconProps> = (props) => (
+const ZedIcon: React.FC<IconProps> = (props) => (
   <svg {...props} fill="currentColor" viewBox="0 0 96 96">
     <path
       fillRule="evenodd"
@@ -82,7 +82,7 @@ export const ZedIcon: React.FC<IconProps> = (props) => (
   </svg>
 );
 
-export const AntigravityIcon: React.FC<IconProps> = (props) => (
+const AntigravityIcon: React.FC<IconProps> = (props) => (
   <svg
     {...props}
     viewBox="0 0 24 24"
@@ -96,13 +96,13 @@ export const AntigravityIcon: React.FC<IconProps> = (props) => (
   </svg>
 );
 
-export const SublimeTextIcon: React.FC<IconProps> = (props) => (
+const SublimeTextIcon: React.FC<IconProps> = (props) => (
   <svg {...props} viewBox="0 0 24 24" fill="currentColor">
     <path d="M21.2 6.8L12.5 2a1.3 1.3 0 0 0-1.3 0L2.5 6.8c-.8.5-1.3 1.3-1.3 2.2v6c0 .9.5 1.7 1.3 2.2l8.7 4.8c.4.2.8.3 1.3.3s.9-.1 1.3-.3l8.7-4.8c.8-.5 1.3-1.3 1.3-2.2V9c0-.9-.5-1.7-1.3-2.2zM12 4.2l6.5 3.6-6.5 3.6-6.5-3.6L12 4.2zm-7.6 6.3l6.5 3.6v6.6l-6.5-3.6v-6.6zm15.2 6.6l-6.5 3.6v-6.6l6.5-3.6v6.6z" />
   </svg>
 );
 
-export const JetBrainsIcon: React.FC<IconProps> = (props) => (
+const JetBrainsIcon: React.FC<IconProps> = (props) => (
   <svg {...props} viewBox="0 0 64 64" fill="none">
     <rect width="64" height="64" rx="12" fill="#000" />
     <path d="M12 12h40v40H12z" fill="#000" />
@@ -112,22 +112,22 @@ export const JetBrainsIcon: React.FC<IconProps> = (props) => (
   </svg>
 );
 
-export function getEditorBrandIcon(editorId: string): React.FC<IconProps> {
+export function EditorBrandIcon({ editorId, ...props }: IconProps & { editorId: string }) {
   switch (editorId) {
     case 'cursor':
-      return CursorIcon;
+      return <CursorIcon {...props} />;
     case 'vscode':
-      return VisualStudioCodeIcon;
+      return <VisualStudioCodeIcon {...props} />;
     case 'vscode-insiders':
-      return VisualStudioCodeInsidersIcon;
+      return <VisualStudioCodeInsidersIcon {...props} />;
     case 'vscodium':
-      return VisualStudioCodeIcon;
+      return <VisualStudioCodeIcon {...props} />;
     case 'zed':
-      return ZedIcon;
+      return <ZedIcon {...props} />;
     case 'antigravity':
-      return AntigravityIcon;
+      return <AntigravityIcon {...props} />;
     case 'sublime':
-      return SublimeTextIcon;
+      return <SublimeTextIcon {...props} />;
     case 'idea':
     case 'webstorm':
     case 'pycharm':
@@ -140,8 +140,8 @@ export function getEditorBrandIcon(editorId: string): React.FC<IconProps> {
     case 'dataspell':
     case 'rubymine':
     case 'aqua':
-      return JetBrainsIcon;
+      return <JetBrainsIcon {...props} />;
     default:
-      return VisualStudioCodeIcon;
+      return <VisualStudioCodeIcon {...props} />;
   }
 }

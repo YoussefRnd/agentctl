@@ -2,36 +2,40 @@
 import { describe, it, expect } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { StreamingMarkdown, splitStreamingContent } from './StreamingMarkdown';
+import { StreamingMarkdown } from './StreamingMarkdown';
+import { splitStreamingContent } from './streamingMarkdownUtils';
 
 describe('splitStreamingContent', () => {
   it('returns single text segment for plain content', () => {
-    expect(splitStreamingContent('hello world')).toEqual([{ type: 'text', value: 'hello world' }]);
+    expect(splitStreamingContent('hello world')).toEqual([
+      { key: 'seg-0', type: 'text', value: 'hello world' },
+    ]);
   });
 
   it('splits balanced fences into text/code segments', () => {
     expect(splitStreamingContent('a\n```ts\nx\n```\nb')).toEqual([
-      { type: 'text', value: 'a\n' },
-      { type: 'code', value: 'x\n' },
-      { type: 'text', value: '\nb' },
+      { key: 'seg-0', type: 'text', value: 'a\n' },
+      { key: 'seg-2', type: 'code', value: 'x\n' },
+      { key: 'seg-7', type: 'text', value: '\nb' },
     ]);
   });
 
   it('treats unclosed trailing fence as code segment', () => {
     expect(splitStreamingContent('a\n```ts\nx')).toEqual([
-      { type: 'text', value: 'a\n' },
-      { type: 'code', value: 'x' },
+      { key: 'seg-0', type: 'text', value: 'a\n' },
+      { key: 'seg-2', type: 'code', value: 'x' },
     ]);
   });
 
   it('strips language tag line from code segments', () => {
     const segments = splitStreamingContent('```ts\nconst a = 1\n```');
-    expect(segments[0]).toEqual({ type: 'code', value: 'const a = 1\n' });
+    expect(segments[0]).toEqual({ key: 'seg-0', type: 'code', value: 'const a = 1\n' });
   });
 
   it('keeps long first lines intact', () => {
     const segments = splitStreamingContent('```\nconst long = "line with spaces in it";\n```');
     expect(segments[0]).toEqual({
+      key: 'seg-0',
       type: 'code',
       value: 'const long = "line with spaces in it";\n',
     });

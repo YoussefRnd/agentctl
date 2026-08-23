@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow } from '@agentctl/shared';
 import { SessionEngine } from '@agentctl/shared';
 
-import { apiClient } from '@agentctl/api-client';
+import { apiClient, getAuthToken } from '@agentctl/api-client';
 import { getApiBaseUrl } from '../shared/lib/api-base-url';
 
 const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
@@ -32,7 +32,7 @@ export function useSessionEvents(sessionId: string | null) {
   useEffect(() => {
     if (!sessionId) return;
 
-    const token = localStorage.getItem('agentctl_token') ?? undefined;
+    const token = getAuthToken() ?? undefined;
     const sseUrl = `${getApiBaseUrl()}/api/sessions/${sessionId}/events/stream`;
 
     const engine = new SessionEngine({

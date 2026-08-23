@@ -77,7 +77,7 @@ export function Workbench({
                   type="button"
                   role="tab"
                   aria-selected={tab === t}
-                  className={`relative flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                  className={`relative flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors duration-200 ${
                     tab === t
                       ? 'text-accent'
                       : 'text-text-muted/60 hover:text-text-muted hover:bg-surface-tertiary/20'
@@ -133,7 +133,7 @@ export function Workbench({
               <button
                 type="button"
                 onClick={onToggleMaximize}
-                className="text-text-muted/60 hover:text-accent hover:bg-surface-tertiary/20 ml-2 flex h-7 w-7 items-center justify-center rounded-md transition-all"
+                className="text-text-muted/60 hover:text-accent hover:bg-surface-tertiary/20 ml-2 flex h-7 w-7 items-center justify-center rounded-md transition-colors"
                 title={isMaximized ? 'Contract panel' : 'Maximize panel'}
                 aria-label={isMaximized ? 'Contract panel' : 'Maximize panel'}
               >

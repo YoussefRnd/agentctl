@@ -63,12 +63,18 @@ export function SetupWizardProviderRow({
               return (
                 <div key={key} className="space-y-1">
                   <div className="flex items-baseline justify-between">
-                    <label className="text-text-muted font-mono text-xs font-medium">{key}</label>
+                    <label
+                      htmlFor={`setup-${provider.id}-${key}`}
+                      className="text-text-muted font-mono text-xs font-medium"
+                    >
+                      {key}
+                    </label>
                     {errorMsg && (
                       <span className="text-danger text-xs font-normal">{errorMsg}</span>
                     )}
                   </div>
                   <Input
+                    id={`setup-${provider.id}-${key}`}
                     type="password"
                     value={keysValues[key]}
                     onChange={(e) => {

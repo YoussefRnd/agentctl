@@ -6,6 +6,47 @@ export function setApiBaseUrl(url: string) {
   apiBaseUrl = url;
 }
 
+const CREDENTIAL_KEY = 'agentctl_session_key';
+let inMemoryCredential: string | null = null;
+
+function readStoredCredential(): string | null {
+  if (inMemoryCredential) return inMemoryCredential;
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(CREDENTIAL_KEY);
+    inMemoryCredential = raw;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredCredential(val: string | null): void {
+  inMemoryCredential = val;
+  if (typeof window === 'undefined') return;
+  try {
+    if (val === null) {
+      window.localStorage.removeItem(CREDENTIAL_KEY);
+    } else {
+      window.localStorage.setItem(CREDENTIAL_KEY, val);
+    }
+  } catch {
+    // Ignore storage quota/permission errors
+  }
+}
+
+export function getAuthToken(): string | null {
+  return readStoredCredential();
+}
+
+export function setAuthToken(value: string): void {
+  writeStoredCredential(value);
+}
+
+export function clearAuthToken(): void {
+  writeStoredCredential(null);
+}
+
 export function extractAndPersistUrlToken(): string | null {
   if (typeof window === 'undefined') return null;
 
@@ -23,7 +64,7 @@ export function extractAndPersistUrlToken(): string | null {
     }
 
     if (token) {
-      localStorage.setItem('agentctl_token', token);
+      setAuthToken(token);
 
       // Strip token from URL to prevent accidental sharing
       url.searchParams.delete('token');
@@ -63,11 +104,9 @@ export const apiClient = {
     if (hasBody && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('agentctl_token');
-      if (token && !headers.has('Authorization')) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
+    const token = getAuthToken();
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
     }
 
     try {
@@ -135,11 +174,9 @@ export const apiClient = {
     if (hasBody && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('agentctl_token');
-      if (token && !headers.has('Authorization')) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
+    const token = getAuthToken();
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
     }
 
     try {

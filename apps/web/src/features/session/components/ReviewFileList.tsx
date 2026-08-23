@@ -252,6 +252,7 @@ export function ReviewFileList({
                           onToggleFile(file.path);
                         }}
                         aria-expanded={!collapsed}
+                        aria-label={collapsed ? `Expand ${file.path}` : `Collapse ${file.path}`}
                         className="text-text-muted/20 hover:text-text-muted/50 cursor-pointer border-0 bg-transparent p-0 transition-colors"
                       >
                         {collapsed ? (

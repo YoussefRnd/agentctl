@@ -28,7 +28,7 @@ export const Card = ({
   return (
     <div
       className={cn(
-        'liquid-glass flex flex-col overflow-hidden rounded-lg border transition-all duration-200',
+        'liquid-glass flex flex-col overflow-hidden rounded-lg border transition-colors duration-200',
         intensity === 'high' && 'bg-surface/40 backdrop-blur-[32px]',
         STATUS_CLASSES[status],
         className,

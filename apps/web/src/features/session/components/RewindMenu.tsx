@@ -132,7 +132,7 @@ export function RewindMenu({ eventId, hasGitRepo, onRewind, onClose }: RewindMen
               tabIndex={isFocused ? 0 : -1}
               disabled={opt.disabled}
               aria-disabled={opt.disabled}
-              className={`flex w-full items-start gap-2.5 rounded-md border p-2 text-left transition-all ${
+              className={`flex w-full items-start gap-2.5 rounded-md border p-2 text-left transition-colors ${
                 opt.disabled
                   ? 'cursor-not-allowed border-transparent opacity-35'
                   : isFocused

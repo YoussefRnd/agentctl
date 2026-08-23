@@ -31,7 +31,7 @@ export function MarkdownCodeBlock({
       <button
         type="button"
         onClick={handleCopy}
-        className="border-border/40 bg-surface-primary/90 text-text-muted hover:bg-surface-secondary hover:text-text-main absolute top-2 right-2 flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 font-sans text-[11px] font-medium opacity-0 shadow-sm backdrop-blur-sm transition-all group-hover/code:opacity-100 focus-visible:opacity-100"
+        className="border-border/40 bg-surface-primary/90 text-text-muted hover:bg-surface-secondary hover:text-text-main absolute top-2 right-2 flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 font-sans text-[11px] font-medium opacity-0 shadow-sm backdrop-blur-sm transition-colors group-hover/code:opacity-100 focus-visible:opacity-100"
         aria-label="Copy code"
         title="Copy code"
       >

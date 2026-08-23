@@ -46,7 +46,7 @@ export function AttachmentStrip({ attachments, onRemove, onRetry }: AttachmentSt
                 strokeDasharray={String(2 * Math.PI * 18)}
                 strokeDashoffset={String(2 * Math.PI * 18 * (1 - attachment.progress / 100))}
                 transform="rotate(-90 22 22)"
-                className="duration-200 motion-safe:transition-[stroke-dashoffset]"
+                className="transition-[stroke-dashoffset]"
               />
             </svg>
           )}

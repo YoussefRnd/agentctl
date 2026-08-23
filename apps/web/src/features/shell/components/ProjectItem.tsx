@@ -203,7 +203,7 @@ export function ProjectItem({
                               onClick={(e) => {
                                 e.stopPropagation();
                               }}
-                              className={`flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-all ${
+                              className={`flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-colors ${
                                 isActive
                                   ? 'text-text-main hover:bg-surface-secondary'
                                   : 'text-text-muted hover:text-text-main hover:bg-surface-secondary'

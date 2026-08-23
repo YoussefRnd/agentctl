@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Spinner, StreamingDots } from '@/shared';
 import { useSettings } from '@/hooks/useSettings';
@@ -30,24 +30,8 @@ export function ThinkingBlock({
   const isSessionActive = sessionStatus === 'running' || sessionStatus === 'needs_attention';
   const isCompleted = !isActive || !isSessionActive;
 
-  const [isOpen, setIsOpen] = useState(() => !isCompleted && showThinking);
-  const userToggledRef = useRef(false);
-  const prevShowThinkingRef = useRef(showThinking);
-
-  useEffect(() => {
-    if (showThinking !== prevShowThinkingRef.current) {
-      prevShowThinkingRef.current = showThinking;
-      if (!showThinking) {
-        setIsOpen(false);
-      } else if (!isCompleted) {
-        setIsOpen(true);
-      }
-      return;
-    }
-    if (isCompleted && !userToggledRef.current) {
-      setIsOpen(false);
-    }
-  }, [isCompleted, showThinking]);
+  const [userToggled, setUserToggled] = useState<boolean | null>(null);
+  const isOpen = userToggled ?? (!isCompleted && showThinking);
 
   const { totalDurationMs, totalTokens } = useMemo(() => {
     let durMs = 0;
@@ -77,8 +61,7 @@ export function ThinkingBlock({
 
   const toggle = () => {
     if (events.length === 0) return;
-    userToggledRef.current = true;
-    setIsOpen((v) => !v);
+    setUserToggled(!isOpen);
   };
 
   return (
@@ -88,7 +71,7 @@ export function ThinkingBlock({
         aria-expanded={isOpen}
         aria-controls="activity-details"
         onClick={toggle}
-        className="border-border/30 bg-surface-secondary/30 text-text-muted/80 hover:text-text-main hover:border-border/50 focus-visible:ring-accent/40 focus-visible:ring-offset-background flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-medium tracking-wide transition-all outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1"
+        className="border-border/30 bg-surface-secondary/30 text-text-muted/80 hover:text-text-main hover:border-border/50 focus-visible:ring-accent/40 focus-visible:ring-offset-background flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-medium tracking-wide transition-colors outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1"
       >
         <Spinner done={isCompleted} />
 
@@ -107,7 +90,7 @@ export function ThinkingBlock({
       {isOpen && (
         <div
           id="activity-details"
-          className="animate-in fade-in slide-in-from-top-1 mt-2 space-y-2 duration-150"
+          className="animate-in fade-in slide-in-from-top-1 mt-2 space-y-2"
         >
           {events.map((e) => {
             const isLastStreaming = isStreaming && e.id === events[events.length - 1].id;

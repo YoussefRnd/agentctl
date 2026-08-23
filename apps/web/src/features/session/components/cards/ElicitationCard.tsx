@@ -98,13 +98,19 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
             <div className="space-y-2.5 pt-1">
               {request.form.fields.map((field) => (
                 <div key={field.id} className="flex flex-col gap-1">
-                  <label className="text-text-muted text-[11px] font-semibold">
-                    {field.label}
-                    {field.required && <span className="ml-1 text-rose-400">*</span>}
-                  </label>
+                  {field.type !== 'boolean' && (
+                    <label
+                      htmlFor={`elicitation-${field.id}`}
+                      className="text-text-muted text-[11px] font-semibold"
+                    >
+                      {field.label}
+                      {field.required && <span className="ml-1 text-rose-400">*</span>}
+                    </label>
+                  )}
 
                   {field.type === 'select' ? (
                     <Select
+                      id={`elicitation-${field.id}`}
                       value={
                         typeof formValues[field.id] === 'string'
                           ? (formValues[field.id] as string)
@@ -137,6 +143,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                     </label>
                   ) : (
                     <Input
+                      id={`elicitation-${field.id}`}
                       type={field.type === 'number' ? 'number' : 'text'}
                       value={
                         typeof formValues[field.id] === 'string' ||

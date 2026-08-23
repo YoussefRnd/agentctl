@@ -68,6 +68,7 @@ export function FontSettingsPanel({ fontConfig, onUpdate }: FontSettingsPanelPro
             <div className="flex shrink-0 items-center gap-1">
               <button
                 type="button"
+                aria-label={`Decrease ${label} font size`}
                 disabled={ctx.size <= 8}
                 onClick={() => {
                   onUpdate({ [ctxKey]: { ...ctx, size: ctx.size - 1 } });
@@ -81,6 +82,7 @@ export function FontSettingsPanel({ fontConfig, onUpdate }: FontSettingsPanelPro
               </span>
               <button
                 type="button"
+                aria-label={`Increase ${label} font size`}
                 disabled={ctx.size >= 72}
                 onClick={() => {
                   onUpdate({ [ctxKey]: { ...ctx, size: ctx.size + 1 } });

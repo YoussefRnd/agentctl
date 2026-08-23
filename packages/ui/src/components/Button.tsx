@@ -29,7 +29,7 @@ const sizes = {
 };
 
 const baseStyles =
-  'inline-flex items-center justify-center rounded-md font-sans font-bold tracking-tight transition-all focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
+  'inline-flex items-center justify-center rounded-md font-sans font-bold tracking-tight transition-colors focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
 
 const ButtonComponent = <T extends ElementType = 'button'>({
   as,

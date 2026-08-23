@@ -33,7 +33,7 @@ export function CommandDropdown<T extends string>({
   const triggerClass =
     variant === 'toolbar'
       ? cn(
-          'group flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200',
+          'group flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-colors duration-200',
           'text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent',
           'disabled:pointer-events-none disabled:opacity-40',
           'data-[state=open]:bg-accent/20 data-[state=open]:text-accent data-[state=open]:border-accent/50',

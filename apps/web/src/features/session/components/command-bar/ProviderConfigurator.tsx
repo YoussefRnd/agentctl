@@ -9,6 +9,16 @@ import { ConfigOptionsPanel } from '../ConfigOptionsPanel';
 
 const PRIMARY_CONFIG_CATEGORIES = ['model', 'mode', 'thought_level'] as const;
 
+const INACTIVE_GRID_STYLE = {
+  backgroundImage: `linear-gradient(90deg, #181825 1.5px, transparent 1.5px), linear-gradient(0deg, #181825 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.07))`,
+  backgroundSize: '5px 5px, 5px 5px, 100% 100%',
+};
+
+const ACTIVE_GRID_STYLE = {
+  backgroundImage: `linear-gradient(90deg, #181825 1.5px, transparent 1.5px), linear-gradient(0deg, #181825 1.5px, transparent 1.5px), linear-gradient(90deg, #3b82f6, #cba6f7)`,
+  backgroundSize: '5px 5px, 5px 5px, 100% 100%',
+};
+
 export function ProviderPickerTrigger({
   isLoading,
   isOpen,
@@ -65,7 +75,7 @@ export function ProviderPickerTrigger({
             }
           }}
           className={cn(
-            'flex h-8 items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-3 text-xs font-medium text-amber-300 transition-all duration-200 hover:bg-amber-500/25 focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
+            'flex h-8 items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-3 text-xs font-medium text-amber-300 transition-colors duration-200 hover:bg-amber-500/25 focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
             isLoading && 'pointer-events-none opacity-50',
           )}
         >
@@ -83,7 +93,7 @@ export function ProviderPickerTrigger({
               aria-label="Select AI provider"
               aria-expanded={isOpen}
               className={cn(
-                'focus-visible:ring-accent/50 flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-all duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
+                'focus-visible:ring-accent/50 flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
                 isOpen
                   ? 'bg-accent/20 text-accent border-accent/50'
                   : 'border-border/40 bg-surface-secondary/50 text-text-main hover:bg-surface-secondary hover:border-border/60',
@@ -100,7 +110,10 @@ export function ProviderPickerTrigger({
                 />
               ) : (
                 <Zap
-                  className={cn('h-3.5 w-3.5 transition-all duration-200', isOpen && 'fill-accent')}
+                  className={cn(
+                    'h-3.5 w-3.5 transition-colors duration-200',
+                    isOpen && 'fill-accent',
+                  )}
                 />
               )}
               <span className="max-w-[220px] truncate text-xs font-medium">{badgeLabel}</span>
@@ -155,10 +168,11 @@ export function ThinkingEffortSelector({
   const options = thinkingOption?.options;
   const currentValue = thinkingOption?.currentValue;
 
-  // Reset local drag state when option configuration updates externally
-  useEffect(() => {
+  const [prevCurrentValue, setPrevCurrentValue] = useState(currentValue);
+  if (prevCurrentValue !== currentValue) {
+    setPrevCurrentValue(currentValue);
     setLocalIndex(null);
-  }, [currentValue, options]);
+  }
 
   // Debounce API calls when sliding quickly to prevent out-of-order race conditions
   useEffect(() => {
@@ -178,26 +192,19 @@ export function ThinkingEffortSelector({
 
   const currentIndex = options.findIndex((opt) => opt.value === currentValue);
   const activeIndex = currentIndex !== -1 ? currentIndex : 0;
-  const displayIndex = localIndex ?? activeIndex;
-  const isMaxEffort = displayIndex === options.length - 1;
-  const maxVal = options.length > 1 ? options.length - 1 : 1;
+  const displayIndex = localIndex !== null ? localIndex : activeIndex;
 
-  const activeOptionName = options[displayIndex]?.name ?? currentValue;
+  const maxVal = Math.max(0, options.length - 1);
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const nextIndex = parseInt(e.target.value, 10);
-    setLocalIndex(nextIndex);
+    const nextIdx = Number.parseInt(e.target.value, 10);
+    if (!Number.isNaN(nextIdx) && nextIdx >= 0 && nextIdx <= maxVal) {
+      setLocalIndex(nextIdx);
+    }
   };
 
-  const inactiveGridStyle = {
-    backgroundImage: `linear-gradient(90deg, #181825 1.5px, transparent 1.5px), linear-gradient(0deg, #181825 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.07))`,
-    backgroundSize: '5px 5px, 5px 5px, 100% 100%',
-  };
-
-  const activeGridStyle = {
-    backgroundImage: `linear-gradient(90deg, #181825 1.5px, transparent 1.5px), linear-gradient(0deg, #181825 1.5px, transparent 1.5px), linear-gradient(90deg, #3b82f6, #cba6f7)`,
-    backgroundSize: '5px 5px, 5px 5px, 100% 100%',
-  };
+  const isMaxEffort = displayIndex === options.length - 1;
+  const activeOptionName = options[displayIndex]?.name ?? currentValue;
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -206,7 +213,7 @@ export function ThinkingEffortSelector({
           type="button"
           disabled={isUpdating}
           className={cn(
-            'group flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-all duration-200',
+            'group flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-colors duration-200',
             'text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
             'disabled:pointer-events-none disabled:opacity-40',
             isOpen ? 'bg-accent/20 text-accent border-accent/50' : '',
@@ -214,29 +221,31 @@ export function ThinkingEffortSelector({
         >
           <Brain
             className={cn(
-              'h-3.5 w-3.5 transition-all duration-300',
+              'h-3.5 w-3.5 transition-colors duration-300',
               isMaxEffort ? 'text-accent' : 'text-text-muted',
             )}
           />
-          <span className="max-w-[150px] truncate text-xs font-medium">{activeOptionName}</span>
+          <span className="font-mono text-xs font-semibold">{activeOptionName}</span>
           <ChevronUp
             className={cn(
-              'text-text-muted/50 h-3 w-3 transition-transform duration-200',
+              'h-3.5 w-3.5 opacity-40 transition-transform duration-200',
               isOpen && 'rotate-180',
             )}
           />
         </button>
       </PopoverTrigger>
       <PopoverContent
-        align="start"
         side="top"
-        className="border-border/20 bg-brand-mantle w-[280px] rounded-xl border p-4.5 shadow-2xl"
+        align="center"
+        sideOffset={8}
+        className="border-border/50 bg-brand-mantle/95 flex w-[280px] flex-col gap-4 rounded-xl border p-4 shadow-2xl backdrop-blur-xl"
       >
-        <div className="flex flex-col gap-3 font-sans text-xs">
+        <div className="flex flex-col gap-3">
           {/* Header */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-bold">
-              <span className="text-text-muted/60">Effort</span>
+            <span className="text-text-main text-xs font-bold tracking-tight">Thinking Effort</span>
+            <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold">
+              <span className="text-text-muted">Level:</span>
               <span className="text-accent">{activeOptionName}</span>
             </div>
           </div>
@@ -252,11 +261,11 @@ export function ThinkingEffortSelector({
             {/* Custom Track */}
             <div className="relative flex h-5 w-full items-center">
               {/* Background Inactive Track */}
-              <div className="absolute inset-0 rounded-md" style={inactiveGridStyle} />
+              <div className="absolute inset-0 rounded-md" style={INACTIVE_GRID_STYLE} />
 
               {/* Ambient Glow Backdrop - Dynamic soft glow casting colors behind the active grid */}
               <div
-                className="to-accent/30 pointer-events-none absolute top-1/2 left-0 h-5 -translate-y-1/2 bg-gradient-to-r from-blue-500/20 blur-md transition-all duration-300"
+                className="to-accent/30 pointer-events-none absolute top-1/2 left-0 h-5 -translate-y-1/2 bg-gradient-to-r from-blue-500/20 blur-md transition-colors duration-300"
                 style={{
                   width: `${((displayIndex / maxVal) * 100).toString()}%`,
                 }}
@@ -264,16 +273,16 @@ export function ThinkingEffortSelector({
 
               {/* Active Track Overlay */}
               <div
-                className="absolute top-0 bottom-0 left-0 rounded-md transition-all duration-300"
+                className="absolute top-0 bottom-0 left-0 rounded-md transition-colors duration-300"
                 style={{
                   width: `${((displayIndex / maxVal) * 100).toString()}%`,
-                  ...activeGridStyle,
+                  ...ACTIVE_GRID_STYLE,
                 }}
               />
 
               {/* Custom Thumb - Math-aligned to stay perfectly centered within track bounds */}
               <div
-                className="absolute top-1/2 h-6 w-3.5 -translate-y-1/2 rounded-[4px] border-white bg-white shadow-lg transition-all duration-300"
+                className="absolute top-1/2 h-6 w-3.5 -translate-y-1/2 rounded-[4px] border-white bg-white shadow-lg transition-transform duration-300"
                 style={{
                   left: `calc(${((displayIndex / maxVal) * 100).toString()}% - ${((displayIndex / maxVal) * 14).toString()}px)`,
                 }}
@@ -286,6 +295,7 @@ export function ThinkingEffortSelector({
                 max={maxVal}
                 step="1"
                 value={displayIndex}
+                aria-label="Thinking effort level"
                 onChange={handleSliderChange}
                 className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
               />
@@ -372,7 +382,7 @@ export function AdvancedSettingsPopover({ isLoading }: { isLoading: boolean }) {
           type="button"
           disabled={isLoading}
           className={cn(
-            'group border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border transition-all duration-300 focus-visible:ring-2 focus-visible:outline-none',
+            'group border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border transition-colors duration-300 focus-visible:ring-2 focus-visible:outline-none',
             isOpen ? 'bg-accent/10 text-accent border-accent/40' : '',
           )}
           title="Advanced Settings"
