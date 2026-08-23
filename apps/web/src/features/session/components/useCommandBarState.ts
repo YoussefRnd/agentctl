@@ -145,26 +145,23 @@ export function useCommandBarState(
     textarea.style.height = `${String(Math.min(textarea.scrollHeight, 240))}px`;
   }, [input]);
 
-  const isSlashCommand = input.startsWith('/') && !input.includes('\n');
-  const slashQuery = isSlashCommand ? input.slice(1).toLowerCase() : '';
+  const isSlashCommand = input.startsWith('/');
 
-  const filteredCommands = useMemo<CommandInfo[]>(() => {
+  const filteredCommands = useMemo(() => {
     if (!isSlashCommand) return [];
-    return commands.filter(
-      (cmd: CommandInfo) =>
-        cmd.name.toLowerCase().includes(slashQuery) ||
-        (cmd.description?.toLowerCase().includes(slashQuery) ?? false),
-    );
-  }, [isSlashCommand, commands, slashQuery]);
+    const query = input.slice(1).toLowerCase().trim();
+    if (!query) return commands;
+    return commands.filter((c) => c.name.toLowerCase().includes(query));
+  }, [isSlashCommand, input, commands]);
+
+  const showSlashMenu = isSlashCommand && filteredCommands.length > 0 && !input.includes(' ');
 
   const matchingCommand = useMemo<CommandInfo | undefined>(() => {
     if (!isSlashCommand) return undefined;
     const parts = input.slice(1).split(' ');
     const cmdName = parts[0].toLowerCase();
-    return commands.find((cmd: CommandInfo) => cmd.name.toLowerCase() === cmdName);
+    return commands.find((cmd) => cmd.name.toLowerCase() === cmdName);
   }, [isSlashCommand, input, commands]);
-
-  const showSlashMenu = isSlashCommand && filteredCommands.length > 0 && !input.includes(' ');
 
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -189,13 +186,11 @@ export function useCommandBarState(
     if (!trimmed && readyAttachmentIds.length === 0 && !hasContext) return;
     if (disabled || isAnyUploading) return;
 
-    // Check for purely functional view actions (e.g. /terminal, /mcp)
+    // Check for purely functional view actions (e.g. /timeline, /terminal, /mcp)
     if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
       const cmdName = trimmed.slice(1).toLowerCase();
-      if (cmdName === 'terminal') {
-        window.dispatchEvent(
-          new CustomEvent('agentctl:switch-tab', { detail: { tab: 'terminal' } }),
-        );
+      if (cmdName === 'timeline' || cmdName === 'terminal') {
+        window.dispatchEvent(new CustomEvent('agentctl:switch-tab', { detail: { tab: cmdName } }));
         setInput('');
         return;
       }

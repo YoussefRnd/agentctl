@@ -1,4 +1,12 @@
-import { createContext, use, useState, useEffect, useCallback, type ReactNode } from 'react';
+import {
+  createContext,
+  use,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from 'react';
 import type { UpdateState } from '../electron';
 
 export interface UpdateContextValue {
@@ -29,11 +37,14 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
     window.electronAPI?.update.check();
   }, []);
 
-  const value: UpdateContextValue = {
-    state,
-    install,
-    check,
-  };
+  const value = useMemo<UpdateContextValue>(
+    () => ({
+      state,
+      install,
+      check,
+    }),
+    [state, install, check],
+  );
 
   return <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>;
 }

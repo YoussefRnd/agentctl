@@ -47,7 +47,7 @@ export function McpServerForm({
           <Input
             id="mcp-name"
             placeholder="Name"
-            value={formState.name}
+            value={formState.name ?? ''}
             onChange={(e) => {
               set('name', e.target.value);
             }}
@@ -86,7 +86,7 @@ export function McpServerForm({
               <Input
                 id="mcp-command"
                 placeholder="Command (e.g. npx)"
-                value={formState.command}
+                value={formState.command ?? ''}
                 onChange={(e) => {
                   set('command', e.target.value);
                 }}
@@ -101,7 +101,7 @@ export function McpServerForm({
               <Input
                 id="mcp-args"
                 placeholder="Arguments (e.g. --debug)"
-                value={formState.args}
+                value={formState.args ?? ''}
                 onChange={(e) => {
                   set('args', e.target.value);
                 }}
@@ -116,7 +116,7 @@ export function McpServerForm({
               <textarea
                 id="mcp-env"
                 placeholder="KEY=VALUE (one per line)"
-                value={formState.env}
+                value={formState.env ?? ''}
                 onChange={(e) => {
                   set('env', e.target.value);
                 }}
@@ -133,7 +133,7 @@ export function McpServerForm({
               <Input
                 id="mcp-url"
                 placeholder="URL (e.g. https://...)"
-                value={formState.url}
+                value={formState.url ?? ''}
                 onChange={(e) => {
                   set('url', e.target.value);
                 }}
@@ -148,7 +148,7 @@ export function McpServerForm({
               <textarea
                 id="mcp-headers"
                 placeholder="Authorization=Bearer xyz (one per line)"
-                value={formState.headers}
+                value={formState.headers ?? ''}
                 onChange={(e) => {
                   set('headers', e.target.value);
                 }}

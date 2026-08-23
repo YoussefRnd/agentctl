@@ -46,10 +46,6 @@ export const TextCard = memo(function TextCard({
   const { sessionId } = useSession();
 
   useEffect(() => {
-    setDraftContent(content);
-  }, [content]);
-
-  useEffect(() => {
     if (isEditing && textareaRef.current) {
       const textarea = textareaRef.current;
       textarea.style.height = 'auto';

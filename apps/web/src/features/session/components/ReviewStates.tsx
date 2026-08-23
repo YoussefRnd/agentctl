@@ -15,34 +15,6 @@ export function ReviewEmptyState({ searchQuery }: { searchQuery: string }) {
   return <ReviewCleanState />;
 }
 
-export function ReviewErrorState({ error, onRetry }: { error: Error; onRetry?: () => void }) {
-  return (
-    <div className="bg-surface-secondary/5 flex-1 p-5">
-      <div className="border-danger/20 bg-danger/5 relative overflow-hidden rounded-xl border p-4 shadow-2xl">
-        <div className="absolute top-0 right-0 p-4 opacity-5">
-          <AlertCircle className="text-danger h-24 w-24" />
-        </div>
-        <div className="text-danger mb-4 flex items-center gap-3 text-[11px] font-black tracking-[0.2em] uppercase">
-          <AlertCircle className="h-5 w-5" />
-          Critical Workspace Error
-        </div>
-        <div className="text-danger/70 selection:bg-danger/20 font-mono text-[11px] leading-relaxed">
-          {error.message}
-        </div>
-        {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="bg-danger mt-6 flex h-8 cursor-pointer items-center rounded-lg px-5 text-[10px] font-black tracking-widest text-white uppercase transition-all hover:opacity-90"
-          >
-            Retry Scan
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function ReviewLoadingState() {
   return (
     <div className="text-text-muted/40 bg-surface-secondary/5 flex h-full flex-col items-center justify-center p-8">

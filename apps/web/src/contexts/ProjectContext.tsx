@@ -1,4 +1,4 @@
-import { createContext, use, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { projectStore, type ProjectSettings } from '@agentctl/shared';
 
 interface ProjectContextValue {
@@ -16,24 +16,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     () => projectStore.getState(),
   );
 
-  const value: ProjectContextValue = {
-    activeId: state.activeId,
-    settings: state.settings,
-    setActiveId: (id) => {
-      projectStore.setActiveId(id);
-    },
-    setSettings: (settings) => {
-      projectStore.setSettings(settings);
-    },
-  };
+  const value = useMemo<ProjectContextValue>(
+    () => ({
+      activeId: state.activeId,
+      settings: state.settings,
+      setActiveId: (id) => {
+        projectStore.setActiveId(id);
+      },
+      setSettings: (settings) => {
+        projectStore.setSettings(settings);
+      },
+    }),
+    [state.activeId, state.settings],
+  );
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
-}
-
-export function useProjectStore() {
-  const context = use(ProjectContext);
-  if (!context) {
-    throw new Error('useProjectStore must be used within a ProjectProvider');
-  }
-  return context;
 }

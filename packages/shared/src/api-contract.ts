@@ -78,11 +78,13 @@ const exploreResponseSchema = z.object({
   error: z.string().optional(),
 });
 
-const reviewFileSchema = z.object({
+export const reviewFileSchema = z.object({
   path: z.string(),
   state: z.enum(['untracked', 'staged', 'modified', 'deleted', 'committed', 'conflicted']),
   diff: z.string().optional(),
 });
+
+export type ReviewFileItem = z.infer<typeof reviewFileSchema>;
 
 export const apiContract = {
   getProjects: {
@@ -709,6 +711,44 @@ export const apiContract = {
       200: z.object({ success: z.boolean() }),
     },
     summary: 'Merge parallel session branch into current session workspace',
+  },
+  checkMergeBranch: {
+    method: 'POST',
+    path: '/api/sessions/:id/check-merge',
+    pathParams: z.object({
+      id: z.uuid(),
+    }),
+    body: z.object({
+      branch: z.string(),
+    }),
+    responses: {
+      200: z.object({
+        canMerge: z.boolean(),
+        hasConflicts: z.boolean(),
+        conflictingFiles: z.array(z.string()),
+      }),
+    },
+    summary: 'Pre-check if merging a branch into current session produces conflicts',
+  },
+  spawnParallelAgent: {
+    method: 'POST',
+    path: '/api/sessions/:id/agents',
+    pathParams: z.object({
+      id: z.uuid(),
+    }),
+    body: z.object({
+      prompt: z.string(),
+      title: z.string().optional(),
+      taskSlug: z.string().optional(),
+      providerId: z.string().optional(),
+      modelId: z.string().optional(),
+    }),
+    responses: {
+      200: z.object({
+        session: sessionRowSchema,
+      }),
+    },
+    summary: 'Spawn a parallel background agent in an isolated workspace',
   },
   getMcpServers: {
     method: 'GET',

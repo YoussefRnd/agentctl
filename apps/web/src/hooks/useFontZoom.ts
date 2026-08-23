@@ -31,10 +31,6 @@ export function requestFontZoom(steps: number): void {
   for (const listener of zoomListeners) listener(steps);
 }
 
-export function requestFontZoomReset(): void {
-  requestFontZoom(0);
-}
-
 /**
  * Trackpad & Font Zoom Hook.
  *

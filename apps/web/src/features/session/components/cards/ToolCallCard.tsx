@@ -1,4 +1,4 @@
-import { useState, memo, useEffect, useRef, type ReactElement } from 'react';
+import { useState, memo, type ReactElement } from 'react';
 import {
   Terminal,
   ChevronRight,
@@ -115,7 +115,7 @@ function LocationsView({ locations }: { locations: { path?: string; line?: numbe
       <Files className="text-text-muted/60 h-3.5 w-3.5 shrink-0" />
       {locations.map((loc, i) => (
         <code
-          key={i}
+          key={`${loc.path || ''}:${String(loc.line ?? i)}`}
           className="bg-surface-secondary/70 text-text-main border-border/25 rounded-md border px-2 py-0.5 font-mono text-[10.5px] break-all select-all"
         >
           {loc.path}
@@ -207,15 +207,8 @@ export const ToolCallCard = memo(function ToolCallCard({
   isStreaming?: boolean;
   durationMs?: number | null;
 }) {
-  const [open, setOpen] = useState(false);
-  const userToggledRef = useRef(false);
-
-  // Auto-expand while streaming, collapse when streaming ends unless user toggled manually
-  useEffect(() => {
-    if (!userToggledRef.current) {
-      setOpen(isStreaming);
-    }
-  }, [isStreaming]);
+  const [userToggled, setUserToggled] = useState<boolean | null>(null);
+  const open = userToggled ?? isStreaming;
 
   const args = payload.arguments ?? {};
   const hasDetails = hasToolCallDetails(payload);
@@ -240,8 +233,7 @@ export const ToolCallCard = memo(function ToolCallCard({
   const contextSnippet = getContextSnippet(tool, args);
 
   const toggle = () => {
-    userToggledRef.current = true;
-    setOpen((v) => !v);
+    setUserToggled(!open);
   };
 
   return (

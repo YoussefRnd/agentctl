@@ -313,14 +313,16 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
       const max = sorted.length - 1;
       if (max < 0) return;
 
+      const safeIndex = Math.min(focusedIndex, max);
+
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         const dir = e.key === 'ArrowUp' ? -1 : 1;
-        const next = Math.max(0, Math.min(max, focusedIndex + dir));
+        const next = Math.max(0, Math.min(max, safeIndex + dir));
         setFocusedIndex(next);
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        const data = sorted[focusedIndex].subagentEvent.data as ACPEventSubagentUpdateData;
+        const data = sorted[safeIndex].subagentEvent.data as ACPEventSubagentUpdateData;
         toggleOne(data.subagentId);
       } else if (e.key === 'e') {
         expandAll();
@@ -330,12 +332,6 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
     },
     [sorted, focusedIndex, toggleOne, expandAll, collapseAll],
   );
-
-  useEffect(() => {
-    if (focusedIndex >= sorted.length) {
-      setFocusedIndex(0);
-    }
-  }, [sorted.length, focusedIndex]);
 
   // Only auto-scroll when a new running subagent appears (sortedKey includes a new running id)
   const runningIds = useMemo(

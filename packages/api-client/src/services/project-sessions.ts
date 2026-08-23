@@ -178,6 +178,42 @@ export async function mergeSessionBranch(
   return res.body;
 }
 
+export async function checkMergeBranch(
+  sessionId: string,
+  branch: string,
+): Promise<{ canMerge: boolean; hasConflicts: boolean; conflictingFiles: string[] }> {
+  const res = await api.checkMergeBranch({
+    params: { id: sessionId },
+    body: { branch },
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to check merge branch: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
+export async function spawnParallelAgent(
+  parentSessionId: string,
+  params: {
+    prompt: string;
+    title?: string;
+    taskSlug?: string;
+    providerId?: string;
+    modelId?: string;
+  },
+): Promise<{ session: SessionRow }> {
+  const res = await api.spawnParallelAgent({
+    params: { id: parentSessionId },
+    body: params,
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to spawn background agent: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
+export const spawnSwarmSubagent = spawnParallelAgent;
+
 export async function switchSessionMode(
   sessionId: string,
   mode: SessionMode,

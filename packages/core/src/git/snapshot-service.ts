@@ -113,6 +113,69 @@ export class SnapshotService {
     return patches;
   }
 
+  async diffBetween(projectPath: string, fromHash: string, toHash: string): Promise<FilePatch[]> {
+    const env = await this.getEnv(projectPath);
+    if (!env) {
+      return [];
+    }
+
+    const git = simpleGit(projectPath).env(env);
+    const diffOutput = await git
+      .raw(['diff-tree', '-r', '--no-commit-id', fromHash, toHash])
+      .catch(() => '');
+
+    const patches: FilePatch[] = [];
+    for (const line of diffOutput.trim().split('\n')) {
+      if (!line) continue;
+      const parts = line.split(/\t/);
+      if (parts.length < 2) continue;
+      const statusChar = parts[0].split(/\s+/).pop();
+      const filePath = parts[1];
+      let status: FilePatch['status'] = 'modified';
+      if (statusChar === 'A') status = 'added';
+      else if (statusChar === 'D') status = 'deleted';
+      patches.push({ path: filePath, status });
+    }
+
+    return patches;
+  }
+
+  async getCheckpointDiffFiles(
+    projectPath: string,
+    fromHash: string,
+    toHash: string,
+  ): Promise<ReviewFile[]> {
+    const env = await this.getEnv(projectPath);
+    if (!env) {
+      return [];
+    }
+
+    const git = simpleGit(projectPath).env(env);
+    const patches = await this.diffBetween(projectPath, fromHash, toHash);
+    if (patches.length === 0) {
+      return [];
+    }
+
+    const reviewFiles: ReviewFile[] = [];
+    for (const patch of patches) {
+      const fileDiff = await git.diff([fromHash, toHash, '--', patch.path]).catch(() => '');
+      const state =
+        patch.status === 'added'
+          ? 'untracked'
+          : patch.status === 'deleted'
+            ? 'deleted'
+            : 'modified';
+
+      reviewFiles.push({
+        path: patch.path,
+        state,
+        diff: fileDiff || `diff --git a/${patch.path} b/${patch.path}`,
+      });
+    }
+
+    return reviewFiles;
+  }
+
   async revertFiles(
     projectPath: string,
     snapshotHash: string,

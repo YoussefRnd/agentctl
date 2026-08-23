@@ -1,5 +1,5 @@
-import { sessions, projects, type db as defaultDb } from '@agentctl/core/db';
-import { eq } from 'drizzle-orm';
+import { sessions, projects, acpEvents, type db as defaultDb } from '@agentctl/core/db';
+import { eq, and, asc } from 'drizzle-orm';
 import { AppError } from '../errors/app-error.js';
 import type { SessionManager } from '@agentctl/core/session';
 import type { WorktreeManager } from '@agentctl/core/git';
@@ -320,6 +320,94 @@ export class SessionService {
       throw new AppError(`Merge failed: ${message}. There may be merge conflicts.`, 400);
     }
   }
+
+  async checkMergeBranch(sessionId: string, otherBranchName: string) {
+    const session = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+
+    if (!session) {
+      throw new AppError('Session not found', 404);
+    }
+
+    const project = session.project;
+    if (!project.repoRoot) {
+      return { canMerge: true, hasConflicts: false, conflictingFiles: [] };
+    }
+
+    const result = await this.worktreeManager.checkMergeConflicts(
+      project.repoRoot,
+      session.worktreePath,
+      otherBranchName,
+    );
+
+    return {
+      canMerge: !result.hasConflicts,
+      hasConflicts: result.hasConflicts,
+      conflictingFiles: result.conflictingFiles,
+    };
+  }
+
+  async spawnParallelAgent(
+    parentSessionId: string,
+    params: {
+      prompt: string;
+      title?: string;
+      taskSlug?: string;
+      providerId?: string;
+      modelId?: string;
+    },
+  ) {
+    const parentSession = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, parentSessionId),
+      with: { project: true },
+    });
+
+    if (!parentSession) {
+      throw new AppError('Parent session not found', 404);
+    }
+
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    const taskSlug = params.taskSlug || `agent-${randomSuffix}`;
+    const title = params.title || `Agent: ${params.prompt.slice(0, 40).trim()}`;
+
+    // Create session in worktree mode
+    const created = await this.sessionManager.createSession({
+      projectId: parentSession.projectId,
+      taskSlug,
+      providerId: params.providerId ?? parentSession.selectedProvider ?? undefined,
+      mode: 'worktree',
+    });
+
+    // Update title
+    await this.db
+      .update(sessions)
+      .set({ title, updatedAt: new Date() })
+      .where(eq(sessions.id, created.sessionId));
+
+    // Send initial prompt input to subagent
+    void this.sessionManager
+      .handleClientMessage(created.sessionId, 'session.input', {
+        input: params.prompt,
+      })
+      .catch((err: unknown) => {
+        this.log.error({ err, sessionId: created.sessionId }, 'Failed to send prompt to subagent');
+      });
+
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, created.sessionId),
+      with: { project: true },
+    });
+
+    if (!sessionRecord) {
+      throw new AppError('Failed to retrieve spawned subagent session', 500);
+    }
+
+    return this.parseSessionRow(sessionRecord);
+  }
+
+  spawnSwarmSubagent = this.spawnParallelAgent;
 
   async renameSession(sessionId: string, title: string) {
     const session = await this.db.query.sessions.findFirst({

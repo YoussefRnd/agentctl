@@ -95,19 +95,6 @@ export function NewProjectPalette() {
     [providers],
   );
 
-  // Default to first project and first installed provider
-  useEffect(() => {
-    if (projects.length > 0 && !selectedProjectId) {
-      setSelectedProjectId(projects[0].id);
-    }
-  }, [projects, selectedProjectId]);
-
-  useEffect(() => {
-    if (installedProviders.length > 0 && !selectedProviderId) {
-      setSelectedProviderId(installedProviders[0].id);
-    }
-  }, [installedProviders, selectedProviderId]);
-
   // Focus textarea on load
   useEffect(() => {
     if (!showExplorer) {

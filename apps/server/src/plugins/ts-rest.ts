@@ -705,6 +705,23 @@ export default fp(async (fastify) => {
         body: { success: true },
       };
     },
+    checkMergeBranch: async ({ params, body }) => {
+      const { id } = params;
+      const { branch } = body;
+      const result = await fastify.sessionService.checkMergeBranch(id, branch);
+      return {
+        status: 200 as const,
+        body: result,
+      };
+    },
+    spawnParallelAgent: async ({ params, body }) => {
+      const { id } = params;
+      const session = await fastify.sessionService.spawnParallelAgent(id, body);
+      return {
+        status: 200 as const,
+        body: { session },
+      };
+    },
     cancelSession: async ({ params }) => {
       const { id } = params;
       await fastify.sessionManager.handleClientMessage(id, 'cancel', {});

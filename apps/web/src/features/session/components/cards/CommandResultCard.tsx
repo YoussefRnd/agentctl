@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useState } from 'react';
 import { Terminal, ChevronRight, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn, Card } from '@agentctl/ui';
 
@@ -15,13 +15,8 @@ export const CommandResultCard = memo(function CommandResultCard({
   status = 'completed',
   isStreaming = false,
 }: CommandResultCardProps) {
-  const [open, setOpen] = useState(() => isStreaming);
-
-  useEffect(() => {
-    if (isStreaming) {
-      setOpen(true);
-    }
-  }, [isStreaming]);
+  const [userToggled, setUserToggled] = useState<boolean | null>(null);
+  const open = userToggled ?? isStreaming;
 
   const argKeys = Object.keys(args);
   const isError = status === 'error' || status === 'failed';
@@ -34,7 +29,7 @@ export const CommandResultCard = memo(function CommandResultCard({
         aria-label="Toggle command output"
         className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent text-left select-none"
         onClick={() => {
-          setOpen(!open);
+          setUserToggled(!open);
         }}
       >
         <Card

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { SearchBar, Card } from '@agentctl/ui';
 import { RegistryCard } from './RegistryCard';
@@ -41,21 +41,16 @@ const statusChipClass = (active: boolean) =>
   }`;
 
 export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
+  const { syncProviders } = api;
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [authProvider, setAuthProvider] = useState<ProviderDiscovery | null>(null);
-
-  const syncProvidersRef = useRef(api.syncProviders);
-
-  useEffect(() => {
-    syncProvidersRef.current = api.syncProviders;
-  });
 
   useEffect(() => {
     let active = true;
     const timer = setTimeout(() => {
       if (active) {
-        syncProvidersRef.current();
+        syncProviders();
       }
     }, 0);
 
@@ -63,7 +58,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
       active = false;
       clearTimeout(timer);
     };
-  }, [syncProvidersRef]);
+  }, [syncProviders]);
 
   const matchesQuery = (p: ProviderDiscovery) => {
     const q = query.toLowerCase().trim();

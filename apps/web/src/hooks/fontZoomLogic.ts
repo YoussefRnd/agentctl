@@ -12,13 +12,6 @@ export const LABELS: Record<FontContextKey, string> = {
   chat: 'Chat',
 };
 
-export const ALL_CONTEXT_KEYS: readonly FontContextKey[] = [
-  'ui',
-  'buffer',
-  'terminal',
-  'chat',
-] as const;
-
 /**
  * Wheel deltaMode constants (mirrors WheelEvent.DOM_DELTA_* so this module
  * stays DOM-free and testable in any environment).

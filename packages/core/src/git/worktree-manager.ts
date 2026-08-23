@@ -905,6 +905,44 @@ export class WorkspaceManager {
     });
   }
 
+  async checkMergeConflicts(
+    repoPath: string,
+    targetWorktreePath: string,
+    sourceBranch: string,
+  ): Promise<{ hasConflicts: boolean; conflictingFiles: string[] }> {
+    return this.gitMutex.run(repoPath, async () => {
+      try {
+        const git = simpleGit(targetWorktreePath);
+        const targetHead = (await git.revparse(['HEAD'])).trim();
+        const sourceHead = (await git.revparse([sourceBranch])).trim();
+
+        const output = await git.raw(['merge-tree', targetHead, sourceHead]).catch(() => null);
+        if (!output) {
+          return { hasConflicts: false, conflictingFiles: [] };
+        }
+
+        const lines = output.split('\n');
+        const conflictingFiles: string[] = [];
+
+        for (const line of lines) {
+          if (line.includes('CONFLICT') || line.includes('changed in both')) {
+            const parts = line.split(':');
+            if (parts.length > 1) {
+              conflictingFiles.push(parts[parts.length - 1].trim());
+            }
+          }
+        }
+
+        return {
+          hasConflicts: conflictingFiles.length > 0 || output.includes('CONFLICT'),
+          conflictingFiles: Array.from(new Set(conflictingFiles)),
+        };
+      } catch {
+        return { hasConflicts: false, conflictingFiles: [] };
+      }
+    });
+  }
+
   // Factory/adapter method to retrieve a Workspace instance
   getWorkspace(
     repoPath: string,
