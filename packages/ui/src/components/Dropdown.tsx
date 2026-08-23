@@ -21,7 +21,7 @@ export function DropdownContent({
     <DropdownMenuPrimitive.Content
       sideOffset={sideOffset}
       className={cn(
-        'liquid-glass z-dropdown animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 min-w-40 rounded-md p-1',
+        'liquid-glass z-dropdown animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 min-w-40 origin-(--radix-dropdown-menu-content-transform-origin) rounded-md p-1 duration-150 ease-out',
         className,
       )}
       {...props}
@@ -82,7 +82,7 @@ export function DropdownSubContent({
     <DropdownMenuPrimitive.SubContent
       sideOffset={sideOffset}
       className={cn(
-        'liquid-glass z-dropdown animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 min-w-32 rounded-md p-1',
+        'liquid-glass z-dropdown animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 min-w-32 origin-(--radix-dropdown-menu-content-transform-origin) rounded-md p-1 duration-150 ease-out',
         className,
       )}
       {...props}

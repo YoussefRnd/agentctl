@@ -94,7 +94,7 @@ interface CommandInputHintProps {
 function CommandInputHint({ showSlashMenu, matchingCommand }: CommandInputHintProps) {
   if (showSlashMenu || !matchingCommand) return null;
   return (
-    <div className="border-accent/20 bg-brand-mantle animate-fade-in absolute bottom-full left-0 z-50 mb-3 flex w-full items-center justify-between gap-3 rounded-md border px-4 py-3 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl">
+    <div className="border-accent/20 bg-brand-mantle animate-in fade-in-0 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-3 flex w-full items-center justify-between gap-3 rounded-md border px-4 py-3 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl duration-150 ease-out">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
         <div className="flex items-center gap-2">
           <span className="text-accent font-mono text-sm font-bold">/{matchingCommand.name}</span>

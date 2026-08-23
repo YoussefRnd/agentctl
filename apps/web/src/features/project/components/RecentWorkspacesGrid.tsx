@@ -76,14 +76,18 @@ export function RecentWorkspacesGrid({
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {projects.map((proj) => {
+        {projects.map((proj, index) => {
           const activeCount = getActiveSessionCount(proj);
           const lastActive = getLastActiveTimestamp(proj);
 
           return (
             <GlassPanel
               key={proj.id}
-              className="group border-border/40 hover:border-accent/40 bg-surface-secondary/20 hover:bg-surface-secondary/40 flex cursor-pointer flex-col justify-between rounded-xl p-4 transition-colors duration-200"
+              style={{
+                animationDelay: `${Math.min(index, 6) * 40}ms`,
+                animationDuration: '150ms',
+              }}
+              className="group border-border/40 hover:border-accent/40 bg-surface-secondary/20 hover:bg-surface-secondary/40 animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-backwards flex cursor-pointer flex-col justify-between rounded-xl p-4 transition-[background-color,border-color] duration-200 ease-out"
             >
               <div
                 role="button"

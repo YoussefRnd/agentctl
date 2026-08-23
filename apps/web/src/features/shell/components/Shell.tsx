@@ -171,7 +171,7 @@ export function Shell({
         {sidebar && onCloseMobileSidebar && (
           <>
             <aside
-              className={`bg-background/95 border-border fixed inset-y-0 left-0 z-50 w-[300px] border-r backdrop-blur-2xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] lg:hidden ${
+              className={`bg-background/95 border-border fixed inset-y-0 left-0 z-50 w-[300px] border-r backdrop-blur-2xl transition-transform duration-250 ease-[cubic-bezier(0.32,0.72,0,1)] lg:hidden ${
                 isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
               }`}
             >
@@ -182,7 +182,7 @@ export function Shell({
               <button
                 type="button"
                 aria-label="Close sidebar"
-                className="fixed inset-0 z-40 border-none bg-black/60 backdrop-blur-md transition-opacity duration-500 outline-none lg:hidden"
+                className="animate-in fade-in-0 fixed inset-0 z-40 border-none bg-black/60 backdrop-blur-md duration-200 ease-out outline-none lg:hidden"
                 onClick={onCloseMobileSidebar}
               />
             )}

@@ -6,10 +6,13 @@ export function ProgressBar() {
   const [{ visible, progress }, setState] = useState({ visible: false, progress: 0 });
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: NodeJS.Timeout | undefined;
+    let timeout: NodeJS.Timeout | undefined;
 
     if (isAnyPending) {
-      setState({ visible: true, progress: 0 });
+      const raf = requestAnimationFrame(() => {
+        setState({ visible: true, progress: 0 });
+      });
       interval = setInterval(() => {
         setState((prev) => {
           if (prev.progress >= 90) return prev;
@@ -19,18 +22,22 @@ export function ProgressBar() {
           };
         });
       }, 200);
-    } else {
-      setState((prev) => ({ ...prev, progress: 100 }));
-      const timeout = setTimeout(() => {
-        setState({ visible: false, progress: 0 });
-      }, 300);
       return () => {
-        clearTimeout(timeout);
+        cancelAnimationFrame(raf);
+        clearInterval(interval);
       };
     }
 
+    const raf = requestAnimationFrame(() => {
+      setState((prev) => (prev.visible ? { ...prev, progress: 100 } : prev));
+    });
+    timeout = setTimeout(() => {
+      setState({ visible: false, progress: 0 });
+    }, 300);
+
     return () => {
-      clearInterval(interval);
+      cancelAnimationFrame(raf);
+      clearTimeout(timeout);
     };
   }, [isAnyPending]);
 
@@ -39,8 +46,8 @@ export function ProgressBar() {
   return (
     <div className="fixed top-0 right-0 left-0 z-[9999] h-[2px] w-full overflow-hidden bg-transparent">
       <div
-        className="bg-accent h-full shadow-[0_0_10px_rgba(202,158,230,0.5)] transition-colors duration-300 ease-out"
-        style={{ width: `${progress.toString()}%` }}
+        className="bg-accent h-full w-full origin-left shadow-[0_0_10px_rgba(202,158,230,0.5)] transition-transform duration-200 ease-out will-change-transform"
+        style={{ transform: `scaleX(${progress / 100})` }}
       />
     </div>
   );

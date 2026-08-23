@@ -164,7 +164,7 @@ function SubagentCard({
       </button>
 
       <div
-        className={`grid transition-colors duration-150 ${
+        className={`grid transition-[grid-template-rows,opacity] duration-150 ease-out ${
           isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         }`}
       >
@@ -242,7 +242,7 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
   const [openMap, setOpenMap] = useState<Partial<Record<string, boolean>>>({});
   const [forceAllOpen, setForceAllOpen] = useState<boolean | undefined>(undefined);
   const focusedIndexRef = useRef(0);
-  const [now, setNow] = useState<Date | null>(null);
+  const [now, setNow] = useState<Date>(() => new Date());
 
   const sorted = useMemo(() => sortSubagentGroups(subagentGroups), [subagentGroups]);
 
@@ -256,10 +256,7 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
   );
 
   useEffect(() => {
-    if (!hasRunning) {
-      setNow(null);
-      return;
-    }
+    if (!hasRunning) return;
     const id = setInterval(() => {
       setNow(new Date());
     }, 250);

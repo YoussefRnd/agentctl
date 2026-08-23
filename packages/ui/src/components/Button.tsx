@@ -18,8 +18,9 @@ export type ButtonProps<T extends ElementType> = ButtonBaseProps & {
 
 const variants = {
   solid: 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]',
-  outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main',
-  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main',
+  outline:
+    'bg-transparent border border-border hover:bg-white/5 text-text-main active:scale-[0.98]',
+  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main active:scale-[0.98]',
 };
 
 const sizes = {
@@ -29,7 +30,7 @@ const sizes = {
 };
 
 const baseStyles =
-  'inline-flex items-center justify-center rounded-md font-sans font-bold tracking-tight transition-colors focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
+  'inline-flex items-center justify-center rounded-md font-sans font-bold tracking-tight transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
 
 const ButtonComponent = <T extends ElementType = 'button'>({
   as,

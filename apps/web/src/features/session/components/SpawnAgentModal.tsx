@@ -96,8 +96,8 @@ export function SpawnAgentModal({ isOpen, onClose, onSuccess }: SpawnAgentModalP
   };
 
   return (
-    <div className="animate-fadeIn fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <GlassPanel className="border-border/20 bg-surface/95 w-full max-w-lg rounded-2xl border p-5 shadow-2xl backdrop-blur-2xl">
+    <div className="animate-in fade-in-0 fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 ease-out">
+      <GlassPanel className="border-border/20 bg-surface/95 animate-in fade-in-0 zoom-in-95 w-full max-w-lg rounded-2xl border p-5 shadow-2xl backdrop-blur-2xl duration-200 ease-out">
         {/* Header */}
         <div className="border-border/10 flex items-center justify-between border-b pb-3.5">
           <div className="flex items-center gap-2.5">

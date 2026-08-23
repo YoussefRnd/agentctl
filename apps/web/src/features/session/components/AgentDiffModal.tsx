@@ -87,8 +87,8 @@ export function AgentDiffModal({
   const conflictingFiles = mergeStatus?.conflictingFiles ?? [];
 
   return (
-    <div className="animate-fadeIn fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <GlassPanel className="border-border/20 bg-surface/95 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border shadow-2xl backdrop-blur-2xl">
+    <div className="animate-in fade-in-0 fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm duration-200 ease-out">
+      <GlassPanel className="border-border/20 bg-surface/95 animate-in fade-in-0 zoom-in-95 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border shadow-2xl backdrop-blur-2xl duration-200 ease-out">
         {/* Header */}
         <header className="border-border/10 bg-surface-secondary/20 flex shrink-0 items-center justify-between border-b px-5 py-3.5">
           <div className="flex min-w-0 items-center gap-3">

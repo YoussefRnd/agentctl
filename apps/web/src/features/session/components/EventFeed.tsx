@@ -175,7 +175,7 @@ export function EventFeed({
       {!autoScroll && (
         <button
           type="button"
-          className="group border-accent/40 bg-surface-tertiary/95 text-accent hover:border-accent hover:bg-accent hover:text-surface-dark absolute bottom-6 left-1/2 z-50 flex h-9 w-9 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border shadow-xl backdrop-blur-xl transition-colors duration-200 hover:scale-110 active:scale-95"
+          className="group border-accent/40 bg-surface-tertiary/95 text-accent hover:border-accent hover:bg-accent hover:text-surface-dark animate-in fade-in-0 zoom-in-95 absolute bottom-6 left-1/2 z-50 flex h-9 w-9 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border shadow-xl backdrop-blur-xl transition-[background-color,border-color,color,transform] duration-150 ease-out hover:scale-105 active:scale-95"
           title="Scroll to bottom"
           onClick={() => {
             setAutoScroll(true);

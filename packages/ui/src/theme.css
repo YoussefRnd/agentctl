@@ -88,6 +88,15 @@
   --font-sans: var(--font-ui-family, 'Geist'), sans-serif;
   --font-mono: var(--font-buffer-family, 'JetBrains Mono'), monospace;
 
+  /* Motion Tokens */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
   --animate-pulse-block: pulse-block 1s steps(1) infinite;
 
   @keyframes pulse-block {
@@ -237,11 +246,11 @@
   }
 
   .click-press {
-    @apply transition-all active:scale-95 active:opacity-80;
+    @apply transition-[transform,opacity] duration-150 ease-out active:scale-95 active:opacity-80;
   }
 
   .hover-glow {
-    @apply hover:border-accent/40 transition-all hover:shadow-[0_0_15px_rgba(203,166,247,0.2)];
+    @apply hover:border-accent/40 transition-[border-color,box-shadow] duration-150 ease-out hover:shadow-[0_0_15px_rgba(203,166,247,0.2)];
   }
 }
 
@@ -267,11 +276,11 @@
 
   /* High Density Input */
   .terminal-input {
-    @apply border-border focus:border-border-active focus:ring-accent/20 h-8 rounded-md border bg-transparent px-2 font-mono text-[12px] transition-all outline-none focus:ring-1;
+    @apply border-border focus:border-border-active focus:ring-accent/20 h-8 rounded-md border bg-transparent px-2 font-mono text-[12px] transition-colors outline-none focus:ring-1;
   }
 
   .terminal-button {
-    @apply bg-text-main text-background font-accent h-8 rounded-md px-3 text-[11px] font-semibold tracking-tight transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-30;
+    @apply bg-text-main text-background font-accent h-8 rounded-md px-3 text-[11px] font-semibold tracking-tight transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:scale-[0.98] disabled:opacity-30;
   }
 
   .status-glow {

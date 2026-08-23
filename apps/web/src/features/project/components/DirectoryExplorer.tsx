@@ -91,7 +91,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
             onClick={() => {
               void explore();
             }}
-            className="hover:text-accent text-text-muted cursor-pointer p-1 transition-colors hover:scale-105 active:scale-95"
+            className="hover:text-accent text-text-muted cursor-pointer rounded-sm p-1 transition-[color,transform] duration-150 ease-out active:scale-90"
             title="Home"
           >
             <Home className="h-3.5 w-3.5" />
@@ -102,7 +102,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
               onClick={() => {
                 void explore(parentPath);
               }}
-              className="hover:text-accent text-text-muted cursor-pointer p-1 transition-colors hover:scale-105 active:scale-95"
+              className="hover:text-accent text-text-muted cursor-pointer rounded-sm p-1 transition-[color,transform] duration-150 ease-out active:scale-90"
               title="Go Up"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
