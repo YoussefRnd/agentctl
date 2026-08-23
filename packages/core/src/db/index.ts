@@ -111,15 +111,15 @@ export function createDatabase(dbPath: string): CoreDatabase {
 }
 
 export function getDbPath(): string {
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+    return process.env.TEST_DATABASE_URL ?? ':memory:';
+  }
   const envPath = process.env.DATABASE_URL;
   if (envPath) {
     if (envPath === ':memory:') {
       return envPath;
     }
     return path.resolve(workspaceRoot, envPath);
-  }
-  if (process.env.NODE_ENV === 'test') {
-    return ':memory:';
   }
   return path.join(os.homedir(), '.agentctl', 'agentctl.db');
 }

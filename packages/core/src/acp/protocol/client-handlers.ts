@@ -161,7 +161,7 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       return toPromise(() => handleTerminalKill(p, terminalManager, logger));
     },
 
-    async unstable_createElicitation(p: Record<string, unknown>) {
+    async createElicitation(p: Record<string, unknown>) {
       const session = ctx.resolveSession(p);
       const modeObj = p.mode as { type?: string } | undefined;
       const req = {
@@ -193,7 +193,7 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       return { action: 'cancel' };
     },
 
-    async unstable_completeElicitation(n: CompleteElicitationNotification) {
+    async completeElicitation(n: CompleteElicitationNotification) {
       const raw = n as CompleteElicitationNotification & { sessionId?: unknown };
       const meta = n._meta as { sessionId?: unknown } | null | undefined;
       const sessionId =

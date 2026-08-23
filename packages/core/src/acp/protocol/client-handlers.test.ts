@@ -44,8 +44,8 @@ describe('createClientHandlers', () => {
         'releaseTerminal',
         'waitForTerminalExit',
         'killTerminal',
-        'unstable_createElicitation',
-        'unstable_completeElicitation',
+        'createElicitation',
+        'completeElicitation',
         'extMethod',
         'extNotification',
       ].sort(),
@@ -134,7 +134,7 @@ describe('createClientHandlers', () => {
     expect(events).toContainEqual({ type: 'status', status: 'step_started' });
   });
 
-  test('unstable_completeElicitation notifies the resolved session', async () => {
+  test('completeElicitation notifies the resolved session', async () => {
     const completed: string[] = [];
     const callbacks = {
       onEvent: () => Promise.resolve(),
@@ -150,11 +150,11 @@ describe('createClientHandlers', () => {
       resolveSession: () => ({ callbacks, cwd: process.cwd() }),
     }) as unknown as Required<Client>;
 
-    await handlers.unstable_completeElicitation({ elicitationId: 'el-1' });
+    await handlers.completeElicitation({ elicitationId: 'el-1' });
     expect(completed).toEqual(['el-1']);
   });
 
-  test('unstable_completeElicitation tolerates unresolvable sessions', async () => {
+  test('completeElicitation tolerates unresolvable sessions', async () => {
     const handlers = createClientHandlers({
       cwd: process.cwd(),
       terminalManager: new TerminalManager(noopLogger),
@@ -164,9 +164,7 @@ describe('createClientHandlers', () => {
       },
     }) as unknown as Required<Client>;
 
-    await expect(handlers.unstable_completeElicitation({ elicitationId: 'el-x' })).resolves.toBe(
-      undefined,
-    );
+    await expect(handlers.completeElicitation({ elicitationId: 'el-x' })).resolves.toBe(undefined);
   });
 
   test('extMethod builtin/bash runs through the terminal manager with session cwd', async () => {
