@@ -86,7 +86,10 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 rows?: number;
               };
 
-              if (parsed.type === 'input' && typeof parsed.data === 'string') {
+              if (
+                (parsed.type === 'input' || parsed.type === 'data') &&
+                typeof parsed.data === 'string'
+              ) {
                 fastify.terminalService.writeInput(sessionId, parsed.data);
                 return;
               }

@@ -36,6 +36,7 @@ export function InteractiveTerminal() {
 
   const [connectKey, setConnectKey] = useState<number>(0);
   const reconnect = useCallback(() => {
+    setStatus('connecting');
     setConnectKey((k) => k + 1);
   }, []);
 
@@ -47,8 +48,6 @@ export function InteractiveTerminal() {
 
   useEffect(() => {
     if (!sessionId) return;
-
-    setStatus('connecting');
 
     const baseUrl = getApiBaseUrl();
     let wsUrl: string;
@@ -117,7 +116,9 @@ export function InteractiveTerminal() {
         setStatus('disconnected');
       };
     } catch {
-      setStatus('disconnected');
+      queueMicrotask(() => {
+        setStatus('disconnected');
+      });
     }
 
     return () => {
@@ -192,7 +193,7 @@ export function InteractiveTerminal() {
 
       term.onData((data) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({ type: 'data', data }));
+          socketRef.current.send(JSON.stringify({ type: 'input', data }));
         }
       });
 
@@ -203,6 +204,7 @@ export function InteractiveTerminal() {
       requestAnimationFrame(() => {
         fitAddon?.fit();
         if (term) {
+          term.focus();
           sendResize(term.cols, term.rows);
         }
       });
