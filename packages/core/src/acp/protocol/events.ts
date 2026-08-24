@@ -69,7 +69,7 @@ interface ToolCallSnapshot {
   rawOutput?: unknown;
 }
 
-function projectConfigOption(option: SessionConfigOption): ACPConfigOption {
+export function projectConfigOption(option: SessionConfigOption): ACPConfigOption {
   return {
     id: option.id,
     name: option.name,
@@ -81,7 +81,7 @@ function projectConfigOption(option: SessionConfigOption): ACPConfigOption {
   };
 }
 
-function projectSelectOptions(
+export function projectSelectOptions(
   options: SessionConfigSelectOptions,
 ): { value: string; name: string; description?: string }[] {
   const projected: { value: string; name: string; description?: string }[] = [];

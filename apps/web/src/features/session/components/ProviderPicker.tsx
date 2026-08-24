@@ -48,6 +48,7 @@ export function ProviderPicker({
   const [localCustomEnvs, setLocalCustomEnvs] = useState<
     Record<string, Record<string, string> | undefined>
   >({});
+  const autoRefreshedRef = useRef<Set<string>>(new Set());
 
   const activeProvider = useMemo<ProviderDiscovery | null>(() => {
     return (
@@ -85,6 +86,36 @@ export function ProviderPicker({
         opt.value.toLowerCase().includes(search.toLowerCase()),
     );
   }, [activeProvider, search]);
+
+  const activeProviderId = activeProvider?.id;
+  const isInstalled = activeProvider?.installState !== 'not_installed';
+  const isAuthenticated = activeProvider?.authState === 'authenticated';
+  const modelsCount = models.length;
+
+  useEffect(() => {
+    if (
+      isOpen &&
+      activeProviderId &&
+      isInstalled &&
+      isAuthenticated &&
+      modelsCount === 0 &&
+      !search &&
+      !isRefreshing &&
+      !autoRefreshedRef.current.has(activeProviderId)
+    ) {
+      autoRefreshedRef.current.add(activeProviderId);
+      refreshProvider(activeProviderId);
+    }
+  }, [
+    isOpen,
+    activeProviderId,
+    isInstalled,
+    isAuthenticated,
+    modelsCount,
+    search,
+    isRefreshing,
+    refreshProvider,
+  ]);
 
   if (!isOpen || !activeProvider) return null;
 
@@ -163,8 +194,8 @@ export function ProviderPicker({
         </div>
 
         <div className="h-[280px] space-y-1 overflow-y-auto p-1.5">
-          {activeProvider.authState === 'needs_auth' ||
-          activeProvider.installState === 'not_installed' ? (
+          {activeProvider.installState === 'not_installed' ||
+          activeProvider.authState !== 'authenticated' ? (
             <ProviderSetupPanel
               activeProvider={activeProvider}
               envKeys={envKeys}
@@ -255,7 +286,7 @@ function ProviderSidebar({
       {providers.map((p) => {
         if (p.installState === 'not_installed') return null;
         const isSelected = p.id === internalProviderId;
-        const needsAuth = p.authState === 'needs_auth';
+        const needsAuth = p.authState !== 'authenticated';
 
         return (
           <button

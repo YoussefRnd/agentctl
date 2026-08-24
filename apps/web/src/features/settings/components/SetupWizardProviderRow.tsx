@@ -49,8 +49,12 @@ export function SetupWizardProviderRow({
               {provider.installState === 'not_installed'
                 ? 'Supported'
                 : provider.authState === 'authenticated'
-                  ? 'Active'
-                  : (provider.authState ?? provider.installState ?? 'unknown').replace('_', ' ')}
+                  ? 'Authenticated'
+                  : provider.authState === 'needs_auth'
+                    ? 'Auth Required'
+                    : provider.authState === 'error'
+                      ? 'Error'
+                      : 'Not Authenticated'}
             </div>
           </div>
         </div>

@@ -56,10 +56,38 @@ export class FileCacheStorage implements CacheStorage {
     }
     return Promise.resolve();
   }
+
+  async delete(key: string): Promise<void> {
+    try {
+      const manifest = this.readManifest();
+      if (key in manifest) {
+        delete manifest[key];
+        fs.writeFileSync(this.manifestFilePath, JSON.stringify(manifest, null, 2), 'utf8');
+      }
+    } catch {
+      // Ignore write errors
+    }
+    return Promise.resolve();
+  }
+
+  async clear(): Promise<void> {
+    try {
+      if (fs.existsSync(this.manifestFilePath)) {
+        fs.unlinkSync(this.manifestFilePath);
+      }
+    } catch {
+      // Ignore unlink errors
+    }
+    return Promise.resolve();
+  }
 }
 
 export function getCacheKey(command: string, args: string[], env: Record<string, string>): string {
-  const data = JSON.stringify({ command, args, env });
+  const sortedEnv: Record<string, string> = {};
+  for (const k of Object.keys(env).sort()) {
+    sortedEnv[k] = env[k];
+  }
+  const data = JSON.stringify({ command, args, env: sortedEnv });
   return crypto.hash('sha256', data);
 }
 

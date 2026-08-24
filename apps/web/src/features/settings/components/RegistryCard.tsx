@@ -34,7 +34,7 @@ const authStateConfig: Record<string, { label: string; className: string }> = {
   authenticated: { label: 'Authenticated', className: 'text-emerald-400 bg-emerald-500/10' },
   needs_auth: { label: 'Auth Required', className: 'text-amber-400 bg-amber-500/10' },
   error: { label: 'Error', className: 'text-red-400 bg-red-500/10' },
-  unknown: { label: 'Checking...', className: 'text-slate-400 bg-slate-500/10' },
+  unknown: { label: 'Not Authenticated', className: 'text-slate-400 bg-slate-500/10' },
 };
 
 export function RegistryCard({
@@ -51,7 +51,9 @@ export function RegistryCard({
   const notInstalled = provider.installState === 'not_installed';
   const repositoryUrl = provider.agent?.repository;
   const websiteUrl = provider.agent?.website;
-  const authStatus = provider.authState ? authStateConfig[provider.authState] : undefined;
+  const hasAuth = !!provider.agent?.authMethods && provider.agent.authMethods.length > 0;
+  const authStatus =
+    hasAuth && provider.authState ? authStateConfig[provider.authState] : undefined;
 
   return (
     <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-colors duration-300">
@@ -171,8 +173,11 @@ function RegistryCardActions({
   isRemoving: boolean;
 }) {
   const notInstalled = provider.installState === 'not_installed';
-  const hasAuth = !!provider.agent?.authMethods && provider.agent.authMethods.length > 0;
-  const canLogout = provider.supportsLogout && provider.authState === 'authenticated';
+  const hasAuth =
+    (provider.agent?.authMethods && provider.agent.authMethods.length > 0) ||
+    (provider.authMethods && provider.authMethods.length > 0);
+  const isAuthed = provider.authState === 'authenticated';
+  const canLogout = provider.supportsLogout && isAuthed;
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
@@ -192,15 +197,17 @@ function RegistryCardActions({
 
       {hasAuth && !notInstalled && (
         <Button
-          variant="outline"
+          variant={isAuthed ? 'outline' : 'solid'}
           size="sm"
           onClick={() => {
             onAuth(provider);
           }}
-          className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
+          className={`flex h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase ${
+            !isAuthed ? 'bg-accent text-brand-crust hover:opacity-90' : ''
+          }`}
         >
           <KeyRound className="h-3 w-3" />
-          Configure
+          {isAuthed ? 'Configure' : 'Authenticate'}
         </Button>
       )}
 

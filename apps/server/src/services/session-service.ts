@@ -1,5 +1,5 @@
-import { sessions, projects, acpEvents, type db as defaultDb } from '@agentctl/core/db';
-import { eq, and, asc } from 'drizzle-orm';
+import { sessions, projects, type db as defaultDb } from '@agentctl/core/db';
+import { eq } from 'drizzle-orm';
 import { AppError } from '../errors/app-error.js';
 import type { SessionManager } from '@agentctl/core/session';
 import type { WorktreeManager } from '@agentctl/core/git';

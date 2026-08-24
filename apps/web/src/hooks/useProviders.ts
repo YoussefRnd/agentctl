@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import {
   useMutation,
   useQuery,
@@ -39,33 +40,32 @@ export function useProviders(sessionId: string | null) {
     },
   });
 
-  const switchProvider = (
-    providerId: string,
-    modelId?: string,
-    sessionData?: SessionResponse | null,
-  ) => {
-    if (!sessionId) return;
+  const switchProvider = useCallback(
+    (providerId: string, modelId?: string, sessionData?: SessionResponse | null) => {
+      if (!sessionId) return;
 
-    const capability = sessionData?.capabilities.find((item) => item.id === providerId);
+      const capability = sessionData?.capabilities.find((item) => item.id === providerId);
 
-    let selectedModel = modelId;
-    if (!selectedModel) {
-      const modelOption = capability?.configOptions?.find(
-        (option) => option.id === 'model' || option.id === 'selectedModel',
+      let selectedModel = modelId;
+      if (!selectedModel) {
+        const modelOption = capability?.configOptions?.find(
+          (option) => option.id === 'model' || option.id === 'selectedModel',
+        );
+        selectedModel =
+          (typeof modelOption?.currentValue === 'string'
+            ? modelOption.currentValue
+            : modelOption?.options?.[0]?.value) ?? 'default';
+      }
+
+      void execute(`switch-provider-${providerId}`, () =>
+        updateProviderMutation.mutateAsync({
+          providerId,
+          modelId: selectedModel,
+        }),
       );
-      selectedModel =
-        (typeof modelOption?.currentValue === 'string'
-          ? modelOption.currentValue
-          : modelOption?.options?.[0]?.value) ?? 'default';
-    }
-
-    void execute(`switch-provider-${providerId}`, () =>
-      updateProviderMutation.mutateAsync({
-        providerId,
-        modelId: selectedModel,
-      }),
-    );
-  };
+    },
+    [sessionId, execute, updateProviderMutation],
+  );
 
   const loginMutation = useMutation({
     mutationFn: async ({ providerId, methodId }: { providerId: string; methodId: string }) => {
@@ -154,33 +154,72 @@ export function useProviders(sessionId: string | null) {
     },
   });
 
-  const wrapMutate = <TParams, TResult>(
-    actionName: string,
-    mutation: ReturnType<typeof useMutation<TResult, Error, TParams>>,
-    options: { successMessage?: string } = {},
-  ) => {
-    return (params: TParams, mutateOptions?: MutateOptions<TResult, Error, TParams>) => {
-      void execute(actionName, () => mutation.mutateAsync(params), {
-        successMessage: options.successMessage,
-      }).then((result) => {
-        if (result !== undefined) {
-          mutateOptions?.onSuccess?.(
-            result,
-            params,
-            undefined,
-            {} as unknown as MutationFunctionContext,
-          );
-        } else {
-          mutateOptions?.onError?.(
-            new Error('Mutation failed'),
-            params,
-            undefined,
-            {} as unknown as MutationFunctionContext,
-          );
-        }
-      });
-    };
-  };
+  const wrapMutate = useCallback(
+    <TParams, TResult>(
+      actionName: string,
+      mutation: { mutateAsync: (params: TParams) => Promise<TResult> },
+      options: { successMessage?: string } = {},
+    ) => {
+      return (params: TParams, mutateOptions?: MutateOptions<TResult, Error, TParams>) => {
+        void execute(actionName, () => mutation.mutateAsync(params), {
+          successMessage: options.successMessage,
+        }).then((result) => {
+          if (result !== undefined) {
+            mutateOptions?.onSuccess?.(
+              result,
+              params,
+              undefined,
+              {} as unknown as MutationFunctionContext,
+            );
+          } else {
+            mutateOptions?.onError?.(
+              new Error('Mutation failed'),
+              params,
+              undefined,
+              {} as unknown as MutationFunctionContext,
+            );
+          }
+        });
+      };
+    },
+    [execute],
+  );
+
+  const login = useMemo(
+    () => wrapMutate('login', loginMutation, { successMessage: 'Login successful' }),
+    [wrapMutate, loginMutation],
+  );
+  const logoutProvider = useMemo(
+    () => wrapMutate('logout', logoutMutation, { successMessage: 'Logged out' }),
+    [wrapMutate, logoutMutation],
+  );
+  const activate = useMemo(
+    () => wrapMutate('activate', activateMutation, { successMessage: 'Provider activated' }),
+    [wrapMutate, activateMutation],
+  );
+  const syncProviders = useMemo(
+    () => wrapMutate('sync', syncMutation, { successMessage: 'Providers synced' }),
+    [wrapMutate, syncMutation],
+  );
+  const refreshProvider = useMemo(
+    () => wrapMutate('refresh', refreshMutation, { successMessage: 'Provider refreshed' }),
+    [wrapMutate, refreshMutation],
+  );
+  const updateProviderConfig = useMemo(
+    () =>
+      wrapMutate('config', updateProviderConfigMutation, {
+        successMessage: 'Configuration updated',
+      }),
+    [wrapMutate, updateProviderConfigMutation],
+  );
+  const installProvider = useMemo(
+    () => wrapMutate('install', installMutation, { successMessage: 'Provider installed' }),
+    [wrapMutate, installMutation],
+  );
+  const removeProvider = useMemo(
+    () => wrapMutate('remove', removeMutation, { successMessage: 'Provider removed' }),
+    [wrapMutate, removeMutation],
+  );
 
   return {
     providers,
@@ -188,29 +227,23 @@ export function useProviders(sessionId: string | null) {
     registry,
     isLoadingRegistry,
     switchProvider,
-    login: wrapMutate('login', loginMutation, { successMessage: 'Login successful' }),
+    login,
     isLoggingIn: loginMutation.isPending,
-    logoutProvider: wrapMutate('logout', logoutMutation, { successMessage: 'Logged out' }),
+    logoutProvider,
     isLoggingOut: logoutMutation.isPending,
     isSwitching: updateProviderMutation.isPending,
-    activate: wrapMutate('activate', activateMutation, { successMessage: 'Provider activated' }),
+    activate,
     isActivating: activateMutation.isPending,
-    syncProviders: wrapMutate('sync', syncMutation, { successMessage: 'Providers synced' }),
+    syncProviders,
     isSyncing: syncMutation.isPending,
-    refreshProvider: wrapMutate('refresh', refreshMutation, {
-      successMessage: 'Provider refreshed',
-    }),
+    refreshProvider,
     isRefreshing: refreshMutation.isPending,
-    updateProviderConfig: wrapMutate('config', updateProviderConfigMutation, {
-      successMessage: 'Configuration updated',
-    }),
+    updateProviderConfig,
     isUpdatingConfig: updateProviderConfigMutation.isPending,
-    installProvider: wrapMutate('install', installMutation, {
-      successMessage: 'Provider installed',
-    }),
+    installProvider,
     isInstalling: installMutation.isPending,
     installingProviderId: installMutation.isPending ? installMutation.variables : null,
-    removeProvider: wrapMutate('remove', removeMutation, { successMessage: 'Provider removed' }),
+    removeProvider,
     isRemoving: removeMutation.isPending,
     removingProviderId: removeMutation.isPending ? removeMutation.variables : null,
   };

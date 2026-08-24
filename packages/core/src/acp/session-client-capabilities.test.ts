@@ -90,3 +90,73 @@ describe('parseAcpCapabilities', () => {
     });
   });
 });
+
+describe('extractConfigOptionsFromSessionResult', () => {
+  test('extracts models when configOptions is empty or missing', async () => {
+    const { extractConfigOptionsFromSessionResult } = await import('./runtime.js');
+    const res = extractConfigOptionsFromSessionResult({
+      models: {
+        availableModels: [
+          { modelId: 'gpt-4o', name: 'GPT-4o', description: 'Fast model' },
+          { modelId: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet' },
+        ],
+        currentModelId: 'claude-3-5-sonnet',
+      },
+    });
+
+    expect(res).toHaveLength(1);
+    expect(res[0].id).toBe('model');
+    expect(res[0].currentValue).toBe('claude-3-5-sonnet');
+    expect(res[0].options).toHaveLength(2);
+    expect(res[0].options?.[0].value).toBe('gpt-4o');
+  });
+
+  test('merges configOptions and models when both are returned by agent', async () => {
+    const { extractConfigOptionsFromSessionResult } = await import('./runtime.js');
+    const res = extractConfigOptionsFromSessionResult({
+      configOptions: [
+        {
+          id: 'thinking',
+          name: 'Thinking Effort',
+          type: 'select',
+          currentValue: 'medium',
+          options: [
+            { value: 'low', name: 'Low' },
+            { value: 'medium', name: 'Medium' },
+          ],
+        },
+      ],
+      models: {
+        availableModels: [{ modelId: 'gemini-2.5-pro', name: 'Gemini Pro' }],
+        currentModelId: 'gemini-2.5-pro',
+      },
+    });
+
+    expect(res).toHaveLength(2);
+    expect(res.find((o) => o.id === 'thinking')).toBeDefined();
+    const modelOpt = res.find((o) => o.id === 'model');
+    expect(modelOpt).toBeDefined();
+    expect(modelOpt?.currentValue).toBe('gemini-2.5-pro');
+  });
+
+  test('does not duplicate model option if already present in configOptions', async () => {
+    const { extractConfigOptionsFromSessionResult } = await import('./runtime.js');
+    const res = extractConfigOptionsFromSessionResult({
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model Selector',
+          type: 'select',
+          currentValue: 'custom-model',
+          options: [{ value: 'custom-model', name: 'Custom' }],
+        },
+      ],
+      models: {
+        availableModels: [{ modelId: 'ignored-model', name: 'Ignored' }],
+      },
+    });
+
+    expect(res).toHaveLength(1);
+    expect(res[0].currentValue).toBe('custom-model');
+  });
+});

@@ -106,6 +106,8 @@ export interface DomainPermissionResponse {
 export interface CacheStorage {
   get(key: string): Promise<AgentProbeResult | null>;
   set(key: string, value: AgentProbeResult): Promise<void>;
+  delete?(key: string): Promise<void>;
+  clear?(): Promise<void>;
 }
 
 export interface ToolCallContent {
@@ -291,6 +293,12 @@ export interface AgentRuntime {
     args: string[],
     env: Record<string, string> | undefined,
     acpSessionId: string,
+  ): Promise<void>;
+
+  invalidateProbeCache?(
+    command: string,
+    args: string[],
+    env?: Record<string, string>,
   ): Promise<void>;
 }
 

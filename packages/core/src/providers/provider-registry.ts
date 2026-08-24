@@ -226,17 +226,46 @@ export class ProviderRegistry {
   }
 
   async discover(): Promise<ProviderDiscovery[]> {
-    const rows = this.store.list();
+    let rows = this.store.list();
 
     if (rows.length === 0) {
       this.logger.info('Registry is empty, performing initial sync...');
       await this.sync();
-      const afterSync = this.store.list();
-      if (afterSync.length === 0) {
+      rows = this.store.list();
+      if (rows.length === 0) {
         this.logger.warn('Provider registry sync completed without any discoverable providers');
         return [];
       }
-      return afterSync.map((row) => new Provider(row).toDiscovery());
+    }
+
+    // Auto-probe any installed & ready providers that have empty/missing model options
+    const unprobedInstalled = rows.filter((row) => {
+      if (row.installState === 'not_installed' || row.authState === 'needs_auth') return false;
+      try {
+        const opts = (row.configOptions ? JSON.parse(row.configOptions) : []) as { id?: string }[];
+        const hasModel = opts.some((o) => o.id === 'model' || o.id === 'selectedModel');
+        return !hasModel;
+      } catch {
+        return true;
+      }
+    });
+
+    if (unprobedInstalled.length > 0) {
+      const snapshot = this.fetcher.getSnapshot();
+      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
+      for (const row of unprobedInstalled) {
+        const agent = agents.find((a) => a.id === row.id);
+        if (agent) {
+          void this.probeWithStatePreserved(row.id, agent, row.authState, 'discover-probe').catch(
+            (err) => {
+              this.logger.debug(
+                { err, providerId: row.id },
+                'Background discover probe skipped/failed',
+              );
+            },
+          );
+        }
+      }
     }
 
     return rows.map((row) => new Provider(row).toDiscovery());
@@ -366,7 +395,7 @@ export class ProviderRegistry {
     });
 
     // Run probe to populate config options (model list, currentValue, etc.)
-    this.launcher.invalidateProbe(providerId);
+    this.launcher.invalidateProbe(providerId, this.runtime, agent);
     await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
 
     const row = this.store.get(providerId);
@@ -510,7 +539,7 @@ export class ProviderRegistry {
       const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
       const agent = agents.find((a) => a.id === providerId);
 
-      this.launcher.invalidateProbe(providerId);
+      this.launcher.invalidateProbe(providerId, this.runtime, agent);
       if (agent) {
         await this.probeWithStatePreserved(providerId, agent, rowBeforeProbe.authState, 'refresh');
       }
@@ -593,11 +622,11 @@ export class ProviderRegistry {
         this.store.setDefaultConfigOptions(providerId, updates.defaultConfigOptions);
       }
 
-      this.launcher.invalidateProbe(providerId);
-
       const snapshot = this.fetcher.getSnapshot();
       const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
       const agent = agents.find((a) => a.id === providerId);
+
+      this.launcher.invalidateProbe(providerId, this.runtime, agent);
       if (agent) {
         await this.probeWithStatePreserved(
           providerId,

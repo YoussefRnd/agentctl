@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { SearchBar, Card } from '@agentctl/ui';
 import { RegistryCard } from './RegistryCard';
@@ -23,7 +23,11 @@ interface ProvidersApi {
     customEnv?: Record<string, string>;
     nativelyLoadsSkills?: boolean;
   }) => void;
+  isUpdatingConfig: boolean;
+  login: (params: { providerId: string; methodId: string }) => void;
+  isLoggingIn: boolean;
   refreshProvider: (id: string) => void;
+  isRefreshing: boolean;
 }
 
 interface RegistryBrowserProps {
@@ -46,18 +50,12 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [authProvider, setAuthProvider] = useState<ProviderDiscovery | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    const timer = setTimeout(() => {
-      if (active) {
-        syncProviders();
-      }
-    }, 0);
+  const hasSyncedRef = useRef(false);
 
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
+  useEffect(() => {
+    if (hasSyncedRef.current) return;
+    hasSyncedRef.current = true;
+    syncProviders();
   }, [syncProviders]);
 
   const matchesQuery = (p: ProviderDiscovery) => {
@@ -107,6 +105,12 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
   const filtered = api.registry
     .filter((p) => matchesQuery(p) && matchesStatus(p))
     .sort((a, b) => queryScore(b) - queryScore(a));
+
+  const activeDialogProvider = authProvider
+    ? (api.registry.find((p) => p.id === authProvider.id) ??
+      api.providers.find((p) => p.id === authProvider.id) ??
+      authProvider)
+    : null;
 
   return (
     <div className="relative z-10 space-y-4">
@@ -186,7 +190,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
       )}
 
       <AuthDialog
-        provider={authProvider}
+        provider={activeDialogProvider}
         onClose={() => {
           setAuthProvider(null);
         }}
@@ -196,6 +200,10 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
         onRefresh={(id) => {
           api.refreshProvider(id);
         }}
+        onLogin={api.login}
+        isLoggingIn={api.isLoggingIn}
+        isUpdatingConfig={api.isUpdatingConfig}
+        isRefreshing={api.isRefreshing}
       />
     </div>
   );

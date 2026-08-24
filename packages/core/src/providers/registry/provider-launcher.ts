@@ -56,8 +56,19 @@ export class ProviderLauncher {
     this.connectionManager = cm;
   }
 
-  invalidateProbe(providerId: string): void {
+  invalidateProbe(providerId: string, runtime?: AgentRuntime, agent?: RegistryAgent): void {
     this.probeCache.delete(providerId);
+    if (runtime?.invalidateProbeCache) {
+      const row = this.store.get(providerId);
+      if (row) {
+        try {
+          const launch = this.resolveLaunch(row, agent);
+          void runtime.invalidateProbeCache(launch.command, launch.args, launch.env);
+        } catch {
+          // ignore launch resolution errors during invalidation
+        }
+      }
+    }
   }
 
   async isBinaryOnPath(command: string): Promise<boolean> {
@@ -172,6 +183,11 @@ export class ProviderLauncher {
             cwd: os.tmpdir(),
             mcpServers: [],
           });
+          if (sessionResult.sessionId && persistent.supportsCloseSession) {
+            void persistent.connection
+              .closeSession({ sessionId: sessionResult.sessionId })
+              .catch(() => undefined);
+          }
           const configOptions = extractConfigOptionsFromSessionResult(sessionResult);
           const probeResult: AgentProbeResult = {
             status: 'ready',
@@ -204,14 +220,12 @@ export class ProviderLauncher {
         result = await runtime.probe(launch.command, launch.args, launch.env);
       } catch (err: unknown) {
         if (isAuthRequiredError(err)) {
-          if (row.authState !== 'authenticated') {
-            this.store.setAuthState(providerId, 'needs_auth');
-          }
+          this.store.setAuthState(providerId, 'needs_auth');
           const existingConfigOpts = row.configOptions
             ? (JSON.parse(row.configOptions) as ACPConfigOption[])
             : [];
           const fallbackResult: AgentProbeResult = {
-            status: row.authState === 'authenticated' ? 'ready' : 'needs_auth',
+            status: 'needs_auth',
             configOptions: existingConfigOpts,
             authMethods: row.authMethods
               ? (JSON.parse(row.authMethods) as AgentProbeResult['authMethods'])
@@ -222,20 +236,11 @@ export class ProviderLauncher {
           };
           return fallbackResult;
         }
-        if (row.authState !== 'authenticated') {
-          this.store.setAuthState(providerId, 'error');
-        }
+        this.store.setAuthState(providerId, 'error');
         throw err;
       }
 
-      const nextAuthState =
-        result.status === 'needs_auth' && row.authState !== 'authenticated'
-          ? 'needs_auth'
-          : row.authState === 'authenticated'
-            ? 'authenticated'
-            : result.status === 'needs_auth'
-              ? 'needs_auth'
-              : 'authenticated';
+      const nextAuthState = result.status === 'needs_auth' ? 'needs_auth' : 'authenticated';
 
       this.store.update(providerId, {
         configOptions: JSON.stringify(result.configOptions),

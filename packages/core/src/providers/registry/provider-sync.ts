@@ -38,6 +38,40 @@ export class ProviderSync {
             env: {},
           };
 
+      let configOptions = JSON.stringify(agent.configOptions ?? []);
+      let authMethods = JSON.stringify(agent.authMethods ?? []);
+      let supportsDynamicModel = agent.supportsDynamicModel ?? false;
+      let supportsDynamicConfig = agent.supportsDynamicConfig ?? false;
+      let supportsLogout = agent.supportsLogout ?? false;
+
+      if (existing) {
+        try {
+          const existingOpts = existing.configOptions
+            ? (JSON.parse(existing.configOptions) as unknown[])
+            : [];
+          if (Array.isArray(existingOpts) && existingOpts.length > 0) {
+            configOptions = existing.configOptions;
+          }
+        } catch {
+          // ignore
+        }
+        try {
+          const existingAuth = existing.authMethods
+            ? (JSON.parse(existing.authMethods) as unknown[])
+            : [];
+          if (Array.isArray(existingAuth) && existingAuth.length > 0) {
+            authMethods = existing.authMethods;
+          }
+        } catch {
+          // ignore
+        }
+        supportsDynamicModel =
+          existing.supportsDynamicModel || (agent.supportsDynamicModel ?? false);
+        supportsDynamicConfig =
+          existing.supportsDynamicConfig || (agent.supportsDynamicConfig ?? false);
+        supportsLogout = existing.supportsLogout || (agent.supportsLogout ?? false);
+      }
+
       this.store.upsert(agent.id, {
         name: agent.name,
         version: agent.version,
@@ -46,15 +80,15 @@ export class ProviderSync {
         command: launchResolved.command,
         launchArgs: JSON.stringify(launchResolved.args),
         launchEnv: JSON.stringify(launchResolved.env),
-        configOptions: JSON.stringify(agent.configOptions ?? []),
-        authMethods: JSON.stringify(agent.authMethods ?? []),
+        configOptions,
+        authMethods,
         installState:
           existing?.installState ?? (isInstalled ? 'system_available' : 'not_installed'),
         authState:
           existing?.authState ?? ((agent.authMethods ?? []).length ? 'unknown' : 'authenticated'),
-        supportsDynamicModel: agent.supportsDynamicModel ?? false,
-        supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
-        supportsLogout: agent.supportsLogout ?? false,
+        supportsDynamicModel,
+        supportsDynamicConfig,
+        supportsLogout,
       });
     }
 

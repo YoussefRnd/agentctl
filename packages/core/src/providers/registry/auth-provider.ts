@@ -57,6 +57,11 @@ export class AuthProvider {
             cwd: os.tmpdir(),
             mcpServers: [],
           });
+          if (sessionResult.sessionId && persistent.supportsCloseSession) {
+            void persistent.connection
+              .closeSession({ sessionId: sessionResult.sessionId })
+              .catch(() => undefined);
+          }
           const configOptions = extractConfigOptionsFromSessionResult(sessionResult);
           if (configOptions.length > 0) {
             this.store.update(providerId, {

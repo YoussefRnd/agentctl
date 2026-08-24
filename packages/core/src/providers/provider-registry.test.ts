@@ -326,4 +326,73 @@ describe('ProviderRegistry', () => {
       probeSpy.mockRestore();
     }
   }, 15000);
+
+  test('sync preserves existing dynamically probed configOptions', async () => {
+    const db = createDatabase(':memory:');
+    const probedOptions = [
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        currentValue: 'claude-3-7-sonnet',
+        options: [{ value: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet' }],
+      },
+    ];
+
+    await db.insert(providers).values({
+      id: 'claude-acp',
+      name: 'Claude Code',
+      installState: 'installed_local',
+      authState: 'authenticated',
+      command: 'claude',
+      launchArgs: '[]',
+      launchEnv: '{}',
+      customEnv: '{}',
+      configOptions: JSON.stringify(probedOptions),
+      authMethods: '[]',
+      version: '1.0.0',
+      description: 'test',
+      icon: 'icon',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      supportsDynamicModel: true,
+      supportsDynamicConfig: true,
+    });
+
+    const staticAgent: RegistryAgent = {
+      id: 'claude-acp',
+      name: 'Claude Code Updated',
+      version: '1.0.1',
+      description: 'updated description',
+      authors: [],
+      distribution: { npx: { package: 'claude', args: [], env: {} } },
+      configOptions: [], // Static registry has empty configOptions
+    };
+
+    await db.insert(registrySnapshots).values({
+      data: JSON.stringify({ version: '1', agents: [staticAgent] }),
+      fetchedAt: new Date(),
+    });
+
+    const registry = new ProviderRegistry(db, noopLogger);
+    const fetchSpy = vi
+      .spyOn(
+        (registry as unknown as { fetcher: { fetch: () => Promise<RegistryAgent[]> } }).fetcher,
+        'fetch',
+      )
+      .mockResolvedValue([staticAgent]);
+
+    try {
+      await registry.sync();
+      const provider = registry.getProvider('claude-acp');
+      expect(provider).toBeDefined();
+      const discovery = provider?.toDiscovery();
+      // Should preserve the probed models, not overwrite with empty []
+      expect(discovery?.configOptions).toEqual(probedOptions);
+      expect(discovery?.supportsDynamicModel).toBe(true);
+      expect(discovery?.version).toBe('1.0.1');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

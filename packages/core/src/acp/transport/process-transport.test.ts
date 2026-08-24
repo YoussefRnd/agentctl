@@ -113,7 +113,6 @@ test('createAgentConnection throws if stdio is missing', () => {
 });
 
 test('DefaultAgentRuntime.probe uses cache and skips spawn on cache hit', async () => {
-  const crypto = await import('node:crypto');
   const { DefaultAgentRuntime } = await import('../index.js');
 
   const cacheMap = new Map<string, AgentProbeResult>();
@@ -158,9 +157,8 @@ test('DefaultAgentRuntime.probe uses cache and skips spawn on cache hit', async 
     supportsDynamicConfig: false,
   };
 
-  const cleanEnv = (await import('../index.js')).cleanEnv;
-  const data = JSON.stringify({ command: 'test-cmd', args: [], env: cleanEnv({}) });
-  const hashKey = crypto.createHash('sha256').update(data).digest('hex');
+  const { cleanEnv, getCacheKey } = await import('../index.js');
+  const hashKey = getCacheKey('test-cmd', [], cleanEnv({}));
   await mockCache.set(hashKey, testResult);
 
   const result = await runtime.probe('test-cmd', [], {});

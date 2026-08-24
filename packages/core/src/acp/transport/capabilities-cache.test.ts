@@ -44,9 +44,24 @@ describe('FileCacheStorage', () => {
     expect(await storage.get('nope')).toBeNull();
   });
 
-  test('cache keys are stable per command+args+env', () => {
-    const a = getCacheKey('cmd', ['--x'], { A: '1' });
-    const b = getCacheKey('cmd', ['--x'], { A: '1' });
+  test('deletes entries', async () => {
+    const storage = new FileCacheStorage(file);
+    await storage.set('k1', sampleResult);
+    expect(await storage.get('k1')).toEqual(sampleResult);
+    await storage.delete('k1');
+    expect(await storage.get('k1')).toBeNull();
+  });
+
+  test('clears entire manifest cache', async () => {
+    const storage = new FileCacheStorage(file);
+    await storage.set('k1', sampleResult);
+    await storage.clear();
+    expect(await storage.get('k1')).toBeNull();
+  });
+
+  test('cache keys are stable per command+args+env and sort keys deterministically', () => {
+    const a = getCacheKey('cmd', ['--x'], { A: '1', B: '2' });
+    const b = getCacheKey('cmd', ['--x'], { B: '2', A: '1' });
     const c = getCacheKey('cmd', ['--y'], { A: '1' });
     expect(a).toBe(b);
     expect(a).not.toBe(c);

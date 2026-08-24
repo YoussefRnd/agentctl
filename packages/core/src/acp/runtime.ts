@@ -34,6 +34,7 @@ import {
   initializeAcpConnection,
   withTimeout,
 } from './transport/capabilities-cache.js';
+import { projectConfigOption } from './protocol/events.js';
 import { createClientHandlers } from './protocol/client-handlers.js';
 import { TerminalManager } from './protocol/terminal-manager.js';
 import { buildPromptBlocks } from './protocol/prompt.js';
@@ -644,10 +645,12 @@ export class DefaultAgentRuntime implements AgentRuntime {
             supportsLogout,
           };
 
-          try {
-            await cache.set(cacheKey, probeResult);
-          } catch (cacheErr) {
-            this.logger.warn(cacheErr, 'Failed to write to capabilities manifest cache');
+          if (status === 'ready') {
+            try {
+              await cache.set(cacheKey, probeResult);
+            } catch (cacheErr) {
+              this.logger.warn(cacheErr, 'Failed to write to capabilities manifest cache');
+            }
           }
 
           return probeResult;
@@ -717,6 +720,17 @@ export class DefaultAgentRuntime implements AgentRuntime {
     }
   }
 
+  async invalidateProbeCache(
+    command: string,
+    args: string[],
+    env?: Record<string, string>,
+  ): Promise<void> {
+    const cleanEnvObj = cleanEnv(env);
+    const cacheKey = getCacheKey(command, args, cleanEnvObj);
+    const cache = this.getCache();
+    await cache.delete?.(cacheKey);
+  }
+
   private wrapDebug(stream: Stream): Stream {
     if (process.env.AGENTCTL_ACP_DEBUG !== '1') {
       return stream;
@@ -743,17 +757,26 @@ export function extractConfigOptionsFromSessionResult(sessionResult: {
   } | null;
 }): ACPConfigOption[] {
   const configOptions: ACPConfigOption[] = [];
+
   if (Array.isArray(sessionResult.configOptions) && sessionResult.configOptions.length > 0) {
-    return sessionResult.configOptions as ACPConfigOption[];
+    for (const opt of sessionResult.configOptions) {
+      if (opt && typeof opt === 'object' && 'id' in opt && 'type' in opt) {
+        configOptions.push(projectConfigOption(opt as SessionConfigOption));
+      }
+    }
   }
+
+  const hasModelOption = configOptions.some(
+    (opt) => opt.id === 'model' || opt.id === 'selectedModel',
+  );
   const models = sessionResult.models;
-  if (models?.availableModels && models.availableModels.length > 0) {
+  if (!hasModelOption && models?.availableModels && models.availableModels.length > 0) {
     configOptions.push({
       id: 'model',
       name: 'Model',
       description: 'Select the model to use',
       type: 'select',
-      currentValue: models.currentModelId ?? '',
+      currentValue: models.currentModelId ?? models.availableModels[0].modelId,
       options: models.availableModels.map((m) => ({
         value: m.modelId,
         name: m.name,
@@ -761,14 +784,16 @@ export function extractConfigOptionsFromSessionResult(sessionResult: {
       })),
     });
   }
+
+  const hasModeOption = configOptions.some((opt) => opt.id === 'mode');
   const modesRes = sessionResult.modes;
-  if (modesRes?.availableModes && modesRes.availableModes.length > 0) {
+  if (!hasModeOption && modesRes?.availableModes && modesRes.availableModes.length > 0) {
     configOptions.push({
       id: 'mode',
       name: 'Mode',
       description: 'Select the tool approval mode',
       type: 'select',
-      currentValue: modesRes.currentModeId ?? '',
+      currentValue: modesRes.currentModeId ?? modesRes.availableModes[0].id,
       options: modesRes.availableModes.map((m) => ({
         value: m.id,
         name: m.name,
@@ -776,5 +801,6 @@ export function extractConfigOptionsFromSessionResult(sessionResult: {
       })),
     });
   }
+
   return configOptions;
 }
