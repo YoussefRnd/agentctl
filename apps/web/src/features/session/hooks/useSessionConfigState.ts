@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@agentctl/api-client';
+import { sessionKeys } from '../../../shared/lib/queryKeys';
 
 export function useSessionConfigState(sessionId: string) {
   const queryClient = useQueryClient();
@@ -17,7 +18,7 @@ export function useSessionConfigState(sessionId: string) {
       return res.body;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
   });
 
@@ -40,7 +41,7 @@ export function useSessionConfigState(sessionId: string) {
       return res.body;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
   });
 
@@ -63,7 +64,7 @@ export function useSessionConfigState(sessionId: string) {
       return res.body;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
   });
 
@@ -86,7 +87,7 @@ export function useSessionConfigState(sessionId: string) {
       return res.body;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
   });
 

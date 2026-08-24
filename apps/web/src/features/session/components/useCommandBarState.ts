@@ -5,6 +5,7 @@ import { useAttachments } from '../../../hooks/useAttachments';
 import { useContextAutocomplete } from '../../../hooks/useContextAutocomplete';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import type { ProviderDiscovery } from '@agentctl/shared';
+import { useUIStore } from '@/shared';
 
 export interface CommandInfo {
   name: string;
@@ -57,16 +58,21 @@ export function useCommandBarState(
 
   const [input, setInput] = useState('');
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (initialInput && initialInput.trim().length > 0) {
-      setInput(initialInput);
-      requestAnimationFrame(() => {
-        const textarea = textareaRef.current;
-        if (textarea) {
-          textarea.focus();
-          textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-        }
+      queueMicrotask(() => {
+        setInput(initialInput);
+        requestAnimationFrame(() => {
+          const textarea = textareaRef.current;
+          if (textarea) {
+            textarea.focus();
+            textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+          }
+        });
       });
     }
   }, [initialInput]);
@@ -122,9 +128,6 @@ export function useCommandBarState(
 
     return merged;
   }, [sessionData?.session.availableCommands]);
-  const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const contextAutocomplete = useContextAutocomplete({
     sessionId,
@@ -189,13 +192,18 @@ export function useCommandBarState(
     // Check for purely functional view actions (e.g. /timeline, /terminal, /mcp)
     if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
       const cmdName = trimmed.slice(1).toLowerCase();
-      if (cmdName === 'timeline' || cmdName === 'terminal') {
-        window.dispatchEvent(new CustomEvent('agentctl:switch-tab', { detail: { tab: cmdName } }));
+      if (
+        cmdName === 'terminal' ||
+        cmdName === 'status' ||
+        cmdName === 'changes' ||
+        cmdName === 'agents'
+      ) {
+        useUIStore.getState().setWorkbenchTab(cmdName);
         setInput('');
         return;
       }
       if (cmdName === 'mcp') {
-        window.dispatchEvent(new CustomEvent('agentctl:open-mcp'));
+        useUIStore.getState().openMcpSettings();
         setInput('');
         return;
       }
@@ -215,10 +223,6 @@ export function useCommandBarState(
 
     onSend(finalPrompt, readyAttachmentIds.length > 0 ? readyAttachmentIds : undefined);
     setInput('');
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
   }, [input, contextAutocomplete, readyAttachmentIds, disabled, isAnyUploading, onSend]);
 
   const handleProviderSelect = useCallback(

@@ -1,17 +1,9 @@
-import {
-  createContext,
-  use,
-  useMemo,
-  useEffect,
-  useSyncExternalStore,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, use, useMemo, useEffect, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ACPEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
-import { sessionStore } from '@agentctl/shared';
 import { api } from '@agentctl/api-client';
+import { sessionKeys } from '../shared/lib/queryKeys';
 import { useSessionConfigState } from '../features/session/hooks/useSessionConfigState';
 import { useWorkspaceReviewState } from '../features/session/hooks/useWorkspaceReviewState';
 import { useSessionEvents } from '../hooks/useSessionEvents';
@@ -37,6 +29,8 @@ export interface StructuredPlanItem {
 // ==========================================
 interface SessionConfigContextValue {
   sessionId: string;
+  sessionData: SessionWithCapabilities | null;
+  capabilities: SessionWithCapabilities['capabilities'];
   isLoadingSession: boolean;
   reviewData: ReviewResponse;
   isLoadingReview: boolean;
@@ -93,18 +87,10 @@ export function SessionConfigProvider({
   children: ReactNode;
 }) {
   const { data: sessionData = null, isLoading: isLoadingSession } = useQuery({
-    queryKey: ['session', sessionId],
+    queryKey: sessionKeys.detail(sessionId),
     queryFn: () => fetchSession(sessionId),
     enabled: !!sessionId,
   });
-
-  useEffect(() => {
-    sessionStore.setSession(sessionData);
-  }, [sessionData]);
-
-  useEffect(() => {
-    sessionStore.setLoading(isLoadingSession);
-  }, [isLoadingSession]);
 
   const configState = useSessionConfigState(sessionId);
   const reviewState = useWorkspaceReviewState(sessionId);
@@ -112,11 +98,13 @@ export function SessionConfigProvider({
   const value = useMemo(
     () => ({
       sessionId,
+      sessionData,
       isLoadingSession,
+      capabilities: sessionData?.capabilities ?? [],
       ...configState,
       ...reviewState,
     }),
-    [sessionId, isLoadingSession, configState, reviewState],
+    [sessionId, sessionData, isLoadingSession, configState, reviewState],
   );
 
   return <SessionConfigContext.Provider value={value}>{children}</SessionConfigContext.Provider>;
@@ -127,31 +115,14 @@ export function useSession() {
   if (!context) {
     throw new Error('useSession must be used within a SessionConfigProvider');
   }
-
-  const sessionState = useSyncExternalStore(
-    (listener) => sessionStore.subscribe(listener),
-    () => sessionStore.getState(),
-  );
-
-  return useMemo(
-    () => ({
-      ...context,
-      sessionData: sessionState.currentSession,
-      isLoadingSession: context.isLoadingSession,
-      capabilities: sessionState.currentSession?.capabilities ?? [],
-    }),
-    [context, sessionState.currentSession],
-  );
+  return context;
 }
 
 // ==========================================
 // 2. SESSION STREAM CONTEXT
 // ==========================================
-export interface QueuedMessage {
-  id: string;
-  text: string;
-  attachmentIds?: string[];
-}
+import { useMessageQueueStore, type QueuedMessage } from '../shared';
+export type { QueuedMessage };
 
 interface SessionStreamContextValue {
   events: ACPEventRow[];
@@ -184,79 +155,68 @@ export function SessionStreamProvider({
     streamingEventId,
   } = useSessionEvents(sessionId);
 
-  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const queuedMessages = useMessageQueueStore((s) => s.queuedMessages);
+  const enqueueMessage = useMessageQueueStore((s) => s.enqueueMessage);
+  const dequeueMessage = useMessageQueueStore((s) => s.dequeueMessage);
+  const reorderQueuedMessages = useMessageQueueStore((s) => s.reorderQueuedMessages);
+  const moveQueuedMessage = useMessageQueueStore((s) => s.moveQueuedMessage);
 
-  const enqueueMessage = (text: string, attachmentIds?: string[]) => {
-    setQueuedMessages((prev) => [...prev, { id: crypto.randomUUID(), text, attachmentIds }]);
-  };
-
-  const dequeueMessage = (id: string) => {
-    setQueuedMessages((prev) => prev.filter((msg) => msg.id !== id));
-  };
-
-  const reorderQueuedMessages = (newQueue: QueuedMessage[]) => {
-    setQueuedMessages(newQueue);
-  };
-
-  const moveQueuedMessage = (index: number, direction: 'up' | 'down') => {
-    setQueuedMessages((prev) => {
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
-      const next = [...prev];
-      const [item] = next.splice(index, 1);
-      next.splice(targetIndex, 0, item);
-      return next;
-    });
-  };
-
-  const sessionState = useSyncExternalStore(
-    (listener) => sessionStore.subscribe(listener),
-    () => sessionStore.getState(),
-  );
-  const sessionData = sessionState.currentSession;
+  const { data: sessionData } = useQuery({
+    queryKey: sessionKeys.detail(sessionId),
+    queryFn: () => fetchSession(sessionId),
+    enabled: !!sessionId,
+  });
 
   useEffect(() => {
     const isIdle = sessionData?.session.status === 'idle';
     if (isIdle && queuedMessages.length > 0) {
       const nextMessage = queuedMessages[0];
-      // Dequeue message synchronously to prevent concurrent re-triggers
-      setQueuedMessages((prev) => prev.filter((m) => m.id !== nextMessage.id));
-      void api
-        .sendInput({
-          params: { id: sessionId },
-          body: {
-            input: nextMessage.text,
-            ...(nextMessage.attachmentIds && nextMessage.attachmentIds.length > 0
-              ? { attachmentIds: nextMessage.attachmentIds }
-              : {}),
-          },
-        })
-        .catch((err: unknown) => {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          toast.error('Failed to send queued message', {
-            description: errorMessage,
-            action: {
-              label: 'Re-send',
-              onClick: () => {
-                enqueueMessage(nextMessage.text, nextMessage.attachmentIds);
-              },
+      queueMicrotask(() => {
+        dequeueMessage(nextMessage.id);
+        void api
+          .sendInput({
+            params: { id: sessionId },
+            body: {
+              input: nextMessage.text,
+              ...(nextMessage.attachmentIds && nextMessage.attachmentIds.length > 0
+                ? { attachmentIds: nextMessage.attachmentIds }
+                : {}),
             },
+          })
+          .catch((err: unknown) => {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            toast.error('Failed to send queued message', {
+              description: errorMessage,
+              action: {
+                label: 'Re-send',
+                onClick: () => {
+                  enqueueMessage(nextMessage.text, nextMessage.attachmentIds);
+                },
+              },
+            });
+            const cleaned = (
+              queryClient.getQueryData<ACPEventRow[]>(sessionKeys.events(sessionId)) ?? []
+            ).filter(
+              (e) =>
+                !(
+                  e.id < 0 &&
+                  e.type === 'text' &&
+                  (e.data as { role?: string }).role === 'user' &&
+                  (e.data as { content?: string }).content === nextMessage.text
+                ),
+            );
+            queryClient.setQueryData<ACPEventRow[]>(sessionKeys.events(sessionId), cleaned);
           });
-          const cleaned = (
-            queryClient.getQueryData<ACPEventRow[]>(['events', sessionId]) ?? []
-          ).filter(
-            (e) =>
-              !(
-                e.id < 0 &&
-                e.type === 'text' &&
-                (e.data as { role?: string }).role === 'user' &&
-                (e.data as { content?: string }).content === nextMessage.text
-              ),
-          );
-          queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], cleaned);
-        });
+      });
     }
-  }, [sessionData?.session.status, queuedMessages, sessionId, queryClient]);
+  }, [
+    sessionData?.session.status,
+    queuedMessages,
+    sessionId,
+    queryClient,
+    dequeueMessage,
+    enqueueMessage,
+  ]);
 
   const planItems = useMemo(() => {
     const planMap = new Map<string, boolean>();
@@ -318,6 +278,10 @@ export function SessionStreamProvider({
       planItems,
       structuredPlan,
       queuedMessages,
+      enqueueMessage,
+      dequeueMessage,
+      reorderQueuedMessages,
+      moveQueuedMessage,
     ],
   );
 

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '@agentctl/api-client';
 import { type FontConfig } from '@agentctl/shared';
+import { settingsKeys } from '../shared/lib/queryKeys';
 
 export interface SystemSettings {
   onboardingCompleted: boolean;
@@ -17,7 +18,7 @@ export function useSettings() {
   const queryClient = useQueryClient();
 
   const { data: settings, isLoading } = useQuery<SystemSettings>({
-    queryKey: ['settings'],
+    queryKey: settingsKeys.all,
     queryFn: () => apiClient.fetch<SystemSettings>('/api/settings'),
   });
 
@@ -29,7 +30,7 @@ export function useSettings() {
       });
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(['settings'], data);
+      queryClient.setQueryData(settingsKeys.all, data);
     },
     onError: (error: unknown) => {
       toast.error(error instanceof Error ? error.message : 'Failed to update settings');

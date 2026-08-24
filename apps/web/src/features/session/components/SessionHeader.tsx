@@ -22,6 +22,7 @@ import {
 } from '@agentctl/api-client';
 import { toast } from 'sonner';
 import { useSession } from '../../../contexts/SessionContext';
+import { projectKeys, sessionKeys } from '../../../shared/lib/queryKeys';
 import { OpenInPicker } from './OpenInPicker';
 import { SessionHeaderTitle } from './SessionHeaderTitle';
 import { SessionHeaderDialogs } from './SessionHeaderDialogs';
@@ -50,7 +51,7 @@ export function SessionHeader({
   const [isArchiving, setIsArchiving] = useState(false);
 
   const { data: projects = [] } = useQuery<SidebarProject[]>({
-    queryKey: ['projects'],
+    queryKey: projectKeys.all,
     queryFn: () =>
       apiClient.fetch<SidebarProject[]>('/api/projects?sortBy=lastActive&gitOnly=false'),
   });
@@ -108,8 +109,8 @@ export function SessionHeader({
     }
     try {
       await renameSession(sessionId, trimmed);
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
       toast.success('Session renamed');
     } catch {
       toast.error('Failed to rename session');
@@ -122,7 +123,7 @@ export function SessionHeader({
     try {
       const res = await rewindSession(sessionId, 999999999, 'fork');
       toast.success('Session forked');
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
       if (res.forkSessionId) {
         void navigate(`/sessions/${res.forkSessionId}`);
       }
@@ -135,8 +136,8 @@ export function SessionHeader({
     try {
       await archiveSession(sessionId);
       toast.success('Session archived');
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
       setIsArchiving(false);
     } catch {
       toast.error('Failed to archive session');
@@ -147,7 +148,7 @@ export function SessionHeader({
     try {
       await deleteSession(sessionId);
       toast.success('Session deleted');
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
       setIsDeleting(false);
       void navigate('/');
     } catch {

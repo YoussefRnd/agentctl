@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { sessionStore } from '@agentctl/shared';
 import type { ACPEventRow, SessionWithCapabilities } from '@agentctl/shared';
+import { sessionKeys } from '../shared/lib/queryKeys';
 
 vi.mock('@agentctl/api-client', () => ({
   api: { sendInput: vi.fn() },
@@ -26,6 +26,7 @@ vi.mock('../hooks/useSessionEvents', () => ({
 
 import { api } from '@agentctl/api-client';
 import { toast } from 'sonner';
+import { useMessageQueueStore } from '../shared';
 import { SessionStreamProvider, useSessionStream } from './SessionContext';
 
 const mockedSendInput = vi.mocked(api.sendInput);
@@ -81,6 +82,7 @@ let root: ReturnType<typeof createRoot>;
 let queryClient: QueryClient;
 
 beforeEach(() => {
+  useMessageQueueStore.getState().clearQueue();
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -95,13 +97,13 @@ afterEach(() => {
   });
   document.body.innerHTML = '';
   vi.clearAllMocks();
-  sessionStore.setSession(null);
+  useMessageQueueStore.getState().clearQueue();
 });
 
 describe('SessionStreamProvider queued message send', () => {
   it('toasts an error and removes the ghost message when a queued send fails', async () => {
-    sessionStore.setSession(makeSession('idle'));
-    queryClient.setQueryData(['events', 'sess-1'], [ghostEvent()]);
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+    queryClient.setQueryData(sessionKeys.events('sess-1'), [ghostEvent()]);
     mockedSendInput.mockRejectedValueOnce(new Error('boom'));
 
     act(() => {
@@ -129,12 +131,12 @@ describe('SessionStreamProvider queued message send', () => {
       expect(mockedToastError).toHaveBeenCalled();
     });
 
-    const remaining = queryClient.getQueryData<ACPEventRow[]>(['events', 'sess-1']) ?? [];
+    const remaining = queryClient.getQueryData<ACPEventRow[]>(sessionKeys.events('sess-1')) ?? [];
     expect(remaining.some((e) => e.id < 0)).toBe(false);
   });
 
   it('sends a queued message successfully when the session is idle', async () => {
-    sessionStore.setSession(makeSession('idle'));
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
     mockedSendInput.mockResolvedValueOnce({
       status: 200,
       body: { success: true },

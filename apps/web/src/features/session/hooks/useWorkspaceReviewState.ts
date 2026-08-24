@@ -15,6 +15,7 @@ import {
   mergeSession,
   discardSession,
 } from '@agentctl/api-client';
+import { sessionKeys } from '../../../shared/lib/queryKeys';
 import type { ReviewFile } from '../components/ReviewHeader';
 
 interface ReviewResponse {
@@ -43,13 +44,13 @@ export function useWorkspaceReviewState(sessionId: string) {
     isLoading: isLoadingReview,
     refetch: refetchReview,
   } = useQuery({
-    queryKey: ['session-review', sessionId],
+    queryKey: sessionKeys.review(sessionId),
     queryFn: () => fetchReview(sessionId),
     enabled: !!sessionId,
   });
 
   const { data: branches = [] } = useQuery({
-    queryKey: ['session-branches', sessionId],
+    queryKey: sessionKeys.branches(sessionId),
     queryFn: async () => {
       const res = await api.getSessionBranches({ params: { id: sessionId } });
       if (res.status !== 200) {
@@ -72,8 +73,8 @@ export function useWorkspaceReviewState(sessionId: string) {
       return res.body;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['session-branches', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.branches(sessionId) });
     },
   });
 
@@ -87,7 +88,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   const switchModeMutation = useMutation({
     mutationFn: (mode: 'local' | 'worktree') => switchSessionMode(sessionId, mode),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
   });
 
@@ -101,14 +102,14 @@ export function useWorkspaceReviewState(sessionId: string) {
   const stageMutation = useMutation({
     mutationFn: (filePath: string) => stageReviewFile(sessionId, filePath),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
   const revertMutation = useMutation({
     mutationFn: (filePath: string) => revertReviewFile(sessionId, filePath),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
@@ -129,7 +130,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   const unstageMutation = useMutation({
     mutationFn: (filePath: string) => unstageReviewFile(sessionId, filePath),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
@@ -143,7 +144,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   const stageAllMutation = useMutation({
     mutationFn: () => stageAllReviewFiles(sessionId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
@@ -154,7 +155,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   const unstageAllMutation = useMutation({
     mutationFn: () => unstageAllReviewFiles(sessionId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
@@ -165,7 +166,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   const commitChangesMutation = useMutation({
     mutationFn: (message: string) => commitWorkspaceChanges(sessionId, message),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
@@ -179,7 +180,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   const pushChangesMutation = useMutation({
     mutationFn: () => pushWorkspaceChanges(sessionId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
@@ -190,7 +191,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   const pullChangesMutation = useMutation({
     mutationFn: () => pullWorkspaceChanges(sessionId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
@@ -201,8 +202,8 @@ export function useWorkspaceReviewState(sessionId: string) {
   const mergeBranchMutation = useMutation({
     mutationFn: (branch: string) => mergeSessionBranch(sessionId, branch),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
   });
 
@@ -216,8 +217,8 @@ export function useWorkspaceReviewState(sessionId: string) {
   const mergeMutation = useMutation({
     mutationFn: (commitMessage?: string) => mergeSession(sessionId, commitMessage),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 
@@ -231,8 +232,8 @@ export function useWorkspaceReviewState(sessionId: string) {
   const discardMutation = useMutation({
     mutationFn: () => discardSession(sessionId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
     },
   });
 

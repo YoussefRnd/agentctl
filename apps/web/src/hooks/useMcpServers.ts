@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@agentctl/api-client';
 import { toast } from 'sonner';
+import { mcpKeys } from '../shared/lib/queryKeys';
 
 export interface McpServerData {
   id: string;
@@ -23,7 +24,7 @@ export function useMcpServers() {
   const queryClient = useQueryClient();
 
   const { data: mcpServers = [], isLoading } = useQuery<McpServerData[]>({
-    queryKey: ['mcpServers'],
+    queryKey: mcpKeys.all,
     queryFn: () => apiClient.fetch<McpServerData[]>('/api/mcp-servers'),
     refetchInterval: 10000,
   });
@@ -35,7 +36,7 @@ export function useMcpServers() {
         body: JSON.stringify(newServer),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['mcpServers'] });
+      void queryClient.invalidateQueries({ queryKey: mcpKeys.all });
       toast.success('MCP server registered successfully');
     },
     onError: (err: Error) => {
@@ -50,7 +51,7 @@ export function useMcpServers() {
         body: JSON.stringify(updates),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['mcpServers'] });
+      void queryClient.invalidateQueries({ queryKey: mcpKeys.all });
       toast.success('MCP server updated');
     },
     onError: (err: Error) => {
@@ -64,7 +65,7 @@ export function useMcpServers() {
         method: 'DELETE',
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['mcpServers'] });
+      void queryClient.invalidateQueries({ queryKey: mcpKeys.all });
       toast.success('MCP server deleted');
     },
     onError: (err: Error) => {

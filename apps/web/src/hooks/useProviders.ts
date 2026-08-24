@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import { providerService } from '@agentctl/api-client';
 import type { SessionWithCapabilities } from '@agentctl/shared';
+import { providerKeys, sessionKeys } from '../shared/lib/queryKeys';
 import { useActionDispatcher } from './useActionDispatcher';
 
 type SessionResponse = SessionWithCapabilities;
@@ -17,14 +18,22 @@ export function useProviders(sessionId: string | null) {
   const { execute } = useActionDispatcher();
 
   const { data: providers = [], isLoading: isLoadingProviders } = useQuery({
-    queryKey: ['providers'],
+    queryKey: providerKeys.all,
     queryFn: () => providerService.getProviders(),
   });
 
   const { data: registry = [], isLoading: isLoadingRegistry } = useQuery({
-    queryKey: ['registry'],
+    queryKey: providerKeys.registry,
     queryFn: () => providerService.getRegistry(),
   });
+
+  const invalidateProviderCaches = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: providerKeys.all });
+    void queryClient.invalidateQueries({ queryKey: providerKeys.registry });
+    if (sessionId) {
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+    }
+  }, [queryClient, sessionId]);
 
   const updateProviderMutation = useMutation({
     mutationFn: ({ providerId, modelId }: { providerId: string; modelId?: string }) => {
@@ -35,7 +44,7 @@ export function useProviders(sessionId: string | null) {
     },
     onSuccess: () => {
       if (sessionId) {
-        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       }
     },
   });
@@ -71,69 +80,49 @@ export function useProviders(sessionId: string | null) {
     mutationFn: async ({ providerId, methodId }: { providerId: string; methodId: string }) => {
       return providerService.login(providerId, methodId);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['registry'] });
-    },
+    onSuccess: invalidateProviderCaches,
   });
 
   const logoutMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.logout(providerId);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['registry'] });
-    },
+    onSuccess: invalidateProviderCaches,
   });
 
   const activateMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.activate(providerId);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['registry'] });
-    },
+    onSuccess: invalidateProviderCaches,
   });
 
   const syncMutation = useMutation({
     mutationFn: async () => {
       return providerService.sync();
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['registry'] });
-    },
+    onSuccess: invalidateProviderCaches,
   });
 
   const refreshMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.refresh(providerId);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['providers'] });
-    },
+    onSuccess: invalidateProviderCaches,
   });
 
   const installMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.install(providerId);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['registry'] });
-    },
+    onSuccess: invalidateProviderCaches,
   });
 
   const removeMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.remove(providerId);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['registry'] });
-    },
+    onSuccess: invalidateProviderCaches,
   });
 
   const updateProviderConfigMutation = useMutation({
@@ -148,10 +137,7 @@ export function useProviders(sessionId: string | null) {
     }) => {
       return providerService.updateConfig(providerId, customEnv, nativelyLoadsSkills);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['registry'] });
-    },
+    onSuccess: invalidateProviderCaches,
   });
 
   const wrapMutate = useCallback(
