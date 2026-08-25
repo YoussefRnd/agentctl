@@ -13,6 +13,11 @@ interface UIState {
   isMcpSettingsOpen: boolean;
   isSettingsOpen: boolean;
 
+  // Active Subagent View (Replaces Main Chat Feed)
+  activeSubagentId: string | null;
+  activeSubagent:
+    import('../../features/session/components/cards/subagentBlockUtils').SubagentGroup | null;
+
   // Actions
   setWorkbenchTab: (tab: WorkbenchTab) => void;
   setWorkbenchOpen: (open: boolean) => void;
@@ -26,6 +31,11 @@ interface UIState {
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
+  setActiveSubagentId: (id: string | null) => void;
+  setActiveSubagent: (
+    group:
+      import('../../features/session/components/cards/subagentBlockUtils').SubagentGroup | null,
+  ) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -35,6 +45,8 @@ export const useUIStore = create<UIState>((set) => ({
   isMobileSidebarOpen: false,
   isMcpSettingsOpen: false,
   isSettingsOpen: false,
+  activeSubagentId: null,
+  activeSubagent: null,
 
   setWorkbenchTab: (tab) => set({ workbenchTab: tab, isWorkbenchOpen: true }),
   setWorkbenchOpen: (open) => set({ isWorkbenchOpen: open }),
@@ -48,4 +60,12 @@ export const useUIStore = create<UIState>((set) => ({
   openSettings: () => set({ isSettingsOpen: true }),
   closeSettings: () => set({ isSettingsOpen: false }),
   toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
+  setActiveSubagentId: (id) => set({ activeSubagentId: id }),
+  setActiveSubagent: (group) =>
+    set({
+      activeSubagent: group,
+      activeSubagentId: group
+        ? ((group.subagentEvent.data as { subagentId?: string })?.subagentId ?? null)
+        : null,
+    }),
 }));

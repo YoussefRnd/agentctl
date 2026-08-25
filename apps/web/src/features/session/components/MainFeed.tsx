@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -7,9 +7,12 @@ import { useSessionActions } from '../../../hooks/useSessionActions';
 import { useProviders } from '../../../hooks/useProviders';
 import { CommandBar } from './CommandBar';
 import { EventFeed } from './EventFeed';
+import { SubagentChatView } from './SubagentChatView';
+import { extractSubagentGroups } from './cards/subagentBlockUtils';
 import { ApprovalCard } from './cards/ApprovalCard';
 import { RewindConfirmDialog } from './RewindConfirmDialog';
 import { rewindSession, restoreSession } from '@agentctl/api-client';
+import { useUIStore } from '@/shared';
 import type { ACPEventRow } from '@agentctl/shared';
 import type { RewindMode } from './RewindMenu';
 
@@ -121,6 +124,36 @@ export function MainFeed() {
     (lastEvent.data as { status?: string }).status === 'pending'
       ? lastEvent
       : undefined;
+
+  const activeSubagent = useUIStore((s) => s.activeSubagent);
+  const activeSubagentId = useUIStore((s) => s.activeSubagentId);
+  const setActiveSubagent = useUIStore((s) => s.setActiveSubagent);
+
+  const subagentGroups = useMemo(() => extractSubagentGroups(events), [events]);
+  const liveActiveSubagent = useMemo(() => {
+    if (activeSubagentId) {
+      const found = subagentGroups.find(
+        (g: import('./cards/subagentBlockUtils').SubagentGroup) =>
+          (g.subagentEvent.data as { subagentId?: string }).subagentId === activeSubagentId,
+      );
+      if (found) return found;
+    }
+    return activeSubagent;
+  }, [subagentGroups, activeSubagentId, activeSubagent]);
+
+  if (liveActiveSubagent) {
+    const isSubagentRunning =
+      (liveActiveSubagent.subagentEvent.data as { status?: string }).status === 'running' ||
+      (liveActiveSubagent.subagentEvent.data as { status?: string }).status === 'spawning';
+
+    return (
+      <SubagentChatView
+        group={liveActiveSubagent}
+        onBack={() => setActiveSubagent(null)}
+        isStreaming={isConnected && isSubagentRunning}
+      />
+    );
+  }
 
   if (!sessionId) {
     return (

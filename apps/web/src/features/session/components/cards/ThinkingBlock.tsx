@@ -71,7 +71,7 @@ export function ThinkingBlock({
         aria-expanded={isOpen}
         aria-controls="activity-details"
         onClick={toggle}
-        className="border-border/30 bg-surface-secondary/30 text-text-muted/80 hover:text-text-main hover:border-border/50 focus-visible:ring-accent/40 focus-visible:ring-offset-background flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-medium tracking-wide transition-colors outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1"
+        className="text-text-muted/80 hover:text-text-main hover:bg-surface-secondary/30 focus-visible:ring-accent/40 -ml-2 inline-flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[12px] font-medium tracking-tight transition-colors outline-none select-none"
       >
         <Spinner done={isCompleted} />
 

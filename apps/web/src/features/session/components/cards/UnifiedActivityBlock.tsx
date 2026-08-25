@@ -39,7 +39,7 @@ function formatShortPath(fullPath?: string): string {
   return parts.slice(-3).join('/');
 }
 
-function getToolDisplayInfo(
+export function getToolDisplayInfo(
   tool: string,
   payload: ACPEventToolCallData,
 ): { icon: string; label: string; sublabel?: string; color: string; isCommand: boolean } {
@@ -332,7 +332,7 @@ function ToolOutputDetails({ call }: { call: ACPEventToolCallData }) {
   );
 }
 
-const ToolStepRow = memo(function ToolStepRow({
+export const ToolStepRow = memo(function ToolStepRow({
   event,
   isStreaming,
 }: {
@@ -421,7 +421,7 @@ const ToolStepRow = memo(function ToolStepRow({
   );
 });
 
-const ThoughtStepRow = memo(function ThoughtStepRow({
+export const ThoughtStepRow = memo(function ThoughtStepRow({
   event,
   isStreaming,
 }: {
@@ -535,7 +535,7 @@ export function UnifiedActivityBlock({
         type="button"
         aria-expanded={isOpen}
         onClick={toggle}
-        className="border-border/30 bg-surface-secondary/30 text-text-muted/80 hover:text-text-main hover:border-border/50 hover:bg-surface-secondary/40 focus-visible:ring-accent/40 flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-[11.5px] font-medium tracking-wide transition-all outline-none select-none"
+        className="text-text-muted/80 hover:text-text-main hover:bg-surface-secondary/30 focus-visible:ring-accent/40 -ml-2 inline-flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[12px] font-medium tracking-tight transition-colors outline-none select-none"
       >
         <Spinner done={isCompleted} />
 

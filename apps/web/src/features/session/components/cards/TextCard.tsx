@@ -2,7 +2,7 @@ import { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Sparkles, RotateCcw, Copy, Check, Pencil } from 'lucide-react';
+import { RotateCcw, Copy, Check, Pencil } from 'lucide-react';
 import { RewindMenu } from '../RewindMenu';
 import type { RewindMode } from '../RewindMenu';
 import { useSession } from '../../../../contexts/SessionContext';
@@ -225,80 +225,64 @@ export const TextCard = memo(function TextCard({
   // provider (default)
   return (
     <div data-font-ctx="chat" className="group/provider relative py-3">
-      <div className="flex items-start gap-3">
-        <div className="mt-1 shrink-0">
-          <div
-            className={`border-border bg-surface-secondary/50 flex h-8 w-8 items-center justify-center rounded-lg border transition-colors duration-300 ${
-              isStreaming
-                ? 'border-accent/40 bg-accent/5'
-                : 'group-hover/provider:border-border-hover'
-            }`}
-          >
-            <Sparkles
-              className={`h-4 w-4 ${isStreaming ? 'text-accent animate-pulse' : 'text-text-muted'}`}
-            />
-          </div>
+      <div className="group/provider-content relative min-w-0 flex-1">
+        {/* Quick-action toolbar for provider response */}
+        <div className="mb-1 flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-200 group-hover/provider:opacity-100 focus-within:opacity-100">
+          <Tooltip content={copied ? 'Copied to clipboard' : 'Copy response'}>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+              aria-label="Copy response"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </Tooltip>
+
+          {eventId && onRewind && (
+            <Popover open={showMenu} onOpenChange={setShowMenu}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                  aria-label="Rewind or fork options"
+                  title="Rewind or fork session"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                side="bottom"
+                sideOffset={4}
+                className="w-[260px] overflow-hidden p-0"
+              >
+                <RewindMenu
+                  eventId={eventId}
+                  hasGitRepo={hasGitRepo ?? false}
+                  onRewind={onRewind}
+                  onClose={() => {
+                    setShowMenu(false);
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
 
-        <div className="group/provider-content relative min-w-0 flex-1">
-          {/* Quick-action toolbar for provider response */}
-          <div className="mb-1 flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-200 group-hover/provider:opacity-100 focus-within:opacity-100">
-            <Tooltip content={copied ? 'Copied to clipboard' : 'Copy response'}>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
-                aria-label="Copy response"
-              >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-400" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </Tooltip>
-
-            {eventId && onRewind && (
-              <Popover open={showMenu} onOpenChange={setShowMenu}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
-                    aria-label="Rewind or fork options"
-                    title="Rewind or fork session"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="end"
-                  side="bottom"
-                  sideOffset={4}
-                  className="w-[260px] overflow-hidden p-0"
-                >
-                  <RewindMenu
-                    eventId={eventId}
-                    hasGitRepo={hasGitRepo ?? false}
-                    onRewind={onRewind}
-                    onClose={() => {
-                      setShowMenu(false);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
-
-          <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 max-w-none text-[15px] leading-7 tracking-normal">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeHighlight]}
-              components={{ pre: MarkdownCodeBlock }}
-            >
-              {content}
-            </ReactMarkdown>
-            {isStreaming && <StreamingDots />}
-          </div>
+        <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 max-w-none text-[15px] leading-7 tracking-normal">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+            components={{ pre: MarkdownCodeBlock }}
+          >
+            {content}
+          </ReactMarkdown>
+          {isStreaming && <StreamingDots />}
         </div>
       </div>
     </div>

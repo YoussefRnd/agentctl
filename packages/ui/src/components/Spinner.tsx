@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
 import { cn } from '../utils';
 
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
@@ -35,7 +34,7 @@ export function Spinner({ done = false, className }: SpinnerProps) {
   const frame = useSpinnerFrame(80, done);
 
   if (done) {
-    return <Check className={cn('text-brand-green h-3.5 w-3.5 shrink-0 stroke-[3]', className)} />;
+    return null;
   }
 
   return (
