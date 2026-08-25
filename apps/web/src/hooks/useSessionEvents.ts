@@ -41,14 +41,30 @@ export function useSessionEvents(sessionId: string | null) {
       token,
       onEventsUpdate: (newEvents) => {
         queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
+          const lastOldId = old.length > 0 ? old[old.length - 1].id : 0;
+          const hasOptimistic = old.some((e) => e.id < 0);
+          const hasRealUserMessage = newEvents.some(
+            (evt) => evt.type === 'text' && evt.data.role === 'user',
+          );
+
+          // Fast path: Pure append of new sequential non-delta events
+          const isSimpleAppend =
+            !hasOptimistic &&
+            !hasRealUserMessage &&
+            old.length > 0 &&
+            newEvents.every(
+              (evt) => !('delta' in (evt as { delta?: string })) && evt.id > lastOldId,
+            );
+
+          if (isSimpleAppend) {
+            return [...old, ...newEvents];
+          }
+
           // Upsert: replace in-place for existing IDs (streaming updates), append for new ones
           const idToIndex = new Map(old.map((e, i) => [e.id, i]));
           const result = [...old];
 
           // Check if any incoming event is a real user message, and remove the temp optimistic event once
-          const hasRealUserMessage = newEvents.some(
-            (evt) => evt.type === 'text' && evt.data.role === 'user',
-          );
           if (hasRealUserMessage) {
             const tempIdx = result.findIndex(
               (e) => e.id < 0 && e.type === 'text' && e.data.role === 'user',
@@ -109,7 +125,13 @@ export function useSessionEvents(sessionId: string | null) {
           }
           return result;
         });
-        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+
+        const shouldInvalidateSession = newEvents.some(
+          (evt) => evt.type !== 'text' || !('delta' in (evt as { delta?: string })),
+        );
+        if (shouldInvalidateSession) {
+          void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        }
       },
       onStatusChange: (status) => {
         setIsConnected(status);

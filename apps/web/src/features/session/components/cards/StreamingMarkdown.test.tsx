@@ -40,6 +40,15 @@ describe('splitStreamingContent', () => {
       value: 'const long = "line with spaces in it";\n',
     });
   });
+
+  it('splits multi-paragraph text across double newlines for block memoization', () => {
+    const segments = splitStreamingContent('Paragraph 1\n\nParagraph 2\n\nParagraph 3');
+    expect(segments).toEqual([
+      { key: 'seg-0', type: 'text', value: 'Paragraph 1\n\n' },
+      { key: 'seg-13', type: 'text', value: 'Paragraph 2\n\n' },
+      { key: 'seg-26', type: 'text', value: 'Paragraph 3' },
+    ]);
+  });
 });
 
 describe('StreamingMarkdown', () => {

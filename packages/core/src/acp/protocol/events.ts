@@ -28,14 +28,7 @@ function parseToolCallEvent(
   _meta: Record<string, unknown> | undefined,
 ): DomainAgentEvent {
   const rawInput = update.rawInput;
-  const parsedArgs =
-    toolArgumentsFrom(rawInput) ??
-    (() => {
-      const primaryPath = update.locations?.[0]?.path ?? update.title;
-      return primaryPath
-        ? { path: primaryPath, TargetFile: primaryPath, AbsolutePath: primaryPath }
-        : {};
-    })();
+  const parsedArgs = toolArgumentsFrom(rawInput) ?? {};
   return {
     type: 'tool_call',
     call: {

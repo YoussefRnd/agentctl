@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useMemo, useEffect } from 'react';
+import { useRef, useState, useCallback, useMemo } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { Brain, RefreshCw, ArrowDown } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -43,22 +43,6 @@ export function EventFeed({
     const lastGroup = groupedEvents[groupedEvents.length - 1];
     return lastGroup?.type === 'agent' ? lastGroup.id : null;
   }, [groupedEvents]);
-
-  // Pin to bottom while response is generating
-  useEffect(() => {
-    if (autoScroll && (isSessionRunning || streamingEventId != null)) {
-      const timer = requestAnimationFrame(() => {
-        virtuosoRef.current?.scrollToIndex({
-          index: Math.max(0, groupedEvents.length - 1),
-          align: 'end',
-          behavior: 'auto',
-        });
-      });
-      return () => {
-        cancelAnimationFrame(timer);
-      };
-    }
-  }, [events, autoScroll, isSessionRunning, streamingEventId, groupedEvents.length]);
 
   const atBottomStateChange = useCallback((atBottom: boolean) => {
     setAutoScroll(atBottom);

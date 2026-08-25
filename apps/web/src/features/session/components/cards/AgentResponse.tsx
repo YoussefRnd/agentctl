@@ -1,8 +1,7 @@
 import { memo, useMemo } from 'react';
-import { StreamingDots, ProviderIconUrl } from '@/shared';
+import { ProviderIconUrl } from '@/shared';
 import { SubagentBlock } from './SubagentBlock';
-import { ThinkingBlock } from './ThinkingBlock';
-import { ActivityTimeline } from './ActivityTimeline';
+import { UnifiedActivityBlock } from './UnifiedActivityBlock';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import type { SubagentGroup } from './subagentBlockUtils';
 import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
@@ -51,10 +50,16 @@ const AgentResponseComponent = function AgentResponse({
     return providers.find((p) => p.id === selectedProviderId)?.agent?.icon ?? null;
   }, [providers, selectedProviderId]);
 
-  const { thoughtEvents, toolEvents, responseEvent, subagentGroups } = useMemo(() => {
-    const thoughts: ACPEventRow[] = [];
-    const tools: ACPEventRow[] = [];
+  const { activityEvents, responseEvent, subagentGroups } = useMemo(() => {
+    const activities: ACPEventRow[] = [];
     let response: ACPEventRow | undefined;
+
+    const idToEvent = new Map<number, ACPEventRow>();
+    const idToIndex = new Map<number, number>();
+    for (let i = 0; i < events.length; i++) {
+      idToEvent.set(events[i].id, events[i]);
+      idToIndex.set(events[i].id, i);
+    }
 
     const toolCallGroups = new Map<string, ACPEventRow[]>();
     const nativelyEmitted = new Map<string, ACPEventRow[]>();
@@ -78,9 +83,7 @@ const AgentResponseComponent = function AgentResponse({
           nativelyEmitted.set(data.subagentId, []);
         }
       } else if (e.parentEventId != null) {
-        const parentData = events.find(
-          (pe) => pe.id === e.parentEventId && isACPEventSubagentUpdate(pe),
-        );
+        const parentData = idToEvent.get(e.parentEventId);
         if (parentData && isACPEventSubagentUpdate(parentData)) {
           const data = parentData.data;
           const children = nativelyEmitted.get(data.subagentId);
@@ -100,10 +103,12 @@ const AgentResponseComponent = function AgentResponse({
 
       if (isACPEventText(e) && e.data.role === 'provider') {
         response = e;
-      } else if (isACPEventText(e) && e.data.role === 'thought') {
-        thoughts.push(e);
-      } else if (isACPEventToolCall(e) || e.type === 'approval_request') {
-        tools.push(e);
+      } else if (
+        (isACPEventText(e) && e.data.role === 'thought') ||
+        isACPEventToolCall(e) ||
+        e.type === 'approval_request'
+      ) {
+        activities.push(e);
       }
     }
 
@@ -115,14 +120,19 @@ const AgentResponseComponent = function AgentResponse({
       const firstData = first.data as ACPEventToolCallData;
       const lastData = last.data as ACPEventToolCallData;
 
-      const lastTcIndex = events.indexOf(last);
-      const hasFollowingActivity = events.slice(lastTcIndex + 1).some((e) => {
-        if (e.type === 'tool_call') {
-          const ed = e.data;
-          if (ed.toolCallId && toolCallGroups.has(ed.toolCallId)) return false;
+      const lastTcIndex = idToIndex.get(last.id) ?? -1;
+      let hasFollowingActivity = false;
+      if (lastTcIndex !== -1) {
+        for (let i = lastTcIndex + 1; i < events.length; i++) {
+          const e = events[i];
+          if (e.type === 'tool_call') {
+            const ed = e.data;
+            if (ed.toolCallId && toolCallGroups.has(ed.toolCallId)) continue;
+          }
+          hasFollowingActivity = true;
+          break;
         }
-        return true;
-      });
+      }
 
       const status =
         lastData.status === 'completed' || lastData.status === 'failed'
@@ -161,14 +171,13 @@ const AgentResponseComponent = function AgentResponse({
     }
 
     return {
-      thoughtEvents: thoughts,
-      toolEvents: tools,
+      activityEvents: activities,
       responseEvent: response,
       subagentGroups: groups,
     };
   }, [events]);
 
-  const hasActivity = thoughtEvents.length > 0 || toolEvents.length > 0;
+  const hasActivity = activityEvents.length > 0;
   const isInitialThinking =
     !hasActivity && !responseEvent && subagentGroups.length === 0 && (isStreaming || isActive);
 
@@ -190,17 +199,13 @@ const AgentResponseComponent = function AgentResponse({
 
         <div className="min-w-0 flex-1">
           {(hasActivity || isInitialThinking) && (
-            <div className="mt-1 mb-3 space-y-3">
-              {(thoughtEvents.length > 0 || isInitialThinking) && (
-                <ThinkingBlock
-                  events={thoughtEvents}
-                  isStreaming={isStreaming}
-                  isActive={isActive}
-                />
-              )}
-              {toolEvents.length > 0 && (
-                <ActivityTimeline events={toolEvents} isStreaming={isStreaming} />
-              )}
+            <div className="mt-0.5 mb-2.5">
+              <UnifiedActivityBlock
+                events={activityEvents}
+                isStreaming={isStreaming}
+                isActive={isActive}
+                isInitialThinking={isInitialThinking}
+              />
             </div>
           )}
 
@@ -220,7 +225,6 @@ const AgentResponseComponent = function AgentResponse({
                 content={(responseEvent.data as { content: string }).content}
                 isStreaming={isStreaming}
               />
-              {isStreaming && <StreamingDots />}
             </div>
           )}
         </div>

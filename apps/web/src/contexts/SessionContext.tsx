@@ -221,20 +221,27 @@ export function SessionStreamProvider({
   const planItems = useMemo(() => {
     const planMap = new Map<string, boolean>();
 
-    for (const e of events) {
-      if (e.type !== 'text') continue;
-
-      const content = e.data.content;
-      if (!content.includes('- [')) continue;
-
-      const lines = content.split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('- [ ]') || trimmed.startsWith('- [x]')) {
-          const text = trimmed.replace(/- \[[ x]\]/, '').trim();
-          const completed = trimmed.startsWith('- [x]');
-          planMap.set(text, completed);
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i];
+      if (e.type === 'text' && typeof e.data?.content === 'string') {
+        const content = e.data.content;
+        if (content.includes('- [')) {
+          const lines = content.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('- [ ]') || trimmed.startsWith('- [x]')) {
+              const text = trimmed.replace(/- \[[ x]\]/, '').trim();
+              const completed = trimmed.startsWith('- [x]');
+              if (!planMap.has(text)) {
+                planMap.set(text, completed);
+              }
+            }
+          }
         }
+      }
+      // Stop scanning once we reach the latest user message boundary
+      if (e.type === 'text' && e.data?.role === 'user') {
+        break;
       }
     }
 

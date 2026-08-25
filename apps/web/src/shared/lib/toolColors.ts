@@ -6,19 +6,38 @@ interface ToolMeta {
   borderColor: string;
 }
 
-export function getToolMeta(kind?: string, name?: string): ToolMeta {
-  const k = kind ?? '';
-  const n = name ?? '';
+const COMMAND_TOOLS = new Set([
+  'bash',
+  'terminal',
+  'sh',
+  'exec',
+  'execute_command',
+  'run_command',
+  'command',
+  'builtin_bash',
+]);
+const FILE_TOOLS = new Set([
+  'read_file',
+  'write_to_file',
+  'replace_file_content',
+  'view_file',
+  'edit_file',
+]);
+const SEARCH_TOOLS = new Set([
+  'grep_search',
+  'find_by_name',
+  'search_web',
+  'read_url_content',
+  'search',
+  'grep',
+]);
+const DELETE_TOOLS = new Set(['delete_file', 'remove_file', 'delete']);
 
-  if (
-    k === 'read' ||
-    k === 'edit' ||
-    k === 'move' ||
-    n.includes('file') ||
-    n.includes('view') ||
-    n.includes('read') ||
-    n.includes('write')
-  ) {
+export function getToolMeta(kind?: string, name?: string): ToolMeta {
+  const k = (kind ?? '').toLowerCase();
+  const n = (name ?? '').toLowerCase();
+
+  if (k === 'read' || k === 'edit' || k === 'move' || FILE_TOOLS.has(n)) {
     return {
       color: 'text-brand-green',
       icon: 'file',
@@ -27,7 +46,7 @@ export function getToolMeta(kind?: string, name?: string): ToolMeta {
       borderColor: 'border-brand-green/20',
     };
   }
-  if (k === 'delete' || n.includes('delete') || n.includes('remove') || n.includes('kill')) {
+  if (k === 'delete' || DELETE_TOOLS.has(n)) {
     return {
       color: 'text-rose-500',
       icon: 'trash',
@@ -36,7 +55,7 @@ export function getToolMeta(kind?: string, name?: string): ToolMeta {
       borderColor: 'border-rose-500/20',
     };
   }
-  if (k === 'search' || k === 'fetch' || n.includes('search') || n.includes('grep')) {
+  if (k === 'search' || k === 'fetch' || SEARCH_TOOLS.has(n)) {
     return {
       color: 'text-brand-blue',
       icon: 'search',
@@ -45,7 +64,7 @@ export function getToolMeta(kind?: string, name?: string): ToolMeta {
       borderColor: 'border-brand-blue/20',
     };
   }
-  if (k === 'execute' || n.includes('command') || n.includes('shell') || n.includes('run')) {
+  if (k === 'execute' || COMMAND_TOOLS.has(n)) {
     return {
       color: 'text-brand-peach',
       icon: 'terminal',

@@ -30,7 +30,7 @@ export function EventFeedItem({
       commandStatus?: string;
     };
     return (
-      <div className="my-2">
+      <div className="my-2 [contain-intrinsic-size:auto_100px] [content-visibility:auto]">
         <CommandResultCard
           command={data.command ?? 'unknown'}
           args={data.args}
@@ -47,7 +47,7 @@ export function EventFeedItem({
     };
     if (!data.elicitation) return null;
     return (
-      <div className="my-2">
+      <div className="my-2 [contain-intrinsic-size:auto_100px] [content-visibility:auto]">
         <ElicitationCard
           elicitation={data.elicitation}
           onRespond={(id, resp) => {
@@ -65,7 +65,7 @@ export function EventFeedItem({
 
   if (group.type === 'agent') {
     return (
-      <div className="my-2">
+      <div className="my-2 [contain-intrinsic-size:auto_100px] [content-visibility:auto]">
         <AgentResponse
           events={group.events}
           isStreaming={group.isStreaming}
@@ -77,7 +77,7 @@ export function EventFeedItem({
 
   const { event: e, isStreaming } = group;
   return (
-    <div className="my-2">
+    <div className="my-2 [contain-intrinsic-size:auto_100px] [content-visibility:auto]">
       <TextCard
         content={(e.data as { content: string }).content}
         variant="user"

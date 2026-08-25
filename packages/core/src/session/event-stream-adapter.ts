@@ -18,6 +18,12 @@ export class EventStreamAdapter {
   private textBuffer: StreamBuffer;
   private thoughtBuffer: StreamBuffer;
 
+  private pendingTextDelta = '';
+  private pendingThoughtDelta = '';
+  private textDeltaTimer: NodeJS.Timeout | null = null;
+  private thoughtDeltaTimer: NodeJS.Timeout | null = null;
+  private transientCoalesceMs = 50;
+
   constructor(
     private sessionId: string,
     private eventStore: SessionEventStoreLike,
@@ -51,6 +57,8 @@ export class EventStreamAdapter {
   }
 
   async startTurn(text: string, attachments?: unknown[], promptTokens?: number): Promise<number> {
+    this.flushTextDelta();
+    this.flushThoughtDelta();
     this.currentMessage = '';
     this.currentThought = '';
     this.messageEventId = null;
@@ -94,10 +102,14 @@ export class EventStreamAdapter {
     const completionTokens = Math.ceil(this.currentMessage.length / 4);
     if (this.messageEventId) {
       this.textBuffer.append(text);
-      this.publishTransient(this.messageEventId, 'text', { content: '', role: 'provider' }, text, {
-        durationMs: this.messageStartTime ? Date.now() - this.messageStartTime : 0,
-        completionTokens,
-      });
+      this.pendingTextDelta += text;
+      if (this.pendingTextDelta.length >= 200) {
+        this.flushTextDelta();
+      } else if (!this.textDeltaTimer) {
+        this.textDeltaTimer = setTimeout(() => {
+          this.flushTextDelta();
+        }, this.transientCoalesceMs);
+      }
     } else {
       this.messageStartTime = Date.now();
       this.messageEventId = await this.eventStore.append(
@@ -118,10 +130,14 @@ export class EventStreamAdapter {
     const completionTokens = Math.ceil(this.currentThought.length / 4);
     if (this.thoughtEventId) {
       this.thoughtBuffer.append(text);
-      this.publishTransient(this.thoughtEventId, 'text', { content: '', role: 'thought' }, text, {
-        durationMs: this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0,
-        completionTokens,
-      });
+      this.pendingThoughtDelta += text;
+      if (this.pendingThoughtDelta.length >= 200) {
+        this.flushThoughtDelta();
+      } else if (!this.thoughtDeltaTimer) {
+        this.thoughtDeltaTimer = setTimeout(() => {
+          this.flushThoughtDelta();
+        }, this.transientCoalesceMs);
+      }
     } else {
       this.thoughtStartTime = Date.now();
       this.thoughtEventId = await this.eventStore.append(
@@ -135,6 +151,38 @@ export class EventStreamAdapter {
         { durationMs: 0, completionTokens },
       );
     }
+  }
+
+  private flushTextDelta(): void {
+    if (this.textDeltaTimer) {
+      clearTimeout(this.textDeltaTimer);
+      this.textDeltaTimer = null;
+    }
+    if (!this.pendingTextDelta || this.messageEventId === null) return;
+    const delta = this.pendingTextDelta;
+    this.pendingTextDelta = '';
+    const completionTokens = Math.ceil(this.currentMessage.length / 4);
+    const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
+    this.publishTransient(this.messageEventId, 'text', { content: '', role: 'provider' }, delta, {
+      durationMs,
+      completionTokens,
+    });
+  }
+
+  private flushThoughtDelta(): void {
+    if (this.thoughtDeltaTimer) {
+      clearTimeout(this.thoughtDeltaTimer);
+      this.thoughtDeltaTimer = null;
+    }
+    if (!this.pendingThoughtDelta || this.thoughtEventId === null) return;
+    const delta = this.pendingThoughtDelta;
+    this.pendingThoughtDelta = '';
+    const completionTokens = Math.ceil(this.currentThought.length / 4);
+    const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
+    this.publishTransient(this.thoughtEventId, 'text', { content: '', role: 'thought' }, delta, {
+      durationMs,
+      completionTokens,
+    });
   }
 
   private publishTransient(
@@ -226,6 +274,8 @@ export class EventStreamAdapter {
   }
 
   async flushAll(): Promise<void> {
+    this.flushTextDelta();
+    this.flushThoughtDelta();
     await Promise.all([this.textBuffer.flush(), this.thoughtBuffer.flush()]);
   }
 

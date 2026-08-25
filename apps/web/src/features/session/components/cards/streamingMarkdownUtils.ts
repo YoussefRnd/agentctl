@@ -23,16 +23,65 @@ export function splitStreamingContent(content: string): StreamingContentSegment[
   const segments: StreamingContentSegment[] = [];
   const parts = content.split('```');
   let offset = 0;
+
   for (let i = 0; i < parts.length; i += 1) {
     const part = parts[i] ?? '';
     if (part.length === 0) continue;
-    const key = `seg-${String(offset)}`;
+
+    const startOffset = offset;
     offset += part.length;
-    if (i % 2 === 0) {
-      segments.push({ key, type: 'text', value: part });
+
+    if (i % 2 !== 0) {
+      // Code segment
+      segments.push({
+        key: `seg-${String(startOffset)}`,
+        type: 'code',
+        value: stripLanguageTag(part),
+      });
     } else {
-      segments.push({ key, type: 'code', value: stripLanguageTag(part) });
+      // Text segment: split by double-newline paragraphs for fine-grained memoization
+      if (part.includes('\n\n')) {
+        let textOffset = startOffset;
+        let remaining = part;
+        let matchIdx: number;
+
+        while ((matchIdx = remaining.indexOf('\n\n')) !== -1) {
+          let newlineCount = 2;
+          while (
+            matchIdx + newlineCount < remaining.length &&
+            remaining[matchIdx + newlineCount] === '\n'
+          ) {
+            newlineCount++;
+          }
+
+          const paragraphWithNewlines = remaining.slice(0, matchIdx + newlineCount);
+          if (paragraphWithNewlines.length > 0) {
+            segments.push({
+              key: `seg-${String(textOffset)}`,
+              type: 'text',
+              value: paragraphWithNewlines,
+            });
+            textOffset += paragraphWithNewlines.length;
+          }
+          remaining = remaining.slice(matchIdx + newlineCount);
+        }
+
+        if (remaining.length > 0) {
+          segments.push({
+            key: `seg-${String(textOffset)}`,
+            type: 'text',
+            value: remaining,
+          });
+        }
+      } else {
+        segments.push({
+          key: `seg-${String(startOffset)}`,
+          type: 'text',
+          value: part,
+        });
+      }
     }
   }
+
   return segments;
 }

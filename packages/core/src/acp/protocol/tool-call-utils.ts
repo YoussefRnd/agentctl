@@ -26,10 +26,19 @@ export function toolNameFrom(toolCall: {
   toolCallId: string;
   kind?: unknown;
   rawInput?: unknown;
+  title?: string | null;
 }): string {
-  const idParts = toolCall.toolCallId.split('__');
-  if (idParts.length > 1 && idParts[0]) return idParts[0];
   const input = asRecord(toolCall.rawInput);
   if (typeof input?.name === 'string' && input.name) return input.name;
-  return typeof toolCall.kind === 'string' ? toolCall.kind : 'tool';
+  const idParts = toolCall.toolCallId.split('__');
+  if (idParts.length > 1 && idParts[0]) {
+    return idParts[0];
+  }
+  if (typeof toolCall.kind === 'string' && toolCall.kind) {
+    return toolCall.kind;
+  }
+  if (typeof toolCall.title === 'string' && toolCall.title) {
+    return toolCall.title;
+  }
+  return 'tool';
 }

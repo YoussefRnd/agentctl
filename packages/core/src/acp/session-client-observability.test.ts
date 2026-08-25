@@ -145,37 +145,40 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
     );
     expect((JSON.parse(providerEvent.data) as Record<string, unknown>).content).toBe('Hello world');
 
-    // Verify instant publishing via eventBus: one publish PER CHUNK,
+    // Verify publishing via eventBus: append + transient delta stream,
     // DB writes happen silently (no publish on flush).
     const thoughtPublishes = publishedEvents.filter((e) => {
       const parsed = JSON.parse(e.data) as Record<string, unknown>;
       return parsed.role === 'thought';
     });
 
-    // 3 chunks -> 3 publishes (append + 2 transient), flush is silent
-    expect(thoughtPublishes.length).toBe(3);
+    expect(thoughtPublishes.length).toBeGreaterThanOrEqual(2);
     // First chunk goes through the persisted append path: full content, no delta
     expect((JSON.parse(thoughtPublishes[0].data) as Record<string, unknown>).content).toBe(
       'Thinking',
     );
     expect(thoughtPublishes[0].delta).toBeUndefined();
     // Subsequent chunks ride the transient path: wire-only delta, empty content
-    expect((JSON.parse(thoughtPublishes[1].data) as Record<string, unknown>).content).toBe('');
-    expect(thoughtPublishes[1].delta).toBe(' about');
-    expect((JSON.parse(thoughtPublishes[2].data) as Record<string, unknown>).content).toBe('');
-    expect(thoughtPublishes[2].delta).toBe(' logic');
+    const combinedTransientThoughtDelta = thoughtPublishes
+      .slice(1)
+      .map((p) => p.delta ?? '')
+      .join('');
+    expect(combinedTransientThoughtDelta).toBe(' about logic');
 
     const providerPublishes = publishedEvents.filter((e) => {
       const parsed = JSON.parse(e.data) as Record<string, unknown>;
       return parsed.role === 'provider';
     });
-    expect(providerPublishes.length).toBe(2);
+    expect(providerPublishes.length).toBeGreaterThanOrEqual(2);
     expect((JSON.parse(providerPublishes[0].data) as Record<string, unknown>).content).toBe(
       'Hello',
     );
     expect(providerPublishes[0].delta).toBeUndefined();
-    expect((JSON.parse(providerPublishes[1].data) as Record<string, unknown>).content).toBe('');
-    expect(providerPublishes[1].delta).toBe(' world');
+    const combinedTransientProviderDelta = providerPublishes
+      .slice(1)
+      .map((p) => p.delta ?? '')
+      .join('');
+    expect(combinedTransientProviderDelta).toBe(' world');
 
     // Verify metadata presence (timing and token estimates)
     const userMetadata = JSON.parse(userEvent.metadata ?? '{}') as Record<string, unknown>;

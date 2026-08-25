@@ -20,43 +20,18 @@ function formatDuration(durationMs: number): string {
 }
 
 function getContextSnippet(name: string, args: Record<string, unknown>): string | undefined {
-  if (
-    name.includes('file') ||
-    name.includes('view') ||
-    name.includes('read') ||
-    name.includes('write')
-  ) {
-    const filePath =
-      typeof args.AbsolutePath === 'string'
-        ? args.AbsolutePath
-        : typeof args.TargetFile === 'string'
-          ? args.TargetFile
-          : typeof args.path === 'string'
-            ? args.path
-            : '';
-    return filePath || undefined;
-  }
-
-  if (name.includes('search') || name.includes('grep')) {
-    const query =
-      typeof args.Query === 'string'
-        ? args.Query
-        : typeof args.query === 'string'
-          ? args.query
-          : '';
-    return query || undefined;
-  }
-
-  if (name.includes('command') || name.includes('shell') || name.includes('run')) {
-    const cmd =
-      typeof args.CommandLine === 'string'
-        ? args.CommandLine
-        : typeof args.command === 'string'
-          ? args.command
-          : '';
-    return cmd || undefined;
-  }
-
+  if (typeof args.CommandLine === 'string') return args.CommandLine;
+  if (typeof args.command === 'string') return args.command;
+  if (typeof args.cmd === 'string') return args.cmd;
+  if (typeof args.AbsolutePath === 'string') return args.AbsolutePath;
+  if (typeof args.TargetFile === 'string') return args.TargetFile;
+  if (typeof args.path === 'string') return args.path;
+  if (typeof args.filePath === 'string') return args.filePath;
+  if (typeof args.file === 'string') return args.file;
+  if (typeof args.Query === 'string') return args.Query;
+  if (typeof args.query === 'string') return args.query;
+  if (typeof args.Pattern === 'string') return args.Pattern;
+  if (typeof args.pattern === 'string') return args.pattern;
   return undefined;
 }
 
