@@ -26,14 +26,14 @@ export function McpServerForm({
   return (
     <Card className="border-accent/20 bg-accent/5 space-y-5 rounded-2xl border p-5">
       <div className="border-border/10 flex items-center justify-between border-b pb-3">
-        <h3 className="text-text-main flex items-center gap-2 text-[11px] font-black tracking-wider uppercase">
-          <Settings className="h-3.5 w-3.5 animate-spin" />
-          {isEditing ? 'EDIT SERVER' : 'REGISTER NEW SERVER'}
+        <h3 className="text-text-main flex items-center gap-2 text-xs font-bold tracking-tight">
+          <Settings className="text-accent h-3.5 w-3.5" />
+          <span>{isEditing ? 'Edit MCP Server' : 'Register New MCP Server'}</span>
         </h3>
         <Button
           variant="ghost"
           onClick={onCancel}
-          className="hover:bg-surface-secondary/40 h-7 w-7 rounded-full p-0"
+          className="hover:bg-surface-secondary/40 h-7 w-7 cursor-pointer rounded-full p-0"
         >
           <X className="text-text-muted h-4 w-4" />
         </Button>
@@ -46,7 +46,7 @@ export function McpServerForm({
           </label>
           <Input
             id="mcp-name"
-            placeholder="Name"
+            placeholder="Server name (e.g. GitHub, Filesystem, Cloudflare MCP)"
             value={formState.name ?? ''}
             onChange={(e) => {
               set('name', e.target.value);
@@ -65,13 +65,13 @@ export function McpServerForm({
                 onClick={() => {
                   set('type', type);
                 }}
-                className={`cursor-pointer rounded-lg px-4 py-1 text-center text-[10px] font-bold tracking-wider uppercase transition-colors ${
+                className={`cursor-pointer rounded-lg px-4 py-1 text-center text-xs font-semibold transition-all ${
                   formState.type === type
-                    ? 'bg-accent text-brand-crust font-black shadow-sm'
+                    ? 'bg-accent text-brand-crust shadow-sm'
                     : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/40'
                 }`}
               >
-                {type}
+                {type === 'local' ? 'Local (stdio)' : 'Remote (Stateless HTTP / SSE)'}
               </button>
             ))}
           </div>
@@ -85,7 +85,7 @@ export function McpServerForm({
               </label>
               <Input
                 id="mcp-command"
-                placeholder="Command (e.g. npx)"
+                placeholder="Command (e.g. npx, uvx, python)"
                 value={formState.command ?? ''}
                 onChange={(e) => {
                   set('command', e.target.value);
@@ -100,7 +100,7 @@ export function McpServerForm({
               </label>
               <Input
                 id="mcp-args"
-                placeholder="Arguments (e.g. --debug)"
+                placeholder="Arguments (e.g. -y @modelcontextprotocol/server-filesystem /path)"
                 value={formState.args ?? ''}
                 onChange={(e) => {
                   set('args', e.target.value);
@@ -128,11 +128,11 @@ export function McpServerForm({
           <>
             <div className="space-y-1">
               <label htmlFor="mcp-url" className="text-text-muted label-3xs opacity-70">
-                URL
+                Endpoint URL
               </label>
               <Input
                 id="mcp-url"
-                placeholder="URL (e.g. https://...)"
+                placeholder="https://mcp.your-domain.com/mcp or https://... (Streamable HTTP)"
                 value={formState.url ?? ''}
                 onChange={(e) => {
                   set('url', e.target.value);
@@ -143,11 +143,11 @@ export function McpServerForm({
 
             <div className="space-y-1">
               <label htmlFor="mcp-headers" className="text-text-muted label-3xs opacity-70">
-                Headers
+                HTTP Headers &amp; Authentication
               </label>
               <textarea
                 id="mcp-headers"
-                placeholder="Authorization=Bearer xyz (one per line)"
+                placeholder="Authorization=Bearer your_token_here (one per line)&#10;Mcp-Version=2026-07-28"
                 value={formState.headers ?? ''}
                 onChange={(e) => {
                   set('headers', e.target.value);
@@ -163,7 +163,7 @@ export function McpServerForm({
         <div className="flex items-center gap-3 select-none">
           <label
             htmlFor="mcp-form-approval-policy"
-            className="text-text-muted text-[10px] font-bold tracking-wider uppercase"
+            className="text-text-muted text-xs font-semibold"
           >
             Approval Policy
           </label>
@@ -181,16 +181,16 @@ export function McpServerForm({
           <Button
             variant="ghost"
             onClick={onCancel}
-            className="hover:bg-surface-secondary/40 text-text-muted h-9 rounded-xl px-4 text-[11px] font-bold tracking-widest uppercase"
+            className="hover:bg-surface-secondary/40 text-text-muted h-8 cursor-pointer rounded-lg px-3.5 text-xs font-medium"
           >
-            CANCEL
+            Cancel
           </Button>
           <Button
             onClick={onSave}
-            className="bg-accent hover:bg-accent/80 text-brand-crust flex h-9 items-center gap-1.5 rounded-xl px-5 text-[11px] font-black tracking-widest uppercase"
+            className="bg-accent hover:bg-accent/80 text-brand-crust flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-4 text-xs font-bold"
           >
-            <Check className="h-3.5 w-3.5 stroke-[3]" />
-            SAVE_CONFIG
+            <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+            Save Server
           </Button>
         </div>
       </div>

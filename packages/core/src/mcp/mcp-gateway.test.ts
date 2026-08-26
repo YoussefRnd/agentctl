@@ -146,4 +146,87 @@ describe('McpGateway', () => {
       await gateway.stop();
     }
   });
+
+  test('executes remote stateless Streamable HTTP tool calls on demand', async () => {
+    const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
+    const { StreamableHTTPServerTransport } =
+      await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+    const { ListToolsRequestSchema, CallToolRequestSchema } =
+      await import('@modelcontextprotocol/sdk/types.js');
+    const http = await import('node:http');
+
+    const mcpServer = new Server(
+      { name: 'remote-test-server', version: '1.0.0' },
+      { capabilities: { tools: {} } },
+    );
+
+    mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [
+        {
+          name: 'remote-echo',
+          description: 'Echoes message from remote serverless MCP',
+          inputSchema: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+            required: ['message'],
+          },
+        },
+      ],
+    }));
+
+    mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
+      const args = req.params.arguments as { message?: string };
+      return {
+        content: [{ type: 'text', text: `remote echo: ${args.message ?? ''}` }],
+      };
+    });
+
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => 'test-session-123',
+    });
+    await mcpServer.connect(transport);
+
+    const httpServer = http.createServer((req, res) => {
+      void transport.handleRequest(req, res);
+    });
+
+    await new Promise<void>((resolve) => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        resolve();
+      });
+    });
+
+    const addr = httpServer.address() as { port: number };
+    const endpointUrl = `http://127.0.0.1:${String(addr.port)}/mcp`;
+
+    const db = createDatabase(':memory:');
+    await db.insert(mcpServers).values({
+      id: 'stateless-remote-server',
+      name: 'Stateless Remote Server',
+      type: 'remote',
+      url: endpointUrl,
+      headers: JSON.stringify({ Authorization: 'Bearer test-token' }),
+      enabled: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const gateway = new McpGateway(db, noopLogger);
+
+    try {
+      const result = await gateway.callTool('stateless-remote-server', 'remote-echo', {
+        message: 'hello stateless world',
+      });
+      const typed = result as { content: { text: string }[] };
+      expect(typed).toBeDefined();
+      expect(typed.content[0].text).toBe('remote echo: hello stateless world');
+    } finally {
+      await gateway.stop();
+      await new Promise<void>((resolve) => {
+        httpServer.close(() => {
+          resolve();
+        });
+      });
+    }
+  });
 });

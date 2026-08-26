@@ -158,12 +158,57 @@ export class McpGateway {
     args: Record<string, unknown>,
   ): Promise<unknown> {
     const entry = this.activeClients.get(serverId);
-    if (!entry) {
+    let client: Client | undefined = entry?.client;
+
+    if (!client) {
+      // Check if server is a remote stateless server in the DB
+      const server = await this.db.query.mcpServers.findFirst({
+        where: eq(mcpServers.id, serverId),
+      });
+
+      if (server && server.enabled && server.type === 'remote' && server.url) {
+        let headers: Record<string, string> = {};
+        if (server.headers) {
+          try {
+            headers = JSON.parse(server.headers) as Record<string, string>;
+          } catch {
+            // ignore
+          }
+        }
+
+        this.logger.info(
+          { serverId, url: server.url },
+          'Executing stateless remote MCP tool call over Streamable HTTP',
+        );
+
+        const transport = new StreamableHTTPClientTransport(new URL(server.url), {
+          requestInit: { headers },
+        });
+        const statelessClient = new Client(
+          { name: 'agentctl-client-gateway', version: '1.0.0' },
+          { capabilities: {} },
+        );
+
+        try {
+          await statelessClient.connect(transport);
+          return await statelessClient.callTool({
+            name: toolName,
+            arguments: args,
+          });
+        } finally {
+          try {
+            await transport.close();
+          } catch {
+            // ignore
+          }
+        }
+      }
+
       throw new Error(`MCP Server ${serverId} is not connected or active`);
     }
 
     this.logger.info({ serverId, toolName, args }, 'Invoking MCP tool');
-    return await entry.client.callTool({
+    return await client.callTool({
       name: toolName,
       arguments: args,
     });

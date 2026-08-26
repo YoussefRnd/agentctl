@@ -221,7 +221,7 @@ export class SessionStateMachine {
             value,
           }));
           return {
-            type: 'sse' as const,
+            type: 'http' as const,
             name: row.name,
             url: row.url ?? '',
             headers: headersArray,
