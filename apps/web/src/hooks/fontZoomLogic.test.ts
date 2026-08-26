@@ -3,6 +3,7 @@ import {
   normalizeDelta,
   consumeDeltaSteps,
   clampSize,
+  clampZoom,
   resolveContextKey,
   keyboardStepFor,
   resolveTargetContexts,
@@ -46,6 +47,14 @@ describe('clampSize', () => {
     expect(clampSize(SIZE_MIN - 10)).toBe(SIZE_MIN);
     expect(clampSize(SIZE_MAX + 10)).toBe(SIZE_MAX);
     expect(clampSize(14)).toBe(14);
+  });
+});
+
+describe('clampZoom', () => {
+  it('clamps window zoom percentage within bounds', () => {
+    expect(clampZoom(50)).toBe(70);
+    expect(clampZoom(200)).toBe(170);
+    expect(clampZoom(115)).toBe(115);
   });
 });
 
@@ -100,14 +109,15 @@ describe('keyboardStepFor', () => {
 });
 
 describe('resolveTargetContexts', () => {
-  const cases: [FontContextKey, FontContextKey[]][] = [
+  const cases: [FontContextKey, string[]][] = [
     ['chat', ['chat', 'terminal']],
     ['terminal', ['chat', 'terminal']],
     ['ui', ['ui']],
     ['buffer', ['buffer']],
+    ['window', []],
   ];
 
-  it('groups chat and terminal together', () => {
+  it('groups chat and terminal together and handles window', () => {
     for (const [input, expected] of cases) {
       expect(resolveTargetContexts(input)).toEqual(expected);
     }

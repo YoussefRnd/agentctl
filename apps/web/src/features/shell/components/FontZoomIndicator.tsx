@@ -23,7 +23,9 @@ export function FontZoomIndicator() {
       <span className="text-[10px] font-bold tracking-[0.1em] text-white/45 uppercase">
         {LABELS[context]}
       </span>
-      <span className="font-mono text-[11px] font-extrabold text-[#cba6f7]">{size}px</span>
+      <span className="font-mono text-[11px] font-extrabold text-[#cba6f7]">
+        {context === 'window' ? `${String(size)}%` : `${String(size)}px`}
+      </span>
     </div>,
     document.body,
   );

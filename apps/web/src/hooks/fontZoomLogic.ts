@@ -3,14 +3,28 @@ import type { FontConfig } from '@agentctl/shared';
 export const SIZE_MIN = 8;
 export const SIZE_MAX = 72;
 
-export type FontContextKey = keyof FontConfig;
+export const ZOOM_MIN = 70;
+export const ZOOM_MAX = 170;
+export const ZOOM_DEFAULT = 100;
+export const ZOOM_STEP = 5;
+
+export type FontConfigKey = keyof FontConfig;
+export type FontContextKey = FontConfigKey | 'window';
 
 export const LABELS: Record<FontContextKey, string> = {
   ui: 'UI',
-  buffer: 'Buffer',
+  buffer: 'Editor',
   terminal: 'Terminal',
   chat: 'Chat',
+  window: 'Window Zoom',
 };
+
+/**
+ * Clamp window zoom percentage to [min, max].
+ */
+export function clampZoom(zoom: number, min = ZOOM_MIN, max = ZOOM_MAX): number {
+  return Math.min(max, Math.max(min, Math.round(zoom)));
+}
 
 /**
  * Wheel deltaMode constants (mirrors WheelEvent.DOM_DELTA_* so this module
@@ -84,7 +98,8 @@ export function keyboardStepFor(e: {
 /**
  * Contexts to scale together: chat prose and terminal code stay in sync.
  */
-export function resolveTargetContexts(rawCtx: FontContextKey): FontContextKey[] {
+export function resolveTargetContexts(rawCtx: FontContextKey): FontConfigKey[] {
+  if (rawCtx === 'window') return [];
   return rawCtx === 'chat' || rawCtx === 'terminal' ? ['chat', 'terminal'] : [rawCtx];
 }
 

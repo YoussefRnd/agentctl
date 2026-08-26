@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_FONT_CONFIG, type FontConfig } from '@agentctl/shared';
 import {
   clampSize,
+  clampZoom,
   consumeDeltaSteps,
   keyboardStepFor,
   normalizeDelta,
   resolveContextKey,
   resolveTargetContexts,
   shouldProcessZoomWheel,
+  ZOOM_DEFAULT,
+  ZOOM_STEP,
   type FontContextKey,
 } from './fontZoomLogic';
 import { useSettings } from './useSettings';
@@ -15,6 +18,7 @@ import { useSettings } from './useSettings';
 const INDICATOR_DURATION = 1500;
 const WHEEL_SENSITIVITY = 40; // Pixels of pinch delta required for 1px font size change
 const SCROLL_ZOOM_GAP_MS = 150; // Plain scroll within this window kills a ctrl+wheel zoom burst
+const PERSIST_DEBOUNCE_MS = 500; // Debounce server settings PATCH during active pinch gestures
 
 export interface ZoomIndicatorState {
   context: FontContextKey;
@@ -25,29 +29,36 @@ export interface ZoomIndicatorState {
 const HIDDEN_INDICATOR: ZoomIndicatorState = { context: 'ui', size: 0, visible: false };
 
 /**
- * Trackpad & Font Zoom Hook.
+ * Trackpad Pinch & Global Window Zoom Hook.
  *
- * Zoom writes straight into the persisted `fontConfig` setting (VS Code style):
- * each step is ±1px on the active context's font size, clamped to [8, 72], and
- * PATCHed to the server. `FontConfigApplier` re-applies the vars from the
- * updated settings, so there is exactly one writer for the CSS variables.
+ * 1. Global Window Zoom (`Ctrl/Cmd + = / - / 0`):
+ *    - Adjusts whole application window zoom percentage (e.g. 100%, 110%, 120%)
+ *    - Persisted in localStorage (`agentctl:window-zoom`) and applies to root document style.
  *
- * - Normal 2-finger trackpad scrolling (ctrlKey = false) is completely ignored
- *   so chat scrolling is 100% smooth, natural, and never glitches.
- * - Trackpad pinch gestures & Ctrl+Wheel (ctrlKey = true) dynamically adjust
- *   font sizes for the active context pane.
- * - Ctrl/Cmd + = / - / 0 adjust or reset font sizes for the last zoomed context.
- * - Groups `chat` and `terminal` together so prose and code blocks scale in sync.
+ * 2. Contextual Font Zoom (`Ctrl/Cmd + Mouse Wheel` / `Trackpad Pinch`):
+ *    - Detects hovered pane (`chat`, `terminal`, `buffer`, `ui`)
+ *    - Immediately applies CSS variables to documentElement for 60/120fps smooth responsiveness
+ *    - Debounces server settings persistence by 500ms to eliminate network flood
  */
+function readInitialWindowZoom(): number {
+  try {
+    const saved = localStorage.getItem('agentctl:window-zoom');
+    return saved ? clampZoom(parseInt(saved, 10)) : ZOOM_DEFAULT;
+  } catch {
+    return ZOOM_DEFAULT;
+  }
+}
+
 export function useFontZoom(): ZoomIndicatorState {
   const { settings, updateSettings } = useSettings();
   const [indicator, setIndicator] = useState<ZoomIndicatorState>(HIDDEN_INDICATOR);
   const accumulatedDeltaRef = useRef<number>(0);
-  const lastContextRef = useRef<FontContextKey>('ui');
   const lastPlainWheelAtRef = useRef<number | null>(null);
 
   const fontConfigRef = useRef<FontConfig | undefined>(settings?.fontConfig);
   const updateSettingsRef = useRef(updateSettings);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const windowZoomRef = useRef<number>(readInitialWindowZoom());
 
   useEffect(() => {
     fontConfigRef.current = settings?.fontConfig;
@@ -56,6 +67,15 @@ export function useFontZoom(): ZoomIndicatorState {
   useEffect(() => {
     updateSettingsRef.current = updateSettings;
   }, [updateSettings]);
+
+  // Apply initial saved window zoom on mount
+  useEffect(() => {
+    const zoom = readInitialWindowZoom();
+    if (zoom !== 100) {
+      document.documentElement.style.setProperty('--app-zoom', `${String(zoom)}%`);
+      (document.documentElement.style as unknown as { zoom?: string }).zoom = `${String(zoom)}%`;
+    }
+  }, []);
 
   useEffect(() => {
     let hideTimerId: ReturnType<typeof setTimeout> | undefined;
@@ -68,26 +88,68 @@ export function useFontZoom(): ZoomIndicatorState {
       }, INDICATOR_DURATION);
     };
 
-    const persist = (fontConfig: FontConfig) => {
-      void updateSettingsRef.current({ fontConfig });
+    const applyCssVars = (fontConfig: FontConfig) => {
+      const root = document.documentElement;
+      root.style.setProperty('--font-ui-size', `${String(fontConfig.ui.size)}px`);
+      root.style.setProperty('--font-buffer-size', `${String(fontConfig.buffer.size)}px`);
+      root.style.setProperty('--font-terminal-size', `${String(fontConfig.terminal.size)}px`);
+      root.style.setProperty('--font-chat-size', `${String(fontConfig.chat.size)}px`);
     };
 
-    const applyZoom = (steps: number, rawCtx: FontContextKey) => {
-      const base = fontConfigRef.current;
-      if (!base) return;
-      lastContextRef.current = rawCtx;
+    const debouncedPersist = (fontConfig: FontConfig) => {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = setTimeout(() => {
+        void updateSettingsRef.current({ fontConfig });
+      }, PERSIST_DEBOUNCE_MS);
+    };
 
+    const applyPaneFontZoom = (steps: number, rawCtx: FontContextKey) => {
+      const base = fontConfigRef.current ?? DEFAULT_FONT_CONFIG;
       const targets = resolveTargetContexts(rawCtx);
+      if (targets.length === 0) return;
+
       const next: FontConfig = { ...base };
       for (const ctx of targets) {
-        next[ctx] = { ...base[ctx], size: clampSize(base[ctx].size + steps) };
+        const currentTarget = base[ctx];
+        next[ctx] = { ...currentTarget, size: clampSize(currentTarget.size + steps) };
       }
-      showIndicator(rawCtx, next[targets[0]].size);
-      persist(next);
+
+      fontConfigRef.current = next;
+      applyCssVars(next);
+      const primaryTarget = targets[0];
+      showIndicator(rawCtx, next[primaryTarget].size);
+      debouncedPersist(next);
     };
 
-    const resetAll = () => {
-      setIndicator(HIDDEN_INDICATOR);
+    const applyWindowZoom = (deltaSteps: number) => {
+      const current = windowZoomRef.current;
+      const nextZoom = clampZoom(current + deltaSteps * ZOOM_STEP);
+      windowZoomRef.current = nextZoom;
+
+      try {
+        localStorage.setItem('agentctl:window-zoom', String(nextZoom));
+      } catch {
+        // ignore
+      }
+
+      document.documentElement.style.setProperty('--app-zoom', `${String(nextZoom)}%`);
+      (document.documentElement.style as unknown as { zoom?: string }).zoom =
+        `${String(nextZoom)}%`;
+
+      showIndicator('window', nextZoom);
+    };
+
+    const resetWindowAndFonts = () => {
+      windowZoomRef.current = ZOOM_DEFAULT;
+      try {
+        localStorage.setItem('agentctl:window-zoom', String(ZOOM_DEFAULT));
+      } catch {
+        // ignore
+      }
+
+      document.documentElement.style.setProperty('--app-zoom', '100%');
+      (document.documentElement.style as unknown as { zoom?: string }).zoom = '100%';
+
       const base = fontConfigRef.current;
       const next: FontConfig = base
         ? {
@@ -97,30 +159,30 @@ export function useFontZoom(): ZoomIndicatorState {
             chat: { family: base.chat.family, size: DEFAULT_FONT_CONFIG.chat.size },
           }
         : DEFAULT_FONT_CONFIG;
-      persist(next);
+
+      fontConfigRef.current = next;
+      applyCssVars(next);
+      showIndicator('window', 100);
+      void updateSettingsRef.current({ fontConfig: next });
     };
 
     const onWheel = (e: WheelEvent) => {
       const now = performance.now();
       const isZoomModifier = e.ctrlKey || e.metaKey;
 
-      // CRITICAL: Plain 2-finger trackpad scrolling has ctrlKey = false and MUST be ignored.
+      // Plain 2-finger trackpad scrolling (ctrlKey = false) is ignored
       if (!isZoomModifier) {
         lastPlainWheelAtRef.current = now;
         accumulatedDeltaRef.current = 0;
         return;
       }
 
-      // Kill pinch-misdetect bursts that are interleaved with plain scrolling.
-      // preventDefault runs for every ctrl/meta wheel event so Chrome's native
-      // page zoom can never hijack a misdetected gesture.
       e.preventDefault();
       if (!shouldProcessZoomWheel(lastPlainWheelAtRef.current, now, SCROLL_ZOOM_GAP_MS)) {
         accumulatedDeltaRef.current = 0;
         return;
       }
 
-      // Accumulate deltaY (negative deltaY = pinch outward / zoom in, positive = pinch inward / zoom out)
       accumulatedDeltaRef.current += normalizeDelta(e.deltaY, e.deltaMode);
 
       const { steps, remainder } = consumeDeltaSteps(
@@ -134,9 +196,9 @@ export function useFontZoom(): ZoomIndicatorState {
       const targetEl = e.target instanceof Element ? e.target : null;
       const rawCtx =
         resolveContextKey(targetEl?.closest<HTMLElement>('[data-font-ctx]')?.dataset.fontCtx) ??
-        'ui';
+        'chat';
 
-      applyZoom(-steps, rawCtx);
+      applyPaneFontZoom(-steps, rawCtx);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -146,11 +208,11 @@ export function useFontZoom(): ZoomIndicatorState {
       e.preventDefault();
 
       if (action === 0) {
-        resetAll();
+        resetWindowAndFonts();
         return;
       }
 
-      applyZoom(action, lastContextRef.current);
+      applyWindowZoom(action);
     };
 
     document.addEventListener('wheel', onWheel, { passive: false });
@@ -160,6 +222,7 @@ export function useFontZoom(): ZoomIndicatorState {
       document.removeEventListener('wheel', onWheel);
       document.removeEventListener('keydown', onKeyDown);
       clearTimeout(hideTimerId);
+      clearTimeout(persistTimerRef.current);
     };
   }, []);
 
