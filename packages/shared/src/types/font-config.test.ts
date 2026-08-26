@@ -2,12 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_FONT_CONFIG, isValidFontSize } from './font-config.js';
 
 describe('DEFAULT_FONT_CONFIG', () => {
-  const contexts = [
-    DEFAULT_FONT_CONFIG.ui,
-    DEFAULT_FONT_CONFIG.buffer,
-    DEFAULT_FONT_CONFIG.terminal,
-    DEFAULT_FONT_CONFIG.chat,
-  ];
+  const contexts = [DEFAULT_FONT_CONFIG.ui, DEFAULT_FONT_CONFIG.code];
 
   it('has no null families', () => {
     for (const ctx of contexts) {
@@ -22,11 +17,9 @@ describe('DEFAULT_FONT_CONFIG', () => {
     }
   });
 
-  it('all four contexts present', () => {
+  it('both core contexts present', () => {
     expect(DEFAULT_FONT_CONFIG.ui).toBeDefined();
-    expect(DEFAULT_FONT_CONFIG.buffer).toBeDefined();
-    expect(DEFAULT_FONT_CONFIG.terminal).toBeDefined();
-    expect(DEFAULT_FONT_CONFIG.chat).toBeDefined();
+    expect(DEFAULT_FONT_CONFIG.code).toBeDefined();
   });
 });
 

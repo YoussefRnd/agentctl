@@ -9,10 +9,8 @@ interface FontSettingsPanelProps {
 }
 
 const contextDefs = [
-  { key: 'ui', label: 'UI' },
-  { key: 'buffer', label: 'Editor' },
-  { key: 'terminal', label: 'Terminal' },
-  { key: 'chat', label: 'Chat' },
+  { key: 'ui', label: 'UI & Text', desc: 'Interface, sidebar, tabs, and chat messages' },
+  { key: 'code', label: 'Code & Terminal', desc: 'Code blocks, diffs, and interactive terminal' },
 ] as const;
 
 export function FontSettingsPanel({ fontConfig, onUpdate }: FontSettingsPanelProps) {
@@ -28,7 +26,7 @@ export function FontSettingsPanel({ fontConfig, onUpdate }: FontSettingsPanelPro
 
   return (
     <Card className="px-5 py-4">
-      {contextDefs.map(({ key, label }, i) => {
+      {contextDefs.map(({ key, label, desc }, i) => {
         const ctxKey = key;
         const ctx = fc[ctxKey];
         const def = DEFAULT_FONT_CONFIG[ctxKey];
@@ -39,23 +37,26 @@ export function FontSettingsPanel({ fontConfig, onUpdate }: FontSettingsPanelPro
             key={key}
             data-font-ctx={key}
             className={cn(
-              'flex items-center gap-3 py-2',
+              'flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-4',
               i < contextDefs.length - 1 && 'border-border/30 border-b',
             )}
           >
-            <div className="flex w-16 shrink-0 items-center gap-0.5">
-              <span className="text-text-main text-[12px] font-bold">{label}</span>
-              <button
-                type="button"
-                disabled={!changed}
-                onClick={() => {
-                  onUpdate({ [ctxKey]: { ...def } });
-                }}
-                title={`Reset to default (${def.family} ${String(def.size)}px)`}
-                className="text-text-muted hover:text-text-main disabled:text-text-muted/20 cursor-pointer transition-colors disabled:pointer-events-none disabled:opacity-0"
-              >
-                <Undo2 className="h-2.5 w-2.5" />
-              </button>
+            <div className="w-44 shrink-0">
+              <div className="flex items-center gap-1">
+                <span className="text-text-main text-[12px] font-bold">{label}</span>
+                <button
+                  type="button"
+                  disabled={!changed}
+                  onClick={() => {
+                    onUpdate({ [ctxKey]: { ...def } });
+                  }}
+                  title={`Reset to default (${def.family} ${String(def.size)}px)`}
+                  className="text-text-muted hover:text-text-main disabled:text-text-muted/20 cursor-pointer transition-colors disabled:pointer-events-none disabled:opacity-0"
+                >
+                  <Undo2 className="h-2.5 w-2.5" />
+                </button>
+              </div>
+              <p className="text-text-muted/70 text-[10px]">{desc}</p>
             </div>
             <div className="min-w-0 flex-1">
               <FontPicker
@@ -102,14 +103,12 @@ export function FontSettingsPanel({ fontConfig, onUpdate }: FontSettingsPanelPro
             onClick={() => {
               onUpdate({
                 ui: { ...DEFAULT_FONT_CONFIG.ui },
-                buffer: { ...DEFAULT_FONT_CONFIG.buffer },
-                terminal: { ...DEFAULT_FONT_CONFIG.terminal },
-                chat: { ...DEFAULT_FONT_CONFIG.chat },
+                code: { ...DEFAULT_FONT_CONFIG.code },
               });
             }}
             className="text-text-muted hover:text-text-main cursor-pointer text-[10px] font-bold tracking-wider uppercase transition-colors"
           >
-            Reset all to defaults
+            Reset to defaults
           </button>
         </div>
       )}

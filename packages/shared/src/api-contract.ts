@@ -35,9 +35,7 @@ const fontContextSchema = z.object({
 
 const fontConfigSchema = z.object({
   ui: fontContextSchema.optional(),
-  buffer: fontContextSchema.optional(),
-  terminal: fontContextSchema.optional(),
-  chat: fontContextSchema.optional(),
+  code: fontContextSchema.optional(),
 });
 
 const patchSettingsSchema = z.object({
@@ -59,9 +57,7 @@ const settingsResponseSchema = z.object({
   registrySyncError: z.string().nullable().optional(),
   fontConfig: z.object({
     ui: fontContextSchema,
-    buffer: fontContextSchema,
-    terminal: fontContextSchema,
-    chat: fontContextSchema,
+    code: fontContextSchema,
   }),
 });
 

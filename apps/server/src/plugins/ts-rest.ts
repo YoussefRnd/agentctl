@@ -442,7 +442,14 @@ export default fp(async (fastify) => {
       let fontConfig: FontConfig = DEFAULT_FONT_CONFIG;
       if (raw.fontConfig) {
         try {
-          fontConfig = JSON.parse(raw.fontConfig) as FontConfig;
+          const parsed = JSON.parse(raw.fontConfig) as Record<
+            string,
+            { family: string; size: number } | undefined
+          >;
+          fontConfig = {
+            ui: parsed.ui ?? parsed.chat ?? DEFAULT_FONT_CONFIG.ui,
+            code: parsed.code ?? parsed.buffer ?? parsed.terminal ?? DEFAULT_FONT_CONFIG.code,
+          };
         } catch {
           /* use default */
         }
@@ -484,17 +491,39 @@ export default fp(async (fastify) => {
       }
       if (body.fontConfig !== undefined) {
         const existing = fastify.providerRegistry.getSettings();
-        const prev = existing.fontConfig
-          ? (JSON.parse(existing.fontConfig) as Partial<FontConfig>)
-          : {};
-        const merged: FontConfig = { ...DEFAULT_FONT_CONFIG, ...prev, ...body.fontConfig };
+        let prev = DEFAULT_FONT_CONFIG;
+        if (existing.fontConfig) {
+          try {
+            const parsed = JSON.parse(existing.fontConfig) as Record<
+              string,
+              { family: string; size: number } | undefined
+            >;
+            prev = {
+              ui: parsed.ui ?? parsed.chat ?? DEFAULT_FONT_CONFIG.ui,
+              code: parsed.code ?? parsed.buffer ?? parsed.terminal ?? DEFAULT_FONT_CONFIG.code,
+            };
+          } catch {
+            /* use default */
+          }
+        }
+        const merged: FontConfig = {
+          ui: body.fontConfig.ui ? { ...prev.ui, ...body.fontConfig.ui } : prev.ui,
+          code: body.fontConfig.code ? { ...prev.code, ...body.fontConfig.code } : prev.code,
+        };
         fastify.providerRegistry.updateSetting('fontConfig', JSON.stringify(merged));
       }
       const raw = fastify.providerRegistry.getSettings();
       let fontConfig: FontConfig = DEFAULT_FONT_CONFIG;
       if (raw.fontConfig) {
         try {
-          fontConfig = JSON.parse(raw.fontConfig) as FontConfig;
+          const parsed = JSON.parse(raw.fontConfig) as Record<
+            string,
+            { family: string; size: number } | undefined
+          >;
+          fontConfig = {
+            ui: parsed.ui ?? parsed.chat ?? DEFAULT_FONT_CONFIG.ui,
+            code: parsed.code ?? parsed.buffer ?? parsed.terminal ?? DEFAULT_FONT_CONFIG.code,
+          };
         } catch {
           /* use default */
         }

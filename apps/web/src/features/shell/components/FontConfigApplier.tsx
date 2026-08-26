@@ -13,12 +13,16 @@ export function FontConfigApplier({ fontConfig }: FontConfigApplierProps) {
     const props: [string, string][] = [
       ['--font-ui-family', fc.ui.family],
       ['--font-ui-size', `${String(fc.ui.size)}px`],
-      ['--font-buffer-family', fc.buffer.family],
-      ['--font-buffer-size', `${String(fc.buffer.size)}px`],
-      ['--font-terminal-family', fc.terminal.family],
-      ['--font-terminal-size', `${String(fc.terminal.size)}px`],
-      ['--font-chat-family', fc.chat.family],
-      ['--font-chat-size', `${String(fc.chat.size)}px`],
+      ['--font-mono-family', fc.code.family],
+      ['--font-mono-size', `${String(fc.code.size)}px`],
+      // Monospace / Editor / Terminal aliases
+      ['--font-buffer-family', fc.code.family],
+      ['--font-buffer-size', `${String(fc.code.size)}px`],
+      ['--font-terminal-family', fc.code.family],
+      ['--font-terminal-size', `${String(fc.code.size)}px`],
+      // Chat prose aliases
+      ['--font-chat-family', fc.ui.family],
+      ['--font-chat-size', `${String(fc.ui.size)}px`],
     ];
     for (const [prop, val] of props) {
       root.style.setProperty(prop, val);

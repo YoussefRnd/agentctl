@@ -29,7 +29,7 @@ const NERD_FONT_FAMILY = [
 export function InteractiveTerminal() {
   const { sessionId } = useSession();
   const { settings } = useSettings();
-  const terminalFont = settings?.fontConfig?.terminal;
+  const codeFont = settings?.fontConfig?.code;
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermInstance = useRef<Terminal | null>(null);
@@ -184,10 +184,10 @@ export function InteractiveTerminal() {
       term = new Terminal({
         cursorBlink: true,
         cursorStyle: 'block',
-        fontSize: terminalFont?.size ?? 12,
+        fontSize: codeFont?.size ?? 13,
         lineHeight: 1.25,
-        fontFamily: terminalFont?.family
-          ? `"${terminalFont.family}", ${NERD_FONT_FAMILY}`
+        fontFamily: codeFont?.family
+          ? `"${codeFont.family}", ${NERD_FONT_FAMILY}`
           : NERD_FONT_FAMILY,
         theme: {
           background: '#090a0f',
@@ -298,14 +298,14 @@ export function InteractiveTerminal() {
     };
   }, [sendResize]);
 
-  // Synchronize dynamic terminal font size and family from settings / zoom gestures
+  // Synchronize dynamic terminal font size and family from settings
   useEffect(() => {
-    if (!xtermInstance.current || !terminalFont) return;
-    if (typeof terminalFont.size === 'number' && terminalFont.size > 0) {
-      xtermInstance.current.options.fontSize = terminalFont.size;
+    if (!xtermInstance.current || !codeFont) return;
+    if (typeof codeFont.size === 'number' && codeFont.size > 0) {
+      xtermInstance.current.options.fontSize = codeFont.size;
     }
-    if (terminalFont.family) {
-      xtermInstance.current.options.fontFamily = `"${terminalFont.family}", ${NERD_FONT_FAMILY}`;
+    if (codeFont.family) {
+      xtermInstance.current.options.fontFamily = `"${codeFont.family}", ${NERD_FONT_FAMILY}`;
     }
     requestAnimationFrame(() => {
       try {
@@ -317,7 +317,7 @@ export function InteractiveTerminal() {
         // ignore
       }
     });
-  }, [terminalFont?.size, terminalFont?.family, sendResize]);
+  }, [codeFont?.size, codeFont?.family, sendResize]);
 
   const handleRestart = () => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {

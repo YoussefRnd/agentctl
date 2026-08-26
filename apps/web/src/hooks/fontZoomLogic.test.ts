@@ -1,46 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-  normalizeDelta,
-  consumeDeltaSteps,
   clampSize,
   clampZoom,
   resolveContextKey,
   keyboardStepFor,
-  resolveTargetContexts,
-  shouldProcessZoomWheel,
   SIZE_MIN,
   SIZE_MAX,
-  type FontContextKey,
 } from './fontZoomLogic';
-
-describe('normalizeDelta', () => {
-  it('passes pixel deltas through unchanged', () => {
-    expect(normalizeDelta(10, 0)).toBe(10);
-    expect(normalizeDelta(-10, 0)).toBe(-10);
-  });
-
-  it('converts line deltas to pixels', () => {
-    expect(normalizeDelta(3, 1)).toBe(48);
-  });
-
-  it('converts page deltas to pixels', () => {
-    expect(normalizeDelta(1, 2)).toBe(500);
-  });
-});
-
-describe('consumeDeltaSteps', () => {
-  it('returns zero steps and keeps remainder below threshold', () => {
-    expect(consumeDeltaSteps(15, 40)).toEqual({ steps: 0, remainder: 15 });
-  });
-
-  it('quantizes accumulated delta into whole steps', () => {
-    expect(consumeDeltaSteps(100, 40)).toEqual({ steps: 2, remainder: 20 });
-  });
-
-  it('preserves sign for negative deltas', () => {
-    expect(consumeDeltaSteps(-100, 40)).toEqual({ steps: -2, remainder: -20 });
-  });
-});
 
 describe('clampSize', () => {
   it('clamps to min and max bounds', () => {
@@ -59,11 +25,19 @@ describe('clampZoom', () => {
 });
 
 describe('resolveContextKey', () => {
-  it('accepts known context keys', () => {
+  it('maps ui and chat to ui', () => {
     expect(resolveContextKey('ui')).toBe('ui');
-    expect(resolveContextKey('chat')).toBe('chat');
-    expect(resolveContextKey('terminal')).toBe('terminal');
-    expect(resolveContextKey('buffer')).toBe('buffer');
+    expect(resolveContextKey('chat')).toBe('ui');
+  });
+
+  it('maps code, terminal, and buffer to code', () => {
+    expect(resolveContextKey('code')).toBe('code');
+    expect(resolveContextKey('terminal')).toBe('code');
+    expect(resolveContextKey('buffer')).toBe('code');
+  });
+
+  it('accepts window context', () => {
+    expect(resolveContextKey('window')).toBe('window');
   });
 
   it('rejects unknown values', () => {
@@ -105,32 +79,5 @@ describe('keyboardStepFor', () => {
   it('ignores unrelated modified keys', () => {
     expect(keyboardStepFor(withMod('a', 'ctrl'))).toBeNull();
     expect(keyboardStepFor(withMod('Enter', 'meta'))).toBeNull();
-  });
-});
-
-describe('resolveTargetContexts', () => {
-  const cases: [FontContextKey, string[]][] = [
-    ['chat', ['chat', 'terminal']],
-    ['terminal', ['chat', 'terminal']],
-    ['ui', ['ui']],
-    ['buffer', ['buffer']],
-    ['window', []],
-  ];
-
-  it('groups chat and terminal together and handles window', () => {
-    for (const [input, expected] of cases) {
-      expect(resolveTargetContexts(input)).toEqual(expected);
-    }
-  });
-});
-
-describe('shouldProcessZoomWheel', () => {
-  it('accepts zoom events when no plain scroll happened recently', () => {
-    expect(shouldProcessZoomWheel(null, 1000, 150)).toBe(true);
-    expect(shouldProcessZoomWheel(500, 1000, 150)).toBe(true);
-  });
-
-  it('rejects zoom events interleaved with plain scroll', () => {
-    expect(shouldProcessZoomWheel(990, 1000, 150)).toBe(false);
   });
 });
