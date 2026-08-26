@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type WorkbenchTab = 'status' | 'changes' | 'terminal' | 'agents';
+export type WorkbenchTab = 'status' | 'changes' | 'terminal';
 
 interface UIState {
   // Workbench & Layout State

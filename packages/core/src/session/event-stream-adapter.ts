@@ -34,11 +34,10 @@ export class EventStreamAdapter {
     this.textBuffer = new StreamBuffer(async () => {
       if (this.messageEventId) {
         const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
-        const completionTokens = Math.ceil(this.currentMessage.length / 4);
         await this.eventStore.updateSilently(
           this.messageEventId,
           { content: this.currentMessage, role: 'provider' },
-          { durationMs, completionTokens },
+          { durationMs },
         );
       }
     });
@@ -46,11 +45,10 @@ export class EventStreamAdapter {
     this.thoughtBuffer = new StreamBuffer(async () => {
       if (this.thoughtEventId) {
         const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
-        const completionTokens = Math.ceil(this.currentThought.length / 4);
         await this.eventStore.updateSilently(
           this.thoughtEventId,
           { content: this.currentThought, role: 'thought' },
-          { durationMs, completionTokens },
+          { durationMs },
         );
       }
     });
@@ -71,7 +69,7 @@ export class EventStreamAdapter {
     this.thoughtBuffer.reset();
 
     const metadata: Record<string, unknown> = {};
-    if (promptTokens) {
+    if (promptTokens !== undefined) {
       metadata.promptTokens = promptTokens;
     }
 
@@ -99,7 +97,6 @@ export class EventStreamAdapter {
 
   async appendText(text: string): Promise<void> {
     this.currentMessage += text;
-    const completionTokens = Math.ceil(this.currentMessage.length / 4);
     if (this.messageEventId) {
       this.textBuffer.append(text);
       this.pendingTextDelta += text;
@@ -120,20 +117,19 @@ export class EventStreamAdapter {
           role: 'provider',
         },
         this.currentParentEventId,
-        { durationMs: 0, completionTokens },
+        { durationMs: 0 },
       );
     }
   }
 
   async appendThought(text: string): Promise<void> {
     this.currentThought += text;
-    const completionTokens = Math.ceil(this.currentThought.length / 4);
     if (this.thoughtEventId) {
       this.thoughtBuffer.append(text);
       this.pendingThoughtDelta += text;
       if (this.pendingThoughtDelta.length >= 200) {
         this.flushThoughtDelta();
-      } else if (!this.thoughtDeltaTimer) {
+      } else if (!this.textDeltaTimer) {
         this.thoughtDeltaTimer = setTimeout(() => {
           this.flushThoughtDelta();
         }, this.transientCoalesceMs);
@@ -148,7 +144,7 @@ export class EventStreamAdapter {
           role: 'thought',
         },
         this.currentParentEventId,
-        { durationMs: 0, completionTokens },
+        { durationMs: 0 },
       );
     }
   }
@@ -161,11 +157,9 @@ export class EventStreamAdapter {
     if (!this.pendingTextDelta || this.messageEventId === null) return;
     const delta = this.pendingTextDelta;
     this.pendingTextDelta = '';
-    const completionTokens = Math.ceil(this.currentMessage.length / 4);
     const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
     this.publishTransient(this.messageEventId, 'text', { content: '', role: 'provider' }, delta, {
       durationMs,
-      completionTokens,
     });
   }
 
@@ -177,11 +171,9 @@ export class EventStreamAdapter {
     if (!this.pendingThoughtDelta || this.thoughtEventId === null) return;
     const delta = this.pendingThoughtDelta;
     this.pendingThoughtDelta = '';
-    const completionTokens = Math.ceil(this.currentThought.length / 4);
     const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
     this.publishTransient(this.thoughtEventId, 'text', { content: '', role: 'thought' }, delta, {
       durationMs,
-      completionTokens,
     });
   }
 
@@ -225,7 +217,6 @@ export class EventStreamAdapter {
         data: JSON.stringify({ content: this.currentMessage, role: 'provider' }),
         metadata: JSON.stringify({
           durationMs: this.messageStartTime ? Date.now() - this.messageStartTime : 0,
-          completionTokens: Math.ceil(this.currentMessage.length / 4),
         }),
         createdAt: new Date(),
       });
@@ -239,7 +230,6 @@ export class EventStreamAdapter {
         data: JSON.stringify({ content: this.currentThought, role: 'thought' }),
         metadata: JSON.stringify({
           durationMs: this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0,
-          completionTokens: Math.ceil(this.currentThought.length / 4),
         }),
         createdAt: new Date(),
       });

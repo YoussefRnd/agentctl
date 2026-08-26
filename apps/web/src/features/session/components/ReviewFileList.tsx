@@ -11,7 +11,11 @@ import {
   Check,
   AlertTriangle,
   ExternalLink,
+  Plus,
+  Minus,
+  RotateCcw,
 } from 'lucide-react';
+import { Tooltip } from '@agentctl/ui';
 import type { parseDiff } from '../../../shared/lib/diff-parser';
 
 const stateIcons: Record<FileState, LucideIcon> = {
@@ -153,114 +157,126 @@ export function ReviewFileList({
                 return (
                   <div key={`${fileState}:${file.path}`} id={`diff-block-${file.path}`}>
                     <div
-                      className={`border-border/5 flex w-full items-center gap-3 border-b px-4 py-2.5 transition-colors ${
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        onToggleFile(file.path);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onToggleFile(file.path);
+                        }
+                      }}
+                      className={`group/filerow border-border/5 flex w-full cursor-pointer items-center gap-2.5 border-b px-3.5 py-1.5 transition-colors select-none ${
                         !collapsed
-                          ? 'bg-surface-secondary/10 border-l-accent/30 border-l-2'
+                          ? 'bg-surface-secondary/15 border-l-accent border-l-2'
                           : 'hover:bg-surface-secondary/15'
                       }`}
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onToggleFile(file.path);
-                        }}
-                        aria-expanded={!collapsed}
-                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 border-0 bg-transparent p-0 text-left"
-                      >
+                      {/* Expand / Collapse chevron indicator */}
+                      <span className="text-text-muted/40 group-hover/filerow:text-text-muted shrink-0 transition-colors">
+                        {collapsed ? (
+                          <ChevronRight className="h-3 w-3" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3" />
+                        )}
+                      </span>
+
+                      {/* File State Icon & Name */}
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
                         <FileStateIcon
                           className={`h-3.5 w-3.5 shrink-0 ${stateColorMini[file.state]}`}
                         />
-                        <div className="flex min-w-0 flex-1 flex-col">
-                          <span className="text-text-main/80 truncate font-mono text-xs font-medium">
-                            {fileName}
+                        <span className="text-text-main/90 truncate font-mono text-xs font-medium">
+                          {fileName}
+                        </span>
+                        {dirPath && (
+                          <span className="text-text-muted/40 truncate font-mono text-[10px]">
+                            {dirPath}/
                           </span>
-                          {dirPath && (
-                            <span className="text-text-muted/40 truncate font-mono text-[10px]">
-                              {dirPath}/
-                            </span>
-                          )}
-                        </div>
-                      </button>
-
-                      <div className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] font-semibold">
-                        {stats.additions > 0 && (
-                          <span className="text-success/80">+{stats.additions}</span>
-                        )}
-                        {stats.deletions > 0 && (
-                          <span className="text-danger/80">-{stats.deletions}</span>
                         )}
                       </div>
 
-                      {onOpenFile && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenFile(file.path);
-                          }}
-                          className="text-text-muted/40 hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded transition-colors"
-                          title="Open file in editor"
-                          aria-label="Open file in editor"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </button>
-                      )}
+                      {/* Diff Add/Del stats */}
+                      <div className="flex shrink-0 items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums">
+                        {stats.additions > 0 && (
+                          <span className="text-success/90">+{stats.additions}</span>
+                        )}
+                        {stats.deletions > 0 && (
+                          <span className="text-danger/90">-{stats.deletions}</span>
+                        )}
+                      </div>
 
-                      {onStage && (file.state === 'modified' || file.state === 'untracked') && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onStage(file.path);
-                          }}
-                          className="bg-accent/15 text-accent/90 hover:bg-accent/25 h-6 shrink-0 cursor-pointer rounded px-2 text-xs font-medium transition-colors"
-                        >
-                          Stage
-                        </button>
-                      )}
-                      {onUnstage && file.state === 'staged' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onUnstage(file.path);
-                          }}
-                          className="bg-accent/15 text-accent/90 hover:bg-accent/25 h-6 shrink-0 cursor-pointer rounded px-2 text-xs font-medium transition-colors"
-                        >
-                          Unstage
-                        </button>
-                      )}
-                      {onRevert &&
-                        (file.state === 'modified' ||
-                          file.state === 'deleted' ||
-                          file.state === 'staged') && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRevert(file.path);
-                            }}
-                            className="bg-danger/10 text-danger/80 hover:bg-danger/20 h-6 shrink-0 cursor-pointer rounded px-2 text-xs font-medium transition-colors"
-                          >
-                            Revert
-                          </button>
+                      {/* VSCode-style icon action buttons */}
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        {onOpenFile && (
+                          <Tooltip content="Open file in editor">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenFile(file.path);
+                              }}
+                              className="text-text-muted/50 hover:text-text-main hover:bg-surface-tertiary/40 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                              aria-label="Open file in editor"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </button>
+                          </Tooltip>
                         )}
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onToggleFile(file.path);
-                        }}
-                        aria-expanded={!collapsed}
-                        aria-label={collapsed ? `Expand ${file.path}` : `Collapse ${file.path}`}
-                        className="text-text-muted/20 hover:text-text-muted/50 cursor-pointer border-0 bg-transparent p-0 transition-colors"
-                      >
-                        {collapsed ? (
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5" />
+                        {onRevert &&
+                          (file.state === 'modified' ||
+                            file.state === 'deleted' ||
+                            file.state === 'staged') && (
+                            <Tooltip content="Discard changes">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRevert(file.path);
+                                }}
+                                className="text-text-muted/50 hover:text-danger hover:bg-danger/10 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                                aria-label="Discard changes"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </button>
+                            </Tooltip>
+                          )}
+
+                        {onStage && (file.state === 'modified' || file.state === 'untracked') && (
+                          <Tooltip content="Stage changes">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onStage(file.path);
+                              }}
+                              className="text-text-muted/60 hover:text-accent hover:bg-accent/15 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                              aria-label="Stage changes"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </Tooltip>
                         )}
-                      </button>
+
+                        {onUnstage && file.state === 'staged' && (
+                          <Tooltip content="Unstage changes">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onUnstage(file.path);
+                              }}
+                              className="text-text-muted/60 hover:text-text-main hover:bg-surface-tertiary/40 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                              aria-label="Unstage changes"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                          </Tooltip>
+                        )}
+                      </div>
                     </div>
 
                     {!collapsed && (

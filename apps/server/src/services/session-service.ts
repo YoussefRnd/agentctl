@@ -67,6 +67,18 @@ export class SessionService {
       }
     }
 
+    if (session.totalTokens <= 0) {
+      const eventStore = this.sessionManager.getEventStore();
+      await eventStore.recalculateTotalTokens(sessionId).catch(() => undefined);
+      const refreshed = await this.db.query.sessions.findFirst({
+        where: eq(sessions.id, sessionId),
+        with: { project: true },
+      });
+      if (refreshed && refreshed.totalTokens > 0) {
+        session.totalTokens = refreshed.totalTokens;
+      }
+    }
+
     const providersList = await this.providerRegistry.discover();
     return {
       session: this.parseSessionRow(session),
@@ -297,6 +309,10 @@ export class SessionService {
 
   async rewindSession(sessionId: string, eventId: number, mode: 'conversation' | 'files' | 'fork') {
     return await this.sessionManager.rewindSession(sessionId, eventId, mode);
+  }
+
+  async previewSnapshotDiff(sessionId: string, eventId: number) {
+    return await this.sessionManager.previewSnapshotDiff(sessionId, eventId);
   }
 
   async mergeSessionBranch(sessionId: string, otherBranchName: string) {

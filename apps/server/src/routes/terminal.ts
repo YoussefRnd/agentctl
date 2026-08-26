@@ -15,6 +15,9 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     { websocket: true },
     async (socket: WebSocketLike, req) => {
       const { id: sessionId } = req.params as { id: string };
+      const query = (req.query as { termId?: string }) || {};
+      const termId = query.termId || '1';
+      const terminalKey = `${sessionId}:${termId}`;
 
       // 1. Resolve session and workspace directory
       const session = await fastify.db.query.sessions.findFirst({
@@ -34,16 +37,16 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const cwd = session.worktreePath || project?.repoRoot || process.cwd();
 
       // 2. Initialize or retrieve terminal session
-      fastify.terminalService.getOrCreateTerminal(sessionId, cwd);
+      fastify.terminalService.getOrCreateTerminal(terminalKey, cwd);
 
       const defaultShell =
         process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : '/bin/bash');
       const shellName = defaultShell.split('/').pop()?.split('\\').pop() || 'sh';
 
       // 3. Send initial metadata and history scrollback
-      socket.send(JSON.stringify({ type: 'init', shell: shellName, cwd }));
+      socket.send(JSON.stringify({ type: 'init', shell: shellName, cwd, termId }));
 
-      const history = fastify.terminalService.getHistory(sessionId);
+      const history = fastify.terminalService.getHistory(terminalKey);
       if (history) {
         socket.send(JSON.stringify({ type: 'data', data: history }));
       }
@@ -67,8 +70,8 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       };
 
-      fastify.terminalService.on(`data:${sessionId}`, onData);
-      fastify.terminalService.on(`exit:${sessionId}`, onExit);
+      fastify.terminalService.on(`data:${terminalKey}`, onData);
+      fastify.terminalService.on(`exit:${terminalKey}`, onExit);
 
       // 5. Handle incoming WebSocket input
       socket.on('message', (rawMessage: Buffer | string) => {
@@ -90,7 +93,7 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 (parsed.type === 'input' || parsed.type === 'data') &&
                 typeof parsed.data === 'string'
               ) {
-                fastify.terminalService.writeInput(sessionId, parsed.data);
+                fastify.terminalService.writeInput(terminalKey, parsed.data);
                 return;
               }
 
@@ -99,12 +102,12 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 typeof parsed.cols === 'number' &&
                 typeof parsed.rows === 'number'
               ) {
-                fastify.terminalService.resizeTerminal(sessionId, parsed.cols, parsed.rows);
+                fastify.terminalService.resizeTerminal(terminalKey, parsed.cols, parsed.rows);
                 return;
               }
 
               if (parsed.type === 'restart') {
-                fastify.terminalService.spawnTerminal(sessionId, cwd);
+                fastify.terminalService.spawnTerminal(terminalKey, cwd);
                 socket.send(
                   JSON.stringify({
                     type: 'data',
@@ -122,15 +125,15 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
 
           // Fallback to raw string input
-          fastify.terminalService.writeInput(sessionId, text);
+          fastify.terminalService.writeInput(terminalKey, text);
         } catch {
           // Ignored
         }
       });
 
       socket.on('close', () => {
-        fastify.terminalService.off(`data:${sessionId}`, onData);
-        fastify.terminalService.off(`exit:${sessionId}`, onExit);
+        fastify.terminalService.off(`data:${terminalKey}`, onData);
+        fastify.terminalService.off(`exit:${terminalKey}`, onExit);
       });
     },
   );

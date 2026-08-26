@@ -144,8 +144,8 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
         const currency = typeof costRec?.currency === 'string' ? costRec.currency : undefined;
         events.push({
           type: 'usage_update',
-          used,
-          size,
+          used: Math.max(0, used),
+          size: Math.max(0, size),
           cost: amount !== null && currency ? { amount, currency } : undefined,
           _meta,
         });

@@ -218,6 +218,15 @@ export function SessionStreamProvider({
     enqueueMessage,
   ]);
 
+  useEffect(() => {
+    if (
+      sessionData?.session.status === 'idle' ||
+      sessionData?.session.status === 'needs_attention'
+    ) {
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+    }
+  }, [sessionData?.session.status, sessionId, queryClient]);
+
   const planItems = useMemo(() => {
     const planMap = new Map<string, boolean>();
 

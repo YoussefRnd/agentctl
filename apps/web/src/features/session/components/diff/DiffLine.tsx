@@ -1,56 +1,39 @@
 import { memo } from 'react';
 import type { DiffLine as DiffLineType } from '../../../../shared/lib/diff-parser';
+import { highlightLine } from '../../../../shared/lib/code-highlighter';
 
 interface DiffLineProps {
-  line: DiffLineType;
+  line: DiffLineType | null;
   hideAdded?: boolean;
   hideRemoved?: boolean;
+  language?: string;
+  isSpacer?: boolean;
 }
-
-const syntaxHighlight = (content: string) => {
-  const regex =
-    /(\/\/.*|\/\*[\s\S]*?\*\/|'.*?'|".*?"|`.*?`|\b(?:function|const|let|var|return|if|else|import|from|export|default|class|interface|type|extends|implements|new|await|async|switch|case|break|try|catch)\b)/g;
-
-  const parts = content.split(regex);
-  let offset = 0;
-  return parts.map((part) => {
-    if (!part) return null;
-    const key = `part-${String(offset)}`;
-    offset += part.length;
-    if (part.startsWith('//') || part.startsWith('/*')) {
-      return (
-        <span key={key} className="text-text-muted/40 italic">
-          {part}
-        </span>
-      );
-    }
-    if (part.startsWith("'") || part.startsWith('"') || part.startsWith('`')) {
-      return (
-        <span key={key} className="text-warning/80">
-          {part}
-        </span>
-      );
-    }
-    if (
-      /^(function|const|let|var|return|if|else|import|from|export|default|class|interface|type|extends|implements|new|await|async|switch|case|break|try|catch)$/.test(
-        part,
-      )
-    ) {
-      return (
-        <span key={key} className="text-accent/80 font-bold">
-          {part}
-        </span>
-      );
-    }
-    return <span key={key}>{part}</span>;
-  });
-};
 
 export const DiffLine = memo(function DiffLine({
   line,
   hideAdded = false,
   hideRemoved = false,
+  language,
+  isSpacer = false,
 }: DiffLineProps) {
+  if (isSpacer || !line) {
+    return (
+      <div className="bg-surface-tertiary/10 flex border-l-2 border-transparent font-mono text-[10px] leading-relaxed opacity-30 select-none">
+        {!hideRemoved && <div className="w-9 shrink-0 pr-1.5 text-right">&nbsp;</div>}
+        {!hideAdded && (
+          <div
+            className={`w-9 shrink-0 pr-1.5 text-right ${!hideRemoved ? 'border-border/10 border-r' : ''}`}
+          >
+            &nbsp;
+          </div>
+        )}
+        <div className="w-4 shrink-0">&nbsp;</div>
+        <div className="flex-1 px-1.5">&nbsp;</div>
+      </div>
+    );
+  }
+
   const isAdded = line.type === 'added';
   const isRemoved = line.type === 'removed';
 
@@ -58,38 +41,48 @@ export const DiffLine = memo(function DiffLine({
   if (hideRemoved && isRemoved) return null;
 
   const bgColor = isAdded
-    ? 'bg-success/[0.08] hover:bg-success/[0.12]'
+    ? 'bg-success/[0.08] hover:bg-success/[0.14]'
     : isRemoved
-      ? 'bg-danger/[0.08] hover:bg-danger/[0.12]'
+      ? 'bg-danger/[0.08] hover:bg-danger/[0.14]'
       : 'hover:bg-surface-secondary/20';
 
   const textColor = isAdded
     ? 'text-success/90'
     : isRemoved
-      ? 'text-danger/70 line-through decoration-danger/30'
-      : 'text-text-main/60';
+      ? 'text-danger/70'
+      : 'text-text-main/80';
 
   const symbol = isAdded ? '+' : isRemoved ? '-' : ' ';
 
-  const getLineContent = () => {
+  const renderContent = () => {
     if (!line.highlights || line.highlights.length === 0) {
-      return syntaxHighlight(line.content);
+      const html = highlightLine(line.content, language);
+      return <span dangerouslySetInnerHTML={{ __html: html }} />;
     }
 
-    const segments = [];
+    const segments: React.ReactNode[] = [];
     let lastIndex = 0;
 
-    line.highlights.forEach((highlight) => {
+    line.highlights.forEach((highlight, hIdx) => {
       if (highlight.start > lastIndex) {
-        segments.push(syntaxHighlight(line.content.slice(lastIndex, highlight.start)));
+        const textSlice = line.content.slice(lastIndex, highlight.start);
+        const html = highlightLine(textSlice, language);
+        segments.push(
+          <span key={`seg-${String(hIdx)}-pre`} dangerouslySetInnerHTML={{ __html: html }} />,
+        );
       }
 
+      const diffSlice = line.content.slice(highlight.start, highlight.end);
       segments.push(
         <span
-          key={`${String(highlight.start)}-${String(highlight.end)}`}
-          className={`${isAdded ? 'bg-success/30 text-success' : 'bg-danger/30 text-danger'} ring-border/10 rounded-sm px-0.5 font-black shadow-sm ring-1`}
+          key={`diff-${String(highlight.start)}-${String(highlight.end)}`}
+          className={`${
+            isAdded
+              ? 'bg-success/35 text-success ring-success/30 font-semibold'
+              : 'bg-danger/35 text-danger ring-danger/30 font-semibold'
+          } rounded px-0.5 shadow-xs ring-1`}
         >
-          {line.content.slice(highlight.start, highlight.end)}
+          {diffSlice}
         </span>,
       );
 
@@ -97,7 +90,9 @@ export const DiffLine = memo(function DiffLine({
     });
 
     if (lastIndex < line.content.length) {
-      segments.push(syntaxHighlight(line.content.slice(lastIndex)));
+      const remainingSlice = line.content.slice(lastIndex);
+      const html = highlightLine(remainingSlice, language);
+      segments.push(<span key="seg-tail" dangerouslySetInnerHTML={{ __html: html }} />);
     }
 
     return segments;
@@ -105,27 +100,31 @@ export const DiffLine = memo(function DiffLine({
 
   return (
     <div
-      className={`flex font-mono text-[10px] leading-relaxed ${bgColor} group border-l-2 transition-colors duration-150 ${isAdded ? 'border-success/30' : isRemoved ? 'border-danger/30' : 'border-transparent'}`}
+      className={`flex font-mono text-[10.5px] leading-relaxed ${bgColor} group border-l-2 transition-colors duration-150 ${
+        isAdded ? 'border-success/40' : isRemoved ? 'border-danger/40' : 'border-transparent'
+      }`}
     >
       {!hideRemoved && (
-        <div className="text-text-muted/20 group-hover:text-text-muted/40 w-9 shrink-0 pr-1.5 text-right font-bold tracking-tighter select-none">
+        <div className="text-text-muted/30 group-hover:text-text-muted/60 w-9 shrink-0 pr-1.5 text-right font-mono text-[10px] select-none">
           {line.oldLineNumber ?? ''}
         </div>
       )}
       {!hideAdded && (
         <div
-          className={`text-text-muted/20 group-hover:text-text-muted/40 w-9 shrink-0 pr-1.5 text-right font-bold tracking-tighter select-none ${!hideRemoved ? 'border-border/10 border-r' : ''}`}
+          className={`text-text-muted/30 group-hover:text-text-muted/60 w-9 shrink-0 pr-1.5 text-right font-mono text-[10px] select-none ${
+            !hideRemoved ? 'border-border/10 border-r' : ''
+          }`}
         >
           {line.newLineNumber ?? ''}
         </div>
       )}
-      <div className={`w-4 shrink-0 text-center font-black opacity-30 select-none ${textColor}`}>
+      <div className={`w-4 shrink-0 text-center font-bold opacity-40 select-none ${textColor}`}>
         {symbol}
       </div>
       <div
-        className={`flex-1 px-1.5 break-all whitespace-pre-wrap ${textColor} selection:bg-accent/30 selection:text-white`}
+        className={`flex-1 px-1.5 font-mono text-[10.5px] break-all whitespace-pre-wrap ${textColor} selection:bg-accent/30 selection:text-white`}
       >
-        {getLineContent()}
+        {renderContent()}
       </div>
     </div>
   );

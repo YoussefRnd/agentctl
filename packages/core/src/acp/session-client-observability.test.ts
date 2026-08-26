@@ -180,17 +180,12 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
       .join('');
     expect(combinedTransientProviderDelta).toBe(' world');
 
-    // Verify metadata presence (timing and token estimates)
-    const userMetadata = JSON.parse(userEvent.metadata ?? '{}') as Record<string, unknown>;
-    expect(Number(userMetadata.promptTokens)).toBeGreaterThan(0);
-
+    // Verify metadata presence (timing)
     const thoughtMetadata = JSON.parse(thoughtEvent.metadata ?? '{}') as Record<string, unknown>;
     expect(thoughtMetadata.durationMs).toBeDefined();
-    expect(thoughtMetadata.completionTokens).toBe(Math.ceil('Thinking about logic'.length / 4));
 
     const providerMetadata = JSON.parse(providerEvent.metadata ?? '{}') as Record<string, unknown>;
     expect(providerMetadata.durationMs).toBeDefined();
-    expect(providerMetadata.completionTokens).toBe(Math.ceil('Hello world'.length / 4));
 
     // Verify transient snapshots: full content, no delta, available mid-stream
     expect(snapshotsMidStream.length).toBe(2);

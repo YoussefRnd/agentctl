@@ -20,10 +20,11 @@ function formatBranchName(branch: string) {
 }
 
 function formatTokens(tokens: number) {
-  if (tokens >= 1000) {
-    return `${(tokens / 1000).toFixed(1)}K`;
+  const safe = Math.max(0, tokens);
+  if (safe >= 1000) {
+    return `${(safe / 1000).toFixed(1)}K`;
   }
-  return tokens.toString();
+  return safe.toString();
 }
 
 export function ContextWindowPopover({
@@ -38,9 +39,10 @@ export function ContextWindowPopover({
   if (isLoading || !sessionData?.session) return null;
 
   const { totalTokens, contextLimit, sessionMetrics } = sessionData.session;
-  if (!contextLimit || contextLimit <= 0) return null;
+  const safeLimit = Math.max(1, contextLimit ?? 128000);
+  const safeTokens = Math.max(0, totalTokens ?? 0);
 
-  const usagePercent = Math.min(100, Math.max(0, (totalTokens / contextLimit) * 100));
+  const usagePercent = Math.min(100, Math.max(0, (safeTokens / safeLimit) * 100));
   const { usageBreakdown, estimatedCost, turnsRemaining } = sessionMetrics;
 
   const radius = 8;
@@ -114,7 +116,7 @@ export function ContextWindowPopover({
               </span>
               <div className="text-text-muted mt-0.5 flex items-baseline justify-between text-[11px] font-semibold">
                 <span className="font-mono">
-                  {formatTokens(totalTokens)} / {formatTokens(contextLimit)} tokens
+                  {formatTokens(safeTokens)} / {formatTokens(safeLimit)} tokens
                 </span>
                 <span
                   className={cn(
@@ -137,19 +139,19 @@ export function ContextWindowPopover({
                   <div
                     className="bg-accent/80 h-full"
                     style={{
-                      width: `${String(((usageBreakdown.history ?? 0) / contextLimit) * 100)}%`,
+                      width: `${String(((usageBreakdown.history ?? 0) / safeLimit) * 100)}%`,
                     }}
                   />
                   <div
                     className="bg-brand-teal/70 h-full"
                     style={{
-                      width: `${String(((usageBreakdown.files ?? 0) / contextLimit) * 100)}%`,
+                      width: `${String(((usageBreakdown.files ?? 0) / safeLimit) * 100)}%`,
                     }}
                   />
                   <div
                     className="bg-brand-lavender/40 h-full"
                     style={{
-                      width: `${String(((usageBreakdown.system ?? 0) / contextLimit) * 100)}%`,
+                      width: `${String(((usageBreakdown.system ?? 0) / safeLimit) * 100)}%`,
                     }}
                   />
                 </div>

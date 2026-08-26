@@ -5,6 +5,7 @@ import { SessionEngine } from '@agentctl/shared';
 
 import { apiClient, getAuthToken } from '@agentctl/api-client';
 import { getApiBaseUrl } from '../shared/lib/api-base-url';
+import { sessionKeys } from '../shared/lib/queryKeys';
 
 const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
   return apiClient.fetch<ACPEventRow[]>(`/api/sessions/${sessionId}/events`);
@@ -126,11 +127,23 @@ export function useSessionEvents(sessionId: string | null) {
           return result;
         });
 
+        const hasToolOrStateEvents = newEvents.some(
+          (evt) =>
+            evt.type === 'tool_call' ||
+            evt.type === 'subagent_update' ||
+            evt.type === 'diff' ||
+            evt.type === 'terminal_exit' ||
+            evt.type === 'status',
+        );
+
         const shouldInvalidateSession = newEvents.some(
           (evt) => evt.type !== 'text' || !('delta' in (evt as { delta?: string })),
         );
         if (shouldInvalidateSession) {
-          void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+        }
+        if (hasToolOrStateEvents) {
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
         }
       },
       onStatusChange: (status) => {
@@ -138,6 +151,10 @@ export function useSessionEvents(sessionId: string | null) {
       },
       onStreamingChange: (id) => {
         setStreamingEventId(id);
+        if (id === null) {
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+        }
       },
     });
 

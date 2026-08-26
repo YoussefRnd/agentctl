@@ -975,4 +975,57 @@ export class SessionManager {
 
     return {};
   }
+
+  async previewSnapshotDiff(
+    sessionId: string,
+    eventId: number,
+  ): Promise<{
+    hasSnapshot: boolean;
+    files: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+  }> {
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+    if (!sessionRecord) {
+      throw new Error('Session not found');
+    }
+
+    const event = await this.eventStore.getEventWithMetadata(sessionId, eventId);
+    if (!event) {
+      throw new Error(`Event not found: ${String(eventId)}`);
+    }
+
+    let metadata: { snapshotHash?: string } | undefined;
+    if (typeof event.metadata === 'string') {
+      try {
+        metadata = JSON.parse(event.metadata) as { snapshotHash?: string };
+      } catch {
+        metadata = undefined;
+      }
+    } else if (typeof event.metadata === 'object' && event.metadata !== null) {
+      metadata = event.metadata as { snapshotHash?: string };
+    }
+
+    if (!metadata?.snapshotHash) {
+      return { hasSnapshot: false, files: [] };
+    }
+
+    const snapshotService = this.stateMachine.getSnapshotService();
+    const projectPath =
+      sessionRecord.mode === 'worktree' ? sessionRecord.worktreePath : sessionRecord.project.path;
+
+    const patches = await snapshotService.diff(projectPath, metadata.snapshotHash);
+    return {
+      hasSnapshot: true,
+      files: patches.map((p) => ({
+        path: p.path,
+        status: p.status,
+      })),
+    };
+  }
+
+  getEventStore(): SessionEventStore {
+    return this.eventStore;
+  }
 }

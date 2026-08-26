@@ -1,20 +1,15 @@
-import { useMemo, Suspense, lazy } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient, type SidebarProject } from '@agentctl/api-client';
+import { useEffect, Suspense, lazy } from 'react';
 import { StatusPane } from './StatusPane';
 import { useSession } from '../../../contexts/SessionContext';
 import { GlassPanel, Badge, Spinner } from '@agentctl/ui';
-import { Maximize2, Minimize2, Terminal, Bot } from 'lucide-react';
+import { Maximize2, Minimize2, Terminal, FileCode, Activity } from 'lucide-react';
 
 const ReviewView = lazy(() => import('./ReviewView').then((m) => ({ default: m.ReviewView })));
-const ParallelAgentsPane = lazy(() =>
-  import('./ParallelAgentsPane').then((m) => ({ default: m.ParallelAgentsPane })),
-);
 const InteractiveTerminal = lazy(() =>
   import('./workbench/InteractiveTerminal').then((m) => ({ default: m.InteractiveTerminal })),
 );
 
-export type WorkbenchTab = 'status' | 'changes' | 'terminal' | 'agents';
+export type WorkbenchTab = 'status' | 'changes' | 'terminal';
 
 interface WorkbenchProps {
   isOpen: boolean;
@@ -31,35 +26,15 @@ export function Workbench({
   isMaximized,
   onToggleMaximize,
 }: WorkbenchProps) {
-  const { sessionId, sessionData, reviewData } = useSession();
+  const { reviewData, refetchReview } = useSession();
+
+  useEffect(() => {
+    if (tab === 'changes') {
+      refetchReview();
+    }
+  }, [tab, refetchReview]);
 
   const changesCount = reviewData.files.filter((f) => f.state !== 'committed').length;
-
-  const { data: projects = [] } = useQuery<SidebarProject[]>({
-    queryKey: ['projects', 'lastActive', false],
-    queryFn: () =>
-      apiClient.fetch<SidebarProject[]>('/api/projects?sortBy=lastActive&gitOnly=false'),
-  });
-
-  const currentProjectId = sessionData?.session.projectId;
-  const currentProject = useMemo(
-    () => projects.find((p) => p.id === currentProjectId),
-    [projects, currentProjectId],
-  );
-
-  const activeSessions = useMemo(() => {
-    return (currentProject?.sessions ?? []).filter(
-      (s) => s.status !== 'merged' && s.status !== 'discarded' && s.status !== 'archived',
-    );
-  }, [currentProject]);
-
-  const otherAgentsCount = useMemo(() => {
-    return activeSessions.filter((s) => s.id !== sessionId).length;
-  }, [activeSessions, sessionId]);
-
-  const hasRunningAgent = useMemo(() => {
-    return activeSessions.some((s) => s.id !== sessionId && s.status === 'running');
-  }, [activeSessions, sessionId]);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -68,10 +43,10 @@ export function Workbench({
         className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
       >
         <div className="flex h-full min-w-0 flex-col">
-          {/* Enhanced Tab Navigation */}
+          {/* Clean 3-Tab Navigation: Status | Changes | Terminal */}
           <div className="border-border/20 bg-surface-secondary/10 flex h-12 shrink-0 items-center justify-between border-b px-2">
             <div className="flex flex-1 items-center gap-1">
-              {(['status', 'changes', 'terminal', 'agents'] as const).map((t) => (
+              {(['status', 'changes', 'terminal'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -87,22 +62,10 @@ export function Workbench({
                   }}
                 >
                   <span className="relative z-10 flex items-center gap-1">
+                    {t === 'status' && <Activity className="h-3 w-3 opacity-80" />}
+                    {t === 'changes' && <FileCode className="h-3 w-3 opacity-80" />}
                     {t === 'terminal' && <Terminal className="h-3 w-3 opacity-80" />}
-                    {t === 'agents' && (
-                      <span className="relative flex items-center">
-                        <Bot className="h-3 w-3 opacity-80" />
-                        {hasRunningAgent && (
-                          <span className="bg-accent absolute -top-0.5 -right-0.5 h-1.5 w-1.5 animate-ping rounded-full" />
-                        )}
-                      </span>
-                    )}
-                    {t === 'status'
-                      ? 'Status'
-                      : t === 'changes'
-                        ? 'Changes'
-                        : t === 'terminal'
-                          ? 'Terminal'
-                          : 'Agents'}
+                    {t === 'status' ? 'Status' : t === 'changes' ? 'Changes' : 'Terminal'}
                   </span>
                   {t === 'changes' && changesCount > 0 && (
                     <Badge
@@ -111,15 +74,6 @@ export function Workbench({
                       className="relative z-10 font-bold tabular-nums"
                     >
                       {changesCount}
-                    </Badge>
-                  )}
-                  {t === 'agents' && otherAgentsCount > 0 && (
-                    <Badge
-                      variant="default"
-                      size="sm"
-                      className="relative z-10 text-[10px] font-bold tabular-nums"
-                    >
-                      {otherAgentsCount}
                     </Badge>
                   )}
                   {tab === t && (
@@ -157,7 +111,6 @@ export function Workbench({
               {tab === 'status' && <StatusPane />}
               {tab === 'changes' && <ReviewView />}
               {tab === 'terminal' && <InteractiveTerminal />}
-              {tab === 'agents' && <ParallelAgentsPane />}
             </Suspense>
           </div>
         </div>

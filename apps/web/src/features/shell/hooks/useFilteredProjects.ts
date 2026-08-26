@@ -9,10 +9,19 @@ export interface FilterOptions {
 function filterProjects(projects: SidebarProject[], options: FilterOptions): SidebarProject[] {
   const { searchQuery, showArchived } = options;
 
-  const visibleProjects = projects.map((p) => ({
-    ...p,
-    sessions: p.sessions.filter((s) => showArchived || s.status !== 'archived'),
-  }));
+  const visibleProjects = projects.map((p) => {
+    const validSessions = p.sessions.filter((s) => showArchived || s.status !== 'archived');
+    const sortedSessions = validSessions.toSorted((a, b) => {
+      const timeA = new Date(a.updatedAt ?? a.createdAt).getTime();
+      const timeB = new Date(b.updatedAt ?? b.createdAt).getTime();
+      return timeB - timeA;
+    });
+
+    return {
+      ...p,
+      sessions: sortedSessions,
+    };
+  });
 
   if (!searchQuery) {
     return visibleProjects;

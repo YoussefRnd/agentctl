@@ -18,6 +18,11 @@ export interface FileDiff {
   hunks: DiffHunk[];
 }
 
+export interface SplitDiffRow {
+  left: DiffLine | null;
+  right: DiffLine | null;
+}
+
 export function parseDiff(diff: string): DiffHunk[] {
   const lines = diff.split('\n');
   const hunks: DiffHunk[] = [];
@@ -67,7 +72,7 @@ export function parseDiff(diff: string): DiffHunk[] {
         newLineNumber: newLineNum++,
       });
     } else if (line === '') {
-      // Handle empty lines which might be context or just trailing
+      // Handle empty lines which might be context or trailing
       if (i < lines.length - 1) {
         currentHunk.lines.push({
           type: 'context',
@@ -79,19 +84,36 @@ export function parseDiff(diff: string): DiffHunk[] {
     }
   }
 
-  // Apply character-level highlighting for adjacent removed/added lines
+  // Apply word-level LCS highlighting for adjacent removed/added blocks
   for (const hunk of hunks) {
-    for (let i = 0; i < hunk.lines.length - 1; i++) {
-      const current = hunk.lines[i];
-      const next = hunk.lines[i + 1];
+    let rIdx = 0;
+    while (rIdx < hunk.lines.length) {
+      if (hunk.lines[rIdx].type === 'removed') {
+        const removedBlock: DiffLine[] = [];
+        while (rIdx < hunk.lines.length && hunk.lines[rIdx].type === 'removed') {
+          removedBlock.push(hunk.lines[rIdx]);
+          rIdx++;
+        }
+        const addedBlock: DiffLine[] = [];
+        while (rIdx < hunk.lines.length && hunk.lines[rIdx].type === 'added') {
+          addedBlock.push(hunk.lines[rIdx]);
+          rIdx++;
+        }
 
-      if (current.type === 'removed' && next.type === 'added') {
-        const { removedHighlights, addedHighlights } = computeLineDiff(
-          current.content,
-          next.content,
-        );
-        current.highlights = removedHighlights;
-        next.highlights = addedHighlights;
+        // Pair corresponding lines 1:1 up to min length
+        const pairCount = Math.min(removedBlock.length, addedBlock.length);
+        for (let k = 0; k < pairCount; k++) {
+          const removed = removedBlock[k];
+          const added = addedBlock[k];
+          const { removedHighlights, addedHighlights } = computeWordDiff(
+            removed.content,
+            added.content,
+          );
+          removed.highlights = removedHighlights;
+          added.highlights = addedHighlights;
+        }
+      } else {
+        rIdx++;
       }
     }
   }
@@ -99,38 +121,160 @@ export function parseDiff(diff: string): DiffHunk[] {
   return hunks;
 }
 
+interface Token {
+  text: string;
+  start: number;
+  end: number;
+}
+
+function tokenize(text: string): Token[] {
+  const tokens: Token[] = [];
+  const regex = /(\w+|\s+|[^\w\s])/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    tokens.push({
+      text: match[0],
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+  return tokens;
+}
+
 /**
- * Simple word-based diff for character-level highlighting.
+ * Word-level tokenized LCS diff for high-precision character highlighting.
  */
-function computeLineDiff(oldLine: string, newLine: string) {
-  const removedHighlights: { start: number; end: number }[] = [];
-  const addedHighlights: { start: number; end: number }[] = [];
-
-  // Very simple approach: find common prefix and suffix
-  let prefixLen = 0;
-  while (
-    prefixLen < oldLine.length &&
-    prefixLen < newLine.length &&
-    oldLine[prefixLen] === newLine[prefixLen]
-  ) {
-    prefixLen++;
+export function computeWordDiff(oldLine: string, newLine: string) {
+  if (oldLine === newLine) {
+    return { removedHighlights: [], addedHighlights: [] };
   }
 
-  let suffixLen = 0;
-  while (
-    suffixLen < oldLine.length - prefixLen &&
-    suffixLen < newLine.length - prefixLen &&
-    oldLine[oldLine.length - 1 - suffixLen] === newLine[newLine.length - 1 - suffixLen]
-  ) {
-    suffixLen++;
+  const oldTokens = tokenize(oldLine);
+  const newTokens = tokenize(newLine);
+
+  const m = oldTokens.length;
+  const n = newTokens.length;
+
+  if (m === 0 && n === 0) {
+    return { removedHighlights: [], addedHighlights: [] };
   }
 
-  if (prefixLen < oldLine.length - suffixLen) {
-    removedHighlights.push({ start: prefixLen, end: oldLine.length - suffixLen });
-  }
-  if (prefixLen < newLine.length - suffixLen) {
-    addedHighlights.push({ start: prefixLen, end: newLine.length - suffixLen });
+  if (m === 0) {
+    return {
+      removedHighlights: [],
+      addedHighlights: [{ start: 0, end: newLine.length }],
+    };
   }
 
-  return { removedHighlights, addedHighlights };
+  if (n === 0) {
+    return {
+      removedHighlights: [{ start: 0, end: oldLine.length }],
+      addedHighlights: [],
+    };
+  }
+
+  // Classic DP table for LCS
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
+    Array.from<number>({ length: n + 1 }).fill(0),
+  );
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldTokens[i - 1].text === newTokens[j - 1].text) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+
+  // Backtrack to identify matched tokens
+  const matchedOld = new Set<number>();
+  const matchedNew = new Set<number>();
+
+  let i = m;
+  let j = n;
+  while (i > 0 && j > 0) {
+    if (oldTokens[i - 1].text === newTokens[j - 1].text) {
+      matchedOld.add(i - 1);
+      matchedNew.add(j - 1);
+      i--;
+      j--;
+    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+
+  function getHighlights(tokens: Token[], matched: Set<number>): { start: number; end: number }[] {
+    const highlights: { start: number; end: number }[] = [];
+    let curStart: number | null = null;
+    let curEnd: number | null = null;
+
+    for (let k = 0; k < tokens.length; k++) {
+      if (!matched.has(k)) {
+        if (curStart === null) {
+          curStart = tokens[k].start;
+        }
+        curEnd = tokens[k].end;
+      } else {
+        if (curStart !== null && curEnd !== null) {
+          highlights.push({ start: curStart, end: curEnd });
+          curStart = null;
+          curEnd = null;
+        }
+      }
+    }
+
+    if (curStart !== null && curEnd !== null) {
+      highlights.push({ start: curStart, end: curEnd });
+    }
+
+    return highlights;
+  }
+
+  return {
+    removedHighlights: getHighlights(oldTokens, matchedOld),
+    addedHighlights: getHighlights(newTokens, matchedNew),
+  };
+}
+
+/**
+ * Builds aligned side-by-side rows for split diff view, inserting spacers
+ * so corresponding context lines remain horizontally aligned.
+ */
+export function buildSplitRows(lines: DiffLine[]): SplitDiffRow[] {
+  const rows: SplitDiffRow[] = [];
+  let removedBuffer: DiffLine[] = [];
+  let addedBuffer: DiffLine[] = [];
+
+  const flushBuffers = () => {
+    const maxLen = Math.max(removedBuffer.length, addedBuffer.length);
+    for (let idx = 0; idx < maxLen; idx++) {
+      rows.push({
+        left: removedBuffer[idx] ?? null,
+        right: addedBuffer[idx] ?? null,
+      });
+    }
+    removedBuffer = [];
+    addedBuffer = [];
+  };
+
+  for (const line of lines) {
+    if (line.type === 'removed') {
+      if (addedBuffer.length > 0) {
+        flushBuffers();
+      }
+      removedBuffer.push(line);
+    } else if (line.type === 'added') {
+      addedBuffer.push(line);
+    } else {
+      flushBuffers();
+      rows.push({ left: line, right: line });
+    }
+  }
+
+  flushBuffers();
+  return rows;
 }

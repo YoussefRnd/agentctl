@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewDialogs } from './ReviewDialogs';
 import { useReviewViewState } from '../hooks/useReviewViewState';
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 export function ReviewView() {
   const {
     reviewData,
+    refetchReview,
     isLoadingReview: isLoading,
     stageFile,
     unstageFile,
@@ -31,6 +32,10 @@ export function ReviewView() {
     isDiscardingSession: isDiscarding,
   } = useSession();
 
+  useEffect(() => {
+    refetchReview();
+  }, [refetchReview]);
+
   const files = reviewData.files;
   const sessionStatus = sessionData?.session.status;
 
@@ -45,53 +50,7 @@ export function ReviewView() {
 
   const { activeFiles, parsedFiles, grouped, fileStats } = useReviewDiffs(files, state.searchQuery);
 
-  const scrollToDiff = useCallback((direction: 'next' | 'prev') => {
-    const container = document.querySelector('.custom-scrollbar');
-    if (!container) return;
-
-    const diffBlocks = Array.from(document.querySelectorAll('[id^="diff-block-"]'));
-    if (diffBlocks.length === 0) return;
-
-    const containerRect = container.getBoundingClientRect();
-    let targetBlock: Element | undefined;
-
-    if (direction === 'next') {
-      targetBlock =
-        diffBlocks.find((block) => {
-          const rect = block.getBoundingClientRect();
-          return rect.top - containerRect.top > 10;
-        }) ?? diffBlocks[0];
-    } else {
-      targetBlock =
-        [...diffBlocks].reverse().find((block) => {
-          const rect = block.getBoundingClientRect();
-          return rect.top - containerRect.top < -10;
-        }) ?? diffBlocks[diffBlocks.length - 1];
-    }
-
-    targetBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
   const isClosed = sessionStatus === 'merged' || sessionStatus === 'discarded';
-
-  const handleSelectFile = useCallback(
-    (path: string) => {
-      const file = parsedFiles.find((f) => f.path === path);
-      if (file && state.collapsedSections[file.state]) {
-        toggleSection(file.state);
-      }
-      if (state.collapsedFiles[path]) {
-        toggleFileCollapse(path);
-      }
-      setTimeout(() => {
-        const el = document.getElementById(`diff-block-${path}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 50);
-    },
-    [parsedFiles, state.collapsedSections, state.collapsedFiles, toggleSection, toggleFileCollapse],
-  );
 
   const handleMergeSubmit = () => {
     void onMerge(state.commitMessage);
@@ -99,7 +58,8 @@ export function ReviewView() {
   };
 
   const allCollapsed = useMemo(() => {
-    return parsedFiles.every((file) => state.collapsedFiles[file.path]);
+    if (parsedFiles.length === 0) return true;
+    return parsedFiles.every((file) => (state.collapsedFiles[file.path] ?? true) === true);
   }, [parsedFiles, state.collapsedFiles]);
 
   const onToggleAll = useCallback(() => {
@@ -144,14 +104,6 @@ export function ReviewView() {
     <div className="bg-surface-secondary/5 flex h-full min-h-0 flex-col">
       <ReviewHeader
         files={activeFiles}
-        isMerging={isMerging}
-        isDiscarding={isDiscarding}
-        onOpenMergeDialog={() => {
-          dispatch({ type: 'SET_MERGE_DIALOG_OPEN', payload: true });
-        }}
-        onOpenDiscardModal={() => {
-          dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: true });
-        }}
         viewMode={state.viewMode}
         onToggleViewMode={() => {
           dispatch({ type: 'TOGGLE_VIEW_MODE' });
@@ -160,15 +112,8 @@ export function ReviewView() {
         onSearchChange={(q) => {
           dispatch({ type: 'SET_SEARCH_QUERY', payload: q });
         }}
-        onNextDiff={() => {
-          scrollToDiff('next');
-        }}
-        onPrevDiff={() => {
-          scrollToDiff('prev');
-        }}
         allCollapsed={allCollapsed}
         onToggleAll={onToggleAll}
-        onSelectFile={handleSelectFile}
       />
 
       {activeFiles.length === 0 ? (
@@ -215,12 +160,6 @@ export function ReviewView() {
           onCommit={(msg) => {
             void onCommitChanges(msg);
           }}
-          onStageAll={() => {
-            void onStageAll();
-          }}
-          onUnstageAll={() => {
-            void onUnstageAll();
-          }}
           onMergeSession={() => {
             dispatch({ type: 'SET_MERGE_DIALOG_OPEN', payload: true });
           }}
@@ -229,11 +168,8 @@ export function ReviewView() {
           }}
           status={{
             isCommitting,
-            isStagingAll,
-            isUnstagingAll,
             isMerging,
             isDiscarding,
-            hasUnstaged: grouped.modified.length > 0 || grouped.untracked.length > 0,
             hasChanges: activeFiles.length > 0,
           }}
         />

@@ -35,7 +35,7 @@ export default defineConfig({
           ) {
             return 'vendor-markdown';
           }
-          if (id.includes('node_modules/react-virtuoso')) return 'vendor-list';
+          if (id.includes('node_modules/@tanstack/react-virtual')) return 'vendor-virtual';
           if (
             id.includes('node_modules/react-resizable-panels') ||
             id.includes('node_modules/sonner') ||

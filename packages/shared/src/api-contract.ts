@@ -698,6 +698,26 @@ export const apiContract = {
     },
     summary: 'Rewind session to a past event',
   },
+  previewSnapshotDiff: {
+    method: 'GET',
+    path: '/api/sessions/:id/snapshots/:eventId/preview',
+    pathParams: z.object({
+      id: z.uuid(),
+      eventId: z.coerce.number(),
+    }),
+    responses: {
+      200: z.object({
+        hasSnapshot: z.boolean(),
+        files: z.array(
+          z.object({
+            path: z.string(),
+            status: z.enum(['added', 'modified', 'deleted']),
+          }),
+        ),
+      }),
+    },
+    summary: 'Preview files changed since a turn snapshot',
+  },
   mergeSessionBranch: {
     method: 'POST',
     path: '/api/sessions/:id/merge-branch',

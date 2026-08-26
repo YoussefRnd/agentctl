@@ -367,6 +367,22 @@ export async function rewindSession(
   return res.body;
 }
 
+export async function previewSnapshotDiff(
+  sessionId: string,
+  eventId: number,
+): Promise<{
+  hasSnapshot: boolean;
+  files: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+}> {
+  const res = await api.previewSnapshotDiff({
+    params: { id: sessionId, eventId },
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to preview snapshot: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
 export async function updateSessionProvider(
   sessionId: string,
   providerId: string,

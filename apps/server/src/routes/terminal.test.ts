@@ -105,4 +105,61 @@ describe('Interactive Terminal WebSocket Route', () => {
 
     expect(messages.join('')).toContain('Agentctl Interactive Shell');
   });
+
+  test('supports concurrent distinct terminal tabs with termId query param', async () => {
+    const startupToken = app.authManager.getStartupToken();
+    const wsUrl1 = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws?token=${startupToken}&termId=tab-1`;
+    const wsUrl2 = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws?token=${startupToken}&termId=tab-2`;
+
+    const ws1 = new WebSocket(wsUrl1);
+    const ws2 = new WebSocket(wsUrl2);
+
+    let tab1Init = false;
+    let tab2Init = false;
+
+    await new Promise<void>((resolve, reject) => {
+      ws1.onmessage = (event) => {
+        try {
+          const raw = typeof event.data === 'string' ? event.data : event.data.toString();
+          const msg = JSON.parse(raw) as { type?: string; termId?: string };
+          if (msg.type === 'init' && msg.termId === 'tab-1') {
+            tab1Init = true;
+            if (tab1Init && tab2Init) {
+              ws1.close();
+              ws2.close();
+              resolve();
+            }
+          }
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      ws2.onmessage = (event) => {
+        try {
+          const raw = typeof event.data === 'string' ? event.data : event.data.toString();
+          const msg = JSON.parse(raw) as { type?: string; termId?: string };
+          if (msg.type === 'init' && msg.termId === 'tab-2') {
+            tab2Init = true;
+            if (tab1Init && tab2Init) {
+              ws1.close();
+              ws2.close();
+              resolve();
+            }
+          }
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      setTimeout(() => {
+        ws1.close();
+        ws2.close();
+        resolve();
+      }, 3000);
+    });
+
+    expect(tab1Init).toBe(true);
+    expect(tab2Init).toBe(true);
+  });
 });

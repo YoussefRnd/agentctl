@@ -118,7 +118,9 @@ export default fp(async (fastify) => {
         return {
           ...p,
           isGitRepo: p.repoRoot !== null,
-          sessions: projSessions.map((s) => sessionRowSchema.parse(s)),
+          sessions: projSessions
+            .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+            .map((s) => sessionRowSchema.parse(s)),
           lastActiveTime: lastSessionUpdate,
         };
       });
@@ -694,6 +696,14 @@ export default fp(async (fastify) => {
           success: true,
           forkSessionId: result.forkSessionId ?? undefined,
         },
+      };
+    },
+    previewSnapshotDiff: async ({ params }) => {
+      const { id, eventId } = params;
+      const result = await fastify.sessionService.previewSnapshotDiff(id, eventId);
+      return {
+        status: 200 as const,
+        body: result,
       };
     },
     mergeSessionBranch: async ({ params, body }) => {

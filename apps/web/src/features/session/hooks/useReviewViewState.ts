@@ -36,14 +36,16 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
       return { ...state, commitMessage: action.payload };
     case 'TOGGLE_SUMMARY_COLLAPSE':
       return { ...state, isSummaryCollapsed: !state.isSummaryCollapsed };
-    case 'TOGGLE_FILE_COLLAPSE':
+    case 'TOGGLE_FILE_COLLAPSE': {
+      const isCurrentlyCollapsed = state.collapsedFiles[action.filePath] ?? true;
       return {
         ...state,
         collapsedFiles: {
           ...state.collapsedFiles,
-          [action.filePath]: !state.collapsedFiles[action.filePath],
+          [action.filePath]: !isCurrentlyCollapsed,
         },
       };
+    }
     case 'TOGGLE_SECTION': {
       const section = action.section;
       return {

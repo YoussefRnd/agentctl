@@ -44,14 +44,17 @@ export class SessionEventStore {
       total += extractTokens(e.metadata);
     }
 
-    await this.db.update(sessions).set({ totalTokens: total }).where(eq(sessions.id, sessionId));
+    await this.db
+      .update(sessions)
+      .set({ totalTokens: Math.max(0, total) })
+      .where(eq(sessions.id, sessionId));
   }
 
   private async incrementTotalTokens(sessionId: string, delta: number): Promise<void> {
     if (delta === 0) return;
     await this.db
       .update(sessions)
-      .set({ totalTokens: sql`${sessions.totalTokens} + ${delta}` })
+      .set({ totalTokens: sql`MAX(0, ${sessions.totalTokens} + ${delta})` })
       .where(eq(sessions.id, sessionId));
   }
 
@@ -59,7 +62,7 @@ export class SessionEventStore {
     if (delta === 0) return;
     await this.db
       .update(sessions)
-      .set({ totalTokens: sql`${sessions.totalTokens} - ${delta}` })
+      .set({ totalTokens: sql`MAX(0, ${sessions.totalTokens} - ${delta})` })
       .where(eq(sessions.id, sessionId));
   }
 

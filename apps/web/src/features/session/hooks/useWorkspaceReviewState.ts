@@ -47,6 +47,8 @@ export function useWorkspaceReviewState(sessionId: string) {
     queryKey: sessionKeys.review(sessionId),
     queryFn: () => fetchReview(sessionId),
     enabled: !!sessionId,
+    staleTime: 2000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: branches = [] } = useQuery({

@@ -234,6 +234,8 @@ export function MainFeed() {
             setRewindError(null);
           }
         }}
+        sessionId={sessionId}
+        eventId={confirmRewind?.eventId}
         mode={confirmRewind?.mode ?? 'conversation'}
         messageCount={confirmRewind?.messageCount ?? 0}
         onConfirm={() => {

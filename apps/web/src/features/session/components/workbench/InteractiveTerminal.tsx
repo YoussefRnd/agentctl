@@ -7,7 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { getApiBaseUrl } from '../../../../shared/lib/api-base-url';
 import { getAuthToken } from '@agentctl/api-client';
 import { useSession } from '../../../../contexts/SessionContext';
-import { TerminalHeader } from './TerminalHeader';
+import { TerminalHeader, type TerminalTabItem } from './TerminalHeader';
 
 const NERD_FONT_FAMILY = [
   '"JetBrainsMono Nerd Font"',
@@ -31,6 +31,10 @@ export function InteractiveTerminal() {
   const xtermInstance = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+
+  const [tabs, setTabs] = useState<TerminalTabItem[]>([{ id: '1', name: 'Terminal 1' }]);
+  const [activeTabId, setActiveTabId] = useState<string>('1');
+
   const [shellName, setShellName] = useState<string>('sh');
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
@@ -46,6 +50,36 @@ export function InteractiveTerminal() {
     }
   }, []);
 
+  const handleAddTab = useCallback(() => {
+    setTabs((prev) => {
+      const nextNum = prev.length + 1;
+      const newId = String(Date.now());
+      const newTab = { id: newId, name: `Terminal ${String(nextNum)}` };
+      setActiveTabId(newId);
+      return [...prev, newTab];
+    });
+  }, []);
+
+  const handleCloseTab = useCallback(
+    (idToClose: string) => {
+      setTabs((prev) => {
+        if (prev.length <= 1) return prev;
+        const filtered = prev.filter((t) => t.id !== idToClose);
+        if (activeTabId === idToClose) {
+          const nextActive = filtered[filtered.length - 1]?.id ?? '1';
+          setActiveTabId(nextActive);
+        }
+        return filtered;
+      });
+    },
+    [activeTabId],
+  );
+
+  const handleRenameTab = useCallback((id: string, newName: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, name: newName } : t)));
+  }, []);
+
+  // WebSocket connection management for the active tab
   useEffect(() => {
     if (!sessionId) return;
 
@@ -55,22 +89,23 @@ export function InteractiveTerminal() {
     if (baseUrl) {
       const urlObj = new URL(baseUrl);
       const wsProtocol = urlObj.protocol === 'https:' ? 'wss:' : 'ws:';
-      wsUrl = `${wsProtocol}//${urlObj.host}/api/sessions/${sessionId}/terminal/ws`;
+      wsUrl = `${wsProtocol}//${urlObj.host}/api/sessions/${sessionId}/terminal/ws?termId=${activeTabId}`;
     } else {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host =
         window.location.port === '5173' || window.location.port === '5174'
           ? 'localhost:3000'
           : window.location.host;
-      wsUrl = `${protocol}//${host}/api/sessions/${sessionId}/terminal/ws`;
+      wsUrl = `${protocol}//${host}/api/sessions/${sessionId}/terminal/ws?termId=${activeTabId}`;
     }
 
     const token = getAuthToken();
     if (token) {
-      wsUrl += `?token=${encodeURIComponent(token)}`;
+      wsUrl += `&token=${encodeURIComponent(token)}`;
     }
 
     let ws: WebSocket | null = null;
+    xtermInstance.current?.clear();
 
     try {
       ws = new WebSocket(wsUrl);
@@ -129,8 +164,9 @@ export function InteractiveTerminal() {
         socketRef.current = null;
       }
     };
-  }, [sessionId, connectKey, sendResize]);
+  }, [sessionId, activeTabId, connectKey, sendResize]);
 
+  // Terminal lifecycle & xterm initialization
   useEffect(() => {
     if (!terminalRef.current) return;
 
@@ -271,6 +307,12 @@ export function InteractiveTerminal() {
   return (
     <div className="flex h-full min-w-0 flex-col bg-[#090a0f]">
       <TerminalHeader
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onSelectTab={setActiveTabId}
+        onAddTab={handleAddTab}
+        onCloseTab={handleCloseTab}
+        onRenameTab={handleRenameTab}
         status={status}
         shellName={shellName}
         reconnect={reconnect}

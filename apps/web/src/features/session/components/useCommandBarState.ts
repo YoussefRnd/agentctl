@@ -192,12 +192,7 @@ export function useCommandBarState(
     // Check for purely functional view actions (e.g. /timeline, /terminal, /mcp)
     if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
       const cmdName = trimmed.slice(1).toLowerCase();
-      if (
-        cmdName === 'terminal' ||
-        cmdName === 'status' ||
-        cmdName === 'changes' ||
-        cmdName === 'agents'
-      ) {
+      if (cmdName === 'terminal' || cmdName === 'status' || cmdName === 'changes') {
         useUIStore.getState().setWorkbenchTab(cmdName);
         setInput('');
         return;

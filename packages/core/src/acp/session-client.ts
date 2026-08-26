@@ -66,11 +66,17 @@ function parseUsageMetrics(usage: unknown): ParsedUsageMetrics | null {
     const amt = typeof c.amount === 'number' ? c.amount : parseFloat(String(c.amount));
     if (!isNaN(amt)) {
       const currencyStr = typeof c.currency === 'string' ? c.currency : 'USD';
-      cost = { amount: amt, currency: currencyStr };
+      cost = { amount: Math.max(0, amt), currency: currencyStr };
     }
   }
 
-  return { inputTokens, outputTokens, totalTokens, contextLimit, cost };
+  return {
+    inputTokens: inputTokens !== undefined ? Math.max(0, inputTokens) : undefined,
+    outputTokens: outputTokens !== undefined ? Math.max(0, outputTokens) : undefined,
+    totalTokens: totalTokens !== undefined ? Math.max(0, totalTokens) : undefined,
+    contextLimit: contextLimit !== undefined ? Math.max(0, contextLimit) : undefined,
+    cost,
+  };
 }
 
 export class ACPSession {
@@ -441,7 +447,7 @@ export class ACPSession {
 
             const newInput = currentInput + (metrics.inputTokens ?? 0);
             const newOutput = currentOutput + (metrics.outputTokens ?? 0);
-            const newTotal = metrics.totalTokens ?? newInput + newOutput;
+            const newTotal = Math.max(0, metrics.totalTokens ?? newInput + newOutput);
             const newContextLimit = metrics.contextLimit ?? sessionRecord.contextLimit;
             const newCost = metrics.cost
               ? sessionRecord.estimatedCost + metrics.cost.amount

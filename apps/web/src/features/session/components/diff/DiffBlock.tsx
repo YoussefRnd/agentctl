@@ -1,5 +1,8 @@
-import { useMemo, memo } from 'react';
+import { useMemo, memo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DiffHunk } from '../../../../shared/lib/diff-parser';
+import { buildSplitRows } from '../../../../shared/lib/diff-parser';
+import { getLanguageForPath } from '../../../../shared/lib/code-highlighter';
 import { DiffLine } from './DiffLine';
 import { ChevronDown, ChevronRight, CheckSquare, ExternalLink } from 'lucide-react';
 
@@ -15,6 +18,83 @@ interface DiffBlockProps {
   showHeader?: boolean;
 }
 
+function VirtualizedInlineHunk({ hunk, language }: { hunk: DiffHunk; language?: string }) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: hunk.lines.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 22,
+    overscan: 20,
+  });
+
+  return (
+    <div ref={parentRef} className="custom-scrollbar relative max-h-[600px] overflow-y-auto py-1">
+      <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const line = hunk.lines[virtualItem.index];
+          return (
+            <div
+              key={virtualItem.key}
+              ref={virtualizer.measureElement}
+              data-index={virtualItem.index}
+              className="absolute top-0 left-0 w-full"
+              style={{
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              <DiffLine line={line} language={language} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VirtualizedSplitHunk({
+  splitRows,
+  language,
+}: {
+  splitRows: ReturnType<typeof buildSplitRows>;
+  language?: string;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: splitRows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 22,
+    overscan: 20,
+  });
+
+  return (
+    <div ref={parentRef} className="custom-scrollbar relative max-h-[600px] overflow-y-auto py-1">
+      <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const row = splitRows[virtualItem.index];
+          return (
+            <div
+              key={virtualItem.key}
+              ref={virtualizer.measureElement}
+              data-index={virtualItem.index}
+              className="divide-border/10 absolute top-0 left-0 flex w-full divide-x overflow-x-auto"
+              style={{
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              <div className="min-w-0 flex-1">
+                <DiffLine line={row.left} hideAdded language={language} isSpacer={!row.left} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DiffLine line={row.right} hideRemoved language={language} isSpacer={!row.right} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export const DiffBlock = memo(function DiffBlock({
   path,
   hunks,
@@ -26,6 +106,8 @@ export const DiffBlock = memo(function DiffBlock({
   viewMode = 'inline',
   showHeader = true,
 }: DiffBlockProps) {
+  const language = useMemo(() => getLanguageForPath(path), [path]);
+
   const stats = useMemo(() => {
     let additions = 0;
     let deletions = 0;
@@ -42,7 +124,7 @@ export const DiffBlock = memo(function DiffBlock({
   const dirPath = path.substring(0, path.lastIndexOf('/'));
 
   return (
-    <div className="group border-border/10 bg-surface-secondary/5 hover:border-border/20 hover:bg-surface-secondary/10 overflow-hidden rounded-lg border backdrop-blur-md transition-colors duration-300">
+    <div className="border-border/10 bg-surface-secondary/5 hover:border-border/20 hover:bg-surface-secondary/10 group overflow-hidden rounded-lg border backdrop-blur-md transition-colors duration-300">
       {showHeader && (
         <header className="border-border/10 bg-surface/40 group-hover:bg-surface/50 sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-2.5 backdrop-blur-2xl transition-colors select-none">
           <button
@@ -121,68 +203,77 @@ export const DiffBlock = memo(function DiffBlock({
 
       {!isCollapsed && (
         <div className="divide-border/10 bg-background/20">
-          {hunks.map((hunk) => (
-            <div key={hunk.header} className="group/hunk overflow-hidden">
-              <div className="bg-surface-secondary/10 text-text-muted/30 border-border/10 flex items-center justify-between border-y px-4 py-1.5 font-mono text-[9px] font-black tracking-tight uppercase select-none">
-                <div className="flex items-center gap-2">
-                  <span className="text-accent/30 text-[12px]">@@</span> {hunk.header}
+          {hunks.map((hunk) => {
+            const splitRows = viewMode === 'split' ? buildSplitRows(hunk.lines) : [];
+            const isLarge = hunk.lines.length > 100;
+
+            return (
+              <div key={hunk.header} className="group/hunk overflow-hidden">
+                <div className="bg-surface-secondary/10 text-text-muted/30 border-border/10 flex items-center justify-between border-y px-4 py-1.5 font-mono text-[9px] font-black tracking-tight uppercase select-none">
+                  <div className="flex items-center gap-2">
+                    <span className="text-accent/30 text-[12px]">@@</span> {hunk.header}
+                  </div>
+                  {onStage && (
+                    <button
+                      type="button"
+                      onClick={onStage}
+                      className="bg-accent/10 text-accent hover:bg-accent/20 flex h-5 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[8px] font-black opacity-0 transition-colors group-hover/hunk:opacity-100"
+                      title="Stage Hunk"
+                    >
+                      <CheckSquare className="h-3 w-3" />
+                      Stage Hunk
+                    </button>
+                  )}
                 </div>
-                {onStage && (
-                  <button
-                    type="button"
-                    onClick={onStage}
-                    className="bg-accent/10 text-accent hover:bg-accent/20 flex h-5 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[8px] font-black opacity-0 transition-colors group-hover/hunk:opacity-100"
-                    title="Stage Hunk"
-                  >
-                    <CheckSquare className="h-3 w-3" />
-                    Stage Hunk
-                  </button>
-                )}
-              </div>
-              <div className="py-1">
-                {viewMode === 'inline' ? (
-                  hunk.lines.map((line) => (
-                    <DiffLine
-                      key={`${String(line.oldLineNumber ?? '')}-${String(line.newLineNumber ?? '')}-${line.type}-${line.content}`}
-                      line={line}
-                    />
-                  ))
+
+                {isLarge ? (
+                  viewMode === 'inline' ? (
+                    <VirtualizedInlineHunk hunk={hunk} language={language} />
+                  ) : (
+                    <VirtualizedSplitHunk splitRows={splitRows} language={language} />
+                  )
                 ) : (
-                  /* Split View Rendering */
-                  <div className="divide-border/10 flex divide-x">
-                    <div className="min-w-0 flex-1">
-                      {hunk.lines.reduce<React.ReactNode[]>((acc, line) => {
-                        if (line.type !== 'added') {
-                          acc.push(
+                  <div className="py-1">
+                    {viewMode === 'inline' ? (
+                      hunk.lines.map((line) => (
+                        <DiffLine
+                          key={`${String(line.oldLineNumber ?? '')}-${String(line.newLineNumber ?? '')}-${line.type}-${line.content}`}
+                          line={line}
+                          language={language}
+                        />
+                      ))
+                    ) : (
+                      /* Horizontally aligned Split View with Spacers */
+                      <div className="divide-border/10 flex divide-x overflow-x-auto">
+                        <div className="min-w-0 flex-1">
+                          {splitRows.map((row, rIdx) => (
                             <DiffLine
-                              key={`old-${String(line.oldLineNumber ?? '')}-${line.content}`}
-                              line={line}
+                              key={`left-${String(rIdx)}-${String(row.left?.oldLineNumber ?? '')}`}
+                              line={row.left}
                               hideAdded
-                            />,
-                          );
-                        }
-                        return acc;
-                      }, [])}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      {hunk.lines.reduce<React.ReactNode[]>((acc, line) => {
-                        if (line.type !== 'removed') {
-                          acc.push(
+                              language={language}
+                              isSpacer={!row.left}
+                            />
+                          ))}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {splitRows.map((row, rIdx) => (
                             <DiffLine
-                              key={`new-${String(line.newLineNumber ?? '')}-${line.content}`}
-                              line={line}
+                              key={`right-${String(rIdx)}-${String(row.right?.newLineNumber ?? '')}`}
+                              line={row.right}
                               hideRemoved
-                            />,
-                          );
-                        }
-                        return acc;
-                      }, [])}
-                    </div>
+                              language={language}
+                              isSpacer={!row.right}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
