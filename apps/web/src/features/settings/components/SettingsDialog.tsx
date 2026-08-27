@@ -55,7 +55,7 @@ export function SettingsDialog() {
       {/* Modal Dialog Window */}
       <div
         ref={modalRef}
-        className="text-text-main relative flex h-[620px] max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0c0d14] shadow-2xl transition-all duration-200 md:flex-row"
+        className="text-text-main border-border/30 bg-brand-mantle relative flex h-[620px] max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border shadow-2xl transition-all duration-200 md:flex-row"
       >
         {/* Left Sub-Nav Sidebar */}
         <div className="border-border/30 bg-surface/20 flex w-full shrink-0 flex-col justify-between border-b p-3 md:w-56 md:border-r md:border-b-0 md:p-4">

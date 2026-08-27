@@ -37,13 +37,6 @@ interface RegistryBrowserProps {
 
 type StatusFilter = 'all' | 'installed' | 'not_installed';
 
-const statusChipClass = (active: boolean) =>
-  `cursor-pointer rounded-lg px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase transition-colors ${
-    active
-      ? 'bg-accent text-brand-crust shadow-sm'
-      : 'text-text-muted hover:text-text-main hover:bg-surface/60'
-  }`;
-
 export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
   const { syncProviders } = api;
   const [query, setQuery] = useState('');

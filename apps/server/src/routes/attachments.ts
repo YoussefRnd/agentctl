@@ -8,6 +8,7 @@ import { sessions } from '@agentctl/core/db';
 
 const ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+const SAFE_ID_REGEX = /^[a-zA-Z0-9_-]+$/;
 
 export const attachmentsRoutes: FastifyPluginAsync = (fastify) => {
   // Add binary content type parser for image mime types
@@ -24,6 +25,10 @@ export const attachmentsRoutes: FastifyPluginAsync = (fastify) => {
     Params: { sessionId: string };
   }>('/sessions/:sessionId/attachments', async (request, reply) => {
     const { sessionId } = request.params;
+
+    if (!SAFE_ID_REGEX.test(sessionId)) {
+      return reply.code(400).send({ error: 'Invalid session ID format' });
+    }
 
     // Verify session exists
     const session = await fastify.db.query.sessions.findFirst({
@@ -88,6 +93,10 @@ export const attachmentsRoutes: FastifyPluginAsync = (fastify) => {
     Params: { sessionId: string; attachmentId: string };
   }>('/sessions/:sessionId/attachments/:attachmentId', (request, reply) => {
     const { sessionId, attachmentId } = request.params;
+
+    if (!SAFE_ID_REGEX.test(sessionId) || !SAFE_ID_REGEX.test(attachmentId)) {
+      return reply.code(400).send({ error: 'Invalid ID format' });
+    }
 
     const sessionAttachmentsDir = path.join(os.tmpdir(), 'agentctl-attachments', sessionId);
 
