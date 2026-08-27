@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { Spinner } from '@/shared';
+import { ThinkingSpinner } from '@/shared';
 import { useSettings } from '@/hooks/useSettings';
 import { useSession } from '@/contexts/SessionContext';
 import { StreamingMarkdown } from './StreamingMarkdown';
@@ -76,7 +76,7 @@ export function ThinkingBlock({
           events.length > 0 ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
-        <Spinner done={isCompleted} className="text-accent text-[15px]" />
+        <ThinkingSpinner done={isCompleted} className="text-accent text-[15px]" />
         <span>{label}</span>
         {events.length > 0 && (
           <ChevronRight

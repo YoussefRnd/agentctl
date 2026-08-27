@@ -14,7 +14,7 @@ import {
   Files,
   Copy,
 } from 'lucide-react';
-import { Spinner, StreamingDots } from '@/shared';
+import { ThinkingSpinner, StreamingDots } from '@/shared';
 import { useSettings } from '@/hooks/useSettings';
 import { useSession } from '@/contexts/SessionContext';
 import { StreamingMarkdown } from './StreamingMarkdown';
@@ -540,7 +540,7 @@ export function UnifiedActivityBlock({
           events.length > 0 || isInitialThinking ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
-        <Spinner done={isCompleted} className="text-accent text-[15px]" />
+        <ThinkingSpinner done={isCompleted} className="text-accent text-[15px]" />
         <span>{summaryLabel}</span>
         {(events.length > 0 || isInitialThinking) && (
           <ChevronRight

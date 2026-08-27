@@ -1,1 +1,6 @@
-export { Spinner, type SpinnerProps } from '@agentctl/ui';
+export {
+  Spinner,
+  ThinkingSpinner,
+  type SpinnerProps,
+  type ThinkingSpinnerProps,
+} from '@agentctl/ui';
