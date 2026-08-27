@@ -6,6 +6,10 @@ export function setApiBaseUrl(url: string) {
   apiBaseUrl = url;
 }
 
+export function getApiBaseUrl(): string {
+  return apiBaseUrl;
+}
+
 const CREDENTIAL_KEY = 'agentctl_session_key';
 let inMemoryCredential: string | null = null;
 

@@ -1,5 +1,5 @@
 import { ApiError } from '../api-error.js';
-import { redirectToLogin } from '../api-client.js';
+import { redirectToLogin, getApiBaseUrl, getAuthToken } from '../api-client.js';
 
 export interface UploadAttachmentResult {
   attachmentId: string;
@@ -35,9 +35,17 @@ export function uploadAttachment(
 
   return new Promise<UploadAttachmentResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}/api/sessions/${sessionId}/attachments`;
 
-    xhr.open('POST', `/api/sessions/${sessionId}/attachments`);
+    xhr.open('POST', url);
     xhr.withCredentials = true;
+
+    const token = getAuthToken();
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
     xhr.setRequestHeader('Content-Type', file.type);
     xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
 

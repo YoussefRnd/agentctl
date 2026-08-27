@@ -1,5 +1,4 @@
-import { RefreshCw, X } from 'lucide-react';
-
+import { RefreshCw, X, Loader2, AlertCircle } from 'lucide-react';
 import type { PendingAttachment } from '../../../hooks/useAttachments';
 
 interface AttachmentStripProps {
@@ -19,84 +18,89 @@ export function AttachmentStrip({ attachments, onRemove, onRetry }: AttachmentSt
 
   return (
     <div
-      className="flex items-center gap-2 overflow-x-auto px-4 py-2"
+      className="flex items-center gap-2.5 overflow-x-auto px-5 py-2.5"
       style={{ scrollbarWidth: 'none' }}
     >
       {attachments.map((attachment) => (
-        <div key={attachment.localId} className="group relative h-11 w-11 shrink-0">
+        <div
+          key={attachment.localId}
+          className="group border-border/40 bg-surface-secondary/40 relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border shadow-sm transition-all sm:h-18 sm:w-18"
+        >
           {/* Base image thumbnail */}
           <img
             src={attachment.objectUrl}
             alt={attachment.file.name}
-            className="h-full w-full rounded-sm object-cover"
+            className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
           />
 
-          {/* Uploading: circular progress overlay */}
+          {/* Bottom subtle gradient for text readability */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-black/80 to-transparent" />
+
+          {/* Uploading: circular spinner overlay */}
           {attachment.state === 'uploading' && (
-            <svg className="absolute inset-0 h-full w-full" viewBox="0 0 44 44">
-              <circle cx="22" cy="22" r="18" fill="rgba(17,17,27,0.7)" />
-              <circle
-                cx="22"
-                cy="22"
-                r="18"
-                fill="none"
-                stroke="var(--color-accent)"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeDasharray={String(2 * Math.PI * 18)}
-                strokeDashoffset={String(2 * Math.PI * 18 * (1 - attachment.progress / 100))}
-                transform="rotate(-90 22 22)"
-                className="transition-[stroke-dashoffset]"
-              />
-            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/60 backdrop-blur-xs">
+              <Loader2 className="text-accent h-4 w-4 animate-spin" />
+              <span className="font-mono text-[9px] font-bold text-white">
+                {attachment.progress}%
+              </span>
+            </div>
           )}
 
-          {/* Error: red tint overlay + retry button */}
+          {/* Error: dark frosted overlay + retry & remove controls */}
           {attachment.state === 'error' && (
-            <div className="absolute inset-0 flex items-center justify-center rounded-sm bg-red-500/50">
-              <button
-                type="button"
-                onClick={() => {
-                  onRetry(attachment.localId);
-                }}
-                className="flex h-full w-1/2 cursor-pointer items-center justify-center text-white hover:bg-black/20"
-                aria-label="Retry upload"
-                title="Retry upload"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 border border-red-500/40 bg-black/80 p-1 backdrop-blur-xs">
               <button
                 type="button"
                 onClick={() => {
                   onRemove(attachment.localId);
                 }}
-                className="flex h-full w-1/2 cursor-pointer items-center justify-center text-white hover:bg-black/20"
+                className="hover:bg-surface/60 text-text-muted hover:text-text-main absolute top-1 right-1 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full transition-colors"
                 aria-label="Remove failed attachment"
                 title="Remove attachment"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3 w-3" />
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onRetry(attachment.localId);
+                }}
+                className="flex cursor-pointer items-center gap-1 rounded-md border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-[9.5px] font-bold text-red-300 transition-colors hover:bg-red-500/30"
+                aria-label="Retry upload"
+                title="Retry upload"
+              >
+                <RefreshCw className="h-2.5 w-2.5" />
+                <span>Retry</span>
+              </button>
+
+              <div className="flex items-center gap-0.5 text-[8px] font-medium text-red-400">
+                <AlertCircle className="h-2.5 w-2.5" />
+                <span>Failed</span>
+              </div>
             </div>
           )}
 
-          {/* Ready: remove button in top-right corner */}
+          {/* Ready: remove button on top right */}
           {attachment.state === 'ready' && (
             <button
               type="button"
               onClick={() => {
                 onRemove(attachment.localId);
               }}
-              className="absolute -top-1 -right-1 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-[rgba(180,190,254,0.08)] bg-[#181825] text-[#a6adc8] opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:text-[#cdd6f4]"
+              className="absolute top-1 right-1 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-black/70 text-white/80 opacity-0 shadow-sm backdrop-blur-xs transition-opacity duration-150 group-hover:opacity-100 hover:bg-black hover:text-white"
               aria-label="Remove attachment"
             >
-              <X className="h-2.5 w-2.5" />
+              <X className="h-3 w-3" />
             </button>
           )}
 
           {/* File size badge — bottom-right */}
-          <span className="absolute right-0.5 bottom-0.5 rounded bg-[rgba(17,17,27,0.75)] px-1 text-[9px] leading-tight font-medium text-[#cdd6f4]">
-            {formatSize(attachment.file.size)}
-          </span>
+          {attachment.state !== 'error' && (
+            <span className="absolute right-1 bottom-1 rounded bg-black/60 px-1 py-0.5 font-mono text-[8.5px] leading-tight font-medium text-white/90 shadow-xs backdrop-blur-xs">
+              {formatSize(attachment.file.size)}
+            </span>
+          )}
         </div>
       ))}
     </div>
