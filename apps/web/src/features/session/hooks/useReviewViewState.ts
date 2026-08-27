@@ -1,6 +1,8 @@
 import { useReducer, useCallback } from 'react';
 import type { FileState } from '../components/ReviewHeader';
 
+export type ReviewScope = 'uncommitted' | 'this_turn' | 'all_edits';
+
 export interface ReviewViewState {
   isDiscardModalOpen: boolean;
   isMergeDialogOpen: boolean;
@@ -10,6 +12,7 @@ export interface ReviewViewState {
   collapsedSections: Record<FileState, boolean>;
   viewMode: 'inline' | 'split';
   searchQuery: string;
+  scope: ReviewScope;
 }
 
 export type ReviewViewAction =
@@ -23,6 +26,7 @@ export type ReviewViewAction =
   | { type: 'RESET_COMMIT_MESSAGE'; payload: string }
   | { type: 'TOGGLE_VIEW_MODE' }
   | { type: 'SET_SEARCH_QUERY'; payload: string }
+  | { type: 'SET_REVIEW_SCOPE'; payload: ReviewScope }
   | { type: 'COLLAPSE_ALL' }
   | { type: 'EXPAND_ALL'; payload: string[] };
 
@@ -80,6 +84,11 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
         ...state,
         searchQuery: action.payload,
       };
+    case 'SET_REVIEW_SCOPE':
+      return {
+        ...state,
+        scope: action.payload,
+      };
     case 'COLLAPSE_ALL':
       return { ...state, collapsedFiles: {} };
     case 'EXPAND_ALL': {
@@ -94,7 +103,7 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
   }
 }
 
-export function useReviewViewState() {
+export function useReviewViewState(initialScope: ReviewScope = 'uncommitted') {
   const [state, dispatch] = useReducer(reviewViewReducer, {
     isDiscardModalOpen: false,
     isMergeDialogOpen: false,
@@ -107,10 +116,11 @@ export function useReviewViewState() {
       staged: false,
       modified: false,
       deleted: false,
-      committed: true,
+      committed: false,
     },
     viewMode: 'inline',
     searchQuery: '',
+    scope: initialScope,
   });
 
   const toggleFileCollapse = useCallback((filePath: string) => {
@@ -129,5 +139,9 @@ export function useReviewViewState() {
     dispatch({ type: 'COLLAPSE_ALL' });
   }, []);
 
-  return { state, dispatch, toggleFileCollapse, toggleSection, expandAll, collapseAll };
+  const setScope = useCallback((scope: ReviewScope) => {
+    dispatch({ type: 'SET_REVIEW_SCOPE', payload: scope });
+  }, []);
+
+  return { state, dispatch, toggleFileCollapse, toggleSection, expandAll, collapseAll, setScope };
 }

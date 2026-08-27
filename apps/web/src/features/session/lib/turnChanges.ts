@@ -1,0 +1,406 @@
+import type { ACPEventRow } from '@agentctl/shared';
+import { isACPEventToolCall } from '@agentctl/shared';
+import { parseDiff } from '../../../shared/lib/diff-parser';
+import type { ReviewFile } from '../components/ReviewHeader';
+
+export interface TurnFileChange {
+  path: string;
+  additions: number;
+  deletions: number;
+  status?: 'modified' | 'added' | 'deleted';
+}
+
+export interface TurnChangesSummary {
+  files: TurnFileChange[];
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
+/**
+ * Normalizes a relative file path (removes leading slashes, quotes, ./, etc.)
+ */
+export function normalizeFilePath(rawPath: string): string {
+  if (!rawPath) return '';
+  let p = rawPath
+    .trim()
+    .replace(/^[`'"]+|[`'"]+$/g, '')
+    .replace(/\\/g, '/');
+  if (p.startsWith('./')) p = p.substring(2);
+  if (p.startsWith('/')) p = p.substring(1);
+  return p;
+}
+
+/**
+ * Checks if two file path strings point to the same file.
+ */
+export function filePathMatches(pathA: string, pathB: string): boolean {
+  const a = normalizeFilePath(pathA);
+  const b = normalizeFilePath(pathB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.endsWith('/' + b) || b.endsWith('/' + a)) return true;
+  const baseA = a.split('/').pop();
+  const baseB = b.split('/').pop();
+  return baseA === baseB && !!baseA;
+}
+
+/**
+ * Extracts a file path from a tool call's arguments, locations, content, title, or rawOutput.
+ */
+export function extractFilePathFromToolCall(data: Record<string, unknown>): string | null {
+  // 1. Locations
+  if (Array.isArray(data.locations) && data.locations.length > 0) {
+    const first = data.locations[0] as { path?: string };
+    if (first?.path) return normalizeFilePath(first.path);
+  }
+
+  // 2. Content diff or path
+  if (Array.isArray(data.content)) {
+    for (const c of data.content as { path?: string; type?: string }[]) {
+      if (c?.path) return normalizeFilePath(c.path);
+    }
+  }
+
+  // 3. RawOutput metadata (filepath, filediff, display path)
+  const rawOut = data.rawOutput as Record<string, unknown> | undefined;
+  if (rawOut && typeof rawOut === 'object') {
+    const meta = rawOut.metadata as Record<string, unknown> | undefined;
+    if (meta && typeof meta === 'object') {
+      if (typeof meta.filepath === 'string') return normalizeFilePath(meta.filepath);
+      const filediff = meta.filediff as { file?: string } | undefined;
+      if (typeof filediff?.file === 'string') return normalizeFilePath(filediff.file);
+      const display = meta.display as { path?: string } | undefined;
+      if (typeof display?.path === 'string') return normalizeFilePath(display.path);
+    }
+  }
+
+  // 4. Arguments / RawInput (handling nested arguments)
+  const sources: Record<string, unknown>[] = [];
+  if (data.arguments && typeof data.arguments === 'object') {
+    sources.push(data.arguments as Record<string, unknown>);
+    const nested = (data.arguments as Record<string, unknown>).arguments;
+    if (nested && typeof nested === 'object') sources.push(nested as Record<string, unknown>);
+  }
+  if (data.rawInput && typeof data.rawInput === 'object') {
+    sources.push(data.rawInput as Record<string, unknown>);
+    const nested = (data.rawInput as Record<string, unknown>).arguments;
+    if (nested && typeof nested === 'object') sources.push(nested as Record<string, unknown>);
+  }
+
+  for (const src of sources) {
+    const directCandidates = [
+      src.targetFile,
+      src.TargetFile,
+      src.filePath,
+      src.FilePath,
+      src.file_path,
+      src.path,
+      src.Path,
+      src.file,
+      src.filename,
+      src.uri,
+      src.file_uri,
+      src.target_file,
+      src.AbsolutePath,
+      src.absolutePath,
+      src.newPath,
+      src.new_path,
+      src.destination,
+    ];
+    for (const cand of directCandidates) {
+      if (typeof cand === 'string' && cand.trim().length > 0) {
+        return normalizeFilePath(cand);
+      }
+    }
+
+    // Generic key scanning for any file-like argument
+    for (const [key, val] of Object.entries(src)) {
+      if (typeof val === 'string' && val.trim().length > 0 && !val.includes('\n')) {
+        const clean = val.trim();
+        const lowerKey = key.toLowerCase();
+        if (
+          lowerKey.includes('path') ||
+          lowerKey.includes('file') ||
+          lowerKey.includes('target') ||
+          lowerKey.includes('dest')
+        ) {
+          return normalizeFilePath(clean);
+        }
+        if (/\.[a-zA-Z0-9_-]{1,10}$/.test(clean) && clean.length < 250) {
+          return normalizeFilePath(clean);
+        }
+      }
+    }
+  }
+
+  // 5. Name or Title when the tool itself is named after the file path
+  const name = typeof data.name === 'string' ? data.name.trim() : '';
+  if (name && (name.includes('/') || /\.[a-zA-Z0-9_-]{1,10}$/.test(name))) {
+    return normalizeFilePath(name);
+  }
+
+  const title = typeof data.title === 'string' ? data.title.trim() : '';
+  if (title && (title.includes('/') || /\.[a-zA-Z0-9_-]{1,10}$/.test(title))) {
+    const match =
+      /(?:created?|edited?|written?|wrote|deleted?|updated?|modifi(?:ed|y)|saving|saved)\s+[`'"]?([a-zA-Z0-9_./\\-]+)[`'"]?/i.exec(
+        title,
+      );
+    if (match?.[1]) {
+      return normalizeFilePath(match[1]);
+    }
+    if (/\.[a-zA-Z0-9_-]{1,10}$/.test(title)) {
+      return normalizeFilePath(title);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Checks if a tool call is an edit / write / creation file modification action.
+ */
+export function isFileModificationToolCall(data: {
+  name?: string;
+  kind?: string;
+  title?: string | null;
+  content?: unknown[];
+  arguments?: Record<string, unknown>;
+  rawInput?: Record<string, unknown>;
+  rawOutput?: Record<string, unknown>;
+}): boolean {
+  const name = (data.name ?? '').toLowerCase();
+  const kind = (data.kind ?? '').toLowerCase();
+  const title = (data.title ?? '').toLowerCase();
+
+  if (kind === 'edit' || kind === 'delete' || kind === 'create') return true;
+
+  if (
+    name.includes('edit') ||
+    name.includes('write') ||
+    name.includes('create') ||
+    name.includes('replace') ||
+    name.includes('delete') ||
+    name.includes('patch') ||
+    name.includes('save')
+  ) {
+    return true;
+  }
+
+  if (
+    title.includes('create') ||
+    title.includes('edit') ||
+    title.includes('write') ||
+    title.includes('delete') ||
+    title.includes('update') ||
+    title.includes('modify')
+  ) {
+    return true;
+  }
+
+  // Check rawOutput for write / edit indicators
+  const rawOut = data.rawOutput as Record<string, unknown> | undefined;
+  if (rawOut && typeof rawOut === 'object') {
+    const outStr = typeof rawOut.output === 'string' ? rawOut.output.toLowerCase() : '';
+    if (
+      outStr.includes('wrote file') ||
+      outStr.includes('edit applied') ||
+      outStr.includes('created') ||
+      outStr.includes('saved') ||
+      outStr.includes('deleted')
+    ) {
+      return true;
+    }
+    const meta = rawOut.metadata as Record<string, unknown> | undefined;
+    if (meta && typeof meta === 'object') {
+      if (meta.diff || meta.filediff || (meta.filepath && meta.exists === false)) {
+        return true;
+      }
+    }
+  }
+
+  // Check content messages
+  if (Array.isArray(data.content)) {
+    for (const c of data.content as {
+      type?: string;
+      content?: { text?: string };
+    }[]) {
+      if (c.type === 'diff') return true;
+      const text = c.content?.text?.toLowerCase() ?? '';
+      if (
+        text.includes('wrote file') ||
+        text.includes('edit applied') ||
+        text.includes('created')
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Calculates diff additions and deletions for a given review file.
+ */
+export function getDiffStats(diffText: string): { additions: number; deletions: number } {
+  if (!diffText) return { additions: 0, deletions: 0 };
+  const hunks = parseDiff(diffText);
+  let additions = 0;
+  let deletions = 0;
+  for (const hunk of hunks) {
+    for (const line of hunk.lines) {
+      if (line.type === 'added') additions++;
+      else if (line.type === 'removed') deletions++;
+    }
+  }
+  return { additions, deletions };
+}
+
+/**
+ * Extracts all file changes made in a specific group of events (an agent response turn),
+ * cross-referencing with live session review files for 100% exact diff stats.
+ */
+export function extractTurnChanges(
+  events: ACPEventRow[],
+  reviewFiles?: ReviewFile[],
+): TurnChangesSummary {
+  const fileMap = new Map<string, TurnFileChange>();
+
+  for (const event of events) {
+    if (!isACPEventToolCall(event)) continue;
+
+    const data = event.data;
+    if (!isFileModificationToolCall(data)) continue;
+
+    const filePath = extractFilePathFromToolCall(data);
+    if (!filePath) continue;
+
+    let additions = 0;
+    let deletions = 0;
+    let matchedReviewPath = filePath;
+    let status: 'modified' | 'added' | 'deleted' =
+      data.kind === 'delete' || data.name?.toLowerCase().includes('delete')
+        ? 'deleted'
+        : data.name?.toLowerCase().includes('create')
+          ? 'added'
+          : 'modified';
+
+    // Cross-reference with live review files if provided
+    if (reviewFiles && reviewFiles.length > 0) {
+      const match = reviewFiles.find((rf) => filePathMatches(rf.path, filePath));
+      if (match) {
+        matchedReviewPath = match.path;
+        status =
+          match.state === 'untracked'
+            ? 'added'
+            : match.state === 'deleted'
+              ? 'deleted'
+              : 'modified';
+        const stats = getDiffStats(match.diff);
+        additions = stats.additions;
+        deletions = stats.deletions;
+      }
+    }
+
+    // If additions/deletions are still 0, parse tool call args / content diffs
+    if (additions === 0 && deletions === 0) {
+      if (Array.isArray(data.content)) {
+        for (const item of data.content as {
+          type?: string;
+          oldText?: string | null;
+          newText?: string;
+        }[]) {
+          if (item.type === 'diff' && typeof item.newText === 'string') {
+            const newLines = item.newText.split('\n').length;
+            const oldLines =
+              typeof item.oldText === 'string' && item.oldText
+                ? item.oldText.split('\n').length
+                : 0;
+            if (newLines >= oldLines) {
+              additions += newLines - oldLines;
+            } else {
+              deletions += oldLines - newLines;
+            }
+          }
+        }
+      }
+
+      // Check tool arguments for CodeContent or ReplacementContent
+      const args = (data.arguments || data.rawInput) as Record<string, unknown> | undefined;
+      if (args && typeof args === 'object') {
+        const codeContent =
+          (args.CodeContent as string) ||
+          (args.codeContent as string) ||
+          (args.content as string) ||
+          (args.text as string);
+        if (typeof codeContent === 'string' && codeContent.length > 0) {
+          additions = codeContent.split('\n').length;
+        }
+
+        const replacement = args.ReplacementContent as string | undefined;
+        const target = args.TargetContent as string | undefined;
+        if (typeof replacement === 'string' && typeof target === 'string') {
+          additions = replacement.split('\n').length;
+          deletions = target.split('\n').length;
+        }
+      }
+    }
+
+    const existing = fileMap.get(matchedReviewPath);
+    if (existing) {
+      existing.additions = Math.max(existing.additions, additions);
+      existing.deletions = Math.max(existing.deletions, deletions);
+    } else {
+      fileMap.set(matchedReviewPath, {
+        path: matchedReviewPath,
+        additions,
+        deletions,
+        status,
+      });
+    }
+  }
+
+  const files = Array.from(fileMap.values());
+  const totalAdditions = files.reduce((sum, f) => sum + f.additions, 0);
+  const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
+
+  return {
+    files,
+    totalAdditions,
+    totalDeletions,
+  };
+}
+
+/**
+ * Extracts the set of file paths modified during the latest agent prompt turn.
+ */
+export function extractLatestTurnTouchedFiles(events: ACPEventRow[]): Set<string> {
+  const set = new Set<string>();
+  let lastUserIdx = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.type === 'text' && (e.data as { role?: string })?.role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+
+  const turnEvents = lastUserIdx >= 0 ? events.slice(lastUserIdx) : events;
+  for (const e of turnEvents) {
+    if (isACPEventToolCall(e)) {
+      const p = extractFilePathFromToolCall(e.data);
+      if (p) {
+        set.add(p);
+        // Add segments and basename for flexible matching
+        const base = p.split('/').pop();
+        if (base) set.add(base);
+
+        const parts = p.split('/');
+        for (let i = 1; i < parts.length; i++) {
+          set.add(parts.slice(i).join('/'));
+        }
+      }
+    }
+  }
+  return set;
+}

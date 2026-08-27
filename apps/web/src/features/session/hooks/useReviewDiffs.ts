@@ -2,9 +2,35 @@ import { useMemo } from 'react';
 import { parseDiff } from '../../../shared/lib/diff-parser';
 import { matchSorter } from 'match-sorter';
 import type { ReviewFile, FileState } from '../components/ReviewHeader';
+import type { ReviewScope } from './useReviewViewState';
+import { filePathMatches } from '../lib/turnChanges';
 
-export function useReviewDiffs(files: ReviewFile[], searchQuery: string) {
-  const activeFiles = useMemo(() => files.filter((f) => f.state !== 'committed'), [files]);
+export function useReviewDiffs(
+  files: ReviewFile[],
+  searchQuery: string,
+  scope: ReviewScope = 'uncommitted',
+  turnFiles?: Set<string>,
+) {
+  const activeFiles = useMemo(() => {
+    if (scope === 'all_edits') {
+      return files;
+    }
+    if (scope === 'this_turn') {
+      if (!turnFiles || turnFiles.size === 0) {
+        return files.filter((f) => f.state !== 'committed');
+      }
+      const turnList = Array.from(turnFiles);
+      return files.filter((f) => {
+        const base = f.path.split('/').pop();
+        return (
+          turnFiles.has(f.path) ||
+          (base && turnFiles.has(base)) ||
+          turnList.some((tf) => filePathMatches(f.path, tf))
+        );
+      });
+    }
+    return files.filter((f) => f.state !== 'committed');
+  }, [files, scope, turnFiles]);
 
   const filteredFiles = useMemo(() => {
     if (!searchQuery) return activeFiles;

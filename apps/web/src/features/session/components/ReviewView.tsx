@@ -1,12 +1,14 @@
 import { useMemo, useCallback, useEffect } from 'react';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewDialogs } from './ReviewDialogs';
-import { useReviewViewState } from '../hooks/useReviewViewState';
+import { useReviewViewState, type ReviewScope } from '../hooks/useReviewViewState';
 import { useReviewDiffs } from '../hooks/useReviewDiffs';
 import { ReviewClosedState, ReviewLoadingState, ReviewEmptyState } from './ReviewStates';
 import { ReviewFileList } from './ReviewFileList';
 import { ReviewCommitInput } from './ReviewCommitInput';
-import { useSession } from '../../../contexts/SessionContext';
+import { useSession, useSessionStream } from '../../../contexts/SessionContext';
+import { extractLatestTurnTouchedFiles, filePathMatches } from '../lib/turnChanges';
+import { useUIStore } from '@/shared';
 import { openInEditor } from '@agentctl/api-client';
 import { toast } from 'sonner';
 
@@ -32,6 +34,8 @@ export function ReviewView() {
     isDiscardingSession: isDiscarding,
   } = useSession();
 
+  const { events } = useSessionStream();
+
   useEffect(() => {
     refetchReview();
   }, [refetchReview]);
@@ -44,11 +48,53 @@ export function ReviewView() {
   const onRevert = revertFile;
   const onStageAll = stageAll;
   const onUnstageAll = unstageAll;
-
-  const { state, dispatch, toggleFileCollapse, toggleSection, expandAll, collapseAll } =
+  const { state, dispatch, toggleFileCollapse, toggleSection, expandAll, collapseAll, setScope } =
     useReviewViewState();
 
-  const { activeFiles, parsedFiles, grouped, fileStats } = useReviewDiffs(files, state.searchQuery);
+  const storeReviewScope = useUIStore((s) => s.reviewScope);
+  const setStoreReviewScope = useUIStore((s) => s.setReviewScope);
+
+  useEffect(() => {
+    if (storeReviewScope && storeReviewScope !== state.scope) {
+      setScope(storeReviewScope);
+    }
+  }, [storeReviewScope, setScope, state.scope]);
+
+  const handleScopeChange = useCallback(
+    (newScope: ReviewScope) => {
+      setScope(newScope);
+      setStoreReviewScope(newScope);
+    },
+    [setScope, setStoreReviewScope],
+  );
+
+  const latestTurnFiles = useMemo(() => extractLatestTurnTouchedFiles(events), [events]);
+
+  const scopeCounts = useMemo(() => {
+    const uncommitted = files.filter((f) => f.state !== 'committed').length;
+    const turnList = Array.from(latestTurnFiles);
+    const thisTurn = files.filter((f) => {
+      const base = f.path.split('/').pop();
+      return (
+        latestTurnFiles.has(f.path) ||
+        (base && latestTurnFiles.has(base)) ||
+        turnList.some((tf) => filePathMatches(f.path, tf))
+      );
+    }).length;
+    const allEdits = files.length;
+    return {
+      uncommitted,
+      this_turn: thisTurn,
+      all_edits: allEdits,
+    };
+  }, [files, latestTurnFiles]);
+
+  const { activeFiles, parsedFiles, grouped, fileStats } = useReviewDiffs(
+    files,
+    state.searchQuery,
+    state.scope,
+    latestTurnFiles,
+  );
 
   const isClosed = sessionStatus === 'merged' || sessionStatus === 'discarded';
 
@@ -104,6 +150,9 @@ export function ReviewView() {
     <div className="bg-surface-secondary/5 flex h-full min-h-0 flex-col">
       <ReviewHeader
         files={activeFiles}
+        scope={state.scope}
+        onScopeChange={handleScopeChange}
+        scopeCounts={scopeCounts}
         viewMode={state.viewMode}
         onToggleViewMode={() => {
           dispatch({ type: 'TOGGLE_VIEW_MODE' });
