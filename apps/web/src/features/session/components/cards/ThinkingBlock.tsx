@@ -72,7 +72,7 @@ export function ThinkingBlock({
         aria-controls="activity-details"
         onClick={toggle}
         disabled={events.length === 0}
-        className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex items-center gap-2 text-[15px] font-bold tracking-tight transition-colors outline-none select-none ${
+        className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex items-center gap-2 text-[15px] font-normal tracking-tight transition-colors outline-none select-none ${
           events.length > 0 ? 'cursor-pointer' : 'cursor-default'
         }`}
       >

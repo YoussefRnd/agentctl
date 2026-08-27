@@ -131,6 +131,20 @@
       opacity: 0.3;
     }
   }
+
+  --animate-ai-think: ai-think-spin 3.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+
+  @keyframes ai-think-spin {
+    0% {
+      transform: rotate(0deg) scale(0.92);
+    }
+    50% {
+      transform: rotate(180deg) scale(1.06);
+    }
+    100% {
+      transform: rotate(360deg) scale(0.92);
+    }
+  }
 }
 
 /* THEME OVERRIDES */

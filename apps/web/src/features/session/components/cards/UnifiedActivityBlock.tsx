@@ -536,7 +536,7 @@ export function UnifiedActivityBlock({
         aria-expanded={isOpen}
         onClick={toggle}
         disabled={events.length === 0 && !isInitialThinking}
-        className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex items-center gap-2 text-[15px] font-bold tracking-tight transition-colors outline-none select-none ${
+        className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex items-center gap-2 text-[15px] font-normal tracking-tight transition-colors outline-none select-none ${
           events.length > 0 || isInitialThinking ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
