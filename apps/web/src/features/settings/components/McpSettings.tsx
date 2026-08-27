@@ -109,13 +109,13 @@ export function McpSettings() {
   const showForm = isAddingNew || editingId;
 
   return (
-    <div className="animate-in fade-in relative mx-auto h-full w-full max-w-4xl overflow-y-auto p-6 select-none">
-      <div className="relative z-10 mb-8 flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between pr-10">
         <div>
-          <h1 className="text-text-main text-2xl font-black tracking-widest uppercase">
-            SETTINGS::MODEL_CONTEXT_PROTOCOL
-          </h1>
-          <p className="text-text-muted caption-xs mt-1 opacity-60">MANAGE MCP INTEGRATIONS</p>
+          <h2 className="text-text-main text-lg font-bold">MCP Servers</h2>
+          <p className="text-text-muted mt-0.5 text-xs">
+            Connect local and remote Model Context Protocol tools to extend your agents.
+          </p>
         </div>
         {!showForm && (
           <Button
@@ -123,15 +123,15 @@ export function McpSettings() {
             onClick={() => {
               setIsAddingNew(true);
             }}
-            className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-9 items-center gap-2 rounded-xl border px-4 text-[11px] font-bold tracking-widest uppercase"
+            className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold"
           >
             <Plus className="h-3.5 w-3.5" />
-            REGISTER_SERVER
+            Add Server
           </Button>
         )}
       </div>
 
-      <div className="relative z-10 space-y-4">
+      <div className="space-y-4">
         {showForm && (
           <McpServerForm
             formState={formState}
@@ -193,21 +193,22 @@ export function McpSettings() {
                   <Cpu className="text-text-muted/40 h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="text-text-muted text-[11px] font-black tracking-widest uppercase">
-                    NO_MCP_SERVERS_REGISTERED
+                  <h3 className="text-text-main text-sm font-semibold">
+                    No MCP Servers Configured
                   </h3>
-                  <p className="text-text-muted mt-1 max-w-sm text-center text-[11.5px] leading-relaxed font-bold opacity-60">
-                    Connect local and remote tools to give coding agents custom superpowers.
+                  <p className="text-text-muted mt-1 max-w-sm text-center text-xs leading-relaxed">
+                    Connect external tool servers to grant your AI agents custom tools and
+                    capabilities.
                   </p>
                 </div>
                 <Button
                   onClick={() => {
                     setIsAddingNew(true);
                   }}
-                  className="bg-accent hover:bg-accent/80 text-brand-crust mt-2 flex h-8 items-center gap-1 rounded-xl px-4 text-[10px] font-extrabold tracking-widest uppercase"
+                  className="bg-accent hover:bg-accent/80 text-brand-crust mt-2 flex h-8 items-center gap-1 rounded-lg px-3.5 text-xs font-semibold"
                 >
-                  <Plus className="h-3.5 w-3.5 stroke-[3]" />
-                  REGISTER_FIRST_SERVER
+                  <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                  Add First Server
                 </Button>
               </Card>
             )}

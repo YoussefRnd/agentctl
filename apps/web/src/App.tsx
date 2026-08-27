@@ -1,32 +1,59 @@
-import { Suspense, lazy } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Suspense, lazy, useEffect } from 'react';
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { Shell } from './features/shell/components/Shell';
 import { Sidebar } from './features/shell/components/Sidebar';
-import { SettingsSidebar } from './features/shell/components/SettingsSidebar';
 import { LoginView } from './routes/LoginView';
 import { NewProjectPalette } from './features/project/components/NewProjectPalette';
 import { useSettings } from './hooks/useSettings';
+import { useUIStore } from './shared';
 import { FontZoomIndicator } from './features/shell/components/FontZoomIndicator';
 import { FontConfigApplier } from './features/shell/components/FontConfigApplier';
+import { SettingsDialog } from './features/settings/components/SettingsDialog';
 import { Spinner } from '@agentctl/ui';
 
 const SessionView = lazy(() =>
   import('./routes/SessionView').then((m) => ({ default: m.SessionView })),
 );
-const SettingsPage = lazy(() =>
-  import('./features/settings/components/SettingsPage').then((m) => ({ default: m.SettingsPage })),
-);
 const SetupWizard = lazy(() =>
   import('./features/settings/components/SetupWizard').then((m) => ({ default: m.SetupWizard })),
 );
 
+function SettingsRouteRedirect() {
+  const [searchParams] = useSearchParams();
+  const openSettings = useUIStore((s) => s.openSettings);
+  const tab = (searchParams.get('tab') as 'general' | 'providers' | 'mcp') || 'general';
+
+  useEffect(() => {
+    openSettings(tab);
+  }, [openSettings, tab]);
+
+  return <Navigate to="/" replace />;
+}
+
 export function App() {
   const { settings } = useSettings();
+  const toggleSettings = useUIStore((s) => s.toggleSettings);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && (e.key === ',' || e.code === 'Comma')) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSettings();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    };
+  }, [toggleSettings]);
 
   return (
     <>
       <FontConfigApplier fontConfig={settings?.fontConfig} />
       <FontZoomIndicator />
+      <SettingsDialog />
       <Suspense fallback={null}>
         <SetupWizard />
       </Suspense>
@@ -57,24 +84,7 @@ export function App() {
               </Shell>
             }
           />
-          <Route
-            path="/settings"
-            element={
-              <Shell
-                nav={
-                  <div className="flex h-full w-full items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs">
-                      <span className="text-text-muted/40">/</span>
-                      <span className="text-text-muted font-medium">Settings</span>
-                    </div>
-                  </div>
-                }
-                sidebar={<SettingsSidebar />}
-              >
-                <SettingsPage />
-              </Shell>
-            }
-          />
+          <Route path="/settings" element={<SettingsRouteRedirect />} />
           <Route path="/sessions/:sessionId" element={<SessionView />} />
         </Routes>
       </Suspense>

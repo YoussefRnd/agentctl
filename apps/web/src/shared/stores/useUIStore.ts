@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 export type WorkbenchTab = 'status' | 'changes' | 'terminal';
+export type SettingsTab = 'general' | 'providers' | 'mcp';
 
 interface UIState {
   // Workbench & Layout State
@@ -12,6 +13,7 @@ interface UIState {
   // Global Modals State
   isMcpSettingsOpen: boolean;
   isSettingsOpen: boolean;
+  settingsTab: SettingsTab;
 
   // Active Subagent View (Replaces Main Chat Feed)
   activeSubagentId: string | null;
@@ -28,9 +30,10 @@ interface UIState {
   openMcpSettings: () => void;
   closeMcpSettings: () => void;
   toggleMcpSettings: () => void;
-  openSettings: () => void;
+  setSettingsTab: (tab: SettingsTab) => void;
+  openSettings: (tab?: SettingsTab) => void;
   closeSettings: () => void;
-  toggleSettings: () => void;
+  toggleSettings: (tab?: SettingsTab) => void;
   setActiveSubagentId: (id: string | null) => void;
   setActiveSubagent: (
     group:
@@ -45,6 +48,7 @@ export const useUIStore = create<UIState>((set) => ({
   isMobileSidebarOpen: false,
   isMcpSettingsOpen: false,
   isSettingsOpen: false,
+  settingsTab: 'general',
   activeSubagentId: null,
   activeSubagent: null,
 
@@ -57,9 +61,15 @@ export const useUIStore = create<UIState>((set) => ({
   openMcpSettings: () => set({ isMcpSettingsOpen: true }),
   closeMcpSettings: () => set({ isMcpSettingsOpen: false }),
   toggleMcpSettings: () => set((state) => ({ isMcpSettingsOpen: !state.isMcpSettingsOpen })),
-  openSettings: () => set({ isSettingsOpen: true }),
+  setSettingsTab: (tab) => set({ settingsTab: tab }),
+  openSettings: (tab) =>
+    set((state) => ({ isSettingsOpen: true, settingsTab: tab ?? state.settingsTab })),
   closeSettings: () => set({ isSettingsOpen: false }),
-  toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
+  toggleSettings: (tab) =>
+    set((state) => ({
+      isSettingsOpen: !state.isSettingsOpen,
+      settingsTab: tab ?? state.settingsTab,
+    })),
   setActiveSubagentId: (id) => set({ activeSubagentId: id }),
   setActiveSubagent: (group) =>
     set({

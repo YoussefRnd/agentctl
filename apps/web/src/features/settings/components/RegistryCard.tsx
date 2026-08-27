@@ -56,18 +56,18 @@ export function RegistryCard({
     hasAuth && provider.authState ? authStateConfig[provider.authState] : undefined;
 
   return (
-    <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-colors duration-300">
-      <div className="flex items-center justify-between gap-3">
+    <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-colors duration-200">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <ProviderIcon provider={provider} size="sm" className="shrink-0" />
-          <div className="flex min-w-0 items-baseline gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h3 className="text-text-main text-[13.5px] font-bold tracking-tight">{name}</h3>
-            <span className="text-text-muted ml-2 font-mono text-[10.5px] opacity-70">
+            <span className="text-text-muted font-mono text-[10.5px] opacity-70">
               v{provider.version ?? '0.0.1'}
             </span>
             {authStatus && !notInstalled && (
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase ${authStatus.className}`}
+                className={`rounded-md px-2 py-0.5 text-[9.5px] font-bold tracking-wider uppercase ${authStatus.className}`}
               >
                 {authStatus.label}
               </span>
@@ -75,15 +75,17 @@ export function RegistryCard({
           </div>
         </div>
 
-        <RegistryCardActions
-          provider={provider}
-          onInstall={onInstall}
-          onRemove={onRemove}
-          onAuth={onAuth}
-          onLogout={onLogout}
-          isInstalling={isInstalling}
-          isRemoving={isRemoving}
-        />
+        <div className="flex shrink-0 items-center self-start sm:self-auto">
+          <RegistryCardActions
+            provider={provider}
+            onInstall={onInstall}
+            onRemove={onRemove}
+            onAuth={onAuth}
+            onLogout={onLogout}
+            isInstalling={isInstalling}
+            isRemoving={isRemoving}
+          />
+        </div>
       </div>
 
       <p className="text-text-muted text-[11px] leading-relaxed opacity-85">

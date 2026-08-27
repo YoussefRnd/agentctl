@@ -9,6 +9,7 @@ import { useSession } from '../../../../contexts/SessionContext';
 import { StreamingDots } from '@/shared';
 import { Popover, PopoverTrigger, PopoverContent, Card, Tooltip } from '@agentctl/ui';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
+import { formatShortcut } from '../../../../shared/lib/platform';
 
 type Role = 'provider' | 'user';
 
@@ -127,7 +128,7 @@ export const TextCard = memo(function TextCard({
                 />
                 <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/5 pt-2">
                   <span className="text-text-muted/40 hidden text-[11px] select-none sm:inline">
-                    Esc to cancel • ⌘Enter to submit
+                    Esc to cancel • {formatShortcut('Enter')} to submit
                   </span>
                   <div className="flex items-center gap-2">
                     <button

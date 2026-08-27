@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { useSession } from '../../../contexts/SessionContext';
 import { projectKeys, sessionKeys } from '../../../shared/lib/queryKeys';
+import { formatShortcut } from '../../../shared/lib/platform';
 import { OpenInPicker } from './OpenInPicker';
 import { SessionHeaderTitle } from './SessionHeaderTitle';
 import { SessionHeaderDialogs } from './SessionHeaderDialogs';
@@ -280,7 +281,7 @@ export function SessionHeader({
           </button>
         )}
 
-        <Tooltip content="Toggle Inspector (⌘\)">
+        <Tooltip content={`Toggle Inspector (${formatShortcut('\\')})`}>
           <button
             type="button"
             onClick={onToggleWorkbench}

@@ -125,7 +125,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
         </Card>
       )}
 
-      {/* Top search & filter bar matching the reference image layout */}
+      {/* Top search & filter bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <SearchBar
@@ -136,21 +136,31 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
             onClear={() => {
               setQuery('');
             }}
-            placeholder="Search agents..."
+            placeholder="Search providers & agents..."
           />
         </div>
 
-        <div className="flex flex-wrap items-center justify-start gap-1 sm:justify-end">
-          {(['all', 'installed', 'not_installed'] as StatusFilter[]).map((f) => (
+        <div className="border-border/30 bg-surface/40 flex shrink-0 gap-1 rounded-xl border p-1">
+          {(
+            [
+              { id: 'all', label: 'All' },
+              { id: 'installed', label: 'Installed' },
+              { id: 'not_installed', label: 'Available' },
+            ] as const
+          ).map(({ id, label }) => (
             <button
-              key={f}
+              key={id}
               type="button"
               onClick={() => {
-                setStatusFilter(f);
+                setStatusFilter(id);
               }}
-              className={statusChipClass(statusFilter === f)}
+              className={`cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                statusFilter === id
+                  ? 'bg-accent text-brand-crust shadow-sm'
+                  : 'text-text-muted hover:text-text-main hover:bg-surface/60'
+              }`}
             >
-              {f === 'all' ? 'All' : f === 'installed' ? 'Installed' : 'Not Installed'}
+              {label}
             </button>
           ))}
         </div>

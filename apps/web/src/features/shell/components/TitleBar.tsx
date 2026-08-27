@@ -5,6 +5,7 @@ import { TitleBarWindowControls } from './TitleBarWindowControls';
 import { UpdateIndicator } from './UpdateIndicator';
 import { useUpdate } from '../hooks/useUpdate';
 import { Tooltip } from '@agentctl/ui';
+import { formatShortcut } from '../../../shared/lib/platform';
 
 interface TitleBarProps {
   nav: ReactNode;
@@ -61,7 +62,7 @@ export function TitleBar({ nav, onToggleSidebar }: TitleBarProps) {
         {/* Left: Sidebar Toggle & Text Brand */}
         <div className="flex shrink-0 items-center gap-2">
           {onToggleSidebar && (
-            <Tooltip content="Toggle Sidebar (⌘B)">
+            <Tooltip content={`Toggle Sidebar (${formatShortcut('B')})`}>
               <button
                 type="button"
                 onClick={onToggleSidebar}
