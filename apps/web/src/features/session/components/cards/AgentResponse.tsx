@@ -2,7 +2,10 @@ import { memo, useMemo } from 'react';
 import { SubagentBlock } from './SubagentBlock';
 import { UnifiedActivityBlock } from './UnifiedActivityBlock';
 import { StreamingMarkdown } from './StreamingMarkdown';
+import { TurnChangesCard } from './TurnChangesCard';
 import { isSubagentToolCall, extractSubagentGroups } from './subagentBlockUtils';
+import { extractTurnChanges } from '../../lib/turnChanges';
+import { useSession } from '../../../../contexts/SessionContext';
 import type { ACPEventRow } from '@agentctl/shared';
 import { isACPEventText, isACPEventToolCall, isACPEventSubagentUpdate } from '@agentctl/shared';
 
@@ -18,7 +21,10 @@ const AgentResponseComponent = function AgentResponse({
   isStreaming = false,
   isActive = false,
 }: AgentResponseProps) {
-  const { activityEvents, responseEvent, subagentGroups } = useMemo(() => {
+  const { reviewData } = useSession();
+  const reviewFiles = reviewData?.files;
+
+  const { activityEvents, responseEvent, subagentGroups, turnChanges } = useMemo(() => {
     const activities: ACPEventRow[] = [];
     let response: ACPEventRow | undefined;
 
@@ -69,13 +75,15 @@ const AgentResponseComponent = function AgentResponse({
     }
 
     const groups = extractSubagentGroups(events);
+    const changes = extractTurnChanges(events, reviewFiles);
 
     return {
       activityEvents: activities,
       responseEvent: response,
       subagentGroups: groups,
+      turnChanges: changes,
     };
-  }, [events]);
+  }, [events, reviewFiles]);
 
   const hasActivity = activityEvents.length > 0;
   const isInitialThinking =
@@ -112,6 +120,8 @@ const AgentResponseComponent = function AgentResponse({
           />
         </div>
       )}
+
+      {turnChanges.files.length > 0 && <TurnChangesCard summary={turnChanges} />}
     </div>
   );
 };
