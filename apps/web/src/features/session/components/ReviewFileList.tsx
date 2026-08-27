@@ -1,40 +1,10 @@
 import { Fragment } from 'react';
 import { DiffBlock } from './diff/DiffBlock';
 import type { ReviewFile, FileState } from './ReviewHeader';
-import type { LucideIcon } from 'lucide-react';
-import {
-  ChevronRight,
-  ChevronDown,
-  FilePlus,
-  FileMinus,
-  FileCode,
-  Check,
-  AlertTriangle,
-  ExternalLink,
-  Plus,
-  Minus,
-  RotateCcw,
-} from 'lucide-react';
+import { ChevronRight, ChevronDown, ExternalLink, Plus, Minus, RotateCcw } from 'lucide-react';
 import { Tooltip } from '@agentctl/ui';
 import type { parseDiff } from '../../../shared/lib/diff-parser';
-
-const stateIcons: Record<FileState, LucideIcon> = {
-  untracked: FilePlus,
-  staged: Check,
-  modified: FileCode,
-  deleted: FileMinus,
-  committed: Check,
-  conflicted: AlertTriangle,
-};
-
-const stateColorMini: Record<FileState, string> = {
-  untracked: 'text-success/80',
-  staged: 'text-accent/80',
-  modified: 'text-warning/80',
-  deleted: 'text-danger/80',
-  committed: 'text-text-muted/40',
-  conflicted: 'text-danger animate-pulse font-black',
-};
+import { FileIcon } from '@/shared';
 
 const stateSectionColor: Record<FileState, string> = {
   modified: 'bg-warning',
@@ -149,7 +119,6 @@ export function ReviewFileList({
             {!isSectionCollapsed &&
               entries.map((file) => {
                 const collapsed = collapsedFiles[file.path] ?? true;
-                const FileStateIcon = stateIcons[file.state];
                 const stats = fileStats.get(file.path) ?? { additions: 0, deletions: 0 };
                 const fileName = file.path.split('/').pop() ?? file.path;
                 const dirPath = file.path.split('/').slice(0, -1).join('/');
@@ -183,11 +152,9 @@ export function ReviewFileList({
                         )}
                       </span>
 
-                      {/* File State Icon & Name */}
+                      {/* File Icon & Name */}
                       <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <FileStateIcon
-                          className={`h-3.5 w-3.5 shrink-0 ${stateColorMini[file.state]}`}
-                        />
+                        <FileIcon path={file.path} className="h-3.5 w-3.5 shrink-0" />
                         <span className="text-text-main/90 truncate font-mono text-xs font-medium">
                           {fileName}
                         </span>
