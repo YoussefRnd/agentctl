@@ -52,6 +52,7 @@ export function ensurePierreIconSprite(): void {
   container.style.width = '0';
   container.style.height = '0';
   container.style.overflow = 'hidden';
+  container.style.display = 'none';
   container.style.pointerEvents = 'none';
   container.innerHTML = `${getBuiltInSpriteSheet('complete')}${CUSTOM_FILE_ICON_SPRITE}`;
   document.body.prepend(container);

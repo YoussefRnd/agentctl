@@ -51,17 +51,16 @@ if (rootElement) {
           richColors={false}
           closeButton
           toastOptions={{
-            duration: 5000,
+            duration: 4000,
             unstyled: true,
             classNames: {
               toast:
-                'liquid-glass flex items-center gap-3 w-full p-3 rounded-sm border border-white/10 shadow-2xl animate-in fade-in slide-in-from-right-5',
-              title: 'text-[12px] font-black uppercase tracking-widest text-white',
-              description:
-                'text-[11px] font-bold uppercase tracking-tight text-text-muted opacity-60',
+                'bg-brand-mantle/95 text-text-main pointer-events-auto flex w-auto min-w-[260px] max-w-[400px] items-center gap-3 rounded-xl border border-border/40 p-3 shadow-2xl animate-in fade-in slide-in-from-right-5',
+              title: 'text-[12px] font-bold tracking-wide text-white',
+              description: 'text-[11px] font-medium text-text-muted opacity-80',
               actionButton: 'terminal-button',
               cancelButton:
-                'text-text-muted hover:text-white px-2 py-1 text-[10px] font-black uppercase transition-colors',
+                'text-text-muted hover:text-white px-2 py-1 text-[10px] font-bold uppercase transition-colors',
               closeButton:
                 'hover:text-white text-text-muted transition-colors !bg-transparent !border-none',
             },
