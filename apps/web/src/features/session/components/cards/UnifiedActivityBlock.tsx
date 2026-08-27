@@ -530,22 +530,21 @@ export function UnifiedActivityBlock({
   };
 
   return (
-    <div className="group/unified-activity w-full py-0.5">
+    <div className="w-full py-0.5">
       <button
         type="button"
         aria-expanded={isOpen}
         onClick={toggle}
-        className="text-text-muted/80 hover:text-text-main hover:bg-surface-secondary/30 focus-visible:ring-accent/40 -ml-2 inline-flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[12px] font-medium tracking-tight transition-colors outline-none select-none"
+        disabled={events.length === 0 && !isInitialThinking}
+        className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex items-center gap-2 text-[15px] font-bold tracking-tight transition-colors outline-none select-none ${
+          events.length > 0 || isInitialThinking ? 'cursor-pointer' : 'cursor-default'
+        }`}
       >
-        <Spinner done={isCompleted} />
-
+        <Spinner done={isCompleted} className="text-accent text-[15px]" />
         <span>{summaryLabel}</span>
-
-        {!isCompleted && <StreamingDots className="ml-0.5" />}
-
         {(events.length > 0 || isInitialThinking) && (
           <ChevronRight
-            className={`h-3 w-3 opacity-60 transition-transform duration-150 group-hover/unified-activity:opacity-100 ${
+            className={`h-3.5 w-3.5 opacity-60 transition-transform duration-150 group-hover/activity-btn:opacity-100 ${
               isOpen ? 'rotate-90' : ''
             }`}
             aria-hidden={true}
