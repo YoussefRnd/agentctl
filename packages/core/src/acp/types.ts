@@ -3,6 +3,7 @@ import type {
   ClientCapabilities,
   ClientSideConnection,
   McpServer,
+  PermissionOptionKind,
   StopReason,
 } from '@agentclientprotocol/sdk';
 import type { ACPEventDbRow } from '../db/zod-schemas.js';
@@ -62,6 +63,7 @@ export interface IAcpClientConnection {
   loadSession?(params?: unknown): Promise<unknown>;
   resumeSession?(params?: unknown): Promise<unknown>;
   closeSession?(params?: unknown): Promise<unknown>;
+  deleteSession?(params?: unknown): Promise<unknown>;
   cancel?(params?: unknown): Promise<unknown>;
   prompt?(params?: unknown): Promise<unknown>;
   setSessionConfigOption?(params?: unknown): Promise<unknown>;
@@ -94,7 +96,7 @@ export interface DomainPermissionRequest {
     arguments?: Record<string, unknown>;
     toolCallId?: string;
   };
-  options?: { optionId: string; label?: string }[];
+  options?: { optionId: string; label?: string; kind?: PermissionOptionKind }[];
   description?: string;
 }
 

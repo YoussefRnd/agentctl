@@ -30,6 +30,7 @@ import { ProcessStreamTransport, cleanEnv } from './transport/process-transport.
 import { wrapDebug, formatAcpMessageLog } from './transport/stream-debug.js';
 import {
   FileCacheStorage,
+  AGENTCTL_CLIENT_CAPABILITIES,
   getCacheKey,
   initializeAcpConnection,
   withTimeout,
@@ -200,7 +201,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
         attachments?: { filePath: string; mimeType: string }[],
         embeddedContext?: string,
       ): Promise<PromptResult> {
-        const promptParts = buildPromptBlocks({
+        const promptParts = await buildPromptBlocks({
           text,
           attachments,
           embeddedContext,
@@ -290,7 +291,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
       async deleteSession(acpSessionId: string): Promise<void> {
         if (supportsDeleteSession) {
           await withTimeout(
-            connection.extMethod('session/delete', { sessionId: acpSessionId }),
+            connection.deleteSession({ sessionId: acpSessionId }),
             5000,
             'deleting ACP session',
           );
@@ -350,6 +351,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
         const { parsedCapabilities } = await initializeAcpConnection(connection, {
           transport,
           timeoutMs: 120_000,
+          clientCapabilities: AGENTCTL_CLIENT_CAPABILITIES,
         });
 
         supportsResumeSession = parsedCapabilities.supportsResumeSession;
@@ -704,12 +706,13 @@ export class DefaultAgentRuntime implements AgentRuntime {
       const { parsedCapabilities } = await initializeAcpConnection(connectionInstance, {
         clientInfo: { name: 'agentctl-delete', version: '1.0.0' },
         timeoutMs: 10_000,
+        clientCapabilities: {},
       });
 
       const supportsDelete = parsedCapabilities.supportsDeleteSession;
       if (supportsDelete) {
         await withTimeout(
-          connectionInstance.extMethod('session/delete', { sessionId: acpSessionId }),
+          connectionInstance.deleteSession({ sessionId: acpSessionId }),
           10_000,
           'sending session/delete request',
         );

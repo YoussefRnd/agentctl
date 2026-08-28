@@ -848,7 +848,7 @@ export class ACPSession {
           const bestOptionId = getBestPermissionOption(reqOptions);
           return {
             allowed: true,
-            optionId: bestOptionId ?? reqOptions[0].optionId,
+            optionId: bestOptionId,
           };
         }
 

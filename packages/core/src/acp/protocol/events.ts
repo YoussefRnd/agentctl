@@ -169,6 +169,9 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
       events.push({ type: 'available_commands_update', commands, _meta });
       break;
     }
+    case 'current_mode_update':
+      events.push({ type: 'mode_update', modeId: update.currentModeId, _meta });
+      break;
     case 'config_option_update':
       if (update.configOptions.length > 0) {
         events.push({

@@ -1,13 +1,9 @@
-import type {
-  Client,
-  CompleteElicitationNotification,
-  ElicitationContentValue,
-} from '@agentclientprotocol/sdk';
-import type { ElicitationRequest } from '@agentctl/shared';
+import type { Client } from '@agentclientprotocol/sdk';
 import type { Logger } from '../../logger.js';
 import type { McpGatewayLike, SessionCallbacks } from '../types.js';
 import { parseNotificationToEvents } from './events.js';
 import { parsePermissionRequest, formatPermissionOutcome } from './permissions.js';
+import { formatElicitationResponse, projectElicitationRequest } from './elicitations.js';
 import { handleFsReadTextFile, handleFsWriteTextFile } from './file-system.js';
 import {
   handleBuiltinBash,
@@ -60,6 +56,7 @@ function toPromise<T>(fn: () => T): Promise<T> {
  */
 export function createClientHandlers(ctx: ClientHandlerContext): Client {
   const { terminalManager, logger, mcpGateway } = ctx;
+  const pendingUrlElicitations = new Map<string, ClientSessionContext>();
 
   return {
     async sessionUpdate(n) {
@@ -96,29 +93,25 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       const session = ctx.resolveSession(r);
       const domainReq = parsePermissionRequest(r);
       const domainResp = await session.callbacks.onRequestPermission(domainReq);
-      return formatPermissionOutcome(domainResp);
+      return formatPermissionOutcome(domainResp, domainReq.options);
     },
 
-    readTextFile(p) {
-      return toPromise(() => {
-        const session = ctx.resolveSession(p);
-        return handleFsReadTextFile(
-          { path: p.path, line: p.line ?? undefined, limit: p.limit ?? undefined },
-          session.cwd,
-          session.additionalDirectories,
-        );
-      });
+    async readTextFile(p) {
+      const session = ctx.resolveSession(p);
+      return handleFsReadTextFile(
+        { path: p.path, line: p.line ?? undefined, limit: p.limit ?? undefined },
+        session.cwd,
+        session.additionalDirectories,
+      );
     },
 
-    writeTextFile(p) {
-      return toPromise(() => {
-        const session = ctx.resolveSession(p);
-        return handleFsWriteTextFile(
-          { path: p.path, content: p.content },
-          session.cwd,
-          session.additionalDirectories,
-        );
-      });
+    async writeTextFile(p) {
+      const session = ctx.resolveSession(p);
+      return handleFsWriteTextFile(
+        { path: p.path, content: p.content },
+        session.cwd,
+        session.additionalDirectories,
+      );
     },
 
     async createTerminal(p) {
@@ -146,72 +139,59 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
     },
 
     terminalOutput(p) {
-      return toPromise(() => handleTerminalOutput(p, terminalManager, logger));
+      return toPromise(() => {
+        ctx.resolveSession(p);
+        return handleTerminalOutput(p, terminalManager, logger);
+      });
     },
 
     releaseTerminal(p) {
-      return toPromise(() => handleTerminalRelease(p, terminalManager, logger));
+      return toPromise(() => {
+        ctx.resolveSession(p);
+        return handleTerminalRelease(p, terminalManager, logger);
+      });
     },
 
     waitForTerminalExit(p) {
+      ctx.resolveSession(p);
       return handleTerminalWaitForExit(p, terminalManager, logger);
     },
 
     killTerminal(p) {
-      return toPromise(() => handleTerminalKill(p, terminalManager, logger));
+      return toPromise(() => {
+        ctx.resolveSession(p);
+        return handleTerminalKill(p, terminalManager, logger);
+      });
     },
 
-    async createElicitation(p: Record<string, unknown>) {
-      const session = ctx.resolveSession(p);
-      const modeObj = p.mode as { type?: string } | undefined;
-      const req = {
-        id: typeof p.id === 'string' ? p.id : `el-${String(Date.now())}`,
-        mode: modeObj?.type === 'url' || typeof p.url === 'string' ? 'url' : 'form',
-        form: p.form as ElicitationRequest['form'],
-        url: p.url as ElicitationRequest['url'],
-      } as ElicitationRequest;
-      if (session.callbacks.onRequestElicitation) {
-        const resp = await session.callbacks.onRequestElicitation(req);
-        if (resp.action === 'submit') {
-          const content: Record<string, ElicitationContentValue> = {};
-          for (const [key, value] of Object.entries(resp.values ?? {})) {
-            if (value === null || value === undefined) continue;
-            if (
-              typeof value === 'string' ||
-              typeof value === 'number' ||
-              typeof value === 'boolean'
-            ) {
-              content[key] = value;
-            } else if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
-              content[key] = value;
-            }
-          }
-          return { action: 'accept', content };
-        }
-        return { action: 'cancel' };
-      }
-      return { action: 'cancel' };
-    },
+    async createElicitation(p) {
+      const request = projectElicitationRequest(p);
+      if (!request) return { action: 'decline' };
 
-    async completeElicitation(n: CompleteElicitationNotification) {
-      const raw = n as CompleteElicitationNotification & { sessionId?: unknown };
-      const meta = n._meta as { sessionId?: unknown } | null | undefined;
-      const sessionId =
-        typeof raw.sessionId === 'string'
-          ? raw.sessionId
-          : typeof meta?.sessionId === 'string'
-            ? meta.sessionId
-            : undefined;
       let session: ClientSessionContext;
       try {
-        session = ctx.resolveSession(sessionId ? { sessionId } : undefined);
-      } catch {
-        logger.debug(
-          { elicitationId: n.elicitationId },
-          'Could not resolve session for elicitation completion',
+        session = ctx.resolveSession(
+          request.sessionId ? { sessionId: request.sessionId } : undefined,
         );
-        return;
+      } catch (err) {
+        logger.debug({ err, mode: p.mode }, 'Declining ACP elicitation without a session context');
+        return { action: 'decline' };
       }
+
+      if (!session.callbacks.onRequestElicitation) return { action: 'decline' };
+
+      const response = await session.callbacks.onRequestElicitation(request);
+      const result = formatElicitationResponse(response, request);
+      if (p.mode === 'url' && result.action === 'accept') {
+        pendingUrlElicitations.set(request.id, session);
+      }
+      return result;
+    },
+
+    async completeElicitation(n) {
+      const session = pendingUrlElicitations.get(n.elicitationId);
+      if (!session) return;
+      pendingUrlElicitations.delete(n.elicitationId);
       await session.callbacks.onElicitationCompleted?.(n.elicitationId);
     },
 

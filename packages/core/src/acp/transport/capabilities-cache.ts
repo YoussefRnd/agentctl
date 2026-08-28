@@ -14,6 +14,14 @@ import type {
   InitializeAcpConnectionOptions,
 } from '../types.js';
 
+export const AGENTCTL_CLIENT_CAPABILITIES: ClientCapabilities = {
+  terminal: true,
+  fs: { readTextFile: true, writeTextFile: true },
+  session: { configOptions: { boolean: {} } },
+  elicitation: { form: {}, url: {} },
+  _meta: { builtin: { bash: true }, session: { model: true } },
+};
+
 export class FileCacheStorage implements CacheStorage {
   private static readonly TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -162,12 +170,7 @@ export async function initializeAcpConnection(
     title: 'Agentctl',
     version: '1.0.0',
   };
-  const clientCapabilities: ClientCapabilities = options.clientCapabilities ?? {
-    terminal: true,
-    fs: { readTextFile: true, writeTextFile: true },
-    elicitation: { form: {}, url: {} },
-    _meta: { builtin: { bash: true }, session: { model: true } },
-  };
+  const clientCapabilities: ClientCapabilities = options.clientCapabilities ?? {};
 
   const initPromise = connection.initialize({
     protocolVersion: PROTOCOL_VERSION,

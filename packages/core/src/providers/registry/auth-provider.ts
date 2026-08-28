@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type { RegistryAgent } from '@agentctl/shared';
 import type { ProviderLauncher } from './provider-launcher.js';
 import type { ProviderStore } from './provider-store.js';
@@ -90,7 +91,7 @@ export class AuthProvider {
     try {
       if (typeof connection.initialize === 'function') {
         await connection.initialize({
-          protocolVersion: 1,
+          protocolVersion: PROTOCOL_VERSION,
           clientCapabilities: {},
           clientInfo: { name: 'agentctl-login', title: 'Agentctl', version: '1.0.0' },
         });
@@ -145,7 +146,7 @@ export class AuthProvider {
     try {
       if (typeof connection.initialize === 'function') {
         await connection.initialize({
-          protocolVersion: 1,
+          protocolVersion: PROTOCOL_VERSION,
           clientCapabilities: {},
           clientInfo: { name: 'agentctl-logout', title: 'Agentctl', version: '1.0.0' },
         });

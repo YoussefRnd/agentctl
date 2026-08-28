@@ -40,51 +40,50 @@ export function parsePermissionRequest(r: RequestPermissionRequest): DomainPermi
 
 export function formatPermissionOutcome(
   domainResp: DomainPermissionResponse,
+  options: DomainPermissionRequest['options'],
 ): RequestPermissionResponse {
-  if (domainResp.allowed && domainResp.optionId) {
+  const selectedOptionId =
+    domainResp.optionId ??
+    (domainResp.allowed
+      ? getBestPermissionOption(options)
+      : getBestPermissionOption(options, 'reject'));
+  if (selectedOptionId) {
     return {
-      outcome: { outcome: 'selected', optionId: domainResp.optionId },
+      outcome: { outcome: 'selected', optionId: selectedOptionId },
     };
   }
   return { outcome: { outcome: 'cancelled' } };
 }
 
 /**
- * Picks the most permissive option id from the agent-advertised options.
+ * Picks an allow-once or reject-once option from the agent-advertised options.
+ * Persistent choices are a fallback and must only be preferred after an
+ * explicit user selection.
  */
 export function getBestPermissionOption(
-  options?: { optionId: string; label?: string }[],
+  options?: DomainPermissionRequest['options'],
+  decision: 'allow' | 'reject' = 'allow',
 ): string | undefined {
   if (!options || options.length === 0) return undefined;
 
-  const negativeKeywords = ['deny', 'cancel', 'reject', 'block', 'no'];
-  const positiveOptions = options.filter((o) => {
-    const id = o.optionId.toLowerCase();
-    const label = (o.label ?? '').toLowerCase();
-    return !negativeKeywords.some((neg) => id.includes(neg) || label.includes(neg));
-  });
-
-  if (positiveOptions.length === 0) {
-    return options[0].optionId;
+  const preferredKinds =
+    decision === 'allow'
+      ? (['allow_once', 'allow_always'] as const)
+      : (['reject_once', 'reject_always'] as const);
+  for (const kind of preferredKinds) {
+    const byKind = options.find((option) => option.kind === kind);
+    if (byKind) return byKind.optionId;
   }
 
-  let best = positiveOptions.find((o) => {
-    const id = o.optionId.toLowerCase();
-    return id.includes('always') || id.includes('session') || id.includes('forever');
+  const keywords =
+    decision === 'allow'
+      ? ['allow', 'approve', 'yes', 'grant', 'confirm', 'ok']
+      : ['deny', 'reject', 'block', 'no'];
+  const byLabel = options.find((option) => {
+    const text = `${option.optionId} ${option.label ?? ''}`.toLowerCase();
+    return keywords.some((keyword) => text.includes(keyword));
   });
-
-  if (!best) {
-    const positiveKeywords = ['allow', 'approve', 'yes', 'grant', 'confirm', 'ok'];
-    best = positiveOptions.find((o) => {
-      const id = o.optionId.toLowerCase();
-      const label = (o.label ?? '').toLowerCase();
-      return positiveKeywords.some((pos) => id.includes(pos) || label.includes(pos));
-    });
-  }
-
-  best ??= positiveOptions[0];
-
-  return best.optionId;
+  return byLabel?.optionId;
 }
 
 /**

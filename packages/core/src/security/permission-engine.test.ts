@@ -109,4 +109,12 @@ describe('PermissionEngine', () => {
     expect(response.outcome.outcome).toBe('selected');
     expect(engine.isToolCallApproved('terminal', { command: 'git status' })).toBe(true);
   });
+
+  test('returns an explicitly selected reject option instead of cancellation', () => {
+    const engine = new PermissionEngine();
+
+    expect(engine.resolveOutcome('perm2', 'reject_once')).toEqual({
+      outcome: { outcome: 'selected', optionId: 'reject_once' },
+    });
+  });
 });
