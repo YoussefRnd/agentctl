@@ -109,4 +109,17 @@ describe('Attachments Routes', () => {
 
     expect(uploadRes.statusCode).toBe(404);
   });
+
+  it('rejects content that does not match the declared image type', async () => {
+    const uploadRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${testSessionId}/attachments`,
+      headers: {
+        'content-type': 'image/png',
+      },
+      payload: Buffer.from('<script>alert("not an image")</script>'),
+    });
+
+    expect(uploadRes.statusCode).toBe(400);
+  });
 });

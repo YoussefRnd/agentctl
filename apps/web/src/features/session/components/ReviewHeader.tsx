@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { SearchBar, Tooltip, Dropdown } from '@agentctl/ui';
 import type { ChangeEvent } from 'react';
-import type { ReviewScope } from '../hooks/useReviewViewState';
+import type { ReviewScope } from '@/shared';
 
 export type FileState =
   'untracked' | 'staged' | 'modified' | 'deleted' | 'committed' | 'conflicted';
@@ -90,7 +90,7 @@ export function ReviewHeader({
           <Dropdown.Trigger asChild>
             <button
               type="button"
-              className="border-border/30 bg-surface/50 hover:bg-surface/80 hover:border-border/50 text-text-main focus:border-accent/40 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all select-none focus:outline-none"
+              className="border-border/30 bg-surface/50 hover:bg-surface/80 hover:border-border/50 text-text-main focus:border-accent/40 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors select-none focus:outline-none"
             >
               <CurrentIcon className="text-accent h-3.5 w-3.5 opacity-90" />
               <span>{currentOption.label}</span>

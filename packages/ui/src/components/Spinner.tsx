@@ -12,10 +12,11 @@ export interface ThinkingSpinnerProps {
 }
 
 /** Standard UI loading spinner for general loading states (data fetching, page transitions, buttons) */
-export function Spinner({ className }: SpinnerProps) {
+export function Spinner({ className, size }: SpinnerProps) {
   return (
     <svg
       className={cn('text-text-muted/70 h-4 w-4 animate-spin', className)}
+      style={size === undefined ? undefined : { width: size, height: size }}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
@@ -33,7 +34,7 @@ export function Spinner({ className }: SpinnerProps) {
 }
 
 /** Specialized AI Agent Thinking Sparkle glyph for chat thinking & turn progress states */
-export function ThinkingSpinner({ done = false, className }: ThinkingSpinnerProps) {
+export function ThinkingSpinner({ done = false, className, size }: ThinkingSpinnerProps) {
   if (done) {
     return null;
   }
@@ -52,6 +53,7 @@ export function ThinkingSpinner({ done = false, className }: ThinkingSpinnerProp
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         className="h-[15px] w-[15px] animate-[ai-think-spin_3.5s_cubic-bezier(0.45,0.05,0.55,0.95)_infinite] motion-reduce:animate-none"
+        style={size === undefined ? undefined : { width: size, height: size }}
       >
         {/* Primary 4-pointed radiant AI star */}
         <path

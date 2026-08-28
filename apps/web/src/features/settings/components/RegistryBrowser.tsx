@@ -147,7 +147,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
               onClick={() => {
                 setStatusFilter(id);
               }}
-              className={`cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+              className={`cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                 statusFilter === id
                   ? 'bg-accent text-brand-crust shadow-sm'
                   : 'text-text-muted hover:text-text-main hover:bg-surface/60'

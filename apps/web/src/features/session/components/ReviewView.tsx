@@ -1,14 +1,14 @@
 import { useMemo, useCallback, useEffect } from 'react';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewDialogs } from './ReviewDialogs';
-import { useReviewViewState, type ReviewScope } from '../hooks/useReviewViewState';
+import { useReviewViewState } from '../hooks/useReviewViewState';
 import { useReviewDiffs } from '../hooks/useReviewDiffs';
 import { ReviewClosedState, ReviewLoadingState, ReviewEmptyState } from './ReviewStates';
 import { ReviewFileList } from './ReviewFileList';
 import { ReviewCommitInput } from './ReviewCommitInput';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
-import { extractLatestTurnTouchedFiles, filePathMatches } from '../lib/turnChanges';
-import { useUIStore } from '@/shared';
+import { extractLatestTurnTouchedFiles, resolveTurnReviewFiles } from '../lib/turnChanges';
+import { useUIStore, type ReviewScope } from '@/shared';
 import { openInEditor } from '@agentctl/api-client';
 import { toast } from 'sonner';
 
@@ -48,52 +48,47 @@ export function ReviewView() {
   const onRevert = revertFile;
   const onStageAll = stageAll;
   const onUnstageAll = unstageAll;
-  const { state, dispatch, toggleFileCollapse, toggleSection, expandAll, collapseAll, setScope } =
+  const { state, dispatch, toggleFileCollapse, toggleSection, expandAll, collapseAll } =
     useReviewViewState();
 
-  const storeReviewScope = useUIStore((s) => s.reviewScope);
-  const setStoreReviewScope = useUIStore((s) => s.setReviewScope);
-
-  useEffect(() => {
-    if (storeReviewScope && storeReviewScope !== state.scope) {
-      setScope(storeReviewScope);
-    }
-  }, [storeReviewScope, setScope, state.scope]);
+  const reviewScope = useUIStore((s) => s.reviewScope);
+  const selectedTurn = useUIStore((s) => s.reviewTurnSelection);
+  const setReviewScope = useUIStore((s) => s.setReviewScope);
 
   const handleScopeChange = useCallback(
     (newScope: ReviewScope) => {
-      setScope(newScope);
-      setStoreReviewScope(newScope);
+      setReviewScope(newScope);
     },
-    [setScope, setStoreReviewScope],
+    [setReviewScope],
   );
 
-  const latestTurnFiles = useMemo(() => extractLatestTurnTouchedFiles(events), [events]);
+  const latestTurnTouchedFiles = useMemo(() => extractLatestTurnTouchedFiles(events), [events]);
+  const latestTurnFiles = useMemo(
+    () => resolveTurnReviewFiles(files, latestTurnTouchedFiles),
+    [files, latestTurnTouchedFiles],
+  );
+  const selectedTurnFiles =
+    selectedTurn && selectedTurn.sessionId === sessionData?.session.id ? selectedTurn.files : null;
+  const activeTurnFiles = useMemo(
+    () => (selectedTurnFiles ? new Set(selectedTurnFiles) : latestTurnFiles),
+    [latestTurnFiles, selectedTurnFiles],
+  );
 
   const scopeCounts = useMemo(() => {
     const uncommitted = files.filter((f) => f.state !== 'committed').length;
-    const turnList = Array.from(latestTurnFiles);
-    const thisTurn = files.filter((f) => {
-      const base = f.path.split('/').pop();
-      return (
-        latestTurnFiles.has(f.path) ||
-        (base && latestTurnFiles.has(base)) ||
-        turnList.some((tf) => filePathMatches(f.path, tf))
-      );
-    }).length;
     const allEdits = files.length;
     return {
       uncommitted,
-      this_turn: thisTurn,
+      this_turn: activeTurnFiles.size,
       all_edits: allEdits,
     };
-  }, [files, latestTurnFiles]);
+  }, [activeTurnFiles, files]);
 
   const { activeFiles, parsedFiles, grouped, fileStats } = useReviewDiffs(
     files,
     state.searchQuery,
-    state.scope,
-    latestTurnFiles,
+    reviewScope,
+    activeTurnFiles,
   );
 
   const isClosed = sessionStatus === 'merged' || sessionStatus === 'discarded';
@@ -150,7 +145,7 @@ export function ReviewView() {
     <div className="bg-surface-secondary/5 flex h-full min-h-0 flex-col">
       <ReviewHeader
         files={activeFiles}
-        scope={state.scope}
+        scope={reviewScope}
         onScopeChange={handleScopeChange}
         scopeCounts={scopeCounts}
         viewMode={state.viewMode}

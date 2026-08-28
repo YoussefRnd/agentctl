@@ -21,7 +21,11 @@ const SetupWizard = lazy(() =>
 function SettingsRouteRedirect() {
   const [searchParams] = useSearchParams();
   const openSettings = useUIStore((s) => s.openSettings);
-  const tab = (searchParams.get('tab') as 'general' | 'providers' | 'mcp') || 'general';
+  const requestedTab = searchParams.get('tab');
+  const tab =
+    requestedTab === 'providers' || requestedTab === 'mcp' || requestedTab === 'general'
+      ? requestedTab
+      : 'general';
 
   useEffect(() => {
     openSettings(tab);

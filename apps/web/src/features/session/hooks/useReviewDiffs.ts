@@ -2,8 +2,7 @@ import { useMemo } from 'react';
 import { parseDiff } from '../../../shared/lib/diff-parser';
 import { matchSorter } from 'match-sorter';
 import type { ReviewFile, FileState } from '../components/ReviewHeader';
-import type { ReviewScope } from './useReviewViewState';
-import { filePathMatches } from '../lib/turnChanges';
+import type { ReviewScope } from '@/shared';
 
 export function useReviewDiffs(
   files: ReviewFile[],
@@ -16,18 +15,7 @@ export function useReviewDiffs(
       return files;
     }
     if (scope === 'this_turn') {
-      if (!turnFiles || turnFiles.size === 0) {
-        return files.filter((f) => f.state !== 'committed');
-      }
-      const turnList = Array.from(turnFiles);
-      return files.filter((f) => {
-        const base = f.path.split('/').pop();
-        return (
-          turnFiles.has(f.path) ||
-          (base && turnFiles.has(base)) ||
-          turnList.some((tf) => filePathMatches(f.path, tf))
-        );
-      });
+      return turnFiles ? files.filter((file) => turnFiles.has(file.path)) : [];
     }
     return files.filter((f) => f.state !== 'committed');
   }, [files, scope, turnFiles]);

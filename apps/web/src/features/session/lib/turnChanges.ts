@@ -38,10 +38,35 @@ export function filePathMatches(pathA: string, pathB: string): boolean {
   const b = normalizeFilePath(pathB);
   if (!a || !b) return false;
   if (a === b) return true;
-  if (a.endsWith('/' + b) || b.endsWith('/' + a)) return true;
-  const baseA = a.split('/').pop();
-  const baseB = b.split('/').pop();
-  return baseA === baseB && !!baseA;
+  return a.endsWith('/' + b) || b.endsWith('/' + a);
+}
+
+/**
+ * Resolves touched paths to review files without guessing when a short path is ambiguous.
+ */
+export function resolveTurnReviewFiles(
+  reviewFiles: ReviewFile[],
+  touchedPaths: Iterable<string>,
+): Set<string> {
+  const resolved = new Set<string>();
+
+  for (const touchedPath of touchedPaths) {
+    const matches = reviewFiles.filter((file) => filePathMatches(file.path, touchedPath));
+    if (matches.length === 1) {
+      resolved.add(matches[0].path);
+      continue;
+    }
+
+    const normalizedTouchedPath = normalizeFilePath(touchedPath);
+    const exactMatch = matches.find(
+      (file) => normalizeFilePath(file.path) === normalizedTouchedPath,
+    );
+    if (exactMatch) {
+      resolved.add(exactMatch.path);
+    }
+  }
+
+  return resolved;
 }
 
 /**
@@ -256,15 +281,66 @@ export function getDiffStats(diffText: string): { additions: number; deletions: 
   return { additions, deletions };
 }
 
+function getToolCallStats(data: Record<string, unknown>): {
+  additions: number;
+  deletions: number;
+} {
+  let additions = 0;
+  let deletions = 0;
+
+  if (Array.isArray(data.content)) {
+    for (const item of data.content as {
+      type?: string;
+      oldText?: string | null;
+      newText?: string;
+    }[]) {
+      if (item.type !== 'diff') continue;
+      if (typeof item.newText === 'string' && item.newText.length > 0) {
+        additions += item.newText.split('\n').length;
+      }
+      if (typeof item.oldText === 'string' && item.oldText.length > 0) {
+        deletions += item.oldText.split('\n').length;
+      }
+    }
+  }
+
+  if (additions > 0 || deletions > 0) {
+    return { additions, deletions };
+  }
+
+  const args = (data.arguments || data.rawInput) as Record<string, unknown> | undefined;
+  if (!args) return { additions, deletions };
+
+  const replacement = args.ReplacementContent as string | undefined;
+  const target = args.TargetContent as string | undefined;
+  if (typeof replacement === 'string' && typeof target === 'string') {
+    return {
+      additions: replacement.length > 0 ? replacement.split('\n').length : 0,
+      deletions: target.length > 0 ? target.split('\n').length : 0,
+    };
+  }
+
+  const codeContent =
+    (args.CodeContent as string) ||
+    (args.codeContent as string) ||
+    (args.content as string) ||
+    (args.text as string);
+  if (typeof codeContent === 'string' && codeContent.length > 0) {
+    additions = codeContent.split('\n').length;
+  }
+
+  return { additions, deletions };
+}
+
 /**
  * Extracts all file changes made in a specific group of events (an agent response turn),
- * cross-referencing with live session review files for 100% exact diff stats.
+ * using tool-local stats when available and the current review diff as a fallback.
  */
 export function extractTurnChanges(
   events: ACPEventRow[],
   reviewFiles?: ReviewFile[],
 ): TurnChangesSummary {
-  const fileMap = new Map<string, TurnFileChange>();
+  const fileMap = new Map<string, TurnFileChange & { hasTurnLocalStats: boolean }>();
 
   for (const event of events) {
     if (!isACPEventToolCall(event)) continue;
@@ -275,8 +351,8 @@ export function extractTurnChanges(
     const filePath = extractFilePathFromToolCall(data);
     if (!filePath) continue;
 
-    let additions = 0;
-    let deletions = 0;
+    let { additions, deletions } = getToolCallStats(data);
+    const hasTurnLocalStats = additions > 0 || deletions > 0;
     let matchedReviewPath = filePath;
     let status: 'modified' | 'added' | 'deleted' =
       data.kind === 'delete' || data.name?.toLowerCase().includes('delete')
@@ -287,7 +363,10 @@ export function extractTurnChanges(
 
     // Cross-reference with live review files if provided
     if (reviewFiles && reviewFiles.length > 0) {
-      const match = reviewFiles.find((rf) => filePathMatches(rf.path, filePath));
+      const [matchedPath] = resolveTurnReviewFiles(reviewFiles, [filePath]);
+      const match = matchedPath
+        ? reviewFiles.find((reviewFile) => reviewFile.path === matchedPath)
+        : undefined;
       if (match) {
         matchedReviewPath = match.path;
         status =
@@ -296,71 +375,39 @@ export function extractTurnChanges(
             : match.state === 'deleted'
               ? 'deleted'
               : 'modified';
-        const stats = getDiffStats(match.diff);
-        additions = stats.additions;
-        deletions = stats.deletions;
-      }
-    }
-
-    // If additions/deletions are still 0, parse tool call args / content diffs
-    if (additions === 0 && deletions === 0) {
-      if (Array.isArray(data.content)) {
-        for (const item of data.content as {
-          type?: string;
-          oldText?: string | null;
-          newText?: string;
-        }[]) {
-          if (item.type === 'diff' && typeof item.newText === 'string') {
-            const newLines = item.newText.split('\n').length;
-            const oldLines =
-              typeof item.oldText === 'string' && item.oldText
-                ? item.oldText.split('\n').length
-                : 0;
-            if (newLines >= oldLines) {
-              additions += newLines - oldLines;
-            } else {
-              deletions += oldLines - newLines;
-            }
-          }
-        }
-      }
-
-      // Check tool arguments for CodeContent or ReplacementContent
-      const args = (data.arguments || data.rawInput) as Record<string, unknown> | undefined;
-      if (args && typeof args === 'object') {
-        const codeContent =
-          (args.CodeContent as string) ||
-          (args.codeContent as string) ||
-          (args.content as string) ||
-          (args.text as string);
-        if (typeof codeContent === 'string' && codeContent.length > 0) {
-          additions = codeContent.split('\n').length;
-        }
-
-        const replacement = args.ReplacementContent as string | undefined;
-        const target = args.TargetContent as string | undefined;
-        if (typeof replacement === 'string' && typeof target === 'string') {
-          additions = replacement.split('\n').length;
-          deletions = target.split('\n').length;
+        if (!hasTurnLocalStats) {
+          const stats = getDiffStats(match.diff);
+          additions = stats.additions;
+          deletions = stats.deletions;
         }
       }
     }
 
     const existing = fileMap.get(matchedReviewPath);
     if (existing) {
-      existing.additions = Math.max(existing.additions, additions);
-      existing.deletions = Math.max(existing.deletions, deletions);
+      if (hasTurnLocalStats && existing.hasTurnLocalStats) {
+        existing.additions += additions;
+        existing.deletions += deletions;
+      } else if (hasTurnLocalStats) {
+        existing.additions = additions;
+        existing.deletions = deletions;
+        existing.hasTurnLocalStats = true;
+      } else if (!existing.hasTurnLocalStats) {
+        existing.additions = Math.max(existing.additions, additions);
+        existing.deletions = Math.max(existing.deletions, deletions);
+      }
     } else {
       fileMap.set(matchedReviewPath, {
         path: matchedReviewPath,
         additions,
         deletions,
         status,
+        hasTurnLocalStats,
       });
     }
   }
 
-  const files = Array.from(fileMap.values());
+  const files = Array.from(fileMap.values(), ({ hasTurnLocalStats: _, ...file }) => file);
   const totalAdditions = files.reduce((sum, f) => sum + f.additions, 0);
   const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
 
@@ -388,17 +435,10 @@ export function extractLatestTurnTouchedFiles(events: ACPEventRow[]): Set<string
   const turnEvents = lastUserIdx >= 0 ? events.slice(lastUserIdx) : events;
   for (const e of turnEvents) {
     if (isACPEventToolCall(e)) {
+      if (!isFileModificationToolCall(e.data)) continue;
       const p = extractFilePathFromToolCall(e.data);
       if (p) {
         set.add(p);
-        // Add segments and basename for flexible matching
-        const base = p.split('/').pop();
-        if (base) set.add(base);
-
-        const parts = p.split('/');
-        for (let i = 1; i < parts.length; i++) {
-          set.add(parts.slice(i).join('/'));
-        }
       }
     }
   }

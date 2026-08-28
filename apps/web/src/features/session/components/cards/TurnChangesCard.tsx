@@ -5,11 +5,13 @@ import type { TurnChangesSummary } from '../../lib/turnChanges';
 
 interface TurnChangesCardProps {
   summary: TurnChangesSummary;
+  sessionId: string;
   onOpenChanges?: () => void;
 }
 
 export const TurnChangesCard = memo(function TurnChangesCard({
   summary,
+  sessionId,
   onOpenChanges,
 }: TurnChangesCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -23,7 +25,10 @@ export const TurnChangesCard = memo(function TurnChangesCard({
     if (e) e.stopPropagation();
     setWorkbenchTab('changes');
     setWorkbenchOpen(true);
-    setReviewScope('this_turn');
+    setReviewScope('this_turn', {
+      sessionId,
+      files: summary.files.map((file) => file.path),
+    });
     if (onOpenChanges) {
       onOpenChanges();
     }
@@ -32,7 +37,7 @@ export const TurnChangesCard = memo(function TurnChangesCard({
   const fileCount = summary.files.length;
 
   return (
-    <div className="border-border/35 bg-surface/30 hover:border-border/50 mt-2.5 overflow-hidden rounded-xl border shadow-xs transition-all duration-150">
+    <div className="border-border/35 bg-surface/30 hover:border-border/50 mt-2.5 overflow-hidden rounded-xl border shadow-xs transition-colors duration-150">
       {/* Header bar */}
       <div
         onClick={() => {

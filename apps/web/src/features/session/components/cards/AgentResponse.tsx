@@ -21,7 +21,7 @@ const AgentResponseComponent = function AgentResponse({
   isStreaming = false,
   isActive = false,
 }: AgentResponseProps) {
-  const { reviewData } = useSession();
+  const { reviewData, sessionData } = useSession();
   const reviewFiles = reviewData?.files;
 
   const { activityEvents, responseEvent, subagentGroups, turnChanges } = useMemo(() => {
@@ -121,7 +121,9 @@ const AgentResponseComponent = function AgentResponse({
         </div>
       )}
 
-      {turnChanges.files.length > 0 && <TurnChangesCard summary={turnChanges} />}
+      {turnChanges.files.length > 0 && sessionData && (
+        <TurnChangesCard summary={turnChanges} sessionId={sessionData.session.id} />
+      )}
     </div>
   );
 };

@@ -55,7 +55,7 @@ export function GeneralSettingsView() {
                   key={mode}
                   type="button"
                   onClick={() => setThemeMode(mode)}
-                  className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                  className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                     themeMode === mode
                       ? 'bg-accent text-brand-crust shadow-sm'
                       : 'text-text-muted hover:text-text-main hover:bg-surface/60'

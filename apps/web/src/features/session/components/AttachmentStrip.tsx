@@ -24,7 +24,7 @@ export function AttachmentStrip({ attachments, onRemove, onRetry }: AttachmentSt
       {attachments.map((attachment) => (
         <div
           key={attachment.localId}
-          className="group border-border/40 bg-surface-secondary/40 relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border shadow-sm transition-all sm:h-18 sm:w-18"
+          className="group border-border/40 bg-surface-secondary/40 relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border shadow-sm transition-colors sm:h-18 sm:w-18"
         >
           {/* Base image thumbnail */}
           <img

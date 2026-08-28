@@ -4,6 +4,11 @@ export type WorkbenchTab = 'status' | 'changes' | 'terminal';
 export type SettingsTab = 'general' | 'providers' | 'mcp';
 export type ReviewScope = 'uncommitted' | 'this_turn' | 'all_edits';
 
+interface ReviewTurnSelection {
+  sessionId: string;
+  files: string[];
+}
+
 interface UIState {
   // Workbench & Layout State
   workbenchTab: WorkbenchTab;
@@ -11,6 +16,7 @@ interface UIState {
   isMaximized: boolean;
   isMobileSidebarOpen: boolean;
   reviewScope: ReviewScope;
+  reviewTurnSelection: ReviewTurnSelection | null;
 
   // Global Modals State
   isMcpSettingsOpen: boolean;
@@ -29,7 +35,7 @@ interface UIState {
   setMaximized: (maximized: boolean) => void;
   toggleMaximized: () => void;
   setMobileSidebarOpen: (open: boolean) => void;
-  setReviewScope: (scope: ReviewScope) => void;
+  setReviewScope: (scope: ReviewScope, turnSelection?: ReviewTurnSelection) => void;
   openMcpSettings: () => void;
   closeMcpSettings: () => void;
   toggleMcpSettings: () => void;
@@ -50,6 +56,7 @@ export const useUIStore = create<UIState>((set) => ({
   isMaximized: false,
   isMobileSidebarOpen: false,
   reviewScope: 'uncommitted',
+  reviewTurnSelection: null,
   isMcpSettingsOpen: false,
   isSettingsOpen: false,
   settingsTab: 'general',
@@ -62,7 +69,11 @@ export const useUIStore = create<UIState>((set) => ({
   setMaximized: (maximized) => set({ isMaximized: maximized }),
   toggleMaximized: () => set((state) => ({ isMaximized: !state.isMaximized })),
   setMobileSidebarOpen: (open) => set({ isMobileSidebarOpen: open }),
-  setReviewScope: (scope) => set({ reviewScope: scope }),
+  setReviewScope: (scope, turnSelection) =>
+    set({
+      reviewScope: scope,
+      reviewTurnSelection: scope === 'this_turn' ? (turnSelection ?? null) : null,
+    }),
   openMcpSettings: () => set({ isMcpSettingsOpen: true }),
   closeMcpSettings: () => set({ isMcpSettingsOpen: false }),
   toggleMcpSettings: () => set((state) => ({ isMcpSettingsOpen: !state.isMcpSettingsOpen })),

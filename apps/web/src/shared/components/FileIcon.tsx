@@ -3,7 +3,7 @@ import {
   getBuiltInSpriteSheet,
   type FileTreeIcons,
 } from '@pierre/trees';
-import { memo, useInsertionEffect, useMemo } from 'react';
+import { useLayoutEffect } from 'react';
 import type { SVGProps } from 'react';
 
 export interface PierreIconResolution {
@@ -127,7 +127,7 @@ interface FileIconProps extends SVGProps<SVGSVGElement> {
   kind?: 'file' | 'directory';
 }
 
-export const FileIcon = memo(function FileIcon({
+export function FileIcon({
   path,
   size = 15,
   kind = 'file',
@@ -135,9 +135,9 @@ export const FileIcon = memo(function FileIcon({
   style,
   ...props
 }: FileIconProps) {
-  useInsertionEffect(ensurePierreIconSprite, []);
+  useLayoutEffect(ensurePierreIconSprite, []);
 
-  const icon = useMemo(() => resolvePierreIconForEntry(path, kind), [path, kind]);
+  const icon = resolvePierreIconForEntry(path, kind);
 
   if (!icon) {
     return (
@@ -177,4 +177,4 @@ export const FileIcon = memo(function FileIcon({
       <use href={`#${icon.name}`} />
     </svg>
   );
-});
+}

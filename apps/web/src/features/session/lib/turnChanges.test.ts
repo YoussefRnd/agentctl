@@ -4,6 +4,7 @@ import {
   extractFilePathFromToolCall,
   extractLatestTurnTouchedFiles,
   filePathMatches,
+  resolveTurnReviewFiles,
 } from './turnChanges';
 import type { ACPEventRow } from '@agentctl/shared';
 import type { ReviewFile } from '../components/ReviewHeader';
@@ -104,7 +105,7 @@ describe('turnChanges', () => {
 
     const touched = extractLatestTurnTouchedFiles(mockEvents);
     expect(touched.has('packages/core/src/feature.ts')).toBe(true);
-    expect(touched.has('feature.ts')).toBe(true);
+    expect(touched.size).toBe(1);
   });
 
   it('detects file creation when tool name is the file path and rawOutput is Wrote file successfully', () => {
@@ -135,13 +136,78 @@ describe('turnChanges', () => {
     ];
 
     const touched = extractLatestTurnTouchedFiles(mockEvents);
-    expect(touched.has('packages/core/src/feature.ts')).toBe(true);
-    expect(touched.has('feature.ts')).toBe(true);
+    expect(
+      touched.has('home/youssef/.agentctl/worktrees/agentctl/slot-1/packages/core/src/feature.ts'),
+    ).toBe(true);
 
     const summary = extractTurnChanges(mockEvents);
     expect(summary.files.length).toBe(1);
     expect(summary.files[0].path).toBe(
       'home/youssef/.agentctl/worktrees/agentctl/slot-1/packages/core/src/feature.ts',
     );
+  });
+
+  it('ignores read-only tool calls when finding files touched in the latest turn', () => {
+    const mockEvents: ACPEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's1',
+        type: 'tool_call',
+        data: {
+          name: 'read_file',
+          kind: 'read',
+          arguments: { path: 'src/unchanged.ts' },
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    expect(extractLatestTurnTouchedFiles(mockEvents).size).toBe(0);
+  });
+
+  it('does not select multiple review files from an ambiguous basename', () => {
+    const reviewFiles: ReviewFile[] = [
+      { path: 'apps/web/src/index.ts', state: 'modified', diff: '' },
+      { path: 'packages/core/src/index.ts', state: 'modified', diff: '' },
+      { path: 'packages/core/src/feature.ts', state: 'modified', diff: '' },
+    ];
+
+    expect(resolveTurnReviewFiles(reviewFiles, ['index.ts'])).toEqual(new Set());
+    expect(resolveTurnReviewFiles(reviewFiles, ['core/src/index.ts'])).toEqual(
+      new Set(['packages/core/src/index.ts']),
+    );
+    expect(resolveTurnReviewFiles(reviewFiles, ['feature.ts'])).toEqual(
+      new Set(['packages/core/src/feature.ts']),
+    );
+  });
+
+  it('uses turn-local tool diffs instead of cumulative review stats', () => {
+    const events: ACPEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's1',
+        type: 'tool_call',
+        data: {
+          name: 'edit_file',
+          kind: 'edit',
+          arguments: { path: 'src/feature.ts' },
+          content: [{ type: 'diff', oldText: 'old line', newText: 'new line\nextra line' }],
+        },
+        createdAt: new Date(),
+      },
+    ];
+    const reviewFiles: ReviewFile[] = [
+      {
+        path: 'src/feature.ts',
+        state: 'modified',
+        diff: '@@ -1,10 +1,20 @@\n-old 1\n-old 2\n+new 1\n+new 2\n+new 3',
+      },
+    ];
+
+    expect(extractTurnChanges(events, reviewFiles)).toMatchObject({
+      totalAdditions: 2,
+      totalDeletions: 1,
+      files: [{ path: 'src/feature.ts', additions: 2, deletions: 1 }],
+    });
   });
 });
