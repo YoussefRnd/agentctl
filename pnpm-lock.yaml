@@ -415,7 +415,7 @@ importers:
   packages/core:
     dependencies:
       '@agentclientprotocol/sdk':
-        specifier: latest
+        specifier: ^1.4.0
         version: 1.4.0(zod@4.4.3)
       '@agentctl/shared':
         specifier: workspace:*

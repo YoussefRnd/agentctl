@@ -12,6 +12,7 @@ import { createClientHandlers } from './client-handlers.js';
 import { TerminalManager } from './terminal-manager.js';
 import { noopLogger } from '../../logger.js';
 import type { SessionCallbacks } from '../types.js';
+import type { ElicitationRequest } from '@agentctl/shared';
 
 /**
  * Regression guard for the dead-handler bug: agentctl previously exposed
@@ -25,6 +26,7 @@ import type { SessionCallbacks } from '../types.js';
  */
 
 let clientConnection: AgentSideConnection;
+let lastElicitation: ElicitationRequest | undefined;
 
 async function makePair(cwd: string) {
   const clientToAgent = new TransformStream<Uint8Array>();
@@ -33,6 +35,13 @@ async function makePair(cwd: string) {
   const callbacks = {
     onEvent: () => Promise.resolve(),
     onRequestPermission: () => Promise.resolve({ allowed: true, optionId: 'allow-once' }),
+    onRequestElicitation: (request: ElicitationRequest) => {
+      lastElicitation = request;
+      return Promise.resolve({
+        action: 'submit' as const,
+        values: { strategy: 'balanced', ignored: { nested: true } },
+      });
+    },
   } as unknown as SessionCallbacks;
 
   const client = createClientHandlers({
@@ -60,6 +69,7 @@ async function makePair(cwd: string) {
 }
 
 beforeEach(() => {
+  lastElicitation = undefined;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-sdk-'));
   return makePair(dir);
 });
@@ -94,6 +104,45 @@ describe('real SDK dispatch parity (regression for dead handler keys)', () => {
       options: [{ optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' }],
     });
     expect(res.outcome).toEqual({ outcome: 'selected', optionId: 'allow-once' });
+  });
+
+  test('createElicitation maps the stabilized ACP form shape', async () => {
+    const res = await clientConnection.createElicitation({
+      sessionId: 's1',
+      mode: 'form',
+      message: 'Choose a strategy',
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          strategy: {
+            type: 'string',
+            title: 'Strategy',
+            oneOf: [
+              { const: 'balanced', title: 'Balanced' },
+              { const: 'fast', title: 'Fast' },
+            ],
+          },
+        },
+        required: ['strategy'],
+      },
+    });
+
+    expect(lastElicitation).toMatchObject({
+      mode: 'form',
+      message: 'Choose a strategy',
+      sessionId: 's1',
+      form: {
+        fields: [
+          {
+            id: 'strategy',
+            label: 'Strategy',
+            type: 'select',
+            required: true,
+          },
+        ],
+      },
+    });
+    expect(res).toEqual({ action: 'accept', content: { strategy: 'balanced' } });
   });
 
   test('extMethod builtin/bash dispatches to the terminal manager', async () => {

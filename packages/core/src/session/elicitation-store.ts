@@ -37,7 +37,12 @@ export class ElicitationStore {
       return false;
     }
 
-    pending.item.status = response.action === 'cancel' ? 'cancelled' : 'completed';
+    pending.item.status =
+      response.action === 'cancel'
+        ? 'cancelled'
+        : response.action === 'decline'
+          ? 'declined'
+          : 'completed';
     pending.item.response = response;
     pending.resolve(response);
     this.elicitations.delete(id);

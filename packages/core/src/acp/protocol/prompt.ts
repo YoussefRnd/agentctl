@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 
 export interface PromptBuildParams {
@@ -10,7 +10,7 @@ export interface PromptBuildParams {
   supportsEmbeddedContext?: boolean;
 }
 
-export function buildPromptBlocks(params: PromptBuildParams): ContentBlock[] {
+export async function buildPromptBlocks(params: PromptBuildParams): Promise<ContentBlock[]> {
   const promptParts: ContentBlock[] = [];
 
   if (params.embeddedContext) {
@@ -50,7 +50,7 @@ export function buildPromptBlocks(params: PromptBuildParams): ContentBlock[] {
       throw new Error('The ACP agent does not advertise image prompt support');
     }
 
-    const data = fs.readFileSync(attachment.filePath).toString('base64');
+    const data = (await fs.readFile(attachment.filePath)).toString('base64');
     if (isAudio) {
       promptParts.push({ type: 'audio', data, mimeType: attachment.mimeType });
     } else {

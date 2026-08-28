@@ -8,6 +8,7 @@ describe('ElicitationStore', () => {
     const { item, promise } = store.createElicitation({
       id: 'el-1',
       mode: 'form',
+      message: 'Choose a name',
       form: {
         title: 'Authentication Form',
         fields: [{ id: 'token', label: 'Token', type: 'string', required: true }],
@@ -37,6 +38,7 @@ describe('ElicitationStore', () => {
     const { promise } = store.createElicitation({
       id: 'el-2',
       mode: 'url',
+      message: 'Authenticate',
       url: { url: 'https://auth.example.com' },
     });
 

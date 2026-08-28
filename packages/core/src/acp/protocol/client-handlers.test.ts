@@ -109,6 +109,20 @@ describe('createClientHandlers', () => {
     expect(res.outcome).toEqual({ outcome: 'selected', optionId: 'allow-once' });
   });
 
+  test('requestPermission selects the advertised reject option when denied', async () => {
+    const handlers = requiredHandlers(process.cwd());
+    const res = await handlers.requestPermission({
+      sessionId: 's',
+      toolCall: { toolCallId: 't2', title: 'Test tool' },
+      options: [
+        { optionId: 'yes', name: 'Allow always', kind: 'allow_always' },
+        { optionId: 'no', name: 'Reject once', kind: 'reject_once' },
+      ],
+    });
+
+    expect(res.outcome).toEqual({ outcome: 'selected', optionId: 'no' });
+  });
+
   test('extNotification routes session updates to the resolved session', async () => {
     const events: unknown[] = [];
     const callbacks = {
@@ -134,10 +148,34 @@ describe('createClientHandlers', () => {
     expect(events).toContainEqual({ type: 'status', status: 'step_started' });
   });
 
+  test('sessionUpdate maps the canonical current mode update', async () => {
+    const events: unknown[] = [];
+    const callbacks = {
+      onEvent: (event: unknown) => {
+        events.push(event);
+      },
+      onRequestPermission: () => Promise.resolve({ allowed: false }),
+    } as unknown as SessionCallbacks;
+    const handlers = createClientHandlers({
+      cwd: process.cwd(),
+      terminalManager: new TerminalManager(noopLogger),
+      logger: noopLogger,
+      resolveSession: () => ({ callbacks, cwd: process.cwd() }),
+    });
+
+    await handlers.sessionUpdate({
+      sessionId: 's',
+      update: { sessionUpdate: 'current_mode_update', currentModeId: 'architect' },
+    });
+
+    expect(events).toEqual([{ type: 'mode_update', modeId: 'architect', _meta: undefined }]);
+  });
+
   test('completeElicitation notifies the resolved session', async () => {
     const completed: string[] = [];
     const callbacks = {
       onEvent: () => Promise.resolve(),
+      onRequestElicitation: () => Promise.resolve({ action: 'submit' }),
       onElicitationCompleted: (id: string) => {
         completed.push(id);
         return Promise.resolve();
@@ -150,6 +188,13 @@ describe('createClientHandlers', () => {
       resolveSession: () => ({ callbacks, cwd: process.cwd() }),
     }) as unknown as Required<Client>;
 
+    await handlers.createElicitation({
+      sessionId: 's',
+      mode: 'url',
+      elicitationId: 'el-1',
+      url: 'https://example.com/auth',
+      message: 'Authenticate',
+    });
     await handlers.completeElicitation({ elicitationId: 'el-1' });
     expect(completed).toEqual(['el-1']);
   });

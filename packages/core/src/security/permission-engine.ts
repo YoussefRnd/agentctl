@@ -142,12 +142,7 @@ export class PermissionEngine {
       const bestOptionId = getBestPermissionOption(domainReq.options);
       const response: RequestPermissionResponse = bestOptionId
         ? { outcome: { outcome: 'selected', optionId: bestOptionId } }
-        : {
-            outcome: {
-              outcome: 'selected',
-              optionId: acpRequest.options[0]?.optionId ?? 'allow_once',
-            },
-          };
+        : { outcome: { outcome: 'cancelled' } };
 
       return {
         autoApproved: true,
@@ -257,18 +252,12 @@ export class PermissionEngine {
       }
     }
 
-    const isDenied =
-      selectedOptionId.toLowerCase().includes('deny') ||
-      selectedOptionId.toLowerCase().includes('reject') ||
-      selectedOptionId.toLowerCase().includes('cancel');
-
-    if (!isDenied) {
-      return {
-        outcome: { outcome: 'selected', optionId: selectedOptionId },
-      };
-    }
-
-    return { outcome: { outcome: 'cancelled' } };
+    // ACP distinguishes selecting an agent-provided rejection option from
+    // dismissing the permission prompt. Every explicit option choice is
+    // returned as `selected`; only dismissal maps to `cancelled`.
+    return {
+      outcome: { outcome: 'selected', optionId: selectedOptionId },
+    };
   }
 
   private extractTargets(toolName: string, args: Record<string, unknown>): string[] {

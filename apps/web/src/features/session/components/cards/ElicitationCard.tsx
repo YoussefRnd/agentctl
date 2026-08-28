@@ -25,6 +25,8 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
           initial[field.id] = field.default;
         } else if (field.type === 'boolean') {
           initial[field.id] = false;
+        } else if (field.type === 'multi_select') {
+          initial[field.id] = [];
         } else {
           initial[field.id] = '';
         }
@@ -34,9 +36,27 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
   });
 
   const isPending = status === 'pending';
+  const isFormValid =
+    !isForm ||
+    (request.form?.fields.every((field) => {
+      const value = formValues[field.id];
+      if (Array.isArray(value)) {
+        return (
+          (!field.required || value.length > 0) &&
+          (field.minItems === undefined || value.length >= field.minItems) &&
+          (field.maxItems === undefined || value.length <= field.maxItems)
+        );
+      }
+      return !field.required || (value !== undefined && value !== null && value !== '');
+    }) ??
+      false);
 
   const cardStatus =
-    status === 'completed' ? 'success' : status === 'cancelled' ? 'error' : 'pending';
+    status === 'completed'
+      ? 'success'
+      : status === 'cancelled' || status === 'declined'
+        ? 'error'
+        : 'pending';
 
   const handleInputChange = (fieldId: string, val: unknown) => {
     setFormValues((prev) => ({
@@ -59,6 +79,19 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
     onRespond(elicitation.id, {
       action: 'cancel',
     });
+  };
+
+  const handleDecline = () => {
+    if (!isPending || !onRespond || disabled) return;
+    onRespond(elicitation.id, {
+      action: 'decline',
+    });
+  };
+
+  const handleOpenUrl = () => {
+    if (!isPending || !onRespond || disabled || !request.url) return;
+    window.open(request.url.url, '_blank', 'noopener,noreferrer');
+    onRespond(elicitation.id, { action: 'submit' });
   };
 
   return (
@@ -84,8 +117,14 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
       </CardHeader>
 
       <CardContent className="space-y-3">
+        <p className="text-text-muted text-[11px] leading-relaxed">{request.message}</p>
+
         {isForm && request.form && (
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form
+            id={`elicitation-form-${elicitation.id}`}
+            onSubmit={handleSubmit}
+            className="space-y-3"
+          >
             {request.form.title && (
               <h4 className="text-text-main text-xs font-bold">{request.form.title}</h4>
             )}
@@ -128,6 +167,47 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                         })) ?? []
                       }
                     />
+                  ) : field.type === 'multi_select' ? (
+                    <div className="space-y-1">
+                      {field.options?.map((option) => {
+                        const selected = Array.isArray(formValues[field.id])
+                          ? (formValues[field.id] as string[])
+                          : [];
+                        return (
+                          <label
+                            key={option.value}
+                            className="text-text-muted flex cursor-pointer items-start gap-2 text-[11px]"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected.includes(option.value)}
+                              disabled={
+                                !isPending ||
+                                disabled ||
+                                (!selected.includes(option.value) &&
+                                  field.maxItems !== undefined &&
+                                  selected.length >= field.maxItems)
+                              }
+                              onChange={(event) => {
+                                handleInputChange(
+                                  field.id,
+                                  event.target.checked
+                                    ? [...selected, option.value]
+                                    : selected.filter((value) => value !== option.value),
+                                );
+                              }}
+                              className="border-border bg-surface text-accent focus:ring-accent/20 mt-0.5 rounded"
+                            />
+                            <span>
+                              {option.label}
+                              {option.description && (
+                                <span className="text-text-subtle block">{option.description}</span>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   ) : field.type === 'boolean' ? (
                     <label className="text-text-muted flex cursor-pointer items-center gap-2 text-[11px] font-semibold">
                       <input
@@ -144,7 +224,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                   ) : (
                     <Input
                       id={`elicitation-${field.id}`}
-                      type={field.type === 'number' ? 'number' : 'text'}
+                      type={field.type === 'number' || field.type === 'integer' ? 'number' : 'text'}
                       value={
                         typeof formValues[field.id] === 'string' ||
                         typeof formValues[field.id] === 'number'
@@ -152,14 +232,28 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                           : ''
                       }
                       disabled={!isPending || disabled}
+                      required={field.required}
+                      min={field.minimum}
+                      max={field.maximum}
+                      minLength={field.minLength}
+                      maxLength={field.maxLength}
+                      pattern={field.pattern}
+                      step={field.type === 'integer' ? 1 : undefined}
                       onChange={(e) => {
                         handleInputChange(
                           field.id,
-                          field.type === 'number' ? Number(e.target.value) : e.target.value,
+                          field.type === 'number' || field.type === 'integer'
+                            ? e.target.value === ''
+                              ? ''
+                              : Number(e.target.value)
+                            : e.target.value,
                         );
                       }}
                       placeholder={`Enter ${field.label.toLowerCase()}...`}
                     />
+                  )}
+                  {field.description && (
+                    <p className="text-text-subtle text-[10px]">{field.description}</p>
                   )}
                 </div>
               ))}
@@ -178,20 +272,10 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
               </p>
             )}
 
-            <div className="bg-surface/50 border-border/40 flex items-center justify-between gap-2 rounded-lg border p-2.5">
-              <span className="text-text-muted truncate font-mono text-[11px]">
+            <div className="bg-surface/50 border-border/40 rounded-lg border p-2.5">
+              <span className="text-text-muted font-mono text-[11px] break-all">
                 {request.url.url}
               </span>
-              <a
-                href={request.url.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex shrink-0"
-              >
-                <Button variant="outline" size="sm">
-                  Open URL ↗
-                </Button>
-              </a>
             </div>
           </div>
         )}
@@ -202,15 +286,18 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
           <Button variant="ghost" size="sm" onClick={handleCancel} disabled={disabled}>
             Cancel
           </Button>
+          <Button variant="ghost" size="sm" onClick={handleDecline} disabled={disabled}>
+            Decline
+          </Button>
           <Button
             variant="solid"
             size="sm"
-            onClick={() => {
-              handleSubmit();
-            }}
-            disabled={disabled}
+            type={isForm ? 'submit' : 'button'}
+            form={isForm ? `elicitation-form-${elicitation.id}` : undefined}
+            onClick={isForm ? undefined : handleOpenUrl}
+            disabled={disabled || !isFormValid}
           >
-            {isForm ? 'Submit' : 'Mark Completed'}
+            {isForm ? 'Submit' : 'Open URL'}
           </Button>
         </CardFooter>
       )}

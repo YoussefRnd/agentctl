@@ -128,14 +128,26 @@ export const availableCommandSchema = z.object({
 export const elicitationFormFieldSchema = z.object({
   id: z.string(),
   label: z.string(),
-  type: z.enum(['string', 'number', 'boolean', 'select']).default('string'),
-  default: z.string().optional(),
+  description: z.string().optional(),
+  type: z
+    .enum(['string', 'number', 'integer', 'boolean', 'select', 'multi_select'])
+    .default('string'),
+  default: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]).optional(),
   required: z.boolean().optional().default(false),
+  minimum: z.number().optional(),
+  maximum: z.number().optional(),
+  minLength: z.number().int().nonnegative().optional(),
+  maxLength: z.number().int().nonnegative().optional(),
+  pattern: z.string().optional(),
+  format: z.enum(['email', 'uri', 'date', 'date-time']).optional(),
+  minItems: z.number().int().nonnegative().optional(),
+  maxItems: z.number().int().nonnegative().optional(),
   options: z
     .array(
       z.object({
         label: z.string(),
         value: z.string(),
+        description: z.string().optional(),
       }),
     )
     .optional(),
@@ -156,19 +168,23 @@ export const urlElicitationSchema = z.object({
 export const elicitationRequestSchema = z.object({
   id: z.string(),
   mode: z.enum(['form', 'url']),
+  message: z.string(),
+  sessionId: z.string().optional(),
+  requestId: z.union([z.string(), z.number()]).optional(),
+  toolCallId: z.string().optional(),
   form: formElicitationSchema.optional(),
   url: urlElicitationSchema.optional(),
 });
 
 export const elicitationResponseSchema = z.object({
-  action: z.enum(['submit', 'cancel']),
+  action: z.enum(['submit', 'decline', 'cancel']),
   values: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const elicitationItemSchema = z.object({
   id: z.string(),
   request: elicitationRequestSchema,
-  status: z.enum(['pending', 'completed', 'cancelled']),
+  status: z.enum(['pending', 'completed', 'declined', 'cancelled']),
   createdAt: z.string(),
   response: elicitationResponseSchema.optional(),
 });

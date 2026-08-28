@@ -129,7 +129,7 @@ export class EventStreamAdapter {
       this.pendingThoughtDelta += text;
       if (this.pendingThoughtDelta.length >= 200) {
         this.flushThoughtDelta();
-      } else if (!this.textDeltaTimer) {
+      } else if (!this.thoughtDeltaTimer) {
         this.thoughtDeltaTimer = setTimeout(() => {
           this.flushThoughtDelta();
         }, this.transientCoalesceMs);

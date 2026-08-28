@@ -8,7 +8,10 @@ import { parseRegistryAgents } from '../provider-registry.js';
 import { ProcessStreamTransport, cleanEnv } from '../../acp/transport/process-transport.js';
 import { createClientHandlers } from '../../acp/protocol/client-handlers.js';
 import { AcpDebugLog, wrapDebug, formatAcpMessageLog } from '../../acp/transport/stream-debug.js';
-import { initializeAcpConnection } from '../../acp/transport/capabilities-cache.js';
+import {
+  AGENTCTL_CLIENT_CAPABILITIES,
+  initializeAcpConnection,
+} from '../../acp/transport/capabilities-cache.js';
 import type { SessionCallbacks, RuntimeOptions } from '../../acp/types.js';
 import { type Logger, noopLogger } from '../../logger.js';
 import { TerminalManager } from '../../acp/protocol/terminal-manager.js';
@@ -204,6 +207,7 @@ export class PersistentAgentConnectionManager {
     const acpInitRes = await initializeAcpConnection(connection, {
       transport,
       timeoutMs: 120_000,
+      clientCapabilities: AGENTCTL_CLIENT_CAPABILITIES,
     });
     const parsedCapabilities = acpInitRes.parsedCapabilities;
 
