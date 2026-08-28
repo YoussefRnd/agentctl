@@ -14,6 +14,7 @@ export function StatusPane() {
   const { mcpServers, isLoading: isLoadingMcp } = useMcpServers();
 
   const sessionPlan = sessionData?.session.plan;
+
   const plan = useMemo(() => {
     return structuredPlan.length > 0 ? structuredPlan : (sessionPlan ?? []);
   }, [structuredPlan, sessionPlan]);

@@ -22,6 +22,7 @@ export interface StructuredPlanItem {
   name: string;
   status: 'pending' | 'in_progress' | 'completed';
   isCompleted: boolean;
+  priority?: 'high' | 'medium' | 'low';
 }
 
 // ==========================================
@@ -261,12 +262,12 @@ export function SessionStreamProvider({
   }, [events]);
 
   const structuredPlan = useMemo(() => {
-    // Search backwards for the latest plan_update
+    // Search backwards for the latest plan_update in the session
     for (let i = events.length - 1; i >= 0; i--) {
       const e = events[i];
       if (e.type === 'plan_update') {
         const data = e.data as { plan: StructuredPlanItem[] };
-        return data.plan;
+        return data.plan ?? [];
       }
     }
     return [];
