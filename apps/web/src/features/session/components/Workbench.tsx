@@ -2,7 +2,7 @@ import { useEffect, Suspense, lazy } from 'react';
 import { StatusPane } from './StatusPane';
 import { useSession } from '../../../contexts/SessionContext';
 import { GlassPanel, Badge, Spinner } from '@agentctl/ui';
-import { Maximize2, Minimize2, Terminal, FileCode, Activity } from 'lucide-react';
+import { Maximize2, Minimize2, Terminal, FileCode, CircleDot } from 'lucide-react';
 
 const ReviewView = lazy(() => import('./ReviewView').then((m) => ({ default: m.ReviewView })));
 const InteractiveTerminal = lazy(() =>
@@ -62,7 +62,7 @@ export function Workbench({
                   }}
                 >
                   <span className="relative z-10 flex items-center gap-1">
-                    {t === 'status' && <Activity className="h-3 w-3 opacity-80" />}
+                    {t === 'status' && <CircleDot className="h-3 w-3 opacity-80" />}
                     {t === 'changes' && <FileCode className="h-3 w-3 opacity-80" />}
                     {t === 'terminal' && <Terminal className="h-3 w-3 opacity-80" />}
                     {t === 'status' ? 'Status' : t === 'changes' ? 'Changes' : 'Terminal'}

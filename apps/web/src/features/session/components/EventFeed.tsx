@@ -17,6 +17,8 @@ import { Card } from '@agentctl/ui';
 import type { RewindMode } from './RewindMenu';
 import { groupFeedEvents, type FeedEventGroup } from './eventFeedGrouping';
 import { EventFeedItem } from './EventFeedItem';
+import { TurnMinimap } from './TurnMinimap';
+import { groupConversationTurns, type ConversationTurn } from '../lib/turnMinimapGrouping';
 
 interface EventFeedProps {
   events: ACPEventRow[];
@@ -53,10 +55,38 @@ export function EventFeed({
   const didInitialScrollRef = useRef(false);
   const groupElementsRef = useRef(new Map<string, HTMLDivElement>());
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
-  const { sessionData, sessionId } = useSession();
+  const [activeTurnIndex, setActiveTurnIndex] = useState<number | null>(null);
+  const { sessionData, sessionId, reviewData } = useSession();
   const { streamingEventId } = useSessionStream();
   const isSessionError = sessionData?.session.status === 'error';
   const queryClient = useQueryClient();
+
+  const activeProvider = useMemo(() => {
+    const providerId = sessionData?.session.selectedProvider || sessionData?.session.agent;
+    return sessionData?.capabilities?.find((p) => p.id === providerId);
+  }, [
+    sessionData?.capabilities,
+    sessionData?.session.selectedProvider,
+    sessionData?.session.agent,
+  ]);
+
+  const conversationTurns = useMemo(() => {
+    return groupConversationTurns(events, reviewData?.files, {
+      modelName: sessionData?.session.selectedModel || sessionData?.session.agent,
+      providerName: activeProvider?.label || sessionData?.session.selectedProvider,
+      providerIcon:
+        activeProvider?.icon ||
+        (activeProvider as { agent?: { icon?: string } } | undefined)?.agent?.icon,
+      userName: 'You',
+    });
+  }, [
+    events,
+    reviewData?.files,
+    sessionData?.session.selectedModel,
+    sessionData?.session.agent,
+    sessionData?.session.selectedProvider,
+    activeProvider,
+  ]);
 
   const groupedEvents = useMemo(
     () => groupFeedEvents(events, streamingEventId, isSessionRunning),
@@ -75,6 +105,58 @@ export function EventFeed({
     isFollowingOutputRef.current = enabled;
     setIsFollowingOutput(enabled);
   }, []);
+
+  const turnRafRef = useRef<number | null>(null);
+
+  const updateActiveTurn = useCallback(() => {
+    if (turnRafRef.current != null) return;
+
+    turnRafRef.current = window.requestAnimationFrame(() => {
+      turnRafRef.current = null;
+      const parent = parentRef.current;
+      if (!parent || conversationTurns.length === 0) return;
+
+      const parentRect = parent.getBoundingClientRect();
+      const viewportTop = parentRect.top;
+
+      let closestIdx = 0;
+      let minDistance = Infinity;
+
+      for (let i = 0; i < conversationTurns.length; i++) {
+        const turn = conversationTurns[i];
+        const el = groupElementsRef.current.get(`user-${String(turn.userEvent.id)}`);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const dist = Math.abs(rect.top - viewportTop - 40);
+          if (rect.top <= viewportTop + parentRect.height && dist < minDistance) {
+            minDistance = dist;
+            closestIdx = i;
+          }
+        }
+      }
+
+      setActiveTurnIndex(closestIdx);
+    });
+  }, [conversationTurns]);
+
+  useEffect(() => {
+    return () => {
+      if (turnRafRef.current != null) {
+        window.cancelAnimationFrame(turnRafRef.current);
+      }
+    };
+  }, []);
+
+  const handleSelectTurn = useCallback(
+    (turn: ConversationTurn) => {
+      setFollowingOutput(false);
+      const targetElement = groupElementsRef.current.get(`user-${String(turn.userEvent.id)}`);
+      if (targetElement) {
+        targetElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    },
+    [setFollowingOutput],
+  );
 
   const scrollToBottom = useCallback(() => {
     if (scrollFrameRef.current != null) {
@@ -100,8 +182,9 @@ export function EventFeed({
       if (isPointerScrollingRef.current && isScrollingUp) {
         setFollowingOutput(false);
       }
+      updateActiveTurn();
     },
-    [setFollowingOutput],
+    [setFollowingOutput, updateActiveTurn],
   );
 
   const handleWheel = useCallback(
@@ -249,7 +332,7 @@ export function EventFeed({
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
         tabIndex={0}
-        className="no-scrollbar h-full w-full flex-grow overflow-y-auto"
+        className="no-scrollbar h-full w-full flex-grow overflow-y-auto pr-8 sm:pr-10"
       >
         <div ref={contentRef} className="w-full">
           {groupedEvents.map((group) => {
@@ -342,6 +425,14 @@ export function EventFeed({
         >
           <ArrowDown className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5" />
         </button>
+      )}
+
+      {conversationTurns.length > 1 && (
+        <TurnMinimap
+          turns={conversationTurns}
+          activeTurnIndex={activeTurnIndex}
+          onSelectTurn={handleSelectTurn}
+        />
       )}
     </div>
   );
