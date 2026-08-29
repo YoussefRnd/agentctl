@@ -407,7 +407,12 @@ export function extractTurnChanges(
     }
   }
 
-  const files = Array.from(fileMap.values(), ({ hasTurnLocalStats: _, ...file }) => file);
+  const files = Array.from(fileMap.values(), ({ path, additions, deletions, status }) => ({
+    path,
+    additions,
+    deletions,
+    status,
+  }));
   const totalAdditions = files.reduce((sum, f) => sum + f.additions, 0);
   const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
 

@@ -42,9 +42,12 @@ function sanitizeFilename(rawFilename: string | undefined): string {
     // Keep the original value if it is not valid URI-encoded text.
   }
 
-  const filename = path
-    .basename(decoded.replaceAll('\\', '/'))
-    .replace(/[\u0000-\u001f\u007f]/g, '')
+  const filename = Array.from(path.basename(decoded.replaceAll('\\', '/')))
+    .filter((character) => {
+      const codePoint = character.codePointAt(0);
+      return codePoint != null && codePoint >= 32 && codePoint !== 127;
+    })
+    .join('')
     .slice(0, 255);
   return filename || 'image';
 }

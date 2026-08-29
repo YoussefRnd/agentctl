@@ -4,7 +4,7 @@ export type WorkbenchTab = 'status' | 'changes' | 'terminal';
 export type SettingsTab = 'general' | 'providers' | 'mcp';
 export type ReviewScope = 'uncommitted' | 'this_turn' | 'all_edits';
 
-interface ReviewTurnSelection {
+export interface ReviewTurnSelection {
   sessionId: string;
   files: string[];
 }
@@ -28,6 +28,9 @@ interface UIState {
   activeSubagent:
     import('../../features/session/components/cards/subagentBlockUtils').SubagentGroup | null;
 
+  // Review View Focus
+  targetReviewFile: string | null;
+
   // Actions
   setWorkbenchTab: (tab: WorkbenchTab) => void;
   setWorkbenchOpen: (open: boolean) => void;
@@ -36,6 +39,8 @@ interface UIState {
   toggleMaximized: () => void;
   setMobileSidebarOpen: (open: boolean) => void;
   setReviewScope: (scope: ReviewScope, turnSelection?: ReviewTurnSelection) => void;
+  setTargetReviewFile: (filePath: string | null) => void;
+  focusReviewFile: (filePath: string, turnSelection: ReviewTurnSelection) => void;
   openMcpSettings: () => void;
   closeMcpSettings: () => void;
   toggleMcpSettings: () => void;
@@ -62,6 +67,7 @@ export const useUIStore = create<UIState>((set) => ({
   settingsTab: 'general',
   activeSubagentId: null,
   activeSubagent: null,
+  targetReviewFile: null,
 
   setWorkbenchTab: (tab) => set({ workbenchTab: tab, isWorkbenchOpen: true }),
   setWorkbenchOpen: (open) => set({ isWorkbenchOpen: open }),
@@ -73,6 +79,15 @@ export const useUIStore = create<UIState>((set) => ({
     set({
       reviewScope: scope,
       reviewTurnSelection: scope === 'this_turn' ? (turnSelection ?? null) : null,
+    }),
+  setTargetReviewFile: (filePath) => set({ targetReviewFile: filePath }),
+  focusReviewFile: (filePath, turnSelection) =>
+    set({
+      workbenchTab: 'changes',
+      isWorkbenchOpen: true,
+      reviewScope: 'this_turn',
+      reviewTurnSelection: turnSelection,
+      targetReviewFile: filePath,
     }),
   openMcpSettings: () => set({ isMcpSettingsOpen: true }),
   closeMcpSettings: () => set({ isMcpSettingsOpen: false }),

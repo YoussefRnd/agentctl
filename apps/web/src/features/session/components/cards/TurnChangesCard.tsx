@@ -1,6 +1,8 @@
 import { memo, useState } from 'react';
-import { ChevronRight, ChevronDown, FileText } from 'lucide-react';
+import { ChevronRight, ChevronDown, FileText, ExternalLink } from 'lucide-react';
 import { useUIStore, FileIcon } from '@/shared';
+import { Tooltip } from '@agentctl/ui';
+import { useOpenWorkspaceFile } from '../../hooks/useOpenWorkspaceFile';
 import type { TurnChangesSummary } from '../../lib/turnChanges';
 
 interface TurnChangesCardProps {
@@ -18,6 +20,8 @@ export const TurnChangesCard = memo(function TurnChangesCard({
   const setWorkbenchTab = useUIStore((s) => s.setWorkbenchTab);
   const setWorkbenchOpen = useUIStore((s) => s.setWorkbenchOpen);
   const setReviewScope = useUIStore((s) => s.setReviewScope);
+  const focusReviewFile = useUIStore((s) => s.focusReviewFile);
+  const openWorkspaceFile = useOpenWorkspaceFile();
 
   if (!summary || summary.files.length === 0) return null;
 
@@ -26,6 +30,16 @@ export const TurnChangesCard = memo(function TurnChangesCard({
     setWorkbenchTab('changes');
     setWorkbenchOpen(true);
     setReviewScope('this_turn', {
+      sessionId,
+      files: summary.files.map((file) => file.path),
+    });
+    if (onOpenChanges) {
+      onOpenChanges();
+    }
+  };
+
+  const handleOpenFileReview = (filePath: string) => {
+    focusReviewFile(filePath, {
       sessionId,
       files: summary.files.map((file) => file.path),
     });
@@ -101,40 +115,50 @@ export const TurnChangesCard = memo(function TurnChangesCard({
             return (
               <div
                 key={file.path}
-                onClick={handleOpenReview}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleOpenReview();
-                  }
-                }}
-                className="hover:bg-surface/50 group/file-row flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 transition-colors"
+                className="hover:bg-surface/50 group/file-row flex items-center rounded-lg transition-colors"
               >
-                {/* Left: Icon + File Name + Directory Path */}
-                <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
-                  <FileIcon path={file.path} className="shrink-0" />
-                  <span className="text-text-main group-hover/file-row:text-accent truncate font-mono text-[12px] font-medium">
-                    {fileName}
-                  </span>
-                  {dirPath && (
-                    <span className="text-text-muted/60 truncate font-mono text-[11px]">
-                      {dirPath}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleOpenFileReview(file.path);
+                  }}
+                  className="flex min-w-0 flex-1 cursor-pointer items-center justify-between px-2.5 py-1.5 text-left"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+                    <FileIcon path={file.path} className="shrink-0" />
+                    <span className="text-text-main group-hover/file-row:text-accent truncate font-mono text-[12px] font-medium">
+                      {fileName}
                     </span>
-                  )}
-                </div>
+                    {dirPath && (
+                      <span className="text-text-muted/60 truncate font-mono text-[11px]">
+                        {dirPath}
+                      </span>
+                    )}
+                  </div>
 
-                {/* Right: Diff stats */}
-                <div className="ml-3 flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] font-medium">
-                  {file.additions > 0 && (
-                    <span className="text-emerald-400">+{file.additions}</span>
-                  )}
-                  {file.deletions > 0 && <span className="text-rose-400">-{file.deletions}</span>}
-                  {file.additions === 0 && file.deletions === 0 && (
-                    <span className="text-text-muted/60 text-[10px]">modified</span>
-                  )}
-                </div>
+                  <div className="ml-3 flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] font-medium">
+                    {file.additions > 0 && (
+                      <span className="text-emerald-400">+{file.additions}</span>
+                    )}
+                    {file.deletions > 0 && <span className="text-rose-400">-{file.deletions}</span>}
+                    {file.additions === 0 && file.deletions === 0 && (
+                      <span className="text-text-muted/60 text-[10px]">modified</span>
+                    )}
+                  </div>
+                </button>
+
+                <Tooltip content="Open in editor">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void openWorkspaceFile(file.path);
+                    }}
+                    className="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-all group-hover/file-row:opacity-100 focus-visible:opacity-100"
+                    aria-label={`Open ${fileName} in editor`}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                  </button>
+                </Tooltip>
               </div>
             );
           })}

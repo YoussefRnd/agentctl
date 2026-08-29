@@ -1,4 +1,9 @@
-import { type SessionRow, type SessionMode, createTaskSlug } from '@agentctl/shared';
+import {
+  type SearchEventType,
+  type SessionRow,
+  type SessionMode,
+  createTaskSlug,
+} from '@agentctl/shared';
 import { api } from '../api.js';
 import { ApiError } from '../api-error.js';
 
@@ -29,12 +34,14 @@ export interface OpenProjectResponse {
 export async function openProjectSession(
   path: string,
   mode?: SessionMode,
+  agent?: string,
 ): Promise<OpenProjectResponse> {
   const res = await api.openProject({
     body: {
       path,
       taskSlug: createTaskSlug('new-session'),
       ...(mode ? { mode } : {}),
+      ...(agent ? { agent } : {}),
     },
   });
   if (res.status !== 200) {
@@ -46,12 +53,14 @@ export async function openProjectSession(
 export async function createProjectSession(
   projectId: string,
   mode?: SessionMode,
+  agent?: string,
 ): Promise<SessionRow> {
   const res = await api.createSession({
     body: {
       projectId,
       taskSlug: createTaskSlug('new-session'),
       ...(mode ? { mode } : {}),
+      ...(agent ? { agent } : {}),
     },
   });
   if (res.status !== 201) {
@@ -432,6 +441,30 @@ export async function getAvailableEditors(): Promise<string[]> {
   const res = await api.getAvailableEditors();
   if (res.status !== 200) {
     throw new ApiError(`Failed to get available editors: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
+export type { SearchResultItem } from '@agentctl/shared';
+
+export async function searchSessionEvents(params: {
+  q: string;
+  type?: 'all' | SearchEventType;
+  projectId?: string;
+  sessionId?: string;
+  limit?: number;
+}): Promise<import('@agentctl/shared').SearchResultItem[]> {
+  const res = await api.searchEvents({
+    query: {
+      q: params.q,
+      ...(params.type ? { type: params.type } : {}),
+      ...(params.projectId ? { projectId: params.projectId } : {}),
+      ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+      ...(params.limit ? { limit: params.limit } : {}),
+    },
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to search events: ${String(res.status)}`, res.status);
   }
   return res.body;
 }

@@ -72,10 +72,19 @@ export function NewProjectPalette() {
       },
     [installedProviders, selectedProviderId],
   );
+  const launchProviderId = installedProviders.length > 0 ? activeProvider.id : undefined;
 
   const mutation = useMutation({
-    mutationFn: async ({ path, mode }: { path: string; mode: SessionMode }) => {
-      return openProjectSession(path, mode);
+    mutationFn: async ({
+      path,
+      mode,
+      agent,
+    }: {
+      path: string;
+      mode: SessionMode;
+      agent?: string;
+    }) => {
+      return openProjectSession(path, mode, agent);
     },
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -90,7 +99,11 @@ export function NewProjectPalette() {
       setShowExplorer(true);
       return;
     }
-    mutation.mutate({ path: activeProject.path, mode: selectedMode });
+    mutation.mutate({
+      path: activeProject.path,
+      mode: selectedMode,
+      agent: launchProviderId,
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -117,7 +130,11 @@ export function NewProjectPalette() {
             </button>
             <DirectoryExplorer
               onSelect={(dirPath: string) => {
-                mutation.mutate({ path: dirPath, mode: selectedMode });
+                mutation.mutate({
+                  path: dirPath,
+                  mode: selectedMode,
+                  agent: launchProviderId,
+                });
               }}
             />
           </div>
@@ -199,7 +216,11 @@ export function NewProjectPalette() {
                 setShowExplorer(true);
               }}
               onSelectProject={(path, mode) => {
-                mutation.mutate({ path, mode });
+                mutation.mutate({
+                  path,
+                  mode,
+                  agent: launchProviderId,
+                });
               }}
             />
           </>

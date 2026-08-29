@@ -25,8 +25,24 @@ export function MainFeed() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const locationInitialPrompt = (location.state as { initialPrompt?: string } | null)
-    ?.initialPrompt;
+  const locationState = location.state as {
+    initialPrompt?: string;
+    targetEventId?: number;
+  } | null;
+  const locationInitialPrompt = locationState?.initialPrompt;
+  const targetEventId = locationState?.targetEventId;
+  const handleTargetEventHandled = useCallback(() => {
+    if (locationState?.targetEventId == null) return;
+
+    void navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: locationState.initialPrompt
+        ? {
+            initialPrompt: locationState.initialPrompt,
+          }
+        : null,
+    });
+  }, [location.hash, location.pathname, location.search, locationState, navigate]);
 
   const handleProviderSelect = (providerId: string, modelId?: string) => {
     switchProvider(providerId, modelId, sessionData);
@@ -217,6 +233,8 @@ export function MainFeed() {
         ) : (
           <EventFeed
             events={events}
+            targetEventId={targetEventId}
+            onTargetEventHandled={handleTargetEventHandled}
             isConnected={isConnected}
             hasGitRepo={sessionData?.session.project?.repoRoot != null}
             isSessionRunning={sessionData?.session.status === 'running'}

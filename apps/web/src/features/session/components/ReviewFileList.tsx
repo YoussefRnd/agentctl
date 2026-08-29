@@ -31,6 +31,8 @@ interface ReviewFileListProps {
   onUnstageAll?: () => void;
   isStagingAll?: boolean;
   isUnstagingAll?: boolean;
+  targetFilePath?: string | null;
+  targetFileRef?: (element: HTMLDivElement | null) => void;
 }
 
 export function ReviewFileList({
@@ -49,6 +51,8 @@ export function ReviewFileList({
   onUnstageAll,
   isStagingAll,
   isUnstagingAll,
+  targetFilePath,
+  targetFileRef,
 }: ReviewFileListProps) {
   const fileStateKeys = Object.keys(groupedFiles) as FileState[];
 
@@ -124,65 +128,60 @@ export function ReviewFileList({
                 const dirPath = file.path.split('/').slice(0, -1).join('/');
 
                 return (
-                  <div key={`${fileState}:${file.path}`} id={`diff-block-${file.path}`}>
+                  <div
+                    key={`${fileState}:${file.path}`}
+                    ref={file.path === targetFilePath ? targetFileRef : undefined}
+                  >
                     <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        onToggleFile(file.path);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onToggleFile(file.path);
-                        }
-                      }}
-                      className={`group/filerow border-border/5 flex w-full cursor-pointer items-center gap-2.5 border-b px-3.5 py-1.5 transition-colors select-none ${
+                      className={`group/filerow border-border/5 flex w-full items-center border-b transition-colors ${
                         !collapsed
                           ? 'bg-surface-secondary/15 border-l-accent border-l-2'
                           : 'hover:bg-surface-secondary/15'
                       }`}
                     >
-                      {/* Expand / Collapse chevron indicator */}
-                      <span className="text-text-muted/40 group-hover/filerow:text-text-muted shrink-0 transition-colors">
-                        {collapsed ? (
-                          <ChevronRight className="h-3 w-3" />
-                        ) : (
-                          <ChevronDown className="h-3 w-3" />
-                        )}
-                      </span>
-
-                      {/* File Icon & Name */}
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <FileIcon path={file.path} className="h-3.5 w-3.5 shrink-0" />
-                        <span className="text-text-main/90 truncate font-mono text-xs font-medium">
-                          {fileName}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onToggleFile(file.path);
+                        }}
+                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3.5 py-1.5 text-left select-none"
+                      >
+                        <span className="text-text-muted/40 group-hover/filerow:text-text-muted shrink-0 transition-colors">
+                          {collapsed ? (
+                            <ChevronRight className="h-3 w-3" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" />
+                          )}
                         </span>
-                        {dirPath && (
-                          <span className="text-text-muted/40 truncate font-mono text-[10px]">
-                            {dirPath}/
+
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <FileIcon path={file.path} className="h-3.5 w-3.5 shrink-0" />
+                          <span className="text-text-main/90 truncate font-mono text-xs font-medium">
+                            {fileName}
                           </span>
-                        )}
-                      </div>
+                          {dirPath && (
+                            <span className="text-text-muted/40 truncate font-mono text-[10px]">
+                              {dirPath}/
+                            </span>
+                          )}
+                        </div>
 
-                      {/* Diff Add/Del stats */}
-                      <div className="flex shrink-0 items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums">
-                        {stats.additions > 0 && (
-                          <span className="text-success/90">+{stats.additions}</span>
-                        )}
-                        {stats.deletions > 0 && (
-                          <span className="text-danger/90">-{stats.deletions}</span>
-                        )}
-                      </div>
+                        <div className="flex shrink-0 items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums">
+                          {stats.additions > 0 && (
+                            <span className="text-success/90">+{stats.additions}</span>
+                          )}
+                          {stats.deletions > 0 && (
+                            <span className="text-danger/90">-{stats.deletions}</span>
+                          )}
+                        </div>
+                      </button>
 
-                      {/* VSCode-style icon action buttons */}
-                      <div className="flex shrink-0 items-center gap-0.5">
+                      <div className="mr-3.5 flex shrink-0 items-center gap-0.5">
                         {onOpenFile && (
                           <Tooltip content="Open file in editor">
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
+                              onClick={() => {
                                 onOpenFile(file.path);
                               }}
                               className="text-text-muted/50 hover:text-text-main hover:bg-surface-tertiary/40 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
@@ -200,8 +199,7 @@ export function ReviewFileList({
                             <Tooltip content="Discard changes">
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                onClick={() => {
                                   onRevert(file.path);
                                 }}
                                 className="text-text-muted/50 hover:text-danger hover:bg-danger/10 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
@@ -216,8 +214,7 @@ export function ReviewFileList({
                           <Tooltip content="Stage changes">
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
+                              onClick={() => {
                                 onStage(file.path);
                               }}
                               className="text-text-muted/60 hover:text-accent hover:bg-accent/15 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
@@ -232,8 +229,7 @@ export function ReviewFileList({
                           <Tooltip content="Unstage changes">
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
+                              onClick={() => {
                                 onUnstage(file.path);
                               }}
                               className="text-text-muted/60 hover:text-text-main hover:bg-surface-tertiary/40 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"

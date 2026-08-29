@@ -31,10 +31,10 @@
     "@typescript/native": "catalog:",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
-    "oxlint": "^1.79.0",
+    "oxlint": "^1.80.0",
     "prettier": "^3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "turbo": "^2.10.11",
+    "turbo": "^2.10.12",
     "typescript": "catalog:",
     "vitest": "^4.1.11"
   },

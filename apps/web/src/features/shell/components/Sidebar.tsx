@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Plus, MessageSquare, Folder } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import {
   apiClient,
@@ -12,9 +12,10 @@ import {
   renameSession,
   rewindSession,
 } from '@agentctl/api-client';
-import { ConfirmationModal, Tooltip, Badge } from '@agentctl/ui';
+import { ConfirmationModal, Tooltip, cn } from '@agentctl/ui';
 import { toast } from 'sonner';
 import { SidebarProjectList } from './SidebarProjectList';
+import { SidebarTranscriptResults } from './SidebarTranscriptResults';
 import { RenameSessionDialog } from './RenameSessionDialog';
 import { SidebarSearch } from './SidebarSearch';
 import { SidebarFilterMenu, type SortByOption } from './SidebarFilterMenu';
@@ -35,6 +36,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchTab, setSearchTab] = useState<'workspaces' | 'messages'>('workspaces');
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
 
@@ -226,69 +228,107 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
           isMac={isMac}
         />
 
-        <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center gap-1.5">
-            <span className="text-text-muted/60 text-[10px] font-bold tracking-wider uppercase">
-              Workspaces
-            </span>
-            {searchQuery && (
-              <Badge
-                variant="accent"
-                size="sm"
-                className="px-1 py-0 font-mono text-[9px] font-semibold"
-              >
-                {totalSessionsCount}
-              </Badge>
-            )}
-          </div>
-
-          <div className="flex items-center gap-0.5">
-            <SidebarFilterMenu
-              isOpen={isFilterMenuOpen}
-              onToggle={() => {
-                setIsFilterMenuOpen(!isFilterMenuOpen);
+        {searchQuery.trim().length > 0 ? (
+          <div className="bg-surface-secondary/30 border-border/20 flex items-center justify-between gap-1 rounded-lg border p-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTab('workspaces');
               }}
-              onClose={() => {
-                setIsFilterMenuOpen(false);
+              className={cn(
+                'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all select-none',
+                searchTab === 'workspaces'
+                  ? 'bg-surface-secondary text-text-main font-semibold shadow-xs'
+                  : 'text-text-muted hover:text-text-main',
+              )}
+            >
+              <Folder className="h-3 w-3" />
+              <span>Workspaces</span>
+              <span className="font-mono text-[10px] opacity-70">({totalSessionsCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTab('messages');
               }}
-              sortBy={sortBy}
-              gitOnly={gitOnly}
-              showArchived={showArchived}
-              onSettingsChange={setSettings}
-            />
-
-            <Tooltip content="Add workspace">
-              <Link
-                to="/"
-                className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 items-center justify-center rounded-lg border border-transparent transition-colors"
-                aria-label="Add workspace"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Link>
-            </Tooltip>
+              className={cn(
+                'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all select-none',
+                searchTab === 'messages'
+                  ? 'bg-surface-secondary text-text-main font-semibold shadow-xs'
+                  : 'text-text-muted hover:text-text-main',
+              )}
+            >
+              <MessageSquare className="h-3 w-3" />
+              <span>Messages</span>
+            </button>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center justify-between px-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-text-muted/60 text-[10px] font-bold tracking-wider uppercase">
+                Workspaces
+              </span>
+            </div>
+
+            <div className="flex items-center gap-0.5">
+              <SidebarFilterMenu
+                isOpen={isFilterMenuOpen}
+                onToggle={() => {
+                  setIsFilterMenuOpen(!isFilterMenuOpen);
+                }}
+                onClose={() => {
+                  setIsFilterMenuOpen(false);
+                }}
+                sortBy={sortBy}
+                gitOnly={gitOnly}
+                showArchived={showArchived}
+                onSettingsChange={setSettings}
+              />
+
+              <Tooltip content="Add workspace">
+                <Link
+                  to="/"
+                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 items-center justify-center rounded-lg border border-transparent transition-colors"
+                  aria-label="Add workspace"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Link>
+              </Tooltip>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-2.5 pb-6">
-        <SidebarProjectList
-          isLoading={isLoading}
-          isError={isError}
-          refetch={refetch}
-          filteredProjects={filteredProjects}
-          searchQuery={searchQuery}
-          currentActiveSessionId={currentActiveSessionId}
-          collapsedProjects={collapsedProjects}
-          pendingActions={pendingActions}
-          toggleProject={toggleProject}
-          setConfirmConfig={setConfirmConfig}
-          handleDeleteProject={handleDeleteProject}
-          handleCreateSession={handleCreateSession}
-          handleArchiveSession={handleArchiveSession}
-          handleDeleteSession={handleDeleteSession}
-          handleRenameSession={handleRenameSession}
-          handleForkSession={handleForkSession}
-        />
+        {searchQuery.trim().length > 0 && searchTab === 'messages' ? (
+          <SidebarTranscriptResults
+            searchQuery={searchQuery}
+            onSelectResult={(sessionId, eventId) => {
+              void navigate(`/sessions/${sessionId}`, {
+                state: { targetEventId: eventId },
+              });
+            }}
+          />
+        ) : (
+          <SidebarProjectList
+            isLoading={isLoading}
+            isError={isError}
+            refetch={refetch}
+            filteredProjects={filteredProjects}
+            searchQuery={searchQuery}
+            currentActiveSessionId={currentActiveSessionId}
+            collapsedProjects={collapsedProjects}
+            pendingActions={pendingActions}
+            toggleProject={toggleProject}
+            setConfirmConfig={setConfirmConfig}
+            handleDeleteProject={handleDeleteProject}
+            handleCreateSession={handleCreateSession}
+            handleArchiveSession={handleArchiveSession}
+            handleDeleteSession={handleDeleteSession}
+            handleRenameSession={handleRenameSession}
+            handleForkSession={handleForkSession}
+          />
+        )}
       </div>
 
       <SidebarFooter />

@@ -1,13 +1,4 @@
-import {
-  Columns,
-  Rows,
-  ChevronsUpDown,
-  FileCode,
-  Sparkles,
-  History,
-  ChevronDown,
-  Check,
-} from 'lucide-react';
+import { Columns, Rows, ChevronsUpDown, ChevronDown, Check } from 'lucide-react';
 import { SearchBar, Tooltip, Dropdown } from '@agentctl/ui';
 import type { ChangeEvent } from 'react';
 import type { ReviewScope } from '@/shared';
@@ -56,30 +47,25 @@ export function ReviewHeader({
     id: ReviewScope;
     label: string;
     count: number;
-    icon: typeof FileCode;
   }[] = [
     {
       id: 'uncommitted',
       label: 'Uncommitted',
       count: scopeCounts.uncommitted,
-      icon: FileCode,
     },
     {
       id: 'this_turn',
       label: 'This turn',
       count: scopeCounts.this_turn,
-      icon: Sparkles,
     },
     {
       id: 'all_edits',
       label: 'All edits',
       count: scopeCounts.all_edits,
-      icon: History,
     },
   ];
 
   const currentOption = scopeOptions.find((opt) => opt.id === scope) ?? scopeOptions[0];
-  const CurrentIcon = currentOption.icon;
 
   return (
     <div className="border-border/20 bg-surface-secondary/20 sticky top-0 z-20 shrink-0 space-y-2 border-b p-2.5 backdrop-blur-md">
@@ -92,7 +78,6 @@ export function ReviewHeader({
               type="button"
               className="border-border/30 bg-surface/50 hover:bg-surface/80 hover:border-border/50 text-text-main focus:border-accent/40 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors select-none focus:outline-none"
             >
-              <CurrentIcon className="text-accent h-3.5 w-3.5 opacity-90" />
               <span>{currentOption.label}</span>
               <span className="bg-surface-tertiary/40 text-text-muted py-0.2 rounded px-1.5 font-mono text-[10px] font-semibold tabular-nums">
                 {currentOption.count}
@@ -104,9 +89,9 @@ export function ReviewHeader({
             <Dropdown.Content
               align="start"
               sideOffset={4}
-              className="border-border/30 bg-brand-mantle/95 z-50 min-w-48 rounded-xl border p-1 shadow-2xl backdrop-blur-md"
+              className="border-border/30 bg-brand-mantle/95 z-50 min-w-44 rounded-xl border p-1 shadow-2xl backdrop-blur-md"
             >
-              {scopeOptions.map(({ id, label, count, icon: Icon }) => {
+              {scopeOptions.map(({ id, label, count }) => {
                 const isSelected = scope === id;
                 return (
                   <Dropdown.Item
@@ -120,10 +105,7 @@ export function ReviewHeader({
                         : 'text-text-muted hover:text-text-main hover:bg-surface/60'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-3.5 w-3.5 opacity-80" />
-                      <span>{label}</span>
-                    </div>
+                    <span>{label}</span>
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-[10.5px] tabular-nums opacity-70">
                         {count}

@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect } from 'react';
+import { useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewDialogs } from './ReviewDialogs';
 import { useReviewViewState } from '../hooks/useReviewViewState';
@@ -9,10 +9,10 @@ import { ReviewCommitInput } from './ReviewCommitInput';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { extractLatestTurnTouchedFiles, resolveTurnReviewFiles } from '../lib/turnChanges';
 import { useUIStore, type ReviewScope } from '@/shared';
-import { openInEditor } from '@agentctl/api-client';
-import { toast } from 'sonner';
+import { useOpenWorkspaceFile } from '../hooks/useOpenWorkspaceFile';
 
 export function ReviewView() {
+  const openWorkspaceFile = useOpenWorkspaceFile();
   const {
     reviewData,
     refetchReview,
@@ -54,6 +54,12 @@ export function ReviewView() {
   const reviewScope = useUIStore((s) => s.reviewScope);
   const selectedTurn = useUIStore((s) => s.reviewTurnSelection);
   const setReviewScope = useUIStore((s) => s.setReviewScope);
+  const targetReviewFile = useUIStore((s) => s.targetReviewFile);
+  const setTargetReviewFile = useUIStore((s) => s.setTargetReviewFile);
+  const targetFileElementRef = useRef<HTMLDivElement | null>(null);
+  const setTargetFileElement = useCallback((element: HTMLDivElement | null) => {
+    targetFileElementRef.current = element;
+  }, []);
 
   const handleScopeChange = useCallback(
     (newScope: ReviewScope) => {
@@ -91,6 +97,15 @@ export function ReviewView() {
     activeTurnFiles,
   );
 
+  useLayoutEffect(() => {
+    const targetElement = targetFileElementRef.current;
+    if (!targetReviewFile || !targetElement) return;
+
+    dispatch({ type: 'EXPAND_FILE', filePath: targetReviewFile });
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTargetReviewFile(null);
+  }, [activeFiles, dispatch, setTargetReviewFile, targetReviewFile]);
+
   const isClosed = sessionStatus === 'merged' || sessionStatus === 'discarded';
 
   const handleMergeSubmit = () => {
@@ -110,30 +125,6 @@ export function ReviewView() {
       collapseAll();
     }
   }, [allCollapsed, expandAll, collapseAll, parsedFiles]);
-
-  const worktreePath = sessionData?.session.worktreePath || '';
-
-  const handleOpenFile = useCallback(
-    async (filePath: string) => {
-      if (!worktreePath) return;
-      const preferredEditor =
-        (typeof window !== 'undefined'
-          ? localStorage.getItem('agentctl:preferred-editor')
-          : null) ?? 'cursor';
-      const fullPath = worktreePath.endsWith('/')
-        ? `${worktreePath}${filePath}`
-        : `${worktreePath}/${filePath}`;
-
-      try {
-        await openInEditor(preferredEditor, fullPath);
-        const fileName = filePath.split('/').pop() ?? filePath;
-        toast.success(`Opened ${fileName}`);
-      } catch {
-        toast.error(`Could not open file in editor`);
-      }
-    },
-    [worktreePath],
-  );
 
   if (isClosed) return <ReviewClosedState sessionStatus={sessionStatus} />;
   if (isLoading) return <ReviewLoadingState />;
@@ -185,7 +176,7 @@ export function ReviewView() {
             void onRevert(p);
           }}
           onOpenFile={(p) => {
-            void handleOpenFile(p);
+            void openWorkspaceFile(p);
           }}
           onStageAll={() => {
             void onStageAll();
@@ -195,6 +186,8 @@ export function ReviewView() {
           }}
           isStagingAll={isStagingAll}
           isUnstagingAll={isUnstagingAll}
+          targetFilePath={targetReviewFile}
+          targetFileRef={setTargetFileElement}
         />
       )}
 
