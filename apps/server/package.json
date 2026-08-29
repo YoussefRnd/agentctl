@@ -1,11 +1,11 @@
 {
   "name": "@agentctl/server",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "build": "tsc -b",
     "dev": "tsx watch src/index.ts",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --root ../.. apps/server",
     "typecheck": "tsc --noEmit"
   },
   "type": "module",

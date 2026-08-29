@@ -63,28 +63,19 @@ describe('Interactive Terminal WebSocket Route', () => {
     const wsUrl = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws?token=${startupToken}`;
 
     const ws = new WebSocket(wsUrl);
-
-    const messages: string[] = [];
+    let receivedEcho = false;
 
     await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => {
-        // Connected!
-      };
-
       ws.onmessage = (event) => {
         try {
           const raw = typeof event.data === 'string' ? event.data : event.data.toString();
           const msg = JSON.parse(raw) as { type?: string; data?: string };
-          if (msg.type === 'data' && msg.data) {
-            messages.push(msg.data);
-            if (messages.join('').includes('Agentctl Interactive Shell')) {
-              // Shell banner received! Send an echo command
-              ws.send(JSON.stringify({ type: 'input', data: 'echo "LIVE_TERMINAL_OK"\n' }));
-            }
-            if (messages.join('').includes('LIVE_TERMINAL_OK')) {
-              ws.close();
-              resolve();
-            }
+          if (msg.type === 'init') {
+            ws.send(JSON.stringify({ type: 'input', data: 'echo "LIVE_TERMINAL_OK"\n' }));
+          } else if (msg.type === 'data' && msg.data?.includes('LIVE_TERMINAL_OK')) {
+            receivedEcho = true;
+            ws.close();
+            resolve();
           }
         } catch (err) {
           reject(err);
@@ -96,14 +87,14 @@ describe('Interactive Terminal WebSocket Route', () => {
       };
 
       setTimeout(() => {
-        if (!messages.join('').includes('LIVE_TERMINAL_OK')) {
+        if (!receivedEcho) {
           ws.close();
-          resolve(); // Finish without hanging
+          reject(new Error('Timed out waiting for terminal echo'));
         }
       }, 3000);
     });
 
-    expect(messages.join('')).toContain('Agentctl Interactive Shell');
+    expect(receivedEcho).toBe(true);
   });
 
   test('supports concurrent distinct terminal tabs with termId query param', async () => {

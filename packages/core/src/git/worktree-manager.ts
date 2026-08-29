@@ -238,7 +238,15 @@ export class WorkspaceManager {
   }
 
   private async listWorktrees(repoPath: string): Promise<ListedWorktree[]> {
-    const output = await simpleGit(repoPath).raw(['worktree', 'list', '--porcelain', '-z']);
+    const git = simpleGit(repoPath);
+    const isRepo = await git.checkIsRepo().catch(() => false);
+    if (!isRepo) {
+      return [];
+    }
+    const output = await git.raw(['worktree', 'list', '--porcelain', '-z']).catch(() => '');
+    if (!output) {
+      return [];
+    }
     const parsed = parsePorcelainWorktrees(output);
 
     // Verify paths exist on disk to filter out pruned/missing worktrees

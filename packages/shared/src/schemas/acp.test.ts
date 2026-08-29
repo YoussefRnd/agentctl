@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { acpEventSchema, acpEventSubagentUpdateDataSchema } from '../schemas/acp.js';
+import { acpEventSchema, acpEventSubagentUpdateDataSchema } from './acp.js';
 
 describe('acpEventSubagentUpdateDataSchema', () => {
   it('should parse a valid subagent_update data object', () => {

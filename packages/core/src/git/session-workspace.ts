@@ -524,7 +524,12 @@ export class SessionWorkspace {
     const allProjects = await this.db.query.projects.findMany();
     for (const project of allProjects) {
       if (project.repoRoot) {
-        await this.workspaceManager.sync(project.repoRoot, activeSessionIds);
+        const isRepo = await simpleGit(project.repoRoot)
+          .checkIsRepo()
+          .catch(() => false);
+        if (isRepo) {
+          await this.workspaceManager.sync(project.repoRoot, activeSessionIds);
+        }
       }
     }
   }

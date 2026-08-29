@@ -1,6 +1,6 @@
 {
   "name": "@agentctl/ui",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc -b",
     "dev": "tsc -b --watch",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --root ../.. packages/ui --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
   "files": [

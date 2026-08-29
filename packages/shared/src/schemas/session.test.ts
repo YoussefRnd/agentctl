@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { getProviderEnvKeys, providerDiscoverySchema } from '../schemas/session.js';
+import { getProviderEnvKeys, providerDiscoverySchema } from './session.js';
 
 test('getProviderEnvKeys maps all env vars across multiple methods', () => {
   const provider = {

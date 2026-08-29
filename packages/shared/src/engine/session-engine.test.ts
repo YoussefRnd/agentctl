@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SessionEngine } from '../engine/session-engine.js';
+import { SessionEngine } from './session-engine.js';
 import type { ACPEventRow } from '../schemas/acp.js';
 
 // Helper class to mock ReadableStream

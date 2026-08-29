@@ -250,6 +250,14 @@ export class InteractiveTerminalService extends EventEmitter {
       this.emit(`data:${sessionId}`, text);
     });
 
+    const onStreamError = (err: Error) => {
+      this.logger.debug({ sessionId, err }, 'Interactive terminal stream closed with an error');
+    };
+    child.stdin?.on('error', onStreamError);
+    child.stdout?.on('error', onStreamError);
+    child.stderr?.on('error', onStreamError);
+    controlStream?.on('error', onStreamError);
+
     child.on('exit', (code, signal) => {
       this.logger.info({ sessionId, code, signal }, 'Interactive terminal process exited');
       this.emit(`exit:${sessionId}`, { code, signal });
