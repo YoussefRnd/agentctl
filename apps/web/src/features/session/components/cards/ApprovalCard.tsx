@@ -72,10 +72,8 @@ export const ApprovalCard = memo(function ApprovalCard({
         intensity="high"
         className="border-border/40 flex flex-col items-stretch justify-between gap-4 rounded-2xl border p-5 shadow-2xl sm:flex-row sm:items-start"
       >
-        <div className="flex min-w-0 flex-1 gap-3.5">
-          <div className="bg-surface-secondary/50 border-border/60 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border">
-            <ShieldCheck className="text-accent h-4 w-4" />
-          </div>
+        <div className="flex min-w-0 flex-1 gap-3">
+          <ShieldCheck className="text-accent mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <div
               id="approval-title"

@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { ChevronRight, ChevronDown, FileText, ExternalLink } from 'lucide-react';
+import { ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
 import { useUIStore, FileIcon } from '@/shared';
 import { Tooltip } from '@agentctl/ui';
 import { useOpenWorkspaceFile } from '../../hooks/useOpenWorkspaceFile';
@@ -95,11 +95,10 @@ export const TurnChangesCard = memo(function TurnChangesCard({
         <button
           type="button"
           onClick={handleOpenReview}
-          className="hover:text-text-main hover:bg-surface-secondary/60 text-text-muted flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors"
+          className="hover:text-text-main hover:bg-surface-secondary/60 text-text-muted flex cursor-pointer items-center rounded-md px-2 py-1 text-[12px] font-medium transition-colors"
           title="Review all changes for this turn in Changes tab"
         >
-          <FileText className="h-3.5 w-3.5 opacity-80" />
-          <span>Review</span>
+          Review
         </button>
       </div>
 

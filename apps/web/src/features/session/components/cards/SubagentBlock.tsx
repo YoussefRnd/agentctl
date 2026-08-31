@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Clock, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 import { StreamingDots, useUIStore } from '@/shared';
 import {
   formatDuration,
@@ -98,10 +98,7 @@ function SubagentCard({
 
       {/* Duration & Expand chevron */}
       <div className="flex shrink-0 items-center gap-2 pl-2">
-        <span className="text-text-muted/50 flex items-center gap-1 font-mono text-[11px] tabular-nums">
-          <Clock className="h-3 w-3" />
-          {duration}
-        </span>
+        <span className="text-text-muted/50 font-mono text-[11px] tabular-nums">{duration}</span>
         <ChevronRight className="text-text-muted/40 group-hover:text-text-main h-3.5 w-3.5 transition-colors" />
       </div>
     </div>

@@ -6,10 +6,7 @@ import {
   Search,
   Settings,
   AlertCircle,
-  Check,
   Trash2,
-  Diff,
-  Files,
 } from 'lucide-react';
 import { StreamingDots, getToolMeta } from '@/shared';
 import type { ACPEventToolCallData } from '@agentctl/shared';
@@ -41,9 +38,8 @@ function DiffBlock({ block }: { block: Record<string, unknown> }) {
   const newText = typeof block.newText === 'string' ? block.newText : '';
 
   return (
-    <div className="border-border/20 overflow-hidden rounded-lg border bg-black/15">
-      <div className="bg-surface-secondary/60 border-border/20 flex items-center gap-1.5 border-b px-3 py-1.5">
-        <Diff className="text-accent h-3 w-3 shrink-0" />
+    <div className="border-border/15 overflow-hidden rounded-md border bg-black/15">
+      <div className="bg-surface-secondary/40 border-border/15 border-b px-2.5 py-1">
         <span className="text-text-muted font-mono text-[10px] break-all">{path}</span>
       </div>
       <div className="no-scrollbar max-h-60 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed">
@@ -93,11 +89,10 @@ function ContentBlock({ block }: { block: Record<string, unknown> }) {
 function LocationsView({ locations }: { locations: { path?: string; line?: number }[] }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <Files className="text-text-muted/60 h-3.5 w-3.5 shrink-0" />
       {locations.map((loc, i) => (
         <code
           key={`${loc.path || ''}:${String(loc.line ?? i)}`}
-          className="bg-surface-secondary/70 text-text-main border-border/25 rounded-md border px-2 py-0.5 font-mono text-[10.5px] break-all select-all"
+          className="bg-surface-secondary/70 text-text-main border-border/25 rounded border px-1.5 py-0.5 font-mono text-[10px] break-all select-all"
         >
           {loc.path}
           {typeof loc.line === 'number' ? `:${String(loc.line)}` : ''}
@@ -119,11 +114,11 @@ function RawOutputView({ rawOutput }: { rawOutput: unknown }) {
   if (text.length === 0) return null;
 
   return (
-    <div className="border-border/20 overflow-hidden rounded-lg border bg-black/15">
-      <div className="bg-surface-secondary/60 text-text-muted border-border/20 border-b px-3 py-1.5 text-[9px] font-bold tracking-wider uppercase">
+    <div className="border-border/15 overflow-hidden rounded-md border bg-black/15">
+      <div className="bg-surface-secondary/40 text-text-muted border-border/15 border-b px-2.5 py-1 text-[9px] font-bold tracking-wider uppercase">
         Output
       </div>
-      <pre className="no-scrollbar max-h-60 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
+      <pre className="no-scrollbar max-h-60 overflow-y-auto p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
         {text}
       </pre>
     </div>
@@ -170,7 +165,7 @@ function ToolCallDetails({ call }: { call: ACPEventToolCallData }) {
     const anyRendered = rendered.some((el) => el !== null);
     if (anyRendered) {
       return (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {rendered}
           {locations.length > 0 && <LocationsView locations={locations} />}
         </div>
@@ -239,11 +234,6 @@ export const ToolCallCard = memo(function ToolCallCard({
 
   const toolMeta = getToolMeta(payload.kind, tool);
 
-  let iconBgBorder = `${toolMeta.bgColor} ${toolMeta.borderColor} ${toolMeta.color}`;
-  if (isFailed) {
-    iconBgBorder = 'bg-rose-500/10 border-rose-500/20 text-rose-500';
-  }
-
   const titleText =
     payload.title ??
     (tool.startsWith('call_') ? tool.substring(5) : tool)
@@ -259,8 +249,10 @@ export const ToolCallCard = memo(function ToolCallCard({
   return (
     <div data-font-ctx="terminal" className="group/tool w-full py-0.5">
       <div
-        className={`overflow-hidden rounded-lg border transition-colors ${
-          isFailed ? 'border-rose-500/25 bg-rose-500/5' : 'border-border/25 bg-surface-secondary/30'
+        className={`overflow-hidden rounded-md border transition-colors ${
+          isFailed
+            ? 'border-rose-500/25 bg-rose-500/5'
+            : 'border-border/15 bg-surface-secondary/20 hover:border-border/30 hover:bg-surface-secondary/35'
         }`}
       >
         <button
@@ -268,24 +260,23 @@ export const ToolCallCard = memo(function ToolCallCard({
           onClick={toggle}
           aria-expanded={open}
           disabled={!hasDetails}
-          className="focus-visible:ring-accent/40 focus-visible:ring-offset-background flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left outline-none select-none focus-visible:ring-1 focus-visible:ring-offset-1 disabled:cursor-default"
+          className="focus-visible:ring-accent/40 flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left outline-none select-none focus-visible:ring-1 disabled:cursor-default"
         >
-          <div
-            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ${isStreaming ? 'scale-105' : 'group-hover/tool:scale-105'} ${iconBgBorder}`}
-          >
-            {isFailed ? (
-              <AlertCircle className="h-3 w-3 text-rose-500" />
-            ) : (
-              <ToolIcon icon={toolMeta.icon} className={`h-3 w-3 ${toolMeta.color}`} />
-            )}
-          </div>
+          {isFailed ? (
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+          ) : (
+            <ToolIcon
+              icon={toolMeta.icon}
+              className="text-text-muted/60 group-hover/tool:text-text-main h-3.5 w-3.5 shrink-0 transition-colors"
+            />
+          )}
 
-          <span className="text-text-main truncate text-[11px] font-bold tracking-tight">
+          <span className="text-text-main/90 truncate text-[11px] font-semibold tracking-tight">
             {titleText}
           </span>
 
           {contextSnippet && (
-            <span className="text-text-muted/55 min-w-0 flex-1 truncate font-mono text-[10.5px]">
+            <span className="text-text-muted/50 min-w-0 flex-1 truncate font-mono text-[10.5px]">
               {contextSnippet}
             </span>
           )}
@@ -297,12 +288,8 @@ export const ToolCallCard = memo(function ToolCallCard({
                 {elapsedMs > 0 && <span>{formatDuration(elapsedMs)}</span>}
               </span>
             )}
-            {!isStreaming && isFailed && <AlertCircle className="h-3.5 w-3.5 text-rose-500" />}
-            {!isStreaming && !isFailed && isPending && (
-              <span className="bg-text-muted/40 h-1.5 w-1.5 rounded-full" />
-            )}
-            {!isStreaming && !isFailed && !isPending && (
-              <Check className="text-brand-green h-3.5 w-3.5 shrink-0 stroke-[3]" />
+            {!isStreaming && isPending && (
+              <span className="bg-text-muted/30 h-1.5 w-1.5 rounded-full" />
             )}
             {!isStreaming && durationMs != null && durationMs > 0 && (
               <span className="text-text-muted/40 shrink-0 font-mono text-[10px] tabular-nums">
@@ -311,7 +298,7 @@ export const ToolCallCard = memo(function ToolCallCard({
             )}
             {hasDetails ? (
               <ChevronRight
-                className={`text-text-muted/40 group-hover/tool:text-text-main h-3 w-3 shrink-0 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
+                className={`text-text-muted/30 group-hover/tool:text-text-muted/70 h-3 w-3 shrink-0 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
                 aria-hidden={true}
               />
             ) : null}

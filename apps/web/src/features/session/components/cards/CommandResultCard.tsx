@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import { Terminal, ChevronRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Terminal, ChevronRight, AlertCircle } from 'lucide-react';
 import { cn, Card } from '@agentctl/ui';
 
 interface CommandResultCardProps {
@@ -34,28 +34,16 @@ export const CommandResultCard = memo(function CommandResultCard({
       >
         <Card
           status={isError ? 'error' : isPending ? 'pending' : 'default'}
-          className="flex-1 flex-row items-center justify-between px-4 py-2.5"
+          className="flex-1 flex-row items-center justify-between px-3 py-2"
         >
-          <div className="flex min-w-0 items-center gap-3">
-            <div
-              className={cn(
-                'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition-transform duration-200',
-                isError ? 'bg-rose-500/10 text-rose-400' : 'bg-accent/10 text-accent',
-                (isStreaming || !isError) && 'group-hover/command:scale-105',
-              )}
-            >
-              <Terminal className="h-3.5 w-3.5" />
-            </div>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Terminal className="text-text-muted/60 h-3.5 w-3.5 shrink-0" />
             <div className="flex min-w-0 flex-col">
               <div className="flex items-center gap-2">
-                <span className="text-text-main text-[12px] font-semibold tracking-tight">
+                <span className="text-text-main/90 font-mono text-[11.5px] font-semibold tracking-tight">
                   /{command}
                 </span>
-                {isError ? (
-                  <AlertCircle className="h-3 w-3 text-rose-400" />
-                ) : !isPending ? (
-                  <CheckCircle2 className="h-3 w-3 text-emerald-400/80" />
-                ) : null}
+                {isError && <AlertCircle className="h-3 w-3 text-rose-400" />}
               </div>
               <span className="text-text-muted/50 truncate font-mono text-[10px] tracking-tight">
                 {argKeys.length > 0

@@ -10,8 +10,6 @@ import {
   Edit3,
   Trash2,
   Brain,
-  Diff,
-  Files,
   Copy,
 } from 'lucide-react';
 import { ThinkingSpinner, StreamingDots } from '@/shared';
@@ -176,23 +174,15 @@ export function getToolDisplayInfo(
   };
 }
 
-function StepIcon({
-  icon,
-  color,
-  className,
-}: {
-  icon: string;
-  color?: string;
-  className?: string;
-}) {
+function StepIcon({ icon, className }: { icon: string; color?: string; className?: string }) {
   const cn = className ?? 'h-3.5 w-3.5';
-  if (icon === 'terminal') return <Terminal className={`${cn} text-amber-400`} />;
-  if (icon === 'file') return <FileText className={`${cn} text-emerald-400`} />;
-  if (icon === 'edit') return <Edit3 className={`${cn} text-purple-400`} />;
-  if (icon === 'search') return <Search className={`${cn} text-sky-400`} />;
-  if (icon === 'trash') return <Trash2 className={`${cn} text-rose-400`} />;
-  if (icon === 'think') return <Brain className={`${cn} text-accent`} />;
-  return <Settings className={`${cn} ${color ?? 'text-text-muted'}`} />;
+  if (icon === 'terminal') return <Terminal className={`${cn} text-text-muted/60`} />;
+  if (icon === 'file') return <FileText className={`${cn} text-text-muted/60`} />;
+  if (icon === 'edit') return <Edit3 className={`${cn} text-text-muted/60`} />;
+  if (icon === 'search') return <Search className={`${cn} text-text-muted/60`} />;
+  if (icon === 'trash') return <Trash2 className={`${cn} text-rose-400/80`} />;
+  if (icon === 'think') return <Brain className={`${cn} text-text-muted/60`} />;
+  return <Settings className={`${cn} text-text-muted/60`} />;
 }
 
 function getCleanOutputText(rawOutput: unknown): string | null {
@@ -218,9 +208,8 @@ function DiffBlock({ block }: { block: Record<string, unknown> }) {
   const newText = typeof block.newText === 'string' ? block.newText : '';
 
   return (
-    <div className="border-border/20 my-1 overflow-hidden rounded-md border bg-black/40">
-      <div className="bg-surface-secondary/50 border-border/20 flex items-center gap-1.5 border-b px-2.5 py-1">
-        <Diff className="text-accent h-3 w-3 shrink-0" />
+    <div className="border-border/15 my-1 overflow-hidden rounded-md border bg-black/40">
+      <div className="bg-surface-secondary/40 border-border/15 flex items-center border-b px-2.5 py-1">
         <span className="text-text-muted font-mono text-[10px] break-all">{path}</span>
       </div>
       <div className="no-scrollbar max-h-52 overflow-y-auto p-2.5 font-mono text-[10.5px] leading-relaxed">
@@ -248,7 +237,6 @@ function DiffBlock({ block }: { block: Record<string, unknown> }) {
 function LocationsView({ locations }: { locations: { path?: string; line?: number }[] }) {
   return (
     <div className="my-1 flex flex-wrap items-center gap-1.5">
-      <Files className="text-text-muted/60 h-3 w-3 shrink-0" />
       {locations.map((loc, i) => (
         <code
           key={`${loc.path || ''}:${String(loc.line ?? i)}`}
