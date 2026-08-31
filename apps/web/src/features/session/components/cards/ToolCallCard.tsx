@@ -1,4 +1,4 @@
-import { useState, memo, type ReactElement } from 'react';
+import { useState, useEffect, useRef, memo, type ReactElement } from 'react';
 import {
   Terminal,
   ChevronRight,
@@ -209,6 +209,25 @@ export const ToolCallCard = memo(function ToolCallCard({
   durationMs?: number | null;
 }) {
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isStreaming) {
+      if (startTimeRef.current === null) {
+        startTimeRef.current = Date.now();
+      }
+      const interval = setInterval(() => {
+        if (startTimeRef.current !== null) {
+          setElapsedMs(Date.now() - startTimeRef.current);
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    } else {
+      startTimeRef.current = null;
+    }
+  }, [isStreaming]);
+
   const open = userToggled ?? isStreaming;
 
   const args = payload.arguments ?? {};
@@ -272,7 +291,12 @@ export const ToolCallCard = memo(function ToolCallCard({
           )}
 
           <span className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-            {isStreaming && <StreamingDots className="ml-0" />}
+            {isStreaming && (
+              <span className="text-accent flex items-center gap-1.5 font-mono text-[10px] tabular-nums">
+                <StreamingDots className="ml-0" />
+                {elapsedMs > 0 && <span>{formatDuration(elapsedMs)}</span>}
+              </span>
+            )}
             {!isStreaming && isFailed && <AlertCircle className="h-3.5 w-3.5 text-rose-500" />}
             {!isStreaming && !isFailed && isPending && (
               <span className="bg-text-muted/40 h-1.5 w-1.5 rounded-full" />

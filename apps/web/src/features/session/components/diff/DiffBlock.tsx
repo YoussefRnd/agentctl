@@ -1,10 +1,11 @@
-import { useMemo, memo, useRef } from 'react';
+import { useState, useCallback, useMemo, memo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DiffHunk } from '../../../../shared/lib/diff-parser';
 import { buildSplitRows } from '../../../../shared/lib/diff-parser';
 import { getLanguageForPath } from '../../../../shared/lib/code-highlighter';
 import { DiffLine } from './DiffLine';
-import { ChevronDown, ChevronRight, CheckSquare, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckSquare, ExternalLink, Copy, Check } from 'lucide-react';
+import { Tooltip } from '@agentctl/ui';
 
 interface DiffBlockProps {
   path: string;
@@ -120,6 +121,20 @@ export const DiffBlock = memo(function DiffBlock({
     return { additions, deletions };
   }, [hunks]);
 
+  const [copiedPath, setCopiedPath] = useState(false);
+
+  const handleCopyPath = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      void navigator.clipboard.writeText(path);
+      setCopiedPath(true);
+      setTimeout(() => {
+        setCopiedPath(false);
+      }, 2000);
+    },
+    [path],
+  );
+
   const fileName = path.split('/').pop() ?? path;
   const dirPath = path.substring(0, path.lastIndexOf('/'));
 
@@ -167,17 +182,33 @@ export const DiffBlock = memo(function DiffBlock({
             </div>
           </button>
 
-          <div className="flex shrink-0 items-center gap-1.5 opacity-40 transition-opacity group-hover:opacity-100">
-            {onOpenFile && (
+          <div className="flex shrink-0 items-center gap-1.5 opacity-60 transition-opacity group-hover:opacity-100">
+            <Tooltip content={copiedPath ? 'Copied path!' : 'Copy path'}>
               <button
                 type="button"
-                onClick={onOpenFile}
+                onClick={handleCopyPath}
                 className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
-                title="Open file in editor"
-                aria-label="Open file in editor"
+                aria-label="Copy file path"
               >
-                <ExternalLink className="h-3 w-3" />
+                {copiedPath ? (
+                  <Check className="text-brand-green h-3 w-3" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
               </button>
+            </Tooltip>
+
+            {onOpenFile && (
+              <Tooltip content="Open in editor">
+                <button
+                  type="button"
+                  onClick={onOpenFile}
+                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                  aria-label="Open file in editor"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              </Tooltip>
             )}
             {onRevert && (
               <button

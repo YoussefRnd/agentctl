@@ -186,7 +186,12 @@ export function EventFeed({
       const isScrollingUp = target.scrollTop < lastScrollTopRef.current - 1;
       lastScrollTopRef.current = target.scrollTop;
 
-      if (isPointerScrollingRef.current && isScrollingUp) {
+      // Automatically re-enable following and dismiss button when scrolled to bottom
+      const isAtBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 35;
+
+      if (isAtBottom) {
+        setFollowingOutput(true);
+      } else if (isPointerScrollingRef.current && isScrollingUp) {
         setFollowingOutput(false);
       }
       updateActiveTurn();
@@ -196,7 +201,13 @@ export function EventFeed({
 
   const handleWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>) => {
-      if (event.deltaY < 0) setFollowingOutput(false);
+      const target = event.currentTarget;
+      const isAtBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 35;
+      if (isAtBottom && event.deltaY > 0) {
+        setFollowingOutput(true);
+      } else if (event.deltaY < 0) {
+        setFollowingOutput(false);
+      }
     },
     [setFollowingOutput],
   );
@@ -432,14 +443,20 @@ export function EventFeed({
       {!isFollowingOutput && (
         <button
           type="button"
-          className="group border-accent/40 bg-surface-tertiary/95 text-accent hover:border-accent hover:bg-accent hover:text-surface-dark animate-in fade-in-0 zoom-in-95 absolute bottom-6 left-1/2 z-50 flex h-9 w-9 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border shadow-xl backdrop-blur-xl transition-[background-color,border-color,color,transform] duration-150 ease-out hover:scale-105 active:scale-95"
+          className="group border-accent/40 bg-brand-mantle/95 text-accent hover:border-accent hover:bg-accent hover:text-brand-crust focus-visible:ring-accent/50 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 absolute bottom-6 left-1/2 z-50 flex h-8 w-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border shadow-xl ring-1 ring-white/10 backdrop-blur-xl transition-all duration-150 ease-out hover:scale-110 focus-visible:ring-2 focus-visible:outline-none active:scale-95"
           title="Scroll to bottom"
           aria-label="Scroll to bottom and follow new messages"
           onClick={() => {
             setFollowingOutput(true);
-            scrollToBottom();
+            scrollToBottom(true);
           }}
         >
+          {isSessionRunning && (
+            <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/50" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+          )}
           <ArrowDown className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5" />
         </button>
       )}
