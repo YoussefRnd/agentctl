@@ -93,4 +93,44 @@ describe('SnapshotService', () => {
       expect(content).toBe('original');
     });
   });
+
+  describe('getTurnChanges', () => {
+    test('computes exact additions, deletions, and statuses between snapshots', async () => {
+      await fs.promises.writeFile(path.join(tempProjectDir, 'existing.txt'), 'line1\nline2\n');
+      const { execSync } = await import('node:child_process');
+      execSync('git add .', { cwd: tempProjectDir });
+      execSync('git commit -m "add existing file"', { cwd: tempProjectDir });
+
+      const startHash = await service.track(tempProjectDir);
+      expect(startHash).toBeDefined();
+
+      // Modify existing file and create a new file
+      await fs.promises.writeFile(
+        path.join(tempProjectDir, 'existing.txt'),
+        'line1\nline2_modified\nline3\n',
+      );
+      await fs.promises.writeFile(path.join(tempProjectDir, 'new.txt'), 'created\n');
+
+      const endHash = await service.track(tempProjectDir);
+      expect(endHash).toBeDefined();
+
+      const turnChanges = await service.getTurnChanges(tempProjectDir, startHash!, endHash!);
+      expect(turnChanges.files.length).toBe(2);
+
+      const existingChange = turnChanges.files.find((f) => f.path === 'existing.txt');
+      expect(existingChange).toBeDefined();
+      expect(existingChange?.status).toBe('modified');
+      expect(existingChange?.additions).toBe(2);
+      expect(existingChange?.deletions).toBe(1);
+
+      const newChange = turnChanges.files.find((f) => f.path === 'new.txt');
+      expect(newChange).toBeDefined();
+      expect(newChange?.status).toBe('added');
+      expect(newChange?.additions).toBe(1);
+      expect(newChange?.deletions).toBe(0);
+
+      expect(turnChanges.totalAdditions).toBe(3);
+      expect(turnChanges.totalDeletions).toBe(1);
+    });
+  });
 });

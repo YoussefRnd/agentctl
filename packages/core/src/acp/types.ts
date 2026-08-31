@@ -42,6 +42,20 @@ export interface SessionEventStoreLike {
 /** Minimal git-snapshot surface used for turn metadata. */
 export interface SnapshotServiceLike {
   track(cwd: string): Promise<string | undefined>;
+  getTurnChanges?(
+    projectPath: string,
+    fromHash: string,
+    toHash?: string,
+  ): Promise<{
+    files: Array<{
+      path: string;
+      additions: number;
+      deletions: number;
+      status: 'added' | 'modified' | 'deleted';
+    }>;
+    totalAdditions: number;
+    totalDeletions: number;
+  }>;
 }
 
 export interface SessionStatusTransitioner {

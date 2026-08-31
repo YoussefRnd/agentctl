@@ -20,9 +20,11 @@ describe('turnChanges', () => {
     expect(extractFilePathFromToolCall({ locations: [{ path: 'apps/web/src/main.tsx' }] })).toBe(
       'apps/web/src/main.tsx',
     );
-    expect(extractFilePathFromToolCall({ title: 'Create packages/core/src/feature.ts' })).toBe(
-      'packages/core/src/feature.ts',
-    );
+    expect(
+      extractFilePathFromToolCall({
+        arguments: { AbsolutePath: '/home/user/packages/core/src/feature.ts' },
+      }),
+    ).toBe('home/user/packages/core/src/feature.ts');
   });
 
   it('matches paths across absolute and relative forms', () => {
@@ -209,5 +211,82 @@ describe('turnChanges', () => {
       totalDeletions: 1,
       files: [{ path: 'src/feature.ts', additions: 2, deletions: 1 }],
     });
+  });
+
+  it('never treats shell commands or searches as file modifications', () => {
+    const mockEvents: ACPEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's1',
+        type: 'tool_call',
+        data: {
+          name: 'run_command',
+          kind: 'execute',
+          title: 'Update test suite',
+          arguments: {
+            CommandLine: "rg -n 'plan_update|plan' packages/core/src/acp/protocol/events.ts | head",
+          },
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        sessionId: 's1',
+        type: 'tool_call',
+        data: {
+          name: 'run_command',
+          kind: 'execute',
+          title: 'Delete temp files',
+          arguments: {
+            CommandLine: 'rm -f packages/core/src/random-a.test.ts && echo "done"',
+          },
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    const summary = extractTurnChanges(mockEvents);
+    expect(summary.files).toEqual([]);
+    expect(summary.totalAdditions).toBe(0);
+    expect(summary.totalDeletions).toBe(0);
+  });
+
+  it('prioritizes server-provided turnChanges from turn_end status event', () => {
+    const serverTurnChanges = {
+      files: [
+        { path: 'src/feature.ts', additions: 15, deletions: 2, status: 'modified' as const },
+        { path: 'src/new-file.ts', additions: 42, deletions: 0, status: 'added' as const },
+      ],
+      totalAdditions: 57,
+      totalDeletions: 2,
+    };
+
+    const mockEvents: ACPEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's1',
+        type: 'tool_call',
+        data: {
+          name: 'write_to_file',
+          kind: 'edit',
+          arguments: { TargetFile: 'src/feature.ts' },
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        sessionId: 's1',
+        type: 'status',
+        data: {
+          status: 'turn_end',
+          stopReason: 'end_turn',
+          turnChanges: serverTurnChanges,
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    const summary = extractTurnChanges(mockEvents);
+    expect(summary).toEqual(serverTurnChanges);
   });
 });

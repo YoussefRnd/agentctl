@@ -70,19 +70,23 @@ export function resolveTurnReviewFiles(
 }
 
 /**
- * Extracts a file path from a tool call's arguments, locations, content, title, or rawOutput.
+ * Extracts a file path from a tool call's explicit arguments, locations, content, or rawOutput metadata.
  */
 export function extractFilePathFromToolCall(data: Record<string, unknown>): string | null {
-  // 1. Locations
+  // 1. Standard ACP Locations
   if (Array.isArray(data.locations) && data.locations.length > 0) {
     const first = data.locations[0] as { path?: string };
-    if (first?.path) return normalizeFilePath(first.path);
+    if (typeof first?.path === 'string' && first.path.trim()) {
+      return normalizeFilePath(first.path);
+    }
   }
 
   // 2. Content diff or path
   if (Array.isArray(data.content)) {
     for (const c of data.content as { path?: string; type?: string }[]) {
-      if (c?.path) return normalizeFilePath(c.path);
+      if (typeof c?.path === 'string' && c.path.trim()) {
+        return normalizeFilePath(c.path);
+      }
     }
   }
 
@@ -91,15 +95,21 @@ export function extractFilePathFromToolCall(data: Record<string, unknown>): stri
   if (rawOut && typeof rawOut === 'object') {
     const meta = rawOut.metadata as Record<string, unknown> | undefined;
     if (meta && typeof meta === 'object') {
-      if (typeof meta.filepath === 'string') return normalizeFilePath(meta.filepath);
+      if (typeof meta.filepath === 'string' && meta.filepath.trim()) {
+        return normalizeFilePath(meta.filepath);
+      }
       const filediff = meta.filediff as { file?: string } | undefined;
-      if (typeof filediff?.file === 'string') return normalizeFilePath(filediff.file);
+      if (typeof filediff?.file === 'string' && filediff.file.trim()) {
+        return normalizeFilePath(filediff.file);
+      }
       const display = meta.display as { path?: string } | undefined;
-      if (typeof display?.path === 'string') return normalizeFilePath(display.path);
+      if (typeof display?.path === 'string' && display.path.trim()) {
+        return normalizeFilePath(display.path);
+      }
     }
   }
 
-  // 4. Arguments / RawInput (handling nested arguments)
+  // 4. Explicit tool arguments (handling nested arguments)
   const sources: Record<string, unknown>[] = [];
   if (data.arguments && typeof data.arguments === 'object') {
     sources.push(data.arguments as Record<string, unknown>);
@@ -137,45 +147,12 @@ export function extractFilePathFromToolCall(data: Record<string, unknown>): stri
         return normalizeFilePath(cand);
       }
     }
-
-    // Generic key scanning for any file-like argument
-    for (const [key, val] of Object.entries(src)) {
-      if (typeof val === 'string' && val.trim().length > 0 && !val.includes('\n')) {
-        const clean = val.trim();
-        const lowerKey = key.toLowerCase();
-        if (
-          lowerKey.includes('path') ||
-          lowerKey.includes('file') ||
-          lowerKey.includes('target') ||
-          lowerKey.includes('dest')
-        ) {
-          return normalizeFilePath(clean);
-        }
-        if (/\.[a-zA-Z0-9_-]{1,10}$/.test(clean) && clean.length < 250) {
-          return normalizeFilePath(clean);
-        }
-      }
-    }
   }
 
-  // 5. Name or Title when the tool itself is named after the file path
+  // 5. Name when the tool itself is directly named after the file path
   const name = typeof data.name === 'string' ? data.name.trim() : '';
-  if (name && (name.includes('/') || /\.[a-zA-Z0-9_-]{1,10}$/.test(name))) {
+  if (name && (name.includes('/') || /\.[a-zA-Z0-9_-]{1,10}$/.test(name)) && !name.includes(' ')) {
     return normalizeFilePath(name);
-  }
-
-  const title = typeof data.title === 'string' ? data.title.trim() : '';
-  if (title && (title.includes('/') || /\.[a-zA-Z0-9_-]{1,10}$/.test(title))) {
-    const match =
-      /(?:created?|edited?|written?|wrote|deleted?|updated?|modifi(?:ed|y)|saving|saved)\s+[`'"]?([a-zA-Z0-9_./\\-]+)[`'"]?/i.exec(
-        title,
-      );
-    if (match?.[1]) {
-      return normalizeFilePath(match[1]);
-    }
-    if (/\.[a-zA-Z0-9_-]{1,10}$/.test(title)) {
-      return normalizeFilePath(title);
-    }
   }
 
   return null;
@@ -197,6 +174,32 @@ export function isFileModificationToolCall(data: {
   const kind = (data.kind ?? '').toLowerCase();
   const title = (data.title ?? '').toLowerCase();
 
+  // 1. Explicitly ignore execution, read, and search tool calls
+  if (
+    kind === 'execute' ||
+    kind === 'terminal' ||
+    kind === 'read' ||
+    kind === 'search' ||
+    kind === 'fetch'
+  ) {
+    return false;
+  }
+
+  if (
+    name.includes('command') ||
+    name.includes('bash') ||
+    name.includes('exec') ||
+    name.includes('terminal') ||
+    name.includes('grep') ||
+    name.includes('search') ||
+    name.includes('find') ||
+    name.includes('read') ||
+    name.includes('view')
+  ) {
+    return false;
+  }
+
+  // 2. Direct modification kinds
   if (kind === 'edit' || kind === 'delete' || kind === 'create') return true;
 
   if (
@@ -340,6 +343,21 @@ export function extractTurnChanges(
   events: ACPEventRow[],
   reviewFiles?: ReviewFile[],
 ): TurnChangesSummary {
+  // 1. Prioritize server-computed turn changes from SnapshotService if present
+  for (const event of events) {
+    if (event.type === 'status' && event.data) {
+      const serverTurnChanges = (event.data as { turnChanges?: TurnChangesSummary }).turnChanges;
+      if (
+        serverTurnChanges &&
+        Array.isArray(serverTurnChanges.files) &&
+        serverTurnChanges.files.length > 0
+      ) {
+        return serverTurnChanges;
+      }
+    }
+  }
+
+  // 2. Client fallback
   const fileMap = new Map<string, TurnFileChange & { hasTurnLocalStats: boolean }>();
 
   for (const event of events) {

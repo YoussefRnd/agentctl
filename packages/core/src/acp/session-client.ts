@@ -410,6 +410,12 @@ export class ACPSession {
         .filter(Boolean)
         .join('\n\n---\n\n');
 
+      const snapshotService = this.stateMachine?.getSnapshotService?.();
+      const startSnapshotHash =
+        this.cwd && snapshotService
+          ? await snapshotService.track(this.cwd).catch(() => undefined)
+          : undefined;
+
       const promptResult = await this.runtimeHandle.prompt(
         promptText,
         resolvedAttachmentFiles,
@@ -418,11 +424,29 @@ export class ACPSession {
 
       await this.flushAll();
 
-      // Store turn end with stopReason and per-turn usage
+      // Store turn end with stopReason, per-turn usage, and centralized turn changes
       const turnData: Record<string, unknown> = {
         status: 'turn_end',
         stopReason: promptResult.stopReason,
       };
+
+      if (snapshotService && this.cwd && startSnapshotHash && snapshotService.getTurnChanges) {
+        try {
+          const endSnapshotHash = await snapshotService.track(this.cwd);
+          if (endSnapshotHash) {
+            const turnChanges = await snapshotService.getTurnChanges(
+              this.cwd,
+              startSnapshotHash,
+              endSnapshotHash,
+            );
+            if (turnChanges && turnChanges.files.length > 0) {
+              turnData.turnChanges = turnChanges;
+            }
+          }
+        } catch (e: unknown) {
+          this.logger.error(e, 'Failed to compute turn changes');
+        }
+      }
 
       if (promptResult.usage) {
         const metrics = parseUsageMetrics(promptResult.usage);

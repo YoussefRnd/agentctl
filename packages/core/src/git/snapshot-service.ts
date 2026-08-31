@@ -140,6 +140,87 @@ export class SnapshotService {
     return patches;
   }
 
+  async getTurnChanges(
+    projectPath: string,
+    fromHash: string,
+    toHash?: string,
+  ): Promise<{
+    files: Array<{
+      path: string;
+      additions: number;
+      deletions: number;
+      status: 'added' | 'modified' | 'deleted';
+    }>;
+    totalAdditions: number;
+    totalDeletions: number;
+  }> {
+    const targetHash = toHash ?? (await this.track(projectPath));
+    if (!fromHash || !targetHash || fromHash === targetHash) {
+      return { files: [], totalAdditions: 0, totalDeletions: 0 };
+    }
+
+    const env = await this.getEnv(projectPath);
+    if (!env) {
+      return { files: [], totalAdditions: 0, totalDeletions: 0 };
+    }
+
+    const git = simpleGit(projectPath).env(env);
+
+    const [statusOutput, numstatOutput] = await Promise.all([
+      git.raw(['diff-tree', '-r', '--no-commit-id', fromHash, targetHash]).catch(() => ''),
+      git
+        .raw(['diff-tree', '--numstat', '-r', '--no-commit-id', fromHash, targetHash])
+        .catch(() => ''),
+    ]);
+
+    const statusMap = new Map<string, 'added' | 'modified' | 'deleted'>();
+    for (const line of statusOutput.trim().split('\n')) {
+      if (!line) continue;
+      const parts = line.split(/\t/);
+      if (parts.length < 2) continue;
+      const statusChar = parts[0].split(/\s+/).pop();
+      const filePath = parts[1];
+      let status: 'added' | 'modified' | 'deleted' = 'modified';
+      if (statusChar === 'A') status = 'added';
+      else if (statusChar === 'D') status = 'deleted';
+      statusMap.set(filePath, status);
+    }
+
+    const files: Array<{
+      path: string;
+      additions: number;
+      deletions: number;
+      status: 'added' | 'modified' | 'deleted';
+    }> = [];
+    let totalAdditions = 0;
+    let totalDeletions = 0;
+
+    for (const line of numstatOutput.trim().split('\n')) {
+      if (!line) continue;
+      const parts = line.split(/\t/);
+      if (parts.length < 3) continue;
+      const adds = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0;
+      const dels = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0;
+      const filePath = parts[2];
+      const status = statusMap.get(filePath) ?? 'modified';
+
+      files.push({
+        path: filePath,
+        additions: adds,
+        deletions: dels,
+        status,
+      });
+      totalAdditions += adds;
+      totalDeletions += dels;
+    }
+
+    return {
+      files,
+      totalAdditions,
+      totalDeletions,
+    };
+  }
+
   async getCheckpointDiffFiles(
     projectPath: string,
     fromHash: string,
