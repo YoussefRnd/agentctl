@@ -158,13 +158,20 @@ export function EventFeed({
     [setFollowingOutput],
   );
 
-  const scrollToBottom = useCallback(() => {
+  // Reset initial scroll state when switching sessions
+  useEffect(() => {
+    didInitialScrollRef.current = false;
+    isFollowingOutputRef.current = true;
+    setIsFollowingOutput(true);
+  }, [sessionId]);
+
+  const scrollToBottom = useCallback((force = false) => {
     if (scrollFrameRef.current != null) {
       window.cancelAnimationFrame(scrollFrameRef.current);
     }
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null;
-      if (!isFollowingOutputRef.current) return;
+      if (!force && !isFollowingOutputRef.current) return;
 
       const scrollElement = parentRef.current;
       if (scrollElement) {
@@ -241,14 +248,24 @@ export function EventFeed({
     };
   }, [highlightedEventId]);
 
+  // Initial scroll to bottom on load / session switch
   useEffect(() => {
-    if (didInitialScrollRef.current || targetEventId != null || groupedEvents.length === 0) {
+    if (targetEventId != null || groupedEvents.length === 0) {
       return;
     }
 
+    scrollToBottom(true);
+    const t1 = setTimeout(() => scrollToBottom(true), 50);
+    const t2 = setTimeout(() => scrollToBottom(true), 150);
+    const t3 = setTimeout(() => scrollToBottom(true), 300);
+
     didInitialScrollRef.current = true;
-    scrollToBottom();
-  }, [groupedEvents.length, scrollToBottom, targetEventId]);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [groupedEvents.length, scrollToBottom, targetEventId, sessionId]);
 
   useEffect(() => {
     if (!isSessionRunning || !isFollowingOutputRef.current || groupedEvents.length === 0) {
@@ -265,7 +282,7 @@ export function EventFeed({
     if (!contentElement) return;
 
     const observer = new ResizeObserver(() => {
-      if (isSessionRunning && isFollowingOutputRef.current) {
+      if (isFollowingOutputRef.current || !didInitialScrollRef.current) {
         scrollToBottom();
       }
     });

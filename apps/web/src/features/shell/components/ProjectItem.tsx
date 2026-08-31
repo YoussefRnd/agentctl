@@ -124,9 +124,8 @@ export function ProjectItem({
                 <Tooltip
                   content={`${runningSessionsCount} session${runningSessionsCount > 1 ? 's' : ''} running`}
                 >
-                  <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/30" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span className="text-accent flex items-center justify-center">
+                    <Loader2 className="h-3 w-3 animate-spin" />
                   </span>
                 </Tooltip>
               )}
@@ -256,15 +255,7 @@ export function ProjectItem({
                       to={`/sessions/${s.id}`}
                       className="flex min-w-0 flex-1 items-center gap-1.5"
                     >
-                      {/* Status indicator only when active running / needs attention / error */}
-                      {s.status === 'running' && (
-                        <Tooltip content="Agent is running...">
-                          <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/30" />
-                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                          </span>
-                        </Tooltip>
-                      )}
+                      {/* Status indicator only when needs attention or error */}
                       {s.status === 'needs_attention' && (
                         <Tooltip content="Review or approval required">
                           <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400 ring-2 ring-amber-400/20" />
@@ -287,11 +278,17 @@ export function ProjectItem({
 
                     {/* Metadata & Actions Area */}
                     <div className="flex shrink-0 items-center gap-1">
-                      {relativeTime && (
+                      {s.status === 'running' ? (
+                        <Tooltip content="Agent is running...">
+                          <span className="text-accent flex items-center justify-center group-hover/session:hidden">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          </span>
+                        </Tooltip>
+                      ) : relativeTime ? (
                         <span className="text-text-muted/40 font-mono text-[10px] tabular-nums group-hover/session:hidden">
                           {relativeTime}
                         </span>
-                      )}
+                      ) : null}
 
                       <div className="hidden group-focus-within/session:flex group-hover/session:flex">
                         <Dropdown.Root>
