@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useSession } from '../../../contexts/SessionContext';
+import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { useProviders } from '../../../hooks/useProviders';
 import { useAttachments } from '../../../hooks/useAttachments';
 import { useContextAutocomplete } from '../../../hooks/useContextAutocomplete';
 import { useSessionActions } from '../../../hooks/useSessionActions';
+import { usePromptHistory } from '../hooks/usePromptHistory';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { useUIStore } from '@/shared';
 
@@ -129,6 +130,9 @@ export function useCommandBarState(
     return merged;
   }, [sessionData?.session.availableCommands]);
 
+  const { events } = useSessionStream();
+  const promptHistory = usePromptHistory(events);
+
   const contextAutocomplete = useContextAutocomplete({
     sessionId,
     input,
@@ -136,10 +140,46 @@ export function useCommandBarState(
     textareaRef,
   });
 
-  const handleInputChange = useCallback((val: string) => {
-    setInput(val);
-    setActiveCommandIndex(0);
-  }, []);
+  const handleInputChange = useCallback(
+    (val: string) => {
+      setInput(val);
+      setActiveCommandIndex(0);
+      promptHistory.resetNavigation();
+    },
+    [promptHistory],
+  );
+
+  const handleHistoryUp = useCallback(() => {
+    const textarea = textareaRef.current;
+    const isAtStart =
+      !input || (textarea ? textarea.selectionStart === 0 && textarea.selectionEnd === 0 : true);
+    const prev = promptHistory.navigateUp(input, isAtStart);
+    if (prev !== null) {
+      setInput(prev);
+      requestAnimationFrame(() => {
+        if (textarea) {
+          textarea.selectionStart = textarea.selectionEnd = prev.length;
+        }
+      });
+      return true;
+    }
+    return false;
+  }, [input, promptHistory]);
+
+  const handleHistoryDown = useCallback(() => {
+    const textarea = textareaRef.current;
+    const next = promptHistory.navigateDown(input);
+    if (next !== null) {
+      setInput(next);
+      requestAnimationFrame(() => {
+        if (textarea) {
+          textarea.selectionStart = textarea.selectionEnd = next.length;
+        }
+      });
+      return true;
+    }
+    return false;
+  }, [input, promptHistory]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -216,9 +256,21 @@ export function useCommandBarState(
       contextAutocomplete.clearAttachedContexts();
     }
 
+    if (trimmed) {
+      promptHistory.recordPrompt(trimmed);
+    }
+
     onSend(finalPrompt, readyAttachmentIds.length > 0 ? readyAttachmentIds : undefined);
     setInput('');
-  }, [input, contextAutocomplete, readyAttachmentIds, disabled, isAnyUploading, onSend]);
+  }, [
+    input,
+    contextAutocomplete,
+    readyAttachmentIds,
+    disabled,
+    isAnyUploading,
+    onSend,
+    promptHistory,
+  ]);
 
   const handleProviderSelect = useCallback(
     (providerId: string, modelId?: string) => {
@@ -343,5 +395,7 @@ export function useCommandBarState(
     canSend,
     handleSelectCommand,
     contextAutocomplete,
+    handleHistoryUp,
+    handleHistoryDown,
   };
 }

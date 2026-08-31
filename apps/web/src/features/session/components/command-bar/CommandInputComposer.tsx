@@ -146,6 +146,8 @@ interface CommandInputComposerProps {
   removeAttachment: (id: string) => void;
   retryAttachment: (id: string) => void;
   contextAutocomplete?: UseContextAutocompleteReturn;
+  handleHistoryUp?: () => boolean;
+  handleHistoryDown?: () => boolean;
   placeholder?: string;
   status?: string;
   authPanelContent?: React.ReactNode;
@@ -173,6 +175,8 @@ export function CommandInputComposer({
   removeAttachment,
   retryAttachment,
   contextAutocomplete,
+  handleHistoryUp,
+  handleHistoryDown,
   placeholder,
   status,
   authPanelContent,
@@ -305,6 +309,18 @@ export function CommandInputComposer({
                         handleInputChange(input.replace('/', ''));
                       }
                     } else {
+                      if (e.key === 'ArrowUp') {
+                        if (handleHistoryUp?.()) {
+                          e.preventDefault();
+                          return;
+                        }
+                      } else if (e.key === 'ArrowDown') {
+                        if (handleHistoryDown?.()) {
+                          e.preventDefault();
+                          return;
+                        }
+                      }
+
                       if (e.key === 'Backspace' && input === '') {
                         if (
                           contextAutocomplete &&
