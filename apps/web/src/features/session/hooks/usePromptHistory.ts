@@ -91,7 +91,7 @@ export function usePromptHistory(sessionEvents?: ACPEventRow[]) {
   );
 
   const navigateDown = useCallback(
-    (currentInput: string): string | null => {
+    (_currentInput?: string): string | null => {
       if (historyIndexRef.current === -1) return null;
 
       if (historyIndexRef.current < history.length - 1) {

@@ -4,7 +4,7 @@ import { useSettings } from '../../../hooks/useSettings';
 import { useNotificationStore } from '../../../shared/stores/useNotificationStore';
 import { requestNotificationPermission } from '../../../shared/lib/notifications';
 import { Card, Select, Switch } from '@agentctl/ui';
-import { Sun, Moon, Monitor, Bell } from 'lucide-react';
+import { Sun, Moon, Monitor } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getLightThemes, getDarkThemes } from '../../../shared/lib/theme-registry';
 import { ThemeSelect } from './ThemeSelect';

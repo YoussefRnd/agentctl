@@ -7,10 +7,7 @@ import { sessionKeys } from '../shared/lib/queryKeys';
 import { useSessionConfigState } from '../features/session/hooks/useSessionConfigState';
 import { useWorkspaceReviewState } from '../features/session/hooks/useWorkspaceReviewState';
 import { useSessionEvents } from '../hooks/useSessionEvents';
-import {
-  sendDesktopNotification,
-  requestNotificationPermission,
-} from '../shared/lib/notifications';
+import { sendDesktopNotification } from '../shared/lib/notifications';
 import type { ReviewFile } from '../features/session/components/ReviewHeader';
 
 interface ReviewResponse {

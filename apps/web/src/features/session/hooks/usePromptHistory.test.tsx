@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { usePromptHistory } from './usePromptHistory';
 import type { ACPEventRow } from '@agentctl/shared';
 
