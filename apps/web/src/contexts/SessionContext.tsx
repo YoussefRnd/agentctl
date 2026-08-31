@@ -235,12 +235,14 @@ export function SessionStreamProvider({
           title: 'AgentCtl · Task Complete',
           body: sessionData?.session.title || 'Task finished successfully',
           sessionId,
+          type: 'completion',
         });
       } else if (currentStatus === 'needs_attention') {
         sendDesktopNotification({
           title: 'AgentCtl · Approval Required',
           body: `${sessionData?.session.title || 'Session'} is waiting for your review`,
           sessionId,
+          type: 'attention',
         });
       }
     }

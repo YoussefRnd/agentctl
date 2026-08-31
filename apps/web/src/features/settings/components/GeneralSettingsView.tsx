@@ -1,8 +1,11 @@
 import { useTheme } from '../../../contexts/ThemeProvider';
 import { useProviders } from '../../../hooks/useProviders';
 import { useSettings } from '../../../hooks/useSettings';
+import { useNotificationStore } from '../../../shared/stores/useNotificationStore';
+import { requestNotificationPermission } from '../../../shared/lib/notifications';
 import { Card, Select, Switch } from '@agentctl/ui';
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, Moon, Monitor, Bell } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { getLightThemes, getDarkThemes } from '../../../shared/lib/theme-registry';
 import { ThemeSelect } from './ThemeSelect';
 import { FontSettingsPanel } from './FontSettingsPanel';
@@ -14,6 +17,28 @@ export function GeneralSettingsView() {
     useTheme();
   const { settings, updateSettings } = useSettings();
   const providersApi = useProviders(null);
+
+  const {
+    enabled: notificationsEnabled,
+    notifyOnCompletion,
+    notifyOnAttention,
+    setEnabled: setNotificationsEnabled,
+    setNotifyOnCompletion,
+    setNotifyOnAttention,
+  } = useNotificationStore();
+
+  const [permission, setPermission] = useState<NotificationPermission>('default');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPermission(Notification.permission);
+    }
+  }, []);
+
+  const handleRequestPermission = async () => {
+    const res = await requestNotificationPermission();
+    setPermission(res);
+  };
 
   const enabledProviders = providersApi.providers.filter((p) => p.installState !== 'not_installed');
 
@@ -161,6 +186,88 @@ export function GeneralSettingsView() {
             });
           }}
         />
+      </div>
+
+      {/* Notifications Section */}
+      <div className="space-y-2.5">
+        <h3 className="text-text-muted px-1 text-[11px] font-bold tracking-wider uppercase">
+          Notifications
+        </h3>
+        <Card className="divide-border/30 divide-y overflow-hidden px-5 py-2">
+          {/* Master Notifications Switch */}
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-text-main text-[13px] font-semibold">Desktop Notifications</p>
+                {permission === 'denied' && (
+                  <span className="text-danger bg-danger/10 border-danger/20 rounded border px-1.5 py-0.5 text-[10px] font-medium">
+                    Blocked in OS/Browser
+                  </span>
+                )}
+                {permission === 'granted' && (
+                  <span className="text-success bg-success/10 border-success/20 rounded border px-1.5 py-0.5 text-[10px] font-medium">
+                    Allowed
+                  </span>
+                )}
+              </div>
+              <p className="text-text-muted mt-0.5 text-[11px]">
+                Receive OS notifications when agentctl is in the background or unfocused
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {permission === 'default' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleRequestPermission();
+                  }}
+                  className="bg-accent text-brand-crust label-3xs cursor-pointer rounded-md px-2.5 py-1 font-semibold transition-opacity hover:opacity-90"
+                >
+                  Request Permission
+                </button>
+              )}
+              <Switch
+                checked={notificationsEnabled}
+                onCheckedChange={setNotificationsEnabled}
+                size="md"
+              />
+            </div>
+          </div>
+
+          {/* Turn Completion */}
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-text-main text-[13px] font-semibold">Notify on Turn Completion</p>
+              <p className="text-text-muted mt-0.5 text-[11px]">
+                Alert when a prompt turn finishes running and becomes idle
+              </p>
+            </div>
+            <Switch
+              checked={notificationsEnabled && notifyOnCompletion}
+              disabled={!notificationsEnabled}
+              onCheckedChange={setNotifyOnCompletion}
+              size="md"
+            />
+          </div>
+
+          {/* Attention Required */}
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-text-main text-[13px] font-semibold">
+                Notify on Review & Approval Needed
+              </p>
+              <p className="text-text-muted mt-0.5 text-[11px]">
+                Alert when the agent requires permission to run a tool or needs your approval
+              </p>
+            </div>
+            <Switch
+              checked={notificationsEnabled && notifyOnAttention}
+              disabled={!notificationsEnabled}
+              onCheckedChange={setNotifyOnAttention}
+              size="md"
+            />
+          </div>
+        </Card>
       </div>
 
       {/* Updates Section */}
