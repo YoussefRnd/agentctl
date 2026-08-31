@@ -1,4 +1,4 @@
-import { createContext, use, useMemo, useEffect, type ReactNode } from 'react';
+import { createContext, use, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ACPEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
@@ -7,6 +7,10 @@ import { sessionKeys } from '../shared/lib/queryKeys';
 import { useSessionConfigState } from '../features/session/hooks/useSessionConfigState';
 import { useWorkspaceReviewState } from '../features/session/hooks/useWorkspaceReviewState';
 import { useSessionEvents } from '../hooks/useSessionEvents';
+import {
+  sendDesktopNotification,
+  requestNotificationPermission,
+} from '../shared/lib/notifications';
 import type { ReviewFile } from '../features/session/components/ReviewHeader';
 
 interface ReviewResponse {
@@ -218,6 +222,31 @@ export function SessionStreamProvider({
     dequeueMessage,
     enqueueMessage,
   ]);
+
+  const prevStatusRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const currentStatus = sessionData?.session.status;
+    const prevStatus = prevStatusRef.current;
+
+    if (prevStatus !== undefined && currentStatus && prevStatus !== currentStatus) {
+      if (prevStatus === 'running' && currentStatus === 'idle') {
+        sendDesktopNotification({
+          title: 'AgentCtl · Task Complete',
+          body: sessionData?.session.title || 'Task finished successfully',
+          sessionId,
+        });
+      } else if (currentStatus === 'needs_attention') {
+        sendDesktopNotification({
+          title: 'AgentCtl · Approval Required',
+          body: `${sessionData?.session.title || 'Session'} is waiting for your review`,
+          sessionId,
+        });
+      }
+    }
+
+    prevStatusRef.current = currentStatus;
+  }, [sessionData?.session.status, sessionData?.session.title, sessionId]);
 
   useEffect(() => {
     if (

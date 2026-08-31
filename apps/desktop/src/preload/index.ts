@@ -29,6 +29,7 @@ export interface ElectronAPI {
     paste: () => void;
     selectAll: () => void;
   };
+  updateTrayStatus?: (status: { runningCount: number; needsAttentionCount: number }) => void;
   update: {
     getState: () => Promise<UpdateState>;
     onUpdate: (callback: (state: UpdateState) => void) => () => void;
@@ -118,6 +119,9 @@ const api: ElectronAPI = {
     selectAll: () => {
       ipcRenderer.send('edit:select-all');
     },
+  },
+  updateTrayStatus: (status) => {
+    ipcRenderer.send('tray:update-status', status);
   },
   update: {
     getState: () => ipcRenderer.invoke('update:get-state'),

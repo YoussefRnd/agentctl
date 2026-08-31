@@ -219,34 +219,74 @@ function createTrayIcon(): Electron.NativeImage {
   );
 }
 
+let trayStatus: { runningCount: number; needsAttentionCount: number } = {
+  runningCount: 0,
+  needsAttentionCount: 0,
+};
+
+function updateTrayMenu() {
+  if (!tray) return;
+
+  let tooltip = 'AgentCtl';
+  if (trayStatus.runningCount > 0 || trayStatus.needsAttentionCount > 0) {
+    const parts: string[] = [];
+    if (trayStatus.runningCount > 0) {
+      parts.push(`${String(trayStatus.runningCount)} running`);
+    }
+    if (trayStatus.needsAttentionCount > 0) {
+      parts.push(`${String(trayStatus.needsAttentionCount)} waiting review`);
+    }
+    tooltip = `AgentCtl (${parts.join(', ')})`;
+  }
+  tray.setToolTip(tooltip);
+
+  const menuItems: Electron.MenuItemConstructorOptions[] = [];
+
+  if (trayStatus.runningCount > 0 || trayStatus.needsAttentionCount > 0) {
+    if (trayStatus.runningCount > 0) {
+      menuItems.push({
+        label: `● ${String(trayStatus.runningCount)} session${trayStatus.runningCount > 1 ? 's' : ''} running`,
+        enabled: false,
+      });
+    }
+    if (trayStatus.needsAttentionCount > 0) {
+      menuItems.push({
+        label: `▲ ${String(trayStatus.needsAttentionCount)} waiting for review`,
+        enabled: false,
+      });
+    }
+    menuItems.push({ type: 'separator' });
+  }
+
+  menuItems.push(
+    {
+      label: 'Open AgentCtl',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          createWindow();
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => {
+        app.quit();
+      },
+    },
+  );
+
+  tray.setContextMenu(Menu.buildFromTemplate(menuItems));
+}
+
 function createTray() {
   try {
     const icon = createTrayIcon();
     tray = new Tray(icon);
-    tray.setToolTip('AgentCtl');
-
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: 'Show Window',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.show();
-            mainWindow.focus();
-          } else {
-            createWindow();
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Quit',
-        click: () => {
-          app.quit();
-        },
-      },
-    ]);
-
-    tray.setContextMenu(contextMenu);
+    updateTrayMenu();
 
     tray.on('double-click', () => {
       if (mainWindow) {
@@ -266,6 +306,13 @@ function registerIpcHandlers() {
   ipcMain.handle('server:get-port', () => serverPort);
   ipcMain.handle('server:get-secret', () => serverSecret);
   ipcMain.handle('app:get-version', () => app.getVersion());
+  ipcMain.on(
+    'tray:update-status',
+    (_event, status: { runningCount: number; needsAttentionCount: number }) => {
+      trayStatus = status;
+      updateTrayMenu();
+    },
+  );
 }
 
 // Registered at module load so the renderer can query it the moment it

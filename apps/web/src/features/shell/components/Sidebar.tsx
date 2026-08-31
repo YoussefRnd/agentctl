@@ -112,6 +112,30 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   });
 
   useEffect(() => {
+    let runningCount = 0;
+    let needsAttentionCount = 0;
+    for (const project of projects) {
+      for (const session of project.sessions ?? []) {
+        if (session.status === 'running') runningCount++;
+        else if (session.status === 'needs_attention') needsAttentionCount++;
+      }
+    }
+
+    const electronAPI = (
+      window as unknown as {
+        electronAPI?: {
+          updateTrayStatus?: (status: {
+            runningCount: number;
+            needsAttentionCount: number;
+          }) => void;
+        };
+      }
+    ).electronAPI;
+
+    electronAPI?.updateTrayStatus?.({ runningCount, needsAttentionCount });
+  }, [projects]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
       const isInput =
