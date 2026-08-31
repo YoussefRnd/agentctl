@@ -19,6 +19,7 @@ interface UIState {
   reviewTurnSelection: ReviewTurnSelection | null;
 
   // Global Modals State
+  isCommandPaletteOpen: boolean;
   isMcpSettingsOpen: boolean;
   isSettingsOpen: boolean;
   settingsTab: SettingsTab;
@@ -41,6 +42,9 @@ interface UIState {
   setReviewScope: (scope: ReviewScope, turnSelection?: ReviewTurnSelection) => void;
   setTargetReviewFile: (filePath: string | null) => void;
   focusReviewFile: (filePath: string, turnSelection: ReviewTurnSelection) => void;
+  openCommandPalette: () => void;
+  closeCommandPalette: () => void;
+  toggleCommandPalette: () => void;
   openMcpSettings: () => void;
   closeMcpSettings: () => void;
   toggleMcpSettings: () => void;
@@ -62,6 +66,7 @@ export const useUIStore = create<UIState>((set) => ({
   isMobileSidebarOpen: false,
   reviewScope: 'uncommitted',
   reviewTurnSelection: null,
+  isCommandPaletteOpen: false,
   isMcpSettingsOpen: false,
   isSettingsOpen: false,
   settingsTab: 'general',
@@ -89,6 +94,10 @@ export const useUIStore = create<UIState>((set) => ({
       reviewTurnSelection: turnSelection,
       targetReviewFile: filePath,
     }),
+  openCommandPalette: () => set({ isCommandPaletteOpen: true }),
+  closeCommandPalette: () => set({ isCommandPaletteOpen: false }),
+  toggleCommandPalette: () =>
+    set((state) => ({ isCommandPaletteOpen: !state.isCommandPaletteOpen })),
   openMcpSettings: () => set({ isMcpSettingsOpen: true }),
   closeMcpSettings: () => set({ isMcpSettingsOpen: false }),
   toggleMcpSettings: () => set((state) => ({ isMcpSettingsOpen: !state.isMcpSettingsOpen })),

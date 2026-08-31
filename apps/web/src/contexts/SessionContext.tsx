@@ -222,9 +222,11 @@ export function SessionStreamProvider({
   useEffect(() => {
     if (
       sessionData?.session.status === 'idle' ||
-      sessionData?.session.status === 'needs_attention'
+      sessionData?.session.status === 'needs_attention' ||
+      sessionData?.session.status === 'running'
     ) {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: ['projects'] });
     }
   }, [sessionData?.session.status, sessionId, queryClient]);
 

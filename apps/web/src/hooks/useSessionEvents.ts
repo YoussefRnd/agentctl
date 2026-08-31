@@ -141,19 +141,23 @@ export function useSessionEvents(sessionId: string | null) {
         );
         if (shouldInvalidateSession) {
           void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+          void queryClient.invalidateQueries({ queryKey: ['projects'] });
         }
         if (hasToolOrStateEvents) {
           void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+          void queryClient.invalidateQueries({ queryKey: ['projects'] });
         }
       },
       onStatusChange: (status) => {
         setIsConnected(status);
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
       },
       onStreamingChange: (id) => {
         setStreamingEventId(id);
         if (id === null) {
           void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
           void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+          void queryClient.invalidateQueries({ queryKey: ['projects'] });
         }
       },
     });

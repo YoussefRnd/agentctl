@@ -25,7 +25,7 @@ export const SidebarSearch = forwardRef<HTMLInputElement, SidebarSearchProps>(
         {!value && (
           <div className="pointer-events-none absolute top-1/2 right-2.5 flex -translate-y-1/2 items-center opacity-40 transition-opacity group-focus-within/search:opacity-0 group-hover/search:opacity-70">
             <kbd className="bg-surface-secondary/80 border-border/30 text-text-muted/70 rounded px-1.5 py-0.5 font-mono text-[9.5px] font-medium tracking-tight">
-              {isMac ? '⌘K' : 'Ctrl+K'}
+              {isMac ? '⌘F' : 'Ctrl+F'}
             </kbd>
           </div>
         )}

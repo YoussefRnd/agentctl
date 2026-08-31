@@ -9,6 +9,7 @@ import { useUIStore } from './shared';
 import { FontZoomIndicator } from './features/shell/components/FontZoomIndicator';
 import { FontConfigApplier } from './features/shell/components/FontConfigApplier';
 import { SettingsDialog } from './features/settings/components/SettingsDialog';
+import { CommandPalette } from './features/shell/components/CommandPalette';
 import { GlobalDropzone } from './features/project/components/GlobalDropzone';
 import { Spinner } from '@agentctl/ui';
 
@@ -38,6 +39,7 @@ function SettingsRouteRedirect() {
 export function App() {
   const { settings } = useSettings();
   const toggleSettings = useUIStore((s) => s.toggleSettings);
+  const toggleCommandPalette = useUIStore((s) => s.toggleCommandPalette);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -47,16 +49,22 @@ export function App() {
         e.stopPropagation();
         toggleSettings();
       }
+      if (isMod && (e.key === 'k' || e.code === 'KeyK')) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleCommandPalette();
+      }
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [toggleSettings]);
+  }, [toggleSettings, toggleCommandPalette]);
 
   return (
     <>
       <GlobalDropzone />
+      <CommandPalette />
       <FontConfigApplier fontConfig={settings?.fontConfig} />
       <FontZoomIndicator />
       <SettingsDialog />

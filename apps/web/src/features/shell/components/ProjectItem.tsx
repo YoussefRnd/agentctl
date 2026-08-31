@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Folder,
@@ -82,6 +82,19 @@ export function ProjectItem({
   const isGit = proj.sessions.some((s) => s.mode === 'worktree');
   const FolderIcon = isGit ? FolderGit2 : Folder;
 
+  // Periodic re-render ticker to update relative timestamps live
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((t) => (t + 1) % 1000);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const runningSessionsCount = proj.sessions.filter((s) => s.status === 'running').length;
+  const needsAttentionCount = proj.sessions.filter((s) => s.status === 'needs_attention').length;
+  const errorSessionsCount = proj.sessions.filter((s) => s.status === 'error').length;
+
   return (
     <div className="space-y-0.5">
       {/* Project Workspace Header Row */}
@@ -103,6 +116,36 @@ export function ProjectItem({
           <span className="text-text-main/90 group-hover/workspace:text-text-main truncate text-[12.5px] font-semibold tracking-tight">
             {proj.name}
           </span>
+
+          {/* Activity indicators when workspace is collapsed */}
+          {isCollapsed && (
+            <div className="ml-1.5 flex items-center gap-1">
+              {runningSessionsCount > 0 && (
+                <Tooltip
+                  content={`${runningSessionsCount} session${runningSessionsCount > 1 ? 's' : ''} running`}
+                >
+                  <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/30" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  </span>
+                </Tooltip>
+              )}
+              {needsAttentionCount > 0 && (
+                <Tooltip
+                  content={`${needsAttentionCount} session${needsAttentionCount > 1 ? 's' : ''} waiting for review`}
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400 ring-2 ring-amber-400/20" />
+                </Tooltip>
+              )}
+              {errorSessionsCount > 0 && (
+                <Tooltip
+                  content={`${errorSessionsCount} session${errorSessionsCount > 1 ? 's' : ''} with errors`}
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400 ring-2 ring-rose-400/20" />
+                </Tooltip>
+              )}
+            </div>
+          )}
         </button>
 
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within/workspace:opacity-100 group-hover/workspace:opacity-100">
@@ -215,16 +258,22 @@ export function ProjectItem({
                     >
                       {/* Status indicator only when active running / needs attention / error */}
                       {s.status === 'running' && (
-                        <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/30" />
-                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        </span>
+                        <Tooltip content="Agent is running...">
+                          <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/30" />
+                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                          </span>
+                        </Tooltip>
                       )}
                       {s.status === 'needs_attention' && (
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 ring-2 ring-amber-400/20" />
+                        <Tooltip content="Review or approval required">
+                          <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400 ring-2 ring-amber-400/20" />
+                        </Tooltip>
                       )}
                       {s.status === 'error' && (
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400 ring-2 ring-rose-400/20" />
+                        <Tooltip content="Session error">
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400 ring-2 ring-rose-400/20" />
+                        </Tooltip>
                       )}
 
                       <span

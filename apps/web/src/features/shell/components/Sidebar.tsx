@@ -107,11 +107,22 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       apiClient.fetch<SidebarProject[]>(
         `/api/projects?sortBy=${sortBy}&gitOnly=${gitOnly ? 'true' : 'false'}`,
       ),
+    refetchInterval: 2500,
+    staleTime: 1000,
   });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      const activeEl = document.activeElement;
+      const isInput =
+        activeEl instanceof HTMLInputElement ||
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl?.getAttribute('contenteditable') === 'true';
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.code === 'KeyF')) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key === '/' && !isInput) {
         e.preventDefault();
         searchInputRef.current?.focus();
       }

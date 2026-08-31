@@ -1,5 +1,5 @@
 import { useSession, useSessionStream } from '../contexts/SessionContext';
-import { api } from '@agentctl/api-client';
+import { api, type SidebarProject } from '@agentctl/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -48,10 +48,22 @@ export function useSessionActions() {
             session: {
               ...old.session,
               status: 'running',
+              updatedAt: new Date(),
             },
           };
         },
       );
+
+      // Optimistically update projects query in cache
+      queryClient.setQueriesData<SidebarProject[]>({ queryKey: ['projects'] }, (old) => {
+        if (!old) return old;
+        return old.map((p) => ({
+          ...p,
+          sessions: p.sessions.map((s) =>
+            s.id === sessionId ? { ...s, status: 'running', updatedAt: new Date() } : s,
+          ),
+        }));
+      });
 
       try {
         await api.sendInput({
@@ -61,6 +73,7 @@ export function useSessionActions() {
             ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
           },
         });
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
       } catch {
         queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
           return old.filter((e) => e.id !== tempId);
@@ -78,30 +91,46 @@ export function useSessionActions() {
             };
           },
         );
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
         toast.error('Failed to send message');
       }
     }
   };
 
   const handleApprove = (eventId: number, optionId?: string) => {
-    void api.approveEvent({
-      params: { id: sessionId },
-      body: { eventId, optionId },
-    });
+    void api
+      .approveEvent({
+        params: { id: sessionId },
+        body: { eventId, optionId },
+      })
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      });
   };
 
   const handleDeny = (eventId: number) => {
-    void api.denyEvent({
-      params: { id: sessionId },
-      body: { eventId },
-    });
+    void api
+      .denyEvent({
+        params: { id: sessionId },
+        body: { eventId },
+      })
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      });
   };
 
   const handleCancel = () => {
-    void api.cancelSession({
-      params: { id: sessionId },
-      body: {},
-    });
+    void api
+      .cancelSession({
+        params: { id: sessionId },
+        body: {},
+      })
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      });
   };
 
   return {
