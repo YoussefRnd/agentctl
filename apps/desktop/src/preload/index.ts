@@ -1,9 +1,10 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 export interface ElectronAPI {
   getServerPort: () => Promise<number>;
   getServerSecret: () => Promise<string>;
   getAppVersion: () => Promise<string>;
+  getPathForFile?: (file: File) => string;
   onNavigate: (callback: (path: string) => void) => void;
   onDeepLink: (callback: (url: string) => void) => void;
   platform: string;
@@ -49,6 +50,7 @@ const api: ElectronAPI = {
   getServerPort: () => ipcRenderer.invoke('server:get-port'),
   getServerSecret: () => ipcRenderer.invoke('server:get-secret'),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onNavigate: (callback) => {
     ipcRenderer.on('navigate', (_event, path: string) => {
       callback(path);

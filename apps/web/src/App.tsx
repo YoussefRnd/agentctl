@@ -9,6 +9,7 @@ import { useUIStore } from './shared';
 import { FontZoomIndicator } from './features/shell/components/FontZoomIndicator';
 import { FontConfigApplier } from './features/shell/components/FontConfigApplier';
 import { SettingsDialog } from './features/settings/components/SettingsDialog';
+import { GlobalDropzone } from './features/project/components/GlobalDropzone';
 import { Spinner } from '@agentctl/ui';
 
 const SessionView = lazy(() =>
@@ -55,6 +56,7 @@ export function App() {
 
   return (
     <>
+      <GlobalDropzone />
       <FontConfigApplier fontConfig={settings?.fontConfig} />
       <FontZoomIndicator />
       <SettingsDialog />

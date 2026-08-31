@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Folder,
   FolderGit2,
   Plus,
   ChevronRight,
+  ChevronDown,
   Loader2,
   Trash2,
   Archive,
@@ -13,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import { Dropdown, Tooltip } from '@agentctl/ui';
+import { QuickLaunchSessionDialog } from '../../session/components/QuickLaunchSessionDialog';
 
 interface ConfirmConfig {
   isOpen: boolean;
@@ -74,6 +77,7 @@ export function ProjectItem({
   handleRenameSession,
   handleForkSession,
 }: ProjectItemProps) {
+  const [showQuickLaunch, setShowQuickLaunch] = useState(false);
   const showSessions = searchQuery ? true : !isCollapsed;
   const isGit = proj.sessions.some((s) => s.mode === 'worktree');
   const FolderIcon = isGit ? FolderGit2 : Folder;
@@ -101,25 +105,41 @@ export function ProjectItem({
           </span>
         </button>
 
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/workspace:opacity-100 group-hover/workspace:opacity-100">
-          <Tooltip content="New session">
-            <button
-              type="button"
-              className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-colors disabled:opacity-50"
-              disabled={isCreatingSession}
-              onClick={(event) => {
-                event.stopPropagation();
-                handleCreateSession(proj.id);
-              }}
-              aria-label="New session"
-            >
-              {isCreatingSession ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Plus className="h-3 w-3" />
-              )}
-            </button>
-          </Tooltip>
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within/workspace:opacity-100 group-hover/workspace:opacity-100">
+          <div className="border-border/30 bg-surface-secondary/40 flex items-center rounded-md border">
+            <Tooltip content="New session (Default / Inherited)">
+              <button
+                type="button"
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 cursor-pointer items-center justify-center rounded-l-md transition-colors disabled:opacity-50"
+                disabled={isCreatingSession}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleCreateSession(proj.id);
+                }}
+                aria-label="New session"
+              >
+                {isCreatingSession ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Plus className="h-3 w-3" />
+                )}
+              </button>
+            </Tooltip>
+            <Tooltip content="Quick launch (Customize agent & model)">
+              <button
+                type="button"
+                className="text-text-muted/70 hover:text-accent hover:bg-surface-secondary border-border/20 flex h-5 w-3.5 cursor-pointer items-center justify-center rounded-r-md border-l transition-colors disabled:opacity-50"
+                disabled={isCreatingSession}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowQuickLaunch(true);
+                }}
+                aria-label="Quick launch session options"
+              >
+                <ChevronDown className="h-2.5 w-2.5" />
+              </button>
+            </Tooltip>
+          </div>
 
           <Tooltip content="Remove workspace">
             <button
@@ -151,6 +171,16 @@ export function ProjectItem({
           </Tooltip>
         </div>
       </div>
+
+      <QuickLaunchSessionDialog
+        open={showQuickLaunch}
+        onClose={() => {
+          setShowQuickLaunch(false);
+        }}
+        projectId={proj.id}
+        projectName={proj.name}
+        defaultMode={isGit ? 'worktree' : 'local'}
+      />
 
       {/* Sessions List with Vertical Hierarchy Guide */}
       {showSessions && (

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { eq, asc, inArray } from 'drizzle-orm';
+import { eq, asc, desc, inArray } from 'drizzle-orm';
 import { simpleGit } from 'simple-git';
 import type { ACPSession } from '../acp/session-client.js';
 import type { DbClient } from '../db/index.js';
@@ -32,6 +32,8 @@ export interface CreateSessionParams {
   providerId?: string;
   taskSlug: string;
   mode?: SessionMode;
+  selectedModel?: string;
+  selectedThinkingEffort?: ThinkingEffort;
 }
 
 export function resolveAgentSessionId(
@@ -115,19 +117,132 @@ export class SessionManager {
     return session.writeTerminalInput(terminalId, data);
   }
 
-  async createSession(params: CreateSessionParams): Promise<{ sessionId: string }> {
-    const { projectId, providerId, taskSlug, mode } = params;
-
-    const settings = this.providerRegistry.getSettings();
-    const resolvedProviderId = providerId ?? settings.defaultProviderId ?? undefined;
-
-    if (!resolvedProviderId) {
-      throw new Error(
-        'No agent provider specified, and no default provider is configured in settings.',
+  private async resolveSessionProviderAndParameters(
+    projectId: string,
+    requestedProviderId?: string,
+    requestedModel?: string,
+    requestedThinkingEffort?: ThinkingEffort,
+  ): Promise<{
+    providerId: string;
+    selection: ReturnType<typeof negotiateCapabilities>;
+    configOptions: ReturnType<SessionManager['buildInitialConfigOptions']>;
+  }> {
+    // 1. Explicit provider requested by caller
+    if (requestedProviderId) {
+      const { selection, configOptions } = await this.resolveLaunchParameters(
+        requestedProviderId,
+        requestedModel,
+        requestedThinkingEffort,
       );
+      return {
+        providerId: requestedProviderId,
+        selection,
+        configOptions,
+      };
     }
 
-    const { selection, configOptions } = await this.resolveLaunchParameters(resolvedProviderId);
+    // 2. Inherit from project's most recent session
+    try {
+      const lastSession = await this.db.query.sessions.findFirst({
+        where: eq(sessions.projectId, projectId),
+        orderBy: [desc(sessions.createdAt)],
+      });
+
+      if (lastSession?.selectedProvider) {
+        try {
+          const inheritedModel = requestedModel ?? lastSession.selectedModel ?? undefined;
+          const inheritedEffort =
+            requestedThinkingEffort ??
+            (lastSession.selectedThinkingEffort as ThinkingEffort | undefined);
+
+          const { selection, configOptions } = await this.resolveLaunchParameters(
+            lastSession.selectedProvider,
+            inheritedModel,
+            inheritedEffort,
+          );
+          return {
+            providerId: lastSession.selectedProvider,
+            selection,
+            configOptions,
+          };
+        } catch (err) {
+          this.logger.warn(
+            { err, providerId: lastSession.selectedProvider, projectId },
+            'Failed to inherit last-used provider from project; falling back',
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.warn({ err, projectId }, 'Failed to query project sessions for inheritance');
+    }
+
+    // 3. Fallback to global defaultProviderId setting
+    const settings = await this.providerRegistry.getSettings();
+    const defaultProviderId = settings.defaultProviderId;
+    if (defaultProviderId) {
+      try {
+        const { selection, configOptions } = await this.resolveLaunchParameters(
+          defaultProviderId,
+          requestedModel,
+          requestedThinkingEffort,
+        );
+        return {
+          providerId: defaultProviderId,
+          selection,
+          configOptions,
+        };
+      } catch (err) {
+        this.logger.warn(
+          { err, providerId: defaultProviderId },
+          'Configured default provider is not ready; falling back to discoverable providers',
+        );
+      }
+    }
+
+    // 4. Fallback to the first discoverable/ready provider in the registry
+    try {
+      if (typeof this.providerRegistry.discover === 'function') {
+        const discoverable = await this.providerRegistry.discover();
+        for (const candidate of discoverable) {
+          if (candidate.id === defaultProviderId) continue;
+          try {
+            const { selection, configOptions } = await this.resolveLaunchParameters(
+              candidate.id,
+              requestedModel,
+              requestedThinkingEffort,
+            );
+            return {
+              providerId: candidate.id,
+              selection,
+              configOptions,
+            };
+          } catch {
+            // Candidate not ready, try next
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn({ err }, 'Failed to discover fallback providers');
+    }
+
+    throw new Error(
+      'No agent provider is available or ready. Please configure or install an agent provider in settings.',
+    );
+  }
+
+  async createSession(params: CreateSessionParams): Promise<{ sessionId: string }> {
+    const { projectId, providerId, taskSlug, mode, selectedModel, selectedThinkingEffort } = params;
+
+    const {
+      providerId: resolvedProviderId,
+      selection,
+      configOptions,
+    } = await this.resolveSessionProviderAndParameters(
+      projectId,
+      providerId,
+      selectedModel,
+      selectedThinkingEffort,
+    );
 
     const context = await this.sessionWorkspace.establish(projectId, taskSlug, {
       mode,

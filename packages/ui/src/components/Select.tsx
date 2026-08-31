@@ -93,6 +93,9 @@ export function Select({
                       ? 'bg-accent/10 text-accent hover:bg-accent/15'
                       : 'text-text-muted hover:text-text-main hover:bg-white/5',
                   )}
+                  onSelect={() => {
+                    onChange(opt.value);
+                  }}
                   onClick={() => {
                     onChange(opt.value);
                   }}

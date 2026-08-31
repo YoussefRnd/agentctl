@@ -2,6 +2,7 @@ interface ElectronAPI {
   getServerPort: () => Promise<number>;
   getServerSecret: () => Promise<string>;
   getAppVersion: () => Promise<string>;
+  getPathForFile?: (file: File) => string;
   onNavigate: (callback: (path: string) => void) => void;
   onDeepLink: (callback: (url: string) => void) => void;
   platform: string;

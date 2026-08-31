@@ -1136,4 +1136,293 @@ describe('SessionManager tests', () => {
       expect(mockPrompt).toHaveBeenCalledWith('Followup message', undefined, undefined);
     });
   });
+
+  describe('createSession provider resolution & smarter fallbacks', () => {
+    const createTestProvider = (id: string, name = id) =>
+      new Provider({
+        id,
+        name,
+        installState: 'installed_local',
+        authState: 'authenticated',
+        enabled: true,
+        hidden: false,
+        distribution: '{}',
+        command: 'node',
+        launchArgs: '[]',
+        launchEnv: '{}',
+        customEnv: '{}',
+        configOptions: JSON.stringify([
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            options: [
+              { value: 'default', name: 'Default' },
+              { value: 'custom-model', name: 'Custom Model' },
+            ],
+            currentValue: 'default',
+          },
+          {
+            id: 'thinking',
+            name: 'Thinking',
+            type: 'select',
+            options: [
+              { value: 'low', name: 'Low' },
+              { value: 'medium', name: 'Medium' },
+              { value: 'high', name: 'High' },
+            ],
+            currentValue: 'medium',
+          },
+        ]),
+        authMethods: '[]',
+        supportsDynamicModel: false,
+        supportsDynamicConfig: false,
+        supportsLogout: false,
+        nativelyLoadsSkills: false,
+        modes: '[]',
+        version: '1.0.0',
+        description: 'test',
+        icon: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+    it('inherits provider, model, and thinking effort from the most recent project session when providerId is omitted', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-inherit',
+        name: 'Inherit Project',
+        path: '/tmp/proj-inherit',
+      });
+
+      // Older session
+      await db.insert(sessions).values({
+        id: 'sess-old',
+        projectId: 'proj-inherit',
+        branch: 'main',
+        worktreePath: '/tmp/proj-inherit',
+        taskSlug: 'old-task',
+        agent: 'provider-old',
+        title: 'old session',
+        status: 'idle',
+        selectedProvider: 'provider-old',
+        selectedModel: 'old-model',
+        selectedThinkingEffort: 'low',
+        baseCommit: 'hash1',
+        createdAt: new Date(Date.now() - 10000),
+      });
+
+      // Most recent session
+      await db.insert(sessions).values({
+        id: 'sess-latest',
+        projectId: 'proj-inherit',
+        branch: 'main',
+        worktreePath: '/tmp/proj-inherit',
+        taskSlug: 'latest-task',
+        agent: 'provider-custom',
+        title: 'latest session',
+        status: 'idle',
+        selectedProvider: 'provider-custom',
+        selectedModel: 'custom-model',
+        selectedThinkingEffort: 'high',
+        baseCommit: 'hash2',
+        createdAt: new Date(Date.now()),
+      });
+
+      const registry = {
+        ensureProviderReady: (id: string) => Promise.resolve(createTestProvider(id)),
+        getSettings: () => Promise.resolve({ defaultProviderId: 'provider-default' }),
+        discover: () => Promise.resolve([createTestProvider('provider-default')]),
+      } as unknown as ProviderRegistry;
+
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        registry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      const { sessionId } = await manager.createSession({
+        projectId: 'proj-inherit',
+        taskSlug: 'new-session-inherit',
+        mode: 'local',
+      });
+
+      const created = await db.query.sessions.findFirst({
+        where: (s, { eq }) => eq(s.id, sessionId),
+      });
+
+      expect(created).toBeDefined();
+      expect(created?.selectedProvider).toBe('provider-custom');
+      expect(created?.selectedModel).toBe('custom-model');
+      expect(created?.selectedThinkingEffort).toBe('high');
+    });
+
+    it('falls back to defaultProviderId when project has no previous sessions', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-fresh',
+        name: 'Fresh Project',
+        path: '/tmp/proj-fresh',
+      });
+
+      const registry = {
+        ensureProviderReady: (id: string) => Promise.resolve(createTestProvider(id)),
+        getSettings: () => Promise.resolve({ defaultProviderId: 'provider-global-default' }),
+        discover: () => Promise.resolve([createTestProvider('provider-global-default')]),
+      } as unknown as ProviderRegistry;
+
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        registry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      const { sessionId } = await manager.createSession({
+        projectId: 'proj-fresh',
+        taskSlug: 'fresh-task',
+        mode: 'local',
+      });
+
+      const created = await db.query.sessions.findFirst({
+        where: (s, { eq }) => eq(s.id, sessionId),
+      });
+
+      expect(created).toBeDefined();
+      expect(created?.selectedProvider).toBe('provider-global-default');
+    });
+
+    it('falls back to discoverable ready provider when defaultProviderId is unset and no previous sessions exist', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-no-default',
+        name: 'No Default Project',
+        path: '/tmp/proj-no-default',
+      });
+
+      const registry = {
+        ensureProviderReady: (id: string) => Promise.resolve(createTestProvider(id)),
+        getSettings: () => Promise.resolve({ defaultProviderId: undefined }),
+        discover: () =>
+          Promise.resolve([
+            createTestProvider('provider-discovered-1'),
+            createTestProvider('provider-discovered-2'),
+          ]),
+      } as unknown as ProviderRegistry;
+
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        registry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      const { sessionId } = await manager.createSession({
+        projectId: 'proj-no-default',
+        taskSlug: 'discovered-task',
+        mode: 'local',
+      });
+
+      const created = await db.query.sessions.findFirst({
+        where: (s, { eq }) => eq(s.id, sessionId),
+      });
+
+      expect(created).toBeDefined();
+      expect(created?.selectedProvider).toBe('provider-discovered-1');
+    });
+
+    it('respects explicit providerId even if project has previous sessions', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-override',
+        name: 'Override Project',
+        path: '/tmp/proj-override',
+      });
+
+      await db.insert(sessions).values({
+        id: 'sess-prev',
+        projectId: 'proj-override',
+        branch: 'main',
+        worktreePath: '/tmp/proj-override',
+        taskSlug: 'prev-task',
+        agent: 'provider-previous',
+        title: 'previous session',
+        status: 'idle',
+        selectedProvider: 'provider-previous',
+        selectedModel: 'custom-model',
+        selectedThinkingEffort: 'high',
+        baseCommit: 'hash1',
+      });
+
+      const registry = {
+        ensureProviderReady: (id: string) => Promise.resolve(createTestProvider(id)),
+        getSettings: () => Promise.resolve({ defaultProviderId: 'provider-global-default' }),
+        discover: () => Promise.resolve([createTestProvider('provider-global-default')]),
+      } as unknown as ProviderRegistry;
+
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        registry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      const { sessionId } = await manager.createSession({
+        projectId: 'proj-override',
+        providerId: 'provider-explicit',
+        taskSlug: 'explicit-task',
+        mode: 'local',
+      });
+
+      const created = await db.query.sessions.findFirst({
+        where: (s, { eq }) => eq(s.id, sessionId),
+      });
+
+      expect(created).toBeDefined();
+      expect(created?.selectedProvider).toBe('provider-explicit');
+    });
+
+    it('throws error when no providers are available or ready', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-none',
+        name: 'None Project',
+        path: '/tmp/proj-none',
+      });
+
+      const registry = {
+        ensureProviderReady: () => Promise.reject(new Error('Provider not ready')),
+        getSettings: () => Promise.resolve({ defaultProviderId: undefined }),
+        discover: () => Promise.resolve([]),
+      } as unknown as ProviderRegistry;
+
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        registry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      await expect(
+        manager.createSession({
+          projectId: 'proj-none',
+          taskSlug: 'none-task',
+          mode: 'local',
+        }),
+      ).rejects.toThrow(
+        'No agent provider is available or ready. Please configure or install an agent provider in settings.',
+      );
+    });
+  });
 });

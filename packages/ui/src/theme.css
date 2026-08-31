@@ -214,7 +214,7 @@
 @layer components {
   /* SEMANTIC Z-INDICES */
   .z-dropdown {
-    z-index: 1000;
+    z-index: 1060;
   }
   .z-sticky {
     z-index: 1020;
