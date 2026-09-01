@@ -565,19 +565,33 @@ export default fp(async (fastify) => {
     mergeSession: async ({ params, body }) => {
       const { id } = params;
       const { commitMessage } = body;
-      await fastify.sessionService.finalizeSession(id, 'merge', commitMessage);
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
+      try {
+        await fastify.sessionService.finalizeSession(id, 'merge', commitMessage);
+        return {
+          status: 200 as const,
+          body: { success: true },
+        };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
     },
     discardSession: async ({ params }) => {
       const { id } = params;
-      await fastify.sessionService.finalizeSession(id, 'discard');
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
+      try {
+        await fastify.sessionService.finalizeSession(id, 'discard');
+        return {
+          status: 200 as const,
+          body: { success: true },
+        };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
     },
     deleteSession: async ({ params }) => {
       const { id } = params;
@@ -857,8 +871,15 @@ export default fp(async (fastify) => {
         where: eq(projects.id, session.projectId),
       });
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
-      await fastify.worktreeManager.commit(project.repoRoot, session.worktreePath, message);
-      return { status: 200 as const, body: { success: true } };
+      try {
+        await fastify.worktreeManager.commit(project.repoRoot, session.worktreePath, message);
+        return { status: 200 as const, body: { success: true } };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
     },
     pushChanges: async ({ params }) => {
       const { id } = params;
@@ -868,8 +889,15 @@ export default fp(async (fastify) => {
         where: eq(projects.id, session.projectId),
       });
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
-      const result = await fastify.worktreeManager.push(project.repoRoot, session.worktreePath);
-      return { status: 200 as const, body: result };
+      try {
+        const result = await fastify.worktreeManager.push(project.repoRoot, session.worktreePath);
+        return { status: 200 as const, body: result };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
     },
     pullChanges: async ({ params }) => {
       const { id } = params;
@@ -879,8 +907,72 @@ export default fp(async (fastify) => {
         where: eq(projects.id, session.projectId),
       });
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
-      const result = await fastify.worktreeManager.pull(project.repoRoot, session.worktreePath);
-      return { status: 200 as const, body: result };
+      try {
+        const result = await fastify.worktreeManager.pull(project.repoRoot, session.worktreePath);
+        return { status: 200 as const, body: result };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
+    },
+    getGitStatus: async ({ params }) => {
+      const { id } = params;
+      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
+      if (!session) throw new AppError('Session not found', 404);
+      const project = await fastify.db.query.projects.findFirst({
+        where: eq(projects.id, session.projectId),
+      });
+      if (!project?.repoRoot) {
+        return {
+          status: 200 as const,
+          body: {
+            isRepo: false,
+            branch: null,
+            hasPrimaryRemote: false,
+            remoteName: null,
+            remoteProvider: null,
+            upstreamBranch: null,
+            hasUpstream: false,
+            aheadCount: 0,
+            behindCount: 0,
+            pr: null,
+          },
+        };
+      }
+      const status = await fastify.worktreeManager.getTrackingStatus(
+        project.repoRoot,
+        session.worktreePath,
+      );
+      return { status: 200 as const, body: status };
+    },
+    createPullRequest: async ({ params, body }) => {
+      const { id } = params;
+      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
+      if (!session) throw new AppError('Session not found', 404);
+      const project = await fastify.db.query.projects.findFirst({
+        where: eq(projects.id, session.projectId),
+      });
+      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
+
+      try {
+        const result = await fastify.worktreeManager.createPullRequest(
+          project.repoRoot,
+          session.worktreePath,
+          {
+            title: body.title,
+            body: body.body,
+            baseBranch: body.baseBranch,
+          },
+        );
+        return { status: 200 as const, body: result };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
     },
     rewindSession: async ({ params, body }) => {
       const { id } = params;

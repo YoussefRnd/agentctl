@@ -4,6 +4,7 @@ import { Popover, PopoverTrigger, PopoverContent, cn } from '@agentctl/ui';
 import { GitBranchIcon, RepoPullIcon, RepoPushIcon } from '@primer/octicons-react';
 import { toast } from 'sonner';
 import { useSession } from '../../../../contexts/SessionContext';
+import { useGitStatus } from '../../hooks/useGitStatus';
 import type { SessionWithCapabilities } from '@agentctl/shared';
 import { CommandDropdown } from './CommandDropdown';
 
@@ -234,7 +235,14 @@ export function CommandBarFooter({
   switchBranch: (branch: string) => Promise<void>;
   branches: string[];
 }) {
-  const { pushChanges, pullChanges, isPushing, isPulling } = useSession();
+  const { pushChanges, pullChanges, isPushing, isPulling, reviewData } = useSession();
+  const { gitStatus } = useGitStatus(sessionData?.session.id ?? '');
+  const hasUncommittedChanges = reviewData.files.some((file) => file.state !== 'committed');
+  const canUseRemote =
+    gitStatus.isRepo &&
+    gitStatus.hasPrimaryRemote &&
+    gitStatus.branch !== null &&
+    gitStatus.branch !== 'HEAD';
 
   if (!isLoadingSession && !sessionData?.session) return null;
 
@@ -270,53 +278,79 @@ export function CommandBarFooter({
           <span>...</span>
         </div>
       ) : (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {sessionData?.session.project?.repoRoot && (
-            <div className="border-border/10 bg-surface-tertiary/10 flex shrink-0 items-center overflow-hidden rounded-md border">
-              <button
-                type="button"
-                disabled={isPulling}
-                onClick={() => {
-                  void toast.promise(
-                    pullChanges().then((res) => {
-                      if (!res.success) throw new Error(res.output);
-                      return res;
-                    }),
-                    {
-                      loading: 'Pulling remote...',
-                      success: 'Pulled successfully',
-                      error: (err: unknown) =>
-                        `Pull failed: ${err instanceof Error ? err.message : String(err)}`,
-                    },
-                  );
-                }}
-                className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-6 w-6 cursor-pointer items-center justify-center border-r transition-colors disabled:opacity-30"
-                title="Pull from Remote"
-              >
-                <RepoPullIcon className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                disabled={isPushing}
-                onClick={() => {
-                  void toast.promise(
-                    pushChanges().then((res) => {
-                      if (!res.success) throw new Error(res.output);
-                      return res;
-                    }),
-                    {
-                      loading: 'Pushing remote...',
-                      success: 'Pushed successfully',
-                      error: (err: unknown) =>
-                        `Push failed: ${err instanceof Error ? err.message : String(err)}`,
-                    },
-                  );
-                }}
-                className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 flex h-6 w-6 cursor-pointer items-center justify-center transition-colors disabled:opacity-30"
-                title="Push to Remote"
-              >
-                <RepoPushIcon className="h-3 w-3" />
-              </button>
+            <div className="flex items-center gap-1.5">
+              {gitStatus.hasUpstream && (gitStatus.aheadCount > 0 || gitStatus.behindCount > 0) && (
+                <span className="text-text-muted/75 flex items-center gap-1 font-mono text-[10px] font-semibold">
+                  {gitStatus.aheadCount > 0 && (
+                    <span title={`${gitStatus.aheadCount} commit(s) ahead of upstream`}>
+                      ↑{gitStatus.aheadCount}
+                    </span>
+                  )}
+                  {gitStatus.behindCount > 0 && (
+                    <span title={`${gitStatus.behindCount} commit(s) behind upstream`}>
+                      ↓{gitStatus.behindCount}
+                    </span>
+                  )}
+                </span>
+              )}
+              <div className="border-border/10 bg-surface-tertiary/10 flex shrink-0 items-center overflow-hidden rounded-md border">
+                <button
+                  type="button"
+                  disabled={isPulling || !canUseRemote || hasUncommittedChanges}
+                  onClick={() => {
+                    void toast.promise(
+                      pullChanges().then((res) => {
+                        if (!res.success) throw new Error(res.output);
+                        return res;
+                      }),
+                      {
+                        loading: 'Pulling remote...',
+                        success: 'Pulled successfully',
+                        error: (err: unknown) =>
+                          `Pull failed: ${err instanceof Error ? err.message : String(err)}`,
+                      },
+                    );
+                  }}
+                  className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-6 w-6 cursor-pointer items-center justify-center border-r transition-colors disabled:opacity-30"
+                  title={
+                    !canUseRemote
+                      ? 'Configure a remote and check out a branch before pulling'
+                      : hasUncommittedChanges
+                        ? 'Commit or discard changes before pulling'
+                        : 'Pull from remote'
+                  }
+                >
+                  <RepoPullIcon className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  disabled={isPushing || !canUseRemote}
+                  onClick={() => {
+                    void toast.promise(
+                      pushChanges().then((res) => {
+                        if (!res.success) throw new Error(res.output);
+                        return res;
+                      }),
+                      {
+                        loading: 'Pushing remote...',
+                        success: 'Pushed successfully',
+                        error: (err: unknown) =>
+                          `Push failed: ${err instanceof Error ? err.message : String(err)}`,
+                      },
+                    );
+                  }}
+                  className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 flex h-6 w-6 cursor-pointer items-center justify-center transition-colors disabled:opacity-30"
+                  title={
+                    canUseRemote
+                      ? `Push to ${gitStatus.remoteName ?? 'remote'}`
+                      : 'Configure a remote and check out a branch before pushing'
+                  }
+                >
+                  <RepoPushIcon className="h-3 w-3" />
+                </button>
+              </div>
             </div>
           )}
 

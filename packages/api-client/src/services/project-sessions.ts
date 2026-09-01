@@ -2,6 +2,9 @@ import {
   type SearchEventType,
   type SessionRow,
   type SessionMode,
+  type GitStatus,
+  type CreatePullRequestBody,
+  type CreatePullRequestResult,
   createTaskSlug,
 } from '@agentctl/shared';
 import { api } from '../api.js';
@@ -141,6 +144,9 @@ export async function commitWorkspaceChanges(
     params: { id: sessionId },
     body: { message },
   });
+  if (res.status === 400) {
+    throw new ApiError(res.body.message, res.status);
+  }
   if (res.status !== 200) {
     throw new ApiError(`Failed to commit workspace changes: ${String(res.status)}`, res.status);
   }
@@ -154,6 +160,9 @@ export async function pushWorkspaceChanges(
     params: { id: sessionId },
     body: {},
   });
+  if (res.status === 400) {
+    throw new ApiError(res.body.message, res.status);
+  }
   if (res.status !== 200) {
     throw new ApiError(`Failed to push changes: ${String(res.status)}`, res.status);
   }
@@ -167,8 +176,38 @@ export async function pullWorkspaceChanges(
     params: { id: sessionId },
     body: {},
   });
+  if (res.status === 400) {
+    throw new ApiError(res.body.message, res.status);
+  }
   if (res.status !== 200) {
     throw new ApiError(`Failed to pull changes: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
+export async function getGitStatus(sessionId: string): Promise<GitStatus> {
+  const res = await api.getGitStatus({
+    params: { id: sessionId },
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to get Git status: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
+export async function createPullRequest(
+  sessionId: string,
+  body: CreatePullRequestBody,
+): Promise<CreatePullRequestResult> {
+  const res = await api.createPullRequest({
+    params: { id: sessionId },
+    body,
+  });
+  if (res.status === 400) {
+    throw new ApiError(res.body.message, res.status);
+  }
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to create pull request: ${String(res.status)}`, res.status);
   }
   return res.body;
 }
@@ -245,6 +284,9 @@ export async function mergeSession(
     params: { id: sessionId },
     body: { commitMessage },
   });
+  if (res.status === 400) {
+    throw new ApiError(res.body.message, res.status);
+  }
   if (res.status !== 200) {
     throw new ApiError(`Failed to merge session: ${String(res.status)}`, res.status);
   }
@@ -256,6 +298,9 @@ export async function discardSession(sessionId: string): Promise<{ success: bool
     params: { id: sessionId },
     body: {},
   });
+  if (res.status === 400) {
+    throw new ApiError(res.body.message, res.status);
+  }
   if (res.status !== 200) {
     throw new ApiError(`Failed to discard session: ${String(res.status)}`, res.status);
   }

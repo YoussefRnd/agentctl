@@ -3,6 +3,7 @@ export const sessionKeys = {
   detail: (sessionId: string) => ['session', sessionId] as const,
   review: (sessionId: string) => ['session-review', sessionId] as const,
   branches: (sessionId: string) => ['session-branches', sessionId] as const,
+  gitStatus: (sessionId: string) => ['session-git-status', sessionId] as const,
   events: (sessionId: string) => ['events', sessionId] as const,
 };
 

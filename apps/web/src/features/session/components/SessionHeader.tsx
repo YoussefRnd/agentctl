@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Menu, PanelRight, Pencil, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
 import { Dropdown, Tooltip } from '@agentctl/ui';
-import { DiffIcon, RepoForkedIcon } from '@primer/octicons-react';
+import { DiffIcon, RepoForkedIcon, GitPullRequestIcon } from '@primer/octicons-react';
 import {
   renameSession,
   archiveSession,
@@ -14,6 +14,7 @@ import {
 } from '@agentctl/api-client';
 import { toast } from 'sonner';
 import { useSession } from '../../../contexts/SessionContext';
+import { useGitStatus } from '../hooks/useGitStatus';
 import { projectKeys, sessionKeys } from '../../../shared/lib/queryKeys';
 import { formatShortcut } from '../../../shared/lib/platform';
 import { OpenInPicker } from './OpenInPicker';
@@ -37,6 +38,7 @@ export function SessionHeader({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { sessionId, sessionData, reviewData } = useSession();
+  const { gitStatus } = useGitStatus(sessionId);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
@@ -255,9 +257,31 @@ export function SessionHeader({
         </div>
       </div>
 
-      {/* Right Action Suite: Open in IDE + Changes Pill + Inspector Toggle */}
+      {/* Right Action Suite: Open in IDE + Changes Pill + PR Chip + Inspector Toggle */}
       <div className="flex shrink-0 items-center gap-1.5">
         {worktreePath && <OpenInPicker targetPath={worktreePath} />}
+
+        {gitStatus.pr && (
+          <a
+            href={gitStatus.pr.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border-border/30 bg-surface-secondary/60 text-accent hover:border-accent/40 hover:bg-surface-secondary flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition-colors"
+            title={`${gitStatus.pr.title} (${gitStatus.pr.state})`}
+          >
+            <GitPullRequestIcon className="h-3.5 w-3.5" />
+            <span>#{gitStatus.pr.number}</span>
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                gitStatus.pr.state === 'merged'
+                  ? 'bg-purple-400'
+                  : gitStatus.pr.state === 'closed'
+                    ? 'bg-rose-400'
+                    : 'bg-emerald-400'
+              }`}
+            />
+          </a>
+        )}
 
         {changesCount > 0 && (
           <button

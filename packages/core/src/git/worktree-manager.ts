@@ -3,7 +3,11 @@ import { simpleGit } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { type ReviewFile, parseMultiFileDiff } from './utils.js';
+
+const execFileAsync = promisify(execFile);
 
 export interface RepositoryInfo {
   selectedPath: string;
@@ -39,6 +43,11 @@ export interface Workspace {
   getReviewFiles(): Promise<ReviewFile[]>;
   stageFile(filePath: string): Promise<void>;
   revertFile(filePath: string): Promise<void>;
+}
+
+export function parseGitHubRemoteUrl(remoteUrl: string): string | null {
+  const match = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(remoteUrl.trim());
+  return match ? `https://github.com/${match[1]}/${match[2]}` : null;
 }
 
 export function parsePorcelainWorktrees(output: string): ListedWorktree[] {
@@ -739,12 +748,25 @@ export class WorkspaceManager {
 
   async revertFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
+      const git = simpleGit(worktreePath);
       try {
-        await simpleGit(worktreePath).raw(['reset', 'HEAD', filePath]);
+        await git.raw(['reset', 'HEAD', filePath]);
       } catch {
-        // Not staged
+        // Not staged or HEAD has no such file
       }
-      await simpleGit(worktreePath).raw(['checkout', '--', filePath]);
+
+      try {
+        await git.raw(['checkout', '--', filePath]);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('did not match any file') || msg.includes('pathspec')) {
+          // File was newly added and never existed in HEAD -> remove from working directory
+          const absPath = path.resolve(worktreePath, filePath);
+          await fs.rm(absPath, { force: true, recursive: true }).catch(() => {});
+        } else {
+          throw err;
+        }
+      }
     });
   }
 
@@ -783,9 +805,13 @@ export class WorkspaceManager {
         if (remotes.length === 0) {
           throw new Error('No git remotes configured for this repository');
         }
+        const primaryRemote = remotes.find((remote) => remote.name === 'origin') ?? remotes[0];
         const branchSummary = await git.branchLocal();
         const currentBranch = branchSummary.current;
-        const result = await git.push(['-u', remotes[0].name, currentBranch]);
+        if (!currentBranch || currentBranch === 'HEAD') {
+          throw new Error('Cannot push from detached HEAD');
+        }
+        const result = await git.push(['-u', primaryRemote.name, currentBranch]);
         return { success: true, output: JSON.stringify(result) };
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -842,6 +868,7 @@ export class WorkspaceManager {
         if (remotes.length === 0) {
           throw new Error('No git remotes configured for this repository');
         }
+        const primaryRemote = remotes.find((remote) => remote.name === 'origin') ?? remotes[0];
 
         const branchSummary = await git.branchLocal();
         const currentBranch = branchSummary.current;
@@ -855,7 +882,7 @@ export class WorkspaceManager {
         }
 
         const beforeCommit = (await git.revparse(['HEAD'])).trim();
-        const remoteName = remotes[0].name;
+        const remoteName = primaryRemote.name;
 
         // Fetch remote updates
         await git.fetch(remoteName, currentBranch).catch(async () => {
@@ -883,11 +910,9 @@ export class WorkspaceManager {
           if (isAncestor) {
             await git.raw(['merge', '--ff-only', targetCommit]);
           } else {
-            // Upstream was rewritten (rebase, squash, or amend)
-            // Preserve the pre-refresh commit under refs/agentctl/pre-refresh
-            await git.raw(['update-ref', 'refs/agentctl/pre-refresh', beforeCommit]);
-            // Lossless merge reset
-            await git.raw(['reset', '--merge', targetCommit]);
+            throw new Error(
+              'Local and remote branches have diverged. Resolve the branch in a terminal before pulling.',
+            );
           }
         } else {
           // Fallback to ff-only pull
@@ -947,6 +972,276 @@ export class WorkspaceManager {
         };
       } catch {
         return { hasConflicts: false, conflictingFiles: [] };
+      }
+    });
+  }
+
+  async detectPullRequest(
+    worktreePath: string,
+    branchName?: string,
+  ): Promise<{
+    number: number;
+    title: string;
+    url: string;
+    baseBranch: string;
+    headBranch: string;
+    state: 'open' | 'closed' | 'merged';
+  } | null> {
+    try {
+      const git = simpleGit(worktreePath);
+      const branch = branchName ?? (await git.branchLocal()).current;
+      if (!branch) return null;
+
+      const { stdout } = await execFileAsync(
+        'gh',
+        ['pr', 'view', branch, '--json', 'number,title,url,state,headRefName,baseRefName'],
+        { cwd: worktreePath, timeout: 5000 },
+      );
+      const data = JSON.parse(stdout) as {
+        number?: number;
+        title?: string;
+        url?: string;
+        state?: string;
+        headRefName?: string;
+        baseRefName?: string;
+      };
+      if (!data.number || !data.url) return null;
+
+      const stateMap: Record<string, 'open' | 'closed' | 'merged'> = {
+        OPEN: 'open',
+        CLOSED: 'closed',
+        MERGED: 'merged',
+      };
+
+      return {
+        number: data.number,
+        title: data.title ?? '',
+        url: data.url,
+        baseBranch: data.baseRefName ?? 'main',
+        headBranch: data.headRefName ?? branch,
+        state: stateMap[data.state ?? 'OPEN'] ?? 'open',
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async getTrackingStatus(
+    repoPath: string,
+    worktreePath: string,
+  ): Promise<{
+    isRepo: boolean;
+    branch: string | null;
+    hasPrimaryRemote: boolean;
+    remoteName: string | null;
+    remoteProvider: 'github' | 'other' | null;
+    upstreamBranch: string | null;
+    hasUpstream: boolean;
+    aheadCount: number;
+    behindCount: number;
+    pr: {
+      number: number;
+      title: string;
+      url: string;
+      baseBranch: string;
+      headBranch: string;
+      state: 'open' | 'closed' | 'merged';
+    } | null;
+    error?: string;
+  }> {
+    return await this.gitMutex.run(repoPath, async () => {
+      try {
+        const git = simpleGit(worktreePath);
+        const isRepo = await git.checkIsRepo();
+        if (!isRepo) {
+          return {
+            isRepo: false,
+            branch: null,
+            hasPrimaryRemote: false,
+            remoteName: null,
+            remoteProvider: null,
+            upstreamBranch: null,
+            hasUpstream: false,
+            aheadCount: 0,
+            behindCount: 0,
+            pr: null,
+          };
+        }
+
+        const branchSummary = await git.branchLocal();
+        const currentBranch = branchSummary.current || null;
+        const remotes = await git.getRemotes(true);
+        const primaryRemote = remotes.find((remote) => remote.name === 'origin') ?? remotes[0];
+        const remoteUrl = primaryRemote?.refs.push || primaryRemote?.refs.fetch || '';
+        const hasPrimaryRemote = primaryRemote !== undefined;
+        const remoteProvider = hasPrimaryRemote
+          ? remoteUrl.includes('github.com')
+            ? ('github' as const)
+            : ('other' as const)
+          : null;
+
+        let upstreamBranch: string | null = null;
+        let hasUpstream = false;
+        let aheadCount = 0;
+        let behindCount = 0;
+
+        if (currentBranch) {
+          try {
+            const upstream = (await git.raw(['rev-parse', '--abbrev-ref', '@{upstream}'])).trim();
+            if (upstream && !upstream.includes('@{upstream}')) {
+              upstreamBranch = upstream;
+              hasUpstream = true;
+
+              const counts = (
+                await git.raw(['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'])
+              ).trim();
+              const [aheadStr, behindStr] = counts.split(/\s+/);
+              aheadCount = parseInt(aheadStr, 10) || 0;
+              behindCount = parseInt(behindStr, 10) || 0;
+            }
+          } catch {
+            // No upstream branch configured
+          }
+        }
+
+        // Detect active PR
+        const pr = currentBranch ? await this.detectPullRequest(worktreePath, currentBranch) : null;
+
+        return {
+          isRepo: true,
+          branch: currentBranch,
+          hasPrimaryRemote,
+          remoteName: primaryRemote?.name ?? null,
+          remoteProvider,
+          upstreamBranch,
+          hasUpstream,
+          aheadCount,
+          behindCount,
+          pr,
+        };
+      } catch (err: unknown) {
+        return {
+          isRepo: false,
+          branch: null,
+          hasPrimaryRemote: false,
+          remoteName: null,
+          remoteProvider: null,
+          upstreamBranch: null,
+          hasUpstream: false,
+          aheadCount: 0,
+          behindCount: 0,
+          pr: null,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    });
+  }
+
+  async createPullRequest(
+    repoPath: string,
+    worktreePath: string,
+    params: {
+      title: string;
+      body?: string;
+      baseBranch?: string;
+      headBranch?: string;
+    },
+  ): Promise<
+    | {
+        status: 'created' | 'already_exists';
+        pr: {
+          number: number;
+          title: string;
+          url: string;
+          baseBranch: string;
+          headBranch: string;
+          state: 'open' | 'closed' | 'merged';
+        };
+      }
+    | {
+        status: 'needs_browser';
+        compareUrl: string;
+      }
+  > {
+    return await this.gitMutex.run(repoPath, async () => {
+      const git = simpleGit(worktreePath);
+      const branchSummary = await git.branchLocal();
+      const head = params.headBranch ?? branchSummary.current;
+      const base = params.baseBranch ?? (await this.getCurrentBranch(repoPath)) ?? 'main';
+
+      if (!head || head === 'HEAD') {
+        throw new Error('Cannot create a pull request from a detached HEAD');
+      }
+      if (!base.trim()) {
+        throw new Error('A base branch is required');
+      }
+      if (head === base) {
+        throw new Error('The head and base branches must be different');
+      }
+
+      const worktreeStatus = await git.status();
+      if (!worktreeStatus.isClean()) {
+        throw new Error(
+          'Commit or discard all working tree changes before creating a pull request',
+        );
+      }
+
+      const remotes = await git.getRemotes(true);
+      const primaryRemote = remotes.find((remote) => remote.name === 'origin') ?? remotes[0];
+      if (!primaryRemote) {
+        throw new Error('No Git remote is configured for this repository');
+      }
+      const remoteUrl = primaryRemote.refs.push || primaryRemote.refs.fetch || '';
+      const repoWebUrl = parseGitHubRemoteUrl(remoteUrl);
+      if (!repoWebUrl) {
+        throw new Error('Pull request creation currently supports GitHub remotes only');
+      }
+
+      await git.push(['-u', primaryRemote.name, head]);
+
+      const existingPr = await this.detectPullRequest(worktreePath, head);
+      if (existingPr?.state === 'open') {
+        return { status: 'already_exists', pr: existingPr };
+      }
+
+      try {
+        const args = ['pr', 'create', '--title', params.title, '--base', base, '--head', head];
+        if (params.body) {
+          args.push('--body', params.body);
+        }
+        const { stdout } = await execFileAsync('gh', args, {
+          cwd: worktreePath,
+          timeout: 15000,
+        });
+
+        const prUrl = stdout.trim().split('\n').pop()?.trim() ?? '';
+        const prNumberMatch = /\/pull\/(\d+)/.exec(prUrl);
+        if (!prNumberMatch) {
+          throw new Error('GitHub CLI did not return a pull request URL');
+        }
+        const prNumber = parseInt(prNumberMatch[1], 10);
+
+        return {
+          status: 'created',
+          pr: {
+            number: prNumber,
+            title: params.title,
+            url: prUrl,
+            baseBranch: base,
+            headBranch: head,
+            state: 'open',
+          },
+        };
+      } catch {
+        const query = new URLSearchParams({
+          expand: '1',
+          title: params.title,
+          ...(params.body ? { body: params.body } : {}),
+        });
+        return {
+          status: 'needs_browser',
+          compareUrl: `${repoWebUrl}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}?${query.toString()}`,
+        };
       }
     });
   }

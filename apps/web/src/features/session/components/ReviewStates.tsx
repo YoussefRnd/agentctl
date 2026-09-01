@@ -30,6 +30,13 @@ export function ReviewLoadingState() {
 }
 
 export function ReviewClosedState({ sessionStatus }: { sessionStatus?: string }) {
+  const outcome =
+    sessionStatus === 'merged'
+      ? 'All changes were successfully applied to the project.'
+      : sessionStatus === 'discarded'
+        ? 'All workspace changes were permanently discarded.'
+        : 'This session is archived and its workspace is read-only.';
+
   return (
     <div className="bg-surface-secondary/5 flex h-full flex-col items-center justify-center p-6 text-center">
       <div className="bg-surface-secondary/20 border-border/10 ring-surface-secondary/5 mb-4 flex items-center justify-center rounded-xl border p-4 shadow-2xl ring-1">
@@ -43,11 +50,7 @@ export function ReviewClosedState({ sessionStatus }: { sessionStatus?: string })
         Session {sessionStatus}
       </h3>
       <p className="text-text-muted/40 max-w-[260px] text-[10px] leading-relaxed font-bold tracking-widest uppercase">
-        This workspace has been finalized. All changes were{' '}
-        {sessionStatus === 'merged'
-          ? 'successfully applied to the project'
-          : 'permanently discarded'}
-        .
+        {outcome}
       </p>
     </div>
   );

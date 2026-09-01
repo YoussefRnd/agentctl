@@ -82,6 +82,54 @@ export const reviewFileSchema = z.object({
 
 export type ReviewFileItem = z.infer<typeof reviewFileSchema>;
 
+export const gitPullRequestSchema = z.object({
+  number: z.number().int().positive(),
+  title: z.string(),
+  url: z.string(),
+  baseBranch: z.string(),
+  headBranch: z.string(),
+  state: z.enum(['open', 'closed', 'merged']),
+});
+export type GitPullRequest = z.infer<typeof gitPullRequestSchema>;
+
+export const gitStatusSchema = z.object({
+  isRepo: z.boolean(),
+  branch: z.string().nullable(),
+  hasPrimaryRemote: z.boolean(),
+  remoteName: z.string().nullable(),
+  remoteProvider: z.enum(['github', 'other']).nullable(),
+  upstreamBranch: z.string().nullable(),
+  hasUpstream: z.boolean(),
+  aheadCount: z.number().int().nonnegative(),
+  behindCount: z.number().int().nonnegative(),
+  pr: gitPullRequestSchema.nullable(),
+  error: z.string().optional(),
+});
+export type GitStatus = z.infer<typeof gitStatusSchema>;
+
+export const createPullRequestBodySchema = z.object({
+  title: z.string().trim().min(1),
+  body: z.string(),
+  baseBranch: z.string().trim().min(1),
+});
+export type CreatePullRequestBody = z.infer<typeof createPullRequestBodySchema>;
+
+export const createPullRequestResultSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('created'),
+    pr: gitPullRequestSchema,
+  }),
+  z.object({
+    status: z.literal('already_exists'),
+    pr: gitPullRequestSchema,
+  }),
+  z.object({
+    status: z.literal('needs_browser'),
+    compareUrl: z.url(),
+  }),
+]);
+export type CreatePullRequestResult = z.infer<typeof createPullRequestResultSchema>;
+
 export const searchEventTypeSchema = z.enum(['user', 'agent', 'tool', 'thought']);
 export type SearchEventType = z.infer<typeof searchEventTypeSchema>;
 
@@ -432,6 +480,7 @@ export const apiContract = {
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
+      400: z.object({ message: z.string() }),
     },
     summary: 'Merge and close session',
   },
@@ -444,6 +493,7 @@ export const apiContract = {
     body: z.any(),
     responses: {
       200: z.object({ success: z.boolean() }),
+      400: z.object({ message: z.string() }),
     },
     summary: 'Discard session changes and close',
   },
@@ -677,10 +727,11 @@ export const apiContract = {
       id: z.uuid(),
     }),
     body: z.object({
-      message: z.string(),
+      message: z.string().trim().min(1),
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
+      400: z.object({ message: z.string() }),
     },
     summary: 'Commit staged changes locally',
   },
@@ -693,6 +744,7 @@ export const apiContract = {
     body: z.any(),
     responses: {
       200: z.object({ success: z.boolean(), output: z.string() }),
+      400: z.object({ message: z.string() }),
     },
     summary: 'Push local changes to remote repository',
   },
@@ -705,8 +757,33 @@ export const apiContract = {
     body: z.any(),
     responses: {
       200: z.object({ success: z.boolean(), output: z.string() }),
+      400: z.object({ message: z.string() }),
     },
     summary: 'Pull changes from remote repository',
+  },
+  getGitStatus: {
+    method: 'GET',
+    path: '/api/sessions/:id/git/status',
+    pathParams: z.object({
+      id: z.uuid(),
+    }),
+    responses: {
+      200: gitStatusSchema,
+    },
+    summary: 'Get Git tracking status and active PR for session',
+  },
+  createPullRequest: {
+    method: 'POST',
+    path: '/api/sessions/:id/git/pull-request',
+    pathParams: z.object({
+      id: z.uuid(),
+    }),
+    body: createPullRequestBodySchema,
+    responses: {
+      200: createPullRequestResultSchema,
+      400: z.object({ message: z.string() }),
+    },
+    summary: 'Push the current branch and create or locate its pull request',
   },
   rewindSession: {
     method: 'POST',

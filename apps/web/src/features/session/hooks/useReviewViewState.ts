@@ -3,7 +3,8 @@ import type { FileState } from '../components/ReviewHeader';
 
 export interface ReviewViewState {
   isDiscardModalOpen: boolean;
-  isMergeDialogOpen: boolean;
+  isApplyDialogOpen: boolean;
+  isPullRequestDialogOpen: boolean;
   commitMessage: string;
   isSummaryCollapsed: boolean;
   collapsedFiles: Record<string, boolean>;
@@ -14,13 +15,13 @@ export interface ReviewViewState {
 
 export type ReviewViewAction =
   | { type: 'SET_DISCARD_MODAL_OPEN'; payload: boolean }
-  | { type: 'SET_MERGE_DIALOG_OPEN'; payload: boolean }
+  | { type: 'SET_APPLY_DIALOG_OPEN'; payload: boolean }
+  | { type: 'SET_PR_DIALOG_OPEN'; payload: boolean }
   | { type: 'SET_COMMIT_MESSAGE'; payload: string }
   | { type: 'TOGGLE_SUMMARY_COLLAPSE' }
   | { type: 'TOGGLE_FILE_COLLAPSE'; filePath: string }
   | { type: 'TOGGLE_SECTION'; section: FileState }
   | { type: 'EXPAND_FILE'; filePath: string }
-  | { type: 'RESET_COMMIT_MESSAGE'; payload: string }
   | { type: 'TOGGLE_VIEW_MODE' }
   | { type: 'SET_SEARCH_QUERY'; payload: string }
   | { type: 'COLLAPSE_ALL' }
@@ -30,8 +31,10 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
   switch (action.type) {
     case 'SET_DISCARD_MODAL_OPEN':
       return { ...state, isDiscardModalOpen: action.payload };
-    case 'SET_MERGE_DIALOG_OPEN':
-      return { ...state, isMergeDialogOpen: action.payload };
+    case 'SET_APPLY_DIALOG_OPEN':
+      return { ...state, isApplyDialogOpen: action.payload };
+    case 'SET_PR_DIALOG_OPEN':
+      return { ...state, isPullRequestDialogOpen: action.payload };
     case 'SET_COMMIT_MESSAGE':
       return { ...state, commitMessage: action.payload };
     case 'TOGGLE_SUMMARY_COLLAPSE':
@@ -64,12 +67,6 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
           [action.filePath]: false,
         },
       };
-    case 'RESET_COMMIT_MESSAGE':
-      return {
-        ...state,
-        commitMessage: action.payload,
-        isMergeDialogOpen: true,
-      };
     case 'TOGGLE_VIEW_MODE':
       return {
         ...state,
@@ -97,7 +94,8 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
 export function useReviewViewState() {
   const [state, dispatch] = useReducer(reviewViewReducer, {
     isDiscardModalOpen: false,
-    isMergeDialogOpen: false,
+    isApplyDialogOpen: false,
+    isPullRequestDialogOpen: false,
     commitMessage: '',
     isSummaryCollapsed: false,
     collapsedFiles: {},

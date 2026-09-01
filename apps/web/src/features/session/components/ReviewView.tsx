@@ -5,11 +5,13 @@ import { useReviewViewState } from '../hooks/useReviewViewState';
 import { useReviewDiffs } from '../hooks/useReviewDiffs';
 import { ReviewClosedState, ReviewLoadingState, ReviewEmptyState } from './ReviewStates';
 import { ReviewFileList } from './ReviewFileList';
-import { ReviewCommitInput } from './ReviewCommitInput';
+import { ReviewGitActions } from './ReviewGitActions';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { extractLatestTurnTouchedFiles, resolveTurnReviewFiles } from '../lib/turnChanges';
 import { useUIStore, type ReviewScope } from '@/shared';
 import { useOpenWorkspaceFile } from '../hooks/useOpenWorkspaceFile';
+import { useGitStatus } from '../hooks/useGitStatus';
+import { toast } from 'sonner';
 
 export function ReviewView() {
   const openWorkspaceFile = useOpenWorkspaceFile();
@@ -23,14 +25,16 @@ export function ReviewView() {
     stageAll,
     unstageAll,
     commitChanges: onCommitChanges,
-    isCommitting,
+    pushChanges,
+    pullChanges,
     isStagingAll,
     isUnstagingAll,
 
     sessionData,
+    branches,
+    switchBranch,
     mergeSession: onMerge,
     discardSession: onDiscard,
-    isMergingSession: isMerging,
     isDiscardingSession: isDiscarding,
   } = useSession();
 
@@ -108,11 +112,6 @@ export function ReviewView() {
 
   const isClosed = sessionStatus === 'merged' || sessionStatus === 'discarded';
 
-  const handleMergeSubmit = () => {
-    void onMerge(state.commitMessage);
-    dispatch({ type: 'SET_MERGE_DIALOG_OPEN', payload: false });
-  };
-
   const allCollapsed = useMemo(() => {
     if (parsedFiles.length === 0) return true;
     return parsedFiles.every((file) => (state.collapsedFiles[file.path] ?? true) === true);
@@ -126,14 +125,96 @@ export function ReviewView() {
     }
   }, [allCollapsed, expandAll, collapseAll, parsedFiles]);
 
-  if (isClosed) return <ReviewClosedState sessionStatus={sessionStatus} />;
-  if (isLoading) return <ReviewLoadingState />;
+  const stagedCount = files.filter((file) => file.state === 'staged').length;
+  const uncommittedCount = files.filter((file) => file.state !== 'committed').length;
+  const unstagedCount = uncommittedCount - stagedCount;
+  const changeStats = useMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    for (const file of files) {
+      if (file.state === 'committed') continue;
+      for (const line of file.diff?.split('\n') ?? []) {
+        if (line.startsWith('+') && !line.startsWith('+++')) additions += 1;
+        if (line.startsWith('-') && !line.startsWith('---')) deletions += 1;
+      }
+    }
+    return { additions, deletions };
+  }, [files]);
+  const { gitStatus, isLoading: isLoadingGitStatus } = useGitStatus(sessionData?.session.id ?? '');
+  const baseBranch = sessionData?.session.baseBranch ?? 'main';
+  const canPush =
+    gitStatus.isRepo &&
+    gitStatus.hasPrimaryRemote &&
+    gitStatus.branch !== null &&
+    gitStatus.branch !== 'HEAD';
 
-  const stageFiles = grouped.staged;
-  const stagedCount = stageFiles.length;
+  const pullRequestBlockedReason = useMemo(() => {
+    if (uncommittedCount > 0) return 'Commit or discard all changes before creating a pull request';
+    if (!gitStatus.isRepo) return gitStatus.error ?? 'This workspace is not a Git repository';
+    if (!gitStatus.branch || gitStatus.branch === 'HEAD')
+      return 'Check out a branch before creating a pull request';
+    if (!gitStatus.hasPrimaryRemote) return 'Configure a Git remote before creating a pull request';
+    if (gitStatus.remoteProvider !== 'github')
+      return 'Pull request creation currently supports GitHub remotes only';
+    if (gitStatus.branch === baseBranch)
+      return 'Create a feature branch before creating a pull request';
+    return undefined;
+  }, [baseBranch, gitStatus, uncommittedCount]);
+
+  const gitActions = (
+    <ReviewGitActions
+      branch={gitStatus.branch}
+      branches={branches}
+      remoteName={gitStatus.remoteName}
+      hasBranchChanges={files.length > 0}
+      stagedCount={stagedCount}
+      unstagedCount={unstagedCount}
+      additions={changeStats.additions}
+      deletions={changeStats.deletions}
+      aheadCount={gitStatus.aheadCount}
+      behindCount={gitStatus.behindCount}
+      hasUpstream={gitStatus.hasUpstream}
+      isBaseBranch={gitStatus.branch === baseBranch}
+      canPush={canPush}
+      isLoadingGitStatus={isLoadingGitStatus}
+      commitMessage={state.commitMessage}
+      onCommitMessageChange={(value) => {
+        dispatch({ type: 'SET_COMMIT_MESSAGE', payload: value });
+      }}
+      onSwitchBranch={switchBranch}
+      onCommit={async () => {
+        await onCommitChanges(state.commitMessage.trim());
+        dispatch({ type: 'SET_COMMIT_MESSAGE', payload: '' });
+      }}
+      onStageAll={onStageAll}
+      onPush={async () => {
+        await pushChanges();
+      }}
+      onPull={async () => {
+        await pullChanges();
+      }}
+      onOpenPullRequestDialog={() => {
+        dispatch({ type: 'SET_PR_DIALOG_OPEN', payload: true });
+      }}
+      existingPullRequest={
+        gitStatus.pr?.state === 'open'
+          ? { number: gitStatus.pr.number, url: gitStatus.pr.url }
+          : undefined
+      }
+      pullRequestBlockedReason={pullRequestBlockedReason}
+      onApplySession={() => {
+        dispatch({ type: 'SET_APPLY_DIALOG_OPEN', payload: true });
+      }}
+      onDiscardChanges={() => {
+        dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: true });
+      }}
+    />
+  );
+
+  if (isClosed) return <ReviewClosedState sessionStatus={sessionStatus} />;
 
   return (
-    <div className="bg-surface-secondary/5 flex h-full min-h-0 flex-col">
+    <div className="bg-surface/50 relative flex h-full flex-col overflow-hidden">
       <ReviewHeader
         files={activeFiles}
         scope={reviewScope}
@@ -149,23 +230,29 @@ export function ReviewView() {
         }}
         allCollapsed={allCollapsed}
         onToggleAll={onToggleAll}
+        gitActions={gitActions}
       />
 
-      {activeFiles.length === 0 ? (
+      {/* Main Review Content Area */}
+      {isLoading ? (
+        <ReviewLoadingState />
+      ) : sessionStatus === 'archived' ? (
+        <ReviewClosedState sessionStatus={sessionStatus} />
+      ) : activeFiles.length === 0 ? (
         <ReviewEmptyState searchQuery={state.searchQuery} />
       ) : (
         <ReviewFileList
           groupedFiles={grouped}
           collapsedSections={state.collapsedSections}
           collapsedFiles={state.collapsedFiles}
-          viewMode={state.viewMode}
-          fileStats={fileStats}
           onToggleSection={(s) => {
             toggleSection(s);
           }}
           onToggleFile={(p) => {
             toggleFileCollapse(p);
           }}
+          viewMode={state.viewMode}
+          fileStats={fileStats}
           onStage={(p) => {
             void onStage(p);
           }}
@@ -191,45 +278,56 @@ export function ReviewView() {
         />
       )}
 
-      {activeFiles.length > 0 && (
-        <ReviewCommitInput
-          stagedCount={stagedCount}
-          onCommit={(msg) => {
-            void onCommitChanges(msg);
-          }}
-          onMergeSession={() => {
-            dispatch({ type: 'SET_MERGE_DIALOG_OPEN', payload: true });
-          }}
-          onDiscardChanges={() => {
-            dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: true });
-          }}
-          status={{
-            isCommitting,
-            isMerging,
-            isDiscarding,
-            hasChanges: activeFiles.length > 0,
-          }}
-        />
-      )}
-
       <ReviewDialogs
+        sessionId={sessionData?.session.id ?? ''}
         isDiscardModalOpen={state.isDiscardModalOpen}
-        isMergeDialogOpen={state.isMergeDialogOpen}
+        isApplyDialogOpen={state.isApplyDialogOpen}
+        isPullRequestDialogOpen={state.isPullRequestDialogOpen}
         commitMessage={state.commitMessage}
+        isDiscarding={isDiscarding}
+        defaultTitle={sessionData?.session.title ?? ''}
+        defaultBaseBranch={baseBranch}
+        currentBranch={sessionData?.session.branch ?? ''}
         onCloseDiscardModal={() => {
           dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: false });
         }}
-        onConfirmDiscard={() => {
-          void onDiscard();
-          dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: false });
+        onConfirmDiscard={async () => {
+          try {
+            await onDiscard();
+            dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: false });
+            toast.success('Session changes discarded');
+          } catch (err) {
+            toast.error(
+              `Failed to discard changes: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }}
-        onSetMergeDialogOpen={(open) => {
-          dispatch({ type: 'SET_MERGE_DIALOG_OPEN', payload: open });
+        onSetApplyDialogOpen={(open) => {
+          dispatch({ type: 'SET_APPLY_DIALOG_OPEN', payload: open });
+        }}
+        onSetPullRequestDialogOpen={(open) => {
+          dispatch({ type: 'SET_PR_DIALOG_OPEN', payload: open });
         }}
         onCommitMessageChange={(val) => {
           dispatch({ type: 'SET_COMMIT_MESSAGE', payload: val });
         }}
-        onConfirmMerge={handleMergeSubmit}
+        onConfirmApply={async () => {
+          await onMerge(state.commitMessage.trim());
+          toast.success('Changes applied and session finished');
+        }}
+        onPullRequestSuccess={(url, created) => {
+          toast.success(
+            created ? 'Pull request created' : 'Branch pushed. Finish the PR on GitHub.',
+            {
+              action: {
+                label: created ? 'Open PR' : 'Continue on GitHub',
+                onClick: () => {
+                  window.open(url, '_blank');
+                },
+              },
+            },
+          );
+        }}
       />
     </div>
   );

@@ -1,5 +1,9 @@
 import { test, expect, describe, beforeAll, afterAll } from 'vitest';
-import { WorkspaceManager, parsePorcelainWorktrees } from './worktree-manager.js';
+import {
+  WorkspaceManager,
+  parseGitHubRemoteUrl,
+  parsePorcelainWorktrees,
+} from './worktree-manager.js';
 import { GitMutex } from './mutex.js';
 import { simpleGit } from 'simple-git';
 import fs from 'node:fs/promises';
@@ -34,6 +38,17 @@ describe('parsePorcelainWorktrees (Unit Tests)', () => {
       { path: '/path/to/worktree-1', branch: 'feature/awesome' },
       { path: '/path/to/detached-wt', branch: 'HEAD' },
     ]);
+  });
+});
+
+describe('parseGitHubRemoteUrl', () => {
+  test.each([
+    ['git@github.com:agentctl/agentctl.git', 'https://github.com/agentctl/agentctl'],
+    ['https://github.com/agentctl/agentctl.git', 'https://github.com/agentctl/agentctl'],
+    ['https://github.com/agentctl/agentctl', 'https://github.com/agentctl/agentctl'],
+    ['https://gitlab.com/agentctl/agentctl.git', null],
+  ])('normalizes %s', (remote, expected) => {
+    expect(parseGitHubRemoteUrl(remote)).toBe(expected);
   });
 });
 
@@ -196,5 +211,81 @@ describe('WorkspaceManager Integration Tests', () => {
 
     // Clean up worktree
     await manager.removeWorktreeOnly(repoPath, result.path);
+  });
+
+  test('requires committed changes and a configured remote before creating a pull request', async () => {
+    const result = await manager.create(repoPath, 'test-pr-session', 'pr-preflight', 'master');
+    await fs.writeFile(path.join(result.path, 'uncommitted.txt'), 'dirty work');
+
+    await expect(
+      manager.createPullRequest(repoPath, result.path, {
+        title: 'Test pull request',
+        body: '',
+        baseBranch: 'master',
+      }),
+    ).rejects.toThrow('Commit or discard all working tree changes');
+
+    await fs.rm(path.join(result.path, 'uncommitted.txt'));
+    await expect(
+      manager.createPullRequest(repoPath, result.path, {
+        title: 'Test pull request',
+        body: '',
+        baseBranch: 'master',
+      }),
+    ).rejects.toThrow('No Git remote is configured');
+
+    await manager.removeWorktreeOnly(repoPath, result.path);
+  });
+
+  test('revertFile correctly reverts modified, untracked, and staged newly added files without pathspec errors', async () => {
+    const result = await manager.create(repoPath, 'test-revert-session', 'revert-test', 'master');
+    const wtPath = result.path;
+    const wtGit = simpleGit(wtPath);
+
+    // 1. Existing modified file
+    const existingFilePath = path.join(wtPath, 'hello.txt');
+    const originalContent = await fs.readFile(existingFilePath, 'utf8');
+    await fs.writeFile(existingFilePath, 'modified content');
+    expect(await fs.readFile(existingFilePath, 'utf8')).toBe('modified content');
+
+    await manager.revertFile(repoPath, wtPath, 'hello.txt');
+    expect(await fs.readFile(existingFilePath, 'utf8')).toBe(originalContent);
+
+    // 2. Untracked newly created file
+    const untrackedFile = path.join(wtPath, 'untracked.txt');
+    await fs.writeFile(untrackedFile, 'new untracked file');
+    expect(
+      await fs
+        .stat(untrackedFile)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+
+    await manager.revertFile(repoPath, wtPath, 'untracked.txt');
+    expect(
+      await fs
+        .stat(untrackedFile)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(false);
+
+    // 3. Staged newly created file (e.g. Dockerfile)
+    const stagedNewFile = path.join(wtPath, 'Dockerfile');
+    await fs.writeFile(stagedNewFile, 'FROM node:20');
+    await wtGit.add('Dockerfile');
+    const statusBefore = await wtGit.status();
+    expect(statusBefore.staged).toContain('Dockerfile');
+
+    await manager.revertFile(repoPath, wtPath, 'Dockerfile');
+    expect(
+      await fs
+        .stat(stagedNewFile)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(false);
+    const statusAfter = await wtGit.status();
+    expect(statusAfter.staged).not.toContain('Dockerfile');
+
+    await manager.removeWorktreeOnly(repoPath, wtPath);
   });
 });

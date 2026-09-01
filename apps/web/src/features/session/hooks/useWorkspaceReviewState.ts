@@ -169,6 +169,7 @@ export function useWorkspaceReviewState(sessionId: string) {
     mutationFn: (message: string) => commitWorkspaceChanges(sessionId, message),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.gitStatus(sessionId) });
     },
   });
 
@@ -183,6 +184,7 @@ export function useWorkspaceReviewState(sessionId: string) {
     mutationFn: () => pushWorkspaceChanges(sessionId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.gitStatus(sessionId) });
     },
   });
 
@@ -194,6 +196,7 @@ export function useWorkspaceReviewState(sessionId: string) {
     mutationFn: () => pullWorkspaceChanges(sessionId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.gitStatus(sessionId) });
     },
   });
 
