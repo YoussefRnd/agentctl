@@ -16,7 +16,9 @@ describe('SessionEventStore', () => {
         }),
         select: () => ({
           from: () => ({
-            where: () => Promise.resolve([]),
+            where: () => ({
+              orderBy: () => Promise.resolve([]),
+            }),
           }),
         }),
       } as unknown as DbClient;
@@ -37,7 +39,9 @@ describe('SessionEventStore', () => {
         }),
         select: () => ({
           from: () => ({
-            where: () => Promise.resolve([]),
+            where: () => ({
+              orderBy: () => Promise.resolve([]),
+            }),
           }),
         }),
         update: () => ({
@@ -226,6 +230,57 @@ describe('SessionEventStore', () => {
       await store.updateSilently(7, { content: 'abcd' }, { durationMs: 200, completionTokens: 3 });
 
       expect(eventBus.publish).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('backupAndDeleteEventsAfter and restoreEvents', () => {
+    test('backs up deleted events and restores them into db', async () => {
+      const mockRows = [
+        {
+          id: 10,
+          sessionId: 'session-1',
+          type: 'user_message',
+          data: JSON.stringify({ message: 'Hello' }),
+          parentEventId: null,
+          metadata: JSON.stringify({ completionTokens: 5 }),
+          createdAt: new Date().toISOString(),
+        },
+      ];
+
+      let insertedRows: unknown[] = [];
+      const mockDb = {
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              orderBy: () => Promise.resolve(mockRows),
+            }),
+          }),
+        }),
+        delete: () => ({
+          where: () => Promise.resolve(),
+        }),
+        insert: () => ({
+          values: (vals: unknown[]) => {
+            insertedRows = vals;
+            return Promise.resolve();
+          },
+        }),
+        update: () => ({
+          set: () => ({
+            where: () => Promise.resolve(),
+          }),
+        }),
+      } as unknown as DbClient;
+
+      const eventBus = { publish: vi.fn() } as unknown as IEventBus;
+      const store = new SessionEventStore(mockDb, eventBus);
+
+      const backedUp = await store.backupAndDeleteEventsAfter('session-1', 10);
+      expect(backedUp).toHaveLength(1);
+      expect(backedUp[0].id).toBe(10);
+
+      await store.restoreEvents('session-1', backedUp);
+      expect(insertedRows).toHaveLength(1);
     });
   });
 });

@@ -892,6 +892,17 @@ export default fp(async (fastify) => {
           success: true,
           forkSessionId: result.forkSessionId ?? undefined,
           undoSnapshotHash: result.undoSnapshotHash ?? undefined,
+          restoredFiles: result.restoredFiles ?? undefined,
+        },
+      };
+    },
+    undoRewind: async ({ params }) => {
+      const { id } = params;
+      await fastify.sessionService.undoRewind(id);
+      return {
+        status: 200 as const,
+        body: {
+          success: true,
         },
       };
     },

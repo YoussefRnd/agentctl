@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { RotateCcw, X } from 'lucide-react';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import { useProviders } from '../../../hooks/useProviders';
@@ -11,7 +12,7 @@ import { SubagentChatView } from './SubagentChatView';
 import { extractSubagentGroups } from './cards/subagentBlockUtils';
 import { ApprovalCard } from './cards/ApprovalCard';
 import { RewindConfirmDialog } from './RewindConfirmDialog';
-import { rewindSession, restoreSession, restoreSnapshot } from '@agentctl/api-client';
+import { rewindSession, restoreSession, undoRewind } from '@agentctl/api-client';
 import { useUIStore } from '@/shared';
 import type { ACPEventRow } from '@agentctl/shared';
 import type { RewindMode } from './RewindMenu';
@@ -28,9 +29,12 @@ export function MainFeed() {
   const locationState = location.state as {
     initialPrompt?: string;
     targetEventId?: number;
+    agent?: string;
   } | null;
-  const locationInitialPrompt = locationState?.initialPrompt;
+
+  const initialPrompt = locationState?.initialPrompt;
   const targetEventId = locationState?.targetEventId;
+
   const handleTargetEventHandled = useCallback(() => {
     if (locationState?.targetEventId == null) return;
 
@@ -51,12 +55,19 @@ export function MainFeed() {
   const [confirmRewind, setConfirmRewind] = useState<{
     eventId: number;
     mode: RewindMode;
-    messageCount: number;
+    messageCount?: number;
   } | null>(null);
 
   const [isRewinding, setIsRewinding] = useState(false);
   const [rewindError, setRewindError] = useState<string | null>(null);
   const isRewindingRef = useRef(false);
+
+  const [rewindUndoState, setRewindUndoState] = useState<{
+    eventId: number;
+    mode: RewindMode;
+    restoredFiles?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+  } | null>(null);
+  const [isUndoing, setIsUndoing] = useState(false);
 
   const [rewindInput, setRewindInput] = useState('');
 
@@ -97,30 +108,13 @@ export function MainFeed() {
       const result = await rewindSession(sessionId, confirmRewind.eventId, confirmRewind.mode);
       if (confirmRewind.mode === 'fork') {
         toast.success('Fork created successfully');
-      } else if (result.undoSnapshotHash) {
-        const undoHash = result.undoSnapshotHash;
-        toast.success('Session rewound', {
-          action: {
-            label: 'Undo',
-            onClick: () => {
-              void (async () => {
-                try {
-                  await restoreSnapshot(sessionId, undoHash);
-                  toast.success('Rewind undone');
-                  void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-                  void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
-                  void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
-                  void queryClient.invalidateQueries({ queryKey: ['projects'] });
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : 'Failed to undo rewind');
-                }
-              })();
-            },
-          },
-          duration: 8000,
-        });
       } else {
         toast.success('Session rewound');
+        setRewindUndoState({
+          eventId: confirmRewind.eventId,
+          mode: confirmRewind.mode,
+          restoredFiles: result.restoredFiles,
+        });
       }
       setConfirmRewind(null);
       if (result.forkSessionId) {
@@ -138,10 +132,29 @@ export function MainFeed() {
     }
   }, [confirmRewind, sessionId, queryClient, navigate]);
 
+  const handleUndoRewind = useCallback(async () => {
+    if (!rewindUndoState || isUndoing) return;
+    setIsUndoing(true);
+    try {
+      await undoRewind(sessionId);
+      toast.success('Rewind undone');
+      setRewindUndoState(null);
+      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to undo rewind');
+    } finally {
+      setIsUndoing(false);
+    }
+  }, [rewindUndoState, isUndoing, sessionId, queryClient]);
+
   const handleEditAndSubmit = useCallback(
     async (eventId: number, newContent: string) => {
       const trimmed = newContent.trim();
       if (!trimmed) return;
+      setRewindUndoState(null);
       try {
         await rewindSession(sessionId, eventId, 'conversation');
         await handleSend(trimmed);
@@ -301,15 +314,51 @@ export function MainFeed() {
           </div>
         )}
 
+        {rewindUndoState && (
+          <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 flex items-center justify-between rounded-xl border px-3.5 py-2 text-[12px] shadow-xs backdrop-blur-md duration-200">
+            <div className="text-text-muted flex min-w-0 items-center gap-2 pr-2">
+              <RotateCcw className="text-text-muted/70 h-3.5 w-3.5 shrink-0" />
+              <span className="text-text-main font-medium">Rewound conversation</span>
+              {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
+                <span className="text-text-muted/70 truncate">
+                  • Reverted {rewindUndoState.restoredFiles.length}{' '}
+                  {rewindUndoState.restoredFiles.length === 1 ? 'file' : 'files'}
+                </span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleUndoRewind();
+                }}
+                disabled={isUndoing}
+                className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
+              >
+                {isUndoing ? 'Undoing...' : 'Undo'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRewindUndoState(null)}
+                className="text-text-muted/50 hover:text-text-main hover:bg-surface-secondary/80 cursor-pointer rounded p-1 transition-colors"
+                title="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         <CommandBar
           onSend={(val, attachmentIds) => {
+            setRewindUndoState(null);
             void handleSend(val, attachmentIds);
           }}
           disabled={!isConnected || isSwitching || isLoadingSession}
           selectedProviderId={sessionData?.session.selectedProvider}
           selectedModelId={sessionData?.session.selectedModel}
           onProviderSelect={handleProviderSelect}
-          initialInput={rewindInput || locationInitialPrompt}
+          initialInput={rewindInput || initialPrompt}
         />
       </div>
     </div>

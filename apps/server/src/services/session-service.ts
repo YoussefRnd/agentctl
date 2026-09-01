@@ -311,6 +311,10 @@ export class SessionService {
     return await this.sessionManager.rewindSession(sessionId, eventId, mode);
   }
 
+  async undoRewind(sessionId: string) {
+    return await this.sessionManager.undoRewind(sessionId);
+  }
+
   async previewSnapshotDiff(sessionId: string, eventId: number) {
     return await this.sessionManager.previewSnapshotDiff(sessionId, eventId);
   }

@@ -21,6 +21,7 @@ import {
 import { SessionStateMachine } from './state-machine.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
 import { buildConversationHistoryTranscript } from './history-transcript.js';
+import type { ACPEventDbRow } from '../db/zod-schemas.js';
 
 export interface IEventBus {
   publish(event: unknown): void;
@@ -59,6 +60,15 @@ export class SessionManager {
   private eventStore: SessionEventStore;
   private stateMachine: SessionStateMachine;
   private sessionWorkspace: SessionWorkspace;
+  private rewindBackups = new Map<
+    string,
+    {
+      undoSnapshotHash?: string;
+      deletedEvents: ACPEventDbRow[];
+      eventId: number;
+      restoredFiles?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+    }
+  >();
 
   constructor(
     private db: DbClient,
@@ -945,6 +955,7 @@ export class SessionManager {
         }
       }
 
+      this.rewindBackups.delete(sessionId);
       await session.prompt(payload.input, payload.attachmentIds, historyContext);
     }
   }
@@ -1005,7 +1016,11 @@ export class SessionManager {
     sessionId: string,
     eventId: number,
     mode: 'conversation' | 'files' | 'fork',
-  ): Promise<{ forkSessionId?: string; undoSnapshotHash?: string }> {
+  ): Promise<{
+    forkSessionId?: string;
+    undoSnapshotHash?: string;
+    restoredFiles?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+  }> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
@@ -1026,6 +1041,8 @@ export class SessionManager {
     }
 
     let undoSnapshotHash: string | undefined;
+    let restoredFiles:
+      Array<{ path: string; status: 'added' | 'modified' | 'deleted' }> | undefined;
     if (mode !== 'fork') {
       const event = await this.eventStore.getEventWithMetadata(sessionId, eventId);
       if (!event) {
@@ -1049,6 +1066,7 @@ export class SessionManager {
 
         const restore = await snapshotService.restoreFiles(projectPath, metadata.snapshotHash);
         undoSnapshotHash = restore.backupHash;
+        restoredFiles = restore.restoredFiles;
       }
     }
 
@@ -1066,15 +1084,57 @@ export class SessionManager {
       return { forkSessionId };
     }
 
-    // conversation mode (default)
-    await this.eventStore.deleteEventsAfter(sessionId, eventId);
+    // conversation or files mode
+    const deletedEvents = await this.eventStore.backupAndDeleteEventsAfter(sessionId, eventId);
+    this.rewindBackups.set(sessionId, {
+      undoSnapshotHash,
+      deletedEvents,
+      eventId,
+      restoredFiles,
+    });
     this.stateMachine.stopSession(sessionId);
 
     void this.restartSession(sessionId).catch((err: unknown) => {
       this.logger.error({ err, sessionId }, 'Failed to restart session after rewind');
     });
 
-    return { undoSnapshotHash };
+    return { undoSnapshotHash, restoredFiles };
+  }
+
+  async undoRewind(sessionId: string): Promise<void> {
+    const backup = this.rewindBackups.get(sessionId);
+    if (!backup) {
+      throw new Error('No rewind state available to undo');
+    }
+
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    if (backup.undoSnapshotHash) {
+      const snapshotService = this.stateMachine.getSnapshotService();
+      const projectPath =
+        sessionRecord.mode === 'worktree' && sessionRecord.worktreePath
+          ? sessionRecord.worktreePath
+          : sessionRecord.project.path;
+
+      await snapshotService.restoreFiles(projectPath, backup.undoSnapshotHash);
+    }
+
+    if (backup.deletedEvents && backup.deletedEvents.length > 0) {
+      await this.eventStore.restoreEvents(sessionId, backup.deletedEvents);
+    }
+
+    this.rewindBackups.delete(sessionId);
+    this.stateMachine.stopSession(sessionId);
+
+    void this.restartSession(sessionId).catch((err: unknown) => {
+      this.logger.error({ err, sessionId }, 'Failed to restart session after undo rewind');
+    });
   }
 
   async previewSnapshotDiff(

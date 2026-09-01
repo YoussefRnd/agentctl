@@ -723,9 +723,31 @@ export const apiContract = {
         success: z.boolean(),
         forkSessionId: z.string().optional(),
         undoSnapshotHash: z.string().optional(),
+        restoredFiles: z
+          .array(
+            z.object({
+              path: z.string(),
+              status: z.enum(['added', 'modified', 'deleted']),
+            }),
+          )
+          .optional(),
       }),
     },
     summary: 'Rewind session to a past event',
+  },
+  undoRewind: {
+    method: 'POST',
+    path: '/api/sessions/:id/undo-rewind',
+    pathParams: z.object({
+      id: z.uuid(),
+    }),
+    body: z.any(),
+    responses: {
+      200: z.object({
+        success: z.boolean(),
+      }),
+    },
+    summary: 'Undo session rewind, restoring both messages and files',
   },
   restoreSnapshot: {
     method: 'POST',

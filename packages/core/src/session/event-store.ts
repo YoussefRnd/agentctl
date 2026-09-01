@@ -233,10 +233,15 @@ export class SessionEventStore {
   }
 
   async deleteEventsAfter(sessionId: string, eventId: number): Promise<void> {
+    await this.backupAndDeleteEventsAfter(sessionId, eventId);
+  }
+
+  async backupAndDeleteEventsAfter(sessionId: string, eventId: number): Promise<ACPEventDbRow[]> {
     const toDelete = await this.db
-      .select({ metadata: acpEvents.metadata })
+      .select()
       .from(acpEvents)
-      .where(and(gte(acpEvents.id, eventId), eq(acpEvents.sessionId, sessionId)));
+      .where(and(gte(acpEvents.id, eventId), eq(acpEvents.sessionId, sessionId)))
+      .orderBy(acpEvents.id);
 
     let deletedTokens = 0;
     for (const e of toDelete) {
@@ -248,6 +253,31 @@ export class SessionEventStore {
       .where(and(gte(acpEvents.id, eventId), eq(acpEvents.sessionId, sessionId)));
 
     void this.decrementTotalTokens(sessionId, deletedTokens).catch(() => undefined);
+
+    return toDelete;
+  }
+
+  async restoreEvents(sessionId: string, rows: ACPEventDbRow[]): Promise<void> {
+    if (rows.length === 0) return;
+
+    await this.db.insert(acpEvents).values(
+      rows.map((row) => ({
+        id: row.id,
+        sessionId: row.sessionId,
+        type: row.type as (typeof acpEvents.$inferInsert)['type'],
+        data: row.data,
+        parentEventId: row.parentEventId,
+        metadata: row.metadata,
+        createdAt: new Date(row.createdAt),
+      })),
+    );
+
+    let restoredTokens = 0;
+    for (const row of rows) {
+      restoredTokens += extractTokens(row.metadata);
+    }
+
+    void this.incrementTotalTokens(sessionId, restoredTokens).catch(() => undefined);
   }
 
   async getEventWithMetadata(

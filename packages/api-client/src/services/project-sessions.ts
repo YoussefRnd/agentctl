@@ -365,13 +365,29 @@ export async function rewindSession(
   sessionId: string,
   eventId: number,
   mode: 'conversation' | 'files' | 'fork',
-): Promise<{ success: boolean; forkSessionId?: string; undoSnapshotHash?: string }> {
+): Promise<{
+  success: boolean;
+  forkSessionId?: string;
+  undoSnapshotHash?: string;
+  restoredFiles?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+}> {
   const res = await api.rewindSession({
     params: { id: sessionId },
     body: { eventId, mode },
   });
   if (res.status !== 200) {
     throw new ApiError(`Failed to rewind session: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
+export async function undoRewind(sessionId: string): Promise<{ success: boolean }> {
+  const res = await api.undoRewind({
+    params: { id: sessionId },
+    body: {},
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to undo rewind: ${String(res.status)}`, res.status);
   }
   return res.body;
 }
