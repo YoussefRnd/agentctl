@@ -315,6 +315,10 @@ export class SessionService {
     return await this.sessionManager.previewSnapshotDiff(sessionId, eventId);
   }
 
+  async restoreSnapshot(sessionId: string, snapshotHash: string) {
+    return await this.sessionManager.restoreSnapshot(sessionId, snapshotHash);
+  }
+
   async mergeSessionBranch(sessionId: string, otherBranchName: string) {
     const session = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),

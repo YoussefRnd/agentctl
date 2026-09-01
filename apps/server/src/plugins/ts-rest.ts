@@ -895,6 +895,18 @@ export default fp(async (fastify) => {
         },
       };
     },
+    restoreSnapshot: async ({ params, body }) => {
+      const { id } = params;
+      const { snapshotHash } = body;
+      const result = await fastify.sessionService.restoreSnapshot(id, snapshotHash);
+      return {
+        status: 200 as const,
+        body: {
+          success: true,
+          backupHash: result.backupHash,
+        },
+      };
+    },
     previewSnapshotDiff: async ({ params }) => {
       const { id, eventId } = params;
       const result = await fastify.sessionService.previewSnapshotDiff(id, eventId);

@@ -2,6 +2,7 @@ import { test, expect, describe, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { SnapshotService } from './snapshot-service.js';
 
 describe('SnapshotService', () => {
@@ -300,6 +301,33 @@ describe('SnapshotService', () => {
       expect(await fs.promises.readFile(path.join(tempProjectDir, 'outside.txt'), 'utf8')).toBe(
         'outside\n',
       );
+    });
+  });
+
+  describe('deleteProjectSnapshots', () => {
+    test('deletes project anchor ref and snapshot directory on disk', async () => {
+      await fs.promises.writeFile(path.join(tempProjectDir, 'sample.txt'), 'data\n');
+      const hash = await service.track(tempProjectDir);
+      expect(hash).toBeDefined();
+
+      const { execSync } = await import('node:child_process');
+      const projectHash = crypto
+        .createHash('sha256')
+        .update(await fs.promises.realpath(tempProjectDir))
+        .digest('hex')
+        .substring(0, 16);
+      const anchorRef = `refs/agentctl/snapshots/${projectHash}`;
+
+      expect(() =>
+        execSync(`git rev-parse --verify ${anchorRef}`, { cwd: tempProjectDir }),
+      ).not.toThrow();
+
+      await service.deleteProjectSnapshots(tempProjectDir);
+
+      expect(() =>
+        execSync(`git rev-parse --verify ${anchorRef}`, { cwd: tempProjectDir }),
+      ).toThrow();
+      await expect(fs.promises.access(path.join(snapshotDir, projectHash))).rejects.toThrow();
     });
   });
 });

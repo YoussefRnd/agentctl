@@ -727,6 +727,23 @@ export const apiContract = {
     },
     summary: 'Rewind session to a past event',
   },
+  restoreSnapshot: {
+    method: 'POST',
+    path: '/api/sessions/:id/restore-snapshot',
+    pathParams: z.object({
+      id: z.uuid(),
+    }),
+    body: z.object({
+      snapshotHash: z.string(),
+    }),
+    responses: {
+      200: z.object({
+        success: z.boolean(),
+        backupHash: z.string().optional(),
+      }),
+    },
+    summary: 'Restore workspace files to a specific snapshot hash',
+  },
   previewSnapshotDiff: {
     method: 'GET',
     path: '/api/sessions/:id/snapshots/:eventId/preview',

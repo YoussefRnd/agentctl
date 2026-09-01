@@ -376,6 +376,20 @@ export async function rewindSession(
   return res.body;
 }
 
+export async function restoreSnapshot(
+  sessionId: string,
+  snapshotHash: string,
+): Promise<{ success: boolean; backupHash?: string }> {
+  const res = await api.restoreSnapshot({
+    params: { id: sessionId },
+    body: { snapshotHash },
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to restore snapshot: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
 export async function previewSnapshotDiff(
   sessionId: string,
   eventId: number,

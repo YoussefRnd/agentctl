@@ -480,6 +480,20 @@ export class SnapshotService {
     });
   }
 
+  async deleteProjectSnapshots(projectPath: string): Promise<void> {
+    const context = await this.getContext(projectPath).catch(() => null);
+    if (!context) {
+      return;
+    }
+    return this.mutex.run(context.lockKey, async () => {
+      const git = simpleGit(context.projectPath).env(context.env);
+      await git.raw(['update-ref', '-d', context.anchorRef]).catch(() => undefined);
+      const hash = this.projectHash(context.projectPath);
+      const snapshotProjectDir = path.join(this.baseDir, hash);
+      await fs.rm(snapshotProjectDir, { recursive: true, force: true }).catch(() => undefined);
+    });
+  }
+
   cleanup(): void {
     // No-op, no shadow repos to track
   }

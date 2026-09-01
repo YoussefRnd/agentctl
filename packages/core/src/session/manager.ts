@@ -1126,6 +1126,24 @@ export class SessionManager {
     };
   }
 
+  async restoreSnapshot(sessionId: string, snapshotHash: string): Promise<{ backupHash: string }> {
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const snapshotService = this.stateMachine.getSnapshotService();
+    const projectPath =
+      sessionRecord.mode === 'worktree' && sessionRecord.worktreePath
+        ? sessionRecord.worktreePath
+        : sessionRecord.project.path;
+
+    const restore = await snapshotService.restoreFiles(projectPath, snapshotHash);
+    return { backupHash: restore.backupHash };
+  }
+
   getEventStore(): SessionEventStore {
     return this.eventStore;
   }

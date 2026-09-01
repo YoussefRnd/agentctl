@@ -477,6 +477,15 @@ export class SessionWorkspace {
 
     await client.delete(sessions).where(eq(sessions.id, sessionId));
 
+    const remainingSessions = await client.query.sessions.findFirst({
+      where: eq(sessions.projectId, project.id),
+    });
+    if (!remainingSessions && project.path) {
+      await this.getSnapshotService()
+        .deleteProjectSnapshots(project.path)
+        .catch(() => undefined);
+    }
+
     if (this.onEvent) {
       this.onEvent('workspace:teardown', { sessionId });
     }

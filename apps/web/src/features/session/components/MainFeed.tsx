@@ -11,7 +11,7 @@ import { SubagentChatView } from './SubagentChatView';
 import { extractSubagentGroups } from './cards/subagentBlockUtils';
 import { ApprovalCard } from './cards/ApprovalCard';
 import { RewindConfirmDialog } from './RewindConfirmDialog';
-import { rewindSession, restoreSession } from '@agentctl/api-client';
+import { rewindSession, restoreSession, restoreSnapshot } from '@agentctl/api-client';
 import { useUIStore } from '@/shared';
 import type { ACPEventRow } from '@agentctl/shared';
 import type { RewindMode } from './RewindMenu';
@@ -95,9 +95,33 @@ export function MainFeed() {
     setRewindError(null);
     try {
       const result = await rewindSession(sessionId, confirmRewind.eventId, confirmRewind.mode);
-      toast.success(
-        confirmRewind.mode === 'fork' ? 'Fork created successfully' : 'Session rewound',
-      );
+      if (confirmRewind.mode === 'fork') {
+        toast.success('Fork created successfully');
+      } else if (result.undoSnapshotHash) {
+        const undoHash = result.undoSnapshotHash;
+        toast.success('Session rewound', {
+          action: {
+            label: 'Undo',
+            onClick: () => {
+              void (async () => {
+                try {
+                  await restoreSnapshot(sessionId, undoHash);
+                  toast.success('Rewind undone');
+                  void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+                  void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
+                  void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+                  void queryClient.invalidateQueries({ queryKey: ['projects'] });
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Failed to undo rewind');
+                }
+              })();
+            },
+          },
+          duration: 8000,
+        });
+      } else {
+        toast.success('Session rewound');
+      }
       setConfirmRewind(null);
       if (result.forkSessionId) {
         void navigate(`/sessions/${result.forkSessionId}`);
