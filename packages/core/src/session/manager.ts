@@ -66,7 +66,12 @@ export class SessionManager {
       undoSnapshotHash?: string;
       deletedEvents: ACPEventDbRow[];
       eventId: number;
-      restoredFiles?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+      restoredFiles?: Array<{
+        path: string;
+        status: 'added' | 'modified' | 'deleted';
+        additions?: number;
+        deletions?: number;
+      }>;
     }
   >();
 
@@ -1019,7 +1024,12 @@ export class SessionManager {
   ): Promise<{
     forkSessionId?: string;
     undoSnapshotHash?: string;
-    restoredFiles?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+    restoredFiles?: Array<{
+      path: string;
+      status: 'added' | 'modified' | 'deleted';
+      additions?: number;
+      deletions?: number;
+    }>;
   }> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),

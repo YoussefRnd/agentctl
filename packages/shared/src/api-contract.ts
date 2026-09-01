@@ -728,6 +728,8 @@ export const apiContract = {
             z.object({
               path: z.string(),
               status: z.enum(['added', 'modified', 'deleted']),
+              additions: z.number().optional(),
+              deletions: z.number().optional(),
             }),
           )
           .optional(),

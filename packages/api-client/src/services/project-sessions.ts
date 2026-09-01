@@ -369,7 +369,12 @@ export async function rewindSession(
   success: boolean;
   forkSessionId?: string;
   undoSnapshotHash?: string;
-  restoredFiles?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+  restoredFiles?: Array<{
+    path: string;
+    status: 'added' | 'modified' | 'deleted';
+    additions?: number;
+    deletions?: number;
+  }>;
 }> {
   const res = await api.rewindSession({
     params: { id: sessionId },

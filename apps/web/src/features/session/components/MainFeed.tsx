@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { RotateCcw, X } from 'lucide-react';
+import { RotateCcw, X, ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import { useProviders } from '../../../hooks/useProviders';
@@ -13,7 +13,9 @@ import { extractSubagentGroups } from './cards/subagentBlockUtils';
 import { ApprovalCard } from './cards/ApprovalCard';
 import { RewindConfirmDialog } from './RewindConfirmDialog';
 import { rewindSession, restoreSession, undoRewind } from '@agentctl/api-client';
-import { useUIStore } from '@/shared';
+import { useUIStore, FileIcon } from '@/shared';
+import { cn, Tooltip } from '@agentctl/ui';
+import { useOpenWorkspaceFile } from '../hooks/useOpenWorkspaceFile';
 import type { ACPEventRow } from '@agentctl/shared';
 import type { RewindMode } from './RewindMenu';
 
@@ -65,9 +67,49 @@ export function MainFeed() {
   const [rewindUndoState, setRewindUndoState] = useState<{
     eventId: number;
     mode: RewindMode;
-    restoredFiles?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+    restoredFiles?: Array<{
+      path: string;
+      status: 'added' | 'modified' | 'deleted';
+      additions?: number;
+      deletions?: number;
+    }>;
   } | null>(null);
   const [isUndoing, setIsUndoing] = useState(false);
+  const [isDiffExpanded, setIsDiffExpanded] = useState(false);
+
+  const setWorkbenchTab = useUIStore((s) => s.setWorkbenchTab);
+  const setWorkbenchOpen = useUIStore((s) => s.setWorkbenchOpen);
+  const setReviewScope = useUIStore((s) => s.setReviewScope);
+  const focusReviewFile = useUIStore((s) => s.focusReviewFile);
+  const openWorkspaceFile = useOpenWorkspaceFile();
+
+  const totalAdditions = useMemo(
+    () => rewindUndoState?.restoredFiles?.reduce((acc, f) => acc + (f.additions ?? 0), 0) ?? 0,
+    [rewindUndoState],
+  );
+  const totalDeletions = useMemo(
+    () => rewindUndoState?.restoredFiles?.reduce((acc, f) => acc + (f.deletions ?? 0), 0) ?? 0,
+    [rewindUndoState],
+  );
+
+  const handleOpenReview = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!rewindUndoState?.restoredFiles) return;
+    setWorkbenchTab('changes');
+    setWorkbenchOpen(true);
+    setReviewScope('all_edits', {
+      sessionId,
+      files: rewindUndoState.restoredFiles.map((file) => file.path),
+    });
+  };
+
+  const handleOpenFileReview = (filePath: string) => {
+    if (!rewindUndoState?.restoredFiles) return;
+    focusReviewFile(filePath, {
+      sessionId,
+      files: rewindUndoState.restoredFiles.map((file) => file.path),
+    });
+  };
 
   const [rewindInput, setRewindInput] = useState('');
 
@@ -110,6 +152,7 @@ export function MainFeed() {
         toast.success('Fork created successfully');
       } else {
         toast.success('Session rewound');
+        setIsDiffExpanded(false);
         setRewindUndoState({
           eventId: confirmRewind.eventId,
           mode: confirmRewind.mode,
@@ -315,37 +358,157 @@ export function MainFeed() {
         )}
 
         {rewindUndoState && (
-          <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 flex items-center justify-between rounded-xl border px-3.5 py-2 text-[12px] shadow-xs backdrop-blur-md duration-200">
-            <div className="text-text-muted flex min-w-0 items-center gap-2 pr-2">
-              <RotateCcw className="text-text-muted/70 h-3.5 w-3.5 shrink-0" />
-              <span className="text-text-main font-medium">Rewound conversation</span>
-              {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
-                <span className="text-text-muted/70 truncate">
-                  • Reverted {rewindUndoState.restoredFiles.length}{' '}
-                  {rewindUndoState.restoredFiles.length === 1 ? 'file' : 'files'}
-                </span>
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
+          <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 overflow-hidden rounded-xl border shadow-xs backdrop-blur-md duration-200">
+            <div className="flex items-center justify-between px-3.5 py-2 text-[12px]">
+              <div
                 onClick={() => {
-                  void handleUndoRewind();
+                  if (rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0) {
+                    setIsDiffExpanded((prev) => !prev);
+                  }
                 }}
-                disabled={isUndoing}
-                className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
+                className={cn(
+                  'text-text-muted flex min-w-0 items-center gap-2 pr-2 select-none',
+                  rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
+                    ? 'hover:text-text-main group/undo-header cursor-pointer'
+                    : '',
+                )}
+                role={
+                  rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
+                    ? 'button'
+                    : undefined
+                }
+                tabIndex={
+                  rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
+                    ? 0
+                    : undefined
+                }
               >
-                {isUndoing ? 'Undoing...' : 'Undo'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setRewindUndoState(null)}
-                className="text-text-muted/50 hover:text-text-main hover:bg-surface-secondary/80 cursor-pointer rounded p-1 transition-colors"
-                title="Dismiss"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+                <RotateCcw className="text-text-muted/70 h-3.5 w-3.5 shrink-0" />
+                <span className="text-text-main font-medium">Rewound conversation</span>
+                {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="text-text-muted/70 truncate">
+                      • Reverted {rewindUndoState.restoredFiles.length}{' '}
+                      {rewindUndoState.restoredFiles.length === 1 ? 'file' : 'files'}
+                    </span>
+                    {(totalAdditions > 0 || totalDeletions > 0) && (
+                      <span className="flex items-center gap-1 font-mono text-[11.5px] font-medium">
+                        {totalAdditions > 0 && (
+                          <span className="text-emerald-400">+{totalAdditions}</span>
+                        )}
+                        {totalDeletions > 0 && (
+                          <span className="text-rose-400">-{totalDeletions}</span>
+                        )}
+                      </span>
+                    )}
+                    {isDiffExpanded ? (
+                      <ChevronDown className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
+                    ) : (
+                      <ChevronRight className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleOpenReview}
+                    className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2 py-1 text-[12px] font-medium transition-colors"
+                    title="Review reverted file changes in Changes tab"
+                  >
+                    Review
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleUndoRewind();
+                  }}
+                  disabled={isUndoing}
+                  className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
+                >
+                  {isUndoing ? 'Undoing...' : 'Undo'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRewindUndoState(null)}
+                  className="text-text-muted/50 hover:text-text-main hover:bg-surface-secondary/80 cursor-pointer rounded p-1 transition-colors"
+                  title="Dismiss"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
+
+            {/* Expanded diff file list */}
+            {isDiffExpanded &&
+              rewindUndoState.restoredFiles &&
+              rewindUndoState.restoredFiles.length > 0 && (
+                <div className="border-border/20 bg-surface-secondary/20 border-t px-2 py-1.5">
+                  {rewindUndoState.restoredFiles.map((file) => {
+                    const fileName = file.path.split('/').pop() ?? file.path;
+                    const dirPath = file.path.includes('/')
+                      ? file.path.substring(0, file.path.lastIndexOf('/'))
+                      : '';
+
+                    return (
+                      <div
+                        key={file.path}
+                        className="hover:bg-surface/50 group/file-row flex items-center rounded-lg transition-colors"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleOpenFileReview(file.path);
+                          }}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center justify-between px-2.5 py-1.5 text-left"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+                            <FileIcon path={file.path} className="shrink-0" />
+                            <span className="text-text-main group-hover/file-row:text-accent truncate font-mono text-[12px] font-medium">
+                              {fileName}
+                            </span>
+                            {dirPath && (
+                              <span className="text-text-muted/60 truncate font-mono text-[11px]">
+                                {dirPath}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="ml-3 flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] font-medium">
+                            {file.additions != null && file.additions > 0 && (
+                              <span className="text-emerald-400">+{file.additions}</span>
+                            )}
+                            {file.deletions != null && file.deletions > 0 && (
+                              <span className="text-rose-400">-{file.deletions}</span>
+                            )}
+                            {(file.additions == null || file.additions === 0) &&
+                              (file.deletions == null || file.deletions === 0) && (
+                                <span className="text-text-muted/60 text-[10px]">
+                                  {file.status}
+                                </span>
+                              )}
+                          </div>
+                        </button>
+
+                        <Tooltip content="Open in editor">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openWorkspaceFile(file.path);
+                            }}
+                            className="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-all group-hover/file-row:opacity-100 focus-visible:opacity-100"
+                            aria-label={`Open ${fileName} in editor`}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </button>
+                        </Tooltip>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
           </div>
         )}
 

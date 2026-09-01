@@ -24,7 +24,7 @@ export interface SnapshotComparison {
 
 export interface RestoreResult {
   backupHash: string;
-  restoredFiles: FilePatch[];
+  restoredFiles: SnapshotFileChange[];
 }
 
 interface SnapshotContext {
@@ -362,7 +362,12 @@ export class SnapshotService {
         : null;
       const patches = comparison.files
         .filter((patch) => !requestedPaths || requestedPaths.has(patch.path))
-        .map(({ path: filePath, status }) => ({ path: filePath, status }));
+        .map(({ path: filePath, status, additions, deletions }) => ({
+          path: filePath,
+          status,
+          additions,
+          deletions,
+        }));
 
       try {
         await this.applySnapshot(context, snapshotTree, patches);
