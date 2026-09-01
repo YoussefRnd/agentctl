@@ -25,7 +25,11 @@ export class SessionProjector {
     this.adapter = new EventStreamAdapter(sessionId, eventStore, logger, cwd, snapshotService);
   }
 
-  async startTurn(text: string, attachments?: unknown[], promptTokens?: number): Promise<number> {
+  async startTurn(
+    text: string,
+    attachments?: unknown[],
+    promptTokens?: number,
+  ): ReturnType<EventStreamAdapter['startTurn']> {
     return this.adapter.startTurn(text, attachments, promptTokens);
   }
 

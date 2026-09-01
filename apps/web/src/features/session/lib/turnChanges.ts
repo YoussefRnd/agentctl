@@ -350,7 +350,8 @@ export function extractTurnChanges(
       if (
         serverTurnChanges &&
         Array.isArray(serverTurnChanges.files) &&
-        serverTurnChanges.files.length > 0
+        typeof serverTurnChanges.totalAdditions === 'number' &&
+        typeof serverTurnChanges.totalDeletions === 'number'
       ) {
         return serverTurnChanges;
       }

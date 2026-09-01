@@ -343,6 +343,7 @@ export class ACPSession {
 
       let promptText = text;
       let isManualMcp = false;
+      let startSnapshotHash: string | undefined;
       const promptTokens = Math.ceil(text.length / 4);
 
       if (text.startsWith('/')) {
@@ -354,7 +355,11 @@ export class ACPSession {
             promptText = `[System Notification: The user manually executed the tool "${executed.toolName}" with args: "${executed.args}". Result:\n---\n${executed.result}\n---\nAnalyze this output and answer the user's request.]`;
 
             // Persist user command
-            await this.projector.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+            ({ snapshotHash: startSnapshotHash } = await this.projector.startTurn(
+              text,
+              resolvedAttachmentsMeta,
+              promptTokens,
+            ));
             // Yield result to user timeline feed
             await this.projector.appendText(
               `\n\n*Manual Tool Execution Result [${executed.toolName}]:*\n\`\`\`json\n${executed.result}\n\`\`\`\n`,
@@ -365,7 +370,11 @@ export class ACPSession {
           isManualMcp = true;
           const msg = err instanceof Error ? err.message : String(err);
           // Persist user command
-          await this.projector.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+          ({ snapshotHash: startSnapshotHash } = await this.projector.startTurn(
+            text,
+            resolvedAttachmentsMeta,
+            promptTokens,
+          ));
           // Stream execution error to UI
           await this.projector.appendText(`\n\n*Manual Tool Execution Error:*\n> ${msg}\n`);
           await this.flushAll();
@@ -392,7 +401,11 @@ export class ACPSession {
 
       if (!isManualMcp) {
         // Persist user message immediately so it shows up in history
-        await this.projector.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+        ({ snapshotHash: startSnapshotHash } = await this.projector.startTurn(
+          text,
+          resolvedAttachmentsMeta,
+          promptTokens,
+        ));
       }
 
       let nativelyLoadsSkills = false;
@@ -411,10 +424,6 @@ export class ACPSession {
         .join('\n\n---\n\n');
 
       const snapshotService = this.stateMachine?.getSnapshotService?.();
-      const startSnapshotHash =
-        this.cwd && snapshotService
-          ? await snapshotService.track(this.cwd).catch(() => undefined)
-          : undefined;
 
       const promptResult = await this.runtimeHandle.prompt(
         promptText,
@@ -439,7 +448,7 @@ export class ACPSession {
               startSnapshotHash,
               endSnapshotHash,
             );
-            if (turnChanges && turnChanges.files.length > 0) {
+            if (turnChanges) {
               turnData.turnChanges = turnChanges;
             }
           }

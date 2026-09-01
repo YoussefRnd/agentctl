@@ -289,4 +289,37 @@ describe('turnChanges', () => {
     const summary = extractTurnChanges(mockEvents);
     expect(summary).toEqual(serverTurnChanges);
   });
+
+  it('treats an empty server-provided turnChanges result as authoritative', () => {
+    const mockEvents: ACPEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's1',
+        type: 'tool_call',
+        data: {
+          name: 'write_to_file',
+          kind: 'edit',
+          arguments: { TargetFile: 'src/feature.ts', CodeContent: 'temporary' },
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        sessionId: 's1',
+        type: 'status',
+        data: {
+          status: 'turn_end',
+          stopReason: 'end_turn',
+          turnChanges: { files: [], totalAdditions: 0, totalDeletions: 0 },
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    expect(extractTurnChanges(mockEvents)).toEqual({
+      files: [],
+      totalAdditions: 0,
+      totalDeletions: 0,
+    });
+  });
 });

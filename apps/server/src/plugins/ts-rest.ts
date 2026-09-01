@@ -785,25 +785,9 @@ export default fp(async (fastify) => {
       });
       if (!project) throw new AppError('Project not found', 404);
 
-      if (session.mode === 'local') {
-        if (session.baseCommit === 'none') {
-          return { status: 200 as const, body: { files: [] } };
-        }
-        const snapshotService = fastify.sessionService.getSnapshotService();
-        const files = await snapshotService.getReviewFiles(
-          session.worktreePath,
-          session.baseCommit,
-        );
-        return { status: 200 as const, body: { files } };
-      }
-
-      if (!project.repoRoot || session.baseCommit === 'none')
-        return { status: 200 as const, body: { files: [] } };
-      const files = await fastify.worktreeManager.getReviewFiles(
-        project.repoRoot,
-        session.worktreePath,
-        session.baseCommit,
-      );
+      if (session.baseCommit === 'none') return { status: 200 as const, body: { files: [] } };
+      const snapshotService = fastify.sessionService.getSnapshotService();
+      const files = await snapshotService.getReviewFiles(session.worktreePath, session.baseCommit);
       return { status: 200 as const, body: { files } };
     },
     stageFile: async ({ params, body }) => {
@@ -907,6 +891,7 @@ export default fp(async (fastify) => {
         body: {
           success: true,
           forkSessionId: result.forkSessionId ?? undefined,
+          undoSnapshotHash: result.undoSnapshotHash ?? undefined,
         },
       };
     },

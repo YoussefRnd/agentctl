@@ -4,6 +4,11 @@ import type { ACPEventDbRow } from '../db/zod-schemas.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 
+export interface TurnStart {
+  eventId: number;
+  snapshotHash?: string;
+}
+
 export class EventStreamAdapter {
   private currentMessage = '';
   private currentThought = '';
@@ -54,7 +59,11 @@ export class EventStreamAdapter {
     });
   }
 
-  async startTurn(text: string, attachments?: unknown[], promptTokens?: number): Promise<number> {
+  async startTurn(
+    text: string,
+    attachments?: unknown[],
+    promptTokens?: number,
+  ): Promise<TurnStart> {
     this.flushTextDelta();
     this.flushThoughtDelta();
     this.currentMessage = '';
@@ -73,10 +82,15 @@ export class EventStreamAdapter {
       metadata.promptTokens = promptTokens;
     }
 
+    let snapshotHash: string | undefined;
     if (this.cwd && this.snapshotService) {
-      const snapshotHash = await this.snapshotService.track(this.cwd);
-      if (snapshotHash) {
-        metadata.snapshotHash = snapshotHash;
+      try {
+        snapshotHash = await this.snapshotService.track(this.cwd);
+        if (snapshotHash) {
+          metadata.snapshotHash = snapshotHash;
+        }
+      } catch (error) {
+        this.logger.error(error, 'Failed to capture turn-start snapshot');
       }
     }
 
@@ -92,7 +106,7 @@ export class EventStreamAdapter {
       Object.keys(metadata).length > 0 ? metadata : undefined,
     );
     this.currentParentEventId = eventId;
-    return eventId;
+    return { eventId, snapshotHash };
   }
 
   async appendText(text: string): Promise<void> {

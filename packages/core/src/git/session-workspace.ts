@@ -74,7 +74,10 @@ export class LocalWorkspaceAdapter implements WorkspaceHandle {
 }
 
 export class WorktreeWorkspaceAdapter implements WorkspaceHandle {
-  constructor(private readonly workspace: WorkspaceHandle) {}
+  constructor(
+    private readonly workspace: WorkspaceHandle,
+    private readonly snapshotService: SnapshotService,
+  ) {}
 
   get path() {
     return this.workspace.path;
@@ -90,13 +93,17 @@ export class WorktreeWorkspaceAdapter implements WorkspaceHandle {
     return this.workspace.getDiff();
   }
   getReviewFiles() {
-    return this.workspace.getReviewFiles();
+    return this.snapshotService.getReviewFiles(this.path, this.baseCommit);
   }
   stageFile(filePath: string) {
     return this.workspace.stageFile(filePath);
   }
-  revertFile(filePath: string) {
-    return this.workspace.revertFile(filePath);
+  async revertFile(filePath: string) {
+    const patches = await this.snapshotService.diff(this.path, this.baseCommit);
+    const filePatch = patches.find((patch) => patch.path === filePath);
+    if (filePatch) {
+      await this.snapshotService.revertFiles(this.path, this.baseCommit, [filePatch]);
+    }
   }
 }
 
@@ -505,7 +512,7 @@ export class SessionWorkspace {
         session.baseCommit,
         session.branch,
       );
-      return new WorktreeWorkspaceAdapter(workspace);
+      return new WorktreeWorkspaceAdapter(workspace, this.getSnapshotService());
     } else {
       return new LocalWorkspaceAdapter(
         project.path,

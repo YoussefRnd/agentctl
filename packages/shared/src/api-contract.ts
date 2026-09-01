@@ -722,6 +722,7 @@ export const apiContract = {
       200: z.object({
         success: z.boolean(),
         forkSessionId: z.string().optional(),
+        undoSnapshotHash: z.string().optional(),
       }),
     },
     summary: 'Rewind session to a past event',

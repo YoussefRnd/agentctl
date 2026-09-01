@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
 import { eq, asc, desc, inArray } from 'drizzle-orm';
-import { simpleGit } from 'simple-git';
 import type { ACPSession } from '../acp/session-client.js';
 import type { DbClient } from '../db/index.js';
 import type { AgentRuntime } from '../acp/types.js';
@@ -1006,7 +1005,7 @@ export class SessionManager {
     sessionId: string,
     eventId: number,
     mode: 'conversation' | 'files' | 'fork',
-  ): Promise<{ forkSessionId?: string }> {
+  ): Promise<{ forkSessionId?: string; undoSnapshotHash?: string }> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
@@ -1026,6 +1025,7 @@ export class SessionManager {
       }
     }
 
+    let undoSnapshotHash: string | undefined;
     if (mode !== 'fork') {
       const event = await this.eventStore.getEventWithMetadata(sessionId, eventId);
       if (!event) {
@@ -1047,22 +1047,8 @@ export class SessionManager {
             ? sessionRecord.worktreePath
             : sessionRecord.project.path;
 
-        const patches = await snapshotService.diff(projectPath, metadata.snapshotHash);
-
-        const modifiedPatches = patches.filter(
-          (p) => p.status === 'modified' || p.status === 'added',
-        );
-        if (modifiedPatches.length > 0) {
-          const git = simpleGit(projectPath);
-          const changedFiles = modifiedPatches.map((p) => p.path);
-          try {
-            await git.raw(['stash', 'push', '--', ...changedFiles]);
-          } catch {
-            // If stash fails (no changes to stash), continue
-          }
-        }
-
-        await snapshotService.revertFiles(projectPath, metadata.snapshotHash, patches);
+        const restore = await snapshotService.restoreFiles(projectPath, metadata.snapshotHash);
+        undoSnapshotHash = restore.backupHash;
       }
     }
 
@@ -1088,7 +1074,7 @@ export class SessionManager {
       this.logger.error({ err, sessionId }, 'Failed to restart session after rewind');
     });
 
-    return {};
+    return { undoSnapshotHash };
   }
 
   async previewSnapshotDiff(

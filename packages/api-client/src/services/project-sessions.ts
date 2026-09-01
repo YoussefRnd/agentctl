@@ -365,7 +365,7 @@ export async function rewindSession(
   sessionId: string,
   eventId: number,
   mode: 'conversation' | 'files' | 'fork',
-): Promise<{ success: boolean; forkSessionId?: string }> {
+): Promise<{ success: boolean; forkSessionId?: string; undoSnapshotHash?: string }> {
   const res = await api.rewindSession({
     params: { id: sessionId },
     body: { eventId, mode },
