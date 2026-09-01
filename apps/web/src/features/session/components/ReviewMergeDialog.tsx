@@ -1,4 +1,3 @@
-import { GitCommit } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -8,6 +7,7 @@ import {
   Input,
   Button,
 } from '@agentctl/ui';
+import { GitCommitIcon } from '@primer/octicons-react';
 
 interface ReviewMergeDialogProps {
   open: boolean;
@@ -38,7 +38,7 @@ export function ReviewMergeDialog({
         <div className="p-5">
           <DialogHeader className="mb-4">
             <div className="bg-surface-accent text-accent ring-accent/30 mb-4 flex h-8 w-8 items-center justify-center rounded-lg shadow-[0_0_15px_rgba(203,166,247,0.2)] ring-1">
-              <GitCommit className="h-4 w-4" />
+              <GitCommitIcon className="h-4 w-4" />
             </div>
             <DialogTitle className="text-text-main text-base font-semibold">
               {title ?? 'Apply changes'}

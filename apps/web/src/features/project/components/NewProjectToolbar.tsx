@@ -1,7 +1,8 @@
-import { Folder, FolderPlus, Bot, ArrowUp, ChevronDown, Check, GitBranch } from 'lucide-react';
+import { Folder, FolderPlus, Bot, ArrowUp, ChevronDown, Check } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import type { SessionMode, ProviderDiscovery } from '@agentctl/shared';
 import { Dropdown, Tooltip, Button } from '@agentctl/ui';
+import { GitBranchIcon } from '@primer/octicons-react';
 
 interface NewProjectToolbarProps {
   projects: SidebarProject[];
@@ -136,7 +137,7 @@ export function NewProjectToolbar({
               type="button"
               className="bg-surface-secondary/60 hover:bg-surface-secondary text-text-muted hover:text-text-main border-border/40 hover:border-border/70 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-colors"
             >
-              <GitBranch className="h-3 w-3 opacity-60" />
+              <GitBranchIcon className="h-3 w-3 opacity-60" />
               <span className="capitalize">{selectedMode}</span>
               <ChevronDown className="h-2 w-2 opacity-50" />
             </button>

@@ -2,19 +2,18 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Folder,
-  FolderGit2,
+  FolderOpen,
   Plus,
-  ChevronRight,
   ChevronDown,
   Loader2,
   Trash2,
   Archive,
   MoreHorizontal,
   Pencil,
-  GitBranch,
 } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import { Dropdown, Tooltip } from '@agentctl/ui';
+import { RepoForkedIcon } from '@primer/octicons-react';
 import { QuickLaunchSessionDialog } from '../../session/components/QuickLaunchSessionDialog';
 
 interface ConfirmConfig {
@@ -61,6 +60,164 @@ function formatRelativeTime(dateStr?: string | Date | null): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+interface SessionRowProps {
+  session: SidebarProject['sessions'][number];
+  isActive: boolean;
+  isPending: boolean;
+  onRename: (id: string, title: string) => void;
+  onFork: (id: string, title: string) => void;
+  onArchive: (id: string, title: string) => void;
+  onDelete: (id: string, title: string) => void;
+}
+
+function SessionRow({
+  session: s,
+  isActive,
+  isPending,
+  onRename,
+  onFork,
+  onArchive,
+  onDelete,
+}: SessionRowProps) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const sessionTitle = s.title || s.taskSlug || s.branch || 'Untitled session';
+  const relativeTime = formatRelativeTime(s.updatedAt ?? s.createdAt);
+
+  return (
+    <div className="group/session relative flex items-center">
+      <div
+        className={`flex w-full min-w-0 items-center justify-between rounded-lg px-2 py-1.5 text-[12px] transition-all duration-150 ${
+          isActive
+            ? 'bg-accent/10 text-text-main font-medium shadow-xs'
+            : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/50'
+        }`}
+      >
+        <Link to={`/sessions/${s.id}`} className="flex min-w-0 flex-1 items-center gap-1.5">
+          {/* Status indicator only when needs attention or error */}
+          {s.status === 'needs_attention' && (
+            <Tooltip content="Review or approval required">
+              <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400 ring-2 ring-amber-400/20" />
+            </Tooltip>
+          )}
+          {s.status === 'error' && (
+            <Tooltip content="Session error">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400 ring-2 ring-rose-400/20" />
+            </Tooltip>
+          )}
+
+          <span
+            className={`truncate tracking-tight ${
+              s.status === 'archived' ? 'line-through opacity-40' : ''
+            }`}
+          >
+            {sessionTitle}
+          </span>
+        </Link>
+
+        {/* Metadata & Actions Area */}
+        <div className="flex shrink-0 items-center gap-1">
+          {s.status === 'running' ? (
+            <Tooltip content="Agent is running...">
+              <span
+                className={`text-accent flex items-center justify-center ${
+                  isDropdownOpen ? 'hidden' : 'group-hover/session:hidden'
+                }`}
+              >
+                <Loader2 className="h-3 w-3 animate-spin" />
+              </span>
+            </Tooltip>
+          ) : relativeTime ? (
+            <span
+              className={`text-text-muted/40 font-mono text-[10px] tabular-nums ${
+                isDropdownOpen ? 'hidden' : 'group-hover/session:hidden'
+              }`}
+            >
+              {relativeTime}
+            </span>
+          ) : null}
+
+          <div
+            className={
+              isDropdownOpen
+                ? 'flex'
+                : 'hidden group-focus-within/session:flex group-hover/session:flex has-[[data-state=open]]:flex'
+            }
+          >
+            <Dropdown.Root open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+              <Dropdown.Trigger asChild>
+                <button
+                  type="button"
+                  aria-label="Session options"
+                  disabled={isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                  className={`flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-colors ${
+                    isActive || isDropdownOpen
+                      ? 'text-text-main hover:bg-surface-secondary'
+                      : 'text-text-muted hover:text-text-main hover:bg-surface-secondary'
+                  } data-[state=open]:bg-surface-secondary disabled:opacity-50 data-[state=open]:flex data-[state=open]:opacity-100`}
+                >
+                  {isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <MoreHorizontal className="h-3 w-3" />
+                  )}
+                </button>
+              </Dropdown.Trigger>
+              <Dropdown.Portal>
+                <Dropdown.Content align="end" className="w-40">
+                  <Dropdown.Item
+                    onSelect={() => {
+                      onRename(s.id, sessionTitle);
+                    }}
+                    className="gap-2"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Rename</span>
+                  </Dropdown.Item>
+
+                  <Dropdown.Item
+                    onSelect={() => {
+                      onFork(s.id, sessionTitle);
+                    }}
+                    className="gap-2"
+                  >
+                    <RepoForkedIcon className="h-3.5 w-3.5" />
+                    <span>Fork session</span>
+                  </Dropdown.Item>
+
+                  {s.status !== 'archived' && (
+                    <Dropdown.Item
+                      onSelect={() => {
+                        onArchive(s.id, sessionTitle);
+                      }}
+                      className="text-brand-peach hover:text-brand-peach focus:text-brand-peach gap-2"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      <span>Archive</span>
+                    </Dropdown.Item>
+                  )}
+
+                  <Dropdown.Item
+                    onSelect={() => {
+                      onDelete(s.id, sessionTitle);
+                    }}
+                    className="text-brand-red hover:text-brand-red focus:text-brand-red gap-2"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete</span>
+                  </Dropdown.Item>
+                </Dropdown.Content>
+              </Dropdown.Portal>
+            </Dropdown.Root>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ProjectItem({
   proj,
   activeSessionId,
@@ -80,7 +237,7 @@ export function ProjectItem({
   const [showQuickLaunch, setShowQuickLaunch] = useState(false);
   const showSessions = searchQuery ? true : !isCollapsed;
   const isGit = proj.sessions.some((s) => s.mode === 'worktree');
-  const FolderIcon = isGit ? FolderGit2 : Folder;
+  const FolderIcon = showSessions ? FolderOpen : Folder;
 
   // Periodic re-render ticker to update relative timestamps live
   const [, setTick] = useState(0);
@@ -107,11 +264,6 @@ export function ProjectItem({
           }}
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left font-normal outline-none"
         >
-          <ChevronRight
-            className={`text-text-muted/40 group-hover/workspace:text-text-main h-3 w-3 shrink-0 transition-transform duration-150 ${
-              isCollapsed ? '' : 'rotate-90'
-            }`}
-          />
           <FolderIcon className="text-accent/80 group-hover/workspace:text-accent h-3.5 w-3.5 shrink-0 transition-colors" />
           <span className="text-text-main/90 group-hover/workspace:text-text-main truncate text-[12.5px] font-semibold tracking-tight">
             {proj.name}
@@ -232,8 +384,6 @@ export function ProjectItem({
         >
           <div className="border-border/15 ml-3 min-h-0 min-w-0 space-y-0.5 border-l py-0.5 pr-0.5 pl-2.5">
             {proj.sessions.map((s) => {
-              const sessionTitle = s.title || s.taskSlug || s.branch || 'Untitled session';
-              const relativeTime = formatRelativeTime(s.updatedAt ?? s.createdAt);
               const isPending =
                 pendingActions.has(`archive-session-${s.id}`) ||
                 pendingActions.has(`delete-session-${s.id}`) ||
@@ -243,148 +393,40 @@ export function ProjectItem({
               const isActive = activeSessionId === s.id;
 
               return (
-                <div key={s.id} className="group/session relative flex items-center">
-                  <div
-                    className={`flex w-full min-w-0 items-center justify-between rounded-lg px-2 py-1.5 text-[12px] transition-all duration-150 ${
-                      isActive
-                        ? 'bg-accent/10 text-text-main font-medium shadow-xs'
-                        : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/50'
-                    }`}
-                  >
-                    <Link
-                      to={`/sessions/${s.id}`}
-                      className="flex min-w-0 flex-1 items-center gap-1.5"
-                    >
-                      {/* Status indicator only when needs attention or error */}
-                      {s.status === 'needs_attention' && (
-                        <Tooltip content="Review or approval required">
-                          <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400 ring-2 ring-amber-400/20" />
-                        </Tooltip>
-                      )}
-                      {s.status === 'error' && (
-                        <Tooltip content="Session error">
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400 ring-2 ring-rose-400/20" />
-                        </Tooltip>
-                      )}
-
-                      <span
-                        className={`truncate tracking-tight ${
-                          s.status === 'archived' ? 'line-through opacity-40' : ''
-                        }`}
-                      >
-                        {sessionTitle}
-                      </span>
-                    </Link>
-
-                    {/* Metadata & Actions Area */}
-                    <div className="flex shrink-0 items-center gap-1">
-                      {s.status === 'running' ? (
-                        <Tooltip content="Agent is running...">
-                          <span className="text-accent flex items-center justify-center group-hover/session:hidden">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          </span>
-                        </Tooltip>
-                      ) : relativeTime ? (
-                        <span className="text-text-muted/40 font-mono text-[10px] tabular-nums group-hover/session:hidden">
-                          {relativeTime}
-                        </span>
-                      ) : null}
-
-                      <div className="hidden group-focus-within/session:flex group-hover/session:flex">
-                        <Dropdown.Root>
-                          <Tooltip content="Session options">
-                            <Dropdown.Trigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Session options"
-                                disabled={isPending}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                className={`flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-colors ${
-                                  isActive
-                                    ? 'text-text-main hover:bg-surface-secondary'
-                                    : 'text-text-muted hover:text-text-main hover:bg-surface-secondary'
-                                } disabled:opacity-50 data-[state=open]:flex data-[state=open]:opacity-100`}
-                              >
-                                {isPending ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <MoreHorizontal className="h-3 w-3" />
-                                )}
-                              </button>
-                            </Dropdown.Trigger>
-                          </Tooltip>
-                          <Dropdown.Portal>
-                            <Dropdown.Content align="end" className="w-40">
-                              <Dropdown.Item
-                                onSelect={() => {
-                                  handleRenameSession(s.id, sessionTitle);
-                                }}
-                                className="gap-2"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                                <span>Rename</span>
-                              </Dropdown.Item>
-
-                              <Dropdown.Item
-                                onSelect={() => {
-                                  handleForkSession(s.id, sessionTitle);
-                                }}
-                                className="gap-2"
-                              >
-                                <GitBranch className="h-3.5 w-3.5" />
-                                <span>Fork session</span>
-                              </Dropdown.Item>
-
-                              {s.status !== 'archived' && (
-                                <Dropdown.Item
-                                  onSelect={() => {
-                                    setConfirmConfig({
-                                      isOpen: true,
-                                      title: 'Archive session',
-                                      message: `Archive session "${sessionTitle}"? This will remove its Git worktree on disk to free up space, but keep its history.`,
-                                      type: 'brand-peach',
-                                      confirmText: 'Archive session',
-                                      onConfirm: () => {
-                                        handleArchiveSession(s.id, sessionTitle);
-                                        setConfirmConfig(null);
-                                      },
-                                    });
-                                  }}
-                                  className="text-brand-peach hover:text-brand-peach focus:text-brand-peach gap-2"
-                                >
-                                  <Archive className="h-3.5 w-3.5" />
-                                  <span>Archive</span>
-                                </Dropdown.Item>
-                              )}
-
-                              <Dropdown.Item
-                                onSelect={() => {
-                                  setConfirmConfig({
-                                    isOpen: true,
-                                    title: 'Delete session',
-                                    message: `Permanently delete session "${sessionTitle}" and all its logs? This cannot be undone.`,
-                                    type: 'brand-red',
-                                    confirmText: 'Delete session',
-                                    onConfirm: () => {
-                                      handleDeleteSession(s.id, sessionTitle);
-                                      setConfirmConfig(null);
-                                    },
-                                  });
-                                }}
-                                className="text-brand-red hover:text-brand-red focus:text-brand-red gap-2"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                <span>Delete</span>
-                              </Dropdown.Item>
-                            </Dropdown.Content>
-                          </Dropdown.Portal>
-                        </Dropdown.Root>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <SessionRow
+                  key={s.id}
+                  session={s}
+                  isActive={isActive}
+                  isPending={isPending}
+                  onRename={handleRenameSession}
+                  onFork={handleForkSession}
+                  onArchive={(sessionId, title) => {
+                    setConfirmConfig({
+                      isOpen: true,
+                      title: 'Archive session',
+                      message: `Archive session "${title}"? This will remove its Git worktree on disk to free up space, but keep its history.`,
+                      type: 'brand-peach',
+                      confirmText: 'Archive session',
+                      onConfirm: () => {
+                        handleArchiveSession(sessionId, title);
+                        setConfirmConfig(null);
+                      },
+                    });
+                  }}
+                  onDelete={(sessionId, title) => {
+                    setConfirmConfig({
+                      isOpen: true,
+                      title: 'Delete session',
+                      message: `Permanently delete session "${title}" and all its logs? This cannot be undone.`,
+                      type: 'brand-red',
+                      confirmText: 'Delete session',
+                      onConfirm: () => {
+                        handleDeleteSession(sessionId, title);
+                        setConfirmConfig(null);
+                      },
+                    });
+                  }}
+                />
               );
             })}
           </div>

@@ -1,7 +1,8 @@
 import { useReducer, useEffect } from 'react';
-import { Folder, ChevronLeft, Home, GitBranch, AlertCircle, Loader2 } from 'lucide-react';
+import { Folder, ChevronLeft, Home, AlertCircle, Loader2 } from 'lucide-react';
 import { apiClient } from '@agentctl/api-client';
 import { Button, GlassPanel } from '@agentctl/ui';
+import { GitBranchIcon } from '@primer/octicons-react';
 
 interface FolderEntry {
   name: string;
@@ -151,7 +152,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                     className={`bg-surface-secondary/40 rounded-lg p-1.5 ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}
                   >
                     {f.isRepo ? (
-                      <GitBranch className="h-3.5 w-3.5" />
+                      <GitBranchIcon className="h-3.5 w-3.5" />
                     ) : (
                       <Folder className="h-3.5 w-3.5" />
                     )}

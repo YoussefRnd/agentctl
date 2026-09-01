@@ -1,14 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import {
-  FileCode,
-  Folder,
-  GitBranch,
-  GitPullRequest,
-  GitCommit,
-  Sparkles,
-  Loader2,
-} from 'lucide-react';
+import { FileCode, Folder, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@agentctl/ui';
+import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem, ContextItemType } from '@agentctl/api-client';
 
 interface ContextDropdownProps {
@@ -29,10 +22,10 @@ function renderDropdownIcon(type: ContextItemType, id: string) {
     return <Folder className="h-4 w-4 shrink-0 text-amber-400" />;
   }
   if (type === 'git') {
-    if (id === 'git:diff') return <GitPullRequest className="h-4 w-4 shrink-0 text-purple-400" />;
-    if (id === 'git:staged') return <GitBranch className="h-4 w-4 shrink-0 text-emerald-400" />;
-    if (id === 'git:log') return <GitCommit className="h-4 w-4 shrink-0 text-blue-400" />;
-    return <GitBranch className="h-4 w-4 shrink-0 text-purple-400" />;
+    if (id === 'git:diff') return <DiffIcon className="h-4 w-4 shrink-0 text-purple-400" />;
+    if (id === 'git:staged') return <GitBranchIcon className="h-4 w-4 shrink-0 text-emerald-400" />;
+    if (id === 'git:log') return <GitCommitIcon className="h-4 w-4 shrink-0 text-blue-400" />;
+    return <GitBranchIcon className="h-4 w-4 shrink-0 text-purple-400" />;
   }
   return <Sparkles className="text-accent h-4 w-4 shrink-0" />;
 }

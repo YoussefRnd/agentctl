@@ -1,17 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Menu,
-  PanelRight,
-  Pencil,
-  MoreHorizontal,
-  GitBranch,
-  Archive,
-  Trash2,
-  FileCode,
-} from 'lucide-react';
+import { Menu, PanelRight, Pencil, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
 import { Dropdown, Tooltip } from '@agentctl/ui';
+import { DiffIcon, RepoForkedIcon } from '@primer/octicons-react';
 import {
   renameSession,
   archiveSession,
@@ -234,7 +226,7 @@ export function SessionHeader({
                     void handleFork();
                   }}
                 >
-                  <GitBranch className="h-3.5 w-3.5 opacity-60" />
+                  <RepoForkedIcon className="h-3.5 w-3.5 opacity-60" />
                   <span>Fork session</span>
                 </Dropdown.Item>
                 {sessionData?.session.status !== 'archived' && (
@@ -274,7 +266,7 @@ export function SessionHeader({
             className="border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors"
             title="View modified files in review"
           >
-            <FileCode className="h-3.5 w-3.5" />
+            <DiffIcon className="h-3.5 w-3.5" />
             <span>
               {changesCount} {changesCount === 1 ? 'change' : 'changes'}
             </span>

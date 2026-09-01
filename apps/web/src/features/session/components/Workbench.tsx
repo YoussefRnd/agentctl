@@ -2,7 +2,8 @@ import { useEffect, Suspense, lazy } from 'react';
 import { StatusPane } from './StatusPane';
 import { useSession } from '../../../contexts/SessionContext';
 import { GlassPanel, Badge, Spinner } from '@agentctl/ui';
-import { Maximize2, Minimize2, Terminal, FileCode, CircleDot } from 'lucide-react';
+import { Maximize2, Minimize2, Terminal, FileText } from 'lucide-react';
+import { DiffIcon } from '@primer/octicons-react';
 
 const ReviewView = lazy(() => import('./ReviewView').then((m) => ({ default: m.ReviewView })));
 const InteractiveTerminal = lazy(() =>
@@ -61,10 +62,10 @@ export function Workbench({
                     onTabChange(t);
                   }}
                 >
-                  <span className="relative z-10 flex items-center gap-1">
-                    {t === 'status' && <CircleDot className="h-3 w-3 opacity-80" />}
-                    {t === 'changes' && <FileCode className="h-3 w-3 opacity-80" />}
-                    {t === 'terminal' && <Terminal className="h-3 w-3 opacity-80" />}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    {t === 'status' && <FileText className="h-3.5 w-3.5 opacity-80" />}
+                    {t === 'changes' && <DiffIcon className="h-3.5 w-3.5 opacity-80" />}
+                    {t === 'terminal' && <Terminal className="h-3.5 w-3.5 opacity-80" />}
                     {t === 'status' ? 'Status' : t === 'changes' ? 'Changes' : 'Terminal'}
                   </span>
                   {t === 'changes' && changesCount > 0 && (

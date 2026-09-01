@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Monitor, GitBranch, ArrowDown, ArrowUp } from 'lucide-react';
+import { Monitor } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent, cn } from '@agentctl/ui';
+import { GitBranchIcon, RepoPullIcon, RepoPushIcon } from '@primer/octicons-react';
 import { toast } from 'sonner';
 import { useSession } from '../../../../contexts/SessionContext';
 import type { SessionWithCapabilities } from '@agentctl/shared';
@@ -265,7 +266,7 @@ export function CommandBarFooter({
 
       {isLoadingSession ? (
         <div className="text-text-muted/60 flex items-center gap-1.5 py-1">
-          <GitBranch className="h-3.5 w-3.5" />
+          <GitBranchIcon className="h-3.5 w-3.5" />
           <span>...</span>
         </div>
       ) : (
@@ -292,7 +293,7 @@ export function CommandBarFooter({
                 className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-6 w-6 cursor-pointer items-center justify-center border-r transition-colors disabled:opacity-30"
                 title="Pull from Remote"
               >
-                <ArrowDown className="h-3 w-3" />
+                <RepoPullIcon className="h-3 w-3" />
               </button>
               <button
                 type="button"
@@ -314,7 +315,7 @@ export function CommandBarFooter({
                 className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 flex h-6 w-6 cursor-pointer items-center justify-center transition-colors disabled:opacity-30"
                 title="Push to Remote"
               >
-                <ArrowUp className="h-3 w-3" />
+                <RepoPushIcon className="h-3 w-3" />
               </button>
             </div>
           )}
@@ -325,7 +326,7 @@ export function CommandBarFooter({
             onChange={(val) => {
               void switchBranch(val);
             }}
-            icon={<GitBranch className="h-3.5 w-3.5" />}
+            icon={<GitBranchIcon className="h-3.5 w-3.5" />}
             align="end"
             options={[
               ...branches.map((b) => ({

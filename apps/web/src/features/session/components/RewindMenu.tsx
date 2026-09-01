@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { RotateCcw, GitBranch, Undo2 } from 'lucide-react';
+import { RotateCcw, Undo2 } from 'lucide-react';
+import { RepoForkedIcon } from '@primer/octicons-react';
 
 export type RewindMode = 'conversation' | 'files' | 'fork';
 
@@ -13,7 +14,7 @@ interface RewindMenuProps {
 interface MenuOption {
   mode: RewindMode;
   label: string;
-  icon: typeof RotateCcw;
+  icon: React.ComponentType<{ className?: string }>;
   description: string;
   disabled: boolean;
 }
@@ -39,7 +40,7 @@ export function RewindMenu({ eventId, hasGitRepo, onRewind, onClose }: RewindMen
       {
         mode: 'fork',
         label: 'Fork From Here',
-        icon: GitBranch,
+        icon: RepoForkedIcon,
         description: 'Create a new session from this point. Original unchanged.',
         disabled: false,
       },

@@ -1,12 +1,4 @@
-import {
-  RotateCcw,
-  Undo2,
-  GitBranch,
-  FileText,
-  CheckCircle,
-  AlertCircle,
-  Loader2,
-} from 'lucide-react';
+import { RotateCcw, Undo2, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import type { RewindMode } from './RewindMenu';
 import { previewSnapshotDiff } from '@agentctl/api-client';
@@ -19,11 +11,12 @@ import {
   Button,
   Badge,
 } from '@agentctl/ui';
+import { RepoForkedIcon } from '@primer/octicons-react';
 
-const modeIcon: Record<RewindMode, typeof RotateCcw> = {
+const modeIcon: Record<RewindMode, React.ComponentType<{ className?: string }>> = {
   conversation: RotateCcw,
   files: Undo2,
-  fork: GitBranch,
+  fork: RepoForkedIcon,
 };
 
 const modeLabel: Record<RewindMode, string> = {
