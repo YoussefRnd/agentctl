@@ -19,7 +19,17 @@ interface DiffBlockProps {
   showHeader?: boolean;
 }
 
-function VirtualizedInlineHunk({ hunk, language }: { hunk: DiffHunk; language?: string }) {
+function VirtualizedInlineHunk({
+  hunk,
+  language,
+  hideOldLineNumber,
+  hideNewLineNumber,
+}: {
+  hunk: DiffHunk;
+  language?: string;
+  hideOldLineNumber?: boolean;
+  hideNewLineNumber?: boolean;
+}) {
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: hunk.lines.length,
@@ -43,7 +53,12 @@ function VirtualizedInlineHunk({ hunk, language }: { hunk: DiffHunk; language?: 
                 transform: `translateY(${virtualItem.start}px)`,
               }}
             >
-              <DiffLine line={line} language={language} />
+              <DiffLine
+                line={line}
+                language={language}
+                hideOldLineNumber={hideOldLineNumber}
+                hideNewLineNumber={hideNewLineNumber}
+              />
             </div>
           );
         })}
@@ -120,6 +135,15 @@ export const DiffBlock = memo(function DiffBlock({
     }
     return { additions, deletions };
   }, [hunks]);
+
+  const hasOldLineNumbers = useMemo(
+    () => hunks.some((h) => h.lines.some((l) => l.oldLineNumber != null)),
+    [hunks],
+  );
+  const hasNewLineNumbers = useMemo(
+    () => hunks.some((h) => h.lines.some((l) => l.newLineNumber != null)),
+    [hunks],
+  );
 
   const [copiedPath, setCopiedPath] = useState(false);
 
@@ -242,7 +266,9 @@ export const DiffBlock = memo(function DiffBlock({
               <div key={hunk.header} className="group/hunk overflow-hidden">
                 <div className="bg-surface-secondary/10 text-text-muted/30 border-border/10 flex items-center justify-between border-y px-4 py-1.5 font-mono text-[9px] font-black tracking-tight uppercase select-none">
                   <div className="flex items-center gap-2">
-                    <span className="text-accent/30 text-[12px]">@@</span> {hunk.header}
+                    <span className="text-text-muted/60 font-mono text-[10.5px] font-medium tracking-normal lowercase">
+                      {hunk.header}
+                    </span>
                   </div>
                   {onStage && (
                     <button
@@ -259,7 +285,12 @@ export const DiffBlock = memo(function DiffBlock({
 
                 {isLarge ? (
                   viewMode === 'inline' ? (
-                    <VirtualizedInlineHunk hunk={hunk} language={language} />
+                    <VirtualizedInlineHunk
+                      hunk={hunk}
+                      language={language}
+                      hideOldLineNumber={!hasOldLineNumbers}
+                      hideNewLineNumber={!hasNewLineNumbers}
+                    />
                   ) : (
                     <VirtualizedSplitHunk splitRows={splitRows} language={language} />
                   )
@@ -271,6 +302,8 @@ export const DiffBlock = memo(function DiffBlock({
                           key={`${String(line.oldLineNumber ?? '')}-${String(line.newLineNumber ?? '')}-${line.type}-${line.content}`}
                           line={line}
                           language={language}
+                          hideOldLineNumber={!hasOldLineNumbers}
+                          hideNewLineNumber={!hasNewLineNumbers}
                         />
                       ))
                     ) : (

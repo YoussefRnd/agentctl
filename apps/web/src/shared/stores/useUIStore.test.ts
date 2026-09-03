@@ -24,4 +24,24 @@ describe('useUIStore review focus', () => {
       targetReviewFile: 'src/older-turn.ts',
     });
   });
+
+  test('opens, closes, and moves workbench tabs correctly', () => {
+    // Initial state: ['changes', 'terminal', 'status']
+    expect(useUIStore.getState().openWorkbenchTabs).toEqual(['changes', 'terminal', 'status']);
+
+    // Move 'status' (index 2) to index 0
+    useUIStore.getState().moveWorkbenchTab(2, 0);
+    expect(useUIStore.getState().openWorkbenchTabs).toEqual(['status', 'changes', 'terminal']);
+
+    // Close active tab ('status') -> automatically switches to adjacent tab ('changes')
+    useUIStore.getState().setWorkbenchTab('status');
+    useUIStore.getState().closeWorkbenchTab('status');
+    expect(useUIStore.getState().openWorkbenchTabs).toEqual(['changes', 'terminal']);
+    expect(useUIStore.getState().workbenchTab).toBe('changes');
+
+    // Reopen 'status'
+    useUIStore.getState().openWorkbenchTab('status');
+    expect(useUIStore.getState().openWorkbenchTabs).toEqual(['changes', 'terminal', 'status']);
+    expect(useUIStore.getState().workbenchTab).toBe('status');
+  });
 });

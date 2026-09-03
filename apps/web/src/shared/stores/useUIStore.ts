@@ -11,7 +11,8 @@ export interface ReviewTurnSelection {
 
 interface UIState {
   // Workbench & Layout State
-  workbenchTab: WorkbenchTab;
+  workbenchTab: WorkbenchTab | null;
+  openWorkbenchTabs: WorkbenchTab[];
   isWorkbenchOpen: boolean;
   isMaximized: boolean;
   isMobileSidebarOpen: boolean;
@@ -38,6 +39,9 @@ interface UIState {
 
   // Actions
   setWorkbenchTab: (tab: WorkbenchTab) => void;
+  openWorkbenchTab: (tab: WorkbenchTab) => void;
+  closeWorkbenchTab: (tab: WorkbenchTab) => void;
+  moveWorkbenchTab: (fromIndex: number, toIndex: number) => void;
   setWorkbenchOpen: (open: boolean) => void;
   toggleWorkbench: () => void;
   setMaximized: (maximized: boolean) => void;
@@ -70,6 +74,7 @@ interface UIState {
 
 export const useUIStore = create<UIState>((set) => ({
   workbenchTab: 'status',
+  openWorkbenchTabs: ['changes', 'terminal', 'status'],
   isWorkbenchOpen: true,
   isMaximized: false,
   isMobileSidebarOpen: false,
@@ -85,7 +90,44 @@ export const useUIStore = create<UIState>((set) => ({
   activeSubagent: null,
   targetReviewFile: null,
 
-  setWorkbenchTab: (tab) => set({ workbenchTab: tab, isWorkbenchOpen: true }),
+  setWorkbenchTab: (tab) =>
+    set((state) => ({
+      openWorkbenchTabs: state.openWorkbenchTabs.includes(tab)
+        ? state.openWorkbenchTabs
+        : [...state.openWorkbenchTabs, tab],
+      workbenchTab: tab,
+      isWorkbenchOpen: true,
+    })),
+  openWorkbenchTab: (tab) =>
+    set((state) => ({
+      openWorkbenchTabs: state.openWorkbenchTabs.includes(tab)
+        ? state.openWorkbenchTabs
+        : [...state.openWorkbenchTabs, tab],
+      workbenchTab: tab,
+      isWorkbenchOpen: true,
+    })),
+  closeWorkbenchTab: (tab) =>
+    set((state) => {
+      const nextTabs = state.openWorkbenchTabs.filter((t) => t !== tab);
+      let nextActive = state.workbenchTab;
+      if (state.workbenchTab === tab) {
+        const closedIndex = state.openWorkbenchTabs.indexOf(tab);
+        nextActive = nextTabs[closedIndex] ?? nextTabs[closedIndex - 1] ?? null;
+      }
+      return {
+        openWorkbenchTabs: nextTabs,
+        workbenchTab: nextActive,
+      };
+    }),
+  moveWorkbenchTab: (fromIndex, toIndex) =>
+    set((state) => {
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return state;
+      const nextTabs = [...state.openWorkbenchTabs];
+      const [moved] = nextTabs.splice(fromIndex, 1);
+      if (!moved) return state;
+      nextTabs.splice(toIndex, 0, moved);
+      return { openWorkbenchTabs: nextTabs };
+    }),
   setWorkbenchOpen: (open) => set({ isWorkbenchOpen: open }),
   toggleWorkbench: () => set((state) => ({ isWorkbenchOpen: !state.isWorkbenchOpen })),
   setMaximized: (maximized) => set({ isMaximized: maximized }),
@@ -98,13 +140,16 @@ export const useUIStore = create<UIState>((set) => ({
     }),
   setTargetReviewFile: (filePath) => set({ targetReviewFile: filePath }),
   focusReviewFile: (filePath, turnSelection) =>
-    set({
+    set((state) => ({
+      openWorkbenchTabs: state.openWorkbenchTabs.includes('changes')
+        ? state.openWorkbenchTabs
+        : [...state.openWorkbenchTabs, 'changes'],
       workbenchTab: 'changes',
       isWorkbenchOpen: true,
       reviewScope: 'this_turn',
       reviewTurnSelection: turnSelection,
       targetReviewFile: filePath,
-    }),
+    })),
   openCommandPalette: () => set({ isCommandPaletteOpen: true }),
   closeCommandPalette: () => set({ isCommandPaletteOpen: false }),
   toggleCommandPalette: () =>

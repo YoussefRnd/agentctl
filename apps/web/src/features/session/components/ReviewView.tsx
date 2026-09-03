@@ -52,8 +52,7 @@ export function ReviewView() {
   const onRevert = revertFile;
   const onStageAll = stageAll;
   const onUnstageAll = unstageAll;
-  const { state, dispatch, toggleFileCollapse, toggleSection, expandAll, collapseAll } =
-    useReviewViewState();
+  const { state, dispatch, toggleFileCollapse, expandAll, collapseAll } = useReviewViewState();
 
   const reviewScope = useUIStore((s) => s.reviewScope);
   const selectedTurn = useUIStore((s) => s.reviewTurnSelection);
@@ -94,7 +93,7 @@ export function ReviewView() {
     };
   }, [activeTurnFiles, files]);
 
-  const { activeFiles, parsedFiles, grouped, fileStats } = useReviewDiffs(
+  const { activeFiles, parsedFiles, fileStats } = useReviewDiffs(
     files,
     state.searchQuery,
     reviewScope,
@@ -259,6 +258,21 @@ export function ReviewView() {
     />
   );
 
+  const hasUnstaged = useMemo(
+    () =>
+      files.some((f) => f.state === 'modified' || f.state === 'untracked' || f.state === 'deleted'),
+    [files],
+  );
+  const hasStaged = useMemo(() => files.some((f) => f.state === 'staged'), [files]);
+
+  const handleSelectFile = useCallback(
+    (filePath: string) => {
+      dispatch({ type: 'EXPAND_FILE', filePath });
+      setTargetReviewFile(filePath);
+    },
+    [dispatch, setTargetReviewFile],
+  );
+
   if (isClosed) return <ReviewClosedState sessionStatus={sessionStatus} />;
 
   return (
@@ -279,6 +293,18 @@ export function ReviewView() {
         allCollapsed={allCollapsed}
         onToggleAll={onToggleAll}
         gitActions={gitActions}
+        onSelectFile={handleSelectFile}
+        fileStats={fileStats}
+        onStageAll={() => {
+          void onStageAll();
+        }}
+        onUnstageAll={() => {
+          void onUnstageAll();
+        }}
+        hasUnstaged={hasUnstaged}
+        hasStaged={hasStaged}
+        isStagingAll={isStagingAll}
+        isUnstagingAll={isUnstagingAll}
       />
 
       {/* Main Review Content Area */}
@@ -290,12 +316,8 @@ export function ReviewView() {
         <ReviewEmptyState searchQuery={state.searchQuery} />
       ) : (
         <ReviewFileList
-          groupedFiles={grouped}
-          collapsedSections={state.collapsedSections}
+          files={parsedFiles}
           collapsedFiles={state.collapsedFiles}
-          onToggleSection={(s) => {
-            toggleSection(s);
-          }}
           onToggleFile={(p) => {
             toggleFileCollapse(p);
           }}
@@ -313,14 +335,6 @@ export function ReviewView() {
           onOpenFile={(p) => {
             void openWorkspaceFile(p);
           }}
-          onStageAll={() => {
-            void onStageAll();
-          }}
-          onUnstageAll={() => {
-            void onUnstageAll();
-          }}
-          isStagingAll={isStagingAll}
-          isUnstagingAll={isUnstagingAll}
           targetFilePath={targetReviewFile}
           targetFileRef={setTargetFileElement}
         />

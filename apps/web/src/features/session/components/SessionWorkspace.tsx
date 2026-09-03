@@ -11,15 +11,19 @@ const sidebarElement = <Sidebar />;
 
 export function SessionWorkspace() {
   const workbenchTab = useUIStore((s) => s.workbenchTab);
+  const openWorkbenchTabs = useUIStore((s) => s.openWorkbenchTabs);
   const isWorkbenchOpen = useUIStore((s) => s.isWorkbenchOpen);
   const isMaximized = useUIStore((s) => s.isMaximized);
   const isMobileSidebarOpen = useUIStore((s) => s.isMobileSidebarOpen);
 
   const setWorkbenchTab = useUIStore((s) => s.setWorkbenchTab);
+  const openWorkbenchTab = useUIStore((s) => s.openWorkbenchTab);
+  const closeWorkbenchTab = useUIStore((s) => s.closeWorkbenchTab);
   const setWorkbenchOpen = useUIStore((s) => s.setWorkbenchOpen);
   const toggleWorkbench = useUIStore((s) => s.toggleWorkbench);
   const setMaximized = useUIStore((s) => s.setMaximized);
   const toggleMaximized = useUIStore((s) => s.toggleMaximized);
+  const moveWorkbenchTab = useUIStore((s) => s.moveWorkbenchTab);
   const setMobileSidebarOpen = useUIStore((s) => s.setMobileSidebarOpen);
 
   useEffect(() => {
@@ -57,12 +61,26 @@ export function SessionWorkspace() {
       <Workbench
         isOpen={isWorkbenchOpen}
         tab={workbenchTab}
+        openTabs={openWorkbenchTabs}
         onTabChange={setWorkbenchTab}
+        onOpenTab={openWorkbenchTab}
+        onCloseTab={closeWorkbenchTab}
+        onMoveTab={moveWorkbenchTab}
         isMaximized={isMaximized}
         onToggleMaximize={toggleMaximized}
       />
     ),
-    [isWorkbenchOpen, workbenchTab, isMaximized, setWorkbenchTab, toggleMaximized],
+    [
+      isWorkbenchOpen,
+      workbenchTab,
+      openWorkbenchTabs,
+      isMaximized,
+      setWorkbenchTab,
+      openWorkbenchTab,
+      closeWorkbenchTab,
+      moveWorkbenchTab,
+      toggleMaximized,
+    ],
   );
 
   return (
