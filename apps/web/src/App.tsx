@@ -9,6 +9,7 @@ import { useUIStore } from './shared';
 import { FontZoomIndicator } from './features/shell/components/FontZoomIndicator';
 import { FontConfigApplier } from './features/shell/components/FontConfigApplier';
 import { SettingsDialog } from './features/settings/components/SettingsDialog';
+import { ShortcutsDialog } from './features/shell/components/ShortcutsDialog';
 import { CommandPalette } from './features/shell/components/CommandPalette';
 import { GlobalDropzone } from './features/project/components/GlobalDropzone';
 import { Spinner } from '@agentctl/ui';
@@ -40,6 +41,7 @@ export function App() {
   const { settings } = useSettings();
   const toggleSettings = useUIStore((s) => s.toggleSettings);
   const toggleCommandPalette = useUIStore((s) => s.toggleCommandPalette);
+  const toggleShortcuts = useUIStore((s) => s.toggleShortcuts);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -54,17 +56,37 @@ export function App() {
         e.stopPropagation();
         toggleCommandPalette();
       }
+      if (isMod && (e.key === '/' || e.code === 'Slash')) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleShortcuts();
+      }
+      if (!isMod && e.key === '?') {
+        const target = e.target as HTMLElement | null;
+        const isInput =
+          target &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable ||
+            target.getAttribute('contenteditable') === 'true');
+        if (!isInput) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleShortcuts();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => {
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [toggleSettings, toggleCommandPalette]);
+  }, [toggleSettings, toggleCommandPalette, toggleShortcuts]);
 
   return (
     <>
       <GlobalDropzone />
       <CommandPalette />
+      <ShortcutsDialog />
       <FontConfigApplier fontConfig={settings?.fontConfig} />
       <FontZoomIndicator />
       <SettingsDialog />

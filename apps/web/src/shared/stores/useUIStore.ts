@@ -23,6 +23,10 @@ interface UIState {
   isMcpSettingsOpen: boolean;
   isSettingsOpen: boolean;
   settingsTab: SettingsTab;
+  isShortcutsOpen: boolean;
+
+  // Session Drafts State
+  sessionDrafts: Record<string, string>;
 
   // Active Subagent View (Replaces Main Chat Feed)
   activeSubagentId: string | null;
@@ -52,6 +56,11 @@ interface UIState {
   openSettings: (tab?: SettingsTab) => void;
   closeSettings: () => void;
   toggleSettings: (tab?: SettingsTab) => void;
+  openShortcuts: () => void;
+  closeShortcuts: () => void;
+  toggleShortcuts: () => void;
+  setSessionDraft: (sessionId: string, draft: string) => void;
+  clearSessionDraft: (sessionId: string) => void;
   setActiveSubagentId: (id: string | null) => void;
   setActiveSubagent: (
     group:
@@ -70,6 +79,8 @@ export const useUIStore = create<UIState>((set) => ({
   isMcpSettingsOpen: false,
   isSettingsOpen: false,
   settingsTab: 'general',
+  isShortcutsOpen: false,
+  sessionDrafts: {},
   activeSubagentId: null,
   activeSubagent: null,
   targetReviewFile: null,
@@ -110,6 +121,22 @@ export const useUIStore = create<UIState>((set) => ({
       isSettingsOpen: !state.isSettingsOpen,
       settingsTab: tab ?? state.settingsTab,
     })),
+  openShortcuts: () => set({ isShortcutsOpen: true }),
+  closeShortcuts: () => set({ isShortcutsOpen: false }),
+  toggleShortcuts: () => set((state) => ({ isShortcutsOpen: !state.isShortcutsOpen })),
+  setSessionDraft: (sessionId, draft) =>
+    set((state) => ({
+      sessionDrafts: {
+        ...state.sessionDrafts,
+        [sessionId]: draft,
+      },
+    })),
+  clearSessionDraft: (sessionId) =>
+    set((state) => {
+      const next = { ...state.sessionDrafts };
+      delete next[sessionId];
+      return { sessionDrafts: next };
+    }),
   setActiveSubagentId: (id) => set({ activeSubagentId: id }),
   setActiveSubagent: (group) =>
     set({

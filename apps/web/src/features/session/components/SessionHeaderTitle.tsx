@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Check, X, Pencil } from 'lucide-react';
 
 interface SessionHeaderTitleProps {
@@ -8,7 +9,6 @@ interface SessionHeaderTitleProps {
   handleRenameSubmit: (e?: React.SyntheticEvent) => void;
   rawTitle: string;
   sessionDisplayTitle: string;
-  projectName: string;
 }
 
 export function SessionHeaderTitle({
@@ -19,26 +19,29 @@ export function SessionHeaderTitle({
   handleRenameSubmit,
   rawTitle,
   sessionDisplayTitle,
-  projectName,
 }: SessionHeaderTitleProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditingTitle) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditingTitle]);
+
   if (isEditingTitle) {
     return (
       <form
         onSubmit={(e) => {
           void handleRenameSubmit(e);
         }}
-        className="flex min-w-0 flex-1 items-center gap-1.5"
+        className="flex min-w-0 items-center gap-1.5"
       >
         <input
-          ref={(el) => {
-            if (el) {
-              el.focus();
-              el.select();
-            }
-          }}
+          ref={inputRef}
           type="text"
           aria-label="Edit session title"
-          className="bg-surface border-border text-text-main focus:border-accent w-full rounded border px-1.5 py-0.5 text-xs font-medium outline-none"
+          className="bg-surface/80 border-accent/40 text-text-main focus:border-accent w-36 rounded-md border px-2 py-0.5 text-xs font-semibold shadow-xs outline-none"
           value={editTitleValue}
           onChange={(e) => {
             setEditTitleValue(e.target.value);
@@ -54,7 +57,7 @@ export function SessionHeaderTitle({
         />
         <button
           type="submit"
-          className="text-accent hover:text-accent/80 shrink-0 p-0.5 transition-colors"
+          className="text-accent hover:text-accent/80 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.97]"
           title="Save title"
         >
           <Check className="h-3 w-3" />
@@ -64,7 +67,7 @@ export function SessionHeaderTitle({
           onClick={() => {
             setIsEditingTitle(false);
           }}
-          className="text-text-muted hover:text-text-main shrink-0 p-0.5 transition-colors"
+          className="text-text-muted hover:text-text-main flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.97]"
           title="Cancel"
         >
           <X className="h-3 w-3" />
@@ -74,14 +77,14 @@ export function SessionHeaderTitle({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+    <div className="flex min-w-0 items-center overflow-hidden">
       <div
         onDoubleClick={() => {
           setIsEditingTitle(true);
           setEditTitleValue(rawTitle);
         }}
-        className="group flex min-w-0 cursor-pointer items-center gap-1.5"
-        title="Double click to rename"
+        className="group flex min-w-0 cursor-pointer items-center"
+        title="Double-click to rename"
       >
         <button
           type="button"
@@ -89,18 +92,12 @@ export function SessionHeaderTitle({
             setIsEditingTitle(true);
             setEditTitleValue(rawTitle);
           }}
-          className="text-text-main hover:text-accent flex min-w-0 cursor-pointer items-center gap-1 text-xs font-semibold tracking-tight transition-colors"
+          className="text-text-main hover:text-accent flex max-w-[260px] min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold tracking-tight transition-[color,background-color] duration-150 hover:bg-white/[0.08] active:scale-[0.97]"
         >
           <span className="truncate">{sessionDisplayTitle}</span>
-          <Pencil className="h-2.5 w-2.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
+          <Pencil className="h-2.5 w-2.5 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-60" />
         </button>
       </div>
-
-      {projectName && (
-        <span className="text-text-muted/50 hidden shrink-0 text-xs font-normal sm:inline">
-          · {projectName}
-        </span>
-      )}
     </div>
   );
 }

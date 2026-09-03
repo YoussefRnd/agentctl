@@ -53,7 +53,7 @@ function SubagentCard({
           onSelect();
         }
       }}
-      className={`border-border/30 bg-surface-secondary/20 hover:border-accent/40 hover:bg-surface-secondary/40 group relative mb-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition-all duration-150 ${
+      className={`border-border/30 bg-surface-secondary/20 hover:border-accent/40 hover:bg-surface-secondary/40 group relative mb-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition-[border-color,background-color,transform] duration-150 active:scale-[0.98] ${
         isFailed ? 'border-rose-500/30' : ''
       }`}
     >

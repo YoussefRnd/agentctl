@@ -292,13 +292,13 @@ export function CommandPalette() {
       role="dialog"
       aria-modal="true"
       aria-label="Command Palette"
-      className="z-popover animate-in fade-in-0 fixed inset-0 flex items-start justify-center bg-black/60 p-4 pt-[14vh] backdrop-blur-md duration-150"
+      className="z-popover fixed inset-0 flex items-start justify-center bg-black/60 p-4 pt-[14vh] backdrop-blur-md"
       onClick={(e) => {
         if (e.target === e.currentTarget) closePalette();
       }}
     >
       <div
-        className="border-border/60 bg-surface-elevated/95 liquid-glass animate-in zoom-in-95 flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border shadow-2xl duration-150"
+        className="border-border/60 bg-surface-elevated/95 liquid-glass flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border shadow-2xl"
         onKeyDown={handleKeyDown}
       >
         {/* Search Header */}

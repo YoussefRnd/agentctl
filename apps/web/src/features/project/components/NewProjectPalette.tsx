@@ -114,7 +114,7 @@ export function NewProjectPalette() {
   };
 
   return (
-    <div className="relative flex min-h-screen w-full flex-col items-center justify-center p-4">
+    <div className="relative flex h-full w-full flex-col items-center justify-center overflow-y-auto p-4 py-8">
       <div className="flex w-full max-w-2xl flex-col items-center space-y-6">
         {showExplorer ? (
           <div className="w-full space-y-4">

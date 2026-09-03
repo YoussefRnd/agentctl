@@ -86,7 +86,7 @@ function SessionRow({
   return (
     <div className="group/session relative flex items-center">
       <div
-        className={`flex w-full min-w-0 items-center justify-between rounded-lg px-2 py-1.5 text-[12px] transition-all duration-150 ${
+        className={`flex w-full min-w-0 items-center justify-between rounded-lg px-2 py-1.5 text-[12px] transition-[background-color,color,box-shadow] duration-150 ${
           isActive
             ? 'bg-accent/10 text-text-main font-medium shadow-xs'
             : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/50'

@@ -68,7 +68,7 @@ export const ConfirmationModal = memo(function ConfirmationModal({
               onConfirm();
             }}
             disabled={isConfirming}
-            className={`h-8 px-4 text-xs font-medium transition-colors active:scale-95 ${confirmButtonClass}`}
+            className={`h-8 px-4 text-xs font-medium transition-colors active:scale-[0.97] ${confirmButtonClass}`}
           >
             {isConfirming ? 'Working...' : confirmText}
           </Button>

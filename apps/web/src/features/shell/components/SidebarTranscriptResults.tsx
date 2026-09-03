@@ -196,7 +196,7 @@ export function SidebarTranscriptResults({
                     onSelectResult(item.sessionId, item.eventId);
                   }
                 }}
-                className="group border-border/20 bg-surface-secondary/20 hover:border-accent/30 hover:bg-surface-secondary/60 flex cursor-pointer flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-all"
+                className="group border-border/20 bg-surface-secondary/20 hover:border-accent/30 hover:bg-surface-secondary/60 flex cursor-pointer flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-[border-color,background-color] duration-150"
               >
                 {/* Header: Project / Session + Event Type + Time */}
                 <div className="flex items-center justify-between gap-1.5 text-[11px]">

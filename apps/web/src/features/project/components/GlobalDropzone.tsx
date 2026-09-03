@@ -116,7 +116,7 @@ export function GlobalDropzone() {
   return (
     <div
       aria-live="polite"
-      className="bg-background/80 pointer-events-none fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md transition-all duration-200"
+      className="bg-background/80 pointer-events-none fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md transition-[opacity,backdrop-filter] duration-200"
     >
       <div className="bg-surface-elevated/95 border-accent/60 shadow-accent/10 animate-in fade-in-50 zoom-in-95 flex max-w-lg flex-col items-center justify-center gap-4 rounded-3xl border-2 border-dashed p-10 text-center shadow-2xl">
         {errorMessage ? (

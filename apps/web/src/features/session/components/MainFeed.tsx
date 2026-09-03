@@ -498,7 +498,7 @@ export function MainFeed() {
                             onClick={() => {
                               void openWorkspaceFile(file.path);
                             }}
-                            className="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-all group-hover/file-row:opacity-100 focus-visible:opacity-100"
+                            className="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,color,background-color] duration-150 group-hover/file-row:opacity-100 focus-visible:opacity-100 active:scale-[0.97]"
                             aria-label={`Open ${fileName} in editor`}
                           >
                             <ExternalLink className="h-3 w-3" />

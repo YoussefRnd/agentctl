@@ -75,6 +75,9 @@ export function CommandBar({
     handleFileInputChange,
     handlePaste,
     handleDrop,
+    isDraggingOver,
+    handleDragEnter,
+    handleDragLeave,
     canSend,
     handleSelectCommand,
     contextAutocomplete,
@@ -122,6 +125,7 @@ export function CommandBar({
             disabled,
             isFocused,
             showSlashMenu,
+            isDraggingOver,
           }}
           disabledReason={disabledReason}
           input={input}
@@ -130,6 +134,8 @@ export function CommandBar({
           handleSubmit={handleSubmit}
           handlePaste={handlePaste}
           handleDrop={handleDrop}
+          handleDragEnter={handleDragEnter}
+          handleDragLeave={handleDragLeave}
           handleAttachClick={handleAttachClick}
           textareaRef={textareaRef}
           filteredCommands={filteredCommands}

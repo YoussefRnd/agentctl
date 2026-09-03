@@ -192,7 +192,7 @@ export const TurnMinimap = memo(function TurnMinimap({
                 {/* Horizontal tick bar */}
                 <span
                   style={tickStyle}
-                  className="block rounded-full transition-all duration-150 ease-out"
+                  className="block rounded-full transition-[width,height,background-color,box-shadow,opacity] duration-150 ease-out"
                 />
               </button>
 

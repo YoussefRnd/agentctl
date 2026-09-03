@@ -57,7 +57,40 @@ export function useCommandBarState(
     [providers],
   );
 
-  const [input, setInput] = useState('');
+  const prevSessionIdRef = useRef(sessionId);
+  const setSessionDraft = useUIStore((s) => s.setSessionDraft);
+  const clearSessionDraft = useUIStore((s) => s.clearSessionDraft);
+
+  const [input, setInputState] = useState(() => {
+    return (sessionId ? useUIStore.getState().sessionDrafts[sessionId] : '') || initialInput || '';
+  });
+
+  useEffect(() => {
+    if (prevSessionIdRef.current !== sessionId) {
+      prevSessionIdRef.current = sessionId;
+      const currentDraft =
+        (sessionId ? useUIStore.getState().sessionDrafts[sessionId] : '') || initialInput || '';
+      setInputState(currentDraft);
+    }
+  }, [sessionId, initialInput]);
+
+  const setInput = useCallback(
+    (value: string | ((prev: string) => string)) => {
+      setInputState((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value;
+        if (sessionId) {
+          if (next.trim().length > 0) {
+            setSessionDraft(sessionId, next);
+          } else {
+            clearSessionDraft(sessionId);
+          }
+        }
+        return next;
+      });
+    },
+    [sessionId, setSessionDraft, clearSessionDraft],
+  );
+
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -270,6 +303,7 @@ export function useCommandBarState(
     isAnyUploading,
     onSend,
     promptHistory,
+    setInput,
   ]);
 
   const handleProviderSelect = useCallback(
@@ -306,26 +340,47 @@ export function useCommandBarState(
     [addFiles],
   );
 
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      setIsDraggingOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDraggingOver(false);
+  }, []);
+
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
+      setIsDraggingOver(false);
       const files = Array.from(e.dataTransfer.files);
       const imageFiles = files.filter((f) => f.type.startsWith('image/'));
-      const nonImageFiles = files.filter((f) => !f.type.startsWith('image/'));
-
-      if (nonImageFiles.length > 0) {
-        void import('sonner').then(({ toast }) => {
-          toast.error(
-            `Unsupported file format: ${nonImageFiles.map((f) => f.name).join(', ')}. Only images (PNG, JPEG, GIF, WebP) are supported.`,
-          );
-        });
-      }
+      const codeFiles = files.filter((f) => !f.type.startsWith('image/'));
 
       if (imageFiles.length > 0) {
         addFiles(imageFiles);
       }
+
+      if (codeFiles.length > 0) {
+        for (const file of codeFiles) {
+          const filePath = (file as { path?: string }).path || file.name;
+          contextAutocomplete.selectItem({
+            id: filePath,
+            type: 'file',
+            title: file.name,
+            subtitle: filePath,
+            value: filePath,
+          });
+        }
+      }
     },
-    [addFiles],
+    [addFiles, contextAutocomplete],
   );
 
   const canSend =
@@ -392,6 +447,9 @@ export function useCommandBarState(
     handleFileInputChange,
     handlePaste,
     handleDrop,
+    isDraggingOver,
+    handleDragEnter,
+    handleDragLeave,
     canSend,
     handleSelectCommand,
     contextAutocomplete,

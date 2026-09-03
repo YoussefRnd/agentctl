@@ -53,7 +53,6 @@ export function SessionHeader({
 
   const currentProjectId = sessionData?.session.projectId;
   const currentProject = projects.find((p) => p.id === currentProjectId);
-  const projectName = currentProject?.name ?? '';
   const worktreePath = sessionData?.session.worktreePath || currentProject?.path || '';
 
   const rawTitle = sessionData?.session.title ?? '';
@@ -172,21 +171,21 @@ export function SessionHeader({
 
       {/* Center Zone: Prominent Command & Session Bar */}
       <div className="flex min-w-0 flex-1 items-center justify-center px-2">
-        <div className="border-border/30 bg-surface/50 hover:border-border/60 hover:bg-surface/80 flex h-7.5 max-w-[440px] min-w-[200px] items-center justify-between gap-2 rounded-lg border px-2.5 transition-colors">
+        <div className="border-border/35 bg-surface-secondary/40 hover:border-border/60 hover:bg-surface-secondary/70 inline-flex h-7.5 max-w-[380px] items-center gap-1.5 rounded-full border px-2 shadow-xs backdrop-blur-md transition-[border-color,background-color] duration-150">
           {/* Status Indicator Dot */}
-          <div
-            className="relative flex h-2 w-2 shrink-0 items-center justify-center"
-            title={statusConfig.label}
-          >
-            {statusConfig.animate && (
+          <Tooltip content={`Status: ${statusConfig.label}`}>
+            <div
+              className="relative flex h-3.5 w-3.5 shrink-0 cursor-default items-center justify-center"
+              aria-label={`Status: ${statusConfig.label}`}
+            >
+              {statusConfig.animate && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              )}
               <span
-                className={`absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75`}
+                className={`relative inline-flex h-1.5 w-1.5 rounded-full ${statusConfig.color}`}
               />
-            )}
-            <span
-              className={`relative inline-flex h-1.5 w-1.5 rounded-full ${statusConfig.color}`}
-            />
-          </div>
+            </div>
+          </Tooltip>
 
           <SessionHeaderTitle
             isEditingTitle={isEditingTitle}
@@ -196,15 +195,17 @@ export function SessionHeader({
             handleRenameSubmit={handleRenameSubmit}
             rawTitle={rawTitle}
             sessionDisplayTitle={sessionDisplayTitle}
-            projectName={projectName}
           />
+
+          {/* Subtle separator */}
+          <span className="bg-border/25 h-3 w-px shrink-0" />
 
           {/* Session Options Menu */}
           <Dropdown.Root>
             <Dropdown.Trigger asChild>
               <button
                 type="button"
-                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 cursor-pointer items-center justify-center rounded transition-colors"
+                className="text-text-muted/60 hover:text-text-main flex h-5 w-5 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-white/10 active:scale-[0.97]"
                 aria-label="Session options"
               >
                 <MoreHorizontal className="h-3 w-3" />

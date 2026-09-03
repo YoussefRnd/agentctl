@@ -74,12 +74,20 @@ export function TitleBar({ nav, onToggleSidebar }: TitleBarProps) {
             </Tooltip>
           )}
 
-          <Link
-            to="/"
-            className="app-region-no-drag text-text-main hover:text-accent flex items-center text-xs font-bold tracking-tight transition-colors"
-          >
-            Agentctl
-          </Link>
+          <Tooltip content="Workspaces">
+            <Link
+              to="/"
+              className="app-region-no-drag text-text-muted hover:text-text-main hover:bg-surface flex h-6 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold tracking-tight transition-[color,background-color] duration-150 active:scale-[0.97]"
+              aria-label="Agentctl Workspaces"
+            >
+              <div className="bg-accent/15 text-accent flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-bold">
+                A
+              </div>
+              <span className="hidden text-[11.5px] font-bold tracking-tight md:inline">
+                Agentctl
+              </span>
+            </Link>
+          </Tooltip>
         </div>
 
         {/* Dynamic Center/Nav Region */}

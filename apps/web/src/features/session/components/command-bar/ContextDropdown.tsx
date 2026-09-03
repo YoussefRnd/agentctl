@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { FileCode, Folder, Sparkles, Loader2 } from 'lucide-react';
+import { Folder, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@agentctl/ui';
 import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem, ContextItemType } from '@agentctl/api-client';
+import { FileIcon } from '@/shared';
 
 interface ContextDropdownProps {
   isOpen: boolean;
@@ -14,17 +15,18 @@ interface ContextDropdownProps {
   setFilterType: (type: 'all' | ContextItemType) => void;
 }
 
-function renderDropdownIcon(type: ContextItemType, id: string) {
-  if (type === 'file') {
-    return <FileCode className="h-4 w-4 shrink-0 text-cyan-400" />;
+function renderDropdownIcon(item: ContextItem) {
+  if (item.type === 'file') {
+    return <FileIcon path={item.title} className="h-4 w-4 shrink-0" />;
   }
-  if (type === 'folder') {
+  if (item.type === 'folder') {
     return <Folder className="h-4 w-4 shrink-0 text-amber-400" />;
   }
-  if (type === 'git') {
-    if (id === 'git:diff') return <DiffIcon className="h-4 w-4 shrink-0 text-purple-400" />;
-    if (id === 'git:staged') return <GitBranchIcon className="h-4 w-4 shrink-0 text-emerald-400" />;
-    if (id === 'git:log') return <GitCommitIcon className="h-4 w-4 shrink-0 text-blue-400" />;
+  if (item.type === 'git') {
+    if (item.id === 'git:diff') return <DiffIcon className="h-4 w-4 shrink-0 text-purple-400" />;
+    if (item.id === 'git:staged')
+      return <GitBranchIcon className="h-4 w-4 shrink-0 text-emerald-400" />;
+    if (item.id === 'git:log') return <GitCommitIcon className="h-4 w-4 shrink-0 text-blue-400" />;
     return <GitBranchIcon className="h-4 w-4 shrink-0 text-purple-400" />;
   }
   return <Sparkles className="text-accent h-4 w-4 shrink-0" />;
@@ -107,7 +109,7 @@ export function ContextDropdown({
                     : 'hover:bg-surface-secondary/60 text-text-muted hover:text-text-main border border-transparent',
                 )}
               >
-                {renderDropdownIcon(item.type, item.id)}
+                {renderDropdownIcon(item)}
 
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span
@@ -132,6 +134,12 @@ export function ContextDropdown({
             );
           })
         )}
+      </div>
+
+      {/* Keyboard navigation helper footer */}
+      <div className="border-border/20 bg-surface-secondary/20 text-text-muted/60 flex items-center justify-between border-t px-3 py-1 text-[10px]">
+        <span>Type to filter files</span>
+        <span>↑↓ navigate · Enter to attach · Esc to close</span>
       </div>
     </div>
   );

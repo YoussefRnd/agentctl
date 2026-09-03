@@ -19,6 +19,7 @@ import { groupFeedEvents, type FeedEventGroup } from './eventFeedGrouping';
 import { EventFeedItem } from './EventFeedItem';
 import { TurnMinimap } from './TurnMinimap';
 import { groupConversationTurns, type ConversationTurn } from '../lib/turnMinimapGrouping';
+import { NewSessionEmptyState } from './NewSessionEmptyState';
 
 interface EventFeedProps {
   events: ACPEventRow[];
@@ -330,18 +331,7 @@ export function EventFeed({
       );
     }
 
-    return (
-      <div className="flex h-full items-center justify-center py-20">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="space-y-2">
-            <h3 className="text-text-main text-[13px] font-semibold tracking-wide">
-              Session ready
-            </h3>
-            <p className="text-text-muted/60 text-[12px]">Send a message to begin.</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <NewSessionEmptyState />;
   }
 
   return (
@@ -383,7 +373,7 @@ export function EventFeed({
                 className="w-full"
               >
                 <div
-                  className={`mx-auto max-w-[800px] rounded-2xl px-6 py-3 transition-all duration-500 ${
+                  className={`mx-auto max-w-[800px] rounded-2xl px-6 py-3 transition-[background-color,box-shadow] duration-300 ${
                     isGroupHighlighted
                       ? 'bg-accent/10 ring-accent shadow-accent/10 shadow-lg ring-2'
                       : ''
@@ -443,7 +433,7 @@ export function EventFeed({
       {!isFollowingOutput && (
         <button
           type="button"
-          className="group border-accent/40 bg-brand-mantle/95 text-accent hover:border-accent hover:bg-accent hover:text-brand-crust focus-visible:ring-accent/50 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 absolute bottom-6 left-1/2 z-50 flex h-8 w-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border shadow-xl ring-1 ring-white/10 backdrop-blur-xl transition-all duration-150 ease-out hover:scale-110 focus-visible:ring-2 focus-visible:outline-none active:scale-95"
+          className="group border-accent/40 bg-brand-mantle/95 text-accent hover:border-accent hover:bg-accent hover:text-brand-crust focus-visible:ring-accent/50 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 absolute bottom-6 left-1/2 z-50 flex h-8 w-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border shadow-xl ring-1 ring-white/10 backdrop-blur-xl transition-[transform,background-color,border-color,color] duration-150 ease-out hover:scale-110 focus-visible:ring-2 focus-visible:outline-none active:scale-[0.97]"
           title="Scroll to bottom"
           aria-label="Scroll to bottom and follow new messages"
           onClick={() => {

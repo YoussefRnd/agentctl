@@ -20,7 +20,7 @@ export const SidebarSearch = forwardRef<HTMLInputElement, SidebarSearchProps>(
             onChange(e.target.value);
           }}
           onClear={onClear}
-          className="bg-surface-secondary/25 border-border/25 hover:border-border/40 hover:bg-surface-secondary/40 focus-within:border-accent/40 focus-within:bg-surface-secondary/50 placeholder:text-text-muted/40 h-8 rounded-lg text-xs transition-all"
+          className="bg-surface-secondary/25 border-border/25 hover:border-border/40 hover:bg-surface-secondary/40 focus-within:border-accent/40 focus-within:bg-surface-secondary/50 placeholder:text-text-muted/40 h-8 rounded-lg text-xs transition-[background-color,border-color] duration-150"
         />
         {!value && (
           <div className="pointer-events-none absolute top-1/2 right-2.5 flex -translate-y-1/2 items-center opacity-40 transition-opacity group-focus-within/search:opacity-0 group-hover/search:opacity-70">

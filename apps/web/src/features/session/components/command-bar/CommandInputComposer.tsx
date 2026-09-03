@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
 import { cn } from '@agentctl/ui';
 import { AttachmentStrip } from '../AttachmentStrip';
 import { ContextDropdown } from './ContextDropdown';
@@ -31,57 +31,76 @@ function SlashCommandsDropdown({
 }: SlashCommandsDropdownProps) {
   if (!showSlashMenu || filteredCommands.length === 0) return null;
   return (
-    <div className="border-border bg-brand-mantle absolute bottom-full left-0 z-50 mb-3 flex max-h-64 w-full [scrollbar-width:none] flex-col gap-0.5 overflow-y-auto scroll-smooth rounded-md border p-1.5 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-      {filteredCommands.map((cmd, index) => {
-        const isActive = index === activeCommandIndex;
-        return (
-          <button
-            key={cmd.name}
-            ref={(el) => {
-              commandRefs.current[index] = el;
-            }}
-            type="button"
-            onClick={() => {
-              onSelectCommand(cmd);
-            }}
-            className={cn(
-              'group/item flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors duration-200',
-              isActive
-                ? 'bg-accent/15 text-accent border-accent/20 border'
-                : 'text-text-main hover:bg-surface-secondary/80 hover:text-text-main border border-transparent',
-            )}
-          >
-            <span
+    <div className="border-border/40 bg-brand-mantle/95 absolute bottom-full left-0 z-50 mb-3 flex max-h-72 w-full flex-col overflow-hidden rounded-xl border p-1.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
+      {/* Top Header */}
+      <div className="border-border/30 bg-surface-secondary/30 flex items-center justify-between border-b px-3 py-1.5 text-xs">
+        <span className="text-text-muted/70 font-mono text-[10px] tracking-wider uppercase">
+          Slash Commands
+        </span>
+        <span className="text-text-muted/50 font-mono text-[10px]">
+          {filteredCommands.length} available
+        </span>
+      </div>
+
+      {/* Commands List */}
+      <div className="flex max-h-56 [scrollbar-width:thin] flex-col gap-0.5 overflow-y-auto p-1">
+        {filteredCommands.map((cmd, index) => {
+          const isActive = index === activeCommandIndex;
+          return (
+            <button
+              key={cmd.name}
+              ref={(el) => {
+                commandRefs.current[index] = el;
+              }}
+              type="button"
+              onClick={() => {
+                onSelectCommand(cmd);
+              }}
               className={cn(
-                'shrink-0 font-mono text-[13px] font-bold',
-                isActive ? 'text-accent' : 'text-text-main',
+                'group/item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150',
+                isActive
+                  ? 'bg-accent/15 border-accent/30 text-text-main border shadow-sm'
+                  : 'hover:bg-surface-secondary/60 text-text-muted hover:text-text-main border border-transparent',
               )}
             >
-              /{cmd.name}
-            </span>
-            <span className="text-text-muted flex-1 truncate font-sans text-[11px] opacity-70 group-hover/item:opacity-100">
-              {cmd.description}
-            </span>
-            {cmd.category && (
               <span
                 className={cn(
-                  'shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium opacity-70 group-hover/item:opacity-90',
-                  cmd.category === 'Skill'
-                    ? 'border-accent/30 bg-accent/10 text-accent'
-                    : 'border-border bg-surface-secondary/40 text-text-muted',
+                  'shrink-0 font-mono text-xs font-bold',
+                  isActive ? 'text-accent' : 'text-text-main',
                 )}
               >
-                {cmd.category}
+                /{cmd.name}
               </span>
-            )}
-            {cmd.input?.hint && (
-              <span className="text-text-muted bg-surface-secondary border-border shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium opacity-60 group-hover/item:opacity-90">
-                {cmd.input.hint}
+              <span className="text-text-muted/80 flex-1 truncate text-xs leading-normal">
+                {cmd.description}
               </span>
-            )}
-          </button>
-        );
-      })}
+              {cmd.category && (
+                <span
+                  className={cn(
+                    'shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase',
+                    cmd.category === 'Skill'
+                      ? 'border-accent/30 bg-accent/15 text-accent border'
+                      : 'border-border/30 bg-surface-secondary/60 text-text-muted/70 border',
+                  )}
+                >
+                  {cmd.category}
+                </span>
+              )}
+              {cmd.input?.hint && (
+                <span className="border-border/30 bg-surface-secondary/60 text-text-muted/70 shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px]">
+                  {cmd.input.hint}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Keyboard navigation helper footer */}
+      <div className="border-border/20 bg-surface-secondary/20 text-text-muted/60 flex items-center justify-between border-t px-3 py-1 text-[10px]">
+        <span>Type command name</span>
+        <span>↑↓ navigate · Tab/Enter select · Esc close</span>
+      </div>
     </div>
   );
 }
@@ -123,6 +142,7 @@ export interface CommandInputComposerFlags {
   isFocused?: boolean;
   showSlashMenu?: boolean;
   isUnauthenticated?: boolean;
+  isDraggingOver?: boolean;
 }
 
 interface CommandInputComposerProps {
@@ -134,6 +154,8 @@ interface CommandInputComposerProps {
   handleSubmit: () => void;
   handlePaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
   handleDrop: (e: React.DragEvent<HTMLDivElement>) => void;
+  handleDragEnter?: (e: React.DragEvent<HTMLDivElement>) => void;
+  handleDragLeave?: (e: React.DragEvent<HTMLDivElement>) => void;
   handleAttachClick: () => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   filteredCommands: CommandInfo[];
@@ -163,6 +185,8 @@ export function CommandInputComposer({
   handleSubmit,
   handlePaste,
   handleDrop,
+  handleDragEnter,
+  handleDragLeave,
   handleAttachClick,
   textareaRef,
   filteredCommands,
@@ -188,6 +212,7 @@ export function CommandInputComposer({
     isFocused = false,
     showSlashMenu = false,
     isUnauthenticated = false,
+    isDraggingOver = false,
   } = flags;
   const getPlaceholder = () => {
     if (disabled) return disabledReason ?? 'Connecting to session...';
@@ -222,18 +247,32 @@ export function CommandInputComposer({
       <div
         data-font-ctx="buffer"
         className={cn(
-          'bg-brand-mantle border-border/30 flex flex-col overflow-visible rounded-xl border transition-colors duration-300',
+          'bg-brand-mantle border-border/30 relative flex flex-col overflow-visible rounded-xl border transition-colors duration-200',
           hasQueuedMessages && 'rounded-t-none border-t-0',
           disabled ? 'opacity-55' : 'opacity-100',
-          isFocused
-            ? 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'
-            : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
+          isDraggingOver
+            ? 'border-accent ring-accent/30 bg-accent/5 ring-2'
+            : isFocused
+              ? 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'
+              : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
         )}
         onDragOver={(e) => {
           e.preventDefault();
         }}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        {/* Visual drop overlay when dragging files over the composer */}
+        {isDraggingOver && (
+          <div className="border-accent/70 bg-surface/95 pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border-2 border-dashed backdrop-blur-xs">
+            <div className="text-accent flex items-center gap-2 text-xs font-semibold">
+              <Sparkles className="h-4 w-4 animate-bounce" />
+              <span>Drop code files or images to attach</span>
+            </div>
+          </div>
+        )}
+
         {isUnauthenticated ? (
           authPanelContent
         ) : (
@@ -252,9 +291,9 @@ export function CommandInputComposer({
                 type="button"
                 disabled={disabled}
                 onClick={handleAttachClick}
-                className="text-text-muted hover:text-accent hover:bg-accent/10 focus-visible:ring-accent/50 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
-                title="Attach image"
-                aria-label="Attach image"
+                className="text-text-muted hover:text-accent hover:bg-accent/10 focus-visible:ring-accent/50 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40"
+                title="Attach image or file"
+                aria-label="Attach image or file"
               >
                 <Plus className="h-4 w-4" />
               </button>

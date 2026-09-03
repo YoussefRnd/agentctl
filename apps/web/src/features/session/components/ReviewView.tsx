@@ -110,6 +110,54 @@ export function ReviewView() {
     setTargetReviewFile(null);
   }, [activeFiles, dispatch, setTargetReviewFile, targetReviewFile]);
 
+  const activeFileIndexRef = useRef<number>(-1);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl instanceof HTMLInputElement ||
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl?.getAttribute('contenteditable') === 'true'
+      ) {
+        return;
+      }
+
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (parsedFiles.length === 0) return;
+
+      if (e.key === 'j' || e.key === ']') {
+        e.preventDefault();
+        const next =
+          activeFileIndexRef.current + 1 >= parsedFiles.length ? 0 : activeFileIndexRef.current + 1;
+        activeFileIndexRef.current = next;
+        const target = parsedFiles[next];
+        if (target) {
+          dispatch({ type: 'EXPAND_FILE', filePath: target.path });
+          setTargetReviewFile(target.path);
+        }
+      } else if (e.key === 'k' || e.key === '[') {
+        e.preventDefault();
+        const next =
+          activeFileIndexRef.current - 1 < 0
+            ? parsedFiles.length - 1
+            : activeFileIndexRef.current - 1;
+        activeFileIndexRef.current = next;
+        const target = parsedFiles[next];
+        if (target) {
+          dispatch({ type: 'EXPAND_FILE', filePath: target.path });
+          setTargetReviewFile(target.path);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [parsedFiles, dispatch, setTargetReviewFile]);
+
   const isClosed = sessionStatus === 'merged' || sessionStatus === 'discarded';
 
   const allCollapsed = useMemo(() => {

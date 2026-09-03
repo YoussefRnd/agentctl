@@ -82,7 +82,7 @@ export function RenameSessionDialog({
             <Button
               type="submit"
               disabled={!value.trim()}
-              className="bg-accent text-brand-crust h-8 px-4 text-xs font-medium transition-colors hover:opacity-90 active:scale-95"
+              className="bg-accent text-brand-crust h-8 px-4 text-xs font-medium transition-colors hover:opacity-90 active:scale-[0.97]"
             >
               Save
             </Button>

@@ -17,10 +17,10 @@ export type ButtonProps<T extends ElementType> = ButtonBaseProps & {
 } & Omit<ComponentPropsWithoutRef<T>, keyof ButtonBaseProps | 'as'>;
 
 const variants = {
-  solid: 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]',
+  solid: 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.97]',
   outline:
-    'bg-transparent border border-border hover:bg-white/5 text-text-main active:scale-[0.98]',
-  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main active:scale-[0.98]',
+    'bg-transparent border border-border hover:bg-white/5 text-text-main active:scale-[0.97]',
+  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main active:scale-[0.97]',
 };
 
 const sizes = {

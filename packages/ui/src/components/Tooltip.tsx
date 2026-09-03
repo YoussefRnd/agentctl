@@ -11,6 +11,10 @@ interface TooltipProps {
   delayDuration?: number;
 }
 
+let activeTooltipCount = 0;
+let lastTooltipClosedAt = 0;
+const SKIP_DELAY_THRESHOLD_MS = 300;
+
 export function Tooltip({
   content,
   children,
@@ -25,23 +29,47 @@ export function Tooltip({
   const handleOpen = () => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
-    timerRef.current = window.setTimeout(() => {
+    const isRecentOrActive =
+      activeTooltipCount > 0 || Date.now() - lastTooltipClosedAt < SKIP_DELAY_THRESHOLD_MS;
+    const delay = isRecentOrActive ? 0 : delayDuration;
+    if (delay === 0) {
+      activeTooltipCount++;
       setOpen(true);
-    }, delayDuration);
+    } else {
+      timerRef.current = window.setTimeout(() => {
+        activeTooltipCount++;
+        setOpen(true);
+      }, delay);
+    }
   };
 
   const handleClose = () => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
-    setOpen(false);
+    setOpen((wasOpen) => {
+      if (wasOpen) {
+        activeTooltipCount = Math.max(0, activeTooltipCount - 1);
+        lastTooltipClosedAt = Date.now();
+      }
+      return false;
+    });
   };
+
+  const isOpenRef = React.useRef(false);
+  isOpenRef.current = open;
 
   React.useEffect(() => {
     return () => {
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current);
+      }
+      if (isOpenRef.current) {
+        activeTooltipCount = Math.max(0, activeTooltipCount - 1);
+        lastTooltipClosedAt = Date.now();
       }
     };
   }, []);
@@ -80,7 +108,7 @@ export function Tooltip({
             e.preventDefault();
           }}
           className={cn(
-            'bg-surface-secondary/95 border-border/30 text-text-main data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 pointer-events-none z-[1000] origin-(--radix-popover-content-transform-origin) rounded-md border px-2 py-1 font-sans text-[10px] font-semibold tracking-wide whitespace-nowrap shadow-xl backdrop-blur-sm duration-150 ease-out outline-none',
+            'bg-surface-secondary/95 border-border/30 text-text-main data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98 pointer-events-none z-[1000] origin-(--radix-popover-content-transform-origin) rounded-md border px-2 py-1 font-sans text-[10px] font-semibold tracking-wide whitespace-nowrap shadow-xl backdrop-blur-sm duration-100 ease-out outline-none',
             className,
           )}
         >

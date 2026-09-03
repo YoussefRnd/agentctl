@@ -260,7 +260,7 @@
   }
 
   .click-press {
-    @apply transition-[transform,opacity] duration-150 ease-out active:scale-95 active:opacity-80;
+    @apply transition-[transform,opacity] duration-150 ease-out active:scale-[0.97] active:opacity-90;
   }
 
   .hover-glow {
@@ -305,7 +305,7 @@
   }
 
   .terminal-button {
-    @apply bg-text-main text-background font-accent h-8 rounded-md px-3 text-[11px] font-semibold tracking-tight transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:scale-[0.98] disabled:opacity-30;
+    @apply bg-text-main text-background font-accent h-8 rounded-md px-3 text-[11px] font-semibold tracking-tight transition-[opacity,transform] duration-150 ease-out hover:opacity-90 active:scale-[0.97] disabled:opacity-30;
   }
 
   .status-glow {
