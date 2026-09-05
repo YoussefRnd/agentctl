@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ContextItem } from '@agentctl/api-client';
 
 export type WorkbenchTab = 'status' | 'changes' | 'terminal';
 export type SettingsTab = 'general' | 'providers' | 'mcp';
@@ -37,7 +38,15 @@ interface UIState {
   // Review View Focus
   targetReviewFile: string | null;
 
+  // Composer Direct Insertion & Context Attachment
+  pendingComposerInsert: string | null;
+  pendingContextItem: ContextItem | null;
+
   // Actions
+  insertIntoComposer: (text: string) => void;
+  clearPendingComposerInsert: () => void;
+  attachContextToComposer: (item: ContextItem) => void;
+  clearPendingContextItem: () => void;
   setWorkbenchTab: (tab: WorkbenchTab) => void;
   openWorkbenchTab: (tab: WorkbenchTab) => void;
   closeWorkbenchTab: (tab: WorkbenchTab) => void;
@@ -89,6 +98,13 @@ export const useUIStore = create<UIState>((set) => ({
   activeSubagentId: null,
   activeSubagent: null,
   targetReviewFile: null,
+  pendingComposerInsert: null,
+  pendingContextItem: null,
+
+  insertIntoComposer: (text) => set({ pendingComposerInsert: text }),
+  clearPendingComposerInsert: () => set({ pendingComposerInsert: null }),
+  attachContextToComposer: (item) => set({ pendingContextItem: item }),
+  clearPendingContextItem: () => set({ pendingContextItem: null }),
 
   setWorkbenchTab: (tab) =>
     set((state) => ({

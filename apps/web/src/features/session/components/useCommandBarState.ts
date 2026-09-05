@@ -109,7 +109,33 @@ export function useCommandBarState(
         });
       });
     }
-  }, [initialInput]);
+  }, [initialInput, setInput]);
+
+  const pendingComposerInsert = useUIStore((s) => s.pendingComposerInsert);
+  const clearPendingComposerInsert = useUIStore((s) => s.clearPendingComposerInsert);
+  const pendingContextItem = useUIStore((s) => s.pendingContextItem);
+  const clearPendingContextItem = useUIStore((s) => s.clearPendingContextItem);
+
+  useEffect(() => {
+    if (!pendingComposerInsert) return;
+
+    setInput((prev) => {
+      const trimmed = prev.trimEnd();
+      if (trimmed.length === 0) return pendingComposerInsert;
+      const sep = pendingComposerInsert.includes('\n') ? '\n\n' : ' ';
+      return `${trimmed}${sep}${pendingComposerInsert}`;
+    });
+
+    clearPendingComposerInsert();
+
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+      }
+    });
+  }, [pendingComposerInsert, clearPendingComposerInsert, setInput]);
 
   useEffect(() => {
     const handleEditPrompt = (e: Event) => {
@@ -172,6 +198,23 @@ export function useCommandBarState(
     setInput,
     textareaRef,
   });
+
+  const { addAttachedContext } = contextAutocomplete;
+
+  useEffect(() => {
+    if (!pendingContextItem) return;
+
+    addAttachedContext(pendingContextItem);
+    clearPendingContextItem();
+
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+      }
+    });
+  }, [pendingContextItem, clearPendingContextItem, addAttachedContext]);
 
   const handleInputChange = useCallback(
     (val: string) => {
@@ -280,17 +323,36 @@ export function useCommandBarState(
     let finalPrompt = trimmed;
 
     if (hasContext) {
-      const resolved = await contextAutocomplete.resolveAttachedContexts();
-      if (resolved?.formattedContent) {
-        finalPrompt = finalPrompt
-          ? `${finalPrompt}\n\n${resolved.formattedContent}`
-          : resolved.formattedContent;
+      const fileContexts = contextAutocomplete.attachedContexts.filter(
+        (c) => c.type === 'file' || c.type === 'folder',
+      );
+      const dynamicContexts = contextAutocomplete.attachedContexts.filter((c) => c.type === 'git');
+
+      // Resolve dynamic git context (like git:diff) if attached
+      if (dynamicContexts.length > 0) {
+        const resolved = await contextAutocomplete.resolveAttachedContexts();
+        if (resolved?.formattedContent) {
+          finalPrompt = finalPrompt
+            ? `${finalPrompt}\n\n${resolved.formattedContent}`
+            : resolved.formattedContent;
+        }
       }
+
+      // Attach file / folder references cleanly (Reference-Only paradigm)
+      if (fileContexts.length > 0) {
+        const mentionHeader = fileContexts.map((c) => `@${c.value}`).join(' ');
+        if (!finalPrompt) {
+          finalPrompt = `Please review and explain ${mentionHeader}`;
+        } else {
+          finalPrompt = `${mentionHeader}\n\n${finalPrompt}`;
+        }
+      }
+
       contextAutocomplete.clearAttachedContexts();
     }
 
-    if (trimmed) {
-      promptHistory.recordPrompt(trimmed);
+    if (finalPrompt) {
+      promptHistory.recordPrompt(finalPrompt);
     }
 
     onSend(finalPrompt, readyAttachmentIds.length > 0 ? readyAttachmentIds : undefined);

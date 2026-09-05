@@ -25,6 +25,7 @@ export interface UseContextAutocompleteReturn {
   setFilterType: (type: 'all' | ContextItemType) => void;
   attachedContexts: ContextItem[];
   selectItem: (item: ContextItem) => void;
+  addAttachedContext: (item: ContextItem) => void;
   removeAttachedContext: (id: string) => void;
   clearAttachedContexts: () => void;
   resolveAttachedContexts: () => Promise<ResolvedContextResult | null>;
@@ -133,6 +134,13 @@ export function useContextAutocomplete({
     [atMatchRange, input, setIsOpen, setInput, textareaRef],
   );
 
+  const addAttachedContext = useCallback((item: ContextItem) => {
+    setAttachedContexts((prev) => {
+      if (prev.some((c) => c.id === item.id)) return prev;
+      return [...prev, item];
+    });
+  }, []);
+
   const removeAttachedContext = useCallback((id: string) => {
     setAttachedContexts((prev) => prev.filter((c) => c.id !== id));
   }, []);
@@ -208,6 +216,7 @@ export function useContextAutocomplete({
     setFilterType,
     attachedContexts,
     selectItem,
+    addAttachedContext,
     removeAttachedContext,
     clearAttachedContexts,
     resolveAttachedContexts,

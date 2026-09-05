@@ -44,4 +44,32 @@ describe('useUIStore review focus', () => {
     expect(useUIStore.getState().openWorkbenchTabs).toEqual(['changes', 'terminal', 'status']);
     expect(useUIStore.getState().workbenchTab).toBe('status');
   });
+
+  test('handles composer text insertion and clearing', () => {
+    expect(useUIStore.getState().pendingComposerInsert).toBeNull();
+
+    useUIStore.getState().insertIntoComposer('@src/index.ts');
+    expect(useUIStore.getState().pendingComposerInsert).toBe('@src/index.ts');
+
+    useUIStore.getState().clearPendingComposerInsert();
+    expect(useUIStore.getState().pendingComposerInsert).toBeNull();
+  });
+
+  test('handles composer context item attachment and clearing', () => {
+    expect(useUIStore.getState().pendingContextItem).toBeNull();
+
+    const item = {
+      id: 'file:src/index.ts',
+      type: 'file' as const,
+      title: 'index.ts',
+      subtitle: 'src/index.ts',
+      value: 'src/index.ts',
+    };
+
+    useUIStore.getState().attachContextToComposer(item);
+    expect(useUIStore.getState().pendingContextItem).toEqual(item);
+
+    useUIStore.getState().clearPendingContextItem();
+    expect(useUIStore.getState().pendingContextItem).toBeNull();
+  });
 });

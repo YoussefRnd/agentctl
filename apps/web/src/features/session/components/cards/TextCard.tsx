@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -10,6 +10,8 @@ import { StreamingDots } from '@/shared';
 import { Popover, PopoverTrigger, PopoverContent, Card, Tooltip } from '@agentctl/ui';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 import { formatShortcut } from '../../../../shared/lib/platform';
+import { parseUserMessageContent } from '../../lib/userMessageParser';
+import { ContextAttachmentChip } from './ContextAttachmentChip';
 
 type Role = 'provider' | 'user';
 
@@ -38,6 +40,32 @@ function autoFocusTextarea(textarea: HTMLTextAreaElement | null) {
   }
 }
 
+function renderTextWithMentions(node: React.ReactNode): React.ReactNode {
+  if (typeof node !== 'string') {
+    if (Array.isArray(node)) {
+      return node.map((child, i) => <span key={i}>{renderTextWithMentions(child)}</span>);
+    }
+    return node;
+  }
+
+  const parts = node.split(/(@[a-zA-Z0-9_./-]+)/g);
+  if (parts.length === 1) return node;
+
+  return parts.map((part, index) => {
+    if (part.startsWith('@') && part.length > 1) {
+      return (
+        <span
+          key={index}
+          className="border-accent/25 bg-accent/15 py-0.2 text-accent selection:bg-accent/30 inline-flex items-center rounded border px-1.5 font-mono text-[11px] font-medium"
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 export const TextCard = memo(function TextCard({
   content,
   variant = 'provider',
@@ -51,7 +79,8 @@ export const TextCard = memo(function TextCard({
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [draftContent, setDraftContent] = useState(content);
+  const parsed = useMemo(() => parseUserMessageContent(content), [content]);
+  const [draftContent, setDraftContent] = useState(parsed.prompt || content);
   const { sessionId } = useSession();
 
   const handleCopy = () => {
@@ -63,13 +92,13 @@ export const TextCard = memo(function TextCard({
   };
 
   const handleStartEdit = () => {
-    setDraftContent(content);
+    setDraftContent(parsed.prompt || content);
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     setIsEditing(false);
-    setDraftContent(content);
+    setDraftContent(parsed.prompt || content);
   };
 
   const handleSaveEdit = () => {
@@ -77,7 +106,10 @@ export const TextCard = memo(function TextCard({
     if (!trimmed) return;
     setIsEditing(false);
     if (eventId && onEditSubmit) {
-      onEditSubmit(eventId, trimmed);
+      const attachmentIndex = content.indexOf('### Context Attachment:');
+      const fullUpdatedContent =
+        attachmentIndex !== -1 ? `${trimmed}\n\n${content.slice(attachmentIndex)}` : trimmed;
+      onEditSubmit(eventId, fullUpdatedContent);
     }
   };
 
@@ -151,10 +183,33 @@ export const TextCard = memo(function TextCard({
               </div>
             ) : (
               <>
-                {content && (
+                {parsed.prompt ? (
                   <Card className="text-text-main relative px-4 py-3 leading-relaxed shadow-sm">
-                    {content}
+                    <div className="prose prose-invert prose-sm max-w-none leading-relaxed break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          pre: MarkdownCodeBlock,
+                          p({ children }) {
+                            return (
+                              <p className="mb-1.5 last:mb-0">{renderTextWithMentions(children)}</p>
+                            );
+                          },
+                        }}
+                      >
+                        {parsed.prompt}
+                      </ReactMarkdown>
+                    </div>
                   </Card>
+                ) : null}
+
+                {/* Clean context attachment badges for existing or dynamic attachments */}
+                {parsed.attachments.length > 0 && (
+                  <div className="mt-2 flex w-full flex-col gap-1.5">
+                    {parsed.attachments.map((att) => (
+                      <ContextAttachmentChip key={att.id} attachment={att} />
+                    ))}
+                  </div>
                 )}
 
                 {/* Quick action bar anchored cleanly below user message bubble */}

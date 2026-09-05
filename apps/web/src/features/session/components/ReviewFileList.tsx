@@ -1,10 +1,19 @@
 import { useMemo } from 'react';
 import { DiffBlock } from './diff/DiffBlock';
 import type { ReviewFile, FileState } from './ReviewHeader';
-import { ChevronRight, ChevronDown, ExternalLink, Plus, Minus, Undo2 } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronDown,
+  ExternalLink,
+  Plus,
+  Minus,
+  Undo2,
+  MessageSquarePlus,
+} from 'lucide-react';
 import { Tooltip, cn } from '@agentctl/ui';
+import { toast } from 'sonner';
 import type { parseDiff } from '../../../shared/lib/diff-parser';
-import { FileIcon } from '@/shared';
+import { FileIcon, useUIStore } from '@/shared';
 
 const STATE_BADGE: Record<FileState, { letter: string; color: string; label: string }> = {
   modified: {
@@ -159,6 +168,28 @@ export function ReviewFileList({
                       </button>
                     </Tooltip>
                   )}
+
+                  {/* Add file context to chat composer */}
+                  <Tooltip content="Add to chat composer">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        useUIStore.getState().attachContextToComposer({
+                          id: `file:${file.path}`,
+                          type: 'file',
+                          title: fileName,
+                          subtitle: file.path,
+                          value: file.path,
+                        });
+                        toast.success(`Added @${fileName} to chat`);
+                      }}
+                      className="text-text-muted hover:text-text-main flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors hover:bg-white/10 active:scale-[0.95]"
+                      aria-label="Add to chat composer"
+                    >
+                      <MessageSquarePlus className="h-3 w-3" />
+                    </button>
+                  </Tooltip>
 
                   {/* Revert / Discard changes (supported across all uncommitted/untracked states) */}
                   {onRevert && (

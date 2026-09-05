@@ -4,8 +4,19 @@ import type { DiffHunk } from '../../../../shared/lib/diff-parser';
 import { buildSplitRows } from '../../../../shared/lib/diff-parser';
 import { getLanguageForPath } from '../../../../shared/lib/code-highlighter';
 import { DiffLine } from './DiffLine';
-import { ChevronDown, ChevronRight, CheckSquare, ExternalLink, Copy, Check } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  CheckSquare,
+  ExternalLink,
+  Copy,
+  Check,
+  MessageSquareQuote,
+  MessageSquarePlus,
+} from 'lucide-react';
 import { Tooltip } from '@agentctl/ui';
+import { toast } from 'sonner';
+import { useUIStore } from '@/shared';
 
 interface DiffBlockProps {
   path: string;
@@ -211,7 +222,7 @@ export const DiffBlock = memo(function DiffBlock({
               <button
                 type="button"
                 onClick={handleCopyPath}
-                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.95]"
                 aria-label="Copy file path"
               >
                 {copiedPath ? (
@@ -222,12 +233,33 @@ export const DiffBlock = memo(function DiffBlock({
               </button>
             </Tooltip>
 
+            <Tooltip content="Add to chat composer">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useUIStore.getState().attachContextToComposer({
+                    id: `file:${path}`,
+                    type: 'file',
+                    title: fileName,
+                    subtitle: path,
+                    value: path,
+                  });
+                  toast.success(`Added @${fileName} to chat`);
+                }}
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.95]"
+                aria-label="Add to chat composer"
+              >
+                <MessageSquarePlus className="h-3 w-3" />
+              </button>
+            </Tooltip>
+
             {onOpenFile && (
               <Tooltip content="Open in editor">
                 <button
                   type="button"
                   onClick={onOpenFile}
-                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors"
+                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.95]"
                   aria-label="Open file in editor"
                 >
                   <ExternalLink className="h-3 w-3" />
@@ -238,7 +270,7 @@ export const DiffBlock = memo(function DiffBlock({
               <button
                 type="button"
                 onClick={onRevert}
-                className="border-danger/20 bg-danger/5 text-danger hover:bg-danger/10 label-3xs flex h-6 cursor-pointer items-center rounded-md border px-2 transition-colors"
+                className="border-danger/20 bg-danger/5 text-danger hover:bg-danger/10 label-3xs flex h-6 cursor-pointer items-center rounded-md border px-2 transition-colors active:scale-[0.95]"
               >
                 Revert
               </button>
@@ -247,7 +279,7 @@ export const DiffBlock = memo(function DiffBlock({
               <button
                 type="button"
                 onClick={onStage}
-                className="bg-accent text-brand-crust label-3xs flex h-6 cursor-pointer items-center rounded-md px-2 shadow-[0_0_10px_rgba(203,166,247,0.2)] transition-colors hover:opacity-90"
+                className="bg-accent text-brand-crust label-3xs flex h-6 cursor-pointer items-center rounded-md px-2 shadow-[0_0_10px_rgba(203,166,247,0.2)] transition-colors hover:opacity-90 active:scale-[0.95]"
               >
                 Stage
               </button>
@@ -270,17 +302,51 @@ export const DiffBlock = memo(function DiffBlock({
                       {hunk.header}
                     </span>
                   </div>
-                  {onStage && (
-                    <button
-                      type="button"
-                      onClick={onStage}
-                      className="bg-accent/10 text-accent hover:bg-accent/20 flex h-5 cursor-pointer items-center gap-1.5 rounded px-1.5 text-[8px] font-black opacity-0 transition-colors group-hover/hunk:opacity-100"
-                      title="Stage Hunk"
-                    >
-                      <CheckSquare className="h-3 w-3" />
-                      Stage Hunk
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/hunk:opacity-100">
+                    <Tooltip content="Quote hunk in chat composer">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const maxLines = 25;
+                          const rawLines = hunk.lines.slice(0, maxLines).map((l) => {
+                            const prefix =
+                              l.type === 'added' ? '+' : l.type === 'removed' ? '-' : ' ';
+                            return `${prefix}${l.content}`;
+                          });
+                          if (hunk.lines.length > maxLines) {
+                            rawLines.push(
+                              `... (${String(hunk.lines.length - maxLines)} more lines)`,
+                            );
+                          }
+                          const snippet = rawLines.join('\n');
+                          useUIStore
+                            .getState()
+                            .insertIntoComposer(
+                              `@${path} \`${hunk.header}\`:\n\`\`\`diff\n${snippet}\n\`\`\``,
+                            );
+                          toast.success('Quoted hunk in chat');
+                        }}
+                        className="text-text-muted hover:text-text-main flex h-5 cursor-pointer items-center gap-1 rounded px-1.5 text-[8px] font-medium transition-colors hover:bg-white/10 active:scale-[0.95]"
+                      >
+                        <MessageSquareQuote className="h-3 w-3" />
+                        <span>Quote</span>
+                      </button>
+                    </Tooltip>
+
+                    {onStage && (
+                      <Tooltip content="Stage changes">
+                        <button
+                          type="button"
+                          onClick={onStage}
+                          className="bg-accent/10 text-accent hover:bg-accent/20 flex h-5 cursor-pointer items-center gap-1 rounded px-1.5 text-[8px] font-black transition-colors"
+                        >
+                          <CheckSquare className="h-3 w-3" />
+                          <span>Stage</span>
+                        </button>
+                      </Tooltip>
+                    )}
+                  </div>
                 </div>
 
                 {isLarge ? (
