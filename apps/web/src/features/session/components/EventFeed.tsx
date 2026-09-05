@@ -309,7 +309,7 @@ export function EventFeed({
     };
   }, [hasGroupedEvents, isSessionRunning, scrollToBottom]);
 
-  if (events.length === 0) {
+  if ((events.length === 0 || groupedEvents.length === 0) && !isSessionError) {
     if (!isConnected) {
       return (
         <div className="flex h-full items-center justify-center py-20">

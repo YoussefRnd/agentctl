@@ -8,7 +8,6 @@ import {
   type PanelSize,
 } from 'react-resizable-panels';
 import { GlassPanel } from '@agentctl/ui';
-import { ProgressBar } from './ProgressBar';
 import { TitleBar } from './TitleBar';
 import { UpdateToast } from './UpdateToast';
 
@@ -104,8 +103,6 @@ export function Shell({
 
   return (
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
-      <ProgressBar />
-
       <TitleBar nav={nav} onToggleSidebar={sidebar ? handleToggleSidebar : undefined} />
 
       <div className="relative z-10 min-h-0 w-full flex-1 overflow-hidden p-3">

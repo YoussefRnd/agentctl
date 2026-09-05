@@ -450,6 +450,10 @@ export function UnifiedActivityBlock({
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
   const isOpen = userToggled ?? (!isCompleted && showThinking);
 
+  if (events.length === 0 && !isInitialThinking) {
+    return null;
+  }
+
   const { totalDurationMs, totalTokens, toolCount, thoughtCount } = useMemo(() => {
     let durMs = 0;
     let tokens = 0;

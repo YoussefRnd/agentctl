@@ -50,6 +50,14 @@ export function groupFeedEvents(
       continue;
     }
 
+    if (e.type === 'status') {
+      if (currentAgentTurn) {
+        currentAgentTurn.events.push(e);
+        if (isStreaming) currentAgentTurn.isStreaming = true;
+      }
+      continue;
+    }
+
     const isUser = isACPEventText(e) && e.data.role === 'user';
 
     if (isUser) {

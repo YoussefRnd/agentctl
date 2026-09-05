@@ -85,9 +85,27 @@ const AgentResponseComponent = function AgentResponse({
     };
   }, [events, reviewFiles]);
 
+  const sessionStatus = sessionData?.session.status;
+  const isSessionActive = sessionStatus === 'running' || sessionStatus === 'needs_attention';
+
   const hasActivity = activityEvents.length > 0;
   const isInitialThinking =
-    !hasActivity && !responseEvent && subagentGroups.length === 0 && (isStreaming || isActive);
+    !hasActivity &&
+    !responseEvent &&
+    subagentGroups.length === 0 &&
+    isSessionActive &&
+    (isStreaming || isActive);
+
+  const hasContent =
+    hasActivity ||
+    isInitialThinking ||
+    subagentGroups.length > 0 ||
+    responseEvent != null ||
+    turnChanges.files.length > 0;
+
+  if (!hasContent) {
+    return null;
+  }
 
   return (
     <div data-font-ctx="chat" className="group/agent relative flex flex-col gap-2 py-3">
