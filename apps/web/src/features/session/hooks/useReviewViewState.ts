@@ -1,6 +1,8 @@
 import { useReducer, useCallback } from 'react';
 import type { FileState } from '../components/ReviewHeader';
 
+export type StatusFilter = 'all' | 'modified' | 'untracked' | 'staged' | 'deleted';
+
 export interface ReviewViewState {
   isDiscardModalOpen: boolean;
   isApplyDialogOpen: boolean;
@@ -11,6 +13,7 @@ export interface ReviewViewState {
   collapsedSections: Record<FileState, boolean>;
   viewMode: 'inline' | 'split';
   searchQuery: string;
+  statusFilter: StatusFilter;
 }
 
 export type ReviewViewAction =
@@ -24,6 +27,7 @@ export type ReviewViewAction =
   | { type: 'EXPAND_FILE'; filePath: string }
   | { type: 'TOGGLE_VIEW_MODE' }
   | { type: 'SET_SEARCH_QUERY'; payload: string }
+  | { type: 'SET_STATUS_FILTER'; payload: StatusFilter }
   | { type: 'COLLAPSE_ALL' }
   | { type: 'EXPAND_ALL'; payload: string[] };
 
@@ -77,6 +81,11 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
         ...state,
         searchQuery: action.payload,
       };
+    case 'SET_STATUS_FILTER':
+      return {
+        ...state,
+        statusFilter: action.payload,
+      };
     case 'COLLAPSE_ALL':
       return { ...state, collapsedFiles: {} };
     case 'EXPAND_ALL': {
@@ -109,6 +118,7 @@ export function useReviewViewState() {
     },
     viewMode: 'inline',
     searchQuery: '',
+    statusFilter: 'all',
   });
 
   const toggleFileCollapse = useCallback((filePath: string) => {

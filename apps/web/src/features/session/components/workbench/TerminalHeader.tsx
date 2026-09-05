@@ -64,6 +64,12 @@ export function TerminalHeader({
               onClick={() => {
                 if (!isActive) onSelectTab(tab.id);
               }}
+              onMouseDown={(e) => {
+                if (e.button === 1) {
+                  e.preventDefault();
+                  onCloseTab(tab.id);
+                }
+              }}
               onDoubleClick={() => handleStartRename(tab)}
               className={`group/tab relative flex h-7 max-w-[130px] min-w-[70px] cursor-pointer items-center justify-between gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-all ${
                 isActive
@@ -154,7 +160,7 @@ export function TerminalHeader({
           <button
             type="button"
             onClick={handleRestart}
-            className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 items-center justify-center rounded-md transition-colors"
+            className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded-md transition-colors active:scale-[0.95]"
             aria-label="Restart shell"
           >
             <RotateCcw className="h-3 w-3" />
@@ -165,7 +171,7 @@ export function TerminalHeader({
           <button
             type="button"
             onClick={handleClear}
-            className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 items-center justify-center rounded-md transition-colors"
+            className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded-md transition-colors active:scale-[0.95]"
             aria-label="Clear terminal"
           >
             <Trash2 className="h-3 w-3" />

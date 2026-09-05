@@ -8,7 +8,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { Dropdown, SearchBar, Tooltip, cn } from '@agentctl/ui';
-import type { ChangeEvent, ReactNode } from 'react';
+import { useMemo, type ChangeEvent, type ReactNode } from 'react';
 import type { ReviewScope } from '@/shared';
 import { FileIcon } from '@/shared';
 
@@ -56,6 +56,8 @@ export interface ReviewHeaderProps {
   hasStaged?: boolean;
   isStagingAll?: boolean;
   isUnstagingAll?: boolean;
+  statusFilter?: import('../hooks/useReviewViewState').StatusFilter;
+  onStatusFilterChange?: (filter: import('../hooks/useReviewViewState').StatusFilter) => void;
 }
 
 export function ReviewHeader({
@@ -78,7 +80,29 @@ export function ReviewHeader({
   hasStaged,
   isStagingAll,
   isUnstagingAll,
+  statusFilter = 'all',
+  onStatusFilterChange,
 }: ReviewHeaderProps) {
+  const statusCounts = useMemo(() => {
+    let modified = 0;
+    let untracked = 0;
+    let staged = 0;
+    let deleted = 0;
+    for (const f of files) {
+      if (f.state === 'modified') modified++;
+      else if (f.state === 'untracked') untracked++;
+      else if (f.state === 'staged') staged++;
+      else if (f.state === 'deleted') deleted++;
+    }
+    return {
+      all: files.length,
+      modified,
+      untracked,
+      staged,
+      deleted,
+    };
+  }, [files]);
+
   const scopeOptions: {
     id: ReviewScope;
     label: string;
@@ -313,8 +337,8 @@ export function ReviewHeader({
         </div>
       </div>
 
-      {/* Bottom Row: Full-width Search / Filter Input */}
-      <div className="w-full">
+      {/* Bottom Row: Full-width Search / Filter Input + Status Filter Chips */}
+      <div className="space-y-1.5">
         <SearchBar
           value={searchQuery}
           onChange={(e: ChangeEvent<HTMLInputElement>) => {
@@ -326,6 +350,96 @@ export function ReviewHeader({
           placeholder="Filter changed files..."
           className="bg-surface/40 border-border/25 hover:border-border/40 focus:border-accent/40 h-7 text-xs"
         />
+
+        {files.length > 0 && onStatusFilterChange && (
+          <div className="flex [scrollbar-width:none] items-center gap-1 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => onStatusFilterChange('all')}
+              className={cn(
+                'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
+                statusFilter === 'all'
+                  ? 'bg-accent/15 text-accent border-accent/30 border font-semibold shadow-xs'
+                  : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
+              )}
+            >
+              <span>All</span>
+              <span className="font-mono tabular-nums opacity-60">{statusCounts.all}</span>
+            </button>
+
+            {statusCounts.modified > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  onStatusFilterChange(statusFilter === 'modified' ? 'all' : 'modified')
+                }
+                className={cn(
+                  'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
+                  statusFilter === 'modified'
+                    ? 'border border-amber-500/30 bg-amber-500/15 font-semibold text-amber-300 shadow-xs'
+                    : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
+                )}
+              >
+                <span className="font-mono font-bold text-amber-400">M</span>
+                <span>Modified</span>
+                <span className="font-mono tabular-nums opacity-60">{statusCounts.modified}</span>
+              </button>
+            )}
+
+            {statusCounts.untracked > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  onStatusFilterChange(statusFilter === 'untracked' ? 'all' : 'untracked')
+                }
+                className={cn(
+                  'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
+                  statusFilter === 'untracked'
+                    ? 'border border-emerald-500/30 bg-emerald-500/15 font-semibold text-emerald-300 shadow-xs'
+                    : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
+                )}
+              >
+                <span className="font-mono font-bold text-emerald-400">U</span>
+                <span>Untracked</span>
+                <span className="font-mono tabular-nums opacity-60">{statusCounts.untracked}</span>
+              </button>
+            )}
+
+            {statusCounts.staged > 0 && (
+              <button
+                type="button"
+                onClick={() => onStatusFilterChange(statusFilter === 'staged' ? 'all' : 'staged')}
+                className={cn(
+                  'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
+                  statusFilter === 'staged'
+                    ? 'border border-emerald-500/30 bg-emerald-500/15 font-semibold text-emerald-300 shadow-xs'
+                    : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
+                )}
+              >
+                <span className="font-mono font-bold text-emerald-400">S</span>
+                <span>Staged</span>
+                <span className="font-mono tabular-nums opacity-60">{statusCounts.staged}</span>
+              </button>
+            )}
+
+            {statusCounts.deleted > 0 && (
+              <button
+                type="button"
+                onClick={() => onStatusFilterChange(statusFilter === 'deleted' ? 'all' : 'deleted')}
+                className={cn(
+                  'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
+                  statusFilter === 'deleted'
+                    ? 'border border-rose-500/30 bg-rose-500/15 font-semibold text-rose-300 shadow-xs'
+                    : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
+                )}
+              >
+                <span className="font-mono font-bold text-rose-400">D</span>
+                <span>Deleted</span>
+                <span className="font-mono tabular-nums opacity-60">{statusCounts.deleted}</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

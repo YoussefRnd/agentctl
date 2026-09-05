@@ -98,6 +98,7 @@ export function ReviewView() {
     state.searchQuery,
     reviewScope,
     activeTurnFiles,
+    state.statusFilter,
   );
 
   useLayoutEffect(() => {
@@ -305,6 +306,10 @@ export function ReviewView() {
         hasStaged={hasStaged}
         isStagingAll={isStagingAll}
         isUnstagingAll={isUnstagingAll}
+        statusFilter={state.statusFilter}
+        onStatusFilterChange={(filter) => {
+          dispatch({ type: 'SET_STATUS_FILTER', payload: filter });
+        }}
       />
 
       {/* Main Review Content Area */}

@@ -3,22 +3,30 @@ import { parseDiff } from '../../../shared/lib/diff-parser';
 import { matchSorter } from 'match-sorter';
 import type { ReviewFile, FileState } from '../components/ReviewHeader';
 import type { ReviewScope } from '@/shared';
+import type { StatusFilter } from './useReviewViewState';
 
 export function useReviewDiffs(
   files: ReviewFile[],
   searchQuery: string,
   scope: ReviewScope = 'uncommitted',
   turnFiles?: Set<string>,
+  statusFilter: StatusFilter = 'all',
 ) {
   const activeFiles = useMemo(() => {
+    let list = files;
     if (scope === 'all_edits') {
-      return files;
+      list = files;
+    } else if (scope === 'this_turn') {
+      list = turnFiles ? files.filter((file) => turnFiles.has(file.path)) : [];
+    } else {
+      list = files.filter((f) => f.state !== 'committed');
     }
-    if (scope === 'this_turn') {
-      return turnFiles ? files.filter((file) => turnFiles.has(file.path)) : [];
+
+    if (statusFilter !== 'all') {
+      list = list.filter((f) => f.state === statusFilter);
     }
-    return files.filter((f) => f.state !== 'committed');
-  }, [files, scope, turnFiles]);
+    return list;
+  }, [files, scope, turnFiles, statusFilter]);
 
   const filteredFiles = useMemo(() => {
     if (!searchQuery) return activeFiles;

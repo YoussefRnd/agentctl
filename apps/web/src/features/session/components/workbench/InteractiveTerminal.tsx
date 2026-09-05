@@ -96,10 +96,7 @@ export function InteractiveTerminal() {
       wsUrl = `${wsProtocol}//${urlObj.host}/api/sessions/${sessionId}/terminal/ws?termId=${activeTabId}`;
     } else {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host =
-        window.location.port === '5173' || window.location.port === '5174'
-          ? 'localhost:3000'
-          : window.location.host;
+      const host = window.location.host;
       wsUrl = `${protocol}//${host}/api/sessions/${sessionId}/terminal/ws?termId=${activeTabId}`;
     }
 
@@ -296,7 +293,7 @@ export function InteractiveTerminal() {
       xtermInstance.current = null;
       fitAddonRef.current = null;
     };
-  }, [sendResize]);
+  }, [codeFont?.family, codeFont?.size, sendResize]);
 
   // Synchronize dynamic terminal font size and family from settings
   useEffect(() => {
