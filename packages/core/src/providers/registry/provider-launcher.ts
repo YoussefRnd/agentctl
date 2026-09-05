@@ -1,7 +1,7 @@
 import os from 'node:os';
 import type { RegistryAgent, ACPConfigOption } from '@agentctl/shared';
 import type { ProviderData } from '../provider.js';
-import type { BinaryInstaller } from './binary-installer.js';
+import { type BinaryInstaller, getPlatformKey } from './binary-installer.js';
 import type { ProviderStore } from './provider-store.js';
 import type { PersistentAgentConnectionManager } from './persistent-connection.js';
 import type { AgentRuntime, AgentProbeResult } from '../../acp/types.js';
@@ -93,6 +93,24 @@ export class ProviderLauncher {
     return false;
   }
 
+  async detectSystemBinary(
+    agent: RegistryAgent,
+    platform: string,
+  ): Promise<{ command: string; args?: string[] } | null> {
+    const binary = agent.distribution.binary;
+    const target = binary ? binary[platform] : undefined;
+    if (target?.cmd) {
+      const baseCmd = target.cmd.replace(/^\.\//, '').replace(/\.exe$/, '');
+      if (baseCmd && baseCmd !== 'npx' && baseCmd !== 'uvx') {
+        if (await this.isBinaryOnPath(baseCmd)) {
+          return { command: baseCmd, args: target.args ?? [] };
+        }
+      }
+    }
+
+    return null;
+  }
+
   resolveLaunch(provider: ProviderData, agent?: RegistryAgent): LaunchResolved {
     const rawLaunchEnv = JSON.parse(provider.launchEnv || '{}') as Record<string, string>;
     const rawCustomEnv = JSON.parse(provider.customEnv || '{}') as Record<string, string>;
@@ -103,6 +121,21 @@ export class ProviderLauncher {
       if (!agent) {
         throw new Error('Registry agent metadata required for system_available providers');
       }
+
+      // If a local binary was detected or custom command configured
+      if (provider.command && provider.command !== 'npx' && provider.command !== 'uvx') {
+        const parsedArgs = JSON.parse(provider.launchArgs || '[]') as string[];
+        return {
+          command: provider.command,
+          args: parsedArgs,
+          env: {
+            ...proxy,
+            ...rawLaunchEnv,
+            ...rawCustomEnv,
+          },
+        };
+      }
+
       if (agent.distribution.npx) {
         return {
           command: 'npx',
@@ -145,7 +178,18 @@ export class ProviderLauncher {
     let command = provider.command;
     const args = JSON.parse(provider.launchArgs || '[]') as string[];
 
-    const binEntry = agent?.distribution.binary?.[process.platform];
+    if (command === 'npx' && args.length === 0 && agent?.distribution.npx) {
+      args.push(
+        '-y',
+        resolveNpxPackageSpec(agent.distribution.npx.package, agent.version),
+        ...(agent.distribution.npx.args ?? []),
+      );
+    } else if (command === 'uvx' && args.length === 0 && agent?.distribution.uvx) {
+      args.push(agent.distribution.uvx.package, ...(agent.distribution.uvx.args ?? []));
+    }
+
+    const platformKey = getPlatformKey();
+    const binEntry = agent?.distribution.binary?.[platformKey];
     if (provider.installState === 'installed_local' && agent && binEntry?.archive) {
       const versionedDir = this.installer.getVersionedInstallDir(
         agent.id,

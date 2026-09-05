@@ -30,28 +30,36 @@ export class Provider {
     return this.data.installState;
   }
 
+  get installError(): string | null {
+    return this.data.installError ?? null;
+  }
+
   get authState(): string {
     return this.data.authState;
   }
 
   get isInstalled(): boolean {
-    return this.data.installState !== 'not_installed';
+    return (
+      this.data.installState === 'installed_local' || this.data.installState === 'system_available'
+    );
   }
 
   get isReady(): boolean {
-    return this.data.installState !== 'not_installed' && this.data.authState === 'authenticated';
+    return this.isInstalled && this.data.authState === 'authenticated';
   }
 
   get needsAuth(): boolean {
-    return this.data.installState !== 'not_installed' && this.data.authState === 'needs_auth';
+    return this.isInstalled && this.data.authState === 'needs_auth';
   }
 
   get hasError(): boolean {
-    return this.data.authState === 'error';
+    return this.data.authState === 'error' || this.data.installState === 'failed';
   }
 
   get status(): ProviderStatus {
     if (!this.data.enabled) return 'inactive';
+    if (this.data.installState === 'failed') return 'error';
+    if (this.data.installState === 'installing') return 'inactive';
     if (this.data.installState === 'not_installed') return 'not_found';
     if (this.data.authState === 'needs_auth') return 'needs_auth';
     if (this.data.authState === 'error') return 'error';
@@ -173,6 +181,7 @@ export class Provider {
       supportsLogout: this.data.supportsLogout,
       nativelyLoadsSkills: this.data.nativelyLoadsSkills,
       installState: this.data.installState as ProviderDiscovery['installState'],
+      installError: this.data.installError ?? null,
       authState: this.data.authState as ProviderDiscovery['authState'],
       status: this.status,
       enabled: this.data.enabled,

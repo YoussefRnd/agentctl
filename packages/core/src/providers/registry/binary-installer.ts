@@ -15,6 +15,22 @@ export function getHome(): string {
   return process.env.AGENTCTL_HOME ?? path.join(os.homedir(), '.agentctl');
 }
 
+export function getPlatformKey(): string {
+  const arch = os.arch();
+  const platform = os.platform();
+  const archMap: Record<string, string> = {
+    x64: 'x86_64',
+    arm64: 'aarch64',
+    aarch64: 'aarch64',
+  };
+  const platformMap: Record<string, string> = {
+    darwin: 'darwin',
+    linux: 'linux',
+    win32: 'windows',
+  };
+  return `${platformMap[platform] ?? platform}-${archMap[arch] ?? arch}`;
+}
+
 function hashString(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex').slice(0, 16);
 }

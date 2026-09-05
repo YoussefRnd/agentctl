@@ -85,11 +85,13 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
   };
 
   const matchesStatus = (p: ProviderDiscovery) => {
+    const isInstalled =
+      p.installState === 'installed_local' || p.installState === 'system_available';
     switch (statusFilter) {
       case 'installed':
-        return p.installState !== 'not_installed';
+        return isInstalled;
       case 'not_installed':
-        return p.installState === 'not_installed';
+        return !isInstalled;
       default:
         return true;
     }

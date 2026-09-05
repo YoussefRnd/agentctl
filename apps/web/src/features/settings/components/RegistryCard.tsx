@@ -1,5 +1,14 @@
 import type { ProviderDiscovery } from '@agentctl/shared';
-import { Download, Trash2, KeyRound, Loader2, ExternalLink, LogOut } from 'lucide-react';
+import {
+  Download,
+  Trash2,
+  KeyRound,
+  Loader2,
+  ExternalLink,
+  LogOut,
+  AlertTriangle,
+  RefreshCw,
+} from 'lucide-react';
 import { ProviderIcon } from '@/shared';
 import { Card, Button } from '@agentctl/ui';
 
@@ -43,12 +52,15 @@ export function RegistryCard({
   onRemove,
   onAuth,
   onLogout,
-  isInstalling,
+  isInstalling: isInstallingProp,
   isRemoving,
 }: RegistryCardProps) {
   const name = provider.agent?.name ?? provider.label;
   const subtitle = provider.agent?.id ?? provider.id;
-  const notInstalled = provider.installState === 'not_installed';
+  const isInstalled =
+    provider.installState === 'installed_local' || provider.installState === 'system_available';
+  const isInstalling = isInstallingProp || provider.installState === 'installing';
+  const isFailed = provider.installState === 'failed';
   const repositoryUrl = provider.agent?.repository;
   const websiteUrl = provider.agent?.website;
   const hasAuth = !!provider.agent?.authMethods && provider.agent.authMethods.length > 0;
@@ -56,7 +68,7 @@ export function RegistryCard({
     hasAuth && provider.authState ? authStateConfig[provider.authState] : undefined;
 
   return (
-    <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-colors duration-200">
+    <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-colors duration-200 [&::before]:hidden">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <ProviderIcon provider={provider} size="sm" className="shrink-0" />
@@ -65,7 +77,12 @@ export function RegistryCard({
             <span className="text-text-muted font-mono text-[10.5px] opacity-70">
               v{provider.version ?? '0.0.1'}
             </span>
-            {authStatus && !notInstalled && (
+            {isFailed && (
+              <span className="rounded-md bg-red-500/10 px-2 py-0.5 text-[9.5px] font-bold tracking-wider text-red-400 uppercase">
+                Install Failed
+              </span>
+            )}
+            {authStatus && isInstalled && (
               <span
                 className={`rounded-md px-2 py-0.5 text-[9.5px] font-bold tracking-wider uppercase ${authStatus.className}`}
               >
@@ -91,6 +108,18 @@ export function RegistryCard({
       <p className="text-text-muted text-[11px] leading-relaxed opacity-85">
         {provider.description ?? 'No description available for this agent provider.'}
       </p>
+
+      {isFailed && provider.installError && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-[11px] text-red-300">
+          <div className="flex items-center gap-1.5 font-semibold text-red-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            Installation Failed
+          </div>
+          <p className="mt-1 font-mono text-[10.5px] break-words whitespace-pre-wrap text-red-300/90">
+            {provider.installError}
+          </p>
+        </div>
+      )}
 
       <div className="text-text-muted mt-1 flex items-center justify-end gap-2 text-[10.5px] opacity-70">
         <span className="font-mono">ID: {subtitle}</span>
@@ -123,21 +152,33 @@ export function RegistryCard({
   );
 }
 
-function InstallButton({ isInstalling, onClick }: { isInstalling: boolean; onClick: () => void }) {
+function InstallButton({
+  isInstalling,
+  isFailed,
+  onClick,
+}: {
+  isInstalling: boolean;
+  isFailed: boolean;
+  onClick: () => void;
+}) {
   return (
     <Button
-      variant="outline"
+      variant={isFailed ? 'solid' : 'outline'}
       size="sm"
       disabled={isInstalling}
       onClick={onClick}
-      className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
+      className={`flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase ${
+        isFailed ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' : ''
+      }`}
     >
       {isInstalling ? (
         <Loader2 className="h-3 w-3 animate-spin" />
+      ) : isFailed ? (
+        <RefreshCw className="h-3 w-3" />
       ) : (
         <Download className="h-3 w-3" />
       )}
-      Install
+      {isInstalling ? 'Installing...' : isFailed ? 'Retry' : 'Install'}
     </Button>
   );
 }
@@ -174,7 +215,9 @@ function RegistryCardActions({
   isInstalling: boolean;
   isRemoving: boolean;
 }) {
-  const notInstalled = provider.installState === 'not_installed';
+  const isInstalled =
+    provider.installState === 'installed_local' || provider.installState === 'system_available';
+  const isFailed = provider.installState === 'failed';
   const hasAuth =
     (provider.agent?.authMethods && provider.agent.authMethods.length > 0) ||
     (provider.authMethods && provider.authMethods.length > 0);
@@ -197,7 +240,7 @@ function RegistryCardActions({
         </Button>
       )}
 
-      {hasAuth && !notInstalled && (
+      {hasAuth && isInstalled && (
         <Button
           variant={isAuthed ? 'outline' : 'solid'}
           size="sm"
@@ -213,10 +256,14 @@ function RegistryCardActions({
         </Button>
       )}
 
-      {notInstalled ? (
-        <InstallButton isInstalling={isInstalling} onClick={() => onInstall(provider.id)} />
-      ) : (
+      {isInstalled ? (
         <RemoveButton isRemoving={isRemoving} onClick={() => onRemove(provider.id)} />
+      ) : (
+        <InstallButton
+          isInstalling={isInstalling}
+          isFailed={isFailed}
+          onClick={() => onInstall(provider.id)}
+        />
       )}
     </div>
   );

@@ -52,8 +52,12 @@ export class ProviderStore {
     this.db.delete(providers).where(eq(providers.id, id)).run();
   }
 
-  setInstallState(id: string, state: ProviderData['installState']): void {
-    this.update(id, { installState: state });
+  setInstallState(id: string, state: ProviderData['installState'], error?: string | null): void {
+    const updateValues: Partial<typeof providers.$inferInsert> = { installState: state };
+    if (error !== undefined) {
+      updateValues.installError = error;
+    }
+    this.update(id, updateValues);
   }
 
   setAuthState(id: string, state: ProviderData['authState']): void {

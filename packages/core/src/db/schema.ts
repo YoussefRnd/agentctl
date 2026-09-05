@@ -79,6 +79,7 @@ export const providers = sqliteTable('providers', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   installState: text('install_state').notNull().default('not_installed'),
+  installError: text('install_error'),
   authState: text('auth_state').notNull().default('unknown'),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),

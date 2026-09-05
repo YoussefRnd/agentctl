@@ -211,6 +211,13 @@
       "when": 1784036541620,
       "tag": "0029_messy_komodo",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1788561241740,
+      "tag": "0030_chunky_star_brand",
+      "breakpoints": true
     }
   ]
 }

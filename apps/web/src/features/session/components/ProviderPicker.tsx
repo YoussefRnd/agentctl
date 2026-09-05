@@ -88,7 +88,9 @@ export function ProviderPicker({
   }, [activeProvider, search]);
 
   const activeProviderId = activeProvider?.id;
-  const isInstalled = activeProvider?.installState !== 'not_installed';
+  const isInstalled =
+    activeProvider?.installState === 'installed_local' ||
+    activeProvider?.installState === 'system_available';
   const isAuthenticated = activeProvider?.authState === 'authenticated';
   const modelsCount = models.length;
 
@@ -184,10 +186,17 @@ export function ProviderPicker({
             type="button"
             aria-label="Refresh provider models"
             onClick={() => {
-              refreshProvider(activeProvider.id);
+              if (activeProvider.installState !== 'not_installed') {
+                refreshProvider(activeProvider.id);
+              }
             }}
-            disabled={isRefreshing}
-            className="text-text-muted hover:text-text-main hover:bg-text-main/5 rounded-lg p-1.5 transition-colors disabled:opacity-30"
+            disabled={isRefreshing || activeProvider.installState === 'not_installed'}
+            title={
+              activeProvider.installState === 'not_installed'
+                ? 'Install provider to load models'
+                : 'Refresh provider models'
+            }
+            className="text-text-muted hover:text-text-main hover:bg-text-main/5 rounded-lg p-1.5 transition-colors disabled:pointer-events-none disabled:opacity-30"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
@@ -284,7 +293,9 @@ function ProviderSidebar({
   return (
     <div className="border-border/30 bg-surface-secondary/20 flex w-12 shrink-0 flex-col items-center gap-2 border-r py-2">
       {providers.map((p) => {
-        if (p.installState === 'not_installed') return null;
+        const isInstalled =
+          p.installState === 'installed_local' || p.installState === 'system_available';
+        if (!isInstalled) return null;
         const isSelected = p.id === internalProviderId;
         const needsAuth = p.authState !== 'authenticated';
 

@@ -1,5 +1,5 @@
 import type { RegistryAgent } from '@agentctl/shared';
-import type { BinaryInstaller } from './binary-installer.js';
+import { type BinaryInstaller, getPlatformKey } from './binary-installer.js';
 import type { ProviderLauncher } from './provider-launcher.js';
 import type { ProviderStore } from './provider-store.js';
 import type { RegistryFetcher } from './registry-fetcher.js';
@@ -72,18 +72,32 @@ export class ProviderSync {
         supportsLogout = existing.supportsLogout || (agent.supportsLogout ?? false);
       }
 
+      let installState =
+        existing?.installState ?? (isInstalled ? 'system_available' : 'not_installed');
+      let finalCommand = launchResolved.command;
+      let finalArgs = launchResolved.args;
+
+      if (!existing || existing.installState === 'not_installed') {
+        const detected = await this.launcher.detectSystemBinary(agent, getPlatformKey());
+        if (detected) {
+          installState = 'system_available';
+          finalCommand = detected.command;
+          finalArgs = detected.args ?? [];
+        }
+      }
+
       this.store.upsert(agent.id, {
         name: agent.name,
         version: agent.version,
         description: agent.description,
         icon: agent.icon ?? null,
-        command: launchResolved.command,
-        launchArgs: JSON.stringify(launchResolved.args),
+        command: finalCommand,
+        launchArgs: JSON.stringify(finalArgs),
         launchEnv: JSON.stringify(launchResolved.env),
         configOptions,
         authMethods,
-        installState:
-          existing?.installState ?? (isInstalled ? 'system_available' : 'not_installed'),
+        installState,
+        installError: existing?.installError ?? null,
         authState:
           existing?.authState ?? ((agent.authMethods ?? []).length ? 'unknown' : 'authenticated'),
         supportsDynamicModel,

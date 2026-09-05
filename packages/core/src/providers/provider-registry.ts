@@ -1,4 +1,3 @@
-import os from 'node:os';
 import { spawn } from 'node:child_process';
 import {
   registrySchema,
@@ -12,28 +11,14 @@ import { createAgentConnection, DefaultAgentRuntime, isAuthRequiredError } from 
 import type { DbClient } from '../db/index.js';
 import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
-import { BinaryInstaller } from './registry/binary-installer.js';
+import { BinaryInstaller, getPlatformKey } from './registry/binary-installer.js';
 import { RegistryFetcher } from './registry/registry-fetcher.js';
 import { ProviderLauncher, resolveNpxPackageSpec } from './registry/provider-launcher.js';
 import { AuthProvider } from './registry/auth-provider.js';
 import { ProviderSync } from './registry/provider-sync.js';
 import { PersistentAgentConnectionManager } from './registry/persistent-connection.js';
 
-function getPlatformKey(): string {
-  const arch = os.arch();
-  const platform = os.platform();
-  const archMap: Record<string, string> = {
-    x64: 'x86_64',
-    arm64: 'aarch64',
-    aarch64: 'aarch64',
-  };
-  const platformMap: Record<string, string> = {
-    darwin: 'darwin',
-    linux: 'linux',
-    win32: 'windows',
-  };
-  return `${platformMap[platform] ?? platform}-${archMap[arch] ?? arch}`;
-}
+export { getPlatformKey };
 
 export function parseRegistryAgents(data: string): RegistryAgent[] {
   let parsed: unknown;
@@ -286,6 +271,7 @@ export class ProviderRegistry {
           name: agent.name,
           command,
           installState: 'not_installed',
+          installError: null,
           authState: 'unknown',
           enabled: true,
           hidden: false,
@@ -337,70 +323,118 @@ export class ProviderRegistry {
       throw new Error(`Agent ${providerId} not found in registry`);
     }
 
-    const platform = getPlatformKey();
-    const binary = agent.distribution.binary;
-    const platformTarget = binary ? binary[platform] : undefined;
-
-    let installState: 'not_installed' | 'installed_local' | 'system_available';
-    let command: string;
-    let launchArgs: string[];
-    let launchEnv: Record<string, string>;
-
-    if (platformTarget) {
-      const result = await this.installer.install(agent, platform, this.logger);
-      installState = 'installed_local';
-      command = result.command;
-      launchArgs = result.args;
-      launchEnv = result.env;
-    } else if (agent.distribution.npx) {
-      const onPath = await this.launcher.isBinaryOnPath('npx');
-      if (!onPath) throw new Error('npx not found on PATH. Install Node.js/npm first.');
-      installState = 'system_available';
-      command = 'npx';
-      launchArgs = [
-        '-y',
-        resolveNpxPackageSpec(agent.distribution.npx.package, agent.version),
-        ...(agent.distribution.npx.args ?? []),
-      ];
-      launchEnv = agent.distribution.npx.env;
-    } else if (agent.distribution.uvx) {
-      const onPath = await this.launcher.isBinaryOnPath('uvx');
-      if (!onPath) throw new Error('uvx not found on PATH. Install uv first.');
-      installState = 'system_available';
-      command = 'uvx';
-      launchArgs = [agent.distribution.uvx.package, ...(agent.distribution.uvx.args ?? [])];
-      launchEnv = agent.distribution.uvx.env;
-    } else if (binary) {
-      throw new Error(`Agent ${providerId} binary not available for platform ${platform}`);
-    } else {
-      throw new Error(`Agent ${providerId} does not support installation`);
-    }
-
+    // Step 1: Mark provider as installing in DB
     this.store.upsert(providerId, {
       name: agent.name,
       version: agent.version,
       description: agent.description,
       icon: agent.icon,
-      command,
-      launchArgs: JSON.stringify(launchArgs),
-      launchEnv: JSON.stringify(launchEnv),
-      customEnv: '{}',
+      command: providerId,
+      installState: 'installing',
+      installError: null,
+      authState: (agent.authMethods ?? []).length ? 'unknown' : 'authenticated',
       configOptions: JSON.stringify(agent.configOptions ?? []),
       authMethods: JSON.stringify(agent.authMethods ?? []),
-      installState,
-      authState: (agent.authMethods ?? []).length ? 'unknown' : 'authenticated',
       supportsDynamicModel: agent.supportsDynamicModel ?? false,
       supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
       supportsLogout: agent.supportsLogout ?? false,
     });
 
-    // Run probe to populate config options (model list, currentValue, etc.)
-    this.launcher.invalidateProbe(providerId, this.runtime, agent);
-    await this.launcher.probe(providerId, this.runtime, agent).catch(() => undefined);
+    const platform = getPlatformKey();
+    const binary = agent.distribution.binary;
+    const platformTarget = binary ? binary[platform] : undefined;
 
-    const row = this.store.get(providerId);
-    if (!row) throw new Error(`Provider ${providerId} vanished`);
-    return new Provider(row).toDiscovery();
+    let installState: 'installed_local' | 'system_available';
+    let command: string;
+    let launchArgs: string[];
+    let launchEnv: Record<string, string>;
+
+    try {
+      // Step 2: Check if binary / CLI is already available on local system PATH
+      const detected = await this.launcher.detectSystemBinary(agent, platform);
+      if (detected) {
+        this.logger.info(
+          { providerId, detectedCommand: detected.command },
+          'Detected agent binary on local system PATH',
+        );
+        installState = 'system_available';
+        command = detected.command;
+        launchArgs = detected.args ?? [];
+        launchEnv = {};
+      } else if (platformTarget) {
+        const result = await this.installer.install(agent, platform, this.logger);
+        installState = 'installed_local';
+        command = result.command;
+        launchArgs = result.args;
+        launchEnv = result.env;
+      } else if (agent.distribution.npx) {
+        const onPath = await this.launcher.isBinaryOnPath('npx');
+        if (!onPath) {
+          throw new Error('npx not found on PATH. Install Node.js/npm first.');
+        }
+        installState = 'system_available';
+        command = 'npx';
+        launchArgs = [
+          '-y',
+          resolveNpxPackageSpec(agent.distribution.npx.package, agent.version),
+          ...(agent.distribution.npx.args ?? []),
+        ];
+        launchEnv = agent.distribution.npx.env;
+      } else if (agent.distribution.uvx) {
+        const onPath = await this.launcher.isBinaryOnPath('uvx');
+        if (!onPath) {
+          throw new Error('uvx not found on PATH. Install uv first.');
+        }
+        installState = 'system_available';
+        command = 'uvx';
+        launchArgs = [agent.distribution.uvx.package, ...(agent.distribution.uvx.args ?? [])];
+        launchEnv = agent.distribution.uvx.env;
+      } else if (binary) {
+        throw new Error(`Agent ${providerId} binary not available for platform ${platform}`);
+      } else {
+        throw new Error(`Agent ${providerId} does not support installation`);
+      }
+
+      this.store.upsert(providerId, {
+        name: agent.name,
+        version: agent.version,
+        description: agent.description,
+        icon: agent.icon,
+        command,
+        launchArgs: JSON.stringify(launchArgs),
+        launchEnv: JSON.stringify(launchEnv),
+        customEnv: '{}',
+        configOptions: JSON.stringify(agent.configOptions ?? []),
+        authMethods: JSON.stringify(agent.authMethods ?? []),
+        installState,
+        installError: null,
+        authState: (agent.authMethods ?? []).length ? 'unknown' : 'authenticated',
+        supportsDynamicModel: agent.supportsDynamicModel ?? false,
+        supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
+        supportsLogout: agent.supportsLogout ?? false,
+      });
+
+      // Step 3: Run probe to populate config options (model list, currentValue, etc.)
+      this.launcher.invalidateProbe(providerId, this.runtime, agent);
+      try {
+        await this.launcher.probe(providerId, this.runtime, agent);
+      } catch (probeErr) {
+        const msg = probeErr instanceof Error ? probeErr.message : String(probeErr);
+        this.logger.warn({ probeErr, providerId }, 'Install probe verification failed for agent');
+        this.store.setInstallState(providerId, 'failed', `Probe verification failed: ${msg}`);
+        throw new Error(`Failed to verify agent installation for ${providerId}: ${msg}`, {
+          cause: probeErr,
+        });
+      }
+
+      const row = this.store.get(providerId);
+      if (!row) throw new Error(`Provider ${providerId} vanished`);
+      return new Provider(row).toDiscovery();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.store.setInstallState(providerId, 'failed', msg);
+      throw err;
+    }
   }
 
   async remove(providerId: string): Promise<ProviderDiscovery> {
@@ -437,6 +471,7 @@ export class ProviderRegistry {
           name: agent.name,
           command: agent.distribution.npx ? 'npx' : agent.distribution.uvx ? 'uvx' : agent.id,
           installState: 'not_installed',
+          installError: null,
           authState: 'unknown',
           enabled: true,
           hidden: false,
@@ -462,6 +497,7 @@ export class ProviderRegistry {
           name: provider.name,
           command: providerId,
           installState: 'not_installed',
+          installError: null,
           authState: 'unknown',
           enabled: true,
           hidden: false,
@@ -540,8 +576,35 @@ export class ProviderRegistry {
       const agent = agents.find((a) => a.id === providerId);
 
       this.launcher.invalidateProbe(providerId, this.runtime, agent);
+
+      // If not installed, update static catalog metadata without attempting to spawn ACP process
+      if (rowBeforeProbe.installState === 'not_installed') {
+        if (agent) {
+          this.store.update(providerId, {
+            version: agent.version,
+            description: agent.description,
+            icon: agent.icon ?? null,
+            configOptions: JSON.stringify(agent.configOptions ?? []),
+            authMethods: JSON.stringify(agent.authMethods ?? []),
+          });
+        }
+        const row = this.store.get(providerId);
+        if (!row) throw new Error(`Provider ${providerId} vanished`);
+        return new Provider(row).toDiscovery();
+      }
+
       if (agent) {
-        await this.probeWithStatePreserved(providerId, agent, rowBeforeProbe.authState, 'refresh');
+        try {
+          await this.probeWithStatePreserved(
+            providerId,
+            agent,
+            rowBeforeProbe.authState,
+            'refresh',
+          );
+        } catch (err) {
+          this.logger.warn({ err, providerId }, 'Failed to refresh probe for provider');
+          this.store.setAuthState(providerId, 'error');
+        }
       }
 
       const row = this.store.get(providerId);
@@ -627,13 +690,18 @@ export class ProviderRegistry {
       const agent = agents.find((a) => a.id === providerId);
 
       this.launcher.invalidateProbe(providerId, this.runtime, agent);
-      if (agent) {
-        await this.probeWithStatePreserved(
-          providerId,
-          agent,
-          rowBeforeUpdate.authState,
-          'apply configuration for',
-        );
+      if (agent && rowBeforeUpdate.installState !== 'not_installed') {
+        try {
+          await this.probeWithStatePreserved(
+            providerId,
+            agent,
+            rowBeforeUpdate.authState,
+            'apply configuration for',
+          );
+        } catch (err) {
+          this.logger.warn({ err, providerId }, 'Failed to probe provider after config update');
+          this.store.setAuthState(providerId, 'error');
+        }
       }
 
       const row = this.store.get(providerId);
@@ -648,6 +716,10 @@ export class ProviderRegistry {
     previousAuthState: ProviderData['authState'],
     action: string,
   ): Promise<void> {
+    const row = this.store.get(providerId);
+    if (row && row.installState === 'not_installed') {
+      return;
+    }
     try {
       await this.launcher.probe(providerId, this.runtime, agent);
     } catch (cause) {
@@ -824,6 +896,7 @@ export class ProviderRegistry {
       id: agent.id,
       name: agent.name,
       installState: 'system_available',
+      installError: null,
       authState: 'unknown',
       enabled: true,
       hidden: false,

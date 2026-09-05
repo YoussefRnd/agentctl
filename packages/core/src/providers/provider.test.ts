@@ -10,6 +10,7 @@ function row(
     id: 'claude-acp',
     name: 'Claude',
     installState: 'not_installed',
+    installError: null,
     authState: 'unknown',
     hidden: false,
     enabled: true,
