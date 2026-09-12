@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Zap, Brain, Settings, ChevronUp, AlertCircle } from 'lucide-react';
+import { Settings, ChevronUp, AlertCircle } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent, cn } from '@agentctl/ui';
+import { AgentIcon } from '@/shared';
 import { ProviderPicker } from '../ProviderPicker';
 import { CommandDropdown } from './CommandDropdown';
 import { useSession } from '../../../../contexts/SessionContext';
@@ -109,10 +110,10 @@ export function ProviderPickerTrigger({
                   className="h-3.5 w-3.5 object-contain"
                 />
               ) : (
-                <Zap
+                <AgentIcon
                   className={cn(
                     'h-3.5 w-3.5 transition-colors duration-200',
-                    isOpen && 'fill-accent',
+                    isOpen && 'text-accent',
                   )}
                 />
               )}
@@ -203,7 +204,6 @@ export function ThinkingEffortSelector({
     }
   };
 
-  const isMaxEffort = displayIndex === options.length - 1;
   const activeOptionName = options[displayIndex]?.name ?? currentValue;
 
   return (
@@ -213,18 +213,12 @@ export function ThinkingEffortSelector({
           type="button"
           disabled={isUpdating}
           className={cn(
-            'group flex h-8 items-center gap-2 rounded-full border border-transparent px-3 transition-colors duration-200',
+            'group flex h-8 items-center gap-1.5 rounded-full border border-transparent px-2.5 transition-colors duration-200',
             'text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
             'disabled:pointer-events-none disabled:opacity-40',
             isOpen ? 'bg-accent/20 text-accent border-accent/50' : '',
           )}
         >
-          <Brain
-            className={cn(
-              'h-3.5 w-3.5 transition-colors duration-300',
-              isMaxEffort ? 'text-accent' : 'text-text-muted',
-            )}
-          />
           <span className="font-mono text-xs font-semibold">{activeOptionName}</span>
           <ChevronUp
             className={cn(
@@ -345,7 +339,6 @@ export function AgentPersonaSelector({
           void setAgentPersona(val);
         }
       }}
-      icon={<Zap className="text-accent h-3.5 w-3.5" />}
       options={
         modeOption
           ? (modeOption.options ?? []).map((o) => ({ value: o.value, label: o.name }))
@@ -390,8 +383,13 @@ export function AdvancedSettingsPopover({ isLoading }: { isLoading: boolean }) {
           <Settings className="h-3.5 w-3.5 shrink-0" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" side="top" className="w-[320px] rounded-xl p-4 shadow-2xl">
-        <div className="custom-scrollbar max-h-[400px] overflow-y-auto pr-1">
+      <PopoverContent
+        side="top"
+        align="end"
+        sideOffset={8}
+        className="border-border/50 bg-brand-mantle/95 w-[290px] rounded-xl border p-4 shadow-2xl backdrop-blur-xl"
+      >
+        <div className="custom-scrollbar max-h-[400px] overflow-y-auto pr-0.5">
           <ConfigOptionsPanel filterCategories={[...PRIMARY_CONFIG_CATEGORIES]} />
         </div>
       </PopoverContent>

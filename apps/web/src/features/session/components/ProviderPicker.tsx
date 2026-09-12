@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Zap, RefreshCw } from 'lucide-react';
+import { Search, Check, RefreshCw } from 'lucide-react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
 import { ProviderIcon } from '@/shared';
@@ -266,7 +266,7 @@ export function ProviderPicker({
                       {activeProvider.label}
                     </div>
                   </div>
-                  {isSelected && <Zap className="fill-accent text-accent h-3 w-3" />}
+                  {isSelected && <Check className="text-accent h-3.5 w-3.5 shrink-0" />}
                 </button>
               );
             })

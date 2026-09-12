@@ -1,13 +1,17 @@
-import { useUIStore, type SettingsTab } from '../../../shared';
+import { useUIStore, type SettingsTab, AgentIcon } from '../../../shared';
 import { GeneralSettingsView } from './GeneralSettingsView';
 import { ProvidersSettingsView } from './ProvidersSettingsView';
 import { McpSettings } from './McpSettings';
-import { SlidersHorizontal, Sparkles, Cpu, X } from 'lucide-react';
+import { SlidersHorizontal, Cpu, X } from 'lucide-react';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@agentctl/ui';
 
-const TABS: { id: SettingsTab; label: string; icon: typeof SlidersHorizontal }[] = [
+const TABS: {
+  id: SettingsTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
-  { id: 'providers', label: 'AI Providers', icon: Sparkles },
+  { id: 'providers', label: 'AI Providers', icon: AgentIcon },
   { id: 'mcp', label: 'MCP Servers', icon: Cpu },
 ];
 

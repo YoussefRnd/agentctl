@@ -1,4 +1,4 @@
-import { Shield, Square, ArrowUp } from 'lucide-react';
+import { Square, ArrowUp } from 'lucide-react';
 import { Button, cn } from '@agentctl/ui';
 import { CommandDropdown } from './CommandDropdown';
 import { ContextWindowPopover } from './WorkspaceStateReviewer';
@@ -61,8 +61,7 @@ export function ApprovalModeSelector({
 }) {
   if (isLoading) {
     return (
-      <div className="text-text-muted/60 flex h-8 items-center gap-1.5 rounded-full border border-transparent px-3">
-        <Shield className="h-3.5 w-3.5" />
+      <div className="text-text-muted/60 flex h-8 items-center rounded-full border border-transparent px-2.5">
         <span className="text-xs font-medium">...</span>
       </div>
     );
@@ -80,11 +79,6 @@ export function ApprovalModeSelector({
       onChange={(val) => {
         void setApprovalMode(val);
       }}
-      icon={
-        <Shield
-          className={cn('h-3.5 w-3.5', currentMode === 'yolo' ? 'text-danger' : 'text-text-muted')}
-        />
-      }
       options={[
         { value: 'review', label: 'Supervised' },
         { value: 'auto_approve', label: 'Auto Approve' },

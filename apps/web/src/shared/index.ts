@@ -2,6 +2,7 @@
 export * from './ui/Spinner';
 export * from './ui/FontPicker';
 export * from './ui/ProviderIcon';
+export * from './ui/AgentIcon';
 export * from './ui/StreamingDots';
 export * from './components/FileIcon';
 

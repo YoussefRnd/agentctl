@@ -150,7 +150,7 @@ export function CommandPalette() {
         id: 'action-settings-providers',
         category: 'Actions',
         title: 'Settings: Agent Providers',
-        subtitle: 'Configure Claude, OpenCode, OpenAI, Ollama',
+        subtitle: 'Configure installed and available agent providers',
         icon: Cpu,
         onSelect: () => {
           closePalette();

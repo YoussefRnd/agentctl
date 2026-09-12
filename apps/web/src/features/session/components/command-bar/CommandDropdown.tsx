@@ -12,7 +12,7 @@ interface CommandDropdownProps<T> {
   options: DropdownOption<T>[];
   onChange: (value: T) => void;
   disabled?: boolean;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   align?: 'start' | 'end';
   variant?: 'default' | 'toolbar';
   side?: 'top' | 'right' | 'bottom' | 'left';

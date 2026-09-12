@@ -1,4 +1,5 @@
-import { Folder, FolderPlus, Bot, ArrowUp, ChevronDown, Check } from 'lucide-react';
+import { Folder, FolderPlus, ArrowUp, ChevronDown, Check } from 'lucide-react';
+import { AgentIcon } from '@/shared';
 import type { SidebarProject } from '@agentctl/api-client';
 import type { SessionMode, ProviderDiscovery } from '@agentctl/shared';
 import { Dropdown, Tooltip, Button } from '@agentctl/ui';
@@ -94,7 +95,7 @@ export function NewProjectToolbar({
                 type="button"
                 className="bg-surface-secondary/60 hover:bg-surface-secondary text-text-main border-border/40 hover:border-border/70 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors"
               >
-                <Bot className="text-text-muted h-3 w-3 shrink-0" />
+                <AgentIcon className="text-text-muted h-3 w-3 shrink-0" />
                 <span className="max-w-[140px] truncate">
                   {activeProvider.label || activeProvider.id}
                 </span>

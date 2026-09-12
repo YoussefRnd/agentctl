@@ -9,7 +9,8 @@ import {
   type PointerEvent,
   type WheelEvent,
 } from 'react';
-import { Brain, RefreshCw, ArrowDown } from 'lucide-react';
+import { RefreshCw, ArrowDown } from 'lucide-react';
+import { AgentIcon } from '@/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ACPEventRow } from '@agentctl/shared';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
@@ -398,7 +399,7 @@ export function EventFeed({
                 <Card status="error" className="flex flex-col gap-3 p-5">
                   <div className="flex items-center gap-3">
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/25 bg-rose-500/8 text-rose-400">
-                      <Brain className="h-4 w-4" />
+                      <AgentIcon className="h-4 w-4" />
                     </div>
                     <span className="text-[11px] font-bold tracking-wider text-rose-400 uppercase">
                       Agent Connection Interrupted

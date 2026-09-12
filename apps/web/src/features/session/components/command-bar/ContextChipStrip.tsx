@@ -1,5 +1,5 @@
 import React from 'react';
-import { Folder, Sparkles, X } from 'lucide-react';
+import { Folder, Code2, X } from 'lucide-react';
 import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem } from '@agentctl/api-client';
 import { FileIcon } from '@/shared';
@@ -23,7 +23,7 @@ function renderContextIcon(ctx: ContextItem) {
     if (ctx.id === 'git:log') return <GitCommitIcon className="h-3 w-3 shrink-0 text-blue-400" />;
     return <GitBranchIcon className="h-3 w-3 shrink-0 text-purple-400" />;
   }
-  return <Sparkles className="text-accent h-3 w-3 shrink-0" />;
+  return <Code2 className="text-accent h-3 w-3 shrink-0" />;
 }
 
 export function ContextChipStrip({ contexts, onRemove }: ContextChipStripProps) {

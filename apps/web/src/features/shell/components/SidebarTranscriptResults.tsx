@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { searchSessionEvents, type SearchResultItem } from '@agentctl/api-client';
 import type { SearchEventType } from '@agentctl/shared';
-import { MessageSquare, Bot, Wrench, Brain, Loader2, Sparkles, RotateCw } from 'lucide-react';
+import { MessageSquare, Wrench, Brain, Loader2, SearchX, RotateCw } from 'lucide-react';
+import { AgentIcon } from '@/shared';
 import { cn } from '@agentctl/ui';
 
 interface SidebarTranscriptResultsProps {
@@ -43,7 +44,7 @@ function getEventBadge(type: SearchEventType) {
     case 'agent':
       return {
         label: 'Agent',
-        icon: Bot,
+        icon: AgentIcon,
         color: 'text-accent bg-accent/10 border-accent/20',
       };
   }
@@ -170,7 +171,7 @@ export function SidebarTranscriptResults({
         </div>
       ) : results.length === 0 ? (
         <div className="text-text-muted/60 flex flex-col items-center justify-center px-4 py-8 text-center">
-          <Sparkles className="mb-1.5 h-5 w-5 opacity-40" />
+          <SearchX className="mb-1.5 h-5 w-5 opacity-40" />
           <p className="text-xs font-medium">No transcript matches found</p>
           <p className="text-text-muted/40 mt-0.5 text-[11px]">
             Try a different keyword or event filter

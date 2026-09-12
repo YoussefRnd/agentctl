@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@agentctl/ui';
 import { useUIStore } from '../../../shared';
 import { formatShortcut } from '../../../shared/lib/platform';
-import { Keyboard, Command, Sparkles, GitPullRequest } from 'lucide-react';
+import { Keyboard, Command, MessageSquareCode, GitPullRequest } from 'lucide-react';
 
 interface ShortcutGroup {
   title: string;
@@ -26,7 +26,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
   },
   {
     title: 'Composer & Input',
-    icon: Sparkles,
+    icon: MessageSquareCode,
     shortcuts: [
       { label: 'Send message', keys: ['Enter'] },
       { label: 'New line in composer', keys: ['Shift', '+', 'Enter'] },

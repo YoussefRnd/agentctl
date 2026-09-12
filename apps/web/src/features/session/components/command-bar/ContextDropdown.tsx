@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Folder, Sparkles, Loader2 } from 'lucide-react';
+import { Folder, Code2, Loader2 } from 'lucide-react';
 import { cn } from '@agentctl/ui';
 import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem, ContextItemType } from '@agentctl/api-client';
@@ -29,7 +29,7 @@ function renderDropdownIcon(item: ContextItem) {
     if (item.id === 'git:log') return <GitCommitIcon className="h-4 w-4 shrink-0 text-blue-400" />;
     return <GitBranchIcon className="h-4 w-4 shrink-0 text-purple-400" />;
   }
-  return <Sparkles className="text-accent h-4 w-4 shrink-0" />;
+  return <Code2 className="text-accent h-4 w-4 shrink-0" />;
 }
 
 export function ContextDropdown({

@@ -9,7 +9,7 @@ import {
   Check,
   Edit3,
   Trash2,
-  Brain,
+  BrainCircuit,
   Copy,
 } from 'lucide-react';
 import { ThinkingSpinner, StreamingDots } from '@/shared';
@@ -181,7 +181,7 @@ function StepIcon({ icon, className }: { icon: string; color?: string; className
   if (icon === 'edit') return <Edit3 className={`${cn} text-text-muted/60`} />;
   if (icon === 'search') return <Search className={`${cn} text-text-muted/60`} />;
   if (icon === 'trash') return <Trash2 className={`${cn} text-rose-400/80`} />;
-  if (icon === 'think') return <Brain className={`${cn} text-text-muted/60`} />;
+  if (icon === 'think') return <BrainCircuit className={`${cn} text-text-muted/60`} />;
   return <Settings className={`${cn} text-text-muted/60`} />;
 }
 
