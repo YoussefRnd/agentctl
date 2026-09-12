@@ -159,7 +159,21 @@ export class BinaryInstaller {
     );
   }
 
-  isInstalled(providerId: string): boolean {
+  isInstalled(providerId: string, agent?: RegistryAgent, platform = getPlatformKey()): boolean {
+    if (agent) {
+      const target = agent.distribution.binary?.[platform];
+      if (!target) return false;
+
+      const versionedDir = this.getVersionedInstallDir(agent.id, agent.version, target.archive);
+      const binaryPath = path.resolve(versionedDir, target.cmd);
+      try {
+        const stats = fs.statSync(binaryPath);
+        return stats.isFile() && (process.platform === 'win32' || (stats.mode & 0o111) !== 0);
+      } catch {
+        return false;
+      }
+    }
+
     const base = this.getInstallDir(providerId);
     if (!fs.existsSync(base)) return false;
     const versions = fs.readdirSync(base).filter((e) => e.startsWith('v_'));

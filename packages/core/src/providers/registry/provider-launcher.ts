@@ -1,4 +1,5 @@
 import os from 'node:os';
+import path from 'node:path';
 import type { RegistryAgent, ACPConfigOption } from '@agentctl/shared';
 import type { ProviderData } from '../provider.js';
 import { type BinaryInstaller, getPlatformKey } from './binary-installer.js';
@@ -196,7 +197,7 @@ export class ProviderLauncher {
         agent.version,
         binEntry.archive,
       );
-      command = `${versionedDir}/${binEntry.cmd || agent.id}`;
+      command = path.join(versionedDir, binEntry.cmd || agent.id);
     }
 
     const env = {

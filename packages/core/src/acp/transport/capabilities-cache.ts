@@ -19,7 +19,12 @@ export const AGENTCTL_CLIENT_CAPABILITIES: ClientCapabilities = {
   fs: { readTextFile: true, writeTextFile: true },
   session: { configOptions: { boolean: {} } },
   elicitation: { form: {}, url: {} },
-  _meta: { builtin: { bash: true }, session: { model: true } },
+  _meta: {
+    'agentctl.dev': {
+      extensionMethods: ['_agentctl.dev/builtin/bash', '_agentctl.dev/terminal/write'],
+      extensionMethodPrefixes: ['_agentctl.dev/mcp/'],
+    },
+  },
 };
 
 export class FileCacheStorage implements CacheStorage {

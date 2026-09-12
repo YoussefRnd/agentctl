@@ -141,7 +141,7 @@ describe('createClientHandlers', () => {
       },
     }) as unknown as Required<Client>;
 
-    await handlers.extNotification('session/session_notification', {
+    await handlers.extNotification('_agentctl.dev/session/update', {
       sessionId: 'acp-42',
       update: { sessionUpdate: 'step_started' },
     });
@@ -212,11 +212,11 @@ describe('createClientHandlers', () => {
     await expect(handlers.completeElicitation({ elicitationId: 'el-x' })).resolves.toBe(undefined);
   });
 
-  test('extMethod builtin/bash runs through the terminal manager with session cwd', async () => {
+  test('namespaced bash extension runs through the terminal manager with session cwd', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-handlers-'));
     const handlers = requiredHandlers(dir);
 
-    const res = await handlers.extMethod('builtin/bash', {
+    const res = await handlers.extMethod('_agentctl.dev/builtin/bash', {
       sessionId: 's',
       command: 'pwd',
       pty: false,

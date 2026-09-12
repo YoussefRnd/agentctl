@@ -232,6 +232,12 @@ export interface McpGatewayLike {
 
 export interface AgentRuntimeHandle {
   acpSessionId: string | null;
+  /**
+   * How the active ACP session was established. A fallback session is a fresh
+   * context and must receive locally persisted conversation history.
+   */
+  sessionCreationKind?: 'new' | 'loaded' | 'resumed' | 'fallback_new';
+  historyRestored?: boolean;
   closed: Promise<void>;
   onProcessError(handler: (err: Error) => void): void;
   onProcessExit(handler: (code: number | null, signal: NodeJS.Signals | null) => void): void;
@@ -256,12 +262,11 @@ export interface AgentRuntimeHandle {
   writeTerminalInput?(terminalId: string, data: string): boolean;
   /** Fork the agent-side session. Returns the new acp session id, or null when unsupported. */
   forkSession?(acpSessionId: string): Promise<string | null>;
-  /** Raw ACP extension request passthrough. */
-  sendRequest?(method: string, params: Record<string, unknown>): Promise<unknown>;
 }
 
 export interface RuntimeOptions {
   providerId?: string;
+  localSessionId?: string;
   cwd: string;
   env?: Record<string, string>;
   selectedModel?: string;

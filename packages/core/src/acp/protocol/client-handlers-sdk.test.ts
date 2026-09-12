@@ -145,11 +145,11 @@ describe('real SDK dispatch parity (regression for dead handler keys)', () => {
     expect(res).toEqual({ action: 'accept', content: { strategy: 'balanced' } });
   });
 
-  test('extMethod builtin/bash dispatches to the terminal manager', async () => {
+  test('namespaced bash extension dispatches to the terminal manager', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-sdk-'));
     await makePair(dir);
 
-    const res = await clientConnection.extMethod('builtin/bash', {
+    const res = await clientConnection.extMethod('_agentctl.dev/builtin/bash', {
       sessionId: 's1',
       command: 'pwd',
       pty: false,
@@ -158,11 +158,12 @@ describe('real SDK dispatch parity (regression for dead handler keys)', () => {
     expect((res as { output: string }).output).toContain(dir);
   }, 15000);
 
-  test('unknown extMethod returns empty object instead of throwing', async () => {
+  test('non-extension method returns JSON-RPC method-not-found', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-sdk-'));
     await makePair(dir);
 
-    const res = await clientConnection.extMethod('totally/unknown', { sessionId: 's1' });
-    expect(res).toEqual({});
+    await expect(
+      clientConnection.extMethod('totally/unknown', { sessionId: 's1' }),
+    ).rejects.toMatchObject({ code: -32601 });
   });
 });

@@ -771,7 +771,15 @@ export class ProviderRegistry {
     }
     if (!row) throw new Error(`Provider ${providerId} not found`);
 
-    if (row.installState === 'installed_local' && !this.installer.isInstalled(providerId)) {
+    const snapshot = this.fetcher.getSnapshot();
+    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
+    const agent = agents.find((candidate) => candidate.id === providerId);
+
+    if (row.installState === 'installed_local' && !this.installer.isInstalled(providerId, agent)) {
+      this.logger.warn(
+        { providerId, command: row.command, version: agent?.version ?? row.version },
+        'Managed provider executable is missing; reinstalling',
+      );
       this.store.setInstallState(providerId, 'not_installed');
       this.store.setAuthState(providerId, 'unknown');
       row = this.store.get(providerId) ?? row;
@@ -807,10 +815,6 @@ export class ProviderRegistry {
         return new Provider(row);
       }
     }
-
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((a) => a.id === providerId);
 
     if (agent) {
       this.launcher.invalidateProbe(providerId);

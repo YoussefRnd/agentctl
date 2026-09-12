@@ -1,4 +1,4 @@
-import type { Client } from '@agentclientprotocol/sdk';
+import { RequestError, type Client } from '@agentclientprotocol/sdk';
 import type { Logger } from '../../logger.js';
 import type { McpGatewayLike, SessionCallbacks } from '../types.js';
 import { parseNotificationToEvents } from './events.js';
@@ -198,11 +198,12 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
     async extMethod(method, params) {
       logger.debug({ method, params }, 'ACP extension method');
       if (typeof method !== 'string') {
-        return {};
+        throw RequestError.invalidRequest(undefined, 'Extension method name must be a string');
       }
-      // The SDK never dispatches `builtin/bash`/`terminal/write` as native
-      // client methods; they arrive here as extension methods.
-      if (method === 'builtin/bash') {
+      if (!method.startsWith('_')) {
+        throw RequestError.methodNotFound(method);
+      }
+      if (method === '_agentctl.dev/builtin/bash') {
         return toPromise(() => {
           // extMethod params are unvalidated and may be undefined at runtime.
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -223,7 +224,7 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
           );
         });
       }
-      if (method === 'terminal/write') {
+      if (method === '_agentctl.dev/terminal/write') {
         return toPromise(() =>
           handleTerminalWrite(
             params as { terminalId: string; data: string },
@@ -232,24 +233,29 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
           ),
         );
       }
-      if (mcpGateway && method.includes('__')) {
-        const parts = method.split('__');
+      if (mcpGateway && method.startsWith('_agentctl.dev/mcp/')) {
+        const qualifiedToolName = method.slice('_agentctl.dev/mcp/'.length);
+        const parts = qualifiedToolName.split('__');
         const serverId = parts[0];
         const toolName = parts.slice(1).join('__');
+        if (!serverId || !toolName) {
+          throw RequestError.invalidParams(undefined, `Invalid MCP extension method: ${method}`);
+        }
         // The SDK may pass undefined params for request methods without args.
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         const args = params ?? {};
         logger.info({ serverId, toolName, params }, 'Routing tool call to client-side MCP gateway');
         return (await mcpGateway.callTool(serverId, toolName, args)) as Record<string, unknown>;
       }
-      return {};
+      throw RequestError.methodNotFound(method);
     },
 
     async extNotification(method, rawParams) {
       try {
+        if (typeof method !== 'string' || !method.startsWith('_')) return;
         const params = rawParams as Record<string, unknown> | undefined;
         logger.debug({ method, params }, 'ACP extension notification');
-        if (params && method.includes('session') && 'sessionId' in params) {
+        if (method === '_agentctl.dev/session/update' && params && 'sessionId' in params) {
           const session = ctx.resolveSession({ sessionId: String(params.sessionId) });
           const update = params.update as { sessionUpdate?: string } | undefined;
           if (update?.sessionUpdate) {

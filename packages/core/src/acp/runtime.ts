@@ -40,6 +40,7 @@ import { createClientHandlers } from './protocol/client-handlers.js';
 import { TerminalManager } from './protocol/terminal-manager.js';
 import { buildPromptBlocks } from './protocol/prompt.js';
 import { buildBaseSessionParams } from './protocol/session-params.js';
+import { getAgentRequestTimeoutMs } from '../config/runtime-defaults.js';
 
 export function isAuthRequiredError(err: unknown): boolean {
   if (!err) return false;
@@ -158,21 +159,11 @@ export class DefaultAgentRuntime implements AgentRuntime {
     if (!isPersistent && terminalManager) {
       terminalManager.on('output', (event) => {
         const { terminalId, data } = event as { terminalId: string; data: string };
-        void connection
-          .extNotification('terminal/output', { terminalId, data })
-          .catch((err: unknown) => {
-            logger.warn(err, 'Failed to push terminal output notification to agent');
-          });
         void callbacks.onEvent({ type: 'terminal_output', terminalId, data });
       });
 
       terminalManager.on('exit', (event) => {
         const { terminalId, code } = event as { terminalId: string; code: number | null };
-        void connection
-          .extNotification('terminal/exit', { terminalId, code })
-          .catch((err: unknown) => {
-            logger.warn(err, 'Failed to push terminal exit notification to agent');
-          });
         void callbacks.onEvent({ type: 'terminal_exit', terminalId, code });
       });
     }
@@ -189,6 +180,8 @@ export class DefaultAgentRuntime implements AgentRuntime {
 
     const handle: AgentRuntimeHandle = {
       acpSessionId: null,
+      sessionCreationKind: 'new',
+      historyRestored: false,
       closed: Promise.race([connection.closed, transport.closed]),
       onProcessError(handler) {
         child.on('error', handler);
@@ -330,9 +323,6 @@ export class DefaultAgentRuntime implements AgentRuntime {
           return null;
         }
       },
-      async sendRequest(method: string, params: Record<string, unknown>): Promise<unknown> {
-        return connection.extMethod(method, params);
-      },
     };
 
     try {
@@ -383,7 +373,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
               acpSessionId,
               {
                 acpSessionId,
-                localSessionId: options.existingAgentSessionId,
+                localSessionId: options.localSessionId ?? '',
                 options,
                 callbacks,
               },
@@ -391,29 +381,76 @@ export class DefaultAgentRuntime implements AgentRuntime {
             );
           }
 
-          if (supportsLoadSession) {
-            newSessionResult = await withTimeout(
-              connection.loadSession({
-                sessionId: options.existingAgentSessionId,
-                ...baseSessionParams,
-              }),
-              60_000,
-              'loading ACP session',
-            );
-          } else if (supportsResumeSession) {
-            newSessionResult = await withTimeout(
-              connection.resumeSession({
-                sessionId: options.existingAgentSessionId,
-                ...baseSessionParams,
-              }),
-              60_000,
-              'resuming ACP session',
-            );
+          try {
+            if (supportsResumeSession) {
+              newSessionResult = await withTimeout(
+                connection.resumeSession({
+                  sessionId: options.existingAgentSessionId,
+                  ...baseSessionParams,
+                }),
+                getAgentRequestTimeoutMs(),
+                'resuming ACP session',
+              );
+              handle.sessionCreationKind = 'resumed';
+              handle.historyRestored = true;
+            } else if (supportsLoadSession) {
+              newSessionResult = await withTimeout(
+                connection.loadSession({
+                  sessionId: options.existingAgentSessionId,
+                  ...baseSessionParams,
+                }),
+                getAgentRequestTimeoutMs(),
+                'loading ACP session',
+              );
+              handle.sessionCreationKind = 'loaded';
+              handle.historyRestored = true;
+            }
+          } catch (resumeErr: unknown) {
+            const errObj = resumeErr as { message?: string };
+            const normalizedMessage = errObj.message?.trim().toLowerCase() ?? '';
+            const isNotFound =
+              normalizedMessage === 'resource not found' ||
+              (normalizedMessage.includes('session') &&
+                (normalizedMessage.includes('not found') ||
+                  normalizedMessage.includes('does not exist')));
+
+            if (isNotFound) {
+              this.logger.warn(
+                { sessionId: options.existingAgentSessionId, err: resumeErr },
+                'Existing ACP session not found on agent process. Falling back to creating a new session.',
+              );
+              if (isPersistent && acpSessionId && self.connectionManager) {
+                self.connectionManager.unregisterActiveSession?.(acpSessionId);
+              }
+              const created = await withTimeout(
+                connection.newSession(baseSessionParams),
+                getAgentRequestTimeoutMs(),
+                'creating ACP session (fallback)',
+              );
+              newSessionResult = created;
+              acpSessionId = created.sessionId;
+              handle.sessionCreationKind = 'fallback_new';
+              handle.historyRestored = false;
+              if (isPersistent && self.connectionManager) {
+                self.connectionManager.registerActiveSession(
+                  acpSessionId,
+                  {
+                    acpSessionId,
+                    localSessionId: options.localSessionId ?? '',
+                    options,
+                    callbacks,
+                  },
+                  providerId,
+                );
+              }
+            } else {
+              throw resumeErr;
+            }
           }
         } else {
           const created = await withTimeout(
             connection.newSession(baseSessionParams),
-            60_000,
+            getAgentRequestTimeoutMs(),
             'creating ACP session',
           );
           newSessionResult = created;
@@ -423,7 +460,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
               acpSessionId,
               {
                 acpSessionId,
-                localSessionId: options.existingAgentSessionId ?? '',
+                localSessionId: options.localSessionId ?? '',
                 options,
                 callbacks,
               },
@@ -660,7 +697,7 @@ export class DefaultAgentRuntime implements AgentRuntime {
         new Promise<never>((_, reject) => {
           setTimeout(() => {
             reject(new Error('Probe timed out'));
-          }, 60_000);
+          }, getAgentRequestTimeoutMs());
         }),
       ]);
 

@@ -12,6 +12,7 @@ import type { AgentRuntime, AgentRuntimeHandle } from '../acp/types.js';
 import { AuthRequiredError } from '../acp/types.js';
 import { SnapshotService } from '../git/snapshot-service.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
+import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 
 export interface SessionRecord {
   id: string;
@@ -95,6 +96,14 @@ export class SessionStateMachine {
       session.kill();
       this.sessions.delete(sessionId);
     }
+  }
+
+  async stopSessionAndWait(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    this.sessions.delete(sessionId);
+    await session.stop();
   }
 
   clearSessions(): void {
@@ -190,8 +199,8 @@ export class SessionStateMachine {
     command: string,
     args: string[],
     env?: Record<string, string>,
-    selectedModel = 'default',
-    selectedThinkingEffort: ThinkingEffort = 'medium',
+    selectedModel = DEFAULT_AGENT_MODEL,
+    selectedThinkingEffort: ThinkingEffort = DEFAULT_THINKING_EFFORT,
     supportsDynamicModel = false,
     supportsDynamicConfig = false,
     resolvedThinkingConfigId?: string,
@@ -251,6 +260,7 @@ export class SessionStateMachine {
         args,
         {
           providerId,
+          localSessionId: sessionId,
           cwd: worktreePath,
           env,
           selectedModel,
