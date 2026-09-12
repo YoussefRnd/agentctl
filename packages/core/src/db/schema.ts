@@ -8,6 +8,11 @@ import {
 } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
 import type { SessionStatus, ACPEvent, SessionMode } from '@agentctl/shared';
+import {
+  DEFAULT_AGENT_MODEL,
+  DEFAULT_CONTEXT_LIMIT,
+  DEFAULT_THINKING_EFFORT,
+} from '../config/runtime-defaults.js';
 
 // Timestamps with DB-level defaults and auto-update on updatedAt
 const timestamps = {
@@ -53,8 +58,10 @@ export const sessions = sqliteTable('sessions', {
   agent: text('agent').notNull(),
   agentSessionId: text('agent_session_id'),
   selectedProvider: text('selected_provider').notNull(),
-  selectedModel: text('selected_model').notNull().default('sonnet-4'),
-  selectedThinkingEffort: text('selected_thinking_effort').notNull().default('medium'),
+  selectedModel: text('selected_model').notNull().default(DEFAULT_AGENT_MODEL),
+  selectedThinkingEffort: text('selected_thinking_effort')
+    .notNull()
+    .default(DEFAULT_THINKING_EFFORT),
   mode: text('mode').$type<SessionMode>().notNull().default('local'),
   approvalMode: text('approval_mode')
     .$type<'review' | 'auto_approve' | 'yolo'>()
@@ -62,7 +69,7 @@ export const sessions = sqliteTable('sessions', {
     .default('review'),
   status: text('status').$type<SessionStatus>().notNull().default('idle'),
   totalTokens: integer('total_tokens').notNull().default(0),
-  contextLimit: integer('context_limit').notNull().default(128000),
+  contextLimit: integer('context_limit').notNull().default(DEFAULT_CONTEXT_LIMIT),
   estimatedCost: real('estimated_cost').notNull().default(0.0),
   lastHeartbeat: integer('last_heartbeat', { mode: 'timestamp' }),
   closedAt: integer('closed_at', { mode: 'timestamp' }),

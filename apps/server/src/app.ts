@@ -217,12 +217,12 @@ export async function buildApp(deps: AppDependencies = {}) {
   await fastify.register(secureSession, {
     secret: config.AGENTCTL_SESSION_KEY,
     salt: config.AGENTCTL_SESSION_SALT,
-    expiry: 24 * 60 * 60,
+    expiry: config.AGENTCTL_SESSION_MAX_AGE_SECONDS,
     cookie: {
       path: '/',
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production' && !deps.embedded,
-      maxAge: 24 * 60 * 60,
+      maxAge: config.AGENTCTL_SESSION_MAX_AGE_SECONDS,
       sameSite: 'lax',
     },
   });

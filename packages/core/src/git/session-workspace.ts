@@ -6,15 +6,16 @@ import type { SnapshotService } from './snapshot-service.js';
 import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
 import crypto from 'node:crypto';
 import { simpleGit } from 'simple-git';
+import { DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 
 export type WorkspaceTargetState = 'active' | 'archived' | 'finalized';
 export type FinalizeResolution = 'merged' | 'discarded';
 
 export interface EstablishOptions {
+  selectedProvider: string;
+  selectedModel: string;
   mode?: SessionMode;
   agent?: string;
-  selectedProvider?: string;
-  selectedModel?: string;
   selectedThinkingEffort?: string;
   contextLimit?: number;
   sessionConfigOptions?: string;
@@ -131,9 +132,9 @@ export class SessionWorkspace {
   async establish(
     projectId: string,
     taskSlug: string,
-    options?: EstablishOptions,
+    options: EstablishOptions,
   ): Promise<WorkspaceContext> {
-    const client = (options?.dbTx ?? this.db) as DbClient;
+    const client = (options.dbTx ?? this.db) as DbClient;
 
     const project = await client.query.projects.findFirst({
       where: eq(projects.id, projectId),
@@ -148,7 +149,7 @@ export class SessionWorkspace {
     let worktreePath = project.path;
     let baseCommit = 'none';
     let baseBranch: string | null = null;
-    let resolvedMode: SessionMode = options?.mode ?? (project.repoRoot ? 'worktree' : 'local');
+    let resolvedMode: SessionMode = options.mode ?? (project.repoRoot ? 'worktree' : 'local');
 
     if (project.repoRoot && resolvedMode === 'worktree') {
       try {
@@ -204,18 +205,19 @@ export class SessionWorkspace {
       projectId,
       branch,
       worktreePath,
-      agent: options?.agent ?? options?.selectedProvider ?? 'claude-acp',
+      agent: options.agent ?? options.selectedProvider,
       status: 'idle',
       taskSlug,
       baseCommit,
       baseBranch,
       mode: resolvedMode,
-      selectedProvider: options?.selectedProvider ?? 'claude-acp',
-      selectedModel: options?.selectedModel ?? 'sonnet-4',
-      selectedThinkingEffort: (options?.selectedThinkingEffort ?? 'medium') as ThinkingEffort,
-      contextLimit: options?.contextLimit ?? 0,
-      sessionConfigOptions: options?.sessionConfigOptions ?? '[]',
-      title: options?.title ?? 'new session',
+      selectedProvider: options.selectedProvider,
+      selectedModel: options.selectedModel,
+      selectedThinkingEffort: (options.selectedThinkingEffort ??
+        DEFAULT_THINKING_EFFORT) as ThinkingEffort,
+      contextLimit: options.contextLimit ?? 0,
+      sessionConfigOptions: options.sessionConfigOptions ?? '[]',
+      title: options.title ?? 'new session',
     });
 
     if (this.onEvent) {

@@ -45,7 +45,9 @@ export const authRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
           ip: request.ip,
         });
         request.session.set('authenticated', true);
-        request.session.options({ maxAge: 30 * 24 * 60 * 60 }); // 30 days
+        request.session.options({
+          maxAge: fastify.config.AGENTCTL_PAIRED_SESSION_MAX_AGE_SECONDS,
+        });
         return result;
       } catch (err) {
         return reply.code(401).send({
@@ -123,7 +125,9 @@ export const authRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
           ip: request.ip,
         });
         request.session.set('authenticated', true);
-        request.session.options({ maxAge: 30 * 24 * 60 * 60 });
+        request.session.options({
+          maxAge: fastify.config.AGENTCTL_PAIRED_SESSION_MAX_AGE_SECONDS,
+        });
         return { success: true, sessionToken: result.sessionToken };
       } catch {
         // Check if matching startup token
@@ -133,7 +137,9 @@ export const authRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
             ip: request.ip,
           });
           request.session.set('authenticated', true);
-          request.session.options({ maxAge: 30 * 24 * 60 * 60 });
+          request.session.options({
+            maxAge: fastify.config.AGENTCTL_PAIRED_SESSION_MAX_AGE_SECONDS,
+          });
           return { success: true, sessionToken: direct.sessionToken };
         }
 

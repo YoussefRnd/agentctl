@@ -28,9 +28,14 @@ async function isCommandAvailable(cmd: string): Promise<boolean> {
 let cachedEditors: EditorId[] | null = null;
 let lastCheckTime = 0;
 
+function getEditorCacheMs(): number {
+  const configured = Number(process.env.AGENTCTL_EDITOR_CACHE_MS);
+  return Number.isSafeInteger(configured) && configured > 0 ? configured : 60_000;
+}
+
 export async function detectAvailableEditors(): Promise<EditorId[]> {
   const now = Date.now();
-  if (cachedEditors && now - lastCheckTime < 60_000) {
+  if (cachedEditors && now - lastCheckTime < getEditorCacheMs()) {
     return cachedEditors;
   }
 

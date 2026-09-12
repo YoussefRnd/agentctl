@@ -1,6 +1,7 @@
 import { eq, asc, and } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
 import { acpEvents } from '../db/schema.js';
+import { getContextTurnLimit } from '../config/runtime-defaults.js';
 
 export interface HistoryTranscriptOptions {
   maxTurns?: number;
@@ -11,7 +12,7 @@ export async function buildConversationHistoryTranscript(
   sessionId: string,
   options: HistoryTranscriptOptions = {},
 ): Promise<string | null> {
-  const maxTurns = options.maxTurns ?? 10;
+  const maxTurns = options.maxTurns ?? getContextTurnLimit();
 
   const rows = await db
     .select()

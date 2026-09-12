@@ -85,6 +85,8 @@ describe('SessionWorkspace Integration Tests (Mock-Free)', () => {
     // 2. Establish Session Workspace
     const context = await sessionWorkspace.establish(projectId, 'wt-slug', {
       mode: 'worktree',
+      selectedProvider: 'test-provider',
+      selectedModel: 'default',
     });
 
     expect(context.sessionId).toBeDefined();
@@ -181,6 +183,8 @@ describe('SessionWorkspace Integration Tests (Mock-Free)', () => {
     // 2. Establish Session Workspace
     const context = await sessionWorkspace.establish(projectId, 'local-slug', {
       mode: 'local',
+      selectedProvider: 'test-provider',
+      selectedModel: 'default',
     });
 
     expect(context.mode).toBe('local');
@@ -225,6 +229,8 @@ describe('SessionWorkspace Integration Tests (Mock-Free)', () => {
     // 1. Establish Session
     const context = await sessionWorkspace.establish(projectId, 'conflict-slug', {
       mode: 'worktree',
+      selectedProvider: 'test-provider',
+      selectedModel: 'default',
     });
 
     // 2. Create conflict: modify hello.txt in the worktree

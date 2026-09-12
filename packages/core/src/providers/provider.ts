@@ -7,6 +7,7 @@ import type {
   RegistryAgent,
 } from '@agentctl/shared';
 import type { providers } from '../db/schema.js';
+import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 
 export type ProviderData = typeof providers.$inferSelect;
 
@@ -129,10 +130,10 @@ export class Provider {
       selectedModel:
         (typeof modelOption?.currentValue === 'string'
           ? modelOption.currentValue
-          : modelOption?.options?.[0]?.value) ?? 'default',
+          : modelOption?.options?.[0]?.value) ?? DEFAULT_AGENT_MODEL,
       selectedThinkingEffort: (thinkingOption?.currentValue ??
         thinkingOption?.options?.[0]?.value ??
-        'medium') as ThinkingEffort,
+        DEFAULT_THINKING_EFFORT) as ThinkingEffort,
     };
   }
 
