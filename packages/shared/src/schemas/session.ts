@@ -34,6 +34,19 @@ export const createSessionSchema = z.object({
   taskSlug: z.string().optional(),
 });
 
+export const handoffSessionSchema = z.object({
+  targetProvider: providerSchema,
+  targetModel: z.string().optional(),
+  nextSessionFocus: z.string().optional(),
+});
+
+export const handoffSessionResponseSchema = z.object({
+  sessionId: z.string(),
+  handoffFilePath: z.string(),
+  initialPrompt: z.string(),
+  handoffSource: z.enum(['skill', 'generated']),
+});
+
 export const sessionSchema = createSessionSchema.extend({
   branch: z.string().min(1),
   taskSlug: z.string().min(1),
@@ -417,6 +430,8 @@ export type SessionMode = z.infer<typeof sessionModeSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type AvailableCommand = z.infer<typeof availableCommandSchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
+export type HandoffSession = z.infer<typeof handoffSessionSchema>;
+export type HandoffSessionResponse = z.infer<typeof handoffSessionResponseSchema>;
 export type SessionProviderSelection = z.infer<typeof sessionProviderSelectionSchema>;
 export type ProviderCapability = z.infer<typeof providerCapabilitySchema>;
 export type ThinkingEffort = z.infer<typeof thinkingEffortSchema>;

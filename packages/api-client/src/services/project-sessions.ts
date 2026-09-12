@@ -442,6 +442,34 @@ export async function undoRewind(sessionId: string): Promise<{ success: boolean 
   return res.body;
 }
 
+export async function handoffSession(
+  sessionId: string,
+  targetProvider: string,
+  targetModel?: string,
+  nextSessionFocus?: string,
+): Promise<{
+  sessionId: string;
+  handoffFilePath: string;
+  initialPrompt: string;
+  handoffSource: 'skill' | 'generated';
+}> {
+  const res = await api.handoffSession({
+    params: { id: sessionId },
+    body: {
+      targetProvider,
+      targetModel,
+      nextSessionFocus,
+    },
+  });
+  if (res.status === 404 || res.status === 409) {
+    throw new ApiError(res.body.message, res.status);
+  }
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to handoff session: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
 export async function restoreSnapshot(
   sessionId: string,
   snapshotHash: string,

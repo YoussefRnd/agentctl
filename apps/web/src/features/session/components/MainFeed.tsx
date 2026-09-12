@@ -12,7 +12,8 @@ import { SubagentChatView } from './SubagentChatView';
 import { extractSubagentGroups } from './cards/subagentBlockUtils';
 import { ApprovalCard } from './cards/ApprovalCard';
 import { RewindConfirmDialog } from './RewindConfirmDialog';
-import { rewindSession, restoreSession, undoRewind } from '@agentctl/api-client';
+import { SwitchAgentModal } from './SwitchAgentModal';
+import { rewindSession, restoreSession, undoRewind, handoffSession } from '@agentctl/api-client';
 import { useUIStore, FileIcon } from '@/shared';
 import { cn, Tooltip } from '@agentctl/ui';
 import { useOpenWorkspaceFile } from '../hooks/useOpenWorkspaceFile';
@@ -50,8 +51,79 @@ export function MainFeed() {
     });
   }, [location.hash, location.pathname, location.search, locationState, navigate]);
 
+  const [switchAgentTarget, setSwitchAgentTarget] = useState<{
+    targetProvider: string;
+    targetModel?: string;
+  } | null>(null);
+  const [isHandoffLoading, setIsHandoffLoading] = useState(false);
+
+  const hasUserMessages = useMemo(() => {
+    return events.some((e) => {
+      if (e.type !== 'text' || !e.data) return false;
+      try {
+        const data = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as {
+          role?: string;
+          text?: string;
+          content?: string;
+        };
+        return data.role === 'user' && Boolean(data.text || data.content);
+      } catch {
+        return false;
+      }
+    });
+  }, [events]);
+
   const handleProviderSelect = (providerId: string, modelId?: string) => {
-    switchProvider(providerId, modelId, sessionData);
+    if (isHandoffLoading) {
+      toast.info('An agent handoff is already in progress');
+      return;
+    }
+    const currentProvider = sessionData?.session.selectedProvider;
+    // If selecting the current provider or the session is empty: do in-place switch directly
+    if (providerId === currentProvider || !hasUserMessages) {
+      switchProvider(providerId, modelId, sessionData);
+      return;
+    }
+
+    // Active session switching to a different provider: trigger handoff modal
+    setSwitchAgentTarget({
+      targetProvider: providerId,
+      targetModel: modelId,
+    });
+  };
+
+  const handleConfirmHandoff = async (nextSessionFocus?: string) => {
+    if (!sessionId || !switchAgentTarget) return;
+    const target = switchAgentTarget;
+    setIsHandoffLoading(true);
+    // The source agent may request permission while preparing the handoff. Close
+    // the modal so those approval controls remain reachable in the main feed.
+    setSwitchAgentTarget(null);
+    try {
+      const result = await handoffSession(
+        sessionId,
+        target.targetProvider,
+        target.targetModel,
+        nextSessionFocus,
+      );
+      toast.success(
+        result.handoffSource === 'skill'
+          ? `Handoff completed with ${target.targetProvider}`
+          : `Handoff completed with generated context for ${target.targetProvider}`,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['session', result.sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['events', result.sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['projects'] }),
+      ]);
+      if (result.sessionId !== sessionId) {
+        void navigate(`/sessions/${result.sessionId}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to switch agent');
+    } finally {
+      setIsHandoffLoading(false);
+    }
   };
 
   const [confirmRewind, setConfirmRewind] = useState<{
@@ -523,6 +595,22 @@ export function MainFeed() {
           onProviderSelect={handleProviderSelect}
           initialInput={rewindInput || initialPrompt}
         />
+
+        {switchAgentTarget && (
+          <SwitchAgentModal
+            open={Boolean(switchAgentTarget)}
+            onOpenChange={(open) => {
+              if (!open && !isHandoffLoading) {
+                setSwitchAgentTarget(null);
+              }
+            }}
+            currentProvider={sessionData?.session.selectedProvider ?? 'agent'}
+            targetProvider={switchAgentTarget.targetProvider}
+            targetModel={switchAgentTarget.targetModel}
+            onConfirm={handleConfirmHandoff}
+            isLoading={isHandoffLoading}
+          />
+        )}
       </div>
     </div>
   );

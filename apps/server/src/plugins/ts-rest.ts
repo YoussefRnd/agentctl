@@ -998,6 +998,25 @@ export default fp(async (fastify) => {
         },
       };
     },
+    handoffSession: async ({ params, body }) => {
+      const { id } = params;
+      const { targetProvider, targetModel, nextSessionFocus } = body;
+      const result = await fastify.sessionService.handoffSession(
+        id,
+        targetProvider,
+        targetModel,
+        nextSessionFocus,
+      );
+      return {
+        status: 200 as const,
+        body: {
+          sessionId: result.sessionId,
+          handoffFilePath: result.handoffFilePath,
+          initialPrompt: result.initialPrompt,
+          handoffSource: result.handoffSource,
+        },
+      };
+    },
     restoreSnapshot: async ({ params, body }) => {
       const { id } = params;
       const { snapshotHash } = body;

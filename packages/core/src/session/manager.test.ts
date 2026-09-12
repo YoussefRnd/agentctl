@@ -1431,4 +1431,175 @@ describe('SessionManager tests', () => {
       );
     });
   });
+
+  describe('restartSession empty session handling', () => {
+    it('does NOT pass existingAgentSessionId when session has 0 text messages', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-empty',
+        name: 'Empty Project',
+        path: '/tmp/proj-empty',
+      });
+      await db.insert(sessions).values({
+        id: 'sess-empty',
+        projectId: 'proj-empty',
+        branch: 'main',
+        worktreePath: '/tmp/proj-empty',
+        taskSlug: 'empty-task',
+        agent: 'provider-1',
+        title: 'Empty session',
+        status: 'idle',
+        selectedProvider: 'provider-1',
+        agentSessionId: JSON.stringify({ 'provider-1': 'acp-empty-session' }),
+        baseCommit: 'hash',
+      });
+
+      const provider = new Provider({
+        id: 'provider-1',
+        name: 'Provider 1',
+        installState: 'installed_local',
+        installError: null,
+        authState: 'authenticated',
+        enabled: true,
+        hidden: false,
+        distribution: '{}',
+        command: 'claude',
+        launchArgs: '[]',
+        launchEnv: '{}',
+        customEnv: '{}',
+        configOptions: '[]',
+        authMethods: '[]',
+        supportsDynamicModel: false,
+        supportsDynamicConfig: false,
+        supportsLogout: false,
+        nativelyLoadsSkills: false,
+        modes: '[]',
+        version: '1.0.0',
+        description: '',
+        icon: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const registry = {
+        ensureProviderReady: () => Promise.resolve(provider),
+        getSettings: () => Promise.resolve({ defaultProviderId: 'provider-1' }),
+        discover: () => Promise.resolve([provider.toDiscovery()]),
+      } as unknown as ProviderRegistry;
+
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        registry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      const startSessionSpy = vi.spyOn(manager, 'startSession').mockResolvedValue({} as ACPSession);
+
+      await manager.restartSession('sess-empty');
+
+      expect(startSessionSpy).toHaveBeenCalledWith(
+        'sess-empty',
+        '/tmp/proj-empty',
+        'claude',
+        [],
+        {},
+        'default',
+        'medium',
+        false,
+        false,
+        undefined,
+        null,
+        undefined,
+      );
+    });
+
+    it('passes existingAgentSessionId when session has at least 1 message', async () => {
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'proj-active',
+        name: 'Active Project',
+        path: '/tmp/proj-active',
+      });
+      await db.insert(sessions).values({
+        id: 'sess-active',
+        projectId: 'proj-active',
+        branch: 'main',
+        worktreePath: '/tmp/proj-active',
+        taskSlug: 'active-task',
+        agent: 'provider-1',
+        title: 'Active session',
+        status: 'idle',
+        selectedProvider: 'provider-1',
+        agentSessionId: JSON.stringify({ 'provider-1': 'acp-active-session' }),
+        baseCommit: 'hash',
+      });
+
+      const store = new SessionEventStore(db, { publish() {} });
+      await store.append('sess-active', 'text', { text: 'Hello', role: 'user' }, null);
+
+      const provider = new Provider({
+        id: 'provider-1',
+        name: 'Provider 1',
+        installState: 'installed_local',
+        installError: null,
+        authState: 'authenticated',
+        enabled: true,
+        hidden: false,
+        distribution: '{}',
+        command: 'claude',
+        launchArgs: '[]',
+        launchEnv: '{}',
+        customEnv: '{}',
+        configOptions: '[]',
+        authMethods: '[]',
+        supportsDynamicModel: false,
+        supportsDynamicConfig: false,
+        supportsLogout: false,
+        nativelyLoadsSkills: false,
+        modes: '[]',
+        version: '1.0.0',
+        description: '',
+        icon: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const registry = {
+        ensureProviderReady: () => Promise.resolve(provider),
+        getSettings: () => Promise.resolve({ defaultProviderId: 'provider-1' }),
+        discover: () => Promise.resolve([provider.toDiscovery()]),
+      } as unknown as ProviderRegistry;
+
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        registry,
+        eventBus,
+        noopLogger,
+        fakeRuntime,
+      );
+
+      const startSessionSpy = vi.spyOn(manager, 'startSession').mockResolvedValue({} as ACPSession);
+
+      await manager.restartSession('sess-active');
+
+      expect(startSessionSpy).toHaveBeenCalledWith(
+        'sess-active',
+        '/tmp/proj-active',
+        'claude',
+        [],
+        {},
+        'default',
+        'medium',
+        false,
+        false,
+        undefined,
+        'acp-active-session',
+        undefined,
+      );
+    });
+  });
 });

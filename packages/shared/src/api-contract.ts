@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import {
   createSessionSchema,
+  handoffSessionSchema,
+  handoffSessionResponseSchema,
   sessionWithCapabilitiesSchema,
   providerDiscoverySchema,
   sessionRowSchema,
@@ -827,6 +829,20 @@ export const apiContract = {
       }),
     },
     summary: 'Undo session rewind, restoring both messages and files',
+  },
+  handoffSession: {
+    method: 'POST',
+    path: '/api/sessions/:id/handoff',
+    pathParams: z.object({
+      id: z.uuid(),
+    }),
+    body: handoffSessionSchema,
+    responses: {
+      200: handoffSessionResponseSchema,
+      404: z.object({ message: z.string() }),
+      409: z.object({ message: z.string() }),
+    },
+    summary: 'Handoff the current workspace and conversation context to another agent',
   },
   restoreSnapshot: {
     method: 'POST',

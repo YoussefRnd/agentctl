@@ -43,7 +43,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && node ./scripts/copy-skills.mjs",
+    "predev": "node ./scripts/copy-skills.mjs",
     "dev": "tsc -b --watch",
     "test": "vitest run --root ../.. packages/core",
     "typecheck": "tsc --noEmit",
@@ -67,6 +68,7 @@
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",
     "simple-git": "^3.36.0",
+    "yaml": "^2.9.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {

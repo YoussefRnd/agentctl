@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { eq, asc, desc, inArray } from 'drizzle-orm';
+import { eq, asc, desc, inArray, and } from 'drizzle-orm';
 import type { ACPSession } from '../acp/session-client.js';
 import type { DbClient } from '../db/index.js';
 import type { AgentRuntime } from '../acp/types.js';
@@ -21,7 +21,18 @@ import {
 import { SessionStateMachine } from './state-machine.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
 import { buildConversationHistoryTranscript } from './history-transcript.js';
+import {
+  findAgentGeneratedHandoff,
+  generateHandoffDocument,
+  scheduleHandoffCleanup,
+  type HandoffResult,
+} from './handoff.js';
 import type { ACPEventDbRow } from '../db/zod-schemas.js';
+import {
+  DEFAULT_AGENT_MODEL,
+  DEFAULT_THINKING_EFFORT,
+  getContextTurnLimit,
+} from '../config/runtime-defaults.js';
 
 export interface IEventBus {
   publish(event: unknown): void;
@@ -277,8 +288,8 @@ export class SessionManager {
     command: string,
     args: string[],
     env?: Record<string, string>,
-    selectedModel = 'default',
-    selectedThinkingEffort: ThinkingEffort = 'medium',
+    selectedModel = DEFAULT_AGENT_MODEL,
+    selectedThinkingEffort: ThinkingEffort = DEFAULT_THINKING_EFFORT,
     supportsDynamicModel = false,
     supportsDynamicConfig = false,
     resolvedThinkingConfigId?: string,
@@ -301,7 +312,10 @@ export class SessionManager {
     );
   }
 
-  async restartSession(sessionId: string): Promise<ACPSession> {
+  async restartSession(
+    sessionId: string,
+    options: { resumeExisting?: boolean } = {},
+  ): Promise<ACPSession> {
     this.logger.info({ sessionId }, 'Restarting session');
     this.stateMachine.stopSession(sessionId);
 
@@ -340,11 +354,23 @@ export class SessionManager {
       workspacePath = context.worktreePath;
     }
 
-    const resolvedAgentSessionId = resolveAgentSessionId(
-      sessionRecord.agentSessionId,
-      sessionRecord.selectedProvider,
-      sessionRecord.agent,
-    );
+    let hasUserMessages = false;
+    if (options.resumeExisting !== false) {
+      const messages = await this.db
+        .select({ id: acpEvents.id })
+        .from(acpEvents)
+        .where(and(eq(acpEvents.sessionId, sessionId), eq(acpEvents.type, 'text')));
+      hasUserMessages = messages.length > 0;
+    }
+
+    const resolvedAgentSessionId =
+      hasUserMessages && options.resumeExisting !== false
+        ? resolveAgentSessionId(
+            sessionRecord.agentSessionId,
+            sessionRecord.selectedProvider,
+            sessionRecord.agent,
+          )
+        : null;
 
     return this.startSession(
       sessionId,
@@ -447,6 +473,154 @@ export class SessionManager {
     return forkSessionId;
   }
 
+  async handoffSession(
+    sessionId: string,
+    targetProvider: string,
+    targetModel?: string,
+    nextSessionFocus?: string,
+  ): Promise<{
+    sessionId: string;
+    handoffFilePath: string;
+    initialPrompt: string;
+    handoffSource: HandoffResult['source'];
+  }> {
+    const sessionRecord = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+
+    if (!sessionRecord) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    if (sessionRecord.status === 'running') {
+      throw new Error('Wait for the current agent turn to finish before switching providers');
+    }
+    if (sessionRecord.selectedProvider === targetProvider) {
+      throw new Error(`Session is already using provider: ${targetProvider}`);
+    }
+
+    const { providerId: resolvedProviderId, selection } =
+      await this.resolveSessionProviderAndParameters(
+        sessionRecord.projectId,
+        targetProvider,
+        targetModel,
+        sessionRecord.selectedThinkingEffort as ThinkingEffort,
+      );
+
+    const latestEventRows = await this.db
+      .select({ id: acpEvents.id })
+      .from(acpEvents)
+      .where(eq(acpEvents.sessionId, sessionId))
+      .orderBy(desc(acpEvents.id))
+      .limit(1);
+    const latestEventId = latestEventRows[0]?.id ?? 0;
+
+    let handoffResult: HandoffResult | null = null;
+    try {
+      const sourceSession =
+        this.stateMachine.getSession(sessionId) ?? (await this.restartSession(sessionId));
+      const focusParts = [`Continue this work with ${resolvedProviderId}.`];
+      if (nextSessionFocus?.trim()) {
+        focusParts.push(nextSessionFocus.trim());
+      }
+      await sourceSession.prompt(focusParts.join(' '), undefined, undefined, {
+        purpose: 'provider-handoff',
+      });
+      await sourceSession.flushAll();
+
+      const generatedEvents = await this.db
+        .select()
+        .from(acpEvents)
+        .where(eq(acpEvents.sessionId, sessionId))
+        .orderBy(desc(acpEvents.id));
+      const responseTexts = generatedEvents
+        .filter((event) => event.id > latestEventId && event.type === 'text')
+        .map((event) => {
+          try {
+            const data = JSON.parse(event.data) as {
+              role?: string;
+              content?: string;
+              text?: string;
+            };
+            return data.role === 'provider' ? (data.content ?? data.text ?? '') : '';
+          } catch {
+            return '';
+          }
+        })
+        .filter((text) => text.length > 0);
+      handoffResult = await findAgentGeneratedHandoff(responseTexts, sessionId);
+    } catch (error) {
+      this.logger.warn(error, 'The source agent could not produce a handoff document');
+    }
+
+    handoffResult ??= await generateHandoffDocument(this.db, sessionId, resolvedProviderId, {
+      nextSessionFocus,
+      maxEventId: latestEventId,
+    });
+
+    const sessionBeforeSwitch = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+    });
+    if (sessionBeforeSwitch?.status === 'running') {
+      scheduleHandoffCleanup(handoffResult.filePath);
+      throw new Error('The source agent started another turn before the handoff could complete');
+    }
+
+    const sourceSelection = {
+      selectedProvider: sessionRecord.selectedProvider,
+      selectedModel: sessionRecord.selectedModel,
+      selectedThinkingEffort: sessionRecord.selectedThinkingEffort as ThinkingEffort,
+    };
+    const initialPrompt = `Continue the work from the attached handoff context.${
+      nextSessionFocus && nextSessionFocus.trim().length > 0
+        ? ` Focus for this session: ${nextSessionFocus.trim()}`
+        : ''
+    }`;
+
+    try {
+      const targetSession = await this.updateSessionConfig(
+        sessionId,
+        {
+          selectedProvider: resolvedProviderId,
+          selectedModel: selection.selectedModel,
+          selectedThinkingEffort: selection.selectedThinkingEffort,
+        },
+        { forceNewAgentSession: true },
+      );
+      if (!targetSession) {
+        throw new Error(`Failed to start target provider: ${resolvedProviderId}`);
+      }
+
+      await this.eventStore.append(
+        sessionId,
+        'status',
+        {
+          status: 'context_handoff',
+          title: `Handoff from ${sessionRecord.selectedProvider} to ${resolvedProviderId}`,
+          handoffFilePath: handoffResult.filePath,
+          handoffSource: handoffResult.source,
+        },
+        null,
+      );
+      await targetSession.prompt(initialPrompt, undefined, handoffResult.content);
+    } catch (error) {
+      await this.stateMachine.stopSessionAndWait(sessionId).catch(() => undefined);
+      await this.updateSessionConfig(sessionId, sourceSelection).catch((rollbackError: unknown) => {
+        this.logger.error(rollbackError, 'Failed to restore source provider after handoff failed');
+      });
+      throw error;
+    } finally {
+      scheduleHandoffCleanup(handoffResult.filePath);
+    }
+
+    return {
+      sessionId,
+      handoffFilePath: handoffResult.filePath,
+      initialPrompt,
+      handoffSource: handoffResult.source,
+    };
+  }
+
   private buildInitialConfigOptions(
     providerConfigOptions: ACPConfigOption[],
     selectedModel: string,
@@ -502,6 +676,7 @@ export class SessionManager {
       selectedModel: string;
       selectedThinkingEffort: ThinkingEffort;
     },
+    options: { forceNewAgentSession?: boolean } = {},
   ): Promise<ACPSession | null> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
@@ -572,7 +747,12 @@ export class SessionManager {
         .where(eq(sessions.id, sessionId));
     };
 
-    if (activeSession && !activeSession.isDead && !providerIdChanged) {
+    if (
+      activeSession &&
+      !activeSession.isDead &&
+      !providerIdChanged &&
+      !options.forceNewAgentSession
+    ) {
       const needsModelRestart = modelChanged && !selection.supportsDynamicModel;
       const needsEffortRestart = effortChanged && !selection.supportsDynamicConfig;
 
@@ -617,11 +797,25 @@ export class SessionManager {
       }
     }
 
-    await persistSelection();
+    if (options.forceNewAgentSession) {
+      await this.stateMachine.stopSessionAndWait(sessionId);
+    }
+
     try {
-      return await this.restartSession(sessionId);
+      await persistSelection();
+      return options.forceNewAgentSession
+        ? await this.restartSession(sessionId, { resumeExisting: false })
+        : await this.restartSession(sessionId);
     } catch (error) {
       await rollbackSelection();
+      if (options.forceNewAgentSession && providerIdChanged) {
+        await this.restartSession(sessionId).catch((rollbackError: unknown) => {
+          this.logger.error(
+            rollbackError,
+            'Failed to restore source provider after target provider startup failed',
+          );
+        });
+      }
       throw error;
     }
   }
@@ -939,11 +1133,12 @@ export class SessionManager {
           sessionRecord.selectedProvider,
           sessionRecord.agent,
         );
-        const hasExistingProviderSession = Boolean(existingAgentSessionId);
+        const hasExistingProviderSession =
+          Boolean(existingAgentSessionId) && !session.requiresHistoryContext;
 
         if (!hasExistingProviderSession) {
           const transcript = await buildConversationHistoryTranscript(this.db, sessionId, {
-            maxTurns: 10,
+            maxTurns: getContextTurnLimit(),
           });
           if (transcript) {
             historyContext = transcript;
@@ -962,6 +1157,9 @@ export class SessionManager {
 
       this.rewindBackups.delete(sessionId);
       await session.prompt(payload.input, payload.attachmentIds, historyContext);
+      if (historyContext) {
+        session.markHistoryContextTransferred?.();
+      }
     }
   }
 

@@ -18,6 +18,7 @@ import type {
 import { SessionProjector } from '../session/session-projector.js';
 import { ElicitationStore } from '../session/elicitation-store.js';
 import { PermissionEngine } from '../security/permission-engine.js';
+import { SkillRegistry, type SkillActivation } from '../skills/registry.js';
 import { getBestPermissionOption, isPersistentPermissionOption } from './protocol/permissions.js';
 
 import type { ElicitationRequest, ElicitationResponse } from '@agentctl/shared';
@@ -87,6 +88,7 @@ export class ACPSession {
   private pendingRequests = new Map<string, DomainPermissionRequest>();
   private isStopped = false;
   private stopKind: 'idle' | 'error' | null = null;
+  private needsHistoryContext = false;
 
   private projector: SessionProjector;
 
@@ -103,6 +105,14 @@ export class ACPSession {
     return this.isStopped;
   }
 
+  get requiresHistoryContext(): boolean {
+    return this.needsHistoryContext;
+  }
+
+  markHistoryContextTransferred(): void {
+    this.needsHistoryContext = false;
+  }
+
   constructor(
     public sessionId: string,
     private runtimeHandle: AgentRuntimeHandle,
@@ -114,6 +124,7 @@ export class ACPSession {
     private mcpGateway?: McpGatewayLike,
   ) {
     this.acpSessionId = runtimeHandle.acpSessionId;
+    this.needsHistoryContext = runtimeHandle.sessionCreationKind === 'fallback_new';
     this.projector = new SessionProjector(
       sessionId,
       db,
@@ -178,36 +189,6 @@ export class ACPSession {
     }
     this.pendingApprovals.clear();
     this.pendingRequests.clear();
-  }
-
-  private loadSkills(cwd: string): string {
-    const skills: string[] = [];
-
-    const readSkillsFromBase = (basePath: string) => {
-      try {
-        const skillsDir = path.join(basePath, 'skills');
-        if (fs.existsSync(skillsDir)) {
-          const dirs = fs.readdirSync(skillsDir, { withFileTypes: true });
-          for (const dir of dirs) {
-            if (dir.isDirectory()) {
-              const skillMdPath = path.join(skillsDir, dir.name, 'SKILL.md');
-              if (fs.existsSync(skillMdPath)) {
-                const content = fs.readFileSync(skillMdPath, 'utf8');
-                skills.push(`### Skill: ${dir.name}\n\n${content}`);
-              }
-            }
-          }
-        }
-      } catch (err: unknown) {
-        this.logger.error(err, `Failed to load skills from ${basePath}`);
-      }
-    };
-
-    // Read workspace skills from .agents directory
-    const workspacePath = path.join(cwd, '.agents');
-    readSkillsFromBase(workspacePath);
-
-    return skills.join('\n\n---\n\n');
   }
 
   private async parseAndExecuteMcpCommand(
@@ -275,7 +256,12 @@ export class ACPSession {
     return false;
   }
 
-  async prompt(text: string, attachmentIds?: string[], embeddedContext?: string): Promise<void> {
+  async prompt(
+    text: string,
+    attachmentIds?: string[],
+    embeddedContext?: string,
+    skillActivation?: SkillActivation,
+  ): Promise<void> {
     try {
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, this.sessionId),
@@ -418,7 +404,17 @@ export class ACPSession {
         }
       }
 
-      const skillsContext = nativelyLoadsSkills ? '' : this.loadSkills(this.cwd);
+      const requestedSkill = /^\/([a-z0-9-]+)(?:\s|$)/i.exec(text)?.[1]?.toLowerCase();
+      const registry = await SkillRegistry.load({
+        cwd: this.cwd,
+        includeWorkspaceSkills: !nativelyLoadsSkills,
+      });
+      const activation = skillActivation ?? (requestedSkill ? { name: requestedSkill } : undefined);
+      if (skillActivation && !registry.activate(skillActivation)) {
+        const requested = skillActivation.name ?? `purpose "${skillActivation.purpose}"`;
+        throw new Error(`Agent skill not found: ${requested}`);
+      }
+      const skillsContext = registry.formatContext(activation);
       const finalEmbeddedContext = [embeddedContext, skillsContext]
         .filter(Boolean)
         .join('\n\n---\n\n');
@@ -665,7 +661,12 @@ export class ACPSession {
 
   async stop(): Promise<void> {
     await this.flushAll();
-    this.kill();
+    if (!this.isStopped) {
+      this.isStopped = true;
+      this.pendingApprovals.clear();
+      this.pendingRequests.clear();
+      await this.runtimeHandle.stop();
+    }
     await this.markSessionStopped('idle');
   }
 
