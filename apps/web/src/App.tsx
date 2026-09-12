@@ -11,7 +11,6 @@ import { FontConfigApplier } from './features/shell/components/FontConfigApplier
 import { SettingsDialog } from './features/settings/components/SettingsDialog';
 import { ShortcutsDialog } from './features/shell/components/ShortcutsDialog';
 import { CommandPalette } from './features/shell/components/CommandPalette';
-import { GlobalDropzone } from './features/project/components/GlobalDropzone';
 import { Spinner } from '@agentctl/ui';
 
 const SessionView = lazy(() =>
@@ -84,7 +83,6 @@ export function App() {
 
   return (
     <>
-      <GlobalDropzone />
       <CommandPalette />
       <ShortcutsDialog />
       <FontConfigApplier fontConfig={settings?.fontConfig} />

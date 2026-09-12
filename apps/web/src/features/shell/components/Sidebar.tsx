@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, MessageSquare, Folder } from 'lucide-react';
+import { Plus, MessageSquare, Folder, FolderUp } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import {
   apiClient,
   createProjectSession,
+  openProjectSession,
   deleteProject,
   archiveSession,
   deleteSession,
@@ -253,10 +254,170 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
 
   const totalSessionsCount = filteredProjects.reduce((acc, p) => acc + p.sessions.length, 0);
 
+  const [isDraggingOverSidebar, setIsDraggingOverSidebar] = useState(false);
+  const dragCounter = useRef(0);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    const types = Array.from(e.dataTransfer?.types || []);
+    if (types.includes('Files') || types.includes('text/uri-list')) {
+      dragCounter.current += 1;
+      if (dragCounter.current === 1) {
+        setIsDraggingOverSidebar(true);
+      }
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) {
+      setIsDraggingOverSidebar(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDraggingOverSidebar(false);
+
+    const files = e.dataTransfer?.files;
+    const firstFile = files?.[0];
+
+    let resolvedPath: string | undefined = undefined;
+
+    // 1. Electron webUtils API (if running in Electron)
+    if (firstFile && window.electronAPI?.getPathForFile) {
+      try {
+        resolvedPath = window.electronAPI.getPathForFile(firstFile);
+      } catch {
+        // fallback
+      }
+    }
+
+    // 2. Electron / node-enabled File.path
+    if (
+      !resolvedPath &&
+      firstFile &&
+      'path' in firstFile &&
+      typeof (firstFile as { path?: string }).path === 'string' &&
+      (firstFile as { path?: string }).path
+    ) {
+      resolvedPath = (firstFile as { path?: string }).path;
+    }
+
+    // 3. text/uri-list (Standard MIME type from OS file managers: Nautilus, Dolphin, macOS Finder)
+    if (!resolvedPath && e.dataTransfer) {
+      const uriList = e.dataTransfer.getData('text/uri-list');
+      if (uriList) {
+        const lines = uriList.split(/\r?\n/);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#') && trimmed.startsWith('file://')) {
+            try {
+              const url = new URL(trimmed);
+              let p = decodeURIComponent(url.pathname);
+              if (/^\/[a-zA-Z]:/.test(p)) {
+                p = p.slice(1);
+              }
+              if (p) {
+                resolvedPath = p;
+                break;
+              }
+            } catch {
+              // continue
+            }
+          }
+        }
+      }
+    }
+
+    // 4. text/plain fallback (Raw file path or file:// URL)
+    if (!resolvedPath && e.dataTransfer) {
+      const textPlain = e.dataTransfer.getData('text/plain');
+      if (textPlain) {
+        const lines = textPlain.split(/\r?\n/);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('file://')) {
+            try {
+              const url = new URL(trimmed);
+              let p = decodeURIComponent(url.pathname);
+              if (/^\/[a-zA-Z]:/.test(p)) {
+                p = p.slice(1);
+              }
+              if (p) {
+                resolvedPath = p;
+                break;
+              }
+            } catch {
+              // continue
+            }
+          } else if (trimmed.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(trimmed)) {
+            resolvedPath = trimmed;
+            break;
+          }
+        }
+      }
+    }
+
+    // 5. Match against existing registered projects by folder name
+    const folderName = firstFile?.name?.replace(/[\\/]$/, '');
+    if (!resolvedPath && folderName && projects.length > 0) {
+      const cleanName = folderName.toLowerCase();
+      const match = projects.find(
+        (p) =>
+          p.name.toLowerCase() === cleanName ||
+          p.path.toLowerCase().endsWith(`/${cleanName}`) ||
+          p.path.toLowerCase().endsWith(`\\${cleanName}`),
+      );
+      if (match) {
+        resolvedPath = match.path;
+      }
+    }
+
+    // 6. Path to attempt opening: either full resolved path or the folder name (server searches candidate directories)
+    const pathToOpen = resolvedPath || folderName;
+
+    if (!pathToOpen) {
+      toast.error('Unable to determine folder path');
+      return;
+    }
+
+    try {
+      const res = await openProjectSession(pathToOpen);
+      if (res?.session?.id) {
+        await queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void navigate(`/sessions/${res.session.id}`);
+        toast.success('Workspace opened');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to open workspace';
+      toast.error(msg);
+      if (!resolvedPath) {
+        void navigate('/');
+      }
+    }
+  };
+
   return (
     <aside
       aria-label="Main Sidebar"
-      className="relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent select-none"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={cn(
+        'relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent transition-colors duration-150 select-none',
+        isDraggingOverSidebar && 'ring-accent/20 bg-accent/[0.015] ring-1 ring-inset',
+      )}
     >
       <div className="space-y-2.5 px-3 pt-3 pb-2">
         <SidebarSearch
@@ -341,6 +502,12 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2.5 pb-6">
+        {isDraggingOverSidebar && (
+          <div className="border-accent/40 bg-accent/[0.04] text-accent ring-accent/20 animate-in fade-in slide-in-from-top-1 pointer-events-none mb-2.5 flex items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-3 text-xs font-medium tracking-tight ring-1 backdrop-blur-xs transition-all duration-150">
+            <FolderUp className="h-4 w-4 shrink-0" />
+            <span>Drop folder to open workspace</span>
+          </div>
+        )}
         {searchQuery.trim().length > 0 && searchTab === 'messages' ? (
           <SidebarTranscriptResults
             searchQuery={searchQuery}

@@ -351,7 +351,83 @@ export default fp(async (fastify) => {
       };
     },
     openProject: async ({ body }) => {
-      const normalizedPath = path.resolve(path.normalize(body.path));
+      const trimmedPath = body.path?.trim();
+      if (!trimmedPath) {
+        throw new AppError('Path cannot be empty', 400);
+      }
+
+      let normalizedPath = path.resolve(path.normalize(trimmedPath));
+
+      let pathExists = false;
+      try {
+        const st = await fs.stat(normalizedPath);
+        pathExists = st.isDirectory();
+      } catch {
+        pathExists = false;
+      }
+
+      if (!pathExists) {
+        const isExplicitAbsolutePath =
+          path.isAbsolute(trimmedPath) || path.win32.isAbsolute(trimmedPath);
+        if (isExplicitAbsolutePath) {
+          throw new AppError(`Cannot open folder: path does not exist: ${trimmedPath}`, 400);
+        }
+
+        // If the path does not exist as-is (e.g. dropped folder from browser sending just folder name or relative path),
+        // try searching in parent directories of existing projects and standard locations.
+        const rawName = path.basename(trimmedPath);
+        const isBareFolderName = rawName === trimmedPath && !trimmedPath.includes('\\');
+        if (rawName && rawName !== '.' && isBareFolderName) {
+          const candidatePaths = new Set<string>();
+
+          const knownProjects = await fastify.db.select({ path: projects.path }).from(projects);
+          for (const kp of knownProjects) {
+            if (kp.path) {
+              candidatePaths.add(path.join(path.dirname(kp.path), rawName));
+            }
+          }
+
+          const configuredRoots = fastify.config.AGENTCTL_WORKSPACE_SEARCH_PATHS?.split(
+            path.delimiter,
+          )
+            .map((root) => root.trim())
+            .filter(Boolean);
+          const home = os.homedir();
+          const searchRoots = configuredRoots?.length
+            ? configuredRoots
+            : [
+                home,
+                ...['Documents', 'Projects', 'Code', 'Desktop'].map((dir) => path.join(home, dir)),
+              ];
+          for (const root of searchRoots) {
+            candidatePaths.add(path.join(root, rawName));
+          }
+
+          const matches = new Set<string>();
+          for (const candidate of candidatePaths) {
+            try {
+              const st = await fs.stat(candidate);
+              if (st.isDirectory()) {
+                matches.add(await fs.realpath(candidate));
+              }
+            } catch {
+              // continue
+            }
+          }
+
+          if (matches.size > 1) {
+            throw new AppError(
+              `Cannot open folder: multiple folders named "${rawName}" were found; use the full path`,
+              400,
+            );
+          }
+          const [match] = matches;
+          if (match) {
+            normalizedPath = match;
+            pathExists = true;
+          }
+        }
+      }
 
       const repoInfo = await fastify.worktreeManager
         .resolveRepository(normalizedPath)

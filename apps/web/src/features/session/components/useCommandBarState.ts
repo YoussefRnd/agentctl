@@ -403,37 +403,77 @@ export function useCommandBarState(
   );
 
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounter = useRef(0);
 
   const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
-      setIsDraggingOver(true);
+    const types = Array.from(e.dataTransfer?.types || []);
+    if (types.includes('Files') || types.includes('text/uri-list')) {
+      dragCounter.current += 1;
+      if (dragCounter.current === 1) {
+        setIsDraggingOver(true);
+      }
     }
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    setIsDraggingOver(false);
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) {
+      setIsDraggingOver(false);
+    }
   }, []);
 
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
+      dragCounter.current = 0;
       setIsDraggingOver(false);
-      const files = Array.from(e.dataTransfer.files);
-      const imageFiles = files.filter((f) => f.type.startsWith('image/'));
-      const codeFiles = files.filter((f) => !f.type.startsWith('image/'));
+      const items = Array.from(e.dataTransfer.items || []);
+      if (items.length > 0) {
+        const imageFiles: File[] = [];
+        for (const item of items) {
+          if (item.kind !== 'file') continue;
+          const entry = item.webkitGetAsEntry?.();
+          const file = item.getAsFile();
+          if (!file) continue;
 
-      if (imageFiles.length > 0) {
-        addFiles(imageFiles);
-      }
+          if (file.type.startsWith('image/')) {
+            imageFiles.push(file);
+          } else {
+            const isDirectory = entry?.isDirectory ?? false;
+            const filePath = (file as { path?: string }).path || file.name;
+            const displayName = isDirectory
+              ? file.name.endsWith('/')
+                ? file.name
+                : `${file.name}/`
+              : file.name;
 
-      if (codeFiles.length > 0) {
-        for (const file of codeFiles) {
+            contextAutocomplete.selectItem({
+              id: isDirectory ? `folder:${filePath}` : `file:${filePath}`,
+              type: isDirectory ? 'folder' : 'file',
+              title: displayName,
+              subtitle: filePath,
+              value: filePath,
+            });
+          }
+        }
+        if (imageFiles.length > 0) {
+          addFiles(imageFiles);
+        }
+      } else {
+        const files = Array.from(e.dataTransfer.files);
+        const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+        const otherFiles = files.filter((f) => !f.type.startsWith('image/'));
+
+        if (imageFiles.length > 0) {
+          addFiles(imageFiles);
+        }
+
+        for (const file of otherFiles) {
           const filePath = (file as { path?: string }).path || file.name;
           contextAutocomplete.selectItem({
-            id: filePath,
+            id: `file:${filePath}`,
             type: 'file',
             title: file.name,
             subtitle: filePath,

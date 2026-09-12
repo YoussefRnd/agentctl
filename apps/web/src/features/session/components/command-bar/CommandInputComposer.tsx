@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Sparkles } from 'lucide-react';
+import { Plus, FileUp } from 'lucide-react';
 import { cn } from '@agentctl/ui';
 import { AttachmentStrip } from '../AttachmentStrip';
 import { ContextDropdown } from './ContextDropdown';
@@ -251,24 +251,27 @@ export function CommandInputComposer({
           hasQueuedMessages && 'rounded-t-none border-t-0',
           disabled ? 'opacity-55' : 'opacity-100',
           isDraggingOver
-            ? 'border-accent ring-accent/30 bg-accent/5 ring-2'
+            ? 'border-accent/60 ring-accent/30 bg-accent/[0.02] ring-1'
             : isFocused
               ? 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'
               : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
         )}
         onDragOver={(e) => {
           e.preventDefault();
+          if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'copy';
+          }
         }}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Visual drop overlay when dragging files over the composer */}
+        {/* Visual drop overlay when dragging files or folders over the composer */}
         {isDraggingOver && (
-          <div className="border-accent/70 bg-surface/95 pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border-2 border-dashed backdrop-blur-xs">
-            <div className="text-accent flex items-center gap-2 text-xs font-semibold">
-              <Sparkles className="h-4 w-4 animate-bounce" />
-              <span>Drop code files or images to attach</span>
+          <div className="border-accent/40 bg-accent/[0.04] ring-accent/20 pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border border-dashed ring-1 backdrop-blur-[2px] transition-all duration-150">
+            <div className="text-accent flex items-center gap-2 text-xs font-medium tracking-tight">
+              <FileUp className="h-4 w-4" />
+              <span>Drop files or folders to attach</span>
             </div>
           </div>
         )}
