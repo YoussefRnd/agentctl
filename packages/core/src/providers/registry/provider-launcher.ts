@@ -1,12 +1,10 @@
-import os from 'node:os';
 import path from 'node:path';
 import type { RegistryAgent, ACPConfigOption } from '@agentctl/shared';
 import type { ProviderData } from '../provider.js';
 import { type BinaryInstaller, getPlatformKey } from './binary-installer.js';
 import type { ProviderStore } from './provider-store.js';
-import type { PersistentAgentConnectionManager } from './persistent-connection.js';
-import type { AgentRuntime, AgentProbeResult } from '../../acp/types.js';
-import { isAuthRequiredError, extractConfigOptionsFromSessionResult } from '../../acp/runtime.js';
+import type { AgentDescriptor, AgentDriver } from '../../agent/types.js';
+import { isAgentAuthenticationRequiredError } from '../../agent/errors.js';
 export function resolveNpxPackageSpec(pkg: string, version?: string): string {
   if (!pkg) return '';
   const lastAtIndex = pkg.lastIndexOf('@');
@@ -45,26 +43,21 @@ function pickProxyEnv(source: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 export class ProviderLauncher {
-  private probeCache = new Map<string, Promise<AgentProbeResult>>();
+  private probeCache = new Map<string, Promise<AgentDescriptor>>();
 
   constructor(
     private store: ProviderStore,
     private installer: BinaryInstaller,
-    private connectionManager?: PersistentAgentConnectionManager,
   ) {}
 
-  setConnectionManager(cm: PersistentAgentConnectionManager): void {
-    this.connectionManager = cm;
-  }
-
-  invalidateProbe(providerId: string, runtime?: AgentRuntime, agent?: RegistryAgent): void {
+  invalidateProbe(providerId: string, runtime?: AgentDriver, agent?: RegistryAgent): void {
     this.probeCache.delete(providerId);
-    if (runtime?.invalidateProbeCache) {
+    if (runtime?.invalidateProviderCache) {
       const row = this.store.get(providerId);
       if (row) {
         try {
           const launch = this.resolveLaunch(row, agent);
-          void runtime.invalidateProbeCache(launch.command, launch.args, launch.env);
+          void runtime.invalidateProviderCache(launch.command, launch.args, launch.env);
         } catch {
           // ignore launch resolution errors during invalidation
         }
@@ -209,71 +202,29 @@ export class ProviderLauncher {
     return { command, args, env };
   }
 
-  probe(
-    providerId: string,
-    runtime: AgentRuntime,
-    agent: RegistryAgent,
-  ): Promise<AgentProbeResult> {
+  probe(providerId: string, runtime: AgentDriver, agent: RegistryAgent): Promise<AgentDescriptor> {
     const cached = this.probeCache.get(providerId);
     if (cached) return cached;
 
-    const promise = (async (): Promise<AgentProbeResult> => {
+    const promise = (async (): Promise<AgentDescriptor> => {
       const row = this.store.get(providerId);
       if (!row) throw new Error(`Provider ${providerId} not found`);
 
-      if (this.connectionManager && row.authState === 'authenticated') {
-        try {
-          const persistent = await this.connectionManager.getConnection(providerId);
-          const sessionResult = await persistent.connection.newSession({
-            cwd: os.tmpdir(),
-            mcpServers: [],
-          });
-          if (sessionResult.sessionId && persistent.supportsCloseSession) {
-            void persistent.connection
-              .closeSession({ sessionId: sessionResult.sessionId })
-              .catch(() => undefined);
-          }
-          const configOptions = extractConfigOptionsFromSessionResult(sessionResult);
-          const probeResult: AgentProbeResult = {
-            status: 'ready',
-            configOptions,
-            authMethods: row.authMethods
-              ? (JSON.parse(row.authMethods) as AgentProbeResult['authMethods'])
-              : [],
-            supportsDynamicModel: configOptions.some(
-              (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-            ),
-            supportsDynamicConfig: configOptions.length > 0,
-            supportsLogout: row.supportsLogout,
-            modes: row.modes ? (JSON.parse(row.modes) as string[]) : [],
-          };
-          this.store.update(providerId, {
-            configOptions: JSON.stringify(configOptions),
-            supportsDynamicModel: probeResult.supportsDynamicModel,
-            supportsDynamicConfig: probeResult.supportsDynamicConfig,
-            authState: 'authenticated',
-          });
-          return probeResult;
-        } catch {
-          // If persistent connection probe fails, fall back to runtime.probe
-        }
-      }
-
       const launch = this.resolveLaunch(row, agent);
-      let result: AgentProbeResult;
+      let result: AgentDescriptor;
       try {
-        result = await runtime.probe(launch.command, launch.args, launch.env);
+        result = await runtime.inspectProvider(launch.command, launch.args, launch.env);
       } catch (err: unknown) {
-        if (isAuthRequiredError(err)) {
+        if (isAgentAuthenticationRequiredError(err)) {
           this.store.setAuthState(providerId, 'needs_auth');
           const existingConfigOpts = row.configOptions
             ? (JSON.parse(row.configOptions) as ACPConfigOption[])
             : [];
-          const fallbackResult: AgentProbeResult = {
+          const fallbackResult: AgentDescriptor = {
             status: 'needs_auth',
             configOptions: existingConfigOpts,
             authMethods: row.authMethods
-              ? (JSON.parse(row.authMethods) as AgentProbeResult['authMethods'])
+              ? (JSON.parse(row.authMethods) as AgentDescriptor['authMethods'])
               : [],
             supportsDynamicModel: row.supportsDynamicModel,
             supportsDynamicConfig: row.supportsDynamicConfig,

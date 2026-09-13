@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import { eq, asc, desc, inArray, and } from 'drizzle-orm';
 import type { ACPSession } from '../acp/session-client.js';
 import type { DbClient } from '../db/index.js';
-import type { AgentRuntime } from '../acp/types.js';
-import { DefaultAgentRuntime } from '../acp/runtime.js';
+import type { AgentDriver, AgentSessionIntent } from '../agent/types.js';
+import { AcpAgentDriver } from '../acp/driver.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import { SessionEventStore } from './event-store.js';
@@ -92,10 +92,10 @@ export class SessionManager {
     private providerRegistry: ProviderRegistry,
     eventBus: IEventBus,
     private logger: Logger = noopLogger,
-    private runtime: AgentRuntime = new DefaultAgentRuntime(spawn, logger),
+    private runtime: AgentDriver = AcpAgentDriver.create(spawn, logger),
     private mcpGateway?: McpGateway,
   ) {
-    if (this.runtime instanceof DefaultAgentRuntime) {
+    if (this.runtime instanceof AcpAgentDriver) {
       this.runtime.setConnectionManager(this.providerRegistry.getConnectionManager());
     }
     this.eventStore = new SessionEventStore(db, eventBus);
@@ -293,7 +293,7 @@ export class SessionManager {
     supportsDynamicModel = false,
     supportsDynamicConfig = false,
     resolvedThinkingConfigId?: string,
-    existingAgentSessionId?: string | null,
+    intent: AgentSessionIntent = { kind: 'new' },
     resolvedModelConfigId?: string,
   ): Promise<ACPSession> {
     return this.stateMachine.startSession(
@@ -307,7 +307,7 @@ export class SessionManager {
       supportsDynamicModel,
       supportsDynamicConfig,
       resolvedThinkingConfigId,
-      existingAgentSessionId,
+      intent,
       resolvedModelConfigId,
     );
   }
@@ -383,7 +383,9 @@ export class SessionManager {
       selection.supportsDynamicModel,
       selection.supportsDynamicConfig,
       selection.resolvedThinkingConfigId,
-      resolvedAgentSessionId,
+      resolvedAgentSessionId
+        ? { kind: 'resume', sessionId: resolvedAgentSessionId }
+        : { kind: 'new' },
       selection.resolvedModelConfigId,
     );
   }
@@ -397,6 +399,7 @@ export class SessionManager {
       selectedProvider: string;
       selectedModel: string;
       selectedThinkingEffort: string;
+      contextLimit: number;
       project: { path: string; repoRoot: string | null; subdir: string };
     },
     eventsToCopy: {
@@ -405,6 +408,7 @@ export class SessionManager {
       parentEventId: number | null;
       metadata: string | null;
     }[],
+    forkFromAgentSessionId?: string,
   ): Promise<string> {
     const context = await this.sessionWorkspace.establish(
       sourceRecord.projectId,
@@ -415,7 +419,7 @@ export class SessionManager {
         selectedProvider: sourceRecord.selectedProvider,
         selectedModel: sourceRecord.selectedModel,
         selectedThinkingEffort: sourceRecord.selectedThinkingEffort,
-        contextLimit: 0,
+        contextLimit: sourceRecord.contextLimit > 0 ? sourceRecord.contextLimit : 0,
         title: `${sourceRecord.taskSlug}-fork`,
       },
     );
@@ -455,20 +459,34 @@ export class SessionManager {
       sourceRecord.selectedThinkingEffort as ThinkingEffort,
     );
 
-    await this.startSession(
-      forkSessionId,
-      worktreePath,
-      launch.command,
-      launch.args,
-      launch.env,
-      selection.selectedModel,
-      selection.selectedThinkingEffort,
-      selection.supportsDynamicModel,
-      selection.supportsDynamicConfig,
-      selection.resolvedThinkingConfigId,
-      undefined,
-      selection.resolvedModelConfigId,
-    );
+    try {
+      await this.startSession(
+        forkSessionId,
+        worktreePath,
+        launch.command,
+        launch.args,
+        launch.env,
+        selection.selectedModel,
+        selection.selectedThinkingEffort,
+        selection.supportsDynamicModel,
+        selection.supportsDynamicConfig,
+        selection.resolvedThinkingConfigId,
+        forkFromAgentSessionId
+          ? { kind: 'fork', sessionId: forkFromAgentSessionId }
+          : { kind: 'new' },
+        selection.resolvedModelConfigId,
+      );
+    } catch (error) {
+      await this.db
+        .update(sessions)
+        .set({ status: 'error', updatedAt: new Date() })
+        .where(eq(sessions.id, forkSessionId));
+      await this.eventStore.append(forkSessionId, 'status', {
+        status: 'error',
+        title: error instanceof Error ? error.message : 'Failed to start forked session',
+      });
+      throw error;
+    }
 
     return forkSessionId;
   }
@@ -717,13 +735,25 @@ export class SessionManager {
     const activeSession = this.stateMachine.getSession(sessionId);
 
     const persistSelection = async (): Promise<void> => {
+      let preservedLimit = sessionRecord.contextLimit > 0 ? sessionRecord.contextLimit : 0;
+      if (preservedLimit === 0 && sessionRecord.sessionMetrics) {
+        try {
+          const metrics = JSON.parse(sessionRecord.sessionMetrics) as { contextLimit?: number };
+          if (typeof metrics.contextLimit === 'number' && metrics.contextLimit > 0) {
+            preservedLimit = metrics.contextLimit;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       await this.db
         .update(sessions)
         .set({
           selectedProvider: params.selectedProvider,
           selectedModel: selection.selectedModel,
           selectedThinkingEffort: selection.selectedThinkingEffort,
-          contextLimit: 0,
+          contextLimit: preservedLimit,
           availableCommands: '[]',
           sessionConfigOptions: JSON.stringify(newConfigOptions),
           updatedAt: new Date(),
@@ -887,7 +917,7 @@ export class SessionManager {
           providerSessions = { [initialProvider]: sessionRecord.agentSessionId };
         }
 
-        if (typeof this.runtime.deleteAgentSession === 'function') {
+        if (typeof this.runtime.deleteSession === 'function') {
           for (const [providerId, sId] of Object.entries(providerSessions)) {
             try {
               const { launch } = await this.resolveLaunchParameters(
@@ -895,7 +925,7 @@ export class SessionManager {
                 sessionRecord.selectedModel,
                 sessionRecord.selectedThinkingEffort as ThinkingEffort,
               );
-              await this.runtime.deleteAgentSession(launch.command, launch.args, launch.env, sId);
+              await this.runtime.deleteSession(launch.command, launch.args, launch.env, sId);
             } catch (delErr) {
               this.logger.warn(
                 { delErr, providerId },
@@ -1157,9 +1187,8 @@ export class SessionManager {
 
       this.rewindBackups.delete(sessionId);
       await session.prompt(payload.input, payload.attachmentIds, historyContext);
-      if (historyContext) {
-        session.markHistoryContextTransferred?.();
-      }
+      // The provider now owns the conversation, even when the first prompt had no prior history.
+      session.markHistoryContextTransferred?.();
     }
   }
 
@@ -1287,7 +1316,25 @@ export class SessionManager {
 
       const eventsToCopy = events.filter((e) => e.id <= eventId);
 
-      const forkSessionId = await this.createForkSession(sessionRecord, eventsToCopy);
+      // The provider RPC forks current context, so historical and in-flight forks
+      // must use the exact transcript selected above instead.
+      const activeSource = this.getSession(sessionId);
+      const canForkCurrentContext =
+        sessionRecord.status === 'idle' &&
+        eventsToCopy.length === events.length &&
+        !activeSource?.requiresHistoryContext;
+      const forkFromAgentSessionId = canForkCurrentContext
+        ? (resolveAgentSessionId(
+            sessionRecord.agentSessionId,
+            sessionRecord.selectedProvider,
+            sessionRecord.agent,
+          ) ?? undefined)
+        : undefined;
+      const forkSessionId = await this.createForkSession(
+        sessionRecord,
+        eventsToCopy,
+        forkFromAgentSessionId,
+      );
 
       return { forkSessionId };
     }

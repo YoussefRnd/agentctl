@@ -1,5 +1,5 @@
 import { StreamBuffer } from '../acp/transport/stream-buffer.js';
-import type { SessionEventStoreLike, SnapshotServiceLike } from '../acp/types.js';
+import type { SessionEventStoreLike, SnapshotServiceLike } from './contracts.js';
 import type { ACPEventDbRow } from '../db/zod-schemas.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
@@ -12,12 +12,15 @@ export interface TurnStart {
 export class EventStreamAdapter {
   private currentMessage = '';
   private currentThought = '';
+  private currentMessageId: string | undefined;
+  private currentThoughtId: string | undefined;
   private messageEventId: number | null = null;
   private thoughtEventId: number | null = null;
   private messageStartTime: number | null = null;
   private thoughtStartTime: number | null = null;
-  private toolCallStartTime: number | null = null;
-  private toolCallEventId: number | null = null;
+  private activeToolCalls = new Map<string, { eventId: number; startTime: number }>();
+  private lastToolCallStartTime: number | null = null;
+  private lastToolCallEventId: number | null = null;
   private currentParentEventId: number | null = null;
 
   private textBuffer: StreamBuffer;
@@ -68,12 +71,15 @@ export class EventStreamAdapter {
     this.flushThoughtDelta();
     this.currentMessage = '';
     this.currentThought = '';
+    this.currentMessageId = undefined;
+    this.currentThoughtId = undefined;
     this.messageEventId = null;
     this.thoughtEventId = null;
     this.messageStartTime = null;
     this.thoughtStartTime = null;
-    this.toolCallStartTime = null;
-    this.toolCallEventId = null;
+    this.lastToolCallStartTime = null;
+    this.lastToolCallEventId = null;
+    this.activeToolCalls.clear();
     this.textBuffer.reset();
     this.thoughtBuffer.reset();
 
@@ -109,8 +115,34 @@ export class EventStreamAdapter {
     return { eventId, snapshotHash };
   }
 
-  async appendText(text: string): Promise<void> {
-    this.currentMessage += text;
+  async appendText(
+    text: string,
+    messageId?: string,
+    operation: 'append' | 'replace' = 'append',
+  ): Promise<void> {
+    if (messageId && this.currentMessageId && messageId !== this.currentMessageId) {
+      await this.flushAll();
+      this.currentMessage = '';
+      this.messageEventId = null;
+      this.messageStartTime = null;
+      this.textBuffer.reset();
+    }
+    if (messageId) this.currentMessageId = messageId;
+
+    if (operation === 'replace') {
+      this.currentMessage = text;
+      if (this.messageEventId) {
+        const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
+        await this.eventStore.update(
+          this.messageEventId,
+          { content: this.currentMessage, role: 'provider' },
+          { durationMs },
+        );
+        return;
+      }
+    } else {
+      this.currentMessage += text;
+    }
     if (this.messageEventId) {
       this.textBuffer.append(text);
       this.pendingTextDelta += text;
@@ -136,8 +168,34 @@ export class EventStreamAdapter {
     }
   }
 
-  async appendThought(text: string): Promise<void> {
-    this.currentThought += text;
+  async appendThought(
+    text: string,
+    messageId?: string,
+    operation: 'append' | 'replace' = 'append',
+  ): Promise<void> {
+    if (messageId && this.currentThoughtId && messageId !== this.currentThoughtId) {
+      await this.flushAll();
+      this.currentThought = '';
+      this.thoughtEventId = null;
+      this.thoughtStartTime = null;
+      this.thoughtBuffer.reset();
+    }
+    if (messageId) this.currentThoughtId = messageId;
+
+    if (operation === 'replace') {
+      this.currentThought = text;
+      if (this.thoughtEventId) {
+        const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
+        await this.eventStore.update(
+          this.thoughtEventId,
+          { content: this.currentThought, role: 'thought' },
+          { durationMs },
+        );
+        return;
+      }
+    } else {
+      this.currentThought += text;
+    }
     if (this.thoughtEventId) {
       this.thoughtBuffer.append(text);
       this.pendingThoughtDelta += text;
@@ -251,30 +309,88 @@ export class EventStreamAdapter {
     return snapshots;
   }
 
-  async registerToolCall(call: unknown, isUpdate: boolean): Promise<void> {
-    if (!isUpdate) {
-      await this.flushAll();
+  async upsertToolCall(
+    call: unknown,
+    contentOperation: 'replace' | 'append' = 'replace',
+  ): Promise<void> {
+    const callObj =
+      typeof call === 'object' && call !== null ? (call as Record<string, unknown>) : {};
+    const toolCallId =
+      typeof callObj.toolCallId === 'string' && callObj.toolCallId.trim()
+        ? callObj.toolCallId.trim()
+        : undefined;
 
-      this.currentMessage = '';
-      this.currentThought = '';
-      this.messageEventId = null;
-      const parentId = this.thoughtEventId ?? this.currentParentEventId;
-      this.thoughtEventId = null;
-      this.messageStartTime = null;
-      this.thoughtStartTime = null;
+    const tracked =
+      (toolCallId ? this.activeToolCalls.get(toolCallId) : undefined) ??
+      (!toolCallId && this.lastToolCallEventId != null && this.lastToolCallStartTime != null
+        ? { eventId: this.lastToolCallEventId, startTime: this.lastToolCallStartTime }
+        : undefined);
+    const status = typeof callObj.status === 'string' ? callObj.status : undefined;
 
-      this.toolCallStartTime = Date.now();
-      this.toolCallEventId = await this.eventStore.append(
-        this.sessionId,
-        'tool_call',
-        call,
-        parentId,
-        { durationMs: 0 },
-      );
-    } else if (this.toolCallEventId) {
-      const durationMs = Date.now() - (this.toolCallStartTime ?? Date.now());
-      await this.eventStore.update(this.toolCallEventId, call, { durationMs });
+    if (tracked) {
+      const durationMs = Math.max(0, Date.now() - tracked.startTime);
+      let persistedCall = call;
+      if (contentOperation === 'append' && Array.isArray(callObj.content)) {
+        const existing = await this.eventStore.getEvent(tracked.eventId);
+        const existingData =
+          existing?.data && typeof existing.data === 'object'
+            ? (existing.data as Record<string, unknown>)
+            : {};
+        persistedCall = {
+          ...callObj,
+          content: [
+            ...(Array.isArray(existingData.content) ? existingData.content : []),
+            ...callObj.content,
+          ],
+        };
+      }
+      await this.eventStore.update(tracked.eventId, persistedCall, { durationMs });
+      if (status === 'completed' || status === 'failed') {
+        if (toolCallId) this.activeToolCalls.delete(toolCallId);
+        if (this.lastToolCallEventId === tracked.eventId) {
+          this.lastToolCallEventId = null;
+          this.lastToolCallStartTime = null;
+        }
+      }
+      return;
     }
+
+    await this.flushAll();
+    this.currentMessage = '';
+    this.currentThought = '';
+    this.currentMessageId = undefined;
+    this.currentThoughtId = undefined;
+    this.messageEventId = null;
+    const parentId = this.thoughtEventId ?? this.currentParentEventId;
+    this.thoughtEventId = null;
+    this.messageStartTime = null;
+    this.thoughtStartTime = null;
+
+    const startTime = Date.now();
+    const eventId = await this.eventStore.append(this.sessionId, 'tool_call', call, parentId, {
+      durationMs: 0,
+    });
+
+    if (status !== 'completed' && status !== 'failed') {
+      this.lastToolCallStartTime = startTime;
+      this.lastToolCallEventId = eventId;
+      if (toolCallId) this.activeToolCalls.set(toolCallId, { eventId, startTime });
+    }
+  }
+
+  async finalizeInFlightToolCalls(): Promise<void> {
+    const now = Date.now();
+    for (const [toolCallId, tracked] of this.activeToolCalls.entries()) {
+      const durationMs = Math.max(0, now - tracked.startTime);
+      await this.eventStore.update(
+        tracked.eventId,
+        { toolCallId, status: 'completed' },
+        { durationMs },
+      );
+    }
+    this.activeToolCalls.clear();
+    this.lastToolCallEventId = null;
+    this.lastToolCallStartTime = null;
   }
 
   async flushAll(): Promise<void> {

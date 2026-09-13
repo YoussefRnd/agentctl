@@ -8,8 +8,8 @@ import type { DbClient } from '../db/index.js';
 import type { SessionEventStore } from './event-store.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
-import type { AgentRuntime, AgentRuntimeHandle } from '../acp/types.js';
-import { AuthRequiredError } from '../acp/types.js';
+import type { AgentDriver, AgentSession, AgentSessionIntent } from '../agent/types.js';
+import { AgentAuthenticationRequiredError } from '../agent/errors.js';
 import { SnapshotService } from '../git/snapshot-service.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
 import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
@@ -68,7 +68,7 @@ export class SessionStateMachine {
     private providerRegistry: ProviderRegistry,
     private eventStore: SessionEventStore,
     private logger: Logger = noopLogger,
-    private runtime: AgentRuntime,
+    private runtime: AgentDriver,
     private mcpGateway?: McpGateway,
   ) {
     this.snapshotService = new SnapshotService();
@@ -204,9 +204,10 @@ export class SessionStateMachine {
     supportsDynamicModel = false,
     supportsDynamicConfig = false,
     resolvedThinkingConfigId?: string,
-    existingAgentSessionId?: string | null,
+    intent: AgentSessionIntent = { kind: 'new' },
     resolvedModelConfigId?: string,
   ): Promise<ACPSession> {
+    const existingAgentSessionId = intent.kind === 'resume' ? intent.sessionId : undefined;
     this.logger.info(
       { sessionId, command, args, worktreePath, existingAgentSessionId },
       existingAgentSessionId
@@ -255,7 +256,7 @@ export class SessionStateMachine {
       });
       const providerId = sessionRecord?.selectedProvider ?? 'default';
 
-      const runtimeHandle = await this.runtime.execute(
+      const runtimeHandle = await this.runtime.startSession(
         command,
         args,
         {
@@ -269,12 +270,12 @@ export class SessionStateMachine {
           supportsDynamicConfig,
           resolvedThinkingConfigId,
           resolvedModelConfigId,
-          existingAgentSessionId,
+          intent,
           mcpServers: mcpServersPayload,
           mcpGateway: this.mcpGateway,
         },
         {
-          onEvent: async (event) => {
+          onUpdate: async (event) => {
             if (session) {
               await session.handleDomainEvent(event);
             }
@@ -329,8 +330,8 @@ export class SessionStateMachine {
         }
       }
 
-      if (runtimeHandle.acpSessionId) {
-        currentMapping[providerId] = runtimeHandle.acpSessionId;
+      if (runtimeHandle.id) {
+        currentMapping[providerId] = runtimeHandle.id;
       }
 
       const newAgentSessionIdValue = JSON.stringify(currentMapping);
@@ -340,7 +341,7 @@ export class SessionStateMachine {
         .set({ agentSessionId: newAgentSessionIdValue, status: 'idle' })
         .where(eq(sessions.id, sessionId));
     } catch (err: unknown) {
-      if (err instanceof AuthRequiredError) {
+      if (err instanceof AgentAuthenticationRequiredError) {
         this.logger.warn(`Session ${sessionId} requires authentication`);
         await this.db
           .update(sessions)
@@ -352,24 +353,7 @@ export class SessionStateMachine {
           message: 'Authentication required. Please check your API keys or log in via CLI.',
         });
 
-        const runtimeHandle: AgentRuntimeHandle = {
-          acpSessionId: null,
-          closed: err.connection.closed,
-          onProcessError(handler) {
-            err.child.on('error', handler);
-          },
-          onProcessExit(handler) {
-            err.child.once('exit', handler);
-          },
-          prompt: (_text: string, _attachments?: unknown[], _embedded?: string) =>
-            Promise.resolve({ stopReason: 'end_turn' }),
-          authenticate: () => Promise.resolve(),
-          cancel: () => Promise.resolve(),
-          stop(): Promise<void> {
-            err.child.kill();
-            return Promise.resolve();
-          },
-        };
+        const runtimeHandle: AgentSession = err.pendingSession;
 
         session = new ACPSession(
           sessionId,

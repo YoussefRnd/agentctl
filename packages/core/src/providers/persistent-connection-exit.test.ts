@@ -10,7 +10,7 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
       localSessionId: 'local-1',
       options: {} as any,
       callbacks: {
-        onEvent: vi.fn().mockResolvedValue(undefined),
+        onUpdate: vi.fn().mockResolvedValue(undefined),
         onRequestPermission: vi.fn(),
       },
     };
@@ -49,7 +49,7 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
       }
 
       for (const session of sessionsToNotify) {
-        await session.callbacks.onEvent({
+        await session.callbacks.onUpdate({
           type: 'status',
           status: 'error',
           title: `Agent process exited with code ${String(code ?? signal)}`,
@@ -66,7 +66,7 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
     // Allow promise callbacks in event handler to resolve
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    expect(mockSession.callbacks.onEvent).toHaveBeenCalledWith({
+    expect(mockSession.callbacks.onUpdate).toHaveBeenCalledWith({
       type: 'status',
       status: 'error',
       title: 'Agent process exited with code 1',
@@ -81,7 +81,7 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
       localSessionId: 'local-sig',
       options: {} as any,
       callbacks: {
-        onEvent: vi.fn().mockResolvedValue(undefined),
+        onUpdate: vi.fn().mockResolvedValue(undefined),
         onRequestPermission: vi.fn(),
       },
     };
@@ -109,7 +109,7 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
       }
 
       for (const session of sessionsToNotify) {
-        await session.callbacks.onEvent({
+        await session.callbacks.onUpdate({
           type: 'status',
           status: 'error',
           title: `Agent process exited with code ${String(code ?? signal)}`,
@@ -125,7 +125,7 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    expect(mockSession.callbacks.onEvent).toHaveBeenCalledWith({
+    expect(mockSession.callbacks.onUpdate).toHaveBeenCalledWith({
       type: 'status',
       status: 'error',
       title: 'Agent process exited with code SIGKILL',
@@ -139,7 +139,7 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
       localSessionId: 'local-2',
       options: {} as any,
       callbacks: {
-        onEvent: vi.fn(),
+        onUpdate: vi.fn(),
         onRequestPermission: vi.fn(),
       },
     };

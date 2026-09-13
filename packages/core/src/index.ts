@@ -1,5 +1,6 @@
 // @agentctl/core domain entry points
 export * from './acp/index.js';
+export * from './agent/index.js';
 export * from './session/index.js';
 export * from './providers/index.js';
 export * from './security/index.js';

@@ -3,10 +3,10 @@ import { createDatabase } from '../db/index.js';
 import { projects, sessions } from '../db/schema.js';
 import { ACPSession } from './session-client.js';
 import { SessionEventStore } from '../session/event-store.js';
-import type { AgentRuntimeHandle, DomainPermissionResponse } from './types.js';
+import type { AgentPermissionResponse, AgentSession } from '../agent/types.js';
 
 interface SessionWithPending {
-  pendingApprovals: Map<string, (response: DomainPermissionResponse) => void>;
+  pendingApprovals: Map<string, (response: AgentPermissionResponse) => void>;
 }
 
 async function makeSession(approvalMode = 'review') {
@@ -31,17 +31,18 @@ async function makeSession(approvalMode = 'review') {
   });
 
   const runtimeHandle = {
-    acpSessionId: 'acp-g',
+    id: 'acp-g',
+    history: 'fresh',
     closed: new Promise<void>(() => {
       // noop
     }),
-    onProcessError: () => {
+    onError: () => {
       // noop
     },
-    onProcessExit: () => {
+    onClose: () => {
       // noop
     },
-  } as unknown as AgentRuntimeHandle;
+  } as unknown as AgentSession;
 
   const session = new ACPSession('sess-g', runtimeHandle, db, eventStore, '/tmp/proj');
   return { session, db };

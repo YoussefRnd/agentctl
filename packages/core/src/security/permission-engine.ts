@@ -1,4 +1,3 @@
-import type { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
 import type {
   PermissionOption,
   PermissionOptionChoice,
@@ -6,19 +5,10 @@ import type {
   PermissionPattern,
   SelectedPermissionOutcome,
 } from '@agentctl/shared';
-import type { DomainPermissionRequest } from '../acp/types.js';
-import {
-  getBestPermissionOption,
-  isPersistentPermissionOption,
-  parsePermissionRequest,
-} from '../acp/protocol/permissions.js';
+import type { AgentPermissionRequest, AgentPermissionResponse } from '../agent/types.js';
+import { getBestPermissionOption, isPersistentPermissionOption } from './permission-options.js';
 
-export {
-  formatPermissionOutcome,
-  getBestPermissionOption,
-  isPersistentPermissionOption,
-  parsePermissionRequest,
-} from '../acp/protocol/permissions.js';
+export { getBestPermissionOption, isPersistentPermissionOption } from './permission-options.js';
 
 export interface PatternGrantOptions {
   maxUses?: number;
@@ -37,8 +27,8 @@ export interface ExportedPermissions {
 
 export interface EvaluationResult {
   autoApproved: boolean;
-  response?: RequestPermissionResponse;
-  domainRequest?: DomainPermissionRequest;
+  response?: AgentPermissionResponse;
+  domainRequest?: AgentPermissionRequest;
   uiOptions?: PermissionOptions;
 }
 
@@ -133,16 +123,16 @@ export class PermissionEngine {
     return true;
   }
 
-  evaluateRequest(acpRequest: RequestPermissionRequest): EvaluationResult {
-    const domainReq = parsePermissionRequest(acpRequest);
+  evaluateRequest(domainReq: AgentPermissionRequest): EvaluationResult {
     const toolName = domainReq.toolCall.name;
     const toolArgs = domainReq.toolCall.arguments ?? {};
 
     if (this.isToolCallApproved(toolName, toolArgs)) {
       const bestOptionId = getBestPermissionOption(domainReq.options);
-      const response: RequestPermissionResponse = bestOptionId
-        ? { outcome: { outcome: 'selected', optionId: bestOptionId } }
-        : { outcome: { outcome: 'cancelled' } };
+      const response: AgentPermissionResponse = {
+        allowed: Boolean(bestOptionId),
+        optionId: bestOptionId,
+      };
 
       return {
         autoApproved: true,
@@ -231,7 +221,7 @@ export class PermissionEngine {
    * (tool name + extracted targets). Used when the user picks a persistent
    * option on an agent-native option id.
    */
-  grantForDomainRequest(domainReq: DomainPermissionRequest): void {
+  grantForDomainRequest(domainReq: AgentPermissionRequest): void {
     const toolName = domainReq.toolCall.name;
     const args = domainReq.toolCall.arguments ?? {};
     for (const target of this.extractTargets(toolName, args)) {
@@ -245,19 +235,14 @@ export class PermissionEngine {
     _permissionId: string,
     selectedOptionId: string,
     outcomeParams?: { patterns?: string[] },
-  ): RequestPermissionResponse {
+  ): { optionId: string } {
     if (isPersistentPermissionOption(selectedOptionId) && outcomeParams?.patterns) {
       for (const p of outcomeParams.patterns) {
         this.grantPattern(p);
       }
     }
 
-    // ACP distinguishes selecting an agent-provided rejection option from
-    // dismissing the permission prompt. Every explicit option choice is
-    // returned as `selected`; only dismissal maps to `cancelled`.
-    return {
-      outcome: { outcome: 'selected', optionId: selectedOptionId },
-    };
+    return { optionId: selectedOptionId };
   }
 
   private extractTargets(toolName: string, args: Record<string, unknown>): string[] {

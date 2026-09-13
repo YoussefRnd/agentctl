@@ -31,7 +31,6 @@ export const authMethodSchema = z.object({
   type: z.enum(['agent', 'env_var']).optional().default('agent'),
   description: z.string().nullable().optional(),
   vars: z.array(authEnvVarSchema).optional(),
-  _meta: z.record(z.string(), z.any()).nullable().optional(),
 });
 
 export const registryDistributionNpxSchema = z.object({

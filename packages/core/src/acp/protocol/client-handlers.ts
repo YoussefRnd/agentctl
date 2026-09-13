@@ -1,20 +1,19 @@
 import { RequestError, type Client } from '@agentclientprotocol/sdk';
 import type { Logger } from '../../logger.js';
-import type { McpGatewayLike, SessionCallbacks } from '../types.js';
+import type { AgentMcpGateway, AgentSessionCallbacks } from '../../agent/types.js';
 import { parseNotificationToEvents } from './events.js';
 import { parsePermissionRequest, formatPermissionOutcome } from './permissions.js';
 import { formatElicitationResponse, projectElicitationRequest } from './elicitations.js';
 import { handleFsReadTextFile, handleFsWriteTextFile } from './file-system.js';
 import {
-  handleBuiltinBash,
   handleTerminalCreate,
   handleTerminalKill,
   handleTerminalOutput,
   handleTerminalRelease,
   handleTerminalWaitForExit,
-  handleTerminalWrite,
 } from './terminals.js';
 import type { TerminalManager } from './terminal-manager.js';
+import { createExtensionRouter } from './extensions.js';
 
 /**
  * Per-session context resolved from an incoming ACP request.
@@ -22,7 +21,7 @@ import type { TerminalManager } from './terminal-manager.js';
  * session; the persistent path resolves by sessionId.
  */
 export interface ClientSessionContext {
-  callbacks: SessionCallbacks;
+  callbacks: AgentSessionCallbacks;
   cwd: string;
   additionalDirectories?: string[];
   /** Called after a terminal is spawned so callers can track terminalId -> session. */
@@ -34,7 +33,7 @@ export interface ClientHandlerContext {
   additionalDirectories?: string[];
   terminalManager: TerminalManager;
   logger: Logger;
-  mcpGateway?: McpGatewayLike;
+  mcpGateway?: AgentMcpGateway;
   resolveSession(params?: { sessionId?: string }): ClientSessionContext;
 }
 
@@ -52,18 +51,28 @@ function toPromise<T>(fn: () => T): Promise<T> {
  *
  * IMPORTANT: handler keys MUST match the method names the SDK dispatches on
  * the `Client` interface (camelCase: readTextFile, createTerminal, ...).
- * Anything else silently falls through to `extMethod` and returns `{}`.
+ * Extensions are explicitly routed below; unknown methods fail with methodNotFound.
  */
 export function createClientHandlers(ctx: ClientHandlerContext): Client {
   const { terminalManager, logger, mcpGateway } = ctx;
   const pendingUrlElicitations = new Map<string, ClientSessionContext>();
+  const extensionRouter = createExtensionRouter({
+    terminalManager,
+    logger,
+    mcpGateway,
+    resolveSession: ctx.resolveSession,
+    async publishStatus(sessionId, status) {
+      const session = ctx.resolveSession({ sessionId });
+      await session.callbacks.onUpdate({ type: 'status', status });
+    },
+  });
 
   return {
     async sessionUpdate(n) {
       try {
         const session = ctx.resolveSession(n);
         for (const event of parseNotificationToEvents(n)) {
-          await session.callbacks.onEvent(event);
+          await session.callbacks.onUpdate(event);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -131,7 +140,7 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
         terminalManager,
         session.cwd,
         logger,
-        session.callbacks.onEvent,
+        session.callbacks.onUpdate,
         session.additionalDirectories,
       );
       session.onTerminalCreated?.(res.terminalId);
@@ -200,68 +209,14 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       if (typeof method !== 'string') {
         throw RequestError.invalidRequest(undefined, 'Extension method name must be a string');
       }
-      if (!method.startsWith('_')) {
-        throw RequestError.methodNotFound(method);
-      }
-      if (method === '_agentctl.dev/builtin/bash') {
-        return toPromise(() => {
-          // extMethod params are unvalidated and may be undefined at runtime.
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          const bp = params ?? {};
-          const session = ctx.resolveSession(bp);
-          return handleBuiltinBash(
-            {
-              command: typeof bp.command === 'string' ? bp.command : '',
-              args: Array.isArray(bp.args) ? (bp.args as string[]) : undefined,
-              pty: typeof bp.pty === 'boolean' ? bp.pty : undefined,
-              input: typeof bp.input === 'string' ? bp.input : undefined,
-              cwd: typeof bp.cwd === 'string' ? bp.cwd : undefined,
-            },
-            terminalManager,
-            session.cwd,
-            logger,
-            session.additionalDirectories,
-          );
-        });
-      }
-      if (method === '_agentctl.dev/terminal/write') {
-        return toPromise(() =>
-          handleTerminalWrite(
-            params as { terminalId: string; data: string },
-            terminalManager,
-            logger,
-          ),
-        );
-      }
-      if (mcpGateway && method.startsWith('_agentctl.dev/mcp/')) {
-        const qualifiedToolName = method.slice('_agentctl.dev/mcp/'.length);
-        const parts = qualifiedToolName.split('__');
-        const serverId = parts[0];
-        const toolName = parts.slice(1).join('__');
-        if (!serverId || !toolName) {
-          throw RequestError.invalidParams(undefined, `Invalid MCP extension method: ${method}`);
-        }
-        // The SDK may pass undefined params for request methods without args.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        const args = params ?? {};
-        logger.info({ serverId, toolName, params }, 'Routing tool call to client-side MCP gateway');
-        return (await mcpGateway.callTool(serverId, toolName, args)) as Record<string, unknown>;
-      }
-      throw RequestError.methodNotFound(method);
+      return (await extensionRouter.request(method, params)) as Record<string, unknown>;
     },
 
     async extNotification(method, rawParams) {
       try {
         if (typeof method !== 'string' || !method.startsWith('_')) return;
-        const params = rawParams as Record<string, unknown> | undefined;
-        logger.debug({ method, params }, 'ACP extension notification');
-        if (method === '_agentctl.dev/session/update' && params && 'sessionId' in params) {
-          const session = ctx.resolveSession({ sessionId: String(params.sessionId) });
-          const update = params.update as { sessionUpdate?: string } | undefined;
-          if (update?.sessionUpdate) {
-            await session.callbacks.onEvent({ type: 'status', status: update.sessionUpdate });
-          }
-        }
+        logger.debug({ method, params: rawParams }, 'ACP extension notification');
+        await extensionRouter.notify(method, rawParams);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('not found or inactive')) {

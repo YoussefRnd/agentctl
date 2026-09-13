@@ -6,8 +6,9 @@ import {
   type ACPConfigOption,
 } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
-import type { AgentRuntime } from '../acp/types.js';
-import { createAgentConnection, DefaultAgentRuntime, isAuthRequiredError } from '../acp/index.js';
+import type { AgentDriver } from '../agent/types.js';
+import { AcpAgentDriver } from '../acp/index.js';
+import { isAgentAuthenticationRequiredError } from '../agent/errors.js';
 import type { DbClient } from '../db/index.js';
 import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
@@ -57,7 +58,7 @@ export class ProviderRegistry {
   private launcher: ProviderLauncher;
   private authProvider: AuthProvider;
   private syncProvider: ProviderSync;
-  private runtime: AgentRuntime;
+  private runtime: AgentDriver;
 
   private providerOperations = new Map<string, ProviderOperation>();
   private activeMutations = 0;
@@ -69,9 +70,9 @@ export class ProviderRegistry {
   constructor(
     private db: DbClient,
     private logger: Logger = noopLogger,
-    runtime?: AgentRuntime,
+    runtime?: AgentDriver,
   ) {
-    this.runtime = runtime ?? new DefaultAgentRuntime(spawn, logger);
+    this.runtime = runtime ?? AcpAgentDriver.create(spawn, logger);
     this.fetcher = new RegistryFetcher(db, logger);
     this.installer = new BinaryInstaller();
     this.store = new ProviderStore(db);
@@ -82,8 +83,7 @@ export class ProviderRegistry {
       this.launcher,
       logger,
     );
-    this.launcher.setConnectionManager(this.connectionManager);
-    this.authProvider = new AuthProvider(this.launcher, this.store, this.connectionManager);
+    this.authProvider = new AuthProvider(this.launcher, this.store, this.runtime);
     this.syncProvider = new ProviderSync(this.fetcher, this.store, this.installer, this.launcher);
   }
 
@@ -532,7 +532,8 @@ export class ProviderRegistry {
       const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
       const agent = agents.find((a) => a.id === providerId);
 
-      await this.authProvider.login(providerId, agent, methodId, params, createAgentConnection);
+      this.connectionManager.closeConnection(providerId);
+      await this.authProvider.login(providerId, agent, methodId, params);
     });
   }
 
@@ -542,7 +543,8 @@ export class ProviderRegistry {
       const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
       const agent = agents.find((a) => a.id === providerId);
 
-      await this.authProvider.logout(providerId, agent, createAgentConnection);
+      this.connectionManager.closeConnection(providerId);
+      await this.authProvider.logout(providerId, agent);
     });
   }
 
@@ -723,7 +725,7 @@ export class ProviderRegistry {
     try {
       await this.launcher.probe(providerId, this.runtime, agent);
     } catch (cause) {
-      if (isAuthRequiredError(cause)) {
+      if (isAgentAuthenticationRequiredError(cause)) {
         if (previousAuthState !== 'authenticated') {
           this.store.setAuthState(providerId, 'needs_auth');
         }
@@ -821,10 +823,7 @@ export class ProviderRegistry {
       try {
         await this.launcher.probe(providerId, this.runtime, agent);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        const isAuthError =
-          msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('unauthorized');
-        if (isAuthError) {
+        if (isAgentAuthenticationRequiredError(err)) {
           this.logger.info(
             { providerId },
             'Probe failed due to auth error, setting state to needs_auth',

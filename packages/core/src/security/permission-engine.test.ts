@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import { PermissionEngine } from './permission-engine.js';
-import type { RequestPermissionRequest } from '@agentclientprotocol/sdk';
+import type { AgentPermissionRequest } from '../agent/types.js';
 
 describe('PermissionEngine', () => {
   test('generates rich permission options with sub-patterns', () => {
@@ -62,39 +62,41 @@ describe('PermissionEngine', () => {
     expect(engine2.isToolCallApproved('read_file', { path: '/src/index.ts' })).toBe(true);
   });
 
-  test('evaluates ACP request and auto-approves when pattern matches', () => {
+  test('evaluates domain request and auto-approves when pattern matches', () => {
     const engine = new PermissionEngine([{ pattern: 'terminal:git status' }]);
 
-    const sdkRequest = {
+    const domainRequest = {
+      permissionId: 't123',
       toolCall: {
         toolCallId: 't123',
-        title: 'Terminal',
-        rawInput: { name: 'terminal', arguments: { command: 'git status' } },
+        name: 'terminal',
+        arguments: { command: 'git status' },
       },
       options: [
-        { optionId: 'allow_once', name: 'Allow Once' },
-        { optionId: 'allow_always', name: 'Allow Always' },
+        { optionId: 'allow_once', label: 'Allow Once' },
+        { optionId: 'allow_always', label: 'Allow Always' },
       ],
-    } as unknown as RequestPermissionRequest;
+    } satisfies AgentPermissionRequest;
 
-    const evalResult = engine.evaluateRequest(sdkRequest);
+    const evalResult = engine.evaluateRequest(domainRequest);
     expect(evalResult.autoApproved).toBe(true);
-    expect(evalResult.response?.outcome.outcome).toBe('selected');
+    expect(evalResult.response).toEqual({ allowed: true, optionId: 'allow_once' });
   });
 
-  test('evaluates ACP request and returns UI options when no pattern matches', () => {
+  test('evaluates domain request and returns UI options when no pattern matches', () => {
     const engine = new PermissionEngine();
 
-    const sdkRequest = {
+    const domainRequest = {
+      permissionId: 't456',
       toolCall: {
         toolCallId: 't456',
-        title: 'Terminal',
-        rawInput: { name: 'terminal', arguments: { command: 'git commit' } },
+        name: 'terminal',
+        arguments: { command: 'git commit' },
       },
-      options: [{ optionId: 'allow_once', name: 'Allow Once' }],
-    } as unknown as RequestPermissionRequest;
+      options: [{ optionId: 'allow_once', label: 'Allow Once' }],
+    } satisfies AgentPermissionRequest;
 
-    const evalResult = engine.evaluateRequest(sdkRequest);
+    const evalResult = engine.evaluateRequest(domainRequest);
     expect(evalResult.autoApproved).toBe(false);
     expect(evalResult.uiOptions?.type).toBe('dropdown_with_patterns');
   });
@@ -106,7 +108,7 @@ describe('PermissionEngine', () => {
       patterns: ['terminal:git *'],
     });
 
-    expect(response.outcome.outcome).toBe('selected');
+    expect(response.optionId).toBe('allow_always');
     expect(engine.isToolCallApproved('terminal', { command: 'git status' })).toBe(true);
   });
 
@@ -114,7 +116,7 @@ describe('PermissionEngine', () => {
     const engine = new PermissionEngine();
 
     expect(engine.resolveOutcome('perm2', 'reject_once')).toEqual({
-      outcome: { outcome: 'selected', optionId: 'reject_once' },
+      optionId: 'reject_once',
     });
   });
 });

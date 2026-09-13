@@ -8,7 +8,7 @@ import { Provider } from '../providers/provider.js';
 import { noopLogger } from '../logger.js';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { AgentRuntime } from '../acp/types.js';
+import type { AgentDriver } from '../agent/types.js';
 import type { ChildProcess } from 'node:child_process';
 import { createDatabase } from '../db/index.js';
 import { projects, sessions } from '../db/schema.js';
@@ -153,8 +153,8 @@ describe('SessionManager tests', () => {
     publish: () => undefined,
   } as unknown as IEventBus;
 
-  const fakeRuntime: AgentRuntime = {
-    execute() {
+  const fakeRuntime: AgentDriver = {
+    startSession() {
       const fakeChild = Object.assign(new EventEmitter(), {
         stdin: new PassThrough(),
         stdout: new PassThrough(),
@@ -163,24 +163,23 @@ describe('SessionManager tests', () => {
       }) as unknown as ChildProcess;
 
       return Promise.resolve({
-        acpSessionId: 'session-id-123',
-        historyRestored: false,
-        sessionCreationKind: 'new',
+        id: 'session-id-123',
+        history: 'fresh',
         closed: new Promise<void>(() => undefined),
-        onProcessError(handler) {
+        onError(handler) {
           fakeChild.on('error', handler);
         },
-        onProcessExit(handler) {
-          fakeChild.once('exit', handler);
+        onClose(handler) {
+          fakeChild.once('exit', (code, signal) => handler({ code, signal }));
         },
         prompt: (_text: string, _attachments?: unknown[], _embedded?: string) =>
           Promise.resolve({ stopReason: 'end_turn' }),
         authenticate: () => Promise.resolve(),
         cancel: () => Promise.resolve(),
-        stop: () => Promise.resolve(),
+        close: () => Promise.resolve(),
       });
     },
-    probe() {
+    inspectProvider() {
       return Promise.resolve({
         status: 'ready' as const,
         configOptions: [],
@@ -589,21 +588,20 @@ describe('SessionManager tests', () => {
 
   test('restores an advertised agent persona on startup without sending approvalMode', async () => {
     const setMode = vi.fn(() => Promise.resolve());
-    const runtime: AgentRuntime = {
+    const runtime: AgentDriver = {
       ...fakeRuntime,
-      execute: () =>
+      startSession: () =>
         Promise.resolve({
-          acpSessionId: 'agent-session',
+          id: 'agent-session',
           availableModes: ['architect', 'coder'],
-          historyRestored: false,
-          sessionCreationKind: 'new',
+          history: 'fresh',
           closed: new Promise<void>(() => undefined),
-          onProcessError: vi.fn(),
-          onProcessExit: vi.fn(),
+          onError: vi.fn(),
+          onClose: vi.fn(),
           prompt: () => Promise.resolve({ stopReason: 'end_turn' }),
           authenticate: () => Promise.resolve(),
           cancel: () => Promise.resolve(),
-          stop: () => Promise.resolve(),
+          close: () => Promise.resolve(),
           setMode,
         }),
     };
@@ -764,17 +762,108 @@ describe('SessionManager tests', () => {
 
     expect(result).toEqual({ forkSessionId: 'fork-1' });
     expect(getEventWithMetadata).not.toHaveBeenCalled();
-    expect(createForkSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }), [
-      { id: 1, type: 'text' },
-      { id: 2, type: 'text' },
-    ]);
+    expect(createForkSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-1' }),
+      [
+        { id: 1, type: 'text' },
+        { id: 2, type: 'text' },
+      ],
+      undefined,
+    );
   });
 
-  test('SessionManager deleteSession calls runtime deleteAgentSession if agentSessionId is present', async () => {
+  test.each([
+    { status: 'idle', cutoff: 99, expected: 'source-agent-id' },
+    { status: 'running', cutoff: 99, expected: undefined },
+    { status: 'idle', cutoff: 1, expected: undefined },
+  ])(
+    'fork routes provider context only for complete idle history ($status, $cutoff)',
+    async ({ status, cutoff, expected }) => {
+      const db = createDatabase(':memory:');
+      await db
+        .insert(projects)
+        .values({ id: 'fork-project', name: 'Fork', path: '/tmp/fork-project' });
+      await db.insert(sessions).values({
+        id: 'fork-source',
+        projectId: 'fork-project',
+        taskSlug: 'source',
+        branch: 'main',
+        worktreePath: '/tmp/fork-project',
+        mode: 'local',
+        agent: 'provider-1',
+        selectedProvider: 'provider-1',
+        status: status as 'idle' | 'running',
+        agentSessionId: JSON.stringify({ 'provider-1': 'source-agent-id' }),
+        baseCommit: 'none',
+      });
+      const originalStartSession = fakeRuntime.startSession.bind(fakeRuntime);
+      const prompt = vi.fn().mockResolvedValue({ stopReason: 'end_turn' });
+      const startSession = vi.fn<AgentDriver['startSession']>(async (...args) => {
+        const handle = await originalStartSession(...args);
+        return {
+          ...handle,
+          prompt,
+          ...(args[2].intent.kind === 'fork'
+            ? {
+                id: 'fork-agent-id',
+                history: 'restored' as const,
+              }
+            : {}),
+        };
+      });
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        mockProviderRegistry,
+        eventBus,
+        noopLogger,
+        { ...fakeRuntime, startSession },
+      );
+      const store = new SessionEventStore(db, eventBus);
+      const first = await store.append(
+        'fork-source',
+        'text',
+        { text: 'First', role: 'user' },
+        null,
+      );
+      await store.append('fork-source', 'text', { text: 'Second', role: 'provider' }, null);
+      const result = await manager.rewindSession(
+        'fork-source',
+        cutoff === 1 ? first : Number.MAX_SAFE_INTEGER,
+        'fork',
+      );
+      expect(result.forkSessionId).toBeTruthy();
+      expect(startSession).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Array),
+        expect.objectContaining({
+          intent: expected ? { kind: 'fork', sessionId: expected } : { kind: 'new' },
+          localSessionId: result.forkSessionId,
+          cwd: '/tmp/fork-project',
+        }),
+        expect.any(Object),
+      );
+      const forkRecord = await db.query.sessions.findFirst({
+        where: (row, { eq }) => eq(row.id, result.forkSessionId!),
+      });
+      expect(JSON.parse(forkRecord!.agentSessionId!)).toEqual({
+        'provider-1': expected ? 'fork-agent-id' : 'session-id-123',
+      });
+      await manager.handleClientMessage(result.forkSessionId!, 'session.input', {
+        input: 'Continue fork',
+      });
+      expect(prompt.mock.calls[0][0]).toBe('Continue fork');
+      const context = prompt.mock.calls[0][2] ?? '';
+      if (expected) expect(context).not.toContain('<previous_conversation_context>');
+      else expect(context).toContain('[User]: First');
+    },
+  );
+
+  test('SessionManager deleteSession calls driver deleteSession if agentSessionId is present', async () => {
     let deletedAgentSessionId = '';
-    const spyRuntime: AgentRuntime = {
+    const spyRuntime: AgentDriver = {
       ...fakeRuntime,
-      deleteAgentSession(_cmd, _args, _env, acpSessionId) {
+      deleteSession(_cmd, _args, _env, acpSessionId) {
         deletedAgentSessionId = acpSessionId;
         return Promise.resolve();
       },
@@ -1092,7 +1181,7 @@ describe('SessionManager tests', () => {
       expect(mockPrompt.mock.calls[0][2]).toContain('[Assistant]: Created login page');
     });
 
-    it('does NOT inject history transcript when provider already has an agentSessionId entry', async () => {
+    it('transfers copied fork history once even after the fresh provider session id is saved', async () => {
       const db = createDatabase(':memory:');
       await db.insert(projects).values({
         id: 'proj-1',
@@ -1100,16 +1189,16 @@ describe('SessionManager tests', () => {
         path: '/tmp/test',
       });
       await db.insert(sessions).values({
-        id: 'sess-existing-test',
+        id: 'sess-history-test',
         projectId: 'proj-1',
         branch: 'main',
         worktreePath: '/tmp/test',
         taskSlug: 'test',
-        agent: 'provider-b',
-        title: 'existing test',
+        agent: 'provider-a',
+        title: 'history test',
         status: 'idle',
         selectedProvider: 'provider-b',
-        agentSessionId: JSON.stringify({ 'provider-b': 'agent-sess-2' }),
+        agentSessionId: JSON.stringify({ 'provider-b': 'fresh-fork-agent-session' }),
         baseCommit: 'hash',
       });
 
@@ -1118,7 +1207,18 @@ describe('SessionManager tests', () => {
           /* noop */
         },
       });
-      await store.append('sess-existing-test', 'text', { text: 'Hello', role: 'user' }, null);
+      await store.append(
+        'sess-history-test',
+        'text',
+        { text: 'Create login page', role: 'user' },
+        null,
+      );
+      await store.append(
+        'sess-history-test',
+        'text',
+        { text: 'Created login page', role: 'provider' },
+        null,
+      );
 
       const mockPrompt = vi.fn().mockResolvedValue(undefined);
       const manager = new SessionManager(
@@ -1130,16 +1230,98 @@ describe('SessionManager tests', () => {
         fakeRuntime,
       );
 
-      vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue({
+      const forkSession = {
         prompt: mockPrompt,
-      } as unknown as ACPSession);
+        requiresHistoryContext: true,
+        markHistoryContextTransferred() {
+          this.requiresHistoryContext = false;
+        },
+      };
+      vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(forkSession as unknown as ACPSession);
 
-      await manager.handleClientMessage('sess-existing-test', 'session.input', {
-        input: 'Followup message',
+      await manager.handleClientMessage('sess-history-test', 'session.input', {
+        input: 'Add validation',
       });
 
-      expect(mockPrompt).toHaveBeenCalledWith('Followup message', undefined, undefined);
+      expect(mockPrompt).toHaveBeenCalledWith(
+        'Add validation',
+        undefined,
+        expect.stringContaining('<previous_conversation_context>'),
+      );
+      expect(mockPrompt.mock.calls[0][2]).toContain('[User]: Create login page');
+      expect(mockPrompt.mock.calls[0][2]).toContain('[Assistant]: Created login page');
+      await manager.handleClientMessage('sess-history-test', 'session.input', { input: 'Next' });
+      expect(mockPrompt).toHaveBeenLastCalledWith('Next', undefined, undefined);
     });
+
+    it.each([false, true])(
+      'does not replay provider-owned history after an initially empty prompt (fresh=%s)',
+      async (fresh) => {
+        const db = createDatabase(':memory:');
+        await db.insert(projects).values({
+          id: 'proj-1',
+          name: 'test-project',
+          path: '/tmp/test',
+        });
+        await db.insert(sessions).values({
+          id: 'sess-existing-test',
+          projectId: 'proj-1',
+          branch: 'main',
+          worktreePath: '/tmp/test',
+          taskSlug: 'test',
+          agent: 'provider-b',
+          title: 'existing test',
+          status: 'idle',
+          selectedProvider: 'provider-b',
+          agentSessionId: JSON.stringify({ 'provider-b': 'agent-sess-2' }),
+          baseCommit: 'hash',
+        });
+
+        const store = new SessionEventStore(db, {
+          publish() {
+            /* noop */
+          },
+        });
+        if (!fresh) {
+          await store.append('sess-existing-test', 'text', { text: 'Hello', role: 'user' }, null);
+        }
+
+        const mockPrompt = vi.fn().mockResolvedValue(undefined);
+        const manager = new SessionManager(
+          db,
+          mockWorkspaceManager,
+          mockProviderRegistry,
+          eventBus,
+          noopLogger,
+          fakeRuntime,
+        );
+
+        const activeSession = {
+          prompt: mockPrompt,
+          requiresHistoryContext: fresh,
+          markHistoryContextTransferred() {
+            this.requiresHistoryContext = false;
+          },
+        };
+        vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(
+          activeSession as unknown as ACPSession,
+        );
+
+        await manager.handleClientMessage('sess-existing-test', 'session.input', {
+          input: 'Followup message',
+        });
+
+        expect(mockPrompt).toHaveBeenCalledWith('Followup message', undefined, undefined);
+        await store.append(
+          'sess-existing-test',
+          'text',
+          { text: 'Followup message', role: 'user' },
+          null,
+        );
+        await manager.handleClientMessage('sess-existing-test', 'session.input', { input: 'Next' });
+        expect(mockPrompt).toHaveBeenLastCalledWith('Next', undefined, undefined);
+      },
+    );
   });
 
   describe('createSession provider resolution & smarter fallbacks', () => {
@@ -1433,7 +1615,7 @@ describe('SessionManager tests', () => {
   });
 
   describe('restartSession empty session handling', () => {
-    it('does NOT pass existingAgentSessionId when session has 0 text messages', async () => {
+    it('starts a new agent session when the local session has no text messages', async () => {
       const db = createDatabase(':memory:');
       await db.insert(projects).values({
         id: 'proj-empty',
@@ -1511,12 +1693,12 @@ describe('SessionManager tests', () => {
         false,
         false,
         undefined,
-        null,
+        { kind: 'new' },
         undefined,
       );
     });
 
-    it('passes existingAgentSessionId when session has at least 1 message', async () => {
+    it('resumes the agent session when the local session has text history', async () => {
       const db = createDatabase(':memory:');
       await db.insert(projects).values({
         id: 'proj-active',
@@ -1597,7 +1779,7 @@ describe('SessionManager tests', () => {
         false,
         false,
         undefined,
-        'acp-active-session',
+        { kind: 'resume', sessionId: 'acp-active-session' },
         undefined,
       );
     });

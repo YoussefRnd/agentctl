@@ -5,10 +5,10 @@ import { projects, sessions, mcpServers, acpEvents } from '../db/schema.js';
 import { ACPSession } from './session-client.js';
 import { SessionEventStore } from '../session/event-store.js';
 import { McpGateway } from '../mcp/mcp-gateway.js';
-import type { AgentRuntimeHandle, DomainPermissionResponse } from './types.js';
+import type { AgentPermissionResponse, AgentSession } from '../agent/types.js';
 
 interface SessionWithPending {
-  pendingApprovals: Map<string, (response: DomainPermissionResponse) => void>;
+  pendingApprovals: Map<string, (response: AgentPermissionResponse) => void>;
 }
 
 describe('MCP Permissions Routing', () => {
@@ -65,17 +65,18 @@ describe('MCP Permissions Routing', () => {
     });
 
     const runtimeHandle = {
-      acpSessionId: 'acp-test',
+      id: 'acp-test',
+      history: 'fresh',
       closed: new Promise<void>(() => {
         // noop
       }),
-      onProcessError: () => {
+      onError: () => {
         // noop
       },
-      onProcessExit: () => {
+      onClose: () => {
         // noop
       },
-    } as unknown as AgentRuntimeHandle;
+    } as unknown as AgentSession;
 
     const session = new ACPSession(
       'sess-p',

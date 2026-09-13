@@ -3,7 +3,8 @@ import { sessions } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
-import type { DomainAgentEvent, SessionEventStoreLike, SnapshotServiceLike } from '../acp/types.js';
+import type { SessionEventStoreLike, SnapshotServiceLike } from './contracts.js';
+import type { AgentUpdate } from '../agent/types.js';
 import { EventStreamAdapter } from './event-stream-adapter.js';
 
 /**
@@ -33,20 +34,32 @@ export class SessionProjector {
     return this.adapter.startTurn(text, attachments, promptTokens);
   }
 
-  async appendText(text: string): Promise<void> {
-    return this.adapter.appendText(text);
+  async appendText(
+    text: string,
+    messageId?: string,
+    operation?: 'append' | 'replace',
+  ): Promise<void> {
+    return this.adapter.appendText(text, messageId, operation);
   }
 
-  async appendThought(text: string): Promise<void> {
-    return this.adapter.appendThought(text);
+  async appendThought(
+    text: string,
+    messageId?: string,
+    operation?: 'append' | 'replace',
+  ): Promise<void> {
+    return this.adapter.appendThought(text, messageId, operation);
   }
 
-  async registerToolCall(call: unknown, isUpdate: boolean): Promise<void> {
-    return this.adapter.registerToolCall(call, isUpdate);
+  async upsertToolCall(call: unknown, contentOperation?: 'replace' | 'append'): Promise<void> {
+    return this.adapter.upsertToolCall(call, contentOperation);
   }
 
   async flushAll(): Promise<void> {
     return this.adapter.flushAll();
+  }
+
+  async finalizeInFlightToolCalls(): Promise<void> {
+    return this.adapter.finalizeInFlightToolCalls();
   }
 
   getCurrentParentEventId(): number | null {
@@ -61,16 +74,16 @@ export class SessionProjector {
     this.adapter.setCurrentParentEventId(id);
   }
 
-  async handleDomainEvent(event: DomainAgentEvent): Promise<void> {
+  async handleDomainEvent(event: AgentUpdate): Promise<void> {
     switch (event.type) {
       case 'tool_call':
-        await this.adapter.registerToolCall(event.call, event.isUpdate);
+        await this.adapter.upsertToolCall(event.call, event.contentOperation);
         break;
       case 'text':
-        await this.adapter.appendText(event.text);
+        await this.adapter.appendText(event.text, event.messageId, event.operation);
         break;
       case 'thought':
-        await this.adapter.appendThought(event.text);
+        await this.adapter.appendThought(event.text, event.messageId, event.operation);
         break;
       case 'status':
         await this.eventStore.append(
@@ -86,23 +99,49 @@ export class SessionProjector {
       case 'usage_update': {
         const sanitizedUsed = Math.max(0, event.used);
         const sanitizedSize = Math.max(0, event.size);
+
+        const sessionRecord = await this.db.query.sessions.findFirst({
+          where: eq(sessions.id, this.sessionId),
+        });
+
+        let existingMetrics: Record<string, unknown> = {};
+        if (sessionRecord?.sessionMetrics) {
+          try {
+            existingMetrics = JSON.parse(sessionRecord.sessionMetrics) as Record<string, unknown>;
+          } catch {
+            existingMetrics = {};
+          }
+        }
+
+        const effectiveContextLimit =
+          sanitizedSize > 0
+            ? sanitizedSize
+            : sessionRecord?.contextLimit && sessionRecord.contextLimit > 0
+              ? sessionRecord.contextLimit
+              : typeof existingMetrics.contextLimit === 'number' && existingMetrics.contextLimit > 0
+                ? existingMetrics.contextLimit
+                : 0;
+
         const metricsPayload = {
+          ...existingMetrics,
           totalTokens: sanitizedUsed,
-          contextLimit: sanitizedSize,
-          cost: event.cost ?? null,
+          ...(effectiveContextLimit > 0 ? { contextLimit: effectiveContextLimit } : {}),
+          cost: event.cost ?? existingMetrics.cost ?? null,
           lastUpdated: new Date().toISOString(),
         };
 
-        await this.db
-          .update(sessions)
-          .set({
-            totalTokens: sanitizedUsed,
-            contextLimit: sanitizedSize,
-            estimatedCost: event.cost ? event.cost.amount : 0.0,
-            sessionMetrics: JSON.stringify(metricsPayload),
-            updatedAt: new Date(),
-          })
-          .where(eq(sessions.id, this.sessionId));
+        const updateSet: Record<string, unknown> = {
+          totalTokens: sanitizedUsed,
+          estimatedCost: event.cost ? event.cost.amount : (sessionRecord?.estimatedCost ?? 0.0),
+          sessionMetrics: JSON.stringify(metricsPayload),
+          updatedAt: new Date(),
+        };
+
+        if (effectiveContextLimit > 0) {
+          updateSet.contextLimit = effectiveContextLimit;
+        }
+
+        await this.db.update(sessions).set(updateSet).where(eq(sessions.id, this.sessionId));
 
         await this.eventStore.append(
           this.sessionId,
@@ -110,7 +149,7 @@ export class SessionProjector {
           {
             status: 'usage_update',
             totalTokens: sanitizedUsed,
-            contextLimit: sanitizedSize,
+            contextLimit: effectiveContextLimit > 0 ? effectiveContextLimit : undefined,
             cost: event.cost ?? undefined,
           },
           null,

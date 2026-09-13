@@ -1,6 +1,6 @@
 import type { TerminalManager } from './terminal-manager.js';
 import type { Logger } from '../../logger.js';
-import type { DomainAgentEvent } from '../types.js';
+import type { AgentUpdate } from '../../agent/types.js';
 import { resolveAllowedPath } from '../transport/path-security.js';
 
 export interface CreateTerminalParams {
@@ -33,7 +33,7 @@ export async function handleTerminalCreate(
   terminalManager: TerminalManager,
   sessionCwd: string,
   logger: Logger,
-  onEvent: (e: DomainAgentEvent) => void | Promise<void>,
+  onEvent: (e: AgentUpdate) => void | Promise<void>,
   additionalDirectories: string[] = [],
 ): Promise<{ terminalId: string }> {
   const terminalCwd = resolveTerminalCwd(p.cwd, sessionCwd, additionalDirectories);

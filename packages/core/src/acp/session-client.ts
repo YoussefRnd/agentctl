@@ -5,87 +5,37 @@ import { sessions, providers, mcpServers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
 import { type Logger, noopLogger } from '../logger.js';
+import type { SessionEventStoreLike, SessionStatusTransitioner } from '../session/contracts.js';
 import type {
-  DomainPermissionRequest,
-  DomainPermissionResponse,
-  DomainAgentEvent,
-  AgentRuntimeHandle,
-  McpGatewayLike,
-  SessionEventStoreLike,
-  SessionStatusTransitioner,
-} from './types.js';
+  AgentMcpGateway,
+  AgentPermissionRequest,
+  AgentPermissionResponse,
+  AgentSession,
+  AgentUpdate,
+  AgentUsage,
+} from '../agent/types.js';
 
 import { SessionProjector } from '../session/session-projector.js';
 import { ElicitationStore } from '../session/elicitation-store.js';
 import { PermissionEngine } from '../security/permission-engine.js';
 import { SkillRegistry, type SkillActivation } from '../skills/registry.js';
-import { getBestPermissionOption, isPersistentPermissionOption } from './protocol/permissions.js';
+import {
+  getBestPermissionOption,
+  isPersistentPermissionOption,
+} from '../security/permission-options.js';
 
 import type { ElicitationRequest, ElicitationResponse } from '@agentctl/shared';
-
-interface ParsedUsageMetrics {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-  contextLimit?: number;
-  cost?: { amount: number; currency: string };
-}
 
 function isDeniedOption(optionId?: string): boolean {
   return optionId ? /deny|reject|cancel|block|no/i.test(optionId) : false;
 }
 
-function parseUsageMetrics(usage: unknown): ParsedUsageMetrics | null {
-  if (!usage || typeof usage !== 'object') return null;
-  const raw = usage as Record<string, unknown>;
-
-  const getNum = (...keys: string[]): number | undefined => {
-    for (const key of keys) {
-      const val = raw[key];
-      if (typeof val === 'number' && !isNaN(val)) return val;
-      if (typeof val === 'string') {
-        const parsed = parseInt(val, 10);
-        if (!isNaN(parsed)) return parsed;
-      }
-    }
-    return undefined;
-  };
-
-  const inputTokens = getNum('inputTokens', 'input_tokens', 'promptTokens', 'prompt_tokens');
-  const outputTokens = getNum(
-    'outputTokens',
-    'output_tokens',
-    'completionTokens',
-    'completion_tokens',
-  );
-  const totalTokens = getNum('totalTokens', 'total_tokens', 'used', 'usedTokens');
-  const contextLimit = getNum('contextLimit', 'context_limit', 'size', 'maxTokens');
-
-  let cost: { amount: number; currency: string } | undefined = undefined;
-  if (raw.cost && typeof raw.cost === 'object') {
-    const c = raw.cost as Record<string, unknown>;
-    const amt = typeof c.amount === 'number' ? c.amount : parseFloat(String(c.amount));
-    if (!isNaN(amt)) {
-      const currencyStr = typeof c.currency === 'string' ? c.currency : 'USD';
-      cost = { amount: Math.max(0, amt), currency: currencyStr };
-    }
-  }
-
-  return {
-    inputTokens: inputTokens !== undefined ? Math.max(0, inputTokens) : undefined,
-    outputTokens: outputTokens !== undefined ? Math.max(0, outputTokens) : undefined,
-    totalTokens: totalTokens !== undefined ? Math.max(0, totalTokens) : undefined,
-    contextLimit: contextLimit !== undefined ? Math.max(0, contextLimit) : undefined,
-    cost,
-  };
-}
-
 export class ACPSession {
-  public acpSessionId: string | null = null;
+  public agentSessionId: string | null = null;
   public elicitationStore = new ElicitationStore();
   public permissionEngine = new PermissionEngine();
-  private pendingApprovals = new Map<string, (response: DomainPermissionResponse) => void>();
-  private pendingRequests = new Map<string, DomainPermissionRequest>();
+  private pendingApprovals = new Map<string, (response: AgentPermissionResponse) => void>();
+  private pendingRequests = new Map<string, AgentPermissionRequest>();
   private isStopped = false;
   private stopKind: 'idle' | 'error' | null = null;
   private needsHistoryContext = false;
@@ -115,16 +65,16 @@ export class ACPSession {
 
   constructor(
     public sessionId: string,
-    private runtimeHandle: AgentRuntimeHandle,
+    private runtimeHandle: AgentSession,
     private db: DbClient,
     public eventStore: SessionEventStoreLike,
     private cwd: string,
     private stateMachine?: SessionStatusTransitioner,
     private logger: Logger = noopLogger,
-    private mcpGateway?: McpGatewayLike,
+    private mcpGateway?: AgentMcpGateway,
   ) {
-    this.acpSessionId = runtimeHandle.acpSessionId;
-    this.needsHistoryContext = runtimeHandle.sessionCreationKind === 'fallback_new';
+    this.agentSessionId = runtimeHandle.id;
+    this.needsHistoryContext = runtimeHandle.history === 'fresh';
     this.projector = new SessionProjector(
       sessionId,
       db,
@@ -147,7 +97,7 @@ export class ACPSession {
         });
     }
 
-    this.runtimeHandle.onProcessError((err) => {
+    this.runtimeHandle.onError((err) => {
       this.logger.error(err, `Child process error in session ${this.sessionId}`);
       this.rejectPendingApprovals();
       void this.handleError(err).catch((e: unknown) => {
@@ -155,7 +105,7 @@ export class ACPSession {
       });
     });
 
-    this.runtimeHandle.onProcessExit(() => {
+    this.runtimeHandle.onClose(() => {
       this.rejectPendingApprovals();
       if (this.stopKind === 'error') return;
 
@@ -428,6 +378,7 @@ export class ACPSession {
       );
 
       await this.flushAll();
+      await this.projector.finalizeInFlightToolCalls();
 
       // Store turn end with stopReason, per-turn usage, and centralized turn changes
       const turnData: Record<string, unknown> = {
@@ -454,7 +405,7 @@ export class ACPSession {
       }
 
       if (promptResult.usage) {
-        const metrics = parseUsageMetrics(promptResult.usage);
+        const metrics: AgentUsage = promptResult.usage;
         if (metrics) {
           turnData.usage = metrics;
 
@@ -477,7 +428,17 @@ export class ACPSession {
             const newInput = currentInput + (metrics.inputTokens ?? 0);
             const newOutput = currentOutput + (metrics.outputTokens ?? 0);
             const newTotal = Math.max(0, metrics.totalTokens ?? newInput + newOutput);
-            const newContextLimit = metrics.contextLimit ?? sessionRecord.contextLimit;
+            const effectiveLimit =
+              metrics.contextLimit && metrics.contextLimit > 0
+                ? metrics.contextLimit
+                : sessionRecord.contextLimit > 0
+                  ? sessionRecord.contextLimit
+                  : typeof existingMetrics.contextLimit === 'number' &&
+                      existingMetrics.contextLimit > 0
+                    ? existingMetrics.contextLimit
+                    : 0;
+            const newContextLimit =
+              effectiveLimit > 0 ? effectiveLimit : sessionRecord.contextLimit;
             const newCost = metrics.cost
               ? sessionRecord.estimatedCost + metrics.cost.amount
               : sessionRecord.estimatedCost;
@@ -487,20 +448,24 @@ export class ACPSession {
               inputTokens: newInput,
               outputTokens: newOutput,
               totalTokens: newTotal,
-              contextLimit: newContextLimit,
+              ...(newContextLimit > 0 ? { contextLimit: newContextLimit } : {}),
               estimatedCost: newCost,
               lastTurn: metrics,
             };
 
+            const sessionUpdate: Record<string, unknown> = {
+              totalTokens: newTotal,
+              estimatedCost: newCost,
+              sessionMetrics: JSON.stringify(updatedMetrics),
+              updatedAt: new Date(),
+            };
+            if (newContextLimit > 0) {
+              sessionUpdate.contextLimit = newContextLimit;
+            }
+
             await this.db
               .update(sessions)
-              .set({
-                totalTokens: newTotal,
-                contextLimit: newContextLimit,
-                estimatedCost: newCost,
-                sessionMetrics: JSON.stringify(updatedMetrics),
-                updatedAt: new Date(),
-              })
+              .set(sessionUpdate)
               .where(eq(sessions.id, this.sessionId));
           }
         } else {
@@ -527,7 +492,7 @@ export class ACPSession {
     }
   }
 
-  resolvePermission(permissionId: string, response: DomainPermissionResponse): void {
+  resolvePermission(permissionId: string, response: AgentPermissionResponse): void {
     const resolve = this.pendingApprovals.get(permissionId);
     if (resolve) {
       const request = this.pendingRequests.get(permissionId);
@@ -642,7 +607,7 @@ export class ACPSession {
       this.logger.error(err, 'Failed to flush buffers in kill()');
     });
 
-    void this.runtimeHandle.stop();
+    void this.runtimeHandle.close();
   }
 
   async authenticate(methodId: string): Promise<void> {
@@ -665,7 +630,7 @@ export class ACPSession {
       this.isStopped = true;
       this.pendingApprovals.clear();
       this.pendingRequests.clear();
-      await this.runtimeHandle.stop();
+      await this.runtimeHandle.close();
     }
     await this.markSessionStopped('idle');
   }
@@ -730,6 +695,7 @@ export class ACPSession {
     this.logger.error(error, `Error in ACPSession ${this.sessionId}`);
     this.stopKind = 'error';
     await this.flushAll();
+    await this.projector.finalizeInFlightToolCalls();
     this.kill();
     await this.markSessionStopped('error');
   }
@@ -753,7 +719,7 @@ export class ACPSession {
     }
   }
 
-  public async handleDomainEvent(event: DomainAgentEvent): Promise<void> {
+  public async handleDomainEvent(event: AgentUpdate): Promise<void> {
     try {
       await this.projector.handleDomainEvent(event);
     } catch (error) {
@@ -764,8 +730,8 @@ export class ACPSession {
   }
 
   public async handleRequestPermission(
-    request: DomainPermissionRequest,
-  ): Promise<DomainPermissionResponse> {
+    request: AgentPermissionRequest,
+  ): Promise<AgentPermissionResponse> {
     try {
       const permissionId = request.toolCall.toolCallId ?? Math.random().toString(36).substring(7);
       const parentId = this.projector.getCurrentParentEventId();
@@ -916,7 +882,7 @@ export class ACPSession {
         parentId,
       );
 
-      const approvalPromise = new Promise<DomainPermissionResponse>((resolve) => {
+      const approvalPromise = new Promise<AgentPermissionResponse>((resolve) => {
         this.pendingRequests.set(String(eventId), request);
         this.pendingApprovals.set(String(eventId), resolve);
       });

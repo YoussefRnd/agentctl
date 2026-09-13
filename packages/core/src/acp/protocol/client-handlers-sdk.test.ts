@@ -33,7 +33,7 @@ async function makePair(cwd: string) {
   const agentToClient = new TransformStream<Uint8Array>();
 
   const callbacks = {
-    onEvent: () => Promise.resolve(),
+    onUpdate: () => Promise.resolve(),
     onRequestPermission: () => Promise.resolve({ allowed: true, optionId: 'allow-once' }),
     onRequestElicitation: (request: ElicitationRequest) => {
       lastElicitation = request;

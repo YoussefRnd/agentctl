@@ -28,6 +28,7 @@ describe('parseAcpCapabilities', () => {
 
   test('handles empty or undefined agentCapabilities gracefully', () => {
     expect(parseAcpCapabilities(undefined)).toEqual({
+      supportsForkSession: false,
       supportsResumeSession: false,
       supportsCloseSession: false,
       supportsDeleteSession: false,
@@ -40,6 +41,7 @@ describe('parseAcpCapabilities', () => {
     });
 
     expect(parseAcpCapabilities(null)).toEqual({
+      supportsForkSession: false,
       supportsResumeSession: false,
       supportsCloseSession: false,
       supportsDeleteSession: false,
@@ -52,6 +54,7 @@ describe('parseAcpCapabilities', () => {
     });
 
     expect(parseAcpCapabilities({})).toEqual({
+      supportsForkSession: false,
       supportsResumeSession: false,
       supportsCloseSession: false,
       supportsDeleteSession: false,
@@ -69,6 +72,7 @@ describe('parseAcpCapabilities', () => {
       loadSession: true,
       promptCapabilities: { image: true, audio: true, embeddedContext: true },
       sessionCapabilities: {
+        fork: {},
         resume: true,
         close: true,
         delete: true,
@@ -78,6 +82,7 @@ describe('parseAcpCapabilities', () => {
     });
 
     expect(caps).toEqual({
+      supportsForkSession: true,
       supportsResumeSession: true,
       supportsCloseSession: true,
       supportsDeleteSession: true,

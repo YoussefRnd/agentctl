@@ -4,7 +4,7 @@ import { projects, sessions, acpEvents } from '../db/schema.js';
 import { ACPSession } from './session-client.js';
 import { SessionEventStore } from '../session/event-store.js';
 import { eq } from 'drizzle-orm';
-import type { AgentRuntimeHandle } from './types.js';
+import type { AgentSession } from '../agent/types.js';
 
 describe('ACPSession Observability & StreamBuffer Integration', () => {
   test('buffers database updates while publishing instantly to eventBus, links parents, and tracks metrics', async () => {
@@ -57,14 +57,15 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
     // Mock runtime handle
     let promptCallback: (() => Promise<void>) | null = null;
     const fakeRuntimeHandle = {
-      acpSessionId: 'acp-obs-123',
+      id: 'acp-obs-123',
+      history: 'fresh',
       closed: new Promise<void>(() => {
         /* noop */
       }),
-      onProcessError: () => {
+      onError: () => {
         /* noop */
       },
-      onProcessExit: () => {
+      onClose: () => {
         /* noop */
       },
       prompt: async () => {
@@ -73,14 +74,14 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
         }
         return { stopReason: 'end_turn' };
       },
-      stop: async () => {
+      close: async () => {
         /* noop */
       },
       updateModel: async () => {
         /* noop */
       },
       updateConfigOption: () => [],
-    } as unknown as AgentRuntimeHandle;
+    } as unknown as AgentSession;
 
     const session = new ACPSession('sess-obs', fakeRuntimeHandle, db, eventStore, '/tmp/proj-obs');
 

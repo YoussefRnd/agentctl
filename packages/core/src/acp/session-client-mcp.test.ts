@@ -5,7 +5,7 @@ import { SessionEventStore } from '../session/event-store.js';
 import { createDatabase } from '../db/index.js';
 import { projects, sessions, acpEvents, mcpServers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import type { AgentRuntimeHandle } from './types.js';
+import type { AgentSession } from '../agent/types.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -158,14 +158,15 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
 
     let promptCalledWith: string | null = null;
     const fakeRuntimeHandle = {
-      acpSessionId: 'acp-mcp-123',
+      id: 'acp-mcp-123',
+      history: 'fresh',
       closed: new Promise<void>(() => {
         /* noop */
       }),
-      onProcessError: () => {
+      onError: () => {
         /* noop */
       },
-      onProcessExit: () => {
+      onClose: () => {
         /* noop */
       },
       prompt: async (text: string) => {
@@ -173,14 +174,14 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
         promptCalledWith = text;
         return { stopReason: 'end_turn' };
       },
-      stop: async () => {
+      close: async () => {
         await Promise.resolve();
       },
       updateModel: async () => {
         await Promise.resolve();
       },
       updateConfigOption: () => [],
-    } as unknown as AgentRuntimeHandle;
+    } as unknown as AgentSession;
 
     const session = new ACPSession(
       'sess-mcp',
@@ -224,7 +225,7 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
 
       // Test Case 3: Failed tool call
       let promptCalledOnFail = false;
-      const fakeRuntimeHandleForFail: AgentRuntimeHandle = {
+      const fakeRuntimeHandleForFail: AgentSession = {
         ...fakeRuntimeHandle,
         prompt: async () => {
           await Promise.resolve();
@@ -271,7 +272,7 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
 
       // Test Case 4: Non-matching slash commands (like /goal) bypass interceptor
       let bypassedPrompt = false;
-      const fakeRuntimeHandleForBypass: AgentRuntimeHandle = {
+      const fakeRuntimeHandleForBypass: AgentSession = {
         ...fakeRuntimeHandle,
         prompt: async (text: string) => {
           await Promise.resolve();

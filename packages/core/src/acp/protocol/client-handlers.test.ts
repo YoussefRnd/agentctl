@@ -9,9 +9,9 @@ import { noopLogger } from '../../logger.js';
 import type { SessionCallbacks } from '../types.js';
 
 function makeContext(cwd: string) {
-  const onEvent = () => Promise.resolve();
+  const onUpdate = () => Promise.resolve();
   const callbacks = {
-    onEvent,
+    onUpdate,
     onRequestPermission: () => Promise.resolve({ allowed: false }),
   } as unknown as SessionCallbacks;
   return {
@@ -31,8 +31,7 @@ describe('createClientHandlers', () => {
     const handlers = createClientHandlers(makeContext(os.tmpdir()));
 
     // The SDK request handler switch (acp.js) dispatches these camelCase
-    // keys; any other spelling silently falls through to extMethod and
-    // returns {}. Keys below MUST stay in sync with the SDK dispatch table.
+    // keys. Keys below MUST stay in sync with the SDK dispatch table.
     expect(Object.keys(handlers).sort()).toEqual(
       [
         'sessionUpdate',
@@ -91,7 +90,7 @@ describe('createClientHandlers', () => {
 
   test('requestPermission delegates to the resolved session callbacks', async () => {
     const callbacks = {
-      onEvent: () => Promise.resolve(),
+      onUpdate: () => Promise.resolve(),
       onRequestPermission: () => Promise.resolve({ allowed: true, optionId: 'allow-once' }),
     } as unknown as SessionCallbacks;
     const handlers = createClientHandlers({
@@ -126,7 +125,7 @@ describe('createClientHandlers', () => {
   test('extNotification routes session updates to the resolved session', async () => {
     const events: unknown[] = [];
     const callbacks = {
-      onEvent: (e: unknown) => {
+      onUpdate: (e: unknown) => {
         events.push(e);
         return Promise.resolve();
       },
@@ -151,7 +150,7 @@ describe('createClientHandlers', () => {
   test('sessionUpdate maps the canonical current mode update', async () => {
     const events: unknown[] = [];
     const callbacks = {
-      onEvent: (event: unknown) => {
+      onUpdate: (event: unknown) => {
         events.push(event);
       },
       onRequestPermission: () => Promise.resolve({ allowed: false }),
@@ -168,13 +167,13 @@ describe('createClientHandlers', () => {
       update: { sessionUpdate: 'current_mode_update', currentModeId: 'architect' },
     });
 
-    expect(events).toEqual([{ type: 'mode_update', modeId: 'architect', _meta: undefined }]);
+    expect(events).toEqual([{ type: 'mode_update', modeId: 'architect' }]);
   });
 
   test('completeElicitation notifies the resolved session', async () => {
     const completed: string[] = [];
     const callbacks = {
-      onEvent: () => Promise.resolve(),
+      onUpdate: () => Promise.resolve(),
       onRequestElicitation: () => Promise.resolve({ action: 'submit' }),
       onElicitationCompleted: (id: string) => {
         completed.push(id);
@@ -224,4 +223,14 @@ describe('createClientHandlers', () => {
     expect(res).toHaveProperty('output');
     expect((res as { output: string }).output).toContain(dir);
   }, 15000);
+
+  test('extension requests reject invalid params before reaching a handler', async () => {
+    const handlers = requiredHandlers(process.cwd());
+    await expect(
+      handlers.extMethod('_agentctl.dev/terminal/write', {
+        terminalId: 'terminal-1',
+        data: 42,
+      }),
+    ).rejects.toThrow('data must be a non-empty string');
+  });
 });

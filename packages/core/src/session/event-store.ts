@@ -133,7 +133,13 @@ export class SessionEventStore {
       typeof data === 'object' &&
       data !== null
     ) {
-      mergedData = { ...existing.data, ...data };
+      const cleanData: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+        if (value !== undefined) {
+          cleanData[key] = value;
+        }
+      }
+      mergedData = { ...(existing.data as Record<string, unknown>), ...cleanData };
     }
     const updateValues: { data: string; metadata?: string | null } = {
       data: JSON.stringify(mergedData),

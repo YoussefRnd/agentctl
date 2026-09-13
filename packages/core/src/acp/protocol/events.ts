@@ -5,7 +5,7 @@ import type {
   ToolCall,
 } from '@agentclientprotocol/sdk';
 import type { ACPConfigOption } from '@agentctl/shared';
-import type { DomainAgentEvent } from '../types.js';
+import type { AgentUpdate } from '../../agent/types.js';
 import { asRecord, toolArgumentsFrom, toolNameFrom } from './tool-call-utils.js';
 
 function parseCount(value: unknown): number | null {
@@ -22,11 +22,7 @@ function blockText(block: unknown): string | undefined {
   return typeof rec?.text === 'string' ? rec.text : undefined;
 }
 
-function parseToolCallEvent(
-  update: ToolCallSnapshot,
-  isUpdate: boolean,
-  _meta: Record<string, unknown> | undefined,
-): DomainAgentEvent {
+function parseToolCallEvent(update: ToolCallSnapshot): AgentUpdate {
   const rawInput = update.rawInput;
   const parsedArgs = toolArgumentsFrom(rawInput) ?? {};
   return {
@@ -46,8 +42,6 @@ function parseToolCallEvent(
       rawInput,
       rawOutput: update.rawOutput,
     },
-    isUpdate,
-    _meta,
   };
 }
 
@@ -103,22 +97,21 @@ export function projectSelectOptions(
  * The SDK only accepts the canonical `sessionUpdate` discriminants, so
  * legacy extension keys (status/plan_update/mode_update) never reach us here.
  */
-export function parseNotificationToEvents(notification: SessionNotification): DomainAgentEvent[] {
+export function parseNotificationToEvents(notification: SessionNotification): AgentUpdate[] {
   const update = notification.update;
-  const events: DomainAgentEvent[] = [];
-  const _meta = update._meta ?? undefined;
+  const events: AgentUpdate[] = [];
 
   switch (update.sessionUpdate) {
     case 'user_message_chunk':
     case 'agent_message_chunk': {
       const block = update.content;
       if (block.type === 'text') {
-        events.push({ type: 'text', text: block.text, _meta });
+        events.push({ type: 'text', text: block.text });
       } else {
         const rec = asRecord(block);
         if (rec?.type === 'thought' || rec?.type === 'thinking') {
           const text = blockText(block);
-          if (text) events.push({ type: 'thought', text, _meta });
+          if (text) events.push({ type: 'thought', text });
         }
       }
       break;
@@ -127,12 +120,12 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
       const rec = asRecord(update.content);
       const thought =
         blockText(update.content) ?? (typeof rec?.thought === 'string' ? rec.thought : undefined);
-      if (thought) events.push({ type: 'thought', text: thought, _meta });
+      if (thought) events.push({ type: 'thought', text: thought });
       break;
     }
     case 'tool_call':
     case 'tool_call_update':
-      events.push(parseToolCallEvent(update, update.sessionUpdate === 'tool_call_update', _meta));
+      events.push(parseToolCallEvent(update));
       break;
     case 'usage_update': {
       const rec = asRecord(update);
@@ -147,7 +140,6 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
           used: Math.max(0, used),
           size: Math.max(0, size),
           cost: amount !== null && currency ? { amount, currency } : undefined,
-          _meta,
         });
       }
       break;
@@ -166,18 +158,17 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
               : undefined,
         };
       });
-      events.push({ type: 'available_commands_update', commands, _meta });
+      events.push({ type: 'available_commands_update', commands });
       break;
     }
     case 'current_mode_update':
-      events.push({ type: 'mode_update', modeId: update.currentModeId, _meta });
+      events.push({ type: 'mode_update', modeId: update.currentModeId });
       break;
     case 'config_option_update':
       if (update.configOptions.length > 0) {
         events.push({
           type: 'config_option_update',
           configOptions: update.configOptions.map(projectConfigOption),
-          _meta,
         });
       }
       break;
@@ -186,7 +177,6 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
         type: 'session_info_update',
         title: update.title,
         updatedAt: update.updatedAt,
-        _meta,
       });
       break;
     case 'plan': {
@@ -196,7 +186,7 @@ export function parseNotificationToEvents(notification: SessionNotification): Do
         isCompleted: entry.status === 'completed',
         priority: entry.priority,
       }));
-      events.push({ type: 'plan_update', plan, _meta });
+      events.push({ type: 'plan_update', plan });
       break;
     }
   }

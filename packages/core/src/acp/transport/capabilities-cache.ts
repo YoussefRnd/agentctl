@@ -132,6 +132,7 @@ export function parseAcpCapabilities(agentCapabilities: unknown): AcpParsedCapab
   const caps = agentCapsObj?.sessionCapabilities;
   const supportsResume = Boolean(caps?.resume);
   return {
+    supportsForkSession: Boolean(caps?.fork),
     supportsResumeSession: supportsResume,
     supportsCloseSession: !!caps?.close,
     supportsDeleteSession: sessionSupportsDelete(caps),

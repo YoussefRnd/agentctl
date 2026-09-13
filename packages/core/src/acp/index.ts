@@ -14,5 +14,8 @@ export * from './protocol/client-handlers.js';
 export * from './protocol/prompt.js';
 export * from './protocol/session-params.js';
 export * from './runtime.js';
+export * from './driver.js';
+export * from './v2/events.js';
+export * from './v2/runtime.js';
 export * from './session-client.js';
 export { ACPSession as SessionClient } from './session-client.js';

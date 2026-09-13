@@ -8,7 +8,7 @@ import type { WorkspaceManager } from '../git/worktree-manager.js';
 import { noopLogger } from '../logger.js';
 import { Provider } from '../providers/provider.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
-import type { AgentRuntime, RuntimeOptions } from '../acp/types.js';
+import type { AgentDriver, AgentSessionOptions } from '../agent/types.js';
 import { SessionManager } from './manager.js';
 
 function createProvider(id: string): Provider {
@@ -90,12 +90,12 @@ describe('SessionManager provider handoff', () => {
     } as unknown as ProviderRegistry;
 
     const executions: {
-      options: RuntimeOptions;
+      options: AgentSessionOptions;
       prompt: ReturnType<typeof vi.fn>;
       stop: ReturnType<typeof vi.fn>;
     }[] = [];
-    const runtime: AgentRuntime = {
-      probe: () =>
+    const runtime: AgentDriver = {
+      inspectProvider: () =>
         Promise.resolve({
           status: 'ready',
           configOptions: [],
@@ -103,28 +103,27 @@ describe('SessionManager provider handoff', () => {
           supportsDynamicModel: false,
           supportsDynamicConfig: false,
         }),
-      execute: (_command, _args, options, callbacks) => {
+      startSession: (_command, _args, options, callbacks) => {
         const prompt = vi.fn(async () => {
           if (options.providerId === 'source') {
             const filePath = path.join(os.tmpdir(), `source-handoff-${Date.now()}.md`);
             await fs.writeFile(filePath, '# Skill handoff\n\nKeep this context\n');
-            await callbacks.onEvent({ type: 'text', text: `Wrote handoff to \`${filePath}\`` });
+            await callbacks.onUpdate({ type: 'text', text: `Wrote handoff to \`${filePath}\`` });
           }
           return { stopReason: 'end_turn' as const };
         });
         const stop = vi.fn(() => Promise.resolve());
         executions.push({ options, prompt, stop });
         return Promise.resolve({
-          acpSessionId: `${options.providerId}-acp-session`,
-          sessionCreationKind: 'new',
-          historyRestored: false,
+          id: `${options.providerId}-acp-session`,
+          history: 'fresh',
           closed: new Promise<void>(() => undefined),
-          onProcessError: () => undefined,
-          onProcessExit: () => undefined,
+          onError: () => undefined,
+          onClose: () => undefined,
           prompt,
           authenticate: () => Promise.resolve(),
           cancel: () => Promise.resolve(),
-          stop,
+          close: stop,
         });
       },
     };
@@ -156,7 +155,7 @@ describe('SessionManager provider handoff', () => {
       providerId: 'target',
       localSessionId: 'session-1',
       cwd,
-      existingAgentSessionId: null,
+      intent: { kind: 'new' },
     });
     expect(executions[1]?.prompt).toHaveBeenCalledWith(
       expect.stringContaining('Continue the work'),

@@ -161,7 +161,7 @@ test('DefaultAgentRuntime.probe uses cache and skips spawn on cache hit', async 
   const hashKey = getCacheKey('test-cmd', [], cleanEnv({}));
   await mockCache.set(hashKey, testResult);
 
-  const result = await runtime.probe('test-cmd', [], {});
+  const result = await runtime.inspectProvider('test-cmd', [], {});
   assert.equal(result.supportsDynamicModel, true);
   assert.equal(spawnCount, 0); // Verify spawn was bypassed
 });
