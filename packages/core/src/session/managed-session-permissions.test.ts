@@ -5,20 +5,33 @@ import { projects, sessions, mcpServers, sessionEvents } from '../db/schema.js';
 import { ManagedSession } from './managed-session.js';
 import { SessionEventStore } from './event-store.js';
 import { McpGateway } from '../mcp/mcp-gateway.js';
-import type { AgentPermissionResponse, AgentSession } from '../agent/types.js';
-
-interface SessionWithPending {
-  pendingApprovals: Map<string, (response: AgentPermissionResponse) => void>;
-}
+import type { AgentSession } from '../agent/types.js';
 
 describe('MCP Permissions Routing', () => {
   test('routes permission checks based on overrides and policies correctly', async () => {
     const db = createDatabase(':memory:');
-    const eventStore = new SessionEventStore(db, {
-      publish: () => {
-        // noop
+    type EventPayload = { id: number; type: string; data: string };
+    const listeners: ((event: EventPayload) => void)[] = [];
+    const eventBus = {
+      publish: (event: unknown) => {
+        for (const listener of listeners) {
+          listener(event as EventPayload);
+        }
       },
-    });
+      waitForEvent: (type: string) => {
+        return new Promise<EventPayload>((resolve) => {
+          const cb = (evt: EventPayload) => {
+            if (evt.type === type) {
+              const idx = listeners.indexOf(cb);
+              if (idx !== -1) listeners.splice(idx, 1);
+              resolve(evt);
+            }
+          };
+          listeners.push(cb);
+        });
+      },
+    };
+    const eventStore = new SessionEventStore(db, eventBus);
     const gateway = new McpGateway(db);
 
     await db.insert(projects).values({ id: 'proj-p', name: 'Proj', path: '/tmp/proj' });
@@ -164,23 +177,26 @@ describe('MCP Permissions Routing', () => {
     });
 
     // 5. Fallback to Server Policy: always_prompt
+    const pendingApprovalPromise = eventBus.waitForEvent('approval_request');
+
     const promptPromise = session.handleRequestPermission({
       permissionId: 'p5',
       toolCall: { name: 'mock-srv__other_tool', toolCallId: 't5' },
       options: [],
     });
 
-    // Wait a short duration to let async DB queries/operations inside handleRequestPermission complete
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    const pendingEvent = await pendingApprovalPromise;
+    expect(pendingEvent.id).toBeDefined();
 
-    // Verify it added to pending approvals rather than returning immediately
-    const sessionWithPending = session as unknown as SessionWithPending;
-    const pendingApprovalsMap = sessionWithPending.pendingApprovals;
-    expect(pendingApprovalsMap.size).toBe(1);
+    const pendingData = JSON.parse(pendingEvent.data) as ApprovalRequestEvent;
+    expect(pendingData.status).toBe('pending');
+    expect(pendingData.requiresApproval).toBe(true);
 
-    // Manually resolve the prompt promise through the pending approval callback
-    const [, resolveFn] = Array.from(pendingApprovalsMap.entries())[0];
-    resolveFn({ allowed: true });
+    // Yield microtask so handleRequestPermission registers pending approval after event append
+    await Promise.resolve();
+
+    // Resolve via public session method
+    session.resolvePermission(String(pendingEvent.id), { allowed: true });
 
     const resPrompt = await promptPromise;
     expect(resPrompt.allowed).toBe(true);

@@ -1,34 +1,16 @@
-import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
-import { buildApp } from '../app.js';
-import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
-import type { SessionManager } from '@agentctl/core/session';
+import { test, expect, describe, beforeEach, afterEach } from 'vitest';
+import { projects, sessions, sessionEvents, type CoreDatabase } from '@agentctl/core/db';
 import type { FastifyInstance } from 'fastify';
-import { parseServerEnv } from '@agentctl/shared';
+import { createTestApp } from '../test-utils.js';
 
 describe('Search & Project Provider Integration Tests', () => {
   let app: FastifyInstance;
-  let db: ReturnType<typeof createDatabase>;
-  const mockSessionManager = {
-    handleClientMessage: vi.fn(),
-    getOrResuscitate: vi.fn(),
-    stopAll: vi.fn(),
-  };
+  let db: CoreDatabase;
 
   beforeEach(async () => {
-    db = createDatabase(':memory:');
-
-    const testEnv = parseServerEnv({
-      AGENTCTL_SECRET: 'test-secret',
-      AGENTCTL_SESSION_KEY: 'test-session-key-test-session-key-123456',
-      AGENTCTL_SESSION_SALT: 'test-session-sal',
-      PORT: '0',
-    });
-
-    app = await buildApp({
-      db,
-      sessionManager: mockSessionManager as unknown as SessionManager,
-      env: testEnv,
-    });
+    const testApp = await createTestApp();
+    app = testApp.app;
+    db = testApp.db;
   });
 
   afterEach(async () => {

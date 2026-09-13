@@ -3,19 +3,41 @@ import { createDatabase } from '../db/index.js';
 import { projects, sessions } from '../db/schema.js';
 import { ManagedSession } from './managed-session.js';
 import { SessionEventStore } from './event-store.js';
-import type { AgentPermissionResponse, AgentSession } from '../agent/types.js';
+import type { AgentSession } from '../agent/types.js';
 
-interface SessionWithPending {
-  pendingApprovals: Map<string, (response: AgentPermissionResponse) => void>;
+interface TestEventBus {
+  publish(event: unknown): void;
+  waitForEvent(type: string): Promise<{ id: number; type: string; data: string }>;
+}
+
+function createTestEventBus(): TestEventBus {
+  type EventPayload = { id: number; type: string; data: string };
+  const listeners: ((event: EventPayload) => void)[] = [];
+  return {
+    publish: (event: unknown) => {
+      for (const listener of listeners) {
+        listener(event as EventPayload);
+      }
+    },
+    waitForEvent: (type: string) => {
+      return new Promise<EventPayload>((resolve) => {
+        const cb = (evt: EventPayload) => {
+          if (evt.type === type) {
+            const idx = listeners.indexOf(cb);
+            if (idx !== -1) listeners.splice(idx, 1);
+            resolve(evt);
+          }
+        };
+        listeners.push(cb);
+      });
+    },
+  };
 }
 
 async function makeSession(approvalMode = 'review') {
   const db = createDatabase(':memory:');
-  const eventStore = new SessionEventStore(db, {
-    publish: () => {
-      // noop
-    },
-  });
+  const eventBus = createTestEventBus();
+  const eventStore = new SessionEventStore(db, eventBus);
 
   await db.insert(projects).values({ id: 'proj-g', name: 'Proj', path: '/tmp/proj' });
   await db.insert(sessions).values({
@@ -45,12 +67,12 @@ async function makeSession(approvalMode = 'review') {
   } as unknown as AgentSession;
 
   const session = new ManagedSession('sess-g', runtimeHandle, db, eventStore, '/tmp/proj');
-  return { session, db };
+  return { session, db, eventBus };
 }
 
 describe('Permission grant semantics', () => {
   test('agent-native persistent option ids map onto pattern grants', async () => {
-    const { session } = await makeSession();
+    const { session, eventBus } = await makeSession();
 
     const toolCall = {
       name: 'mock-srv__fs_write',
@@ -59,6 +81,7 @@ describe('Permission grant semantics', () => {
     };
 
     // First request: engine has no grants -> goes to pending approval.
+    const pendingEventPromise = eventBus.waitForEvent('approval_request');
     const first = session.handleRequestPermission({
       permissionId: 'p-grant-1',
       toolCall,
@@ -69,14 +92,16 @@ describe('Permission grant semantics', () => {
       ],
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    const pendingEvent = await pendingEventPromise;
 
-    const sessionWithPending = session as unknown as SessionWithPending;
-    expect(sessionWithPending.pendingApprovals.size).toBe(1);
+    // Yield microtask so handleRequestPermission registers pending approval
+    await Promise.resolve();
 
     // User picks the agent-native "allow for session" option.
-    const [pendingKey] = Array.from(sessionWithPending.pendingApprovals.entries())[0];
-    session.resolvePermission(pendingKey, { allowed: true, optionId: 'allow-session' });
+    session.resolvePermission(String(pendingEvent.id), {
+      allowed: true,
+      optionId: 'allow-session',
+    });
 
     const firstRes = await first;
     expect(firstRes.allowed).toBe(true);
@@ -88,24 +113,25 @@ describe('Permission grant semantics', () => {
       options: [{ optionId: 'allow-once', label: 'Allow once' }],
     });
     expect(second.allowed).toBe(true);
-    expect((session as unknown as SessionWithPending).pendingApprovals.size).toBe(0);
   });
 
   test('deny option ids never map onto a positive agent option', async () => {
-    const { session } = await makeSession();
+    const { session, eventBus } = await makeSession();
 
+    const pendingEventPromise = eventBus.waitForEvent('approval_request');
     const first = session.handleRequestPermission({
       permissionId: 'p-deny-1',
       toolCall: { name: 'mock-srv__danger', toolCallId: 'tc-deny-1' },
       options: [{ optionId: 'allow-once', label: 'Allow once' }],
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    const pendingEvent = await pendingEventPromise;
 
-    const sessionWithPending = session as unknown as SessionWithPending;
-    const [pendingKey] = Array.from(sessionWithPending.pendingApprovals.entries())[0];
+    // Yield microtask so handleRequestPermission registers pending approval
+    await Promise.resolve();
+
     // UI sends its own reject_once option id.
-    session.resolvePermission(pendingKey, { allowed: true, optionId: 'reject_once' });
+    session.resolvePermission(String(pendingEvent.id), { allowed: true, optionId: 'reject_once' });
 
     const res = await first;
     expect(res.allowed).toBe(false);
