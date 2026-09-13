@@ -322,4 +322,45 @@ describe('turnChanges', () => {
       totalDeletions: 0,
     });
   });
+
+  it('does not treat file read inspection containing "deleted" or "created" as file modification', () => {
+    const mockEvents: ACPEventRow[] = [
+      {
+        id: 2801,
+        sessionId: 's1',
+        type: 'tool_call',
+        data: {
+          name: 'packages/core/src/acp/types.ts',
+          arguments: {},
+          title: 'packages/core/src/acp/types.ts',
+          status: 'completed',
+          content: [
+            {
+              content: {
+                text: "status: 'added' | 'modified' | 'deleted';",
+                type: 'text',
+              },
+              type: 'content',
+            },
+          ],
+          rawOutput: {
+            output:
+              "<path>/home/user/packages/core/src/acp/types.ts</path>\n<type>file</type>\n<content>\nstatus: 'added' | 'modified' | 'deleted';\n</content>",
+            metadata: {
+              display: {
+                type: 'file',
+                path: '/home/user/packages/core/src/acp/types.ts',
+              },
+            },
+          },
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    const summary = extractTurnChanges(mockEvents);
+    expect(summary.files).toEqual([]);
+    expect(summary.totalAdditions).toBe(0);
+    expect(summary.totalDeletions).toBe(0);
+  });
 });

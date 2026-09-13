@@ -228,21 +228,35 @@ export function isFileModificationToolCall(data: {
   // Check rawOutput for write / edit indicators
   const rawOut = data.rawOutput as Record<string, unknown> | undefined;
   if (rawOut && typeof rawOut === 'object') {
-    const outStr = typeof rawOut.output === 'string' ? rawOut.output.toLowerCase() : '';
-    if (
-      outStr.includes('wrote file') ||
-      outStr.includes('edit applied') ||
-      outStr.includes('created') ||
-      outStr.includes('saved') ||
-      outStr.includes('deleted')
-    ) {
-      return true;
-    }
     const meta = rawOut.metadata as Record<string, unknown> | undefined;
     if (meta && typeof meta === 'object') {
       if (meta.diff || meta.filediff || (meta.filepath && meta.exists === false)) {
         return true;
       }
+      const display = meta.display as { type?: string } | undefined;
+      if (display?.type === 'file') {
+        return false;
+      }
+    }
+
+    const outStr = typeof rawOut.output === 'string' ? rawOut.output.toLowerCase() : '';
+    if (outStr.trim().startsWith('<path>') && outStr.includes('<content>')) {
+      return false;
+    }
+
+    if (
+      outStr.includes('wrote file') ||
+      outStr.includes('edit applied') ||
+      outStr.includes('file created') ||
+      outStr.includes('created file') ||
+      outStr.includes('file deleted') ||
+      outStr.includes('deleted file') ||
+      outStr.includes('file saved') ||
+      outStr.includes('saved file') ||
+      outStr.includes('patch applied') ||
+      outStr.includes('changes applied')
+    ) {
+      return true;
     }
   }
 
@@ -257,7 +271,12 @@ export function isFileModificationToolCall(data: {
       if (
         text.includes('wrote file') ||
         text.includes('edit applied') ||
-        text.includes('created')
+        text.includes('file created') ||
+        text.includes('created file') ||
+        text.includes('file deleted') ||
+        text.includes('deleted file') ||
+        text.includes('patch applied') ||
+        text.includes('changes applied')
       ) {
         return true;
       }
