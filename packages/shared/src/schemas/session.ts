@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { registryAgentSchema, acpConfigOptionSchema, authMethodSchema } from './registry.js';
+import {
+  registryAgentSchema,
+  agentConfigOptionSchema,
+  agentFeaturesSchema,
+  authMethodSchema,
+  type AgentConfigOption,
+} from './registry.js';
 
 export const providerSchema = z.string().min(1);
 
@@ -74,13 +80,14 @@ export const providerCapabilitySchema = z.object({
   label: z.string(),
   status: providerStatusSchema,
   command: z.string(),
-  configOptions: z.array(acpConfigOptionSchema).optional(),
+  configOptions: z.array(agentConfigOptionSchema).optional(),
   version: z.string().optional(),
   description: z.string().optional(),
   icon: z.string().optional(),
   supportsDynamicModel: z.boolean().optional(),
   supportsDynamicConfig: z.boolean().optional(),
   modes: z.array(z.string()).optional().default([]),
+  features: agentFeaturesSchema.optional(),
 });
 
 export const installStateSchema = z.enum([
@@ -96,7 +103,7 @@ export const providerDiscoverySchema = z.object({
   // Legacy fields (retained to keep the monolith compiling)
   id: z.string(),
   label: z.string(),
-  configOptions: z.array(acpConfigOptionSchema).optional(),
+  configOptions: z.array(agentConfigOptionSchema).optional(),
   authMethods: z.array(authMethodSchema).optional().default([]),
   version: z.string().optional(),
   description: z.string().optional(),
@@ -104,6 +111,7 @@ export const providerDiscoverySchema = z.object({
   supportsDynamicModel: z.boolean().optional().default(false),
   supportsDynamicConfig: z.boolean().optional().default(false),
   supportsLogout: z.boolean().optional().default(false),
+  features: agentFeaturesSchema.optional(),
   nativelyLoadsSkills: z.boolean().optional().default(false),
 
   // New fields
@@ -262,7 +270,7 @@ export const selectedPermissionOutcomeSchema = z.object({
   params: selectedPermissionParamsSchema.optional(),
 });
 
-export const sessionConfigOptionsSchema = z.array(acpConfigOptionSchema);
+export const sessionConfigOptionsSchema = z.array(agentConfigOptionSchema);
 
 export const sessionMetricsSchema = z.object({
   inputTokens: z.number().optional(),
@@ -440,7 +448,8 @@ export type SessionWithCapabilities = z.infer<typeof sessionWithCapabilitiesSche
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type ApprovalMode = z.infer<typeof approvalModeSchema>;
 export type ProviderStatus = z.infer<typeof providerStatusSchema>;
-export type ACPConfigOption = z.infer<typeof acpConfigOptionSchema>;
+/** @deprecated Use AgentConfigOption from registry. */
+export type ACPConfigOption = AgentConfigOption;
 export type SessionConfigOptions = z.infer<typeof sessionConfigOptionsSchema>;
 export type ProviderDiscovery = z.infer<typeof providerDiscoverySchema>;
 export type AuthMethod = z.infer<typeof authMethodSchema>;

@@ -1,11 +1,11 @@
-import { acpEventRowSchema } from '../schemas/acp.js';
-import type { ACPEventRow } from '../schemas/acp.js';
+import { sessionEventRowSchema } from '../schemas/session-event.js';
+import type { SessionEventRow } from '../schemas/session-event.js';
 
 export interface SessionEngineOptions {
   sessionId: string;
   sseUrl: string;
   token?: string;
-  onEventsUpdate: (events: ACPEventRow[]) => void;
+  onEventsUpdate: (events: SessionEventRow[]) => void;
   onStatusChange: (isConnected: boolean) => void;
   onStreamingChange: (streamingEventId: number | null) => void;
   onError?: (error: string) => void;
@@ -18,7 +18,7 @@ export class SessionEngine {
   private abortController: AbortController | null = null;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  private buffer: ACPEventRow[] = [];
+  private buffer: SessionEventRow[] = [];
   private flushTimeout: ReturnType<typeof setTimeout> | null = null;
   private streamingTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -250,8 +250,8 @@ export class SessionEngine {
         return;
       }
 
-      if (eventName === 'acp_event') {
-        const parsed = acpEventRowSchema.parse(JSON.parse(dataStr));
+      if (eventName === 'session_event' || eventName === 'acp_event') {
+        const parsed = sessionEventRowSchema.parse(JSON.parse(dataStr));
         this.handleEvent(parsed);
       }
     } catch {
@@ -259,7 +259,7 @@ export class SessionEngine {
     }
   }
 
-  private handleEvent(event: ACPEventRow) {
+  private handleEvent(event: SessionEventRow) {
     this.buffer.push(event);
     this.scheduleFlush();
 

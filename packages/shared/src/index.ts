@@ -1,5 +1,5 @@
 export * from './schemas/session.js';
-export * from './schemas/acp.js';
+export * from './schemas/session-event.js';
 export * from './schemas/registry.js';
 export * from './engine/session-engine.js';
 export * from './stores/index.js';

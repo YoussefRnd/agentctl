@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SessionEngine } from './session-engine.js';
-import type { ACPEventRow } from '../schemas/acp.js';
+import type { SessionEventRow } from '../schemas/acp.js';
 
 // Helper class to mock ReadableStream
 class MockStreamController {
@@ -106,7 +106,7 @@ describe('SessionEngine', () => {
       sessionId: '00000000-0000-0000-0000-000000000000',
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       data: {},
-    } as ACPEventRow;
+    } as SessionEventRow;
 
     const event2 = {
       id: 2,
@@ -114,7 +114,7 @@ describe('SessionEngine', () => {
       sessionId: '00000000-0000-0000-0000-000000000000',
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       data: {},
-    } as ACPEventRow;
+    } as SessionEventRow;
 
     mockController.enqueue(
       `id: 1\nevent: acp_event\ndata: ${JSON.stringify(event1)}\n\nid: 2\nevent: acp_event\ndata: ${JSON.stringify(event2)}\n\n`,
@@ -140,7 +140,7 @@ describe('SessionEngine', () => {
       sessionId: '00000000-0000-0000-0000-000000000000',
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       data: { content: 'hello' },
-    } as ACPEventRow;
+    } as SessionEventRow;
 
     mockController.enqueue(`id: 1\nevent: acp_event\ndata: ${JSON.stringify(textEvent)}\n\n`);
 
@@ -163,7 +163,7 @@ describe('SessionEngine', () => {
       sessionId: '00000000-0000-0000-0000-000000000000',
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       data: { content: 'hello' },
-    } as ACPEventRow;
+    } as SessionEventRow;
 
     mockController.enqueue(`id: 1\nevent: acp_event\ndata: ${JSON.stringify(textEvent)}\n\n`);
 
@@ -176,7 +176,7 @@ describe('SessionEngine', () => {
       sessionId: '00000000-0000-0000-0000-000000000000',
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       data: {},
-    } as ACPEventRow;
+    } as SessionEventRow;
 
     mockController.enqueue(`id: 2\nevent: acp_event\ndata: ${JSON.stringify(statusEvent)}\n\n`);
 
@@ -218,7 +218,7 @@ describe('SessionEngine', () => {
       sessionId: '00000000-0000-0000-0000-000000000000',
       createdAt: new Date('2026-06-25T00:00:00.000Z'),
       data: {},
-    } as ACPEventRow;
+    } as SessionEventRow;
 
     mockController.enqueue(`id: 5\nevent: acp_event\ndata: ${JSON.stringify(event1)}\n\n`);
 
