@@ -17,6 +17,7 @@ import { TerminalManager } from '../protocol/terminal-manager.js';
 const PERSISTENT_CONNECTION_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface PersistentConnection {
+  generation: number;
   connection: ClientSideConnection;
   child: ChildProcess;
   transport: ProcessStreamTransport;
@@ -37,8 +38,11 @@ export interface ActiveSession {
 
 export class PersistentAgentConnectionManager {
   private connections = new Map<string, PersistentConnection>();
+  private pendingConnections = new Map<string, Promise<PersistentConnection>>();
+  private providerEpochs = new Map<string, number>();
   private activeSessions = new Map<string, ActiveSession>(); // key: acpSessionId
   private terminalToSession = new Map<string, string>(); // key: terminalId, value: acpSessionId
+  private nextGeneration = 1;
 
   constructor(
     private store: ProviderStore,
@@ -47,17 +51,11 @@ export class PersistentAgentConnectionManager {
     private logger: Logger = noopLogger,
   ) {}
 
-  registerActiveSession(acpSessionId: string, session: ActiveSession, providerId?: string) {
+  registerActiveSession(acpSessionId: string, session: ActiveSession, providerId: string) {
     this.activeSessions.set(acpSessionId, session);
-    if (providerId) {
-      const conn = this.connections.get(providerId);
-      if (conn) {
-        conn.sessions.set(acpSessionId, { sessionId: acpSessionId, createdAt: Date.now() });
-      }
-    } else {
-      for (const conn of this.connections.values()) {
-        conn.sessions.set(acpSessionId, { sessionId: acpSessionId, createdAt: Date.now() });
-      }
+    const conn = this.connections.get(providerId);
+    if (conn) {
+      conn.sessions.set(acpSessionId, { sessionId: acpSessionId, createdAt: Date.now() });
     }
   }
 
@@ -92,11 +90,14 @@ export class PersistentAgentConnectionManager {
 
   async getConnection(providerId: string): Promise<PersistentConnection> {
     const conn = this.connections.get(providerId);
-    if (conn && !conn.child.killed) {
+    if (conn?.transport.isAlive) {
       conn.lastUsed = Date.now();
       this.resetIdleTimer(conn);
       return conn;
     }
+
+    const pending = this.pendingConnections.get(providerId);
+    if (pending) return pending;
 
     const provider = this.store.get(providerId);
     if (!provider) throw new Error(`Provider ${providerId} not found`);
@@ -107,16 +108,26 @@ export class PersistentAgentConnectionManager {
     if (!agent) throw new Error(`Registry agent data not found for ${providerId}`);
 
     const launch = this.launcher.resolveLaunch(provider, agent);
-    return await this.createPersistentConnection(providerId, launch);
+    const epoch = this.providerEpochs.get(providerId) ?? 0;
+    const creation = this.createPersistentConnection(providerId, launch, epoch);
+    this.pendingConnections.set(providerId, creation);
+    try {
+      return await creation;
+    } finally {
+      if (this.pendingConnections.get(providerId) === creation) {
+        this.pendingConnections.delete(providerId);
+      }
+    }
   }
 
   private async createPersistentConnection(
     providerId: string,
     launch: { command: string; args: string[]; env: Record<string, string> },
+    epoch: number,
   ): Promise<PersistentConnection> {
+    const generation = this.nextGeneration++;
     const activeSessions = this.activeSessions;
     const terminalToSession = this.terminalToSession;
-    const logger = this.logger;
     const debugLog = new AcpDebugLog();
     const child = spawn(launch.command, launch.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -148,7 +159,7 @@ export class PersistentAgentConnectionManager {
         // by handlers that never resolve a session (none today).
         cwd: process.cwd(),
         terminalManager,
-        logger,
+        logger: this.logger,
         mcpGateway: undefined,
         resolveSession: (params?: { sessionId?: string }) => {
           const acpSessionId = params?.sessionId;
@@ -194,14 +205,22 @@ export class PersistentAgentConnectionManager {
       }
     });
 
-    const acpInitRes = await initializeAcpConnection(connection, {
-      transport,
-      timeoutMs: 120_000,
-      clientCapabilities: AGENTCTL_CLIENT_CAPABILITIES,
-    });
+    let acpInitRes;
+    try {
+      acpInitRes = await initializeAcpConnection(connection, {
+        transport,
+        timeoutMs: 120_000,
+        clientCapabilities: AGENTCTL_CLIENT_CAPABILITIES,
+      });
+    } catch (error) {
+      transport.kill();
+      await terminalManager.dispose();
+      throw error;
+    }
     const parsedCapabilities = acpInitRes.parsedCapabilities;
 
     const persistentConn: PersistentConnection = {
+      generation,
       connection,
       child,
       transport,
@@ -213,42 +232,16 @@ export class PersistentAgentConnectionManager {
       terminalManager,
     };
 
+    if ((this.providerEpochs.get(providerId) ?? 0) !== epoch) {
+      this.closeConnectionByInstance(persistentConn);
+      throw new Error(`Connection creation for ${providerId} was cancelled`);
+    }
+
     this.connections.set(providerId, persistentConn);
     this.resetIdleTimer(persistentConn);
 
     child.once('exit', (code, signal) => {
-      logger.info(
-        { providerId, code, signal },
-        `Persistent agent process exited for provider ${providerId}`,
-      );
-
-      const exitReason = String(code ?? signal ?? 'unknown');
-      const sessionsToNotify: ActiveSession[] = [];
-      for (const [acpSessionId, session] of this.activeSessions.entries()) {
-        if (persistentConn.sessions.has(acpSessionId) || persistentConn.sessions.size === 0) {
-          sessionsToNotify.push(session);
-        }
-      }
-
-      for (const session of sessionsToNotify) {
-        void (async () => {
-          try {
-            await session.callbacks.onUpdate({
-              type: 'status',
-              status: 'error',
-              title: `Agent process exited with code ${exitReason}`,
-            });
-          } catch (err) {
-            logger.warn(
-              { err, acpSessionId: session.acpSessionId },
-              'Failed to emit exit status event for session',
-            );
-          }
-        })();
-        this.unregisterActiveSession(session.acpSessionId);
-      }
-
-      this.closeConnection(providerId);
+      this.handleConnectionExit(providerId, persistentConn, code, signal);
     });
 
     return persistentConn;
@@ -287,11 +280,53 @@ export class PersistentAgentConnectionManager {
   }
 
   closeConnection(providerId: string) {
+    this.providerEpochs.set(providerId, (this.providerEpochs.get(providerId) ?? 0) + 1);
     const conn = this.connections.get(providerId);
     if (conn) {
       this.closeConnectionByInstance(conn);
       this.connections.delete(providerId);
     }
+  }
+
+  private closeConnectionIfCurrent(providerId: string, connection: PersistentConnection) {
+    if (this.connections.get(providerId) !== connection) return;
+    this.closeConnectionByInstance(connection);
+    this.connections.delete(providerId);
+  }
+
+  private handleConnectionExit(
+    providerId: string,
+    connection: PersistentConnection,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+  ) {
+    this.logger.info(
+      { providerId, generation: connection.generation, code, signal },
+      `Persistent agent process exited for provider ${providerId}`,
+    );
+
+    const exitReason = String(code ?? signal ?? 'unknown');
+    const sessionsToNotify = Array.from(connection.sessions.keys())
+      .map((sessionId) => this.activeSessions.get(sessionId))
+      .filter((session): session is ActiveSession => session !== undefined);
+
+    for (const session of sessionsToNotify) {
+      void Promise.resolve(
+        session.callbacks.onUpdate({
+          type: 'status',
+          status: 'error',
+          title: `Agent process exited with code ${exitReason}`,
+        }),
+      ).catch((err: unknown) => {
+        this.logger.warn(
+          { err, acpSessionId: session.acpSessionId },
+          'Failed to emit exit status event for session',
+        );
+      });
+      this.unregisterActiveSession(session.acpSessionId);
+    }
+
+    this.closeConnectionIfCurrent(providerId, connection);
   }
 
   private closeConnectionByInstance(conn: PersistentConnection) {
