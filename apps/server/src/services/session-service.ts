@@ -84,6 +84,21 @@ export class SessionService {
       }
     }
 
+    if (session.contextLimit <= 0 && session.sessionMetrics) {
+      try {
+        const parsed = JSON.parse(session.sessionMetrics) as { contextLimit?: number };
+        if (typeof parsed.contextLimit === 'number' && parsed.contextLimit > 0) {
+          await this.db
+            .update(sessions)
+            .set({ contextLimit: parsed.contextLimit })
+            .where(eq(sessions.id, sessionId));
+          session.contextLimit = parsed.contextLimit;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     const providersList = await this.providerRegistry.discover();
     return {
       session: this.parseSessionRow(session),

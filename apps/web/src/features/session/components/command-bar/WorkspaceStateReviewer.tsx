@@ -41,15 +41,26 @@ export function ContextWindowPopover({
   if (isLoading || !sessionData?.session) return null;
 
   const { totalTokens, contextLimit, sessionMetrics } = sessionData.session;
-  const safeLimit = Math.max(1, contextLimit ?? 128000);
   const safeTokens = Math.max(0, totalTokens ?? 0);
 
-  const usagePercent = Math.min(100, Math.max(0, (safeTokens / safeLimit) * 100));
+  // Use the agent-calculated context limit without guessing hardcoded fallbacks
+  const calculatedLimit =
+    typeof contextLimit === 'number' && contextLimit > 0
+      ? contextLimit
+      : typeof sessionMetrics?.contextLimit === 'number' && sessionMetrics.contextLimit > 0
+        ? sessionMetrics.contextLimit
+        : null;
+
+  const hasCalculatedLimit = calculatedLimit !== null;
+  const usagePercent = hasCalculatedLimit
+    ? Math.min(100, Math.max(0, (safeTokens / calculatedLimit) * 100))
+    : null;
   const { usageBreakdown, estimatedCost, turnsRemaining } = sessionMetrics;
 
   const radius = 8;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (usagePercent / 100) * circumference;
+  const strokeDashoffset =
+    usagePercent !== null ? circumference - (usagePercent / 100) * circumference : circumference;
 
   return (
     <div
@@ -88,11 +99,13 @@ export function ContextWindowPopover({
                 r={radius}
                 className={cn(
                   'fill-none transition-colors duration-300',
-                  usagePercent > 90
-                    ? 'stroke-danger'
-                    : usagePercent > 70
-                      ? 'stroke-warning'
-                      : 'stroke-accent',
+                  usagePercent === null
+                    ? 'stroke-text-muted/30'
+                    : usagePercent > 90
+                      ? 'stroke-danger'
+                      : usagePercent > 70
+                        ? 'stroke-warning'
+                        : 'stroke-accent',
                 )}
                 strokeWidth="3"
                 strokeDasharray={circumference}
@@ -106,7 +119,7 @@ export function ContextWindowPopover({
                 isOpen ? 'w-auto overflow-visible opacity-100' : 'w-0 overflow-hidden opacity-0',
               )}
             >
-              {Math.round(usagePercent)}%
+              {usagePercent !== null ? `${Math.round(usagePercent)}%` : formatTokens(safeTokens)}
             </span>
           </button>
         </PopoverTrigger>
@@ -118,51 +131,55 @@ export function ContextWindowPopover({
               </span>
               <div className="text-text-muted mt-0.5 flex items-baseline justify-between text-[11px] font-semibold">
                 <span className="font-mono">
-                  {formatTokens(safeTokens)} / {formatTokens(safeLimit)} tokens
+                  {hasCalculatedLimit
+                    ? `${formatTokens(safeTokens)} / ${formatTokens(calculatedLimit)} tokens`
+                    : `${formatTokens(safeTokens)} tokens`}
                 </span>
                 <span
                   className={cn(
                     'font-mono font-bold',
-                    usagePercent > 90
-                      ? 'text-danger'
-                      : usagePercent > 70
-                        ? 'text-warning'
-                        : 'text-accent',
+                    usagePercent === null
+                      ? 'text-text-muted'
+                      : usagePercent > 90
+                        ? 'text-danger'
+                        : usagePercent > 70
+                          ? 'text-warning'
+                          : 'text-accent',
                   )}
                 >
-                  {usagePercent.toFixed(1)}%
+                  {usagePercent !== null ? `${usagePercent.toFixed(1)}%` : '—'}
                 </span>
               </div>
             </div>
 
             <div className="bg-surface-tertiary/30 ring-border/10 relative h-2 w-full overflow-hidden rounded-full ring-1">
-              {usageBreakdown ? (
+              {hasCalculatedLimit && usageBreakdown ? (
                 <div className="absolute inset-0 flex h-full w-full">
                   <div
                     className="bg-accent/80 h-full"
                     style={{
-                      width: `${String(((usageBreakdown.history ?? 0) / safeLimit) * 100)}%`,
+                      width: `${String(((usageBreakdown.history ?? 0) / calculatedLimit) * 100)}%`,
                     }}
                   />
                   <div
                     className="bg-brand-teal/70 h-full"
                     style={{
-                      width: `${String(((usageBreakdown.files ?? 0) / safeLimit) * 100)}%`,
+                      width: `${String(((usageBreakdown.files ?? 0) / calculatedLimit) * 100)}%`,
                     }}
                   />
                   <div
                     className="bg-brand-lavender/40 h-full"
                     style={{
-                      width: `${String(((usageBreakdown.system ?? 0) / safeLimit) * 100)}%`,
+                      width: `${String(((usageBreakdown.system ?? 0) / calculatedLimit) * 100)}%`,
                     }}
                   />
                 </div>
-              ) : (
+              ) : hasCalculatedLimit && usagePercent !== null ? (
                 <div
                   className="bg-accent absolute top-0 left-0 h-full rounded-full transition-colors duration-300"
                   style={{ width: `${String(usagePercent)}%` }}
                 />
-              )}
+              ) : null}
             </div>
 
             {(usageBreakdown !== undefined ||
