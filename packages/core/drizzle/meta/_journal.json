@@ -225,6 +225,13 @@
       "when": 1789225343652,
       "tag": "0031_glorious_boomer",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1789310925601,
+      "tag": "0032_black_firelord",
+      "breakpoints": true
     }
   ]
 }

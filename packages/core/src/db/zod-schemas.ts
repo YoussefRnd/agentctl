@@ -12,6 +12,8 @@ export const mcpServerRowSchema = createSelectSchema(mcpServers);
 export type ProjectRow = z.infer<typeof projectRowSchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
 export type ProviderRow = z.infer<typeof providerRowSchema>;
-export type ACPEventDbRow = z.infer<typeof acpEventDbRowSchema>;
+export type SessionEventDbRow = z.infer<typeof acpEventDbRowSchema>;
+/** @deprecated Use SessionEventDbRow. */
+export type ACPEventDbRow = SessionEventDbRow;
 export type SystemSettingRow = z.infer<typeof systemSettingRowSchema>;
 export type McpServerRow = z.infer<typeof mcpServerRowSchema>;

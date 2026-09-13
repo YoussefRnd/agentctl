@@ -7,7 +7,7 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
-import type { SessionStatus, ACPEvent, SessionMode } from '@agentctl/shared';
+import type { SessionStatus, SessionEvent, SessionMode } from '@agentctl/shared';
 import {
   DEFAULT_AGENT_MODEL,
   DEFAULT_CONTEXT_LIMIT,
@@ -107,6 +107,7 @@ export const providers = sqliteTable('providers', {
     .notNull()
     .default(false),
   supportsLogout: integer('supports_logout', { mode: 'boolean' }).notNull().default(false),
+  features: text('features').notNull().default('{}'),
   nativelyLoadsSkills: integer('natively_loads_skills', { mode: 'boolean' })
     .notNull()
     .default(false),
@@ -140,7 +141,7 @@ export const acpEvents = sqliteTable(
     parentEventId: integer('parent_event_id').references((): AnySQLiteColumn => acpEvents.id, {
       onDelete: 'cascade',
     }),
-    type: text('type').$type<ACPEvent['type']>().notNull(),
+    type: text('type').$type<SessionEvent['type']>().notNull(),
     data: text('data').notNull(), // JSON string
     metadata: text('metadata'), // JSON string
     ...eventTimestamps,

@@ -1,0 +1,1 @@
+ALTER TABLE `providers` ADD `features` text DEFAULT '{}' NOT NULL;
