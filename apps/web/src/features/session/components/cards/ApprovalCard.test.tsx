@@ -3,9 +3,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { ApprovalCard } from './ApprovalCard';
-import type { ACPEventApprovalRequestData } from '@agentctl/shared';
+import type { SessionEventApprovalRequestData } from '@agentctl/shared';
 
-function renderApprovalCard(data: ACPEventApprovalRequestData) {
+function renderApprovalCard(data: SessionEventApprovalRequestData) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -27,8 +27,8 @@ function renderApprovalCard(data: ACPEventApprovalRequestData) {
 }
 
 const approvalData = (
-  overrides: Partial<ACPEventApprovalRequestData> = {},
-): ACPEventApprovalRequestData => ({
+  overrides: Partial<SessionEventApprovalRequestData> = {},
+): SessionEventApprovalRequestData => ({
   message: 'Approve this action?',
   request: {
     toolCall: {

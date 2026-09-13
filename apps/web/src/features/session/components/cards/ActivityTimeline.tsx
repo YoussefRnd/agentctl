@@ -1,10 +1,10 @@
-import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
+import type { SessionEventRow, SessionEventToolCallData } from '@agentctl/shared';
 import { TimelineEvent } from './TimelineEvent';
 import { ToolCallCard } from './ToolCallCard';
 import { getToolMeta } from '@/shared/lib/toolColors';
 
 interface ActivityTimelineProps {
-  events: ACPEventRow[];
+  events: SessionEventRow[];
   isStreaming?: boolean;
 }
 
@@ -25,7 +25,7 @@ export function ActivityTimeline({ events, isStreaming = false }: ActivityTimeli
         const toolName = reqData.request?.toolCall?.name ?? reqData.name ?? 'tool';
         const payload = (
           e.type === 'approval_request' ? (reqData.request?.toolCall ?? reqData) : e.data
-        ) as ACPEventToolCallData;
+        ) as SessionEventToolCallData;
 
         const isFailed = payload.status === 'failed';
         const dynamicDotColor = isFailed

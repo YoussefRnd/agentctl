@@ -4,10 +4,10 @@ import { ThinkingSpinner } from '@/shared';
 import { useSettings } from '@/hooks/useSettings';
 import { useSession } from '@/contexts/SessionContext';
 import { StreamingMarkdown } from './StreamingMarkdown';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 
 interface ThinkingBlockProps {
-  events: ACPEventRow[];
+  events: SessionEventRow[];
   isStreaming?: boolean;
   isActive?: boolean;
 }

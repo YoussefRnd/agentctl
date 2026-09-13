@@ -1,6 +1,6 @@
 import { useEffect, useRef, memo } from 'react';
 import { ShieldCheck } from 'lucide-react';
-import type { ACPEventApprovalRequestData } from '@agentctl/shared';
+import type { SessionEventApprovalRequestData } from '@agentctl/shared';
 import { GlassPanel } from '@agentctl/ui';
 
 export const ApprovalCard = memo(function ApprovalCard({
@@ -10,7 +10,7 @@ export const ApprovalCard = memo(function ApprovalCard({
   onDeny,
 }: {
   eventId: number;
-  data: ACPEventApprovalRequestData;
+  data: SessionEventApprovalRequestData;
   onApprove: (eventId: number, optionId?: string) => void;
   onDeny: (eventId: number) => void;
 }) {

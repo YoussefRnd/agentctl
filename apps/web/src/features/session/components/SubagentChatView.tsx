@@ -5,9 +5,9 @@ import { StreamingMarkdown } from './cards/StreamingMarkdown';
 import { formatDuration } from './cards/subagentBlockUtils';
 import type { SubagentGroup } from './cards/subagentBlockUtils';
 import type {
-  ACPEventSubagentUpdateData,
-  ACPEventRow,
-  ACPEventToolCallData,
+  SessionEventSubagentUpdateData,
+  SessionEventRow,
+  SessionEventToolCallData,
 } from '@agentctl/shared';
 
 interface SubagentChatViewProps {
@@ -19,7 +19,7 @@ interface SubagentChatViewProps {
 export function SubagentChatView({ group, onBack, isStreaming = false }: SubagentChatViewProps) {
   const [now, setNow] = useState<Date>(() => new Date());
 
-  const data = group.subagentEvent.data as ACPEventSubagentUpdateData;
+  const data = group.subagentEvent.data as SessionEventSubagentUpdateData;
   const childEvents = group.childEvents;
   const isRunning = data.status === 'running' || data.status === 'spawning';
 
@@ -51,7 +51,7 @@ export function SubagentChatView({ group, onBack, isStreaming = false }: Subagen
 
   // Extract thoughts, tool calls, and text response from childEvents
   const { activityEvents, responseText } = useMemo(() => {
-    const activities: ACPEventRow[] = [];
+    const activities: SessionEventRow[] = [];
     let text = data.result?.summary ?? '';
 
     for (const e of childEvents) {
@@ -76,7 +76,7 @@ export function SubagentChatView({ group, onBack, isStreaming = false }: Subagen
     if (!text && childEvents.length > 0) {
       const lastChild = childEvents[childEvents.length - 1];
       if (lastChild.type === 'tool_call') {
-        const tc = lastChild.data as ACPEventToolCallData;
+        const tc = lastChild.data as SessionEventToolCallData;
         if (typeof tc.rawOutput === 'string' && tc.rawOutput) {
           text = tc.rawOutput;
         }

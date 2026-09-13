@@ -6,7 +6,7 @@ import {
   filePathMatches,
   resolveTurnReviewFiles,
 } from './turnChanges';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 import type { ReviewFile } from '../components/ReviewHeader';
 
 describe('turnChanges', () => {
@@ -39,7 +39,7 @@ describe('turnChanges', () => {
   });
 
   it('summarizes file modifications and calculates diff stats from review files', () => {
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 's1',
@@ -84,7 +84,7 @@ describe('turnChanges', () => {
   });
 
   it('extracts latest turn touched files from event stream', () => {
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 's1',
@@ -111,7 +111,7 @@ describe('turnChanges', () => {
   });
 
   it('detects file creation when tool name is the file path and rawOutput is Wrote file successfully', () => {
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 1921,
         sessionId: 's1',
@@ -150,7 +150,7 @@ describe('turnChanges', () => {
   });
 
   it('ignores read-only tool calls when finding files touched in the latest turn', () => {
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 's1',
@@ -184,7 +184,7 @@ describe('turnChanges', () => {
   });
 
   it('uses turn-local tool diffs instead of cumulative review stats', () => {
-    const events: ACPEventRow[] = [
+    const events: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 's1',
@@ -214,7 +214,7 @@ describe('turnChanges', () => {
   });
 
   it('never treats shell commands or searches as file modifications', () => {
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 's1',
@@ -261,7 +261,7 @@ describe('turnChanges', () => {
       totalDeletions: 2,
     };
 
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 's1',
@@ -291,7 +291,7 @@ describe('turnChanges', () => {
   });
 
   it('treats an empty server-provided turnChanges result as authoritative', () => {
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 's1',
@@ -324,7 +324,7 @@ describe('turnChanges', () => {
   });
 
   it('does not treat file read inspection containing "deleted" or "created" as file modification', () => {
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 2801,
         sessionId: 's1',
@@ -362,5 +362,33 @@ describe('turnChanges', () => {
     expect(summary.files).toEqual([]);
     expect(summary.totalAdditions).toBe(0);
     expect(summary.totalDeletions).toBe(0);
+  });
+
+  it('prefers normalized product effects over provider-specific payload heuristics', () => {
+    const events: SessionEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's1',
+        type: 'tool_call',
+        data: {
+          name: 'opaque_vendor_tool',
+          effects: [
+            {
+              type: 'file_modified',
+              path: 'src/product.ts',
+              oldText: 'before',
+              newText: 'after',
+            },
+          ],
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    expect(extractTurnChanges(events)).toEqual({
+      files: [{ path: 'src/product.ts', additions: 1, deletions: 1, status: 'modified' }],
+      totalAdditions: 1,
+      totalDeletions: 1,
+    });
   });
 });

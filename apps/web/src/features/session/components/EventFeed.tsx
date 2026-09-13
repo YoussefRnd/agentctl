@@ -12,7 +12,7 @@ import {
 import { RefreshCw, ArrowDown } from 'lucide-react';
 import { AgentIcon } from '@/shared';
 import { useQueryClient } from '@tanstack/react-query';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 import { useSession, useSessionStream } from '../../../contexts/SessionContext';
 import { Card } from '@agentctl/ui';
 import type { RewindMode } from './RewindMenu';
@@ -23,7 +23,7 @@ import { groupConversationTurns, type ConversationTurn } from '../lib/turnMinima
 import { NewSessionEmptyState } from './NewSessionEmptyState';
 
 interface EventFeedProps {
-  events: ACPEventRow[];
+  events: SessionEventRow[];
   targetEventId?: number;
   onTargetEventHandled?: () => void;
   isConnected?: boolean;

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSession } from '../../../contexts/SessionContext';
-import type { ACPConfigOption } from '@agentctl/shared';
+import type { AgentConfigOption } from '@agentctl/shared';
 import { Select, cn } from '@agentctl/ui';
 import { Loader2 } from 'lucide-react';
 
@@ -21,7 +21,7 @@ export function ConfigOptionsPanel({
 
   const groupedOptions = useMemo(() => {
     const filterSet = new Set(filterCategories);
-    const groups: Record<string, ACPConfigOption[]> = {};
+    const groups: Record<string, AgentConfigOption[]> = {};
     for (const opt of configOptions) {
       const cat = opt.category ?? 'other';
       // Filter out if category OR id is in the list
@@ -80,7 +80,7 @@ export function ConfigOptionsPanel({
 }
 
 interface ConfigOptionRowProps {
-  option: ACPConfigOption;
+  option: AgentConfigOption;
   onChange: (value: string) => void;
   disabled: boolean;
   isUpdating: boolean;

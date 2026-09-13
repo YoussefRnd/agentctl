@@ -9,7 +9,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { StreamingDots, getToolMeta } from '@/shared';
-import type { ACPEventToolCallData } from '@agentctl/shared';
+import type { SessionEventToolCallData } from '@agentctl/shared';
 
 function formatDuration(durationMs: number): string {
   if (durationMs < 1000) return `${String(durationMs)}ms`;
@@ -125,7 +125,7 @@ function RawOutputView({ rawOutput }: { rawOutput: unknown }) {
   );
 }
 
-function hasToolCallDetails(call: ACPEventToolCallData): boolean {
+function hasToolCallDetails(call: SessionEventToolCallData): boolean {
   const contentBlocks = Array.isArray(call.content) ? call.content : [];
   if (
     contentBlocks.some(
@@ -150,7 +150,7 @@ function getBlockKey(block: Record<string, unknown>): string {
   return JSON.stringify(block).slice(0, 32);
 }
 
-function ToolCallDetails({ call }: { call: ACPEventToolCallData }) {
+function ToolCallDetails({ call }: { call: SessionEventToolCallData }) {
   const contentBlocks = Array.isArray(call.content)
     ? (call.content as Record<string, unknown>[])
     : [];
@@ -199,7 +199,7 @@ export const ToolCallCard = memo(function ToolCallCard({
   durationMs,
 }: {
   tool: string;
-  payload: ACPEventToolCallData;
+  payload: SessionEventToolCallData;
   isStreaming?: boolean;
   durationMs?: number | null;
 }) {

@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 import { SessionEngine } from '@agentctl/shared';
 
 import { apiClient, getAuthToken } from '@agentctl/api-client';
 import { getApiBaseUrl } from '../shared/lib/api-base-url';
 import { sessionKeys } from '../shared/lib/queryKeys';
 
-const fetchEvents = async (sessionId: string): Promise<ACPEventRow[]> => {
-  return apiClient.fetch<ACPEventRow[]>(`/api/sessions/${sessionId}/events`);
+const fetchEvents = async (sessionId: string): Promise<SessionEventRow[]> => {
+  return apiClient.fetch<SessionEventRow[]>(`/api/sessions/${sessionId}/events`);
 };
 
 export function useSessionEvents(sessionId: string | null) {
@@ -41,7 +41,7 @@ export function useSessionEvents(sessionId: string | null) {
       sseUrl,
       token,
       onEventsUpdate: (newEvents) => {
-        queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
+        queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
           const lastOldId = old.length > 0 ? old[old.length - 1].id : 0;
           const hasOptimistic = old.some((e) => e.id < 0);
           const hasRealUserMessage = newEvents.some(

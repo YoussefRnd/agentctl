@@ -8,7 +8,7 @@ import {
   sortSubagentGroups,
 } from './subagentBlockUtils';
 import type { SubagentGroup } from './subagentBlockUtils';
-import type { ACPEventSubagentUpdateData } from '@agentctl/shared';
+import type { SessionEventSubagentUpdateData } from '@agentctl/shared';
 
 export type { SubagentGroup };
 
@@ -29,7 +29,7 @@ function SubagentCard({
   isStreaming?: boolean;
   now: Date | null;
 }) {
-  const data = group.subagentEvent.data as ACPEventSubagentUpdateData;
+  const data = group.subagentEvent.data as SessionEventSubagentUpdateData;
   const childEvents = group.childEvents;
   const isRunning = data.status === 'running' || data.status === 'spawning';
   const isFailed = data.status === 'failed';
@@ -111,7 +111,7 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
 
   const sorted = useMemo(() => sortSubagentGroups(subagentGroups), [subagentGroups]);
   const hasRunning = sorted.some((g) => {
-    const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
+    const data = g.subagentEvent.data as SessionEventSubagentUpdateData;
     return data.status === 'running' || data.status === 'spawning';
   });
 
@@ -128,7 +128,7 @@ export function SubagentBlock({ subagentGroups, isStreaming = false }: SubagentB
   return (
     <div className="mb-3">
       {sorted.map((group) => {
-        const data = group.subagentEvent.data as ACPEventSubagentUpdateData;
+        const data = group.subagentEvent.data as SessionEventSubagentUpdateData;
         const subId = data.subagentId;
         return (
           <SubagentCard

@@ -4,7 +4,7 @@ import { createDatabase, projects, sessions, acpEvents } from '@agentctl/core/db
 import type { SessionManager } from '@agentctl/core/session';
 import type { FastifyInstance } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 import http from 'node:http';
 
 describe('SSE stream & Client actions REST API endpoints', () => {
@@ -196,7 +196,7 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     });
 
     // Publish an event to eventBus to see if it is received
-    const testEvent: ACPEventRow = {
+    const testEvent: SessionEventRow = {
       id: 123,
       sessionId,
       type: 'text',
@@ -208,7 +208,7 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     const body = await promise;
     expect(body).toContain(':\n\n');
     expect(body).toContain('id: 123');
-    expect(body).toContain('event: acp_event');
+    expect(body).toContain('event: session_event');
     expect(body).toContain('Hello from stream');
   });
 

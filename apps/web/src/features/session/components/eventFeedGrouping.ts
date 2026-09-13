@@ -1,21 +1,21 @@
-import type { ACPEventRow } from '@agentctl/shared';
-import { isACPEventText } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
+import { isSessionEventText } from '@agentctl/shared';
 
 export type FeedEventGroup =
-  | { type: 'user'; event: ACPEventRow; isStreaming: boolean }
-  | { type: 'agent'; events: ACPEventRow[]; isStreaming: boolean; id: string }
-  | { type: 'command'; event: ACPEventRow; isStreaming: boolean }
-  | { type: 'elicitation'; event: ACPEventRow; isStreaming: boolean };
+  | { type: 'user'; event: SessionEventRow; isStreaming: boolean }
+  | { type: 'agent'; events: SessionEventRow[]; isStreaming: boolean; id: string }
+  | { type: 'command'; event: SessionEventRow; isStreaming: boolean }
+  | { type: 'elicitation'; event: SessionEventRow; isStreaming: boolean };
 
 export function groupFeedEvents(
-  events: ACPEventRow[],
+  events: SessionEventRow[],
   streamingEventId: number | null | undefined,
   isSessionRunning?: boolean,
 ): FeedEventGroup[] {
   const result: FeedEventGroup[] = [];
   let currentAgentTurn: {
     type: 'agent';
-    events: ACPEventRow[];
+    events: SessionEventRow[];
     isStreaming: boolean;
     id: string;
   } | null = null;
@@ -62,7 +62,7 @@ export function groupFeedEvents(
       continue;
     }
 
-    const isUser = isACPEventText(e) && e.data.role === 'user';
+    const isUser = isSessionEventText(e) && e.data.role === 'user';
 
     if (isUser) {
       currentAgentTurn = null;

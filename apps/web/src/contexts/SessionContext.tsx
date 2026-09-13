@@ -1,7 +1,7 @@
 import { createContext, use, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { ACPEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
+import type { SessionEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
 import { api } from '@agentctl/api-client';
 import { sessionKeys } from '../shared/lib/queryKeys';
 import { useSessionConfigState } from '../features/session/hooks/useSessionConfigState';
@@ -127,7 +127,7 @@ import { useMessageQueueStore, type QueuedMessage } from '../shared';
 export type { QueuedMessage };
 
 interface SessionStreamContextValue {
-  events: ACPEventRow[];
+  events: SessionEventRow[];
   isLoadingEvents: boolean;
   isConnected: boolean;
   streamingEventId: number | null;
@@ -197,7 +197,7 @@ export function SessionStreamProvider({
               },
             });
             const cleaned = (
-              queryClient.getQueryData<ACPEventRow[]>(sessionKeys.events(sessionId)) ?? []
+              queryClient.getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId)) ?? []
             ).filter(
               (e) =>
                 !(
@@ -207,7 +207,7 @@ export function SessionStreamProvider({
                   (e.data as { content?: string }).content === nextMessage.text
                 ),
             );
-            queryClient.setQueryData<ACPEventRow[]>(sessionKeys.events(sessionId), cleaned);
+            queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), cleaned);
           });
       });
     }

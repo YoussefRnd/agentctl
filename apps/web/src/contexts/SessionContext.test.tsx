@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ACPEventRow, SessionWithCapabilities } from '@agentctl/shared';
+import type { SessionEventRow, SessionWithCapabilities } from '@agentctl/shared';
 import { sessionKeys } from '../shared/lib/queryKeys';
 
 vi.mock('@agentctl/api-client', () => ({
@@ -46,7 +46,7 @@ function Harness() {
   );
 }
 
-function ghostEvent(content = 'hello world'): ACPEventRow {
+function ghostEvent(content = 'hello world'): SessionEventRow {
   return {
     id: -1,
     sessionId: 'sess-1',
@@ -131,7 +131,8 @@ describe('SessionStreamProvider queued message send', () => {
       expect(mockedToastError).toHaveBeenCalled();
     });
 
-    const remaining = queryClient.getQueryData<ACPEventRow[]>(sessionKeys.events('sess-1')) ?? [];
+    const remaining =
+      queryClient.getQueryData<SessionEventRow[]>(sessionKeys.events('sess-1')) ?? [];
     expect(remaining.some((e) => e.id < 0)).toBe(false);
   });
 

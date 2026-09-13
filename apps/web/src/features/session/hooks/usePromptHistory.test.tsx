@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import React from 'react';
 import { usePromptHistory } from './usePromptHistory';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 
 describe('usePromptHistory', () => {
   let container: HTMLDivElement | null = null;
@@ -74,7 +74,7 @@ describe('usePromptHistory', () => {
   });
 
   it('merges initial session events into prompt history', () => {
-    const mockEvents: ACPEventRow[] = [
+    const mockEvents: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 'test-1',

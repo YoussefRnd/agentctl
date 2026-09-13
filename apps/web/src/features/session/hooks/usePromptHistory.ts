@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 
 const STORAGE_KEY = 'agentctl:prompt_history';
 const MAX_HISTORY = 50;
@@ -25,7 +25,7 @@ function saveStoredHistory(history: string[]): void {
   }
 }
 
-export function usePromptHistory(sessionEvents?: ACPEventRow[]) {
+export function usePromptHistory(sessionEvents?: SessionEventRow[]) {
   const [history, setHistory] = useState<string[]>(() => getStoredHistory());
   const historyIndexRef = useRef<number>(-1);
   const draftRef = useRef<string>('');

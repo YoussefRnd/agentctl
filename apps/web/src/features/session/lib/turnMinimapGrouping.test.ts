@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 import { groupConversationTurns, extractTurnSummary } from './turnMinimapGrouping';
 
 describe('turnMinimapGrouping', () => {
   it('groups multiple user prompt events into separate ConversationTurns', () => {
-    const events: ACPEventRow[] = [
+    const events: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 'sess-1',
@@ -71,7 +71,7 @@ describe('turnMinimapGrouping', () => {
   });
 
   it('extracts tool action descriptions when no final provider text exists', () => {
-    const agentEvents: ACPEventRow[] = [
+    const agentEvents: SessionEventRow[] = [
       {
         id: 10,
         sessionId: 'sess-1',

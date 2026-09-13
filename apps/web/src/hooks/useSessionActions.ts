@@ -3,7 +3,7 @@ import { api, type SidebarProject } from '@agentctl/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import type { ACPEventRow, SessionWithCapabilities } from '@agentctl/shared';
+import type { SessionEventRow, SessionWithCapabilities } from '@agentctl/shared';
 
 export function useSessionActions() {
   const { sessionId, sessionData } = useSession();
@@ -20,7 +20,7 @@ export function useSessionActions() {
     if (!text.trim() && (!attachmentIds || attachmentIds.length === 0)) return;
 
     const tempId = -Date.now();
-    const optimisticEvent: ACPEventRow = {
+    const optimisticEvent: SessionEventRow = {
       id: tempId,
       sessionId: sessionId,
       type: 'text',
@@ -31,7 +31,7 @@ export function useSessionActions() {
       createdAt: new Date(),
     };
 
-    queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
+    queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
       return [...old, optimisticEvent];
     });
 
@@ -75,7 +75,7 @@ export function useSessionActions() {
         });
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
       } catch {
-        queryClient.setQueryData<ACPEventRow[]>(['events', sessionId], (old = []) => {
+        queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
           return old.filter((e) => e.id !== tempId);
         });
         queryClient.setQueryData<SessionWithCapabilities>(

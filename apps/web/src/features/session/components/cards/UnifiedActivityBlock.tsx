@@ -16,8 +16,8 @@ import { ThinkingSpinner, StreamingDots } from '@/shared';
 import { useSettings } from '@/hooks/useSettings';
 import { useSession } from '@/contexts/SessionContext';
 import { StreamingMarkdown } from './StreamingMarkdown';
-import type { ACPEventRow, ACPEventToolCallData } from '@agentctl/shared';
-import { isACPEventText, isACPEventToolCall } from '@agentctl/shared';
+import type { SessionEventRow, SessionEventToolCallData } from '@agentctl/shared';
+import { isSessionEventText, isSessionEventToolCall } from '@agentctl/shared';
 
 function formatDuration(durationMs?: number | null): string {
   if (!durationMs || durationMs <= 0) return '';
@@ -39,7 +39,7 @@ function formatShortPath(fullPath?: string): string {
 
 export function getToolDisplayInfo(
   tool: string,
-  payload: ACPEventToolCallData,
+  payload: SessionEventToolCallData,
 ): { icon: string; label: string; sublabel?: string; color: string; isCommand: boolean } {
   const args = payload.arguments ?? {};
   const kind = payload.kind;
@@ -250,7 +250,7 @@ function LocationsView({ locations }: { locations: { path?: string; line?: numbe
   );
 }
 
-function ToolOutputDetails({ call }: { call: ACPEventToolCallData }) {
+function ToolOutputDetails({ call }: { call: SessionEventToolCallData }) {
   const contentBlocks = Array.isArray(call.content)
     ? (call.content as Record<string, unknown>[])
     : [];
@@ -325,7 +325,7 @@ export const ToolStepRow = memo(function ToolStepRow({
   isStreaming,
   isCompleted,
 }: {
-  event: ACPEventRow;
+  event: SessionEventRow;
   isStreaming?: boolean;
   isCompleted?: boolean;
 }) {
@@ -338,7 +338,7 @@ export const ToolStepRow = memo(function ToolStepRow({
   const toolName = reqData.request?.toolCall?.name ?? reqData.name ?? 'tool';
   const payload = (
     event.type === 'approval_request' ? (reqData.request?.toolCall ?? reqData) : event.data
-  ) as ACPEventToolCallData;
+  ) as SessionEventToolCallData;
 
   const status = payload.status;
   const isFailed = status === 'failed';
@@ -418,7 +418,7 @@ export const ThoughtStepRow = memo(function ThoughtStepRow({
   event,
   isStreaming,
 }: {
-  event: ACPEventRow;
+  event: SessionEventRow;
   isStreaming?: boolean;
 }) {
   const content = (event.data as { content?: string })?.content ?? '';
@@ -432,7 +432,7 @@ export const ThoughtStepRow = memo(function ThoughtStepRow({
 });
 
 interface UnifiedActivityBlockProps {
-  events: ACPEventRow[];
+  events: SessionEventRow[];
   isStreaming?: boolean;
   isActive?: boolean;
   isInitialThinking?: boolean;
@@ -468,8 +468,8 @@ export function UnifiedActivityBlock({
     for (const e of events) {
       if (e.metadata?.durationMs) durMs += e.metadata.durationMs;
       if (e.metadata?.completionTokens) tokens += e.metadata.completionTokens;
-      if (isACPEventToolCall(e) || e.type === 'approval_request') tools++;
-      if (isACPEventText(e) && e.data.role === 'thought') thoughts++;
+      if (isSessionEventToolCall(e) || e.type === 'approval_request') tools++;
+      if (isSessionEventText(e) && e.data.role === 'thought') thoughts++;
     }
 
     if (durMs === 0 && events.length > 0) {
@@ -555,11 +555,11 @@ export function UnifiedActivityBlock({
             const isLast = idx === events.length - 1;
             const isStreamingThis = isStreaming && isLast;
 
-            if (isACPEventText(e) && e.data.role === 'thought') {
+            if (isSessionEventText(e) && e.data.role === 'thought') {
               return <ThoughtStepRow key={e.id} event={e} isStreaming={isStreamingThis} />;
             }
 
-            if (isACPEventToolCall(e) || e.type === 'approval_request') {
+            if (isSessionEventToolCall(e) || e.type === 'approval_request') {
               return (
                 <ToolStepRow
                   key={e.id}

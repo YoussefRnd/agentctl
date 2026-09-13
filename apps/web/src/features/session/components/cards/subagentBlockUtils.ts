@@ -1,12 +1,12 @@
 import type {
-  ACPEventRow,
-  ACPEventToolCallData,
-  ACPEventSubagentUpdateData,
+  SessionEventRow,
+  SessionEventToolCallData,
+  SessionEventSubagentUpdateData,
 } from '@agentctl/shared';
 
 export interface SubagentGroup {
-  subagentEvent: ACPEventRow;
-  childEvents: ACPEventRow[];
+  subagentEvent: SessionEventRow;
+  childEvents: SessionEventRow[];
 }
 
 export type SubagentFilter = 'all' | 'running' | 'completed' | 'failed';
@@ -18,7 +18,7 @@ export function formatSubagentTitle(name?: string): string {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
-export function isSubagentToolCall(data: ACPEventToolCallData): boolean {
+export function isSubagentToolCall(data: SessionEventToolCallData): boolean {
   // Protocol-level kind tag
   if ((data.kind as string) === 'subagent' || (data.kind as string) === 'task') return true;
 
@@ -43,7 +43,7 @@ export function isSubagentToolCall(data: ACPEventToolCallData): boolean {
   );
 }
 
-export function getSubagentTitleFromData(data: ACPEventToolCallData): string {
+export function getSubagentTitleFromData(data: SessionEventToolCallData): string {
   if (data.title) return formatSubagentTitle(data.title);
   const args = data.arguments;
   if (args) {
@@ -61,7 +61,7 @@ export function getSubagentTitleFromData(data: ACPEventToolCallData): string {
   return formatSubagentTitle(data.name);
 }
 
-export function getSubagentScopeFromData(data: ACPEventToolCallData): string {
+export function getSubagentScopeFromData(data: SessionEventToolCallData): string {
   const args = data.arguments;
   if (args) {
     if (typeof args.Prompt === 'string') return args.Prompt;
@@ -73,20 +73,20 @@ export function getSubagentScopeFromData(data: ACPEventToolCallData): string {
   return data.title || '';
 }
 
-export function extractSubagentGroups(events: ACPEventRow[]): SubagentGroup[] {
-  const idToEvent = new Map<number, ACPEventRow>();
+export function extractSubagentGroups(events: SessionEventRow[]): SubagentGroup[] {
+  const idToEvent = new Map<number, SessionEventRow>();
   const idToIndex = new Map<number, number>();
   for (let i = 0; i < events.length; i++) {
     idToEvent.set(events[i].id, events[i]);
     idToIndex.set(events[i].id, i);
   }
 
-  const toolCallGroups = new Map<string, ACPEventRow[]>();
-  const nativelyEmitted = new Map<string, ACPEventRow[]>();
+  const toolCallGroups = new Map<string, SessionEventRow[]>();
+  const nativelyEmitted = new Map<string, SessionEventRow[]>();
 
   for (const e of events) {
     if (e.type === 'tool_call') {
-      const tcData = e.data as ACPEventToolCallData;
+      const tcData = e.data as SessionEventToolCallData;
       if (tcData.toolCallId && isSubagentToolCall(tcData)) {
         const group = toolCallGroups.get(tcData.toolCallId);
         if (group) {
@@ -120,8 +120,8 @@ export function extractSubagentGroups(events: ACPEventRow[]): SubagentGroup[] {
   for (const [, tcEvents] of toolCallGroups) {
     const first = tcEvents[0];
     const last = tcEvents[tcEvents.length - 1];
-    const firstData = first.data as ACPEventToolCallData;
-    const lastData = last.data as ACPEventToolCallData;
+    const firstData = first.data as SessionEventToolCallData;
+    const lastData = last.data as SessionEventToolCallData;
 
     const lastTcIndex = idToIndex.get(last.id) ?? -1;
     let hasFollowingActivity = false;
@@ -129,7 +129,7 @@ export function extractSubagentGroups(events: ACPEventRow[]): SubagentGroup[] {
       for (let i = lastTcIndex + 1; i < events.length; i++) {
         const e = events[i];
         if (e.type === 'tool_call') {
-          const ed = e.data as ACPEventToolCallData;
+          const ed = e.data as SessionEventToolCallData;
           if (ed.toolCallId && toolCallGroups.has(ed.toolCallId)) continue;
         }
         hasFollowingActivity = true;
@@ -229,12 +229,12 @@ function formatShortPath(fullPath?: string): string {
   return parts.slice(-2).join('/');
 }
 
-export function formatToolTitlePeek(childEvents: ACPEventRow[] | null | undefined): string {
+export function formatToolTitlePeek(childEvents: SessionEventRow[] | null | undefined): string {
   if (!childEvents || childEvents.length === 0) return '';
   const last = childEvents[childEvents.length - 1];
 
   if (last.type === 'tool_call') {
-    const tcData = last.data as ACPEventToolCallData;
+    const tcData = last.data as SessionEventToolCallData;
     const toolName = tcData.name;
     const kind = tcData.kind;
     const args = tcData.arguments ?? {};
@@ -273,12 +273,12 @@ export function formatToolTitlePeek(childEvents: ACPEventRow[] | null | undefine
   return '';
 }
 
-export function formatPeek(childEvents: ACPEventRow[] | null | undefined): string {
+export function formatPeek(childEvents: SessionEventRow[] | null | undefined): string {
   if (!childEvents || childEvents.length === 0) return 'Spawning…';
   const last = childEvents[childEvents.length - 1];
 
   if (last.type === 'tool_call') {
-    const tcData = last.data as ACPEventToolCallData;
+    const tcData = last.data as SessionEventToolCallData;
     const toolName = tcData.name;
     const kind = tcData.kind;
     const args = tcData.arguments ?? {};
@@ -328,13 +328,13 @@ export interface DotsResult {
   overflow?: number;
 }
 
-export function buildProgressDots(childEvents: ACPEventRow[] | null | undefined): DotsResult[] {
+export function buildProgressDots(childEvents: SessionEventRow[] | null | undefined): DotsResult[] {
   if (!childEvents) return [];
   const tcEvents = childEvents.filter((e) => e.type === 'tool_call');
   if (tcEvents.length === 0) return [];
 
   const dots: DotsResult[] = tcEvents.slice(0, 8).map((e) => {
-    const data = e.data as ACPEventToolCallData;
+    const data = e.data as SessionEventToolCallData;
     return { filled: data.status === 'completed' || data.status === 'failed' };
   });
 
@@ -383,7 +383,7 @@ export function getSubagentSwarmStats(groups: SubagentGroup[]): SubagentSwarmSta
   let totalTools = 0;
 
   for (const g of groups) {
-    const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
+    const data = g.subagentEvent.data as SessionEventSubagentUpdateData;
     if (data.status === 'running' || data.status === 'spawning') {
       running++;
     } else if (data.status === 'completed') {
@@ -422,7 +422,7 @@ export function filterSubagentGroups(
 ): SubagentGroup[] {
   if (filter === 'all') return groups;
   return groups.filter((g) => {
-    const data = g.subagentEvent.data as ACPEventSubagentUpdateData;
+    const data = g.subagentEvent.data as SessionEventSubagentUpdateData;
     if (filter === 'running') return data.status === 'running' || data.status === 'spawning';
     if (filter === 'completed') return data.status === 'completed';
     if (filter === 'failed') return data.status === 'failed';

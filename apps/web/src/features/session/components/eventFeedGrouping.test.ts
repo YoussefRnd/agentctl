@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { groupFeedEvents } from './eventFeedGrouping';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 
 describe('groupFeedEvents', () => {
   it('does not create an agent turn for standalone system status events (e.g. process exit SIGTERM)', () => {
-    const events: ACPEventRow[] = [
+    const events: SessionEventRow[] = [
       {
         id: 2423,
         sessionId: 'sess-1',
@@ -22,7 +22,7 @@ describe('groupFeedEvents', () => {
   });
 
   it('filters out hidden system events', () => {
-    const events: ACPEventRow[] = [
+    const events: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 'sess-1',
@@ -44,7 +44,7 @@ describe('groupFeedEvents', () => {
   });
 
   it('correctly groups user messages and agent turns', () => {
-    const events: ACPEventRow[] = [
+    const events: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 'sess-1',
@@ -78,7 +78,7 @@ describe('groupFeedEvents', () => {
   });
 
   it('appends mid-turn status events to an active agent turn', () => {
-    const events: ACPEventRow[] = [
+    const events: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 'sess-1',
@@ -112,7 +112,7 @@ describe('groupFeedEvents', () => {
   });
 
   it('appends turn_end status event to an active agent turn so turnChanges are preserved', () => {
-    const events: ACPEventRow[] = [
+    const events: SessionEventRow[] = [
       {
         id: 1,
         sessionId: 'sess-1',

@@ -17,7 +17,7 @@ import { rewindSession, restoreSession, undoRewind, handoffSession } from '@agen
 import { useUIStore, FileIcon } from '@/shared';
 import { cn, Tooltip } from '@agentctl/ui';
 import { useOpenWorkspaceFile } from '../hooks/useOpenWorkspaceFile';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 import type { RewindMode } from './RewindMenu';
 
 export function MainFeed() {
@@ -285,7 +285,7 @@ export function MainFeed() {
     [sessionId, handleSend, queryClient],
   );
 
-  const lastEvent = events[events.length - 1] as ACPEventRow | undefined;
+  const lastEvent = events[events.length - 1] as SessionEventRow | undefined;
 
   const approvalEvent =
     lastEvent?.type === 'approval_request' &&

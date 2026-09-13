@@ -1,5 +1,5 @@
-import type { ACPEventRow } from '@agentctl/shared';
-import { isACPEventToolCall } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
+import { isSessionEventToolCall } from '@agentctl/shared';
 import { parseDiff } from '../../../shared/lib/diff-parser';
 import type { ReviewFile } from '../components/ReviewHeader';
 
@@ -73,7 +73,19 @@ export function resolveTurnReviewFiles(
  * Extracts a file path from a tool call's explicit arguments, locations, content, or rawOutput metadata.
  */
 export function extractFilePathFromToolCall(data: Record<string, unknown>): string | null {
-  // 1. Standard ACP Locations
+  // 1. Product-normalized effects
+  if (Array.isArray(data.effects)) {
+    const effect = data.effects.find(
+      (candidate): candidate is { type: string; path: string } =>
+        typeof candidate === 'object' &&
+        candidate !== null &&
+        'path' in candidate &&
+        typeof candidate.path === 'string',
+    );
+    if (effect?.path.trim()) return normalizeFilePath(effect.path);
+  }
+
+  // 2. Standard locations
   if (Array.isArray(data.locations) && data.locations.length > 0) {
     const first = data.locations[0] as { path?: string };
     if (typeof first?.path === 'string' && first.path.trim()) {
@@ -81,7 +93,7 @@ export function extractFilePathFromToolCall(data: Record<string, unknown>): stri
     }
   }
 
-  // 2. Content diff or path
+  // 3. Content diff or path
   if (Array.isArray(data.content)) {
     for (const c of data.content as { path?: string; type?: string }[]) {
       if (typeof c?.path === 'string' && c.path.trim()) {
@@ -90,7 +102,7 @@ export function extractFilePathFromToolCall(data: Record<string, unknown>): stri
     }
   }
 
-  // 3. RawOutput metadata (filepath, filediff, display path)
+  // 4. RawOutput metadata (filepath, filediff, display path)
   const rawOut = data.rawOutput as Record<string, unknown> | undefined;
   if (rawOut && typeof rawOut === 'object') {
     const meta = rawOut.metadata as Record<string, unknown> | undefined;
@@ -109,7 +121,7 @@ export function extractFilePathFromToolCall(data: Record<string, unknown>): stri
     }
   }
 
-  // 4. Explicit tool arguments (handling nested arguments)
+  // 5. Explicit tool arguments (handling nested arguments)
   const sources: Record<string, unknown>[] = [];
   if (data.arguments && typeof data.arguments === 'object') {
     sources.push(data.arguments as Record<string, unknown>);
@@ -149,7 +161,7 @@ export function extractFilePathFromToolCall(data: Record<string, unknown>): stri
     }
   }
 
-  // 5. Name when the tool itself is directly named after the file path
+  // 6. Name when the tool itself is directly named after the file path
   const name = typeof data.name === 'string' ? data.name.trim() : '';
   if (name && (name.includes('/') || /\.[a-zA-Z0-9_-]{1,10}$/.test(name)) && !name.includes(' ')) {
     return normalizeFilePath(name);
@@ -169,7 +181,17 @@ export function isFileModificationToolCall(data: {
   arguments?: Record<string, unknown>;
   rawInput?: Record<string, unknown>;
   rawOutput?: Record<string, unknown>;
+  effects?: { type: string; path?: string }[];
 }): boolean {
+  if (
+    data.effects?.some(
+      (effect) => effect.type === 'file_modified' || effect.type === 'file_deleted',
+    )
+  ) {
+    return true;
+  }
+  if (data.effects?.some((effect) => effect.type === 'file_read')) return false;
+
   const name = (data.name ?? '').toLowerCase();
   const kind = (data.kind ?? '').toLowerCase();
   const title = (data.title ?? '').toLowerCase();
@@ -310,6 +332,20 @@ function getToolCallStats(data: Record<string, unknown>): {
   let additions = 0;
   let deletions = 0;
 
+  if (Array.isArray(data.effects)) {
+    for (const effect of data.effects as {
+      type?: string;
+      oldText?: string | null;
+      newText?: string;
+    }[]) {
+      if (effect.type !== 'file_modified') continue;
+      if (effect.newText) additions += effect.newText.split('\n').length;
+      if (effect.oldText) deletions += effect.oldText.split('\n').length;
+    }
+  }
+
+  if (additions > 0 || deletions > 0) return { additions, deletions };
+
   if (Array.isArray(data.content)) {
     for (const item of data.content as {
       type?: string;
@@ -359,7 +395,7 @@ function getToolCallStats(data: Record<string, unknown>): {
  * using tool-local stats when available and the current review diff as a fallback.
  */
 export function extractTurnChanges(
-  events: ACPEventRow[],
+  events: SessionEventRow[],
   reviewFiles?: ReviewFile[],
 ): TurnChangesSummary {
   // 1. Prioritize server-computed turn changes from SnapshotService if present
@@ -381,7 +417,7 @@ export function extractTurnChanges(
   const fileMap = new Map<string, TurnFileChange & { hasTurnLocalStats: boolean }>();
 
   for (const event of events) {
-    if (!isACPEventToolCall(event)) continue;
+    if (!isSessionEventToolCall(event)) continue;
 
     const data = event.data;
     if (!isFileModificationToolCall(data)) continue;
@@ -393,7 +429,9 @@ export function extractTurnChanges(
     const hasTurnLocalStats = additions > 0 || deletions > 0;
     let matchedReviewPath = filePath;
     let status: 'modified' | 'added' | 'deleted' =
-      data.kind === 'delete' || data.name?.toLowerCase().includes('delete')
+      data.effects?.some((effect) => effect.type === 'file_deleted') ||
+      data.kind === 'delete' ||
+      data.name?.toLowerCase().includes('delete')
         ? 'deleted'
         : data.name?.toLowerCase().includes('create')
           ? 'added'
@@ -464,7 +502,7 @@ export function extractTurnChanges(
 /**
  * Extracts the set of file paths modified during the latest agent prompt turn.
  */
-export function extractLatestTurnTouchedFiles(events: ACPEventRow[]): Set<string> {
+export function extractLatestTurnTouchedFiles(events: SessionEventRow[]): Set<string> {
   const set = new Set<string>();
   let lastUserIdx = -1;
   for (let i = events.length - 1; i >= 0; i--) {
@@ -477,7 +515,7 @@ export function extractLatestTurnTouchedFiles(events: ACPEventRow[]): Set<string
 
   const turnEvents = lastUserIdx >= 0 ? events.slice(lastUserIdx) : events;
   for (const e of turnEvents) {
-    if (isACPEventToolCall(e)) {
+    if (isSessionEventToolCall(e)) {
       if (!isFileModificationToolCall(e.data)) continue;
       const p = extractFilePathFromToolCall(e.data);
       if (p) {

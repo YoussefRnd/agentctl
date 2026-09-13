@@ -6,11 +6,15 @@ import { TurnChangesCard } from './TurnChangesCard';
 import { isSubagentToolCall, extractSubagentGroups } from './subagentBlockUtils';
 import { extractTurnChanges } from '../../lib/turnChanges';
 import { useSession } from '../../../../contexts/SessionContext';
-import type { ACPEventRow } from '@agentctl/shared';
-import { isACPEventText, isACPEventToolCall, isACPEventSubagentUpdate } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
+import {
+  isSessionEventText,
+  isSessionEventToolCall,
+  isSessionEventSubagentUpdate,
+} from '@agentctl/shared';
 
 interface AgentResponseProps {
-  events: ACPEventRow[];
+  events: SessionEventRow[];
   isStreaming?: boolean;
   isActive?: boolean;
   selectedProviderId?: string | null;
@@ -25,10 +29,10 @@ const AgentResponseComponent = function AgentResponse({
   const reviewFiles = reviewData?.files;
 
   const { activityEvents, responseEvent, subagentGroups, turnChanges } = useMemo(() => {
-    const activities: ACPEventRow[] = [];
-    let response: ACPEventRow | undefined;
+    const activities: SessionEventRow[] = [];
+    let response: SessionEventRow | undefined;
 
-    const idToEvent = new Map<number, ACPEventRow>();
+    const idToEvent = new Map<number, SessionEventRow>();
     for (let i = 0; i < events.length; i++) {
       idToEvent.set(events[i].id, events[i]);
     }
@@ -36,7 +40,7 @@ const AgentResponseComponent = function AgentResponse({
     const subagentToolCallIds = new Set<string>();
 
     for (const e of events) {
-      if (isACPEventToolCall(e)) {
+      if (isSessionEventToolCall(e)) {
         const tcData = e.data;
         if (tcData.toolCallId && isSubagentToolCall(tcData)) {
           subagentToolCallIds.add(tcData.toolCallId);
@@ -45,7 +49,7 @@ const AgentResponseComponent = function AgentResponse({
     }
 
     for (const e of events) {
-      if (isACPEventToolCall(e)) {
+      if (isSessionEventToolCall(e)) {
         const tcData = e.data;
         if (tcData.toolCallId && subagentToolCallIds.has(tcData.toolCallId)) {
           continue;
@@ -54,20 +58,20 @@ const AgentResponseComponent = function AgentResponse({
 
       if (e.parentEventId != null) {
         const parentData = idToEvent.get(e.parentEventId);
-        if (parentData && isACPEventSubagentUpdate(parentData)) {
+        if (parentData && isSessionEventSubagentUpdate(parentData)) {
           continue;
         }
       }
 
-      if (isACPEventSubagentUpdate(e)) {
+      if (isSessionEventSubagentUpdate(e)) {
         continue;
       }
 
-      if (isACPEventText(e) && e.data.role === 'provider') {
+      if (isSessionEventText(e) && e.data.role === 'provider') {
         response = e;
       } else if (
-        (isACPEventText(e) && e.data.role === 'thought') ||
-        isACPEventToolCall(e) ||
+        (isSessionEventText(e) && e.data.role === 'thought') ||
+        isSessionEventToolCall(e) ||
         e.type === 'approval_request'
       ) {
         activities.push(e);

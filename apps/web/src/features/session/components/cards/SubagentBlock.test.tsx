@@ -6,7 +6,7 @@ import { SubagentBlock } from './SubagentBlock';
 import { SubagentChatView } from '../SubagentChatView';
 import { useUIStore } from '@/shared';
 import type { SubagentGroup } from './subagentBlockUtils';
-import type { ACPEventRow } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
 
 beforeEach(() => {
   window.matchMedia =
@@ -27,7 +27,7 @@ function createMockGroup(
   scope: string,
   status: 'spawning' | 'running' | 'completed' | 'failed',
   summary?: string,
-  childEvents: ACPEventRow[] = [],
+  childEvents: SessionEventRow[] = [],
 ): SubagentGroup {
   return {
     subagentEvent: {

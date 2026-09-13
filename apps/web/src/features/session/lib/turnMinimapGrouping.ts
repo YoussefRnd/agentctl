@@ -1,14 +1,14 @@
-import type { ACPEventRow } from '@agentctl/shared';
-import { isACPEventText, isACPEventToolCall } from '@agentctl/shared';
+import type { SessionEventRow } from '@agentctl/shared';
+import { isSessionEventText, isSessionEventToolCall } from '@agentctl/shared';
 import { extractTurnChanges } from './turnChanges';
 import type { ReviewFile } from '../components/ReviewHeader';
 
 export interface ConversationTurn {
   id: string;
   turnIndex: number;
-  userEvent: ACPEventRow;
+  userEvent: SessionEventRow;
   userPrompt: string;
-  agentEvents: ACPEventRow[];
+  agentEvents: SessionEventRow[];
   agentResponseText?: string;
   turnSummary: string;
   diffStats: {
@@ -27,12 +27,12 @@ export interface ConversationTurn {
 /**
  * Extracts a concise summary from agent events in a turn.
  */
-export function extractTurnSummary(agentEvents: ACPEventRow[]): string {
+export function extractTurnSummary(agentEvents: SessionEventRow[]): string {
   // 1. Look for provider text response
   for (let i = agentEvents.length - 1; i >= 0; i--) {
     const e = agentEvents[i];
     if (
-      isACPEventText(e) &&
+      isSessionEventText(e) &&
       (e.data.role === 'provider' || (e.data as { role?: string }).role === 'assistant')
     ) {
       const text = e.data.content?.trim();
@@ -57,7 +57,7 @@ export function extractTurnSummary(agentEvents: ACPEventRow[]): string {
 
   // 3. Look for tool call activities
   const toolNames = agentEvents
-    .filter(isACPEventToolCall)
+    .filter(isSessionEventToolCall)
     .map(
       (e) =>
         (e.data as { title?: string; name?: string }).title ||
@@ -75,7 +75,7 @@ export function extractTurnSummary(agentEvents: ACPEventRow[]): string {
 
   // 4. Look for thought updates
   for (const e of agentEvents) {
-    if (isACPEventText(e) && e.data.role === 'thought') {
+    if (isSessionEventText(e) && e.data.role === 'thought') {
       const text = e.data.content?.trim();
       if (text) {
         const firstLine = text.split(/\n+/)[0]?.trim() ?? text;
@@ -95,7 +95,7 @@ export function extractTurnSummary(agentEvents: ACPEventRow[]): string {
  * Groups session events into structured ConversationTurn objects for the minimap.
  */
 export function groupConversationTurns(
-  events: ACPEventRow[],
+  events: SessionEventRow[],
   reviewFiles?: ReviewFile[],
   sessionMeta?: {
     modelName?: string;
@@ -106,9 +106,9 @@ export function groupConversationTurns(
 ): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
   let currentTurn: {
-    userEvent: ACPEventRow;
+    userEvent: SessionEventRow;
     userPrompt: string;
-    agentEvents: ACPEventRow[];
+    agentEvents: SessionEventRow[];
   } | null = null;
 
   for (const e of events) {
@@ -125,7 +125,7 @@ export function groupConversationTurns(
       ].includes(statusVal);
     if (isHidden) continue;
 
-    const isUser = isACPEventText(e) && e.data.role === 'user';
+    const isUser = isSessionEventText(e) && e.data.role === 'user';
 
     if (isUser) {
       if (currentTurn) {
