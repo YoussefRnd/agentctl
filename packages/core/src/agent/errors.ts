@@ -1,4 +1,4 @@
-import type { ACPConfigOption } from '@agentctl/shared';
+import type { AgentConfigOption } from '@agentctl/shared';
 import type { AgentSession } from './types.js';
 
 export type AgentErrorKind =
@@ -22,7 +22,7 @@ export class AgentError extends Error {
 export class AgentAuthenticationRequiredError extends AgentError {
   constructor(
     public readonly pendingSession: AgentSession,
-    public readonly configOptions: ACPConfigOption[] = [],
+    public readonly configOptions: AgentConfigOption[] = [],
   ) {
     super('authentication_required', 'Authentication required');
     this.name = 'AgentAuthenticationRequiredError';

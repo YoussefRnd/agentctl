@@ -1,5 +1,6 @@
 import type {
-  ACPConfigOption,
+  AgentConfigOption,
+  AgentFeatures,
   AuthMethod,
   ElicitationRequest,
   ElicitationResponse,
@@ -8,7 +9,8 @@ import type {
   ThinkingEffort,
 } from '@agentctl/shared';
 
-export type AgentConfigOption = ACPConfigOption;
+export type { AgentConfigOption } from '@agentctl/shared';
+export type { AgentFeatures } from '@agentctl/shared';
 
 export type AgentStopReason =
   'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled' | (string & {});
@@ -71,23 +73,32 @@ export interface AgentToolCallContent {
   [key: string]: unknown;
 }
 
+export type AgentToolEffect =
+  | { type: 'file_read'; path: string }
+  | { type: 'file_modified'; path: string; oldText?: string | null; newText?: string }
+  | { type: 'file_deleted'; path: string }
+  | { type: 'terminal'; terminalId: string };
+
+export interface AgentToolCall {
+  name?: string;
+  arguments?: Record<string, unknown>;
+  toolCallId?: string;
+  title?: string;
+  status?: string;
+  kind?: string;
+  locations?: { path?: string; line?: number }[];
+  content?: AgentToolCallContent[];
+  effects?: AgentToolEffect[];
+  rawInput?: unknown;
+  rawOutput?: unknown;
+}
+
 export type AgentUpdate =
   | { type: 'text'; text: string; messageId?: string; operation?: 'append' | 'replace' }
   | { type: 'thought'; text: string; messageId?: string; operation?: 'append' | 'replace' }
   | {
       type: 'tool_call';
-      call: {
-        name?: string;
-        arguments?: Record<string, unknown>;
-        toolCallId?: string;
-        title?: string;
-        status?: string;
-        kind?: string;
-        locations?: { path?: string; line?: number }[];
-        content?: AgentToolCallContent[];
-        rawInput?: unknown;
-        rawOutput?: unknown;
-      };
+      call: AgentToolCall;
       contentOperation?: 'replace' | 'append';
     }
   | { type: 'status'; status: string; title?: string }
@@ -120,7 +131,7 @@ export type AgentUpdate =
   | { type: 'terminal_output'; terminalId: string; data: string }
   | { type: 'terminal_exit'; terminalId: string; code: number | null }
   | { type: 'session_info_update'; title?: string | null; updatedAt?: string | null }
-  | { type: 'config_option_update'; configOptions: ACPConfigOption[] }
+  | { type: 'config_option_update'; configOptions: AgentConfigOption[] }
   | { type: 'metrics_update'; metrics: SessionMetrics };
 
 export interface AgentPromptResult {
@@ -168,8 +179,7 @@ export interface AgentSessionOptions {
   env?: Record<string, string>;
   selectedModel?: string;
   selectedThinkingEffort?: ThinkingEffort;
-  supportsDynamicModel?: boolean;
-  supportsDynamicConfig?: boolean;
+  features: AgentFeatures;
   resolvedThinkingConfigId?: string;
   resolvedModelConfigId?: string;
   intent: AgentSessionIntent;
@@ -193,6 +203,7 @@ export interface AgentDescriptor {
   supportsDynamicConfig: boolean;
   modes?: string[];
   supportsLogout?: boolean;
+  features?: AgentFeatures;
 }
 
 export interface AgentDriver {
