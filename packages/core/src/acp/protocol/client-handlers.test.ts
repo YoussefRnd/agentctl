@@ -6,14 +6,14 @@ import { CLIENT_METHODS, type Client } from '@agentclientprotocol/sdk';
 import { createClientHandlers } from './client-handlers.js';
 import { TerminalManager } from './terminal-manager.js';
 import { noopLogger } from '../../logger.js';
-import type { SessionCallbacks } from '../types.js';
+import type { AgentSessionCallbacks } from '../../agent/types.js';
 
 function makeContext(cwd: string) {
   const onUpdate = () => Promise.resolve();
   const callbacks = {
     onUpdate,
     onRequestPermission: () => Promise.resolve({ allowed: false }),
-  } as unknown as SessionCallbacks;
+  } as unknown as AgentSessionCallbacks;
   return {
     cwd: process.cwd(),
     terminalManager: new TerminalManager(noopLogger),
@@ -92,7 +92,7 @@ describe('createClientHandlers', () => {
     const callbacks = {
       onUpdate: () => Promise.resolve(),
       onRequestPermission: () => Promise.resolve({ allowed: true, optionId: 'allow-once' }),
-    } as unknown as SessionCallbacks;
+    } as unknown as AgentSessionCallbacks;
     const handlers = createClientHandlers({
       cwd: process.cwd(),
       terminalManager: new TerminalManager(noopLogger),
@@ -129,7 +129,7 @@ describe('createClientHandlers', () => {
         events.push(e);
         return Promise.resolve();
       },
-    } as unknown as SessionCallbacks;
+    } as unknown as AgentSessionCallbacks;
     const handlers = createClientHandlers({
       cwd: process.cwd(),
       terminalManager: new TerminalManager(noopLogger),
@@ -154,7 +154,7 @@ describe('createClientHandlers', () => {
         events.push(event);
       },
       onRequestPermission: () => Promise.resolve({ allowed: false }),
-    } as unknown as SessionCallbacks;
+    } as unknown as AgentSessionCallbacks;
     const handlers = createClientHandlers({
       cwd: process.cwd(),
       terminalManager: new TerminalManager(noopLogger),
@@ -179,7 +179,7 @@ describe('createClientHandlers', () => {
         completed.push(id);
         return Promise.resolve();
       },
-    } as unknown as SessionCallbacks;
+    } as unknown as AgentSessionCallbacks;
     const handlers = createClientHandlers({
       cwd: process.cwd(),
       terminalManager: new TerminalManager(noopLogger),

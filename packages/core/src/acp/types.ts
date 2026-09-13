@@ -25,21 +25,6 @@ export type {
   AgentUsage,
 } from '../agent/types.js';
 
-/** @deprecated Import the product-owned name from agent/types instead. */
-export type {
-  AgentDescriptor as AgentProbeResult,
-  AgentDriver as AgentRuntime,
-  AgentMcpGateway as McpGatewayLike,
-  AgentPermissionRequest as DomainPermissionRequest,
-  AgentPermissionResponse as DomainPermissionResponse,
-  AgentPromptResult as PromptResult,
-  AgentSession as AgentRuntimeHandle,
-  AgentSessionCallbacks as SessionCallbacks,
-  AgentSessionOptions as RuntimeOptions,
-  AgentToolCallContent as ToolCallContent,
-  AgentUpdate as DomainAgentEvent,
-} from '../agent/types.js';
-
 export interface ACPConnectionHandle {
   child: ChildProcess;
   connection: ClientSideConnection;

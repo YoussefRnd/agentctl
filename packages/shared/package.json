@@ -9,10 +9,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./acp": {
-      "types": "./dist/schemas/acp.d.ts",
-      "default": "./dist/schemas/acp.js"
-    },
     "./schemas": {
       "types": "./dist/schemas/index.d.ts",
       "default": "./dist/schemas/index.js"

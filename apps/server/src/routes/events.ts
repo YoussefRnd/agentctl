@@ -1,6 +1,6 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
-import { acpEvents, acpEventDbRowSchema } from '@agentctl/core/db';
+import { acpEvents, sessionEventDbRowSchema } from '@agentctl/core/db';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { SessionEventRow } from '@agentctl/shared';
@@ -8,7 +8,7 @@ import { sessionEventRowSchema, isSessionEventRow } from '@agentctl/shared';
 import { AppError } from '../errors/app-error.js';
 
 function parseEventRow(rawRow: typeof acpEvents.$inferSelect): SessionEventRow {
-  const row = acpEventDbRowSchema.parse(rawRow);
+  const row = sessionEventDbRowSchema.parse(rawRow);
   const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
   const metadata: unknown = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : undefined;
   return sessionEventRowSchema.parse({

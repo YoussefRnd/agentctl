@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { acpEventSchema, acpEventSubagentUpdateDataSchema } from './acp.js';
+import { sessionEventSchema, sessionEventSubagentUpdateDataSchema } from './session-event.js';
 
-describe('acpEventSubagentUpdateDataSchema', () => {
+describe('sessionEventSubagentUpdateDataSchema', () => {
   it('should parse a valid subagent_update data object', () => {
     const data = {
       subagentId: 'sa_abc123',
@@ -9,7 +9,7 @@ describe('acpEventSubagentUpdateDataSchema', () => {
       scope: 'Search for auth middleware patterns',
       status: 'running',
     };
-    const result = acpEventSubagentUpdateDataSchema.parse(data);
+    const result = sessionEventSubagentUpdateDataSchema.parse(data);
     expect(result.subagentId).toBe('sa_abc123');
     expect(result.name).toBe('explore');
     expect(result.status).toBe('running');
@@ -23,7 +23,7 @@ describe('acpEventSubagentUpdateDataSchema', () => {
       status: 'completed',
       result: { summary: 'Done', tokensUsed: 142 },
     };
-    const result = acpEventSubagentUpdateDataSchema.parse(data);
+    const result = sessionEventSubagentUpdateDataSchema.parse(data);
     expect(result.result?.summary).toBe('Done');
     expect(result.result?.tokensUsed).toBe(142);
   });
@@ -35,16 +35,16 @@ describe('acpEventSubagentUpdateDataSchema', () => {
       scope: 'test',
       status: 'unknown',
     };
-    expect(() => acpEventSubagentUpdateDataSchema.parse(data)).toThrow();
+    expect(() => sessionEventSubagentUpdateDataSchema.parse(data)).toThrow();
   });
 
   it('should reject missing required fields', () => {
     const data = { subagentId: 'sa_abc123' };
-    expect(() => acpEventSubagentUpdateDataSchema.parse(data)).toThrow();
+    expect(() => sessionEventSubagentUpdateDataSchema.parse(data)).toThrow();
   });
 });
 
-describe('acpEventSchema (subagent_update variant)', () => {
+describe('sessionEventSchema (subagent_update variant)', () => {
   it('should parse a full subagent_update event', () => {
     const event = {
       type: 'subagent_update',
@@ -56,7 +56,7 @@ describe('acpEventSchema (subagent_update variant)', () => {
       },
       createdAt: '2026-07-08T00:00:00Z',
     };
-    const result = acpEventSchema.parse(event);
+    const result = sessionEventSchema.parse(event);
     expect(result.type).toBe('subagent_update');
   });
 });

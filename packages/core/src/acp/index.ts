@@ -2,8 +2,6 @@ export * from './types.js';
 export * from './transport/process-transport.js';
 export * from './transport/path-security.js';
 export * from './transport/capabilities-cache.js';
-export * from './transport/capabilities-negotiator.js';
-export * from './transport/stream-buffer.js';
 export * from './transport/stream-debug.js';
 export * from './protocol/events.js';
 export * from './protocol/file-system.js';
@@ -17,7 +15,3 @@ export * from './runtime.js';
 export * from './driver.js';
 export * from './v2/events.js';
 export * from './v2/runtime.js';
-/** @deprecated Import ManagedSession from @agentctl/core (session/managed-session.js). */
-export * from './session-client.js';
-/** @deprecated Import ManagedSession from @agentctl/core. */
-export { ACPSession as SessionClient } from './session-client.js';

@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { FileCacheStorage, getCacheKey } from './capabilities-cache.js';
-import type { AgentProbeResult } from '../types.js';
+import type { AgentDescriptor } from '../../agent/types.js';
 
-const sampleResult: AgentProbeResult = {
+const sampleResult: AgentDescriptor = {
   status: 'ready',
   configOptions: [],
   authMethods: [],

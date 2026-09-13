@@ -3,13 +3,8 @@ import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
 import type { SessionNotification } from '@agentclientprotocol/sdk';
-import {
-  cleanEnv,
-  createAgentConnection,
-  type CacheStorage,
-  type AgentProbeResult,
-  type DomainAgentEvent,
-} from '../index.js';
+import { cleanEnv, createAgentConnection, type CacheStorage } from '../index.js';
+import type { AgentDescriptor, AgentUpdate } from '../../agent/types.js';
 
 test('cleanEnv overlays values and strips npm config variables', () => {
   const previousUserAgent = process.env.npm_config_user_agent;
@@ -112,13 +107,13 @@ test('createAgentConnection throws if stdio is missing', () => {
   assert.equal(killCount, 1);
 });
 
-test('DefaultAgentRuntime.probe uses cache and skips spawn on cache hit', async () => {
-  const { DefaultAgentRuntime } = await import('../index.js');
+test('AcpV1AgentDriver.probe uses cache and skips spawn on cache hit', async () => {
+  const { AcpV1AgentDriver } = await import('../runtime.js');
 
-  const cacheMap = new Map<string, AgentProbeResult>();
+  const cacheMap = new Map<string, AgentDescriptor>();
   const mockCache: CacheStorage = {
     get: (key: string) => Promise.resolve(cacheMap.get(key) ?? null),
-    set: (key: string, val: AgentProbeResult) => {
+    set: (key: string, val: AgentDescriptor) => {
       cacheMap.set(key, val);
       return Promise.resolve();
     },
@@ -147,7 +142,7 @@ test('DefaultAgentRuntime.probe uses cache and skips spawn on cache hit', async 
     kill: () => undefined,
   });
 
-  const runtime = new DefaultAgentRuntime(fakeSpawn, undefined, fakeTransport, mockCache);
+  const runtime = new AcpV1AgentDriver(fakeSpawn, undefined, fakeTransport, mockCache);
 
   const testResult = {
     status: 'ready' as const,
@@ -185,7 +180,7 @@ test('parseNotificationToEvents parses tool_call rawInput with nested arguments'
 
   const events = parseNotificationToEvents(notification);
   assert.equal(events.length, 1);
-  const event = events[0] as Extract<DomainAgentEvent, { type: 'tool_call' }>;
+  const event = events[0] as Extract<AgentUpdate, { type: 'tool_call' }>;
   assert.equal(event.type, 'tool_call');
   assert.equal(event.call.name, 'read_file');
   assert.deepEqual(event.call.arguments, { path: 'test.txt' });
@@ -207,7 +202,7 @@ test('parseNotificationToEvents parses tool_call rawInput as direct arguments ob
 
   const events = parseNotificationToEvents(notification);
   assert.equal(events.length, 1);
-  const event = events[0] as Extract<DomainAgentEvent, { type: 'tool_call' }>;
+  const event = events[0] as Extract<AgentUpdate, { type: 'tool_call' }>;
   assert.equal(event.type, 'tool_call');
   assert.equal(event.call.name, 'run_shell_command');
   assert.deepEqual(event.call.arguments, { command: 'echo hello' });
@@ -230,7 +225,7 @@ test('parseNotificationToEvents parses usage_update notification', async () => {
 
   const events = parseNotificationToEvents(notification);
   assert.equal(events.length, 1);
-  const event = events[0] as Extract<DomainAgentEvent, { type: 'usage_update' }>;
+  const event = events[0] as Extract<AgentUpdate, { type: 'usage_update' }>;
   assert.equal(event.type, 'usage_update');
   assert.equal(event.used, 53000);
   assert.equal(event.size, 200000);
@@ -254,7 +249,7 @@ test('parseNotificationToEvents normalizes usage_update values from provider met
 
   const events = parseNotificationToEvents(notification as unknown as SessionNotification);
   assert.equal(events.length, 1);
-  const event = events[0] as Extract<DomainAgentEvent, { type: 'usage_update' }>;
+  const event = events[0] as Extract<AgentUpdate, { type: 'usage_update' }>;
   assert.equal(event.type, 'usage_update');
   assert.equal(event.used, 53000);
   assert.equal(event.size, 200000);

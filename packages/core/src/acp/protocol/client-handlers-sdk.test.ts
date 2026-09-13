@@ -11,7 +11,7 @@ import {
 import { createClientHandlers } from './client-handlers.js';
 import { TerminalManager } from './terminal-manager.js';
 import { noopLogger } from '../../logger.js';
-import type { SessionCallbacks } from '../types.js';
+import type { AgentSessionCallbacks } from '../../agent/types.js';
 import type { ElicitationRequest } from '@agentctl/shared';
 
 /**
@@ -42,7 +42,7 @@ async function makePair(cwd: string) {
         values: { strategy: 'balanced', ignored: { nested: true } },
       });
     },
-  } as unknown as SessionCallbacks;
+  } as unknown as AgentSessionCallbacks;
 
   const client = createClientHandlers({
     cwd: process.cwd(),

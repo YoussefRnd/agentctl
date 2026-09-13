@@ -801,9 +801,6 @@ export class AcpV1AgentDriver implements AgentDriver {
   }
 }
 
-/** @deprecated Use AcpV1AgentDriver. */
-export { AcpV1AgentDriver as DefaultAgentRuntime };
-
 export function extractConfigOptionsFromSessionResult(sessionResult: {
   configOptions?: unknown;
   models?: {

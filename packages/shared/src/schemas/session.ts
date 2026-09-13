@@ -4,7 +4,6 @@ import {
   agentConfigOptionSchema,
   agentFeaturesSchema,
   authMethodSchema,
-  type AgentConfigOption,
 } from './registry.js';
 
 export const providerSchema = z.string().min(1);
@@ -448,8 +447,6 @@ export type SessionWithCapabilities = z.infer<typeof sessionWithCapabilitiesSche
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type ApprovalMode = z.infer<typeof approvalModeSchema>;
 export type ProviderStatus = z.infer<typeof providerStatusSchema>;
-/** @deprecated Use AgentConfigOption from registry. */
-export type ACPConfigOption = AgentConfigOption;
 export type SessionConfigOptions = z.infer<typeof sessionConfigOptionsSchema>;
 export type ProviderDiscovery = z.infer<typeof providerDiscoverySchema>;
 export type AuthMethod = z.infer<typeof authMethodSchema>;

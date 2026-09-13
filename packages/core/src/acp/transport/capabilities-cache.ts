@@ -9,10 +9,10 @@ import {
 } from '@agentclientprotocol/sdk';
 import type {
   CacheStorage,
-  AgentProbeResult,
   AcpParsedCapabilities,
   InitializeAcpConnectionOptions,
 } from '../types.js';
+import type { AgentDescriptor } from '../../agent/types.js';
 
 export const AGENTCTL_CLIENT_CAPABILITIES: ClientCapabilities = {
   terminal: true,
@@ -32,11 +32,11 @@ export class FileCacheStorage implements CacheStorage {
 
   constructor(private readonly manifestFilePath: string) {}
 
-  private readManifest(): Record<string, { ts?: number; result?: AgentProbeResult }> {
+  private readManifest(): Record<string, { ts?: number; result?: AgentDescriptor }> {
     try {
       if (fs.existsSync(this.manifestFilePath)) {
         const content = fs.readFileSync(this.manifestFilePath, 'utf8');
-        return JSON.parse(content) as Record<string, { ts?: number; result?: AgentProbeResult }>;
+        return JSON.parse(content) as Record<string, { ts?: number; result?: AgentDescriptor }>;
       }
     } catch {
       // Ignore reading errors, return empty
@@ -44,7 +44,7 @@ export class FileCacheStorage implements CacheStorage {
     return {};
   }
 
-  async get(key: string): Promise<AgentProbeResult | null> {
+  async get(key: string): Promise<AgentDescriptor | null> {
     const manifest = this.readManifest();
     const entry = manifest[key];
     // Record index access can be undefined at runtime even though the
@@ -55,7 +55,7 @@ export class FileCacheStorage implements CacheStorage {
     return Promise.resolve(entry.result);
   }
 
-  async set(key: string, value: AgentProbeResult): Promise<void> {
+  async set(key: string, value: AgentDescriptor): Promise<void> {
     try {
       const dir = path.dirname(this.manifestFilePath);
       if (!fs.existsSync(dir)) {
@@ -94,9 +94,7 @@ export class FileCacheStorage implements CacheStorage {
     return Promise.resolve();
   }
 
-  private writeManifest(
-    manifest: Record<string, { ts?: number; result?: AgentProbeResult }>,
-  ): void {
+  private writeManifest(manifest: Record<string, { ts?: number; result?: AgentDescriptor }>): void {
     const temporaryPath = `${this.manifestFilePath}.${String(process.pid)}.tmp`;
     fs.writeFileSync(temporaryPath, JSON.stringify(manifest, null, 2), 'utf8');
     fs.renameSync(temporaryPath, this.manifestFilePath);

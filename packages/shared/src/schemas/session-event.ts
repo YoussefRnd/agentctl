@@ -243,35 +243,8 @@ export function isSessionEventModeUpdate(
 ): event is Extract<SessionEvent, { type: 'mode_update' }> {
   return event.type === 'mode_update';
 }
-
 export function isSessionEventSubagentUpdate(
   event: SessionEvent,
 ): event is Extract<SessionEvent, { type: 'subagent_update' }> {
   return event.type === 'subagent_update';
 }
-
-// Deprecated protocol-branded aliases retained for downstream compatibility.
-export const acpEventSchema = sessionEventSchema;
-export const acpEventRowSchema = sessionEventRowSchema;
-export const acpEventTextDataSchema = sessionEventTextDataSchema;
-export const acpEventToolCallDataSchema = sessionEventToolCallDataSchema;
-export const acpEventApprovalRequestDataSchema = sessionEventApprovalRequestDataSchema;
-export const acpEventSubagentUpdateDataSchema = sessionEventSubagentUpdateDataSchema;
-export const acpEventPlanDataSchema = sessionEventPlanDataSchema;
-export const acpEventModeDataSchema = sessionEventModeDataSchema;
-export const acpEventMetadataSchema = sessionEventMetadataSchema;
-
-export type ACPEvent = SessionEvent;
-export type ACPEventRow = SessionEventRow;
-export type ACPEventTextData = SessionEventTextData;
-export type ACPEventToolCallData = SessionEventToolCallData;
-export type ACPEventApprovalRequestData = SessionEventApprovalRequestData;
-export type ACPEventSubagentUpdateData = SessionEventSubagentUpdateData;
-
-export const isACPEvent = isSessionEvent;
-export const isACPEventRow = isSessionEventRow;
-export const isACPEventText = isSessionEventText;
-export const isACPEventToolCall = isSessionEventToolCall;
-export const isACPEventPlanUpdate = isSessionEventPlanUpdate;
-export const isACPEventModeUpdate = isSessionEventModeUpdate;
-export const isACPEventSubagentUpdate = isSessionEventSubagentUpdate;

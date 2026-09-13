@@ -3,7 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ClientSideConnection } from '@agentclientprotocol/sdk';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
-import { DefaultAgentRuntime } from './runtime.js';
+import { AcpV1AgentDriver } from './runtime.js';
 import { parseAcpCapabilities } from './transport/capabilities-cache.js';
 import type { AgentStreamTransport, IConnectionManager } from './types.js';
 import { runAgentDriverConformance } from '../agent/conformance.js';
@@ -31,7 +31,7 @@ function setup(supported = true) {
     unregisterActiveSession: vi.fn(),
     writeTerminalInput: () => false,
   };
-  const runtime = new DefaultAgentRuntime();
+  const runtime = new AcpV1AgentDriver();
   runtime.setConnectionManager(manager);
   const execute = () =>
     runtime.startSession(

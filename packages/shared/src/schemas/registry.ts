@@ -25,8 +25,6 @@ export const agentConfigOptionSchema = z.object({
     .optional(),
 });
 
-/** @deprecated Use agentConfigOptionSchema. */
-export const acpConfigOptionSchema = agentConfigOptionSchema;
 export type AgentConfigOption = z.infer<typeof agentConfigOptionSchema>;
 
 export const agentFeaturesSchema = z.object({
