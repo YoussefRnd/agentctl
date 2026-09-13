@@ -46,7 +46,7 @@ export function getToolDisplayInfo(
   const title = payload.title;
   const locations = payload.locations ?? [];
 
-  // 1. Direct ACP v1 canonical kind mapping (official @agentclientprotocol/sdk specification)
+  // 1. Canonical product tool-kind mapping
   if (kind === 'execute') {
     const rawCmd = args.CommandLine ?? args.command ?? args.cmd ?? args.input;
     const cmdText = (typeof rawCmd === 'string' && rawCmd) || title || tool;
@@ -323,9 +323,11 @@ function ToolOutputDetails({ call }: { call: ACPEventToolCallData }) {
 export const ToolStepRow = memo(function ToolStepRow({
   event,
   isStreaming,
+  isCompleted,
 }: {
   event: ACPEventRow;
   isStreaming?: boolean;
+  isCompleted?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -342,6 +344,9 @@ export const ToolStepRow = memo(function ToolStepRow({
   const isFailed = status === 'failed';
   const isPending = status === 'pending';
   const durationMs = event.metadata?.durationMs;
+  const hasFinishedDuration = durationMs != null && durationMs > 0;
+  const isStillInProgress =
+    !isCompleted && !hasFinishedDuration && (isStreaming || status === 'in_progress');
 
   const info = getToolDisplayInfo(toolName, payload);
   const cleanOutput = getCleanOutputText(payload.rawOutput);
@@ -374,7 +379,7 @@ export const ToolStepRow = memo(function ToolStepRow({
         </span>
 
         <div className="ml-auto flex shrink-0 items-center gap-2 pl-2 text-[10px]">
-          {isStreaming || status === 'in_progress' ? (
+          {isStillInProgress ? (
             <StreamingDots className="ml-0" />
           ) : isFailed ? (
             <AlertCircle className="h-3 w-3 text-rose-500" />
@@ -555,7 +560,14 @@ export function UnifiedActivityBlock({
             }
 
             if (isACPEventToolCall(e) || e.type === 'approval_request') {
-              return <ToolStepRow key={e.id} event={e} isStreaming={isStreamingThis} />;
+              return (
+                <ToolStepRow
+                  key={e.id}
+                  event={e}
+                  isStreaming={isStreamingThis}
+                  isCompleted={isCompleted}
+                />
+              );
             }
 
             return null;

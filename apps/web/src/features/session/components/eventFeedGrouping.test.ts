@@ -110,4 +110,42 @@ describe('groupFeedEvents', () => {
       expect(groups[1].events[1].id).toBe(3);
     }
   });
+
+  it('appends turn_end status event to an active agent turn so turnChanges are preserved', () => {
+    const events: ACPEventRow[] = [
+      {
+        id: 1,
+        sessionId: 'sess-1',
+        type: 'text',
+        data: { role: 'user', content: 'Inspect files' },
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        sessionId: 'sess-1',
+        type: 'text',
+        data: { role: 'thought', content: 'Looking around...' },
+        createdAt: new Date(),
+      },
+      {
+        id: 3,
+        sessionId: 'sess-1',
+        type: 'status',
+        data: {
+          status: 'turn_end',
+          turnChanges: { files: [], totalAdditions: 0, totalDeletions: 0 },
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    const groups = groupFeedEvents(events, null, false);
+    expect(groups).toHaveLength(2);
+    expect(groups[1].type).toBe('agent');
+    if (groups[1].type === 'agent') {
+      expect(groups[1].events).toHaveLength(2);
+      expect(groups[1].events[1].id).toBe(3);
+      expect((groups[1].events[1].data as { status?: string }).status).toBe('turn_end');
+    }
+  });
 });

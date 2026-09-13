@@ -442,12 +442,6 @@ export function EventFeed({
             scrollToBottom(true);
           }}
         >
-          {isSessionRunning && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/50" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-            </span>
-          )}
           <ArrowDown className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5" />
         </button>
       )}

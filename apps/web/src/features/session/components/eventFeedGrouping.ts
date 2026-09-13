@@ -21,22 +21,26 @@ export function groupFeedEvents(
   } | null = null;
 
   for (const e of events) {
+    const isStreaming = e.id === streamingEventId;
     const statusVal = (e.data as { status?: string } | null)?.status;
     const isHiddenSystemEvent =
       e.type === 'status' &&
       typeof statusVal === 'string' &&
-      [
-        'available_commands_update',
-        'config_option_update',
-        'session_info_update',
-        'turn_end',
-      ].includes(statusVal);
+      ['available_commands_update', 'config_option_update', 'session_info_update'].includes(
+        statusVal,
+      );
 
     if (isHiddenSystemEvent) {
       continue;
     }
 
-    const isStreaming = e.id === streamingEventId;
+    if (e.type === 'status' && statusVal === 'turn_end') {
+      if (currentAgentTurn) {
+        currentAgentTurn.events.push(e);
+        if (isStreaming) currentAgentTurn.isStreaming = true;
+      }
+      continue;
+    }
 
     if (e.type === 'status' && (e.data as { status?: string }).status === 'command_result') {
       currentAgentTurn = null;
