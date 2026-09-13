@@ -3,7 +3,7 @@ import { ManagedSession } from './managed-session.js';
 import { McpGateway } from '../mcp/mcp-gateway.js';
 import { SessionEventStore } from './event-store.js';
 import { createDatabase } from '../db/index.js';
-import { projects, sessions, acpEvents, mcpServers } from '../db/schema.js';
+import { projects, sessions, sessionEvents, mcpServers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { AgentSession } from '../agent/types.js';
 import fs from 'node:fs';
@@ -205,7 +205,10 @@ describe('ManagedSession Manual MCP Tool Interceptor', () => {
       );
       expect(promptCalledWith).toContain('result for 5 + 5: 42');
 
-      const dbEvents = await db.select().from(acpEvents).where(eq(acpEvents.sessionId, 'sess-mcp'));
+      const dbEvents = await db
+        .select()
+        .from(sessionEvents)
+        .where(eq(sessionEvents.sessionId, 'sess-mcp'));
       const providerTextEvent = dbEvents.find((e) => {
         const data = JSON.parse(e.data) as { role?: string; content?: string };
         return (
@@ -251,8 +254,8 @@ describe('ManagedSession Manual MCP Tool Interceptor', () => {
 
       const dbEventsAfterFail = await db
         .select()
-        .from(acpEvents)
-        .where(eq(acpEvents.sessionId, 'sess-mcp-fail'));
+        .from(sessionEvents)
+        .where(eq(sessionEvents.sessionId, 'sess-mcp-fail'));
       const errorTextEvent = dbEventsAfterFail.find((e) => {
         const data = JSON.parse(e.data) as { role?: string; content?: string };
         return (

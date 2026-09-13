@@ -25,7 +25,7 @@ const timestamps = {
     .$onUpdateFn(() => new Date()),
 };
 
-// acp_events is append-only - only needs createdAt with DB-level default
+// session_events is append-only - only needs createdAt with DB-level default
 const eventTimestamps = {
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
@@ -131,14 +131,14 @@ export const registrySnapshots = sqliteTable('registry_snapshots', {
     .default(sql`(unixepoch())`),
 });
 
-export const acpEvents = sqliteTable(
-  'acp_events',
+export const sessionEvents = sqliteTable(
+  'session_events',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
     sessionId: text('session_id')
       .notNull()
       .references(() => sessions.id, { onDelete: 'cascade' }),
-    parentEventId: integer('parent_event_id').references((): AnySQLiteColumn => acpEvents.id, {
+    parentEventId: integer('parent_event_id').references((): AnySQLiteColumn => sessionEvents.id, {
       onDelete: 'cascade',
     }),
     type: text('type').$type<SessionEvent['type']>().notNull(),
@@ -146,7 +146,7 @@ export const acpEvents = sqliteTable(
     metadata: text('metadata'), // JSON string
     ...eventTimestamps,
   },
-  (table) => [index('acp_events_session_id_idx').on(table.sessionId)],
+  (table) => [index('session_events_session_id_idx').on(table.sessionId)],
 );
 
 export const projectRelations = relations(projects, ({ many }) => ({
@@ -158,20 +158,20 @@ export const sessionRelations = relations(sessions, ({ one, many }) => ({
     fields: [sessions.projectId],
     references: [projects.id],
   }),
-  events: many(acpEvents),
+  events: many(sessionEvents),
 }));
 
-export const acpEventRelations = relations(acpEvents, ({ one, many }) => ({
+export const sessionEventRelations = relations(sessionEvents, ({ one, many }) => ({
   session: one(sessions, {
-    fields: [acpEvents.sessionId],
+    fields: [sessionEvents.sessionId],
     references: [sessions.id],
   }),
-  parent: one(acpEvents, {
-    fields: [acpEvents.parentEventId],
-    references: [acpEvents.id],
+  parent: one(sessionEvents, {
+    fields: [sessionEvents.parentEventId],
+    references: [sessionEvents.id],
     relationName: 'event_hierarchy',
   }),
-  children: many(acpEvents, {
+  children: many(sessionEvents, {
     relationName: 'event_hierarchy',
   }),
 }));

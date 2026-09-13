@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { createDatabase } from '../db/index.js';
-import { projects, sessions, acpEvents } from '../db/schema.js';
+import { projects, sessions, sessionEvents } from '../db/schema.js';
 import { ManagedSession } from './managed-session.js';
 import { SessionEventStore } from './event-store.js';
 import { eq } from 'drizzle-orm';
@@ -111,7 +111,10 @@ describe('ManagedSession Observability & StreamBuffer Integration', () => {
     await session.prompt('Test prompt');
 
     // Retrieve events from DB to assert their state
-    const dbEvents = await db.select().from(acpEvents).where(eq(acpEvents.sessionId, 'sess-obs'));
+    const dbEvents = await db
+      .select()
+      .from(sessionEvents)
+      .where(eq(sessionEvents.sessionId, 'sess-obs'));
 
     // We expect 3 distinct text events recorded in DB:
     // 1. User prompt (type: 'text', role: 'user')

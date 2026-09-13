@@ -1,5 +1,5 @@
 import { eq, and, desc, gte, sql } from 'drizzle-orm';
-import { acpEvents, sessions } from '../db/schema.js';
+import { sessionEvents, sessions } from '../db/schema.js';
 import type { DbClient } from '../db/index.js';
 import type { IEventBus } from './manager.js';
 import type { SessionEvent } from '@agentctl/shared';
@@ -35,9 +35,9 @@ export class SessionEventStore {
 
   async recalculateTotalTokens(sessionId: string): Promise<void> {
     const events = await this.db
-      .select({ metadata: acpEvents.metadata })
-      .from(acpEvents)
-      .where(eq(acpEvents.sessionId, sessionId));
+      .select({ metadata: sessionEvents.metadata })
+      .from(sessionEvents)
+      .where(eq(sessionEvents.sessionId, sessionId));
 
     let total = 0;
     for (const e of events) {
@@ -83,7 +83,7 @@ export class SessionEventStore {
     metadata?: unknown,
   ): Promise<number> {
     const inserted = await this.db
-      .insert(acpEvents)
+      .insert(sessionEvents)
       .values({
         sessionId,
         type,
@@ -148,9 +148,9 @@ export class SessionEventStore {
       updateValues.metadata = metadata ? JSON.stringify(metadata) : null;
     }
     const updated = await this.db
-      .update(acpEvents)
+      .update(sessionEvents)
       .set(updateValues)
-      .where(eq(acpEvents.id, eventId))
+      .where(eq(sessionEvents.id, eventId))
       .returning();
 
     const first = updated.length > 0 ? updated[0] : undefined;
@@ -173,14 +173,14 @@ export class SessionEventStore {
   ): Promise<{ id: number; type: string; data: unknown; metadata: unknown } | null> {
     const rows = await this.db
       .select({
-        id: acpEvents.id,
-        type: acpEvents.type,
-        data: acpEvents.data,
-        metadata: acpEvents.metadata,
-        sessionId: acpEvents.sessionId,
+        id: sessionEvents.id,
+        type: sessionEvents.type,
+        data: sessionEvents.data,
+        metadata: sessionEvents.metadata,
+        sessionId: sessionEvents.sessionId,
       })
-      .from(acpEvents)
-      .where(eq(acpEvents.id, eventId))
+      .from(sessionEvents)
+      .where(eq(sessionEvents.id, eventId))
       .limit(1);
 
     if (rows.length === 0) return null;
@@ -198,7 +198,11 @@ export class SessionEventStore {
   }
 
   async getEvent(eventId: number): Promise<{ id: number; type: string; data: unknown } | null> {
-    const rows = await this.db.select().from(acpEvents).where(eq(acpEvents.id, eventId)).limit(1);
+    const rows = await this.db
+      .select()
+      .from(sessionEvents)
+      .where(eq(sessionEvents.id, eventId))
+      .limit(1);
 
     if (rows.length === 0) return null;
     const first = rows[0];
@@ -220,9 +224,9 @@ export class SessionEventStore {
   ): Promise<{ id: number; data: unknown } | null> {
     const last = await this.db
       .select()
-      .from(acpEvents)
-      .where(and(eq(acpEvents.sessionId, sessionId), eq(acpEvents.type, type)))
-      .orderBy(desc(acpEvents.id))
+      .from(sessionEvents)
+      .where(and(eq(sessionEvents.sessionId, sessionId), eq(sessionEvents.type, type)))
+      .orderBy(desc(sessionEvents.id))
       .limit(1);
 
     if (last.length === 0) return null;
@@ -248,9 +252,9 @@ export class SessionEventStore {
   ): Promise<SessionEventDbRow[]> {
     const toDelete = await this.db
       .select()
-      .from(acpEvents)
-      .where(and(gte(acpEvents.id, eventId), eq(acpEvents.sessionId, sessionId)))
-      .orderBy(acpEvents.id);
+      .from(sessionEvents)
+      .where(and(gte(sessionEvents.id, eventId), eq(sessionEvents.sessionId, sessionId)))
+      .orderBy(sessionEvents.id);
 
     let deletedTokens = 0;
     for (const e of toDelete) {
@@ -258,8 +262,8 @@ export class SessionEventStore {
     }
 
     await this.db
-      .delete(acpEvents)
-      .where(and(gte(acpEvents.id, eventId), eq(acpEvents.sessionId, sessionId)));
+      .delete(sessionEvents)
+      .where(and(gte(sessionEvents.id, eventId), eq(sessionEvents.sessionId, sessionId)));
 
     void this.decrementTotalTokens(sessionId, deletedTokens).catch(() => undefined);
 
@@ -269,11 +273,11 @@ export class SessionEventStore {
   async restoreEvents(sessionId: string, rows: SessionEventDbRow[]): Promise<void> {
     if (rows.length === 0) return;
 
-    await this.db.insert(acpEvents).values(
+    await this.db.insert(sessionEvents).values(
       rows.map((row) => ({
         id: row.id,
         sessionId: row.sessionId,
-        type: row.type as (typeof acpEvents.$inferInsert)['type'],
+        type: row.type as (typeof sessionEvents.$inferInsert)['type'],
         data: row.data,
         parentEventId: row.parentEventId,
         metadata: row.metadata,
@@ -295,8 +299,8 @@ export class SessionEventStore {
   ): Promise<{ id: number; type: string; data: unknown; metadata: unknown } | null> {
     const rows = await this.db
       .select()
-      .from(acpEvents)
-      .where(and(eq(acpEvents.id, eventId), eq(acpEvents.sessionId, sessionId)))
+      .from(sessionEvents)
+      .where(and(eq(sessionEvents.id, eventId), eq(sessionEvents.sessionId, sessionId)))
       .limit(1);
 
     if (rows.length === 0) return null;

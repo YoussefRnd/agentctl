@@ -1,13 +1,13 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
-import { acpEvents, sessionEventDbRowSchema } from '@agentctl/core/db';
+import { sessionEvents, sessionEventDbRowSchema } from '@agentctl/core/db';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { SessionEventRow } from '@agentctl/shared';
 import { sessionEventRowSchema, isSessionEventRow } from '@agentctl/shared';
 import { AppError } from '../errors/app-error.js';
 
-function parseEventRow(rawRow: typeof acpEvents.$inferSelect): SessionEventRow {
+function parseEventRow(rawRow: typeof sessionEvents.$inferSelect): SessionEventRow {
   const row = sessionEventDbRowSchema.parse(rawRow);
   const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
   const metadata: unknown = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : undefined;
@@ -55,9 +55,9 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
 
       const rows = await fastify.db
         .select()
-        .from(acpEvents)
-        .where(eq(acpEvents.sessionId, id))
-        .orderBy(asc(acpEvents.id));
+        .from(sessionEvents)
+        .where(eq(sessionEvents.sessionId, id))
+        .orderBy(asc(sessionEvents.id));
 
       return rows.map(parseEventRow);
     },
@@ -115,9 +115,9 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
           try {
             const missedEvents = await fastify.db
               .select()
-              .from(acpEvents)
-              .where(and(eq(acpEvents.sessionId, id), gt(acpEvents.id, lastEventId)))
-              .orderBy(asc(acpEvents.id));
+              .from(sessionEvents)
+              .where(and(eq(sessionEvents.sessionId, id), gt(sessionEvents.id, lastEventId)))
+              .orderBy(asc(sessionEvents.id));
 
             for (const row of missedEvents) {
               if (reply.raw.destroyed) return;

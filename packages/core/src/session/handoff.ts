@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { eq, asc } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
-import { acpEvents, sessions } from '../db/schema.js';
+import { sessionEvents, sessions } from '../db/schema.js';
 import {
   getContextTurnLimit,
   getGitCommandTimeoutMs,
@@ -300,9 +300,9 @@ export async function generateHandoffDocument(
 
   const allEvents = await db
     .select()
-    .from(acpEvents)
-    .where(eq(acpEvents.sessionId, sessionId))
-    .orderBy(asc(acpEvents.id));
+    .from(sessionEvents)
+    .where(eq(sessionEvents.sessionId, sessionId))
+    .orderBy(asc(sessionEvents.id));
   const maxEventId = options.maxEventId;
   const eligibleEvents =
     maxEventId === undefined ? allEvents : allEvents.filter((event) => event.id <= maxEventId);

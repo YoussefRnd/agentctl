@@ -1,11 +1,18 @@
 import type { z } from 'zod';
 import { createSelectSchema } from 'drizzle-zod';
-import { projects, sessions, providers, acpEvents, systemSettings, mcpServers } from './schema.js';
+import {
+  projects,
+  sessions,
+  providers,
+  sessionEvents,
+  systemSettings,
+  mcpServers,
+} from './schema.js';
 
 export const projectRowSchema = createSelectSchema(projects);
 export const sessionRowSchema = createSelectSchema(sessions);
 export const providerRowSchema = createSelectSchema(providers);
-export const sessionEventDbRowSchema = createSelectSchema(acpEvents);
+export const sessionEventDbRowSchema = createSelectSchema(sessionEvents);
 export const systemSettingRowSchema = createSelectSchema(systemSettings);
 export const mcpServerRowSchema = createSelectSchema(mcpServers);
 

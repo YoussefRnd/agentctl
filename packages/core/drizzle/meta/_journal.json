@@ -232,6 +232,13 @@
       "when": 1789310925601,
       "tag": "0032_black_firelord",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1789314570187,
+      "tag": "0033_colossal_grim_reaper",
+      "breakpoints": true
     }
   ]
 }

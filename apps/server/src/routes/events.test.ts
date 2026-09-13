@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../app.js';
-import { createDatabase, projects, sessions, acpEvents } from '@agentctl/core/db';
+import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
 import type { SessionManager } from '@agentctl/core/session';
 import type { FastifyInstance } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
@@ -235,14 +235,14 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     });
 
     // Insert two events
-    await db.insert(acpEvents).values({
+    await db.insert(sessionEvents).values({
       id: 1,
       sessionId,
       type: 'text',
       data: JSON.stringify({ content: 'first' }),
     });
 
-    await db.insert(acpEvents).values({
+    await db.insert(sessionEvents).values({
       id: 2,
       sessionId,
       type: 'text',

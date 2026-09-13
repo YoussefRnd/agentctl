@@ -1,6 +1,6 @@
 import { eq, asc, and } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
-import { acpEvents } from '../db/schema.js';
+import { sessionEvents } from '../db/schema.js';
 import { getContextTurnLimit } from '../config/runtime-defaults.js';
 
 export interface HistoryTranscriptOptions {
@@ -16,9 +16,9 @@ export async function buildConversationHistoryTranscript(
 
   const rows = await db
     .select()
-    .from(acpEvents)
-    .where(and(eq(acpEvents.sessionId, sessionId), eq(acpEvents.type, 'text')))
-    .orderBy(asc(acpEvents.id));
+    .from(sessionEvents)
+    .where(and(eq(sessionEvents.sessionId, sessionId), eq(sessionEvents.type, 'text')))
+    .orderBy(asc(sessionEvents.id));
 
   const conversationEntries: { role: 'User' | 'Assistant'; text: string }[] = [];
 

@@ -6,7 +6,7 @@ import { createDefaultAgentDriver } from '../default-agent-driver.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import { SessionEventStore } from './event-store.js';
-import { sessions, projects, acpEvents } from '../db/schema.js';
+import { sessions, projects, sessionEvents } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import { SessionWorkspace } from '../git/session-workspace.js';
 import { negotiateCapabilities } from '../providers/capabilities-negotiator.js';
@@ -354,9 +354,9 @@ export class SessionManager {
     let hasUserMessages = false;
     if (options.resumeExisting !== false) {
       const messages = await this.db
-        .select({ id: acpEvents.id })
-        .from(acpEvents)
-        .where(and(eq(acpEvents.sessionId, sessionId), eq(acpEvents.type, 'text')));
+        .select({ id: sessionEvents.id })
+        .from(sessionEvents)
+        .where(and(eq(sessionEvents.sessionId, sessionId), eq(sessionEvents.type, 'text')));
       hasUserMessages = messages.length > 0;
     }
 
@@ -521,10 +521,10 @@ export class SessionManager {
       );
 
     const latestEventRows = await this.db
-      .select({ id: acpEvents.id })
-      .from(acpEvents)
-      .where(eq(acpEvents.sessionId, sessionId))
-      .orderBy(desc(acpEvents.id))
+      .select({ id: sessionEvents.id })
+      .from(sessionEvents)
+      .where(eq(sessionEvents.sessionId, sessionId))
+      .orderBy(desc(sessionEvents.id))
       .limit(1);
     const latestEventId = latestEventRows[0]?.id ?? 0;
 
@@ -543,9 +543,9 @@ export class SessionManager {
 
       const generatedEvents = await this.db
         .select()
-        .from(acpEvents)
-        .where(eq(acpEvents.sessionId, sessionId))
-        .orderBy(desc(acpEvents.id));
+        .from(sessionEvents)
+        .where(eq(sessionEvents.sessionId, sessionId))
+        .orderBy(desc(sessionEvents.id));
       const responseTexts = generatedEvents
         .filter((event) => event.id > latestEventId && event.type === 'text')
         .map((event) => {
@@ -1281,9 +1281,9 @@ export class SessionManager {
     if (mode === 'fork') {
       const events = await this.db
         .select()
-        .from(acpEvents)
-        .where(eq(acpEvents.sessionId, sessionId))
-        .orderBy(asc(acpEvents.id));
+        .from(sessionEvents)
+        .where(eq(sessionEvents.sessionId, sessionId))
+        .orderBy(asc(sessionEvents.id));
 
       const eventsToCopy = events.filter((e) => e.id <= eventId);
 

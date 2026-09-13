@@ -1,7 +1,7 @@
 import { eq, asc, inArray } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
 import type { WorkspaceManager, Workspace as WorkspaceHandle } from './worktree-manager.js';
-import { sessions, projects, acpEvents } from '../db/schema.js';
+import { sessions, projects, sessionEvents } from '../db/schema.js';
 import type { SnapshotService } from './snapshot-service.js';
 import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
 import crypto from 'node:crypto';
@@ -617,9 +617,9 @@ export class SessionWorkspace {
     if (!initialHash || initialHash === 'none') {
       const allEvents = await client
         .select()
-        .from(acpEvents)
-        .where(eq(acpEvents.sessionId, sessionId))
-        .orderBy(asc(acpEvents.id));
+        .from(sessionEvents)
+        .where(eq(sessionEvents.sessionId, sessionId))
+        .orderBy(asc(sessionEvents.id));
 
       for (const event of allEvents) {
         try {

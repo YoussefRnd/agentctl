@@ -10,7 +10,7 @@ import {
   type SearchResultItem,
 } from '@agentctl/shared';
 import fp from 'fastify-plugin';
-import { projects, sessions, mcpServers, acpEvents } from '@agentctl/core/db';
+import { projects, sessions, mcpServers, sessionEvents } from '@agentctl/core/db';
 import { and, eq, desc, sql, type SQL } from 'drizzle-orm';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -103,40 +103,40 @@ export default fp(async (fastify) => {
 
       const searchableText = sql<string>`
         CASE
-          WHEN json_valid(${acpEvents.data}) = 0 THEN ${acpEvents.data}
-          WHEN ${acpEvents.type} = 'text'
-            THEN coalesce(json_extract(${acpEvents.data}, '$.content'), '')
-          WHEN ${acpEvents.type} = 'tool_call'
+          WHEN json_valid(${sessionEvents.data}) = 0 THEN ${sessionEvents.data}
+          WHEN ${sessionEvents.type} = 'text'
+            THEN coalesce(json_extract(${sessionEvents.data}, '$.content'), '')
+          WHEN ${sessionEvents.type} = 'tool_call'
             THEN
-              coalesce(json_extract(${acpEvents.data}, '$.name'), '') || ' ' ||
-              coalesce(json_extract(${acpEvents.data}, '$.title'), '') || ' ' ||
-              coalesce(json_extract(${acpEvents.data}, '$.arguments'), '') || ' ' ||
-              coalesce(json_extract(${acpEvents.data}, '$.rawInput'), '') || ' ' ||
-              coalesce(json_extract(${acpEvents.data}, '$.content'), '') || ' ' ||
-              coalesce(json_extract(${acpEvents.data}, '$.rawOutput'), '')
+              coalesce(json_extract(${sessionEvents.data}, '$.name'), '') || ' ' ||
+              coalesce(json_extract(${sessionEvents.data}, '$.title'), '') || ' ' ||
+              coalesce(json_extract(${sessionEvents.data}, '$.arguments'), '') || ' ' ||
+              coalesce(json_extract(${sessionEvents.data}, '$.rawInput'), '') || ' ' ||
+              coalesce(json_extract(${sessionEvents.data}, '$.content'), '') || ' ' ||
+              coalesce(json_extract(${sessionEvents.data}, '$.rawOutput'), '')
           ELSE ''
         END
       `;
       const conditions: SQL[] = [
-        sql`${acpEvents.type} IN ('text', 'tool_call')`,
+        sql`${sessionEvents.type} IN ('text', 'tool_call')`,
         sql`instr(lower(${searchableText}), lower(${cleanQ})) > 0`,
       ];
       const eventRole = sql<string | null>`
         CASE
-          WHEN json_valid(${acpEvents.data}) = 1
-            THEN json_extract(${acpEvents.data}, '$.role')
+          WHEN json_valid(${sessionEvents.data}) = 1
+            THEN json_extract(${sessionEvents.data}, '$.role')
           ELSE NULL
         END
       `;
 
-      if (sessionId) conditions.push(eq(acpEvents.sessionId, sessionId));
+      if (sessionId) conditions.push(eq(sessionEvents.sessionId, sessionId));
       if (projectId) conditions.push(eq(sessions.projectId, projectId));
 
       if (type && type !== 'all') {
         if (type === 'tool') {
-          conditions.push(eq(acpEvents.type, 'tool_call'));
+          conditions.push(eq(sessionEvents.type, 'tool_call'));
         } else {
-          conditions.push(eq(acpEvents.type, 'text'));
+          conditions.push(eq(sessionEvents.type, 'text'));
           if (type === 'user' || type === 'thought') {
             conditions.push(sql`${eventRole} = ${type}`);
           } else {
@@ -147,21 +147,21 @@ export default fp(async (fastify) => {
 
       const rows = await fastify.db
         .select({
-          eventId: acpEvents.id,
-          eventType: acpEvents.type,
-          eventData: acpEvents.data,
-          eventCreatedAt: acpEvents.createdAt,
+          eventId: sessionEvents.id,
+          eventType: sessionEvents.type,
+          eventData: sessionEvents.data,
+          eventCreatedAt: sessionEvents.createdAt,
           sessionId: sessions.id,
           sessionTitle: sessions.title,
           sessionTaskSlug: sessions.taskSlug,
           projectId: sessions.projectId,
           projectName: projects.name,
         })
-        .from(acpEvents)
-        .innerJoin(sessions, eq(acpEvents.sessionId, sessions.id))
+        .from(sessionEvents)
+        .innerJoin(sessions, eq(sessionEvents.sessionId, sessions.id))
         .leftJoin(projects, eq(sessions.projectId, projects.id))
         .where(and(...conditions))
-        .orderBy(desc(acpEvents.id))
+        .orderBy(desc(sessionEvents.id))
         .limit(limit);
 
       const results: SearchResultItem[] = [];

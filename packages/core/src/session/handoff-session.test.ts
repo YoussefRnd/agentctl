@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../db/index.js';
-import { acpEvents, projects, sessions } from '../db/schema.js';
+import { projects, sessionEvents, sessions } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import { noopLogger } from '../logger.js';
 import { Provider } from '../providers/provider.js';
@@ -73,7 +73,7 @@ describe('SessionManager provider handoff', () => {
       baseCommit: 'none',
       mode: 'local',
     });
-    await db.insert(acpEvents).values({
+    await db.insert(sessionEvents).values({
       sessionId: 'session-1',
       type: 'text',
       data: JSON.stringify({ role: 'user', content: 'Keep this context' }),

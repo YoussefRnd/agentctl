@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../app.js';
-import { createDatabase, projects, sessions, acpEvents } from '@agentctl/core/db';
+import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
 import type { SessionManager } from '@agentctl/core/session';
 import type { FastifyInstance } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
@@ -61,7 +61,7 @@ describe('Search & Project Provider Integration Tests', () => {
       mode: 'worktree',
     });
 
-    await db.insert(acpEvents).values([
+    await db.insert(sessionEvents).values([
       {
         sessionId,
         type: 'text',

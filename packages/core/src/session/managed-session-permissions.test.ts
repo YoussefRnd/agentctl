@@ -1,7 +1,7 @@
 import { test, describe, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createDatabase } from '../db/index.js';
-import { projects, sessions, mcpServers, acpEvents } from '../db/schema.js';
+import { projects, sessions, mcpServers, sessionEvents } from '../db/schema.js';
 import { ManagedSession } from './managed-session.js';
 import { SessionEventStore } from './event-store.js';
 import { McpGateway } from '../mcp/mcp-gateway.js';
@@ -124,8 +124,8 @@ describe('MCP Permissions Routing', () => {
     // Verify audit logs for denied tools
     const loggedEvents = await db
       .select()
-      .from(acpEvents)
-      .where(eq(acpEvents.type, 'approval_request'));
+      .from(sessionEvents)
+      .where(eq(sessionEvents.type, 'approval_request'));
 
     interface ApprovalRequestEvent {
       name: string;
