@@ -26,6 +26,7 @@ function row(
     supportsDynamicModel: false,
     supportsDynamicConfig: false,
     supportsLogout: false,
+    features: '{}',
     nativelyLoadsSkills: false,
     modes: '[]',
     distribution: JSON.stringify({ npx: { package: 'foo', args: [], env: {} } }),

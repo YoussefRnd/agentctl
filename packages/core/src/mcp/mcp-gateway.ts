@@ -5,6 +5,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { DbClient } from '../db/index.js';
 import { mcpServers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { jsonCodecs } from '../db/json-codecs.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 
@@ -55,8 +56,8 @@ export class McpGateway {
             this.logger.warn({ serverId: server.id }, 'Local MCP server missing command config');
             continue;
           }
-          const args = JSON.parse(server.launchArgs) as string[];
-          const env = JSON.parse(server.launchEnv) as Record<string, string>;
+          const args = jsonCodecs.stringArray(server.launchArgs);
+          const env = jsonCodecs.stringRecord(server.launchEnv);
           this.logger.info(
             { serverId: server.id, command: server.command, args },
             'Spawning stdio MCP server',
@@ -81,14 +82,7 @@ export class McpGateway {
             continue;
           }
 
-          let headers: Record<string, string> = {};
-          if (server.headers) {
-            try {
-              headers = JSON.parse(server.headers) as Record<string, string>;
-            } catch {
-              // ignore
-            }
-          }
+          const headers = jsonCodecs.stringRecord(server.headers);
 
           this.logger.info(
             { serverId: server.id, url: sseUrl },
@@ -167,14 +161,7 @@ export class McpGateway {
       });
 
       if (server && server.enabled && server.type === 'remote' && server.url) {
-        let headers: Record<string, string> = {};
-        if (server.headers) {
-          try {
-            headers = JSON.parse(server.headers) as Record<string, string>;
-          } catch {
-            // ignore
-          }
-        }
+        const headers = jsonCodecs.stringRecord(server.headers);
 
         this.logger.info(
           { serverId, url: server.url },

@@ -2,9 +2,11 @@ import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ClientSideConnection } from '@agentclientprotocol/sdk';
+import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import { DefaultAgentRuntime } from './runtime.js';
 import { parseAcpCapabilities } from './transport/capabilities-cache.js';
 import type { AgentStreamTransport, IConnectionManager } from './types.js';
+import { runAgentDriverConformance } from '../agent/conformance.js';
 
 function setup(supported = true) {
   const closed = new Promise<void>(() => {});
@@ -39,15 +41,33 @@ function setup(supported = true) {
         providerId: 'provider',
         localSessionId: 'local-fork',
         cwd: '/tmp/destination-worktree',
+        features: EMPTY_AGENT_FEATURES,
         intent: { kind: 'fork', sessionId: 'source-agent-id' },
         mcpServers: [],
       },
       { onUpdate() {}, onRequestPermission: async () => ({ allowed: false }) },
     );
-  return { connection, manager, execute };
+  return { connection, manager, runtime, execute };
 }
 
 afterEach(() => vi.unstubAllEnvs());
+
+test('v1 adapter passes the shared driver lifecycle contract', async () => {
+  const { runtime } = setup(false);
+  const report = await runAgentDriverConformance(runtime, {
+    providerId: 'provider',
+    localSessionId: 'local-conformance',
+    cwd: '/tmp/conformance',
+    features: EMPTY_AGENT_FEATURES,
+    intent: { kind: 'new' },
+    mcpServers: [],
+  });
+  expect(report).toMatchObject({
+    sessionId: 'fresh-agent-id',
+    history: 'fresh',
+    promptResult: { stopReason: 'end_turn' },
+  });
+});
 
 test('fork startup adopts the returned id, targets the destination workspace, and routes prompts independently', async () => {
   const { connection, manager, execute } = setup();

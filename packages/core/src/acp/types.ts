@@ -79,7 +79,7 @@ export interface IConnectionManager {
       options: AgentSessionOptions;
       callbacks: AgentSessionCallbacks;
     },
-    providerId?: string,
+    providerId: string,
   ): void;
   unregisterActiveSession?(acpSessionId: string): void;
 }

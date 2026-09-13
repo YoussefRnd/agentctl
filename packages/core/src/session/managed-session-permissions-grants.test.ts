@@ -1,8 +1,8 @@
 import { test, describe, expect } from 'vitest';
 import { createDatabase } from '../db/index.js';
 import { projects, sessions } from '../db/schema.js';
-import { ACPSession } from './session-client.js';
-import { SessionEventStore } from '../session/event-store.js';
+import { ManagedSession } from './managed-session.js';
+import { SessionEventStore } from './event-store.js';
 import type { AgentPermissionResponse, AgentSession } from '../agent/types.js';
 
 interface SessionWithPending {
@@ -44,7 +44,7 @@ async function makeSession(approvalMode = 'review') {
     },
   } as unknown as AgentSession;
 
-  const session = new ACPSession('sess-g', runtimeHandle, db, eventStore, '/tmp/proj');
+  const session = new ManagedSession('sess-g', runtimeHandle, db, eventStore, '/tmp/proj');
   return { session, db };
 }
 

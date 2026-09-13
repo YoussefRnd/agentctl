@@ -1,10 +1,11 @@
 import path from 'node:path';
-import type { RegistryAgent, ACPConfigOption } from '@agentctl/shared';
+import type { RegistryAgent } from '@agentctl/shared';
 import type { ProviderData } from '../provider.js';
 import { type BinaryInstaller, getPlatformKey } from './binary-installer.js';
 import type { ProviderStore } from './provider-store.js';
 import type { AgentDescriptor, AgentDriver } from '../../agent/types.js';
 import { isAgentAuthenticationRequiredError } from '../../agent/errors.js';
+import { jsonCodecs } from '../../db/json-codecs.js';
 export function resolveNpxPackageSpec(pkg: string, version?: string): string {
   if (!pkg) return '';
   const lastAtIndex = pkg.lastIndexOf('@');
@@ -106,8 +107,8 @@ export class ProviderLauncher {
   }
 
   resolveLaunch(provider: ProviderData, agent?: RegistryAgent): LaunchResolved {
-    const rawLaunchEnv = JSON.parse(provider.launchEnv || '{}') as Record<string, string>;
-    const rawCustomEnv = JSON.parse(provider.customEnv || '{}') as Record<string, string>;
+    const rawLaunchEnv = jsonCodecs.stringRecord(provider.launchEnv);
+    const rawCustomEnv = jsonCodecs.stringRecord(provider.customEnv);
 
     const proxy = pickProxyEnv(process.env);
 
@@ -118,7 +119,7 @@ export class ProviderLauncher {
 
       // If a local binary was detected or custom command configured
       if (provider.command && provider.command !== 'npx' && provider.command !== 'uvx') {
-        const parsedArgs = JSON.parse(provider.launchArgs || '[]') as string[];
+        const parsedArgs = jsonCodecs.stringArray(provider.launchArgs);
         return {
           command: provider.command,
           args: parsedArgs,
@@ -170,7 +171,7 @@ export class ProviderLauncher {
     }
 
     let command = provider.command;
-    const args = JSON.parse(provider.launchArgs || '[]') as string[];
+    const args = jsonCodecs.stringArray(provider.launchArgs);
 
     if (command === 'npx' && args.length === 0 && agent?.distribution.npx) {
       args.push(
@@ -217,18 +218,15 @@ export class ProviderLauncher {
       } catch (err: unknown) {
         if (isAgentAuthenticationRequiredError(err)) {
           this.store.setAuthState(providerId, 'needs_auth');
-          const existingConfigOpts = row.configOptions
-            ? (JSON.parse(row.configOptions) as ACPConfigOption[])
-            : [];
+          const existingConfigOpts = jsonCodecs.agentConfigOptions(row.configOptions);
           const fallbackResult: AgentDescriptor = {
             status: 'needs_auth',
             configOptions: existingConfigOpts,
-            authMethods: row.authMethods
-              ? (JSON.parse(row.authMethods) as AgentDescriptor['authMethods'])
-              : [],
+            authMethods: jsonCodecs.authMethods(row.authMethods),
             supportsDynamicModel: row.supportsDynamicModel,
             supportsDynamicConfig: row.supportsDynamicConfig,
             supportsLogout: row.supportsLogout,
+            features: jsonCodecs.agentFeatures(row.features),
           };
           return fallbackResult;
         }
@@ -244,6 +242,7 @@ export class ProviderLauncher {
         supportsDynamicModel: result.supportsDynamicModel,
         supportsDynamicConfig: result.supportsDynamicConfig,
         supportsLogout: result.supportsLogout ?? false,
+        features: JSON.stringify(result.features ?? jsonCodecs.agentFeatures(row.features)),
         modes: JSON.stringify(result.modes ?? []),
         authState: nextAuthState,
       });

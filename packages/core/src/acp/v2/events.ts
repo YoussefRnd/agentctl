@@ -16,7 +16,7 @@ import type {
   ToolCallUpdate,
   UsageUpdate,
 } from '@agentclientprotocol/sdk/experimental/v2';
-import type { ACPConfigOption } from '@agentctl/shared';
+import type { AgentConfigOption } from '@agentctl/shared';
 import type { AgentToolCallContent, AgentUpdate } from '../../agent/types.js';
 
 function textFromContent(content: unknown): string {
@@ -57,7 +57,7 @@ function projectSelectOptions(option: Extract<SessionConfigOption, { type: 'sele
   );
 }
 
-export function projectV2ConfigOption(option: SessionConfigOption): ACPConfigOption | null {
+export function projectV2ConfigOption(option: SessionConfigOption): AgentConfigOption | null {
   if (option.type !== 'select' && option.type !== 'boolean') return null;
   if (option.type === 'select') {
     const select = option as Extract<SessionConfigOption, { type: 'select' }>;
@@ -261,7 +261,7 @@ export function projectV2SessionUpdate(update: SessionUpdate): AgentUpdate[] {
           type: 'config_option_update',
           configOptions: value.configOptions
             .map(projectV2ConfigOption)
-            .filter((option): option is ACPConfigOption => option !== null),
+            .filter((option): option is AgentConfigOption => option !== null),
         },
       ];
     }

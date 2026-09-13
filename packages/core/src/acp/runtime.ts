@@ -13,7 +13,7 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk';
 import { type Logger, noopLogger } from '../logger.js';
-import type { ACPConfigOption } from '@agentctl/shared';
+import type { AgentConfigOption } from '@agentctl/shared';
 import type { AgentStreamTransport, IConnectionManager, CacheStorage } from './types.js';
 import type {
   AgentDescriptor,
@@ -23,10 +23,7 @@ import type {
   AgentSessionCallbacks,
   AgentSessionOptions,
 } from '../agent/types.js';
-import {
-  AgentAuthenticationRequiredError,
-  isAgentAuthenticationRequiredError,
-} from '../agent/errors.js';
+import { AgentAuthenticationRequiredError } from '../agent/errors.js';
 import { ProcessStreamTransport, cleanEnv } from './transport/process-transport.js';
 import { createAgentConnection } from './transport/process-transport.js';
 import { wrapDebug, formatAcpMessageLog } from './transport/stream-debug.js';
@@ -47,32 +44,7 @@ import { forkProviderSession } from './protocol/session-fork.js';
 import { normalizeAcpUsage } from './protocol/usage.js';
 import { getAgentRequestTimeoutMs } from '../config/runtime-defaults.js';
 import { authenticateConnection, initializeAuthConnection } from './protocol/auth.js';
-
-function isAuthRequiredError(err: unknown): boolean {
-  if (!err) return false;
-  if (isAgentAuthenticationRequiredError(err)) return true;
-  if (typeof err === 'string') {
-    const lower = err.toLowerCase();
-    return (
-      lower.includes('auth') || lower.includes('unauthorized') || lower.includes('unauthenticated')
-    );
-  }
-  if (typeof err === 'object') {
-    const e = err as { code?: string | number; message?: string };
-    if (e.code === 'auth_required' || e.code === 'needs_auth') return true;
-    if (typeof e.message === 'string') {
-      const lower = e.message.toLowerCase();
-      return (
-        lower.includes('authentication required') ||
-        lower.includes('auth_required') ||
-        lower.includes('needs_auth') ||
-        lower.includes('unauthenticated') ||
-        lower.includes('unauthorized')
-      );
-    }
-  }
-  return false;
-}
+import { isAcpAuthenticationRequired, isAcpSessionNotFound } from './protocol/error-classifier.js';
 
 export class AcpV1AgentDriver implements AgentDriver {
   private connectionManager?: IConnectionManager;
@@ -252,7 +224,7 @@ export class AcpV1AgentDriver implements AgentDriver {
       async updateConfigOption(
         configId: string,
         value: string | boolean,
-      ): Promise<ACPConfigOption[]> {
+      ): Promise<AgentConfigOption[]> {
         if (!this.id) return [];
         if (typeof value === 'boolean') {
           const result = await connection.setSessionConfigOption({
@@ -261,14 +233,14 @@ export class AcpV1AgentDriver implements AgentDriver {
             type: 'boolean',
             value,
           });
-          return result.configOptions as ACPConfigOption[];
+          return result.configOptions as AgentConfigOption[];
         }
         const result = await connection.setSessionConfigOption({
           sessionId: this.id,
           configId,
           value,
         });
-        return result.configOptions as ACPConfigOption[];
+        return result.configOptions as AgentConfigOption[];
       },
       async setMode(modeId: string): Promise<void> {
         if (this.id) {
@@ -389,15 +361,7 @@ export class AcpV1AgentDriver implements AgentDriver {
               handle.history = 'restored';
             }
           } catch (resumeErr: unknown) {
-            const errObj = resumeErr as { message?: string };
-            const normalizedMessage = errObj.message?.trim().toLowerCase() ?? '';
-            const isNotFound =
-              normalizedMessage === 'resource not found' ||
-              (normalizedMessage.includes('session') &&
-                (normalizedMessage.includes('not found') ||
-                  normalizedMessage.includes('does not exist')));
-
-            if (isNotFound) {
+            if (isAcpSessionNotFound(resumeErr)) {
               this.logger.warn(
                 { sessionId: options.intent.sessionId, err: resumeErr },
                 'Existing ACP session not found on agent process. Falling back to creating a new session.',
@@ -454,8 +418,8 @@ export class AcpV1AgentDriver implements AgentDriver {
         if (isPersistent && acpSessionId && self.connectionManager) {
           self.connectionManager.unregisterActiveSession?.(acpSessionId);
         }
-        const error = err as { code?: string; data?: { configOptions?: ACPConfigOption[] } };
-        if (isAuthRequiredError(error)) {
+        const error = err as { code?: string; data?: { configOptions?: AgentConfigOption[] } };
+        if (isAcpAuthenticationRequired(error)) {
           throw new AgentAuthenticationRequiredError(handle, error.data?.configOptions ?? []);
         }
         throw err;
@@ -516,7 +480,7 @@ export class AcpV1AgentDriver implements AgentDriver {
         }
 
         if (
-          options.supportsDynamicConfig &&
+          options.features?.configuration.options &&
           options.selectedThinkingEffort &&
           options.resolvedThinkingConfigId
         ) {
@@ -550,7 +514,7 @@ export class AcpV1AgentDriver implements AgentDriver {
 
       return handle;
     } catch (err) {
-      if (isAgentAuthenticationRequiredError(err)) {
+      if (err instanceof AgentAuthenticationRequiredError) {
         throw err;
       }
       await handle.close();
@@ -606,17 +570,20 @@ export class AcpV1AgentDriver implements AgentDriver {
       const result = await Promise.race([
         (async (): Promise<AgentDescriptor> => {
           let status: 'ready' | 'needs_auth' = 'ready';
-          let configOptions: ACPConfigOption[] = [];
+          let configOptions: AgentConfigOption[] = [];
           let supportsDynamicModel = false;
           let supportsDynamicConfig = false;
           let authMethods: AgentDescriptor['authMethods'] = [];
           let agentCapabilities: AgentCapabilities | undefined;
+          let parsedCapabilities = parseAcpCapabilities(undefined);
           let modes: string[] | undefined;
 
           try {
-            const { initResult } = await initializeAcpConnection(connection, {
+            const initialized = await initializeAcpConnection(connection, {
               clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
             });
+            const { initResult } = initialized;
+            parsedCapabilities = initialized.parsedCapabilities;
 
             agentCapabilities = initResult.agentCapabilities;
             authMethods = (initResult.authMethods ?? []).map((method) => ({
@@ -638,9 +605,9 @@ export class AcpV1AgentDriver implements AgentDriver {
             supportsDynamicConfig = configOptions.length > 0;
             modes = sessionResult.modes?.availableModes.map((mode) => mode.id);
           } catch (err: unknown) {
-            if (isAuthRequiredError(err)) {
+            if (isAcpAuthenticationRequired(err)) {
               status = 'needs_auth';
-              const error = err as { data?: { configOptions?: ACPConfigOption[] } };
+              const error = err as { data?: { configOptions?: AgentConfigOption[] } };
               if (error.data?.configOptions) {
                 configOptions = error.data.configOptions;
               }
@@ -659,6 +626,26 @@ export class AcpV1AgentDriver implements AgentDriver {
             supportsDynamicConfig,
             modes,
             supportsLogout,
+            features: {
+              sessions: {
+                resume:
+                  parsedCapabilities.supportsResumeSession ||
+                  parsedCapabilities.supportsLoadSession,
+                fork: parsedCapabilities.supportsForkSession,
+                delete: parsedCapabilities.supportsDeleteSession,
+                list: parsedCapabilities.supportsListSessions,
+              },
+              prompts: {
+                image: parsedCapabilities.supportsImage,
+                audio: parsedCapabilities.supportsAudio,
+                embeddedContext: parsedCapabilities.supportsEmbeddedContext,
+              },
+              configuration: {
+                model: supportsDynamicModel,
+                options: supportsDynamicConfig,
+              },
+              authentication: { logout: supportsLogout },
+            },
           };
 
           if (status === 'ready') {
@@ -827,8 +814,8 @@ export function extractConfigOptionsFromSessionResult(sessionResult: {
     availableModes?: { id: string; name: string; description?: string | null }[];
     currentModeId?: string;
   } | null;
-}): ACPConfigOption[] {
-  const configOptions: ACPConfigOption[] = [];
+}): AgentConfigOption[] {
+  const configOptions: AgentConfigOption[] = [];
 
   if (Array.isArray(sessionResult.configOptions) && sessionResult.configOptions.length > 0) {
     for (const opt of sessionResult.configOptions) {

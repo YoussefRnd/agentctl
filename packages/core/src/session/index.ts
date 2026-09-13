@@ -6,3 +6,4 @@ export * from './session-projector.js';
 export * from './elicitation-store.js';
 export * from './history-transcript.js';
 export * from './contracts.js';
+export * from './managed-session.js';

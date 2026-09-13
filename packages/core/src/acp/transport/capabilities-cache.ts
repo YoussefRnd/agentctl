@@ -63,7 +63,7 @@ export class FileCacheStorage implements CacheStorage {
       }
       const manifest = this.readManifest();
       manifest[key] = { result: value, ts: Date.now() };
-      fs.writeFileSync(this.manifestFilePath, JSON.stringify(manifest, null, 2), 'utf8');
+      this.writeManifest(manifest);
     } catch {
       // Ignore write errors
     }
@@ -75,7 +75,7 @@ export class FileCacheStorage implements CacheStorage {
       const manifest = this.readManifest();
       if (key in manifest) {
         delete manifest[key];
-        fs.writeFileSync(this.manifestFilePath, JSON.stringify(manifest, null, 2), 'utf8');
+        this.writeManifest(manifest);
       }
     } catch {
       // Ignore write errors
@@ -93,6 +93,33 @@ export class FileCacheStorage implements CacheStorage {
     }
     return Promise.resolve();
   }
+
+  private writeManifest(
+    manifest: Record<string, { ts?: number; result?: AgentProbeResult }>,
+  ): void {
+    const temporaryPath = `${this.manifestFilePath}.${String(process.pid)}.tmp`;
+    fs.writeFileSync(temporaryPath, JSON.stringify(manifest, null, 2), 'utf8');
+    fs.renameSync(temporaryPath, this.manifestFilePath);
+  }
+}
+
+function executableFingerprint(command: string, env: Record<string, string>): string | null {
+  const candidates = command.includes(path.sep)
+    ? [command]
+    : (env.PATH ?? process.env.PATH ?? '')
+        .split(path.delimiter)
+        .filter(Boolean)
+        .map((directory) => path.join(directory, command));
+
+  for (const candidate of candidates) {
+    try {
+      const stat = fs.statSync(candidate);
+      if (stat.isFile()) return `${candidate}:${String(stat.size)}:${String(stat.mtimeMs)}`;
+    } catch {
+      // Continue searching PATH.
+    }
+  }
+  return null;
 }
 
 export function getCacheKey(command: string, args: string[], env: Record<string, string>): string {
@@ -100,7 +127,13 @@ export function getCacheKey(command: string, args: string[], env: Record<string,
   for (const k of Object.keys(env).sort()) {
     sortedEnv[k] = env[k];
   }
-  const data = JSON.stringify({ command, args, env: sortedEnv });
+  const data = JSON.stringify({
+    schemaVersion: 2,
+    command,
+    args,
+    env: sortedEnv,
+    executable: executableFingerprint(command, env),
+  });
   return crypto.hash('sha256', data);
 }
 

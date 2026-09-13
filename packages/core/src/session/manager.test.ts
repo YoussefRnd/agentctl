@@ -1,6 +1,6 @@
 import { test, it, expect, describe, vi } from 'vitest';
 import { SessionManager, resolveAgentSessionId, type IEventBus } from './manager.js';
-import type { ACPSession } from '../acp/session-client.js';
+import type { ManagedSession } from './managed-session.js';
 import type { DbClient } from '../db/index.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
@@ -13,6 +13,7 @@ import type { ChildProcess } from 'node:child_process';
 import { createDatabase } from '../db/index.js';
 import { projects, sessions } from '../db/schema.js';
 import { SessionEventStore } from './event-store.js';
+import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 
 describe('SessionManager tests', () => {
   const mockDb = {
@@ -528,8 +529,12 @@ describe('SessionManager tests', () => {
       {},
       'model-1',
       'medium',
-      true,
-      true,
+      {
+        sessions: { resume: false, fork: false, delete: false, list: false },
+        prompts: { image: false, audio: false, embeddedContext: false },
+        configuration: { model: true, options: true },
+        authentication: { logout: false },
+      },
     );
 
     let modelUpdated = '';
@@ -980,7 +985,7 @@ describe('SessionManager tests', () => {
       fakeRuntime,
     );
 
-    manager.restartSession = vi.fn(() => Promise.resolve({} as unknown as ACPSession));
+    manager.restartSession = vi.fn(() => Promise.resolve({} as unknown as ManagedSession));
 
     // Should NOT throw an error when selecting provider requiring auth
     await expect(
@@ -1166,7 +1171,7 @@ describe('SessionManager tests', () => {
 
       vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue({
         prompt: mockPrompt,
-      } as unknown as ACPSession);
+      } as unknown as ManagedSession);
 
       await manager.handleClientMessage('sess-history-test', 'session.input', {
         input: 'Add validation',
@@ -1237,7 +1242,9 @@ describe('SessionManager tests', () => {
           this.requiresHistoryContext = false;
         },
       };
-      vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(forkSession as unknown as ACPSession);
+      vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(
+        forkSession as unknown as ManagedSession,
+      );
 
       await manager.handleClientMessage('sess-history-test', 'session.input', {
         input: 'Add validation',
@@ -1304,7 +1311,7 @@ describe('SessionManager tests', () => {
           },
         };
         vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(
-          activeSession as unknown as ACPSession,
+          activeSession as unknown as ManagedSession,
         );
 
         await manager.handleClientMessage('sess-existing-test', 'session.input', {
@@ -1678,7 +1685,9 @@ describe('SessionManager tests', () => {
         fakeRuntime,
       );
 
-      const startSessionSpy = vi.spyOn(manager, 'startSession').mockResolvedValue({} as ACPSession);
+      const startSessionSpy = vi
+        .spyOn(manager, 'startSession')
+        .mockResolvedValue({} as ManagedSession);
 
       await manager.restartSession('sess-empty');
 
@@ -1690,8 +1699,7 @@ describe('SessionManager tests', () => {
         {},
         'default',
         'medium',
-        false,
-        false,
+        EMPTY_AGENT_FEATURES,
         undefined,
         { kind: 'new' },
         undefined,
@@ -1764,7 +1772,9 @@ describe('SessionManager tests', () => {
         fakeRuntime,
       );
 
-      const startSessionSpy = vi.spyOn(manager, 'startSession').mockResolvedValue({} as ACPSession);
+      const startSessionSpy = vi
+        .spyOn(manager, 'startSession')
+        .mockResolvedValue({} as ManagedSession);
 
       await manager.restartSession('sess-active');
 
@@ -1776,8 +1786,7 @@ describe('SessionManager tests', () => {
         {},
         'default',
         'medium',
-        false,
-        false,
+        EMPTY_AGENT_FEATURES,
         undefined,
         { kind: 'resume', sessionId: 'acp-active-session' },
         undefined,

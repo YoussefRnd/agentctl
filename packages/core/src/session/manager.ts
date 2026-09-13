@@ -1,25 +1,27 @@
-import { spawn } from 'node:child_process';
 import { eq, asc, desc, inArray, and } from 'drizzle-orm';
-import type { ACPSession } from '../acp/session-client.js';
+import type { ManagedSession } from './managed-session.js';
 import type { DbClient } from '../db/index.js';
 import type { AgentDriver, AgentSessionIntent } from '../agent/types.js';
-import { AcpAgentDriver } from '../acp/driver.js';
+import { createDefaultAgentDriver } from '../default-agent-driver.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import { SessionEventStore } from './event-store.js';
 import { sessions, projects, acpEvents } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import { SessionWorkspace } from '../git/session-workspace.js';
-import { negotiateCapabilities } from '../acp/transport/capabilities-negotiator.js';
+import { negotiateCapabilities } from '../providers/capabilities-negotiator.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
 import {
-  type ACPConfigOption,
+  EMPTY_AGENT_FEATURES,
+  type AgentConfigOption,
+  type AgentFeatures,
   type SessionMode,
   type ThinkingEffort,
-  type ACPEvent,
+  type SessionEvent,
 } from '@agentctl/shared';
 import { SessionStateMachine } from './state-machine.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
+import { jsonCodecs } from '../db/json-codecs.js';
 import { buildConversationHistoryTranscript } from './history-transcript.js';
 import {
   findAgentGeneratedHandoff,
@@ -27,7 +29,7 @@ import {
   scheduleHandoffCleanup,
   type HandoffResult,
 } from './handoff.js';
-import type { ACPEventDbRow } from '../db/zod-schemas.js';
+import type { SessionEventDbRow } from '../db/zod-schemas.js';
 import {
   DEFAULT_AGENT_MODEL,
   DEFAULT_THINKING_EFFORT,
@@ -53,16 +55,10 @@ export function resolveAgentSessionId(
   initialProviderId?: string | null,
 ): string | null {
   if (!rawAgentSessionId) return null;
-  try {
-    const parsed = JSON.parse(rawAgentSessionId) as unknown;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const val = (parsed as Record<string, unknown>)[targetProviderId];
-      return typeof val === 'string' ? val : null;
-    }
-  } catch {
-    if (!initialProviderId || initialProviderId === targetProviderId) {
-      return rawAgentSessionId;
-    }
+  const parsed = jsonCodecs.agentSessionMap(rawAgentSessionId);
+  if (parsed) return parsed[targetProviderId] ?? null;
+  if (!initialProviderId || initialProviderId === targetProviderId) {
+    return rawAgentSessionId;
   }
   return null;
 }
@@ -75,7 +71,7 @@ export class SessionManager {
     string,
     {
       undoSnapshotHash?: string;
-      deletedEvents: ACPEventDbRow[];
+      deletedEvents: SessionEventDbRow[];
       eventId: number;
       restoredFiles?: Array<{
         path: string;
@@ -92,11 +88,14 @@ export class SessionManager {
     private providerRegistry: ProviderRegistry,
     eventBus: IEventBus,
     private logger: Logger = noopLogger,
-    private runtime: AgentDriver = AcpAgentDriver.create(spawn, logger),
+    private runtime: AgentDriver = createDefaultAgentDriver(logger),
     private mcpGateway?: McpGateway,
   ) {
-    if (this.runtime instanceof AcpAgentDriver) {
-      this.runtime.setConnectionManager(this.providerRegistry.getConnectionManager());
+    const connectionAwareRuntime = this.runtime as AgentDriver & {
+      setConnectionManager?: (manager: unknown) => void;
+    };
+    if (connectionAwareRuntime.setConnectionManager) {
+      connectionAwareRuntime.setConnectionManager(this.providerRegistry.getConnectionManager());
     }
     this.eventStore = new SessionEventStore(db, eventBus);
     this.stateMachine = new SessionStateMachine(
@@ -290,12 +289,11 @@ export class SessionManager {
     env?: Record<string, string>,
     selectedModel = DEFAULT_AGENT_MODEL,
     selectedThinkingEffort: ThinkingEffort = DEFAULT_THINKING_EFFORT,
-    supportsDynamicModel = false,
-    supportsDynamicConfig = false,
+    features: AgentFeatures = EMPTY_AGENT_FEATURES,
     resolvedThinkingConfigId?: string,
     intent: AgentSessionIntent = { kind: 'new' },
     resolvedModelConfigId?: string,
-  ): Promise<ACPSession> {
+  ): Promise<ManagedSession> {
     return this.stateMachine.startSession(
       sessionId,
       worktreePath,
@@ -304,8 +302,7 @@ export class SessionManager {
       env,
       selectedModel,
       selectedThinkingEffort,
-      supportsDynamicModel,
-      supportsDynamicConfig,
+      features,
       resolvedThinkingConfigId,
       intent,
       resolvedModelConfigId,
@@ -315,7 +312,7 @@ export class SessionManager {
   async restartSession(
     sessionId: string,
     options: { resumeExisting?: boolean } = {},
-  ): Promise<ACPSession> {
+  ): Promise<ManagedSession> {
     this.logger.info({ sessionId }, 'Restarting session');
     this.stateMachine.stopSession(sessionId);
 
@@ -380,8 +377,7 @@ export class SessionManager {
       launch.env,
       selection.selectedModel,
       selection.selectedThinkingEffort,
-      selection.supportsDynamicModel,
-      selection.supportsDynamicConfig,
+      selection.features,
       selection.resolvedThinkingConfigId,
       resolvedAgentSessionId
         ? { kind: 'resume', sessionId: resolvedAgentSessionId }
@@ -446,7 +442,7 @@ export class SessionManager {
       }
       await this.eventStore.append(
         forkSessionId,
-        evt.type as ACPEvent['type'],
+        evt.type as SessionEvent['type'],
         parsedData,
         evt.parentEventId,
         parsedMetadata ?? undefined,
@@ -468,8 +464,7 @@ export class SessionManager {
         launch.env,
         selection.selectedModel,
         selection.selectedThinkingEffort,
-        selection.supportsDynamicModel,
-        selection.supportsDynamicConfig,
+        selection.features,
         selection.resolvedThinkingConfigId,
         forkFromAgentSessionId
           ? { kind: 'fork', sessionId: forkFromAgentSessionId }
@@ -640,10 +635,10 @@ export class SessionManager {
   }
 
   private buildInitialConfigOptions(
-    providerConfigOptions: ACPConfigOption[],
+    providerConfigOptions: AgentConfigOption[],
     selectedModel: string,
     selectedThinkingEffort: ThinkingEffort,
-  ): ACPConfigOption[] {
+  ): AgentConfigOption[] {
     return providerConfigOptions.map((opt) => {
       if (opt.id === 'model' || opt.id === 'selectedModel') {
         return { ...opt, currentValue: selectedModel };
@@ -695,7 +690,7 @@ export class SessionManager {
       selectedThinkingEffort: ThinkingEffort;
     },
     options: { forceNewAgentSession?: boolean } = {},
-  ): Promise<ACPSession | null> {
+  ): Promise<ManagedSession | null> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
@@ -737,13 +732,9 @@ export class SessionManager {
     const persistSelection = async (): Promise<void> => {
       let preservedLimit = sessionRecord.contextLimit > 0 ? sessionRecord.contextLimit : 0;
       if (preservedLimit === 0 && sessionRecord.sessionMetrics) {
-        try {
-          const metrics = JSON.parse(sessionRecord.sessionMetrics) as { contextLimit?: number };
-          if (typeof metrics.contextLimit === 'number' && metrics.contextLimit > 0) {
-            preservedLimit = metrics.contextLimit;
-          }
-        } catch {
-          // ignore
+        const metrics = jsonCodecs.unknownRecord(sessionRecord.sessionMetrics);
+        if (typeof metrics.contextLimit === 'number' && metrics.contextLimit > 0) {
+          preservedLimit = metrics.contextLimit;
         }
       }
 
@@ -783,8 +774,8 @@ export class SessionManager {
       !providerIdChanged &&
       !options.forceNewAgentSession
     ) {
-      const needsModelRestart = modelChanged && !selection.supportsDynamicModel;
-      const needsEffortRestart = effortChanged && !selection.supportsDynamicConfig;
+      const needsModelRestart = modelChanged && !selection.features.configuration.model;
+      const needsEffortRestart = effortChanged && !selection.features.configuration.options;
 
       if (!needsModelRestart && !needsEffortRestart) {
         const thinkingOption = configOptions.find(
@@ -850,7 +841,7 @@ export class SessionManager {
     }
   }
 
-  async switchMode(sessionId: string, newMode: SessionMode): Promise<ACPSession | null> {
+  async switchMode(sessionId: string, newMode: SessionMode): Promise<ManagedSession | null> {
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
     });
@@ -877,7 +868,7 @@ export class SessionManager {
     return null;
   }
 
-  getSession(sessionId: string): ACPSession | undefined {
+  getSession(sessionId: string): ManagedSession | undefined {
     return this.stateMachine.getSession(sessionId);
   }
 
@@ -906,13 +897,8 @@ export class SessionManager {
 
     if (sessionRecord.agentSessionId) {
       try {
-        let providerSessions: Record<string, string> = {};
-        try {
-          const parsed = JSON.parse(sessionRecord.agentSessionId) as unknown;
-          if (parsed && typeof parsed === 'object') {
-            providerSessions = parsed as Record<string, string>;
-          }
-        } catch {
+        let providerSessions = jsonCodecs.agentSessionMap(sessionRecord.agentSessionId);
+        if (!providerSessions) {
           const initialProvider = sessionRecord.agent || sessionRecord.selectedProvider;
           providerSessions = { [initialProvider]: sessionRecord.agentSessionId };
         }
@@ -996,7 +982,7 @@ export class SessionManager {
   async getOrResuscitate(
     sessionId: string,
     options?: { allowArchived?: boolean },
-  ): Promise<ACPSession | null> {
+  ): Promise<ManagedSession | null> {
     const session = this.stateMachine.getSession(sessionId);
     if (session && !session.isDead) {
       return session;
@@ -1043,17 +1029,10 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    let advertisedOptions: ACPConfigOption[];
-    try {
-      const parsed =
-        typeof sessionRecord.sessionConfigOptions === 'string'
-          ? JSON.parse(sessionRecord.sessionConfigOptions)
-          : sessionRecord.sessionConfigOptions;
-      if (!Array.isArray(parsed)) {
-        throw new Error();
-      }
-      advertisedOptions = parsed as ACPConfigOption[];
-    } catch {
+    const advertisedOptions = jsonCodecs.agentConfigOptionsOrNull(
+      sessionRecord.sessionConfigOptions,
+    );
+    if (!advertisedOptions) {
       throw new Error(`Session ${sessionId} has invalid advertised config options`);
     }
     const option = advertisedOptions.find((candidate) => candidate.id === configId);
@@ -1079,7 +1058,7 @@ export class SessionManager {
     }
 
     const isModelOption = configId === 'model' || configId === 'selectedModel';
-    if (isModelOption && !provider.supportsDynamicModel) {
+    if (isModelOption && !provider.features.configuration.model) {
       throw new Error(`Provider does not support dynamic config option: ${configId}`);
     }
 
@@ -1200,15 +1179,7 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    let availablePersonas: string[];
-    try {
-      const parsed = JSON.parse(sessionRecord.availableAgentPersonas) as unknown;
-      availablePersonas = Array.isArray(parsed)
-        ? parsed.filter((value): value is string => typeof value === 'string')
-        : [];
-    } catch {
-      availablePersonas = [];
-    }
+    const availablePersonas = jsonCodecs.stringArray(sessionRecord.availableAgentPersonas);
     if (!availablePersonas.includes(persona)) {
       throw new Error(`Agent persona is not available for this session: ${persona}`);
     }

@@ -1,6 +1,6 @@
-import { StreamBuffer } from '../acp/transport/stream-buffer.js';
+import { StreamBuffer } from './stream-buffer.js';
 import type { SessionEventStoreLike, SnapshotServiceLike } from './contracts.js';
-import type { ACPEventDbRow } from '../db/zod-schemas.js';
+import type { SessionEventDbRow } from '../db/zod-schemas.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 
@@ -257,7 +257,7 @@ export class EventStreamAdapter {
     metadata: Record<string, unknown>,
   ): void {
     const parentId = this.currentParentEventId ?? null;
-    const row: ACPEventDbRow = {
+    const row: SessionEventDbRow = {
       id: eventId,
       sessionId: this.sessionId,
       parentEventId: parentId,
@@ -278,8 +278,8 @@ export class EventStreamAdapter {
    * layer to resync clients after a replay (replay rows may lag the live
    * transient stream). Guaranteed >= the last persisted row for the same id.
    */
-  getTransientSnapshots(): ACPEventDbRow[] {
-    const snapshots: ACPEventDbRow[] = [];
+  getTransientSnapshots(): SessionEventDbRow[] {
+    const snapshots: SessionEventDbRow[] = [];
     if (this.messageEventId !== null && this.currentMessage.length > 0) {
       snapshots.push({
         id: this.messageEventId,

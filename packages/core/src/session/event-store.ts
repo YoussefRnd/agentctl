@@ -2,8 +2,8 @@ import { eq, and, desc, gte, sql } from 'drizzle-orm';
 import { acpEvents, sessions } from '../db/schema.js';
 import type { DbClient } from '../db/index.js';
 import type { IEventBus } from './manager.js';
-import type { ACPEvent } from '@agentctl/shared';
-import type { ACPEventDbRow } from '../db/zod-schemas.js';
+import type { SessionEvent } from '@agentctl/shared';
+import type { SessionEventDbRow } from '../db/zod-schemas.js';
 
 interface TokenMetadata {
   promptTokens?: number;
@@ -71,13 +71,13 @@ export class SessionEventStore {
    * live update). When `delta` is provided the payload carries wire-only delta
    * semantics: consumers append it to the existing event instead of replacing.
    */
-  publishTransient(event: ACPEventDbRow, delta?: string): void {
+  publishTransient(event: SessionEventDbRow, delta?: string): void {
     this.eventBus.publish(delta !== undefined ? { ...event, delta } : event);
   }
 
   async append(
     sessionId: string,
-    type: ACPEvent['type'],
+    type: SessionEvent['type'],
     data: unknown,
     parentEventId?: number | null,
     metadata?: unknown,
@@ -216,7 +216,7 @@ export class SessionEventStore {
 
   async findLastEventByType(
     sessionId: string,
-    type: ACPEvent['type'],
+    type: SessionEvent['type'],
   ): Promise<{ id: number; data: unknown } | null> {
     const last = await this.db
       .select()
@@ -242,7 +242,10 @@ export class SessionEventStore {
     await this.backupAndDeleteEventsAfter(sessionId, eventId);
   }
 
-  async backupAndDeleteEventsAfter(sessionId: string, eventId: number): Promise<ACPEventDbRow[]> {
+  async backupAndDeleteEventsAfter(
+    sessionId: string,
+    eventId: number,
+  ): Promise<SessionEventDbRow[]> {
     const toDelete = await this.db
       .select()
       .from(acpEvents)
@@ -263,7 +266,7 @@ export class SessionEventStore {
     return toDelete;
   }
 
-  async restoreEvents(sessionId: string, rows: ACPEventDbRow[]): Promise<void> {
+  async restoreEvents(sessionId: string, rows: SessionEventDbRow[]): Promise<void> {
     if (rows.length === 0) return;
 
     await this.db.insert(acpEvents).values(

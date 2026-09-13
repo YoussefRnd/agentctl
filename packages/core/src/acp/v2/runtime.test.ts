@@ -7,8 +7,10 @@ import {
   ndJsonStream,
   PROTOCOL_VERSION,
 } from '@agentclientprotocol/sdk/experimental/v2';
+import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import type { AgentStreamTransport } from '../types.js';
 import { AcpV2AgentDriver } from './runtime.js';
+import { runAgentDriverConformance } from '../../agent/conformance.js';
 
 function harness() {
   const clientToAgent = new TransformStream<Uint8Array>();
@@ -64,31 +66,23 @@ function harness() {
 describe('AcpV2AgentDriver', () => {
   test('waits for idle state after prompt acknowledgement and projects updates', async () => {
     const setup = harness();
-    const updates: unknown[] = [];
     const driver = new AcpV2AgentDriver(setup.fakeSpawn, undefined, () => setup.transport);
-    const session = await driver.startSession(
-      'agent',
-      [],
-      { cwd: '/tmp', intent: { kind: 'new' } },
-      {
-        onUpdate(update) {
-          updates.push(update);
-        },
-        onRequestPermission: () => Promise.resolve({ allowed: false }),
-      },
-    );
+    const report = await runAgentDriverConformance(driver, {
+      cwd: '/tmp',
+      features: EMPTY_AGENT_FEATURES,
+      intent: { kind: 'new' },
+    });
 
-    expect(session.id).toBe('v2-session');
-    await expect(session.prompt('hello')).resolves.toMatchObject({ stopReason: 'end_turn' });
-    expect(updates).toContainEqual({ type: 'status', status: 'running' });
-    expect(updates).toContainEqual({
+    expect(report.sessionId).toBe('v2-session');
+    expect(report.promptResult).toMatchObject({ stopReason: 'end_turn' });
+    expect(report.updates).toContainEqual({ type: 'status', status: 'running' });
+    expect(report.updates).toContainEqual({
       type: 'text',
       text: 'hello from v2',
       messageId: 'message-1',
       operation: 'append',
     });
 
-    await session.close();
     expect(setup.wasKilled()).toBe(true);
     setup.agentConnection.close();
   });

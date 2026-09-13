@@ -13,3 +13,12 @@ test('keeps direct ACP SDK dependencies inside the adapter', () => {
     );
   expect(leaks).toEqual([]);
 });
+
+test('keeps the product session layer independent from the ACP adapter', () => {
+  const root = fileURLToPath(new URL('../session/', import.meta.url));
+  const leaks = readdirSync(root, { recursive: true })
+    .map(String)
+    .filter((file) => file.endsWith('.ts'))
+    .filter((file) => /from ['"]\.\.\/acp\//.test(readFileSync(path.join(root, file), 'utf8')));
+  expect(leaks).toEqual([]);
+});

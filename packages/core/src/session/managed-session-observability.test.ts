@@ -1,12 +1,12 @@
 import { test, expect, describe } from 'vitest';
 import { createDatabase } from '../db/index.js';
 import { projects, sessions, acpEvents } from '../db/schema.js';
-import { ACPSession } from './session-client.js';
-import { SessionEventStore } from '../session/event-store.js';
+import { ManagedSession } from './managed-session.js';
+import { SessionEventStore } from './event-store.js';
 import { eq } from 'drizzle-orm';
 import type { AgentSession } from '../agent/types.js';
 
-describe('ACPSession Observability & StreamBuffer Integration', () => {
+describe('ManagedSession Observability & StreamBuffer Integration', () => {
   test('buffers database updates while publishing instantly to eventBus, links parents, and tracks metrics', async () => {
     const db = createDatabase(':memory:');
 
@@ -83,10 +83,16 @@ describe('ACPSession Observability & StreamBuffer Integration', () => {
       updateConfigOption: () => [],
     } as unknown as AgentSession;
 
-    const session = new ACPSession('sess-obs', fakeRuntimeHandle, db, eventStore, '/tmp/proj-obs');
+    const session = new ManagedSession(
+      'sess-obs',
+      fakeRuntimeHandle,
+      db,
+      eventStore,
+      '/tmp/proj-obs',
+    );
 
     // Set up what happens during runtime handle prompt
-    let snapshotsMidStream: ReturnType<ACPSession['getLiveEventSnapshots']> = [];
+    let snapshotsMidStream: ReturnType<ManagedSession['getLiveEventSnapshots']> = [];
     promptCallback = async () => {
       // 1. Send thought chunks
       await session.handleDomainEvent({ type: 'thought', text: 'Thinking' });

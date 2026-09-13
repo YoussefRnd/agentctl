@@ -1,7 +1,7 @@
 import { test, describe, expect } from 'vitest';
-import { ACPSession } from './session-client.js';
+import { ManagedSession } from './managed-session.js';
 import { McpGateway } from '../mcp/mcp-gateway.js';
-import { SessionEventStore } from '../session/event-store.js';
+import { SessionEventStore } from './event-store.js';
 import { createDatabase } from '../db/index.js';
 import { projects, sessions, acpEvents, mcpServers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -85,7 +85,7 @@ rl.on('line', (line) => {
 });
 `;
 
-describe('ACPSession Manual MCP Tool Interceptor', () => {
+describe('ManagedSession Manual MCP Tool Interceptor', () => {
   test('intercepts manual tool call, invokes via gateway, yields timeline, and forwards context to agent', async () => {
     const tempDir = os.tmpdir();
     const scriptPath = path.join(tempDir, `mock-session-mcp-server-${String(Date.now())}.js`);
@@ -183,7 +183,7 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
       updateConfigOption: () => [],
     } as unknown as AgentSession;
 
-    const session = new ACPSession(
+    const session = new ManagedSession(
       'sess-mcp',
       fakeRuntimeHandle,
       db,
@@ -234,7 +234,7 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
         },
       };
 
-      const sessionWithFail = new ACPSession(
+      const sessionWithFail = new ManagedSession(
         'sess-mcp-fail',
         fakeRuntimeHandleForFail,
         db,
@@ -282,7 +282,7 @@ describe('ACPSession Manual MCP Tool Interceptor', () => {
         },
       };
 
-      const sessionWithBypass = new ACPSession(
+      const sessionWithBypass = new ManagedSession(
         'sess-mcp-bypass',
         fakeRuntimeHandleForBypass,
         db,

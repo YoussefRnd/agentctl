@@ -17,5 +17,7 @@ export * from './runtime.js';
 export * from './driver.js';
 export * from './v2/events.js';
 export * from './v2/runtime.js';
+/** @deprecated Import ManagedSession from @agentctl/core (session/managed-session.js). */
 export * from './session-client.js';
+/** @deprecated Import ManagedSession from @agentctl/core. */
 export { ACPSession as SessionClient } from './session-client.js';

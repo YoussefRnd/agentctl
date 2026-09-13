@@ -14,7 +14,7 @@ import {
   type SessionConfigOption,
   type UpdateSessionNotification,
 } from '@agentclientprotocol/sdk/experimental/v2';
-import type { ACPConfigOption } from '@agentctl/shared';
+import type { AgentConfigOption } from '@agentctl/shared';
 import type {
   AgentDescriptor,
   AgentDriver,
@@ -34,6 +34,11 @@ import { normalizeAcpUsage } from '../protocol/usage.js';
 import { getAgentRequestTimeoutMs } from '../../config/runtime-defaults.js';
 import { withTimeout } from '../transport/capabilities-cache.js';
 import { projectV2ConfigOption, projectV2SessionUpdate } from './events.js';
+import {
+  isAcpAuthenticationRequired,
+  isAcpMethodNotFound,
+  isAcpSessionNotFound,
+} from '../protocol/error-classifier.js';
 
 interface TurnStop {
   stopReason: AgentStopReason;
@@ -46,45 +51,15 @@ interface ActiveCallbacks {
   waiters: Array<{ resolve(value: TurnStop): void; reject(error: unknown): void }>;
 }
 
-function isAuthError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const value = error as { code?: unknown; message?: unknown };
-  const code = String(value.code ?? '').toLowerCase();
-  const message = String(value.message ?? '').toLowerCase();
-  return (
-    code === 'auth_required' ||
-    code === 'needs_auth' ||
-    message.includes('auth_required') ||
-    message.includes('authentication required') ||
-    message.includes('unauthorized')
-  );
-}
-
-function errorCode(error: unknown): unknown {
-  return error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
-}
-
-function isSessionNotFound(error: unknown): boolean {
-  if (errorCode(error) === -32002) return true;
-  const message =
-    error && typeof error === 'object' && 'message' in error
-      ? String((error as { message?: unknown }).message).toLowerCase()
-      : '';
-  return (
-    message.includes('session') &&
-    (message.includes('not found') || message.includes('does not exist'))
-  );
-}
-
-function productConfigOptions(options?: SessionConfigOption[]): ACPConfigOption[] {
+function productConfigOptions(options?: SessionConfigOption[]): AgentConfigOption[] {
   return (options ?? [])
     .map(projectV2ConfigOption)
-    .filter((option): option is ACPConfigOption => option !== null);
+    .filter((option): option is AgentConfigOption => option !== null);
 }
 
 function descriptorFromInitialization(
   initialization: InitializeResponse,
-  configOptions: ACPConfigOption[],
+  configOptions: AgentConfigOption[],
 ): AgentDescriptor {
   const authMethods = (initialization.authMethods ?? [])
     .filter((method) => method.type === 'agent')
@@ -97,15 +72,34 @@ function descriptorFromInitialization(
   const modes = configOptions
     .filter((option) => option.category === 'mode' || option.id === 'mode')
     .flatMap((option) => option.options?.map((entry) => entry.value) ?? []);
+  const capabilities = advertised(initialization.capabilities);
+  const supportsDynamicModel = configOptions.some(
+    (option) => option.category === 'model' || option.id === 'model',
+  );
+  const supportsDynamicConfig = configOptions.length > 0;
+  const supportsLogout = authMethods.length > 0;
   return {
     status: 'ready',
     configOptions,
     authMethods,
-    supportsDynamicModel: configOptions.some(
-      (option) => option.category === 'model' || option.id === 'model',
-    ),
-    supportsDynamicConfig: configOptions.length > 0,
-    supportsLogout: authMethods.length > 0,
+    supportsDynamicModel,
+    supportsDynamicConfig,
+    supportsLogout,
+    features: {
+      sessions: {
+        resume: capabilities.sessions,
+        fork: capabilities.fork,
+        delete: capabilities.delete,
+        list: capabilities.sessions,
+      },
+      prompts: {
+        image: capabilities.image,
+        audio: capabilities.audio,
+        embeddedContext: capabilities.embeddedContext,
+      },
+      configuration: { model: supportsDynamicModel, options: supportsDynamicConfig },
+      authentication: { logout: supportsLogout },
+    },
     modes,
   };
 }
@@ -472,7 +466,7 @@ export class AcpV2AgentDriver implements AgentDriver {
           }
           handle.history = 'restored';
         } catch (error) {
-          if (errorCode(error) !== -32601) throw error;
+          if (!isAcpMethodNotFound(error)) throw error;
           response = await withTimeout(
             connection.agent.request(methods.agent.session.new, request),
             getAgentRequestTimeoutMs(),
@@ -493,7 +487,7 @@ export class AcpV2AgentDriver implements AgentDriver {
           response = { sessionId: options.intent.sessionId, configOptions: resumed.configOptions };
           handle.history = 'restored';
         } catch (error) {
-          if (!isSessionNotFound(error)) throw error;
+          if (!isAcpSessionNotFound(error)) throw error;
           response = await withTimeout(
             connection.agent.request(methods.agent.session.new, request),
             getAgentRequestTimeoutMs(),
@@ -520,7 +514,7 @@ export class AcpV2AgentDriver implements AgentDriver {
       handle.availableModes = descriptorFromInitialization(initialization, configOptions).modes;
       return handle;
     } catch (error) {
-      if (isAuthError(error)) {
+      if (isAcpAuthenticationRequired(error)) {
         const configOptions =
           error && typeof error === 'object' && 'data' in error
             ? productConfigOptions(
@@ -561,7 +555,7 @@ export class AcpV2AgentDriver implements AgentDriver {
         capabilities: {},
       });
       const capabilities = advertised(initialization.capabilities);
-      let configOptions: ACPConfigOption[] = [];
+      let configOptions: AgentConfigOption[] = [];
       if (capabilities.sessions) {
         const created = await connection.agent.request(methods.agent.session.new, {
           cwd: os.tmpdir(),
@@ -574,7 +568,7 @@ export class AcpV2AgentDriver implements AgentDriver {
       }
       return descriptorFromInitialization(initialization, configOptions);
     } catch (error) {
-      if (isAuthError(error)) {
+      if (isAcpAuthenticationRequired(error)) {
         if (initialization) {
           return {
             ...descriptorFromInitialization(initialization, []),

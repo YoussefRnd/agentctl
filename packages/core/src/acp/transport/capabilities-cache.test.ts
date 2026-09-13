@@ -66,4 +66,13 @@ describe('FileCacheStorage', () => {
     expect(a).toBe(b);
     expect(a).not.toBe(c);
   });
+
+  test('cache keys change when the provider executable changes', () => {
+    const executable = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-bin-')), 'agent');
+    fs.writeFileSync(executable, 'v1');
+    const first = getCacheKey(executable, [], {});
+    fs.writeFileSync(executable, 'version-two');
+    const second = getCacheKey(executable, [], {});
+    expect(first).not.toBe(second);
+  });
 });

@@ -4,7 +4,7 @@ import type {
   SessionNotification,
   ToolCall,
 } from '@agentclientprotocol/sdk';
-import type { ACPConfigOption } from '@agentctl/shared';
+import type { AgentConfigOption } from '@agentctl/shared';
 import type { AgentUpdate } from '../../agent/types.js';
 import { asRecord, toolArgumentsFrom, toolNameFrom } from './tool-call-utils.js';
 
@@ -56,7 +56,7 @@ interface ToolCallSnapshot {
   rawOutput?: unknown;
 }
 
-export function projectConfigOption(option: SessionConfigOption): ACPConfigOption {
+export function projectConfigOption(option: SessionConfigOption): AgentConfigOption {
   return {
     id: option.id,
     name: option.name,

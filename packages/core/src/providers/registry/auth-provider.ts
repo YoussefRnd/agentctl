@@ -2,6 +2,7 @@ import type { RegistryAgent } from '@agentctl/shared';
 import type { AgentDriver } from '../../agent/types.js';
 import type { ProviderLauncher } from './provider-launcher.js';
 import type { ProviderStore } from './provider-store.js';
+import { jsonCodecs } from '../../db/json-codecs.js';
 
 export class AuthProvider {
   constructor(
@@ -20,7 +21,7 @@ export class AuthProvider {
     if (!row) throw new Error(`Provider ${providerId} not found`);
 
     if (methodId === 'env') {
-      const existing = JSON.parse(row.customEnv || '{}') as Record<string, string>;
+      const existing = jsonCodecs.stringRecord(row.customEnv);
       const nextCustomEnv = { ...existing };
       for (const [k, v] of Object.entries(params)) {
         if (typeof v === 'string') nextCustomEnv[k] = v;

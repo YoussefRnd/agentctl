@@ -1,5 +1,5 @@
 import type {
-  ACPConfigOption,
+  AgentConfigOption,
   AuthMethod,
   ProviderDiscovery,
   ProviderStatus,
@@ -8,8 +8,9 @@ import type {
 } from '@agentctl/shared';
 import type { providers } from '../db/schema.js';
 import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
+import { jsonCodecs } from '../db/json-codecs.js';
 
-export type ProviderData = typeof providers.$inferSelect;
+export type ProviderData = Omit<typeof providers.$inferSelect, 'features'> & { features?: string };
 
 export interface ProviderLaunchConfig {
   command: string;
@@ -79,9 +80,24 @@ export class Provider {
     return this.data.supportsLogout;
   }
 
+  get features() {
+    const persisted = jsonCodecs.agentFeatures(this.data.features);
+    return {
+      ...persisted,
+      configuration: {
+        model: persisted.configuration.model || this.supportsDynamicModel,
+        options: persisted.configuration.options || this.supportsDynamicConfig,
+      },
+      authentication: {
+        logout: persisted.authentication.logout || this.supportsLogout,
+      },
+    };
+  }
+
   getLaunchConfig(selectedModel: string, selectedThinkingEffort: string): ProviderLaunchConfig {
     const extraArgs: string[] = [];
     const configOptions = this.parseConfigOptions();
+    const features = this.features;
 
     const hasModelOption = configOptions.some((opt) =>
       (MODEL_OPTION_IDS as readonly string[]).includes(opt.id),
@@ -91,16 +107,16 @@ export class Provider {
     );
 
     if (
-      !this.supportsDynamicModel &&
+      !features.configuration.model &&
       hasModelOption &&
       selectedModel &&
       selectedModel !== 'default' &&
-      !this.supportsDynamicConfig
+      !features.configuration.options
     ) {
       extraArgs.push('--model', selectedModel);
     }
 
-    if (!this.supportsDynamicConfig && hasThinkingOption && selectedThinkingEffort) {
+    if (!features.configuration.options && hasThinkingOption && selectedThinkingEffort) {
       extraArgs.push('--thinking-effort', selectedThinkingEffort);
     }
 
@@ -151,6 +167,7 @@ export class Provider {
       supportsDynamicModel: this.data.supportsDynamicModel,
       supportsDynamicConfig: this.data.supportsDynamicConfig,
       supportsLogout: this.data.supportsLogout,
+      features: this.features,
     };
   }
 
@@ -180,6 +197,7 @@ export class Provider {
       supportsDynamicModel: this.data.supportsDynamicModel,
       supportsDynamicConfig: this.data.supportsDynamicConfig,
       supportsLogout: this.data.supportsLogout,
+      features: this.features,
       nativelyLoadsSkills: this.data.nativelyLoadsSkills,
       installState: this.data.installState as ProviderDiscovery['installState'],
       installError: this.data.installError ?? null,
@@ -192,51 +210,26 @@ export class Provider {
   }
 
   private parseStringArray(value: string | null | undefined): string[] {
-    if (!value) return [];
-    try {
-      return JSON.parse(value) as string[];
-    } catch {
-      return [];
-    }
+    return jsonCodecs.stringArray(value);
   }
 
   private parseStringRecord(value: string | null | undefined): Record<string, string> {
-    if (!value) return {};
-    try {
-      return JSON.parse(value) as Record<string, string>;
-    } catch {
-      return {};
-    }
+    return jsonCodecs.stringRecord(value);
   }
 
   private parseConfigOptions(
     value: string | null | undefined = this.data.configOptions,
-  ): ACPConfigOption[] {
-    if (!value) return [];
-    try {
-      return JSON.parse(value) as ACPConfigOption[];
-    } catch {
-      return [];
-    }
+  ): AgentConfigOption[] {
+    return jsonCodecs.agentConfigOptions(value);
   }
 
   private parseAuthMethods(value: string | null | undefined = this.data.authMethods): AuthMethod[] {
-    if (!value) return [];
-    try {
-      return JSON.parse(value) as AuthMethod[];
-    } catch {
-      return [];
-    }
+    return jsonCodecs.authMethods(value);
   }
 
   private parseDistribution(
     value: string | null | undefined = this.data.distribution,
   ): RegistryAgent['distribution'] {
-    if (!value) return {};
-    try {
-      return JSON.parse(value) as RegistryAgent['distribution'];
-    } catch {
-      return {};
-    }
+    return jsonCodecs.registryDistribution(value);
   }
 }

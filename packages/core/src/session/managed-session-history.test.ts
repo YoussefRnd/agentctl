@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { createDatabase } from '../db/index.js';
-import { SessionEventStore } from '../session/event-store.js';
-import { ACPSession } from './session-client.js';
+import { SessionEventStore } from './event-store.js';
+import { ManagedSession } from './managed-session.js';
 import type { AgentSession } from '../agent/types.js';
 
 test.each(['fresh', 'restored'] as const)(
@@ -16,7 +16,7 @@ test.each(['fresh', 'restored'] as const)(
       onError() {},
       onClose() {},
     } as unknown as AgentSession;
-    const session = new ACPSession('fork', handle, db, eventStore, '/tmp');
+    const session = new ManagedSession('fork', handle, db, eventStore, '/tmp');
     expect(session.requiresHistoryContext).toBe(history === 'fresh');
     session.markHistoryContextTransferred();
     expect(session.requiresHistoryContext).toBe(false);

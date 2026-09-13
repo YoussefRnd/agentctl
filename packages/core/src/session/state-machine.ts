@@ -2,8 +2,13 @@ import { eq } from 'drizzle-orm';
 import { sessions, mcpServers } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
-import type { SessionStatus, ThinkingEffort } from '@agentctl/shared';
-import { ACPSession } from '../acp/session-client.js';
+import {
+  EMPTY_AGENT_FEATURES,
+  type AgentFeatures,
+  type SessionStatus,
+  type ThinkingEffort,
+} from '@agentctl/shared';
+import { ManagedSession } from './managed-session.js';
 import type { DbClient } from '../db/index.js';
 import type { SessionEventStore } from './event-store.js';
 import type { Logger } from '../logger.js';
@@ -13,6 +18,7 @@ import { AgentAuthenticationRequiredError } from '../agent/errors.js';
 import { SnapshotService } from '../git/snapshot-service.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
 import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
+import { jsonCodecs } from '../db/json-codecs.js';
 
 export interface SessionRecord {
   id: string;
@@ -52,14 +58,12 @@ export interface LaunchContext {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
-  supportsDynamicModel?: boolean;
-  supportsDynamicConfig?: boolean;
   resolvedThinkingConfigId?: string;
   resolvedModelConfigId?: string;
 }
 
 export class SessionStateMachine {
-  private sessions = new Map<string, ACPSession>();
+  private sessions = new Map<string, ManagedSession>();
   private snapshotService: SnapshotService;
 
   constructor(
@@ -78,7 +82,7 @@ export class SessionStateMachine {
     return this.snapshotService;
   }
 
-  getSession(sessionId: string): ACPSession | undefined {
+  getSession(sessionId: string): ManagedSession | undefined {
     return this.sessions.get(sessionId);
   }
 
@@ -86,7 +90,7 @@ export class SessionStateMachine {
     return this.sessions.has(sessionId);
   }
 
-  registerSession(sessionId: string, session: ACPSession): void {
+  registerSession(sessionId: string, session: ManagedSession): void {
     this.sessions.set(sessionId, session);
   }
 
@@ -201,12 +205,11 @@ export class SessionStateMachine {
     env?: Record<string, string>,
     selectedModel = DEFAULT_AGENT_MODEL,
     selectedThinkingEffort: ThinkingEffort = DEFAULT_THINKING_EFFORT,
-    supportsDynamicModel = false,
-    supportsDynamicConfig = false,
+    features: AgentFeatures = EMPTY_AGENT_FEATURES,
     resolvedThinkingConfigId?: string,
     intent: AgentSessionIntent = { kind: 'new' },
     resolvedModelConfigId?: string,
-  ): Promise<ACPSession> {
+  ): Promise<ManagedSession> {
     const existingAgentSessionId = intent.kind === 'resume' ? intent.sessionId : undefined;
     this.logger.info(
       { sessionId, command, args, worktreePath, existingAgentSessionId },
@@ -215,7 +218,7 @@ export class SessionStateMachine {
         : 'Starting new agent session via state machine',
     );
 
-    let session: ACPSession | undefined;
+    let session: ManagedSession | undefined;
 
     try {
       const activeMcpConfigs = await this.db
@@ -266,8 +269,7 @@ export class SessionStateMachine {
           env,
           selectedModel,
           selectedThinkingEffort,
-          supportsDynamicModel,
-          supportsDynamicConfig,
+          features,
           resolvedThinkingConfigId,
           resolvedModelConfigId,
           intent,
@@ -300,7 +302,7 @@ export class SessionStateMachine {
         },
       );
 
-      session = new ACPSession(
+      session = new ManagedSession(
         sessionId,
         runtimeHandle,
         this.db,
@@ -317,12 +319,10 @@ export class SessionStateMachine {
 
       let currentMapping: Record<string, string> = {};
       if (sessionRecord?.agentSessionId) {
-        try {
-          const parsed = JSON.parse(sessionRecord.agentSessionId) as unknown;
-          if (parsed && typeof parsed === 'object') {
-            currentMapping = parsed as Record<string, string>;
-          }
-        } catch {
+        const decodedMapping = jsonCodecs.agentSessionMap(sessionRecord.agentSessionId);
+        if (decodedMapping) {
+          currentMapping = decodedMapping;
+        } else {
           const initialProvider = sessionRecord.agent || sessionRecord.selectedProvider;
           if (initialProvider) {
             currentMapping[initialProvider] = sessionRecord.agentSessionId;
@@ -355,7 +355,7 @@ export class SessionStateMachine {
 
         const runtimeHandle: AgentSession = err.pendingSession;
 
-        session = new ACPSession(
+        session = new ManagedSession(
           sessionId,
           runtimeHandle,
           this.db,
@@ -375,20 +375,10 @@ export class SessionStateMachine {
   }
 
   private parseStringArray(value: string | null | undefined): string[] {
-    if (!value) return [];
-    try {
-      return JSON.parse(value) as string[];
-    } catch {
-      return [];
-    }
+    return jsonCodecs.stringArray(value);
   }
 
   private parseStringRecord(value: string | null | undefined): Record<string, string> {
-    if (!value) return {};
-    try {
-      return JSON.parse(value) as Record<string, string>;
-    } catch {
-      return {};
-    }
+    return jsonCodecs.stringRecord(value);
   }
 }

@@ -1,15 +1,15 @@
-import { spawn } from 'node:child_process';
 import {
   registrySchema,
   type ProviderDiscovery,
   type RegistryAgent,
-  type ACPConfigOption,
+  type AgentConfigOption,
 } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentDriver } from '../agent/types.js';
-import { AcpAgentDriver } from '../acp/index.js';
+import { createDefaultAgentDriver } from '../default-agent-driver.js';
 import { isAgentAuthenticationRequiredError } from '../agent/errors.js';
 import type { DbClient } from '../db/index.js';
+import { jsonCodecs } from '../db/json-codecs.js';
 import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
 import { BinaryInstaller, getPlatformKey } from './registry/binary-installer.js';
@@ -72,7 +72,7 @@ export class ProviderRegistry {
     private logger: Logger = noopLogger,
     runtime?: AgentDriver,
   ) {
-    this.runtime = runtime ?? AcpAgentDriver.create(spawn, logger);
+    this.runtime = runtime ?? createDefaultAgentDriver(logger);
     this.fetcher = new RegistryFetcher(db, logger);
     this.installer = new BinaryInstaller();
     this.store = new ProviderStore(db);
@@ -226,13 +226,9 @@ export class ProviderRegistry {
     // Auto-probe any installed & ready providers that have empty/missing model options
     const unprobedInstalled = rows.filter((row) => {
       if (row.installState === 'not_installed' || row.authState === 'needs_auth') return false;
-      try {
-        const opts = (row.configOptions ? JSON.parse(row.configOptions) : []) as { id?: string }[];
-        const hasModel = opts.some((o) => o.id === 'model' || o.id === 'selectedModel');
-        return !hasModel;
-      } catch {
-        return true;
-      }
+      const opts = jsonCodecs.agentConfigOptions(row.configOptions);
+      const hasModel = opts.some((o) => o.id === 'model' || o.id === 'selectedModel');
+      return !hasModel;
     });
 
     if (unprobedInstalled.length > 0) {
@@ -648,7 +644,7 @@ export class ProviderRegistry {
     updates: {
       customEnv?: Record<string, string>;
       nativelyLoadsSkills?: boolean;
-      defaultConfigOptions?: ACPConfigOption[];
+      defaultConfigOptions?: AgentConfigOption[];
     },
   ): Promise<ProviderDiscovery> {
     return this.runProviderOperation(providerId, 'set-config', async () => {
@@ -656,15 +652,7 @@ export class ProviderRegistry {
       if (!rowBeforeUpdate) throw new Error(`Provider ${providerId} not found`);
 
       if (updates.customEnv !== undefined) {
-        let existingCustomEnv: Record<string, string> = {};
-        try {
-          existingCustomEnv = JSON.parse(rowBeforeUpdate.customEnv || '{}') as Record<
-            string,
-            string
-          >;
-        } catch {
-          existingCustomEnv = {};
-        }
+        const existingCustomEnv = jsonCodecs.stringRecord(rowBeforeUpdate.customEnv);
 
         const merged: Record<string, string> = {};
         const removeKeys = new Set(
@@ -799,20 +787,8 @@ export class ProviderRegistry {
     }
 
     if (!options.force && row.authState === 'authenticated') {
-      let hasModelConfig = false;
-      try {
-        const opts = (row.configOptions ? JSON.parse(row.configOptions) : []) as unknown[];
-        hasModelConfig = opts.some(
-          (opt) =>
-            typeof opt === 'object' &&
-            opt !== null &&
-            'id' in opt &&
-            ((opt as Record<string, unknown>).id === 'model' ||
-              (opt as Record<string, unknown>).id === 'selectedModel'),
-        );
-      } catch {
-        hasModelConfig = false;
-      }
+      const opts = jsonCodecs.agentConfigOptions(row.configOptions);
+      const hasModelConfig = opts.some((opt) => opt.id === 'model' || opt.id === 'selectedModel');
       if (hasModelConfig) {
         return new Provider(row);
       }

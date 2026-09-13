@@ -5,6 +5,8 @@ import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import type { SessionEventStoreLike, SnapshotServiceLike } from './contracts.js';
 import type { AgentUpdate } from '../agent/types.js';
+import { deriveAgentToolEffects } from '../agent/tool-effects.js';
+import { jsonCodecs } from '../db/json-codecs.js';
 import { EventStreamAdapter } from './event-stream-adapter.js';
 
 /**
@@ -76,9 +78,17 @@ export class SessionProjector {
 
   async handleDomainEvent(event: AgentUpdate): Promise<void> {
     switch (event.type) {
-      case 'tool_call':
-        await this.adapter.upsertToolCall(event.call, event.contentOperation);
+      case 'tool_call': {
+        const effects = event.call.effects ?? deriveAgentToolEffects(event.call);
+        await this.adapter.upsertToolCall(
+          {
+            ...event.call,
+            ...(effects.length > 0 ? { effects } : {}),
+          },
+          event.contentOperation,
+        );
         break;
+      }
       case 'text':
         await this.adapter.appendText(event.text, event.messageId, event.operation);
         break;
@@ -104,14 +114,7 @@ export class SessionProjector {
           where: eq(sessions.id, this.sessionId),
         });
 
-        let existingMetrics: Record<string, unknown> = {};
-        if (sessionRecord?.sessionMetrics) {
-          try {
-            existingMetrics = JSON.parse(sessionRecord.sessionMetrics) as Record<string, unknown>;
-          } catch {
-            existingMetrics = {};
-          }
-        }
+        const existingMetrics = jsonCodecs.unknownRecord(sessionRecord?.sessionMetrics);
 
         const effectiveContextLimit =
           sanitizedSize > 0

@@ -3,6 +3,7 @@ import { type BinaryInstaller, getPlatformKey } from './binary-installer.js';
 import type { ProviderLauncher } from './provider-launcher.js';
 import type { ProviderStore } from './provider-store.js';
 import type { RegistryFetcher } from './registry-fetcher.js';
+import { jsonCodecs } from '../../db/json-codecs.js';
 
 export class ProviderSync {
   constructor(
@@ -45,25 +46,13 @@ export class ProviderSync {
       let supportsLogout = agent.supportsLogout ?? false;
 
       if (existing) {
-        try {
-          const existingOpts = existing.configOptions
-            ? (JSON.parse(existing.configOptions) as unknown[])
-            : [];
-          if (Array.isArray(existingOpts) && existingOpts.length > 0) {
-            configOptions = existing.configOptions;
-          }
-        } catch {
-          // ignore
+        const existingOpts = jsonCodecs.agentConfigOptions(existing.configOptions);
+        if (existingOpts.length > 0) {
+          configOptions = existing.configOptions;
         }
-        try {
-          const existingAuth = existing.authMethods
-            ? (JSON.parse(existing.authMethods) as unknown[])
-            : [];
-          if (Array.isArray(existingAuth) && existingAuth.length > 0) {
-            authMethods = existing.authMethods;
-          }
-        } catch {
-          // ignore
+        const existingAuth = jsonCodecs.authMethods(existing.authMethods);
+        if (existingAuth.length > 0) {
+          authMethods = existing.authMethods;
         }
         supportsDynamicModel =
           existing.supportsDynamicModel || (agent.supportsDynamicModel ?? false);

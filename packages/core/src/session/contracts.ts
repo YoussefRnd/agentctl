@@ -1,5 +1,5 @@
 import type { SessionStatus } from '@agentctl/shared';
-import type { ACPEventDbRow } from '../db/zod-schemas.js';
+import type { SessionEventDbRow } from '../db/zod-schemas.js';
 
 export interface SessionEventStoreLike {
   append(
@@ -12,7 +12,7 @@ export interface SessionEventStoreLike {
   getEvent(eventId: number): Promise<{ id: number; type: string; data: unknown } | null>;
   update(eventId: number, data: unknown, metadata?: unknown): Promise<void>;
   updateSilently(eventId: number, data: unknown, metadata?: unknown): Promise<void>;
-  publishTransient(event: ACPEventDbRow, delta?: string): void;
+  publishTransient(event: SessionEventDbRow, delta?: string): void;
 }
 
 export interface SnapshotServiceLike {
