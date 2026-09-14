@@ -8,13 +8,21 @@ import { parseAcpCapabilities } from './transport/capabilities-cache.js';
 import type { AgentStreamTransport, IConnectionManager } from './types.js';
 import { runAgentDriverConformance } from '../agent/conformance.js';
 
-function setup(supported = true) {
+function setup(supported = true, extraSessionCapabilities: Record<string, unknown> = {}) {
   const closed = new Promise<void>(() => {});
   const connection = {
     closed,
     unstable_forkSession: vi.fn().mockResolvedValue({ sessionId: 'forked-agent-id' }),
     newSession: vi.fn().mockResolvedValue({ sessionId: 'fresh-agent-id' }),
     prompt: vi.fn().mockResolvedValue({ stopReason: 'end_turn' }),
+    cancel: vi.fn().mockResolvedValue({}),
+    setSessionConfigOption: vi.fn().mockResolvedValue({ configOptions: [] }),
+    setSessionMode: vi.fn().mockResolvedValue({}),
+    listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
+    deleteSession: vi.fn().mockResolvedValue({}),
+    logout: vi.fn().mockResolvedValue({}),
+    authenticate: vi.fn().mockResolvedValue({}),
+    resumeSession: vi.fn().mockResolvedValue({ sessionId: 'source-agent-id' }),
   };
   const manager: IConnectionManager = {
     getProviderIdByCommand: () => 'provider',
@@ -23,7 +31,12 @@ function setup(supported = true) {
       transport: { closed, isAlive: true } as AgentStreamTransport,
       connection: connection as unknown as ClientSideConnection,
       capabilities: parseAcpCapabilities({
-        sessionCapabilities: { fork: supported ? {} : undefined },
+        sessionCapabilities: {
+          fork: supported ? {} : undefined,
+          list: {},
+          delete: {},
+          ...extraSessionCapabilities,
+        },
       }),
     }),
     closeSession: vi.fn(),
@@ -52,21 +65,70 @@ function setup(supported = true) {
 
 afterEach(() => vi.unstubAllEnvs());
 
-test('v1 adapter passes the shared driver lifecycle contract', async () => {
-  const { runtime } = setup(false);
-  const report = await runAgentDriverConformance(runtime, {
-    providerId: 'provider',
-    localSessionId: 'local-conformance',
-    cwd: '/tmp/conformance',
-    features: EMPTY_AGENT_FEATURES,
-    intent: { kind: 'new' },
-    mcpServers: [],
-  });
+test('v1 adapter passes the shared driver lifecycle and control contract', async () => {
+  const { runtime, connection } = setup(false);
+  const report = await runAgentDriverConformance(
+    runtime,
+    {
+      providerId: 'provider',
+      localSessionId: 'local-conformance',
+      cwd: '/tmp/conformance',
+      features: EMPTY_AGENT_FEATURES,
+      intent: { kind: 'new' },
+      mcpServers: [],
+      resolvedModelConfigId: 'model',
+    },
+    'conformance prompt',
+    {
+      cancel: true,
+      authMethodId: 'oauth',
+      modelId: 'model-2',
+      configOption: { id: 'thinking', value: 'high' },
+      modeId: 'code',
+      listSessions: true,
+      deleteSessionId: 'old-session',
+      logout: true,
+    },
+  );
   expect(report).toMatchObject({
     sessionId: 'fresh-agent-id',
     history: 'fresh',
     promptResult: { stopReason: 'end_turn' },
+    exercisedOperations: [
+      'prompt',
+      'cancel',
+      'authenticate',
+      'update_model',
+      'update_config',
+      'set_mode',
+      'list_sessions',
+      'delete_session',
+      'logout',
+    ],
   });
+  expect(connection.cancel).toHaveBeenCalled();
+  expect(connection.authenticate).toHaveBeenCalledWith({ methodId: 'oauth' });
+  expect(connection.setSessionConfigOption).toHaveBeenCalledTimes(2);
+  expect(connection.setSessionMode).toHaveBeenCalled();
+  expect(connection.listSessions).toHaveBeenCalled();
+  expect(connection.deleteSession).toHaveBeenCalled();
+  expect(connection.logout).toHaveBeenCalled();
+});
+
+test('v1 adapter resumes an advertised provider session', async () => {
+  const { runtime, connection } = setup(false, { resume: {} });
+  const report = await runAgentDriverConformance(runtime, {
+    providerId: 'provider',
+    localSessionId: 'local-resume',
+    cwd: '/tmp/conformance',
+    features: EMPTY_AGENT_FEATURES,
+    intent: { kind: 'resume', sessionId: 'source-agent-id' },
+    mcpServers: [],
+  });
+  expect(report.history).toBe('restored');
+  expect(connection.resumeSession).toHaveBeenCalledWith(
+    expect.objectContaining({ sessionId: 'source-agent-id' }),
+  );
 });
 
 test('fork startup adopts the returned id, targets the destination workspace, and routes prompts independently', async () => {
