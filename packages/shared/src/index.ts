@@ -1,6 +1,7 @@
 export * from './schemas/session.js';
 export * from './schemas/session-event.js';
 export * from './schemas/registry.js';
+export * from './schemas/diagnostics.js';
 export * from './engine/session-engine.js';
 export * from './stores/index.js';
 export * from './types/index.js';

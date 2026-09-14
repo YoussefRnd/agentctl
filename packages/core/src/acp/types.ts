@@ -49,6 +49,7 @@ export interface CacheStorage {
 export interface IConnectionManager {
   getProviderIdByCommand(command: string): string | undefined;
   getConnection(providerId: string): Promise<{
+    generation?: number;
     child: ChildProcess;
     transport: AgentStreamTransport;
     connection: ClientSideConnection;

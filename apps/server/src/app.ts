@@ -24,6 +24,7 @@ import { InteractiveTerminalService } from './services/terminal-service.js';
 import { terminalRoutes } from './routes/terminal.js';
 import { contextRoutes } from './routes/context.js';
 import { attachmentsRoutes } from './routes/attachments.js';
+import { diagnosticsRoutes } from './routes/diagnostics.js';
 
 export interface AppDependencies {
   db?: typeof defaultDb;
@@ -242,6 +243,7 @@ export async function buildApp(deps: AppDependencies = {}) {
   await fastify.register(terminalRoutes, { prefix: '/api' });
   await fastify.register(contextRoutes, { prefix: '/api' });
   await fastify.register(attachmentsRoutes, { prefix: '/api' });
+  await fastify.register(diagnosticsRoutes, { prefix: '/api' });
 
   // Basic route to verify server is up
   fastify.get('/health', () => {

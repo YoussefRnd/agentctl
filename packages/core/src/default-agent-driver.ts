@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { AcpAgentDriver } from './acp/driver.js';
 import { PersistentAgentConnectionManager } from './acp/transport/persistent-connection.js';
+import { AgentDiagnosticsRecorder } from './agent/diagnostics.js';
 import type { Logger } from './logger.js';
 import type { ProviderStore } from './providers/registry/provider-store.js';
 import type { RegistryFetcher } from './providers/registry/registry-fetcher.js';
@@ -8,8 +9,10 @@ import type { ProviderLauncher } from './providers/registry/provider-launcher.js
 
 /** Composition helper for applications that use ACP as their configured transport. */
 export function createDefaultAgentDriver(logger: Logger) {
-  return AcpAgentDriver.create(spawn, logger);
+  return AcpAgentDriver.create(spawn, logger, defaultAgentDiagnostics);
 }
+
+export const defaultAgentDiagnostics = new AgentDiagnosticsRecorder();
 
 /** Composition helper for the default transport's shared process manager. */
 export function createDefaultAgentConnectionManager(
@@ -18,5 +21,11 @@ export function createDefaultAgentConnectionManager(
   launcher: ProviderLauncher,
   logger: Logger,
 ) {
-  return new PersistentAgentConnectionManager(store, fetcher, launcher, logger);
+  return new PersistentAgentConnectionManager(
+    store,
+    fetcher,
+    launcher,
+    logger,
+    defaultAgentDiagnostics,
+  );
 }

@@ -13,10 +13,16 @@ import type { AcpParsedCapabilities } from '../types.js';
 import type { AgentSessionCallbacks, AgentSessionOptions } from '../../agent/types.js';
 import { type Logger, noopLogger } from '../../logger.js';
 import { TerminalManager } from '../protocol/terminal-manager.js';
+import type {
+  AgentConnectionDiagnostic,
+  AgentDiagnosticsRecorder,
+} from '../../agent/diagnostics.js';
+import type { AgentFeatures } from '../../agent/types.js';
 
 const PERSISTENT_CONNECTION_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface PersistentConnection {
+  providerId: string;
   generation: number;
   connection: ClientSideConnection;
   child: ChildProcess;
@@ -49,6 +55,7 @@ export class PersistentAgentConnectionManager {
     private fetcher: RegistryFetcher,
     private launcher: ProviderLauncher,
     private logger: Logger = noopLogger,
+    private diagnostics?: AgentDiagnosticsRecorder,
   ) {}
 
   registerActiveSession(acpSessionId: string, session: ActiveSession, providerId: string) {
@@ -93,6 +100,13 @@ export class PersistentAgentConnectionManager {
     if (conn?.transport.isAlive) {
       conn.lastUsed = Date.now();
       this.resetIdleTimer(conn);
+      this.diagnostics?.record({
+        kind: 'connection_reused',
+        adapter: 'acp-v1',
+        providerId,
+        generation: conn.generation,
+        path: 'persistent',
+      });
       return conn;
     }
 
@@ -126,6 +140,13 @@ export class PersistentAgentConnectionManager {
     epoch: number,
   ): Promise<PersistentConnection> {
     const generation = this.nextGeneration++;
+    this.diagnostics?.record({
+      kind: 'connection_starting',
+      adapter: 'acp-v1',
+      providerId,
+      generation,
+      path: 'persistent',
+    });
     const activeSessions = this.activeSessions;
     const terminalToSession = this.terminalToSession;
     const debugLog = new AcpDebugLog();
@@ -220,6 +241,7 @@ export class PersistentAgentConnectionManager {
     const parsedCapabilities = acpInitRes.parsedCapabilities;
 
     const persistentConn: PersistentConnection = {
+      providerId,
       generation,
       connection,
       child,
@@ -239,6 +261,14 @@ export class PersistentAgentConnectionManager {
 
     this.connections.set(providerId, persistentConn);
     this.resetIdleTimer(persistentConn);
+    this.diagnostics?.record({
+      kind: 'connection_ready',
+      adapter: 'acp-v1',
+      providerId,
+      generation,
+      path: 'persistent',
+      features: this.featuresFromCapabilities(parsedCapabilities),
+    });
 
     child.once('exit', (code, signal) => {
       this.handleConnectionExit(providerId, persistentConn, code, signal);
@@ -254,6 +284,14 @@ export class PersistentAgentConnectionManager {
     conn.idleTimer = setTimeout(() => {
       if (conn.sessions.size === 0) {
         this.logger.info(`Closing idle persistent connection`);
+        this.diagnostics?.record({
+          kind: 'connection_closed',
+          adapter: 'acp-v1',
+          providerId: conn.providerId,
+          generation: conn.generation,
+          path: 'persistent',
+          reason: 'idle_timeout',
+        });
         this.closeConnectionByInstance(conn);
       }
     }, PERSISTENT_CONNECTION_IDLE_TIMEOUT_MS);
@@ -283,6 +321,14 @@ export class PersistentAgentConnectionManager {
     this.providerEpochs.set(providerId, (this.providerEpochs.get(providerId) ?? 0) + 1);
     const conn = this.connections.get(providerId);
     if (conn) {
+      this.diagnostics?.record({
+        kind: 'connection_closed',
+        adapter: 'acp-v1',
+        providerId,
+        generation: conn.generation,
+        path: 'persistent',
+        reason: 'provider_closed',
+      });
       this.closeConnectionByInstance(conn);
       this.connections.delete(providerId);
     }
@@ -304,6 +350,14 @@ export class PersistentAgentConnectionManager {
       { providerId, generation: connection.generation, code, signal },
       `Persistent agent process exited for provider ${providerId}`,
     );
+    this.diagnostics?.record({
+      kind: 'connection_exited',
+      adapter: 'acp-v1',
+      providerId,
+      generation: connection.generation,
+      path: 'persistent',
+      reason: 'process_exit',
+    });
 
     const exitReason = String(code ?? signal ?? 'unknown');
     const sessionsToNotify = Array.from(connection.sessions.keys())
@@ -336,6 +390,36 @@ export class PersistentAgentConnectionManager {
     }
     void conn.terminalManager.dispose();
     conn.transport.kill();
+  }
+
+  getConnectionDiagnostics(): AgentConnectionDiagnostic[] {
+    return Array.from(this.connections.values()).map((connection) => ({
+      adapter: 'acp-v1',
+      providerId: connection.providerId,
+      generation: connection.generation,
+      state: 'ready',
+      activeSessionCount: connection.sessions.size,
+      lastUsedAt: new Date(connection.lastUsed).toISOString(),
+      features: this.featuresFromCapabilities(connection.capabilities),
+    }));
+  }
+
+  private featuresFromCapabilities(capabilities: AcpParsedCapabilities): AgentFeatures {
+    return {
+      sessions: {
+        resume: capabilities.supportsResumeSession || capabilities.supportsLoadSession,
+        fork: capabilities.supportsForkSession,
+        delete: capabilities.supportsDeleteSession,
+        list: capabilities.supportsListSessions,
+      },
+      prompts: {
+        image: capabilities.supportsImage,
+        audio: capabilities.supportsAudio,
+        embeddedContext: capabilities.supportsEmbeddedContext,
+      },
+      configuration: { model: false, options: false },
+      authentication: { logout: false },
+    };
   }
 
   closeAll() {

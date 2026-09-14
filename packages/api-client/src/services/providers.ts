@@ -1,7 +1,10 @@
 import { apiClient } from '../api-client.js';
-import type { ProviderDiscovery } from '@agentctl/shared';
+import type { AgentDiagnosticsSnapshot, ProviderDiscovery } from '@agentctl/shared';
 
 export const providerService = {
+  getTransportDiagnostics() {
+    return apiClient.fetch<AgentDiagnosticsSnapshot>('/api/diagnostics/transport');
+  },
   getProviders(): Promise<ProviderDiscovery[]> {
     return apiClient.fetch<ProviderDiscovery[]>('/api/providers');
   },

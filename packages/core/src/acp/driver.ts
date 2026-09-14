@@ -1,6 +1,7 @@
 import type { spawn } from 'node:child_process';
 import type { AgentDriver, AgentSessionCallbacks, AgentSessionOptions } from '../agent/types.js';
 import type { Logger } from '../logger.js';
+import type { AgentDiagnosticsRecorder } from '../agent/diagnostics.js';
 import type { IConnectionManager } from './types.js';
 import { AcpV1AgentDriver } from './runtime.js';
 import { AcpV2AgentDriver } from './v2/runtime.js';
@@ -17,12 +18,18 @@ export class AcpAgentDriver implements AgentDriver {
   constructor(
     private readonly v1: AcpV1AgentDriver = new AcpV1AgentDriver(),
     private readonly v2: AcpV2AgentDriver = new AcpV2AgentDriver(),
+    private readonly diagnostics?: AgentDiagnosticsRecorder,
   ) {}
 
-  static create(spawnImpl: typeof spawn, logger: Logger): AcpAgentDriver {
+  static create(
+    spawnImpl: typeof spawn,
+    logger: Logger,
+    diagnostics?: AgentDiagnosticsRecorder,
+  ): AcpAgentDriver {
     return new AcpAgentDriver(
-      new AcpV1AgentDriver(spawnImpl, logger),
-      new AcpV2AgentDriver(spawnImpl, logger),
+      new AcpV1AgentDriver(spawnImpl, logger, undefined, undefined, diagnostics),
+      new AcpV2AgentDriver(spawnImpl, logger, undefined, diagnostics),
+      diagnostics,
     );
   }
 
@@ -36,7 +43,15 @@ export class AcpAgentDriver implements AgentDriver {
     options: AgentSessionOptions,
     callbacks: AgentSessionCallbacks,
   ) {
-    return this.forEnv(options.env).startSession(command, args, options, callbacks);
+    const version = selectAcpProtocol(options.env);
+    this.diagnostics?.record({
+      kind: 'adapter_selected',
+      adapter: version === 'v2' ? 'acp-v2' : 'acp-v1',
+      providerId: options.providerId,
+      intent: options.intent.kind,
+      features: options.features,
+    });
+    return (version === 'v2' ? this.v2 : this.v1).startSession(command, args, options, callbacks);
   }
 
   inspectProvider(command: string, args: string[], env?: Record<string, string>) {

@@ -39,6 +39,7 @@ import {
   isAcpMethodNotFound,
   isAcpSessionNotFound,
 } from '../protocol/error-classifier.js';
+import type { AgentDiagnosticsRecorder } from '../../agent/diagnostics.js';
 
 interface TurnStop {
   stopReason: AgentStopReason;
@@ -228,6 +229,7 @@ export class AcpV2AgentDriver implements AgentDriver {
       child,
       logger,
     ) => new ProcessStreamTransport(child, logger),
+    private diagnostics?: AgentDiagnosticsRecorder,
   ) {}
 
   async startSession(
@@ -236,12 +238,27 @@ export class AcpV2AgentDriver implements AgentDriver {
     options: AgentSessionOptions,
     callbacks: AgentSessionCallbacks,
   ): Promise<AgentSession> {
+    this.diagnostics?.record({
+      kind: 'connection_starting',
+      adapter: 'acp-v2',
+      providerId: options.providerId,
+      path: 'spawn',
+    });
     const child = this.spawnImpl(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: cleanEnv(options.env),
       cwd: options.cwd,
     });
     const transport = this.createTransport(child, this.logger);
+    child.once('exit', () => {
+      this.diagnostics?.record({
+        kind: 'connection_exited',
+        adapter: 'acp-v2',
+        providerId: options.providerId,
+        path: 'spawn',
+        reason: 'process_exit',
+      });
+    });
     const sessions = new Map<string, ActiveCallbacks>();
     const pendingUpdates = new Map<string, UpdateSessionNotification[]>();
     let permissionSequence = 0;
@@ -439,6 +456,12 @@ export class AcpV2AgentDriver implements AgentDriver {
         );
       }
       capabilities = advertised(initialization.capabilities);
+      this.diagnostics?.record({
+        kind: 'connection_ready',
+        adapter: 'acp-v2',
+        providerId: options.providerId,
+        path: 'spawn',
+      });
       if (!capabilities.sessions) {
         throw new AgentError('unsupported', 'Agent does not advertise ACP v2 session support');
       }
@@ -465,8 +488,23 @@ export class AcpV2AgentDriver implements AgentDriver {
             throw new AgentError('agent_failure', 'ACP v2 fork returned an invalid session ID');
           }
           handle.history = 'restored';
+          this.diagnostics?.record({
+            kind: 'session_started',
+            adapter: 'acp-v2',
+            providerId: options.providerId,
+            intent: 'fork',
+            path: 'provider_fork',
+          });
         } catch (error) {
           if (!isAcpMethodNotFound(error)) throw error;
+          this.diagnostics?.record({
+            kind: 'fallback_used',
+            adapter: 'acp-v2',
+            providerId: options.providerId,
+            intent: 'fork',
+            path: 'fresh_session',
+            reason: 'fork_method_not_found',
+          });
           response = await withTimeout(
             connection.agent.request(methods.agent.session.new, request),
             getAgentRequestTimeoutMs(),
@@ -486,8 +524,23 @@ export class AcpV2AgentDriver implements AgentDriver {
           );
           response = { sessionId: options.intent.sessionId, configOptions: resumed.configOptions };
           handle.history = 'restored';
+          this.diagnostics?.record({
+            kind: 'session_started',
+            adapter: 'acp-v2',
+            providerId: options.providerId,
+            intent: 'resume',
+            path: 'provider_resume',
+          });
         } catch (error) {
           if (!isAcpSessionNotFound(error)) throw error;
+          this.diagnostics?.record({
+            kind: 'fallback_used',
+            adapter: 'acp-v2',
+            providerId: options.providerId,
+            intent: 'resume',
+            path: 'fresh_session',
+            reason: 'session_not_found',
+          });
           response = await withTimeout(
             connection.agent.request(methods.agent.session.new, request),
             getAgentRequestTimeoutMs(),
@@ -495,11 +548,30 @@ export class AcpV2AgentDriver implements AgentDriver {
           );
         }
       } else {
+        if (options.intent.kind === 'fork') {
+          this.diagnostics?.record({
+            kind: 'fallback_used',
+            adapter: 'acp-v2',
+            providerId: options.providerId,
+            intent: 'fork',
+            path: 'fresh_session',
+            reason: 'fork_not_supported',
+          });
+        }
         response = await withTimeout(
           connection.agent.request(methods.agent.session.new, request),
           getAgentRequestTimeoutMs(),
           'creating ACP v2 session',
         );
+        if (options.intent.kind === 'new') {
+          this.diagnostics?.record({
+            kind: 'session_started',
+            adapter: 'acp-v2',
+            providerId: options.providerId,
+            intent: 'new',
+            path: 'fresh_session',
+          });
+        }
       }
 
       handle.id = response.sessionId ?? null;

@@ -45,6 +45,7 @@ import { normalizeAcpUsage } from './protocol/usage.js';
 import { getAgentRequestTimeoutMs } from '../config/runtime-defaults.js';
 import { authenticateConnection, initializeAuthConnection } from './protocol/auth.js';
 import { isAcpAuthenticationRequired, isAcpSessionNotFound } from './protocol/error-classifier.js';
+import type { AgentDiagnosticsRecorder } from '../agent/diagnostics.js';
 
 export class AcpV1AgentDriver implements AgentDriver {
   private connectionManager?: IConnectionManager;
@@ -57,6 +58,7 @@ export class AcpV1AgentDriver implements AgentDriver {
       logger,
     ) => new ProcessStreamTransport(child, logger),
     private cache?: CacheStorage,
+    private diagnostics?: AgentDiagnosticsRecorder,
   ) {}
 
   setConnectionManager(manager: IConnectionManager): void {
@@ -97,6 +99,14 @@ export class AcpV1AgentDriver implements AgentDriver {
           err,
           `Failed to get persistent connection for ${providerId}, falling back to spawn`,
         );
+        this.diagnostics?.record({
+          kind: 'fallback_used',
+          adapter: 'acp-v1',
+          providerId,
+          intent: options.intent.kind,
+          path: 'spawn',
+          reason: 'persistent_connection_unavailable',
+        });
       }
     }
 
@@ -104,10 +114,25 @@ export class AcpV1AgentDriver implements AgentDriver {
     let terminalManager: TerminalManager | undefined;
 
     if (!isPersistent) {
+      this.diagnostics?.record({
+        kind: 'connection_starting',
+        adapter: 'acp-v1',
+        providerId: options.providerId,
+        path: 'spawn',
+      });
       child = this.spawnImpl(command, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: cleanEnv(options.env),
         cwd: options.cwd,
+      });
+      child.once('exit', () => {
+        this.diagnostics?.record({
+          kind: 'connection_exited',
+          adapter: 'acp-v1',
+          providerId: options.providerId,
+          path: 'spawn',
+          reason: 'process_exit',
+        });
       });
 
       transport = this.createTransport(child, this.logger);
@@ -294,6 +319,12 @@ export class AcpV1AgentDriver implements AgentDriver {
         });
 
         capabilities = parsedCapabilities;
+        this.diagnostics?.record({
+          kind: 'connection_ready',
+          adapter: 'acp-v1',
+          providerId: options.providerId,
+          path: 'spawn',
+        });
       }
       let newSessionResult:
         NewSessionResponse | ResumeSessionResponse | LoadSessionResponse | null = null;
@@ -320,6 +351,13 @@ export class AcpV1AgentDriver implements AgentDriver {
           newSessionResult = forked;
           acpSessionId = forked.sessionId;
           handle.history = 'restored';
+          this.diagnostics?.record({
+            kind: 'session_started',
+            adapter: 'acp-v1',
+            providerId,
+            intent: 'fork',
+            path: 'provider_fork',
+          });
         } else if (
           options.intent.kind === 'resume' &&
           (capabilities.supportsLoadSession || capabilities.supportsResumeSession)
@@ -349,6 +387,13 @@ export class AcpV1AgentDriver implements AgentDriver {
                 'resuming ACP session',
               );
               handle.history = 'restored';
+              this.diagnostics?.record({
+                kind: 'session_started',
+                adapter: 'acp-v1',
+                providerId,
+                intent: 'resume',
+                path: 'provider_resume',
+              });
             } else if (capabilities.supportsLoadSession) {
               newSessionResult = await withTimeout(
                 connection.loadSession({
@@ -359,6 +404,13 @@ export class AcpV1AgentDriver implements AgentDriver {
                 'loading ACP session',
               );
               handle.history = 'restored';
+              this.diagnostics?.record({
+                kind: 'session_started',
+                adapter: 'acp-v1',
+                providerId,
+                intent: 'resume',
+                path: 'provider_resume',
+              });
             }
           } catch (resumeErr: unknown) {
             if (isAcpSessionNotFound(resumeErr)) {
@@ -377,6 +429,14 @@ export class AcpV1AgentDriver implements AgentDriver {
               newSessionResult = created;
               acpSessionId = created.sessionId;
               handle.history = 'fresh';
+              this.diagnostics?.record({
+                kind: 'fallback_used',
+                adapter: 'acp-v1',
+                providerId,
+                intent: 'resume',
+                path: 'fresh_session',
+                reason: 'session_not_found',
+              });
               if (isPersistent && self.connectionManager) {
                 self.connectionManager.registerActiveSession(
                   acpSessionId,
@@ -394,6 +454,18 @@ export class AcpV1AgentDriver implements AgentDriver {
             }
           }
         } else {
+          if (options.intent.kind === 'fork') {
+            this.diagnostics?.record({
+              kind: 'fallback_used',
+              adapter: 'acp-v1',
+              providerId,
+              intent: 'fork',
+              path: 'fresh_session',
+              reason: capabilities.supportsForkSession
+                ? 'fork_method_not_found'
+                : 'fork_not_supported',
+            });
+          }
           const created = await withTimeout(
             connection.newSession(baseSessionParams),
             getAgentRequestTimeoutMs(),
@@ -401,6 +473,15 @@ export class AcpV1AgentDriver implements AgentDriver {
           );
           newSessionResult = created;
           acpSessionId = created.sessionId;
+          if (options.intent.kind === 'new') {
+            this.diagnostics?.record({
+              kind: 'session_started',
+              adapter: 'acp-v1',
+              providerId,
+              intent: 'new',
+              path: 'fresh_session',
+            });
+          }
           if (isPersistent && self.connectionManager) {
             self.connectionManager.registerActiveSession(
               acpSessionId,

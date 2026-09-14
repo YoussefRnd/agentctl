@@ -9,6 +9,7 @@ import type { AgentDriver } from '../agent/types.js';
 import {
   createDefaultAgentConnectionManager,
   createDefaultAgentDriver,
+  defaultAgentDiagnostics,
 } from '../default-agent-driver.js';
 import { isAgentAuthenticationRequiredError } from '../agent/errors.js';
 import type { DbClient } from '../db/index.js';
@@ -91,6 +92,10 @@ export class ProviderRegistry {
 
   getConnectionManager(): ReturnType<typeof createDefaultAgentConnectionManager> {
     return this.connectionManager;
+  }
+
+  getTransportDiagnostics() {
+    return defaultAgentDiagnostics.snapshot(this.connectionManager.getConnectionDiagnostics());
   }
 
   private acquireMutation(): Promise<() => void> {
