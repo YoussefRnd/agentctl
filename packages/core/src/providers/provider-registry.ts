@@ -6,7 +6,10 @@ import {
 } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentDriver } from '../agent/types.js';
-import { createDefaultAgentDriver } from '../default-agent-driver.js';
+import {
+  createDefaultAgentConnectionManager,
+  createDefaultAgentDriver,
+} from '../default-agent-driver.js';
 import { isAgentAuthenticationRequiredError } from '../agent/errors.js';
 import type { DbClient } from '../db/index.js';
 import { jsonCodecs } from '../db/json-codecs.js';
@@ -17,7 +20,6 @@ import { RegistryFetcher } from './registry/registry-fetcher.js';
 import { ProviderLauncher, resolveNpxPackageSpec } from './registry/provider-launcher.js';
 import { AuthProvider } from './registry/auth-provider.js';
 import { ProviderSync } from './registry/provider-sync.js';
-import { PersistentAgentConnectionManager } from './registry/persistent-connection.js';
 
 export { getPlatformKey };
 
@@ -65,7 +67,7 @@ export class ProviderRegistry {
   private syncActive = false;
   private coordinationWaiters: CoordinationWaiter[] = [];
   private activeSync?: Promise<void>;
-  private connectionManager: PersistentAgentConnectionManager;
+  private connectionManager: ReturnType<typeof createDefaultAgentConnectionManager>;
 
   constructor(
     private db: DbClient,
@@ -77,7 +79,7 @@ export class ProviderRegistry {
     this.installer = new BinaryInstaller();
     this.store = new ProviderStore(db);
     this.launcher = new ProviderLauncher(this.store, this.installer);
-    this.connectionManager = new PersistentAgentConnectionManager(
+    this.connectionManager = createDefaultAgentConnectionManager(
       this.store,
       this.fetcher,
       this.launcher,
@@ -87,7 +89,7 @@ export class ProviderRegistry {
     this.syncProvider = new ProviderSync(this.fetcher, this.store, this.installer, this.launcher);
   }
 
-  getConnectionManager(): PersistentAgentConnectionManager {
+  getConnectionManager(): ReturnType<typeof createDefaultAgentConnectionManager> {
     return this.connectionManager;
   }
 

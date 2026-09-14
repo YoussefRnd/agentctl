@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument */
 import { describe, it, expect, vi } from 'vitest';
-import { PersistentAgentConnectionManager } from './registry/persistent-connection.js';
+import { PersistentAgentConnectionManager } from '../acp/transport/persistent-connection.js';
 
 describe('PersistentAgentConnectionManager Process Exit', () => {
   it('shares one in-flight connection creation between concurrent callers', async () => {
