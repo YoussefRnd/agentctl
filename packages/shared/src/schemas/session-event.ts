@@ -1,23 +1,32 @@
 import { z } from 'zod';
 
-export const sessionEventTextDataSchema = z.object({
-  content: z.string(),
-  role: z.enum(['provider', 'user', 'thought']).optional(),
-  attachments: z
-    .array(
-      z.object({
-        attachmentId: z.string(),
-        mimeType: z.string(),
-        filename: z.string(),
-        sizeBytes: z.number(),
-      }),
-    )
-    .optional(),
-});
+export const sessionEventTextDataSchema = z
+  .object({
+    content: z.string().optional().default(''),
+    text: z.string().optional(),
+    role: z.enum(['provider', 'user', 'thought']).optional(),
+    attachments: z
+      .array(
+        z.object({
+          attachmentId: z.string(),
+          mimeType: z.string(),
+          filename: z.string(),
+          sizeBytes: z.number(),
+        }),
+      )
+      .optional(),
+  })
+  .transform((val) => ({
+    ...val,
+    content:
+      val.content !== undefined && val.content !== ''
+        ? val.content
+        : (val.text ?? val.content ?? ''),
+  }));
 
 export const sessionEventToolCallDataSchema = z
   .object({
-    name: z.string(),
+    name: z.string().optional().default(''),
     arguments: z.record(z.string(), z.unknown()).optional(),
     toolCallId: z.string().optional(),
     title: z.string().optional(),
@@ -73,39 +82,72 @@ export const sessionEventToolCallDataSchema = z
   })
   .loose();
 
-export const sessionEventApprovalRequestDataSchema = z.object({
-  message: z.string().optional(),
-  toolCallId: z.string().optional(),
-  request: z.unknown().optional(),
-});
+export const sessionEventApprovalRequestDataSchema = z
+  .object({
+    message: z.string().optional(),
+    toolCallId: z.string().optional(),
+    request: z.unknown().optional(),
+  })
+  .loose();
 
-export const sessionEventSubagentUpdateDataSchema = z.object({
-  subagentId: z.string(),
-  name: z.string(),
-  scope: z.string(),
-  status: z.enum(['spawning', 'running', 'completed', 'failed']),
-  result: z
-    .object({
-      summary: z.string().optional(),
-      tokensUsed: z.number().optional(),
-    })
-    .optional(),
-});
+export const sessionEventSubagentUpdateDataSchema = z
+  .object({
+    subagentId: z.string(),
+    name: z.string(),
+    scope: z.string(),
+    status: z.enum(['spawning', 'running', 'completed', 'failed']),
+    result: z
+      .object({
+        summary: z.string().optional(),
+        tokensUsed: z.number().optional(),
+      })
+      .optional(),
+  })
+  .loose();
 
-export const sessionEventPlanDataSchema = z.object({
-  plan: z.array(
-    z.object({
-      name: z.string(),
-      status: z.string(),
-      isCompleted: z.boolean(),
-      priority: z.enum(['high', 'medium', 'low']).optional(),
-    }),
-  ),
-});
+export const sessionEventPlanDataSchema = z
+  .object({
+    plan: z.array(
+      z.object({
+        name: z.string(),
+        status: z.string(),
+        isCompleted: z.boolean(),
+        priority: z.enum(['high', 'medium', 'low']).optional(),
+      }),
+    ),
+  })
+  .loose();
 
-export const sessionEventModeDataSchema = z.object({
-  mode: z.string(),
-});
+export const sessionEventModeDataSchema = z
+  .object({
+    mode: z.string(),
+  })
+  .loose();
+
+export const sessionEventTerminalCreatedDataSchema = z
+  .object({
+    terminalId: z.string(),
+    command: z.string(),
+  })
+  .loose();
+
+export const sessionEventTerminalOutputDataSchema = z
+  .object({
+    terminalId: z.string(),
+    data: z.string(),
+  })
+  .loose();
+
+export const sessionEventTerminalExitDataSchema = z
+  .object({
+    terminalId: z.string(),
+    code: z.number().nullable(),
+  })
+  .loose();
+
+export const sessionEventDiffDataSchema = z.record(z.string(), z.unknown());
+export const sessionEventStatusDataSchema = z.record(z.string(), z.unknown());
+export const sessionEventCompactDataSchema = z.record(z.string(), z.unknown());
 
 export const sessionEventSchema = z.discriminatedUnion('type', [
   z.object({
@@ -135,41 +177,32 @@ export const sessionEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('terminal_created'),
-    data: z.object({
-      terminalId: z.string(),
-      command: z.string(),
-    }),
+    data: sessionEventTerminalCreatedDataSchema,
     createdAt: z.coerce.date(),
   }),
   z.object({
     type: z.literal('terminal_output'),
-    data: z.object({
-      terminalId: z.string(),
-      data: z.string(),
-    }),
+    data: sessionEventTerminalOutputDataSchema,
     createdAt: z.coerce.date(),
   }),
   z.object({
     type: z.literal('terminal_exit'),
-    data: z.object({
-      terminalId: z.string(),
-      code: z.number().nullable(),
-    }),
+    data: sessionEventTerminalExitDataSchema,
     createdAt: z.coerce.date(),
   }),
   z.object({
     type: z.literal('diff'),
-    data: z.record(z.string(), z.unknown()),
+    data: sessionEventDiffDataSchema,
     createdAt: z.coerce.date(),
   }),
   z.object({
     type: z.literal('status'),
-    data: z.record(z.string(), z.unknown()),
+    data: sessionEventStatusDataSchema,
     createdAt: z.coerce.date(),
   }),
   z.object({
     type: z.literal('compact'),
-    data: z.record(z.string(), z.unknown()),
+    data: sessionEventCompactDataSchema,
     createdAt: z.coerce.date(),
   }),
   z.object({
@@ -184,14 +217,46 @@ export type SessionEventTextData = z.infer<typeof sessionEventTextDataSchema>;
 export type SessionEventToolCallData = z.infer<typeof sessionEventToolCallDataSchema>;
 export type SessionEventApprovalRequestData = z.infer<typeof sessionEventApprovalRequestDataSchema>;
 export type SessionEventSubagentUpdateData = z.infer<typeof sessionEventSubagentUpdateDataSchema>;
+export type SessionEventPlanData = z.infer<typeof sessionEventPlanDataSchema>;
+export type SessionEventModeData = z.infer<typeof sessionEventModeDataSchema>;
+export type SessionEventTerminalCreatedData = z.infer<typeof sessionEventTerminalCreatedDataSchema>;
+export type SessionEventTerminalOutputData = z.infer<typeof sessionEventTerminalOutputDataSchema>;
+export type SessionEventTerminalExitData = z.infer<typeof sessionEventTerminalExitDataSchema>;
+export type SessionEventDiffData = z.infer<typeof sessionEventDiffDataSchema>;
+export type SessionEventStatusData = z.infer<typeof sessionEventStatusDataSchema>;
+export type SessionEventCompactData = z.infer<typeof sessionEventCompactDataSchema>;
 
-export const sessionEventMetadataSchema = z.object({
-  durationMs: z.number().optional(),
-  promptTokens: z.number().optional(),
-  completionTokens: z.number().optional(),
-  cost: z.number().optional(),
-  snapshotHash: z.string().optional(),
-});
+export interface SessionEventPayloadMap {
+  text: z.input<typeof sessionEventTextDataSchema>;
+  tool_call: z.input<typeof sessionEventToolCallDataSchema>;
+  approval_request: z.input<typeof sessionEventApprovalRequestDataSchema>;
+  plan_update: z.input<typeof sessionEventPlanDataSchema>;
+  mode_update: z.input<typeof sessionEventModeDataSchema>;
+  terminal_created: z.input<typeof sessionEventTerminalCreatedDataSchema>;
+  terminal_output: z.input<typeof sessionEventTerminalOutputDataSchema>;
+  terminal_exit: z.input<typeof sessionEventTerminalExitDataSchema>;
+  diff: Record<string, unknown>;
+  status: Record<string, unknown>;
+  compact: Record<string, unknown>;
+  subagent_update: z.input<typeof sessionEventSubagentUpdateDataSchema>;
+}
+
+export type SessionEventType = keyof SessionEventPayloadMap;
+export type SessionEventPayload<T extends string> = T extends SessionEventType
+  ? SessionEventPayloadMap[T]
+  : Record<string, unknown>;
+
+export const sessionEventMetadataSchema = z
+  .object({
+    durationMs: z.number().optional(),
+    promptTokens: z.number().optional(),
+    completionTokens: z.number().optional(),
+    cost: z.number().optional(),
+    snapshotHash: z.string().optional(),
+  })
+  .loose();
+
+export type SessionEventMetadata = z.infer<typeof sessionEventMetadataSchema>;
 
 export const sessionEventRowSchema = z.intersection(
   sessionEventSchema,

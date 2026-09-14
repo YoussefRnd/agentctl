@@ -2,8 +2,9 @@ import { eq, and, desc, gte, sql } from 'drizzle-orm';
 import { sessionEvents, sessions } from '../db/schema.js';
 import type { DbClient } from '../db/index.js';
 import type { IEventBus } from './manager.js';
-import type { SessionEvent } from '@agentctl/shared';
+import type { SessionEvent, SessionEventPayload, SessionEventMetadata } from '@agentctl/shared';
 import type { SessionEventDbRow } from '../db/zod-schemas.js';
+import { sessionEventCodecs } from '../db/json-codecs.js';
 
 interface TokenMetadata {
   promptTokens?: number;
@@ -75,21 +76,33 @@ export class SessionEventStore {
     this.eventBus.publish(delta !== undefined ? { ...event, delta } : event);
   }
 
+  async append<T extends SessionEvent['type']>(
+    sessionId: string,
+    type: T,
+    data: SessionEventPayload<T>,
+    parentEventId?: number | null,
+    metadata?: SessionEventMetadata | null,
+  ): Promise<number>;
   async append(
     sessionId: string,
-    type: SessionEvent['type'],
+    type: string,
     data: unknown,
     parentEventId?: number | null,
-    metadata?: unknown,
+    metadata?: SessionEventMetadata | null,
   ): Promise<number> {
+    const validatedData = sessionEventCodecs.validateData(
+      type as SessionEvent['type'],
+      data as SessionEventPayload<SessionEvent['type']>,
+    );
+    const validatedMetadata = sessionEventCodecs.validateMetadata(metadata);
     const inserted = await this.db
       .insert(sessionEvents)
       .values({
         sessionId,
-        type,
-        data: JSON.stringify(data),
+        type: type as SessionEvent['type'],
+        data: JSON.stringify(validatedData),
         parentEventId: parentEventId ?? null,
-        metadata: metadata ? JSON.stringify(metadata) : null,
+        metadata: validatedMetadata ? JSON.stringify(validatedMetadata) : null,
       })
       .returning();
 
@@ -99,25 +112,33 @@ export class SessionEventStore {
       createdAt: new Date(first.createdAt),
     });
 
-    void this.incrementTotalTokens(sessionId, extractTokens(metadata)).catch(() => {
+    void this.incrementTotalTokens(sessionId, extractTokens(validatedMetadata)).catch(() => {
       // ignore token refresh failure
     });
 
     return first.id;
   }
 
-  async update(eventId: number, data: unknown, metadata?: unknown): Promise<void> {
+  async update(
+    eventId: number,
+    data: unknown,
+    metadata?: SessionEventMetadata | null,
+  ): Promise<void> {
     await this.performUpdate(eventId, data, metadata, true);
   }
 
-  async updateSilently(eventId: number, data: unknown, metadata?: unknown): Promise<void> {
+  async updateSilently(
+    eventId: number,
+    data: unknown,
+    metadata?: SessionEventMetadata | null,
+  ): Promise<void> {
     await this.performUpdate(eventId, data, metadata, false);
   }
 
   private async performUpdate(
     eventId: number,
     data: unknown,
-    metadata?: unknown,
+    metadata?: SessionEventMetadata | null,
     shouldPublish = true,
   ): Promise<void> {
     const existing = await this.getEventWithMetadataFull(eventId);
@@ -141,11 +162,19 @@ export class SessionEventStore {
       }
       mergedData = { ...(existing.data as Record<string, unknown>), ...cleanData };
     }
+    const validatedData = existing
+      ? sessionEventCodecs.validateData(
+          existing.type as SessionEvent['type'],
+          mergedData as SessionEventPayload<SessionEvent['type']>,
+        )
+      : mergedData;
+    const validatedMetadata =
+      metadata === undefined ? undefined : sessionEventCodecs.validateMetadata(metadata);
     const updateValues: { data: string; metadata?: string | null } = {
-      data: JSON.stringify(mergedData),
+      data: JSON.stringify(validatedData),
     };
     if (metadata !== undefined) {
-      updateValues.metadata = metadata ? JSON.stringify(metadata) : null;
+      updateValues.metadata = validatedMetadata ? JSON.stringify(validatedMetadata) : null;
     }
     const updated = await this.db
       .update(sessionEvents)
@@ -186,14 +215,14 @@ export class SessionEventStore {
     if (rows.length === 0) return null;
     const first = rows[0];
 
-    const parsedData: unknown =
-      typeof first.data === 'string' ? JSON.parse(first.data) : first.data;
+    const parsedData = sessionEventCodecs.parseData(first.type, first.data);
+    const parsedMetadata = sessionEventCodecs.parseMetadata(first.metadata);
 
     return {
       id: first.id,
       type: first.type,
       data: parsedData,
-      metadata: first.metadata,
+      metadata: parsedMetadata,
     };
   }
 
@@ -207,9 +236,7 @@ export class SessionEventStore {
     if (rows.length === 0) return null;
     const first = rows[0];
 
-    const parsedData = (
-      typeof first.data === 'string' ? JSON.parse(first.data) : first.data
-    ) as unknown;
+    const parsedData = sessionEventCodecs.parseData(first.type, first.data);
 
     return {
       id: first.id,
@@ -232,9 +259,7 @@ export class SessionEventStore {
     if (last.length === 0) return null;
     const first = last[0];
 
-    const parsedData = (
-      typeof first.data === 'string' ? JSON.parse(first.data) : first.data
-    ) as unknown;
+    const parsedData = sessionEventCodecs.parseData(first.type, first.data);
 
     return {
       id: first.id,
@@ -306,13 +331,8 @@ export class SessionEventStore {
     if (rows.length === 0) return null;
     const first = rows[0];
 
-    const parsedData: unknown =
-      typeof first.data === 'string' ? JSON.parse(first.data) : first.data;
-    const parsedMetadata: unknown = first.metadata
-      ? typeof first.metadata === 'string'
-        ? JSON.parse(first.metadata)
-        : first.metadata
-      : {};
+    const parsedData = sessionEventCodecs.parseData(first.type, first.data);
+    const parsedMetadata = sessionEventCodecs.parseMetadata(first.metadata);
 
     return {
       id: first.id,

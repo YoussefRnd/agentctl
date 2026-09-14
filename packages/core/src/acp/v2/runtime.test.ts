@@ -128,6 +128,28 @@ function harness() {
 }
 
 describe('AcpV2AgentDriver', () => {
+  test('records provider and protocol provenance during inspection', async () => {
+    const setup = harness();
+    const driver = new AcpV2AgentDriver(setup.fakeSpawn, undefined, () => setup.transport);
+
+    const descriptor = await driver.inspectProvider(
+      'test-agent',
+      [],
+      {},
+      {
+        providerVersion: '2.0.0',
+      },
+    );
+
+    expect(descriptor.snapshot).toMatchObject({
+      source: 'handshake',
+      providerVersion: '2.0.0',
+      protocolVersion: String(PROTOCOL_VERSION),
+    });
+    expect(descriptor.snapshot?.verifiedAt).toBeInstanceOf(Date);
+    setup.agentConnection.close();
+  });
+
   test('passes the shared lifecycle, update, and control contract', async () => {
     const setup = harness();
     const driver = new AcpV2AgentDriver(setup.fakeSpawn, undefined, () => setup.transport);

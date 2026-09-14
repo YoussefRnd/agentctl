@@ -10,7 +10,13 @@ import type { providers } from '../db/schema.js';
 import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 import { jsonCodecs } from '../db/json-codecs.js';
 
-export type ProviderData = Omit<typeof providers.$inferSelect, 'features'> & { features?: string };
+export type ProviderData = Omit<
+  typeof providers.$inferSelect,
+  'features' | 'capabilitySnapshot'
+> & {
+  features?: string;
+  capabilitySnapshot?: string | null;
+};
 
 export interface ProviderLaunchConfig {
   command: string;
@@ -92,6 +98,10 @@ export class Provider {
         logout: persisted.authentication.logout || this.supportsLogout,
       },
     };
+  }
+
+  get capabilitySnapshot() {
+    return jsonCodecs.capabilitySnapshot(this.data.capabilitySnapshot);
   }
 
   getLaunchConfig(selectedModel: string, selectedThinkingEffort: string): ProviderLaunchConfig {
@@ -198,6 +208,7 @@ export class Provider {
       supportsDynamicConfig: this.data.supportsDynamicConfig,
       supportsLogout: this.data.supportsLogout,
       features: this.features,
+      snapshot: this.capabilitySnapshot,
       nativelyLoadsSkills: this.data.nativelyLoadsSkills,
       installState: this.data.installState as ProviderDiscovery['installState'],
       installError: this.data.installError ?? null,

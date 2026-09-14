@@ -108,6 +108,7 @@ export const providers = sqliteTable('providers', {
     .default(false),
   supportsLogout: integer('supports_logout', { mode: 'boolean' }).notNull().default(false),
   features: text('features').notNull().default('{}'),
+  capabilitySnapshot: text('capability_snapshot'),
   nativelyLoadsSkills: integer('natively_loads_skills', { mode: 'boolean' })
     .notNull()
     .default(false),

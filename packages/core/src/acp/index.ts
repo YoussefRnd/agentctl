@@ -1,5 +1,11 @@
 export * from './types.js';
 export * from './transport/process-transport.js';
+export * from './transport/acp-process-lifecycle.js';
+export {
+  withTimeout,
+  ProcessStreamTransport,
+  cleanEnv,
+} from './transport/acp-process-lifecycle.js';
 export * from './transport/path-security.js';
 export * from './transport/capabilities-cache.js';
 export * from './transport/stream-debug.js';

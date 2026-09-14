@@ -4,6 +4,7 @@ import {
   agentConfigOptionSchema,
   agentFeaturesSchema,
   authMethodSchema,
+  capabilitySnapshotSchema,
 } from './registry.js';
 
 export const providerSchema = z.string().min(1);
@@ -87,6 +88,7 @@ export const providerCapabilitySchema = z.object({
   supportsDynamicConfig: z.boolean().optional(),
   modes: z.array(z.string()).optional().default([]),
   features: agentFeaturesSchema.optional(),
+  snapshot: capabilitySnapshotSchema.optional(),
 });
 
 export const installStateSchema = z.enum([
@@ -111,6 +113,7 @@ export const providerDiscoverySchema = z.object({
   supportsDynamicConfig: z.boolean().optional().default(false),
   supportsLogout: z.boolean().optional().default(false),
   features: agentFeaturesSchema.optional(),
+  snapshot: capabilitySnapshotSchema.optional(),
   nativelyLoadsSkills: z.boolean().optional().default(false),
 
   // New fields

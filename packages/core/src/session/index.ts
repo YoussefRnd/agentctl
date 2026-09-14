@@ -1,4 +1,5 @@
 export * from './manager.js';
+export * from './agent-session-id.js';
 export * from './state-machine.js';
 export * from './event-store.js';
 export * from './event-stream-adapter.js';

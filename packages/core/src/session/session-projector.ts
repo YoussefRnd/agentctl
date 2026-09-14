@@ -8,6 +8,7 @@ import type { AgentUpdate } from '../agent/types.js';
 import { deriveAgentToolEffects } from '../agent/tool-effects.js';
 import { jsonCodecs } from '../db/json-codecs.js';
 import { EventStreamAdapter } from './event-stream-adapter.js';
+import type { SessionEventPayload } from '@agentctl/shared';
 
 /**
  * Owns the persistence side of an ACP session: maps incoming domain events
@@ -30,7 +31,7 @@ export class SessionProjector {
 
   async startTurn(
     text: string,
-    attachments?: unknown[],
+    attachments?: NonNullable<SessionEventPayload<'text'>['attachments']>,
     promptTokens?: number,
   ): ReturnType<EventStreamAdapter['startTurn']> {
     return this.adapter.startTurn(text, attachments, promptTokens);

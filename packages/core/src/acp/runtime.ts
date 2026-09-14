@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   ClientSideConnection,
   ndJsonStream,
+  PROTOCOL_VERSION,
   type NewSessionResponse,
   type ResumeSessionResponse,
   type LoadSessionResponse,
@@ -13,18 +14,23 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk';
 import { type Logger, noopLogger } from '../logger.js';
-import type { AgentConfigOption } from '@agentctl/shared';
+import { createCapabilitySnapshot, type AgentConfigOption } from '@agentctl/shared';
 import type { AgentStreamTransport, IConnectionManager, CacheStorage } from './types.js';
 import type {
   AgentDescriptor,
   AgentDriver,
+  AgentInspectionOptions,
   AgentPromptResult,
   AgentSession,
   AgentSessionCallbacks,
   AgentSessionOptions,
 } from '../agent/types.js';
 import { AgentAuthenticationRequiredError } from '../agent/errors.js';
-import { ProcessStreamTransport, cleanEnv } from './transport/process-transport.js';
+import {
+  ProcessStreamTransport,
+  cleanEnv,
+  spawnManagedProcess,
+} from './transport/acp-process-lifecycle.js';
 import { createAgentConnection } from './transport/process-transport.js';
 import { wrapDebug, formatAcpMessageLog } from './transport/stream-debug.js';
 import {
@@ -114,28 +120,20 @@ export class AcpV1AgentDriver implements AgentDriver {
     let terminalManager: TerminalManager | undefined;
 
     if (!isPersistent) {
-      this.diagnostics?.record({
-        kind: 'connection_starting',
+      const managed = spawnManagedProcess({
+        command,
+        args,
+        env: options.env,
+        cwd: options.cwd,
+        spawnImpl: this.spawnImpl,
+        logger: this.logger,
+        diagnostics: this.diagnostics,
         adapter: 'acp-v1',
         providerId: options.providerId,
-        path: 'spawn',
+        createTransport: this.createTransport,
       });
-      child = this.spawnImpl(command, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: cleanEnv(options.env),
-        cwd: options.cwd,
-      });
-      child.once('exit', () => {
-        this.diagnostics?.record({
-          kind: 'connection_exited',
-          adapter: 'acp-v1',
-          providerId: options.providerId,
-          path: 'spawn',
-          reason: 'process_exit',
-        });
-      });
-
-      transport = this.createTransport(child, this.logger);
+      child = managed.child;
+      transport = managed.transport;
 
       const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
 
@@ -607,9 +605,14 @@ export class AcpV1AgentDriver implements AgentDriver {
     command: string,
     args: string[],
     env?: Record<string, string>,
+    options?: AgentInspectionOptions,
   ): Promise<AgentDescriptor> {
     const cleanEnvObj = cleanEnv(env);
-    const cacheKey = getCacheKey(command, args, cleanEnvObj);
+    const cacheIdentity = {
+      providerVersion: options?.providerVersion,
+      protocolVersion: String(PROTOCOL_VERSION),
+    };
+    const cacheKey = getCacheKey(command, args, cleanEnvObj, cacheIdentity);
     const cache = this.getCache();
 
     try {
@@ -622,13 +625,16 @@ export class AcpV1AgentDriver implements AgentDriver {
       this.logger.warn(cacheErr, 'Failed to read from capabilities manifest cache');
     }
 
-    const child = this.spawnImpl(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
+    const managed = spawnManagedProcess({
+      command,
+      args,
       env: cleanEnvObj,
       cwd: os.tmpdir(),
+      spawnImpl: this.spawnImpl,
+      logger: this.logger,
+      createTransport: this.createTransport,
     });
-
-    const transport = this.createTransport(child, this.logger);
+    const { transport } = managed;
     transport.closed.catch(() => undefined);
 
     const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
@@ -728,6 +734,10 @@ export class AcpV1AgentDriver implements AgentDriver {
               authentication: { logout: supportsLogout },
             },
           };
+          probeResult.snapshot = createCapabilitySnapshot(probeResult.features!, 'handshake', {
+            ...cacheIdentity,
+            commandHash: cacheKey,
+          });
 
           if (status === 'ready') {
             try {
@@ -758,14 +768,16 @@ export class AcpV1AgentDriver implements AgentDriver {
     env: Record<string, string> | undefined,
     acpSessionId: string,
   ): Promise<void> {
-    const cleanEnvObj = cleanEnv(env);
-    const child = this.spawnImpl(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnvObj,
+    const managed = spawnManagedProcess({
+      command,
+      args,
+      env,
       cwd: os.tmpdir(),
+      spawnImpl: this.spawnImpl,
+      logger: this.logger,
+      createTransport: this.createTransport,
     });
-
-    const transport = this.createTransport(child, this.logger);
+    const { transport } = managed;
     const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
 
     const connectionInstance = new ClientSideConnection(
@@ -809,9 +821,13 @@ export class AcpV1AgentDriver implements AgentDriver {
     command: string,
     args: string[],
     env?: Record<string, string>,
+    options?: AgentInspectionOptions,
   ): Promise<void> {
     const cleanEnvObj = cleanEnv(env);
-    const cacheKey = getCacheKey(command, args, cleanEnvObj);
+    const cacheKey = getCacheKey(command, args, cleanEnvObj, {
+      providerVersion: options?.providerVersion,
+      protocolVersion: String(PROTOCOL_VERSION),
+    });
     const cache = this.getCache();
     await cache.delete?.(cacheKey);
   }

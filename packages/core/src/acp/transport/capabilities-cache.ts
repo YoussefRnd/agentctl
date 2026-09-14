@@ -13,6 +13,9 @@ import type {
   InitializeAcpConnectionOptions,
 } from '../types.js';
 import type { AgentDescriptor } from '../../agent/types.js';
+import { capabilitySnapshotSchema } from '@agentctl/shared';
+import { withTimeout } from './acp-process-lifecycle.js';
+export { withTimeout };
 
 export const AGENTCTL_CLIENT_CAPABILITIES: ClientCapabilities = {
   terminal: true,
@@ -52,7 +55,10 @@ export class FileCacheStorage implements CacheStorage {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (!entry?.result) return null;
     if (!entry.ts || Date.now() - entry.ts > FileCacheStorage.TTL_MS) return null;
-    return Promise.resolve(entry.result);
+    if (!entry.result.snapshot) return Promise.resolve(entry.result);
+    const snapshot = capabilitySnapshotSchema.safeParse(entry.result.snapshot);
+    if (!snapshot.success) return null;
+    return Promise.resolve({ ...entry.result, snapshot: snapshot.data });
   }
 
   async set(key: string, value: AgentDescriptor): Promise<void> {
@@ -120,17 +126,24 @@ function executableFingerprint(command: string, env: Record<string, string>): st
   return null;
 }
 
-export function getCacheKey(command: string, args: string[], env: Record<string, string>): string {
+export function getCacheKey(
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  options?: { providerVersion?: string; protocolVersion?: string },
+): string {
   const sortedEnv: Record<string, string> = {};
   for (const k of Object.keys(env).sort()) {
     sortedEnv[k] = env[k];
   }
   const data = JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     command,
     args,
     env: sortedEnv,
     executable: executableFingerprint(command, env),
+    providerVersion: options?.providerVersion,
+    protocolVersion: options?.protocolVersion,
   });
   return crypto.hash('sha256', data);
 }
@@ -174,28 +187,6 @@ export function parseAcpCapabilities(agentCapabilities: unknown): AcpParsedCapab
     supportsAudio: Boolean(agentCapsObj?.promptCapabilities?.audio),
     supportsEmbeddedContext: Boolean(agentCapsObj?.promptCapabilities?.embeddedContext),
   };
-}
-
-export async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  label: string,
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(`Timed out while ${label}`));
-    }, timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeoutPromise]);
-  } finally {
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
-    }
-  }
 }
 
 export async function initializeAcpConnection(

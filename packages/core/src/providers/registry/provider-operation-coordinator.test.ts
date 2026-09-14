@@ -1,0 +1,46 @@
+import { describe, test, expect } from 'vitest';
+import { ProviderOperationCoordinator } from './provider-operation-coordinator.js';
+
+describe('ProviderOperationCoordinator', () => {
+  test('allows parallel mutations but serializes sync operations', async () => {
+    const coordinator = new ProviderOperationCoordinator();
+    const order: string[] = [];
+
+    const mutation1 = coordinator.runMutation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      order.push('mutation1');
+    });
+
+    const mutation2 = coordinator.runMutation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      order.push('mutation2');
+    });
+
+    const sync = coordinator.runSync(async () => {
+      order.push('sync');
+    });
+
+    await Promise.all([mutation1, mutation2, sync]);
+
+    expect(order.indexOf('sync')).toBeGreaterThan(order.indexOf('mutation1'));
+    expect(order.indexOf('sync')).toBeGreaterThan(order.indexOf('mutation2'));
+  });
+
+  test('deduplicates identical in-flight provider operations', async () => {
+    const coordinator = new ProviderOperationCoordinator();
+    let executions = 0;
+
+    const op = () =>
+      coordinator.runProviderOperation('prov-1', 'install', async () => {
+        executions += 1;
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return 42;
+      });
+
+    const [res1, res2] = await Promise.all([op(), op()]);
+
+    expect(executions).toBe(1);
+    expect(res1).toBe(42);
+    expect(res2).toBe(42);
+  });
+});

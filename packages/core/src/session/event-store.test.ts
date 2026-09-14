@@ -283,4 +283,92 @@ describe('SessionEventStore', () => {
       expect(insertedRows).toHaveLength(1);
     });
   });
+
+  describe('typed session events and codecs', () => {
+    test('rejects invalid payloads before writing', async () => {
+      const eventBus = { publish: vi.fn() } as unknown as IEventBus;
+      const store = new SessionEventStore({} as DbClient, eventBus);
+
+      await expect(
+        store.append('session-1', 'terminal_created', { terminalId: 'term-1' } as never),
+      ).rejects.toThrow();
+      expect(eventBus.publish).not.toHaveBeenCalled();
+    });
+
+    test('appends strongly typed text event and publishes correctly', async () => {
+      let insertedPayload: unknown;
+      const mockDb = {
+        insert: () => ({
+          values: (val: unknown) => {
+            insertedPayload = val;
+            return {
+              returning: () =>
+                Promise.resolve([
+                  {
+                    id: 101,
+                    sessionId: 'session-1',
+                    type: 'text',
+                    data: (val as { data: string }).data,
+                    parentEventId: null,
+                    metadata: null,
+                    createdAt: new Date(),
+                  },
+                ]),
+            };
+          },
+        }),
+      } as unknown as DbClient;
+
+      const eventBus = { publish: vi.fn() } as unknown as IEventBus;
+      const store = new SessionEventStore(mockDb, eventBus);
+
+      const id = await store.append('session-1', 'text', {
+        content: 'Hello typed world',
+        role: 'user',
+      });
+
+      expect(id).toBe(101);
+      expect(JSON.parse((insertedPayload as { data: string }).data)).toEqual({
+        content: 'Hello typed world',
+        role: 'user',
+      });
+      expect(eventBus.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 101,
+          type: 'text',
+        }),
+      );
+    });
+
+    test('safe decoding handles malformed and null data without throwing', async () => {
+      const mockDb = {
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              limit: () =>
+                Promise.resolve([
+                  {
+                    id: 1,
+                    sessionId: 'session-1',
+                    type: 'text',
+                    data: '{malformed json...',
+                    metadata: '{not valid json either...',
+                    parentEventId: null,
+                    createdAt: new Date(),
+                  },
+                ]),
+            }),
+          }),
+        }),
+      } as unknown as DbClient;
+
+      const eventBus = { publish: vi.fn() } as unknown as IEventBus;
+      const store = new SessionEventStore(mockDb, eventBus);
+
+      const event = await store.getEventWithMetadata('session-1', 1);
+      expect(event).toBeDefined();
+      expect(event?.data).toEqual({ content: '' });
+      expect(event?.metadata).toEqual({});
+    });
+  });
 });

@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
-import type { SessionNotification } from '@agentclientprotocol/sdk';
+import { PROTOCOL_VERSION, type SessionNotification } from '@agentclientprotocol/sdk';
 import { cleanEnv, createAgentConnection, type CacheStorage } from '../index.js';
 import type { AgentDescriptor, AgentUpdate } from '../../agent/types.js';
 
@@ -153,7 +153,9 @@ test('AcpV1AgentDriver.probe uses cache and skips spawn on cache hit', async () 
   };
 
   const { cleanEnv, getCacheKey } = await import('../index.js');
-  const hashKey = getCacheKey('test-cmd', [], cleanEnv({}));
+  const hashKey = getCacheKey('test-cmd', [], cleanEnv({}), {
+    protocolVersion: String(PROTOCOL_VERSION),
+  });
   await mockCache.set(hashKey, testResult);
 
   const result = await runtime.inspectProvider('test-cmd', [], {});

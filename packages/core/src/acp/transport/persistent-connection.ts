@@ -4,7 +4,7 @@ import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type { ProviderLauncher } from '../../providers/registry/provider-launcher.js';
 import type { ProviderStore } from '../../providers/registry/provider-store.js';
 import type { RegistryFetcher } from '../../providers/registry/registry-fetcher.js';
-import { parseRegistryAgents } from '../../providers/provider-registry.js';
+import { parseRegistryAgents } from '../../providers/registry/registry-parser.js';
 import { ProcessStreamTransport, cleanEnv } from './process-transport.js';
 import { createClientHandlers } from '../protocol/client-handlers.js';
 import { AcpDebugLog, wrapDebug, formatAcpMessageLog } from './stream-debug.js';

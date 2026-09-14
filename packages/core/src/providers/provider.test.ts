@@ -2,6 +2,7 @@ import { test, expect } from 'vitest';
 import { Provider } from './provider.js';
 import { resolveNpxPackageSpec } from './registry/provider-launcher.js';
 import type { providers } from '../db/schema.js';
+import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 
 function row(
   overrides: Partial<(typeof providers)['$inferSelect']>,
@@ -27,6 +28,7 @@ function row(
     supportsDynamicConfig: false,
     supportsLogout: false,
     features: '{}',
+    capabilitySnapshot: null,
     nativelyLoadsSkills: false,
     modes: '[]',
     distribution: JSON.stringify({ npx: { package: 'foo', args: [], env: {} } }),
@@ -41,6 +43,24 @@ test('Provider.toDiscovery exposes registry distribution', () => {
   expect(discovery.agent?.distribution).toEqual({
     npx: { package: 'foo', args: [], env: {} },
   });
+});
+
+test('Provider.toDiscovery exposes a hydrated capability snapshot', () => {
+  const verifiedAt = new Date('2026-09-14T12:00:00.000Z');
+  const discovery = new Provider(
+    row({
+      capabilitySnapshot: JSON.stringify({
+        features: EMPTY_AGENT_FEATURES,
+        source: 'handshake',
+        providerVersion: '2.0.0',
+        protocolVersion: '1',
+        verifiedAt,
+      }),
+    }),
+  ).toDiscovery();
+
+  expect(discovery.snapshot?.verifiedAt).toEqual(verifiedAt);
+  expect(discovery.snapshot?.providerVersion).toBe('2.0.0');
 });
 
 test('resolveNpxPackageSpec formats package specifiers correctly without duplication', () => {

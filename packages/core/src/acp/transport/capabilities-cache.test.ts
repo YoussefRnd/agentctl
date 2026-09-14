@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { FileCacheStorage, getCacheKey } from './capabilities-cache.js';
 import type { AgentDescriptor } from '../../agent/types.js';
+import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 
 const sampleResult: AgentDescriptor = {
   status: 'ready',
@@ -25,6 +26,25 @@ describe('FileCacheStorage', () => {
     await storage.set('k1', sampleResult);
     const res = await storage.get('k1');
     expect(res).toEqual(sampleResult);
+  });
+
+  test('hydrates persisted capability snapshot timestamps', async () => {
+    const storage = new FileCacheStorage(file);
+    const verifiedAt = new Date('2026-09-14T12:00:00.000Z');
+    await storage.set('snapshot', {
+      ...sampleResult,
+      features: EMPTY_AGENT_FEATURES,
+      snapshot: {
+        features: EMPTY_AGENT_FEATURES,
+        source: 'handshake',
+        protocolVersion: '1',
+        providerVersion: '2.0.0',
+        verifiedAt,
+      },
+    });
+
+    const result = await storage.get('snapshot');
+    expect(result?.snapshot?.verifiedAt).toEqual(verifiedAt);
   });
 
   test('treats stale entries as misses', async () => {
@@ -74,5 +94,13 @@ describe('FileCacheStorage', () => {
     fs.writeFileSync(executable, 'version-two');
     const second = getCacheKey(executable, [], {});
     expect(first).not.toBe(second);
+  });
+
+  test('cache keys change when providerVersion or protocolVersion changes', () => {
+    const k1 = getCacheKey('cmd', ['--x'], {}, { providerVersion: '1.0.0' });
+    const k2 = getCacheKey('cmd', ['--x'], {}, { providerVersion: '1.1.0' });
+    const k3 = getCacheKey('cmd', ['--x'], {}, { providerVersion: '1.0.0', protocolVersion: 'v2' });
+    expect(k1).not.toBe(k2);
+    expect(k1).not.toBe(k3);
   });
 });

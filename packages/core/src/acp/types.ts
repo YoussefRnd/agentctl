@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import type { AgentConnectionDiagnostic } from '../agent/diagnostics.js';
 import type { ClientCapabilities, ClientSideConnection } from '@agentclientprotocol/sdk';
 import type {
   AgentDescriptor,
@@ -68,6 +69,13 @@ export interface IConnectionManager {
     providerId: string,
   ): void;
   unregisterActiveSession?(acpSessionId: string): void;
+}
+
+/** Complete connection lifecycle required by the application composition root. */
+export interface AgentConnectionManager extends IConnectionManager {
+  getConnectionDiagnostics(): AgentConnectionDiagnostic[];
+  closeConnection(providerId: string): void;
+  closeAll(): void;
 }
 
 export interface AcpParsedCapabilities {

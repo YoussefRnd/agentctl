@@ -3,6 +3,7 @@ import type { SessionEventStoreLike, SnapshotServiceLike } from './contracts.js'
 import type { SessionEventDbRow } from '../db/zod-schemas.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
+import { sessionEventToolCallDataSchema, type SessionEventPayload } from '@agentctl/shared';
 
 export interface TurnStart {
   eventId: number;
@@ -64,7 +65,7 @@ export class EventStreamAdapter {
 
   async startTurn(
     text: string,
-    attachments?: unknown[],
+    attachments?: NonNullable<SessionEventPayload<'text'>['attachments']>,
     promptTokens?: number,
   ): Promise<TurnStart> {
     this.flushTextDelta();
@@ -367,9 +368,15 @@ export class EventStreamAdapter {
     this.thoughtStartTime = null;
 
     const startTime = Date.now();
-    const eventId = await this.eventStore.append(this.sessionId, 'tool_call', call, parentId, {
-      durationMs: 0,
-    });
+    const eventId = await this.eventStore.append(
+      this.sessionId,
+      'tool_call',
+      sessionEventToolCallDataSchema.parse(callObj),
+      parentId,
+      {
+        durationMs: 0,
+      },
+    );
 
     if (status !== 'completed' && status !== 'failed') {
       this.lastToolCallStartTime = startTime;

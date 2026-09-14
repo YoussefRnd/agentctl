@@ -2,6 +2,7 @@ import type {
   AgentConfigOption,
   AgentFeatures,
   AuthMethod,
+  CapabilitySnapshot,
   ElicitationRequest,
   ElicitationResponse,
   PermissionOptionKind,
@@ -204,6 +205,11 @@ export interface AgentDescriptor {
   modes?: string[];
   supportsLogout?: boolean;
   features?: AgentFeatures;
+  snapshot?: CapabilitySnapshot;
+}
+
+export interface AgentInspectionOptions {
+  providerVersion?: string;
 }
 
 export interface AgentDriver {
@@ -217,6 +223,7 @@ export interface AgentDriver {
     command: string,
     args: string[],
     env?: Record<string, string>,
+    options?: AgentInspectionOptions,
   ): Promise<AgentDescriptor>;
   deleteSession?(
     command: string,
@@ -228,6 +235,7 @@ export interface AgentDriver {
     command: string,
     args: string[],
     env?: Record<string, string>,
+    options?: AgentInspectionOptions,
   ): Promise<void>;
   authenticateProvider?(
     command: string,

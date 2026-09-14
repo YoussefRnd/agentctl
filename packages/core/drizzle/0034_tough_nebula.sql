@@ -1,0 +1,1 @@
+ALTER TABLE `providers` ADD `capability_snapshot` text;

@@ -1,5 +1,5 @@
 import { createContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { projectStore, type ProjectSettings } from '@agentctl/shared';
+import { projectStore, type ProjectSettings } from '../shared/stores/project-store.js';
 
 interface ProjectContextValue {
   activeId: string | null;

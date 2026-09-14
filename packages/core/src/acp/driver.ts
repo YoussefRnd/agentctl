@@ -1,5 +1,10 @@
 import type { spawn } from 'node:child_process';
-import type { AgentDriver, AgentSessionCallbacks, AgentSessionOptions } from '../agent/types.js';
+import type {
+  AgentDriver,
+  AgentInspectionOptions,
+  AgentSessionCallbacks,
+  AgentSessionOptions,
+} from '../agent/types.js';
 import type { Logger } from '../logger.js';
 import type { AgentDiagnosticsRecorder } from '../agent/diagnostics.js';
 import type { IConnectionManager } from './types.js';
@@ -54,8 +59,13 @@ export class AcpAgentDriver implements AgentDriver {
     return (version === 'v2' ? this.v2 : this.v1).startSession(command, args, options, callbacks);
   }
 
-  inspectProvider(command: string, args: string[], env?: Record<string, string>) {
-    return this.forEnv(env).inspectProvider(command, args, env);
+  inspectProvider(
+    command: string,
+    args: string[],
+    env?: Record<string, string>,
+    options?: AgentInspectionOptions,
+  ) {
+    return this.forEnv(env).inspectProvider(command, args, env, options);
   }
 
   deleteSession(
@@ -74,10 +84,11 @@ export class AcpAgentDriver implements AgentDriver {
     command: string,
     args: string[],
     env?: Record<string, string>,
+    options?: AgentInspectionOptions,
   ): Promise<void> {
     const driver: AgentDriver = this.forEnv(env);
     return driver.invalidateProviderCache
-      ? driver.invalidateProviderCache(command, args, env)
+      ? driver.invalidateProviderCache(command, args, env, options)
       : Promise.resolve();
   }
 

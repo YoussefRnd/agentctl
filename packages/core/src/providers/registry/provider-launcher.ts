@@ -58,7 +58,9 @@ export class ProviderLauncher {
       if (row) {
         try {
           const launch = this.resolveLaunch(row, agent);
-          void runtime.invalidateProviderCache(launch.command, launch.args, launch.env);
+          void runtime.invalidateProviderCache(launch.command, launch.args, launch.env, {
+            providerVersion: agent?.version ?? row.version ?? undefined,
+          });
         } catch {
           // ignore launch resolution errors during invalidation
         }
@@ -214,7 +216,9 @@ export class ProviderLauncher {
       const launch = this.resolveLaunch(row, agent);
       let result: AgentDescriptor;
       try {
-        result = await runtime.inspectProvider(launch.command, launch.args, launch.env);
+        result = await runtime.inspectProvider(launch.command, launch.args, launch.env, {
+          providerVersion: agent.version,
+        });
       } catch (err: unknown) {
         if (isAgentAuthenticationRequiredError(err)) {
           this.store.setAuthState(providerId, 'needs_auth');
@@ -227,6 +231,7 @@ export class ProviderLauncher {
             supportsDynamicConfig: row.supportsDynamicConfig,
             supportsLogout: row.supportsLogout,
             features: jsonCodecs.agentFeatures(row.features),
+            snapshot: jsonCodecs.capabilitySnapshot(row.capabilitySnapshot),
           };
           return fallbackResult;
         }
@@ -243,6 +248,7 @@ export class ProviderLauncher {
         supportsDynamicConfig: result.supportsDynamicConfig,
         supportsLogout: result.supportsLogout ?? false,
         features: JSON.stringify(result.features ?? jsonCodecs.agentFeatures(row.features)),
+        capabilitySnapshot: result.snapshot ? JSON.stringify(result.snapshot) : null,
         modes: JSON.stringify(result.modes ?? []),
         authState: nextAuthState,
       });

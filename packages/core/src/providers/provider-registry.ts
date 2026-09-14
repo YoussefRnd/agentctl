@@ -1,11 +1,12 @@
 import {
-  registrySchema,
   type ProviderDiscovery,
   type RegistryAgent,
   type AgentConfigOption,
 } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentDriver } from '../agent/types.js';
+import type { AgentRuntimeServices } from '../agent/runtime-services.js';
+import type { AgentDiagnosticsRecorder } from '../agent/diagnostics.js';
 import {
   createDefaultAgentConnectionManager,
   createDefaultAgentDriver,
@@ -22,37 +23,13 @@ import { ProviderLauncher, resolveNpxPackageSpec } from './registry/provider-lau
 import { AuthProvider } from './registry/auth-provider.js';
 import { ProviderSync } from './registry/provider-sync.js';
 
+import { ProviderOperationCoordinator } from './registry/provider-operation-coordinator.js';
+import { ProviderProbingService } from './registry/provider-probing-service.js';
+import { parseRegistryAgents } from './registry/registry-parser.js';
+import type { AgentConnectionManager } from '../acp/types.js';
+
 export { getPlatformKey };
-
-export function parseRegistryAgents(data: string): RegistryAgent[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(data);
-  } catch (cause) {
-    throw new Error('Registry snapshot contains invalid JSON. Run a registry sync and try again.', {
-      cause,
-    });
-  }
-
-  const validated = registrySchema.safeParse(parsed);
-  if (!validated.success) {
-    throw new Error(
-      `Registry snapshot failed validation. Run a registry sync and try again: ${validated.error.message}`,
-    );
-  }
-
-  return validated.data.agents;
-}
-
-interface ProviderOperation {
-  name: string;
-  promise: Promise<unknown>;
-}
-
-interface CoordinationWaiter {
-  kind: 'mutation' | 'sync';
-  resolve: (release: () => void) => void;
-}
+export { parseRegistryAgents } from './registry/registry-parser.js';
 
 export class ProviderRegistry {
   private fetcher: RegistryFetcher;
@@ -62,122 +39,62 @@ export class ProviderRegistry {
   private authProvider: AuthProvider;
   private syncProvider: ProviderSync;
   private runtime: AgentDriver;
+  private coordinator: ProviderOperationCoordinator;
+  private probing: ProviderProbingService;
 
-  private providerOperations = new Map<string, ProviderOperation>();
-  private activeMutations = 0;
-  private syncActive = false;
-  private coordinationWaiters: CoordinationWaiter[] = [];
   private activeSync?: Promise<void>;
-  private connectionManager: ReturnType<typeof createDefaultAgentConnectionManager>;
+  private connectionManager: AgentConnectionManager;
+  private diagnostics: AgentDiagnosticsRecorder;
 
   constructor(
     private db: DbClient,
     private logger: Logger = noopLogger,
     runtime?: AgentDriver,
+    runtimeServices?: AgentRuntimeServices,
   ) {
-    this.runtime = runtime ?? createDefaultAgentDriver(logger);
-    this.fetcher = new RegistryFetcher(db, logger);
-    this.installer = new BinaryInstaller();
-    this.store = new ProviderStore(db);
-    this.launcher = new ProviderLauncher(this.store, this.installer);
-    this.connectionManager = createDefaultAgentConnectionManager(
+    this.diagnostics = runtimeServices?.diagnostics ?? defaultAgentDiagnostics;
+    this.runtime =
+      runtimeServices?.driver ?? runtime ?? createDefaultAgentDriver(logger, this.diagnostics);
+    this.fetcher = runtimeServices?.providers.fetcher ?? new RegistryFetcher(db, logger);
+    this.installer = runtimeServices?.providers.installer ?? new BinaryInstaller();
+    this.store = runtimeServices?.providers.store ?? new ProviderStore(db);
+    this.launcher =
+      runtimeServices?.providers.launcher ?? new ProviderLauncher(this.store, this.installer);
+    this.connectionManager =
+      runtimeServices?.connections ??
+      createDefaultAgentConnectionManager(
+        this.store,
+        this.fetcher,
+        this.launcher,
+        logger,
+        this.diagnostics,
+      );
+    this.authProvider = new AuthProvider(this.launcher, this.store, this.runtime);
+    this.syncProvider = new ProviderSync(this.fetcher, this.store, this.installer, this.launcher);
+    this.coordinator = new ProviderOperationCoordinator();
+    this.probing = new ProviderProbingService(
       this.store,
       this.fetcher,
       this.launcher,
-      logger,
+      this.runtime,
+      this.logger,
     );
-    this.authProvider = new AuthProvider(this.launcher, this.store, this.runtime);
-    this.syncProvider = new ProviderSync(this.fetcher, this.store, this.installer, this.launcher);
   }
 
-  getConnectionManager(): ReturnType<typeof createDefaultAgentConnectionManager> {
+  getConnectionManager(): AgentConnectionManager {
     return this.connectionManager;
   }
 
   getTransportDiagnostics() {
-    return defaultAgentDiagnostics.snapshot(this.connectionManager.getConnectionDiagnostics());
+    return this.diagnostics.snapshot(this.connectionManager.getConnectionDiagnostics());
   }
 
-  private acquireMutation(): Promise<() => void> {
-    if (!this.syncActive && this.coordinationWaiters.length === 0) {
-      this.activeMutations += 1;
-      return Promise.resolve(() => {
-        this.releaseMutation();
-      });
-    }
-
-    return new Promise((resolve) => {
-      this.coordinationWaiters.push({ kind: 'mutation', resolve });
-      this.processCoordinationWaiters();
-    });
+  private runMutation<T>(op: () => Promise<T>): Promise<T> {
+    return this.coordinator.runMutation(op);
   }
 
-  private acquireSync(): Promise<() => void> {
-    if (!this.syncActive && this.activeMutations === 0 && this.coordinationWaiters.length === 0) {
-      this.syncActive = true;
-      return Promise.resolve(() => {
-        this.releaseSync();
-      });
-    }
-
-    return new Promise((resolve) => {
-      this.coordinationWaiters.push({ kind: 'sync', resolve });
-      this.processCoordinationWaiters();
-    });
-  }
-
-  private releaseMutation(): void {
-    this.activeMutations -= 1;
-    this.processCoordinationWaiters();
-  }
-
-  private releaseSync(): void {
-    this.syncActive = false;
-    this.processCoordinationWaiters();
-  }
-
-  private processCoordinationWaiters(): void {
-    if (this.syncActive || this.activeMutations > 0 || this.coordinationWaiters.length === 0) {
-      return;
-    }
-
-    if (this.coordinationWaiters[0].kind === 'sync') {
-      const waiter = this.coordinationWaiters.shift();
-      if (!waiter) return;
-      this.syncActive = true;
-      waiter.resolve(() => {
-        this.releaseSync();
-      });
-      return;
-    }
-
-    while (this.coordinationWaiters.length > 0) {
-      const waiter: CoordinationWaiter = this.coordinationWaiters[0];
-      if (waiter.kind !== 'mutation') break;
-      this.coordinationWaiters.shift();
-      this.activeMutations += 1;
-      waiter.resolve(() => {
-        this.releaseMutation();
-      });
-    }
-  }
-
-  private async runMutation<T>(op: () => Promise<T>): Promise<T> {
-    const release = await this.acquireMutation();
-    try {
-      return await op();
-    } finally {
-      release();
-    }
-  }
-
-  private async runSync(op: () => Promise<void>): Promise<void> {
-    const release = await this.acquireSync();
-    try {
-      await op();
-    } finally {
-      release();
-    }
+  private runSync(op: () => Promise<void>): Promise<void> {
+    return this.coordinator.runSync(op);
   }
 
   private runProviderOperation<T>(
@@ -185,32 +102,7 @@ export class ProviderRegistry {
     operationName: string,
     op: () => Promise<T>,
   ): Promise<T> {
-    const previous = this.providerOperations.get(providerId);
-    if (previous?.name === operationName) {
-      return previous.promise as Promise<T>;
-    }
-
-    const promise = this.runMutation(async () => {
-      await previous?.promise.catch(() => undefined);
-      return op();
-    });
-    this.providerOperations.set(providerId, { name: operationName, promise });
-
-    void promise.then(
-      () => {
-        this.clearProviderOperation(providerId, promise);
-      },
-      () => {
-        this.clearProviderOperation(providerId, promise);
-      },
-    );
-    return promise;
-  }
-
-  private clearProviderOperation(providerId: string, promise: Promise<unknown>): void {
-    if (this.providerOperations.get(providerId)?.promise === promise) {
-      this.providerOperations.delete(providerId);
-    }
+    return this.coordinator.runProviderOperation(providerId, operationName, op);
   }
 
   getInstallDir(providerId: string): string {
@@ -453,7 +345,7 @@ export class ProviderRegistry {
     const agent = agents.find((a) => a.id === providerId);
     const wasDefault = this.store.getDefaultProviderId() === providerId;
 
-    this.launcher.invalidateProbe(providerId);
+    this.launcher.invalidateProbe(providerId, this.runtime, agent);
 
     if (provider.installState === 'installed_local') {
       await this.installer.remove(providerId, this.logger);
@@ -619,31 +511,7 @@ export class ProviderRegistry {
   }
 
   async probeAllInstalledProviders(): Promise<void> {
-    const allProviders = this.store.list();
-    const candidates = allProviders.filter(
-      (row) => row.installState !== 'not_installed' && row.authState !== 'needs_auth',
-    );
-
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-
-    await Promise.allSettled(
-      candidates.map(async (row) => {
-        try {
-          const agent = agents.find((a) => a.id === row.id);
-          if (agent) {
-            await this.probeWithStatePreserved(row.id, agent, row.authState, 'startup-probe');
-          } else {
-            await this.refreshProvider(row.id);
-          }
-        } catch (err) {
-          this.logger.warn(
-            { err, providerId: row.id },
-            'Background startup probe failed for provider',
-          );
-        }
-      }),
-    );
+    return this.probing.probeAllInstalledProviders((id) => this.refreshProvider(id));
   }
 
   async setProviderConfig(
@@ -713,32 +581,7 @@ export class ProviderRegistry {
     previousAuthState: ProviderData['authState'],
     action: string,
   ): Promise<void> {
-    const row = this.store.get(providerId);
-    if (row && row.installState === 'not_installed') {
-      return;
-    }
-    try {
-      await this.launcher.probe(providerId, this.runtime, agent);
-    } catch (cause) {
-      if (isAgentAuthenticationRequiredError(cause)) {
-        if (previousAuthState !== 'authenticated') {
-          this.store.setAuthState(providerId, 'needs_auth');
-        }
-        return;
-      }
-      if (this.store.get(providerId)) {
-        const restoredAuthState =
-          previousAuthState === 'authenticated' ||
-          previousAuthState === 'error' ||
-          previousAuthState === 'needs_auth' ||
-          previousAuthState === 'unknown'
-            ? previousAuthState
-            : 'unknown';
-        this.store.setAuthState(providerId, restoredAuthState);
-      }
-      const detail = cause instanceof Error ? cause.message : String(cause);
-      throw new Error(`Failed to ${action} provider ${providerId}: ${detail}`, { cause });
-    }
+    return this.probing.probeWithStatePreserved(providerId, agent, previousAuthState, action);
   }
 
   async sync(): Promise<void> {
@@ -802,7 +645,7 @@ export class ProviderRegistry {
     }
 
     if (agent) {
-      this.launcher.invalidateProbe(providerId);
+      this.launcher.invalidateProbe(providerId, this.runtime, agent);
       try {
         await this.launcher.probe(providerId, this.runtime, agent);
       } catch (err) {
@@ -875,59 +718,10 @@ export class ProviderRegistry {
   probeAgent(
     agent: RegistryAgent,
     launch: { command: string; args: string[]; env: Record<string, string> },
-    _options?: object,
-    _existing?: ProviderData,
+    options?: object,
+    existing?: ProviderData,
   ): ProviderDiscovery {
-    const dummyStore: ProviderData = {
-      id: agent.id,
-      name: agent.name,
-      installState: 'system_available',
-      installError: null,
-      authState: 'unknown',
-      enabled: true,
-      hidden: false,
-      distribution: '{}',
-      command: launch.command,
-      launchArgs: JSON.stringify(launch.args),
-      launchEnv: JSON.stringify(launch.env),
-      configOptions: '[]',
-      authMethods: '[]',
-      version: agent.version,
-      description: agent.description,
-      icon: agent.icon ?? null,
-      customEnv: '{}',
-      supportsDynamicModel: agent.supportsDynamicModel ?? false,
-      supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
-      supportsLogout: agent.supportsLogout ?? false,
-      nativelyLoadsSkills: false,
-      modes: '[]',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    const launchResolved = this.launcher.resolveLaunch(dummyStore, agent);
-    const authMethods = agent.authMethods ?? [];
-    return {
-      id: agent.id,
-      label: agent.name,
-      command: launchResolved.command,
-      launchArgs: launchResolved.args,
-      launchEnv: launchResolved.env,
-      customEnv: {},
-      customEnvConfigured: {},
-      configOptions: agent.configOptions ?? [],
-      authMethods,
-      version: agent.version,
-      description: agent.description,
-      icon: agent.icon,
-      supportsDynamicModel: agent.supportsDynamicModel ?? false,
-      supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
-      supportsLogout: agent.supportsLogout ?? false,
-      nativelyLoadsSkills: false,
-      installState: 'system_available',
-      authState: authMethods.length > 0 ? 'needs_auth' : 'authenticated',
-      enabled: true,
-      agent,
-    };
+    return this.probing.probeAgent(agent, launch, options, existing);
   }
 
   dispose(): void {

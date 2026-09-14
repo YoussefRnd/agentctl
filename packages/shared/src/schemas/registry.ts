@@ -77,6 +77,37 @@ export function resolveAgentFeatures(source?: {
   };
 }
 
+export const capabilitySnapshotSchema = z.object({
+  features: agentFeaturesSchema,
+  source: z.enum(['registry', 'probe', 'handshake']),
+  providerVersion: z.string().optional(),
+  protocolVersion: z.string().optional(),
+  verifiedAt: z.coerce.date(),
+  commandHash: z.string().optional(),
+});
+
+export type CapabilitySnapshot = z.infer<typeof capabilitySnapshotSchema>;
+
+export function createCapabilitySnapshot(
+  features: AgentFeatures,
+  source: 'registry' | 'probe' | 'handshake',
+  options?: {
+    providerVersion?: string;
+    protocolVersion?: string;
+    verifiedAt?: Date;
+    commandHash?: string;
+  },
+): CapabilitySnapshot {
+  return {
+    features,
+    source,
+    providerVersion: options?.providerVersion,
+    protocolVersion: options?.protocolVersion,
+    verifiedAt: options?.verifiedAt ?? new Date(),
+    commandHash: options?.commandHash,
+  };
+}
+
 export const authMethodSchema = z.object({
   id: z.string(),
   name: z.string(),

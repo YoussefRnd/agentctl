@@ -28,7 +28,7 @@ export class AuthProvider {
       }
       this.store.setCustomEnv(providerId, nextCustomEnv);
       this.store.setAuthState(providerId, 'authenticated');
-      this.launcher.invalidateProbe(providerId);
+      this.launcher.invalidateProbe(providerId, this.runtime, agent);
       return;
     }
 
@@ -48,7 +48,7 @@ export class AuthProvider {
       );
       await new Promise((resolve) => setTimeout(resolve, 500));
       this.store.setAuthState(providerId, 'authenticated');
-      this.launcher.invalidateProbe(providerId);
+      this.launcher.invalidateProbe(providerId, this.runtime, agent);
     } catch (err) {
       this.store.setAuthState(providerId, initialAuthState);
       throw err;
@@ -68,6 +68,6 @@ export class AuthProvider {
       // Ignore errors on logout
     }
     this.store.setAuthState(providerId, 'needs_auth');
-    this.launcher.invalidateProbe(providerId);
+    this.launcher.invalidateProbe(providerId, this.runtime, agent);
   }
 }

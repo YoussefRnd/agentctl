@@ -14,10 +14,11 @@ import {
   type SessionConfigOption,
   type UpdateSessionNotification,
 } from '@agentclientprotocol/sdk/experimental/v2';
-import type { AgentConfigOption } from '@agentctl/shared';
+import { createCapabilitySnapshot, type AgentConfigOption } from '@agentctl/shared';
 import type {
   AgentDescriptor,
   AgentDriver,
+  AgentInspectionOptions,
   AgentPermissionRequest,
   AgentSession,
   AgentSessionCallbacks,
@@ -28,7 +29,7 @@ import type {
 import { AgentAuthenticationRequiredError, AgentError } from '../../agent/errors.js';
 import { type Logger, noopLogger } from '../../logger.js';
 import type { AgentStreamTransport } from '../types.js';
-import { ProcessStreamTransport, cleanEnv } from '../transport/process-transport.js';
+import { ProcessStreamTransport, spawnManagedProcess } from '../transport/acp-process-lifecycle.js';
 import { buildPromptBlocks } from '../protocol/prompt.js';
 import { normalizeAcpUsage } from '../protocol/usage.js';
 import { getAgentRequestTimeoutMs } from '../../config/runtime-defaults.js';
@@ -61,6 +62,7 @@ function productConfigOptions(options?: SessionConfigOption[]): AgentConfigOptio
 function descriptorFromInitialization(
   initialization: InitializeResponse,
   configOptions: AgentConfigOption[],
+  options?: AgentInspectionOptions,
 ): AgentDescriptor {
   const authMethods = (initialization.authMethods ?? [])
     .filter((method) => method.type === 'agent')
@@ -79,7 +81,7 @@ function descriptorFromInitialization(
   );
   const supportsDynamicConfig = configOptions.length > 0;
   const supportsLogout = authMethods.length > 0;
-  return {
+  const descriptor: AgentDescriptor = {
     status: 'ready',
     configOptions,
     authMethods,
@@ -103,6 +105,11 @@ function descriptorFromInitialization(
     },
     modes,
   };
+  descriptor.snapshot = createCapabilitySnapshot(descriptor.features!, 'handshake', {
+    providerVersion: options?.providerVersion,
+    protocolVersion: String(PROTOCOL_VERSION),
+  });
+  return descriptor;
 }
 
 function toPermissionRequest(
@@ -238,27 +245,19 @@ export class AcpV2AgentDriver implements AgentDriver {
     options: AgentSessionOptions,
     callbacks: AgentSessionCallbacks,
   ): Promise<AgentSession> {
-    this.diagnostics?.record({
-      kind: 'connection_starting',
+    const managed = spawnManagedProcess({
+      command,
+      args,
+      env: options.env,
+      cwd: options.cwd,
+      spawnImpl: this.spawnImpl,
+      logger: this.logger,
+      diagnostics: this.diagnostics,
       adapter: 'acp-v2',
       providerId: options.providerId,
-      path: 'spawn',
+      createTransport: this.createTransport,
     });
-    const child = this.spawnImpl(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnv(options.env),
-      cwd: options.cwd,
-    });
-    const transport = this.createTransport(child, this.logger);
-    child.once('exit', () => {
-      this.diagnostics?.record({
-        kind: 'connection_exited',
-        adapter: 'acp-v2',
-        providerId: options.providerId,
-        path: 'spawn',
-        reason: 'process_exit',
-      });
-    });
+    const { child, transport } = managed;
     const sessions = new Map<string, ActiveCallbacks>();
     const pendingUpdates = new Map<string, UpdateSessionNotification[]>();
     let permissionSequence = 0;
@@ -604,13 +603,18 @@ export class AcpV2AgentDriver implements AgentDriver {
     command: string,
     args: string[],
     env?: Record<string, string>,
+    options?: AgentInspectionOptions,
   ): Promise<AgentDescriptor> {
-    const child = this.spawnImpl(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnv(env),
+    const managed = spawnManagedProcess({
+      command,
+      args,
+      env,
       cwd: os.tmpdir(),
+      spawnImpl: this.spawnImpl,
+      logger: this.logger,
+      createTransport: this.createTransport,
     });
-    const transport = this.createTransport(child, this.logger);
+    const { transport } = managed;
     const app = client({ name: 'agentctl-probe' });
     app.onNotification(methods.client.session.update, () => undefined);
     app.onRequest(methods.client.session.requestPermission, () => ({
@@ -638,12 +642,12 @@ export class AcpV2AgentDriver implements AgentDriver {
           .request(methods.agent.session.close, { sessionId: created.sessionId })
           .catch(() => undefined);
       }
-      return descriptorFromInitialization(initialization, configOptions);
+      return descriptorFromInitialization(initialization, configOptions, options);
     } catch (error) {
       if (isAcpAuthenticationRequired(error)) {
         if (initialization) {
           return {
-            ...descriptorFromInitialization(initialization, []),
+            ...descriptorFromInitialization(initialization, [], options),
             status: 'needs_auth',
           };
         }
@@ -716,12 +720,16 @@ export class AcpV2AgentDriver implements AgentDriver {
     name: string,
     operation: (connection: ClientConnection, initialization: InitializeResponse) => Promise<void>,
   ): Promise<void> {
-    const child = this.spawnImpl(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnv(env),
+    const managed = spawnManagedProcess({
+      command,
+      args,
+      env,
       cwd: os.tmpdir(),
+      spawnImpl: this.spawnImpl,
+      logger: this.logger,
+      createTransport: this.createTransport,
     });
-    const transport = this.createTransport(child, this.logger);
+    const { transport } = managed;
     const app = client({ name });
     app.onNotification(methods.client.session.update, () => undefined);
     app.onRequest(methods.client.session.requestPermission, () => ({

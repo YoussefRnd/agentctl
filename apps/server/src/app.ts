@@ -17,20 +17,25 @@ import { EventBus } from './utils/event-bus.js';
 import { AppError } from './errors/app-error.js';
 import type { FastifyError } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
-import { AuthManager, ContextService } from '@agentctl/core';
+import {
+  AuthManager,
+  ContextService,
+  createAgentRuntimeServices,
+  type AgentRuntimeServices,
+} from '@agentctl/core';
 import websocket from '@fastify/websocket';
 import { SessionService } from './services/session-service.js';
 import { InteractiveTerminalService } from './services/terminal-service.js';
 import { terminalRoutes } from './routes/terminal.js';
 import { contextRoutes } from './routes/context.js';
 import { attachmentsRoutes } from './routes/attachments.js';
-import { diagnosticsRoutes } from './routes/diagnostics.js';
 
 export interface AppDependencies {
   db?: typeof defaultDb;
   worktreeManager?: WorktreeManager;
   providerRegistry?: ProviderRegistry;
   sessionManager?: SessionManager;
+  runtimeServices?: AgentRuntimeServices;
   authManager?: AuthManager;
   terminalService?: InteractiveTerminalService;
   contextService?: ContextService;
@@ -44,6 +49,7 @@ declare module 'fastify' {
     worktreeManager: WorktreeManager;
     gitMutex: GitMutex;
     providerRegistry: ProviderRegistry;
+    runtimeServices: AgentRuntimeServices;
     sessionManager: SessionManager;
     sessionService: SessionService;
     authManager: AuthManager;
@@ -76,7 +82,14 @@ export async function buildApp(deps: AppDependencies = {}) {
   const db = deps.db ?? defaultDb;
   const gitMutex = new GitMutex();
   const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
-  const providerRegistry = deps.providerRegistry ?? new ProviderRegistry(db, fastify.log);
+  const runtimeServices =
+    deps.runtimeServices ??
+    createAgentRuntimeServices({
+      db,
+      logger: fastify.log,
+    });
+  const providerRegistry =
+    deps.providerRegistry ?? new ProviderRegistry(db, fastify.log, undefined, runtimeServices);
   const config = deps.env ?? parseServerEnv(process.env);
   const eventBus = new EventBus();
 
@@ -92,6 +105,7 @@ export async function buildApp(deps: AppDependencies = {}) {
       fastify.log,
       undefined,
       mcpGateway,
+      runtimeServices,
     );
 
   const sessionService = new SessionService(
@@ -109,6 +123,7 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.decorate('db', db);
   fastify.decorate('gitMutex', gitMutex);
   fastify.decorate('worktreeManager', worktreeManager);
+  fastify.decorate('runtimeServices', runtimeServices);
   fastify.decorate('providerRegistry', providerRegistry);
   fastify.decorate('sessionManager', sessionManager);
   fastify.decorate('sessionService', sessionService);
@@ -243,7 +258,6 @@ export async function buildApp(deps: AppDependencies = {}) {
   await fastify.register(terminalRoutes, { prefix: '/api' });
   await fastify.register(contextRoutes, { prefix: '/api' });
   await fastify.register(attachmentsRoutes, { prefix: '/api' });
-  await fastify.register(diagnosticsRoutes, { prefix: '/api' });
 
   // Basic route to verify server is up
   fastify.get('/health', () => {

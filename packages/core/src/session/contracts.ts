@@ -1,17 +1,26 @@
-import type { SessionStatus } from '@agentctl/shared';
+import type {
+  SessionEvent,
+  SessionEventMetadata,
+  SessionEventPayload,
+  SessionStatus,
+} from '@agentctl/shared';
 import type { SessionEventDbRow } from '../db/zod-schemas.js';
 
 export interface SessionEventStoreLike {
-  append(
+  append<T extends SessionEvent['type']>(
     sessionId: string,
-    type: string,
-    data: unknown,
+    type: T,
+    data: SessionEventPayload<T>,
     parentEventId?: number | null,
-    metadata?: unknown,
+    metadata?: SessionEventMetadata | null,
   ): Promise<number>;
   getEvent(eventId: number): Promise<{ id: number; type: string; data: unknown } | null>;
-  update(eventId: number, data: unknown, metadata?: unknown): Promise<void>;
-  updateSilently(eventId: number, data: unknown, metadata?: unknown): Promise<void>;
+  update(eventId: number, data: unknown, metadata?: SessionEventMetadata | null): Promise<void>;
+  updateSilently(
+    eventId: number,
+    data: unknown,
+    metadata?: SessionEventMetadata | null,
+  ): Promise<void>;
   publishTransient(event: SessionEventDbRow, delta?: string): void;
 }
 
