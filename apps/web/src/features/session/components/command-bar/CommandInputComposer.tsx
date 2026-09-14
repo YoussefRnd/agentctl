@@ -157,6 +157,7 @@ interface CommandInputComposerProps {
   handleDragEnter?: (e: React.DragEvent<HTMLDivElement>) => void;
   handleDragLeave?: (e: React.DragEvent<HTMLDivElement>) => void;
   handleAttachClick: () => void;
+  supportsImageAttachments?: boolean;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   filteredCommands: CommandInfo[];
   activeCommandIndex: number;
@@ -188,6 +189,7 @@ export function CommandInputComposer({
   handleDragEnter,
   handleDragLeave,
   handleAttachClick,
+  supportsImageAttachments = true,
   textareaRef,
   filteredCommands,
   activeCommandIndex,
@@ -292,11 +294,15 @@ export function CommandInputComposer({
             <div className="flex w-full items-start gap-3 px-5 pt-4 pb-4">
               <button
                 type="button"
-                disabled={disabled}
+                disabled={disabled || !supportsImageAttachments}
                 onClick={handleAttachClick}
                 className="text-text-muted hover:text-accent hover:bg-accent/10 focus-visible:ring-accent/50 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40"
-                title="Attach image or file"
-                aria-label="Attach image or file"
+                title={
+                  supportsImageAttachments
+                    ? 'Attach image'
+                    : 'This agent does not support image attachments'
+                }
+                aria-label="Attach image"
               >
                 <Plus className="h-4 w-4" />
               </button>

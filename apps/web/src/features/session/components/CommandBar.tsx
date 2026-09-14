@@ -72,6 +72,7 @@ export function CommandBar({
     handleSubmit,
     handleProviderSelect,
     handleAttachClick,
+    supportsImageAttachments,
     handleFileInputChange,
     handlePaste,
     handleDrop,
@@ -108,6 +109,7 @@ export function CommandBar({
         className="sr-only"
         aria-hidden="true"
         tabIndex={-1}
+        disabled={!supportsImageAttachments}
         onChange={handleFileInputChange}
       />
 
@@ -137,6 +139,7 @@ export function CommandBar({
           handleDragEnter={handleDragEnter}
           handleDragLeave={handleDragLeave}
           handleAttachClick={handleAttachClick}
+          supportsImageAttachments={supportsImageAttachments}
           textareaRef={textareaRef}
           filteredCommands={filteredCommands}
           activeCommandIndex={activeCommandIndex}

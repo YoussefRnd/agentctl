@@ -5,7 +5,7 @@ import { useAttachments } from '../../../hooks/useAttachments';
 import { useContextAutocomplete } from '../../../hooks/useContextAutocomplete';
 import { useSessionActions } from '../../../hooks/useSessionActions';
 import { usePromptHistory } from '../hooks/usePromptHistory';
-import type { ProviderDiscovery } from '@agentctl/shared';
+import { resolveAgentFeatures, type ProviderDiscovery } from '@agentctl/shared';
 import { useUIStore } from '@/shared';
 
 export interface CommandInfo {
@@ -291,6 +291,7 @@ export function useCommandBarState(
   }, [installedProviders, selectedProviderId]);
 
   const resolvedId = activeProvider?.id ?? selectedProviderId ?? '';
+  const supportsImageAttachments = resolveAgentFeatures(activeProvider).prompts.image;
 
   const selectedProviderLabel = useMemo(() => {
     if (!activeProvider) return selectedProviderId ?? 'Select Agent';
@@ -377,11 +378,12 @@ export function useCommandBarState(
   );
 
   const handleAttachClick = () => {
+    if (!supportsImageAttachments) return;
     fileInputRef.current?.click();
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
+    if (supportsImageAttachments && e.target.files && e.target.files.length > 0) {
       addFiles(e.target.files);
     }
     e.target.value = '';
@@ -391,7 +393,7 @@ export function useCommandBarState(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
       const items = Array.from(e.clipboardData.items);
       const imageItems = items.filter((item) => item.type.startsWith('image/'));
-      if (imageItems.length > 0) {
+      if (supportsImageAttachments && imageItems.length > 0) {
         e.preventDefault();
         const files = imageItems
           .map((item) => item.getAsFile())
@@ -399,7 +401,7 @@ export function useCommandBarState(
         addFiles(files);
       }
     },
-    [addFiles],
+    [addFiles, supportsImageAttachments],
   );
 
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -458,7 +460,7 @@ export function useCommandBarState(
             });
           }
         }
-        if (imageFiles.length > 0) {
+        if (supportsImageAttachments && imageFiles.length > 0) {
           addFiles(imageFiles);
         }
       } else {
@@ -466,7 +468,7 @@ export function useCommandBarState(
         const imageFiles = files.filter((f) => f.type.startsWith('image/'));
         const otherFiles = files.filter((f) => !f.type.startsWith('image/'));
 
-        if (imageFiles.length > 0) {
+        if (supportsImageAttachments && imageFiles.length > 0) {
           addFiles(imageFiles);
         }
 
@@ -482,7 +484,7 @@ export function useCommandBarState(
         }
       }
     },
-    [addFiles, contextAutocomplete],
+    [addFiles, contextAutocomplete, supportsImageAttachments],
   );
 
   const canSend =
@@ -546,6 +548,7 @@ export function useCommandBarState(
     handleSubmit,
     handleProviderSelect,
     handleAttachClick,
+    supportsImageAttachments,
     handleFileInputChange,
     handlePaste,
     handleDrop,

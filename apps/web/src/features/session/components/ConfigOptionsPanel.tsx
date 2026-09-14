@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSession } from '../../../contexts/SessionContext';
-import type { AgentConfigOption } from '@agentctl/shared';
+import { resolveAgentFeatures, type AgentConfigOption } from '@agentctl/shared';
 import { Select, cn } from '@agentctl/ui';
 import { Loader2 } from 'lucide-react';
 
@@ -18,6 +18,10 @@ export function ConfigOptionsPanel({
     () => sessionData?.session.sessionConfigOptions ?? [],
     [sessionData],
   );
+  const activeProvider = sessionData?.capabilities.find(
+    (provider) => provider.id === sessionData.session.selectedProvider,
+  );
+  const supportsDynamicConfig = resolveAgentFeatures(activeProvider).configuration.options;
 
   const groupedOptions = useMemo(() => {
     const filterSet = new Set(filterCategories);
@@ -33,7 +37,7 @@ export function ConfigOptionsPanel({
     return groups;
   }, [configOptions, filterCategories]);
 
-  if (configOptions.length === 0) return null;
+  if (configOptions.length === 0 || !supportsDynamicConfig) return null;
 
   const handleUpdate = (id: string, value: string) => {
     setUpdatingId(id);

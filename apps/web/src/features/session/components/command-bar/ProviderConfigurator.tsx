@@ -5,7 +5,11 @@ import { AgentIcon } from '@/shared';
 import { ProviderPicker } from '../ProviderPicker';
 import { CommandDropdown } from './CommandDropdown';
 import { useSession } from '../../../../contexts/SessionContext';
-import type { ProviderDiscovery, SessionWithCapabilities } from '@agentctl/shared';
+import {
+  resolveAgentFeatures,
+  type ProviderDiscovery,
+  type SessionWithCapabilities,
+} from '@agentctl/shared';
 import { ConfigOptionsPanel } from '../ConfigOptionsPanel';
 
 const PRIMARY_CONFIG_CATEGORIES = ['model', 'mode', 'thought_level'] as const;
@@ -166,6 +170,10 @@ export function ThinkingEffortSelector({
   const thinkingOption = sessionData?.session.sessionConfigOptions.find(
     (opt) => opt.category === 'thought_level',
   );
+  const activeProvider = sessionData?.capabilities.find(
+    (provider) => provider.id === sessionData.session.selectedProvider,
+  );
+  const supportsDynamicConfig = resolveAgentFeatures(activeProvider).configuration.options;
   const options = thinkingOption?.options;
   const currentValue = thinkingOption?.currentValue;
 
@@ -189,7 +197,8 @@ export function ThinkingEffortSelector({
     };
   }, [localIndex, options, thinkingOption, currentValue, handleSetConfigOption]);
 
-  if (isLoading || !sessionData?.session || !thinkingOption || !options) return null;
+  if (isLoading || !sessionData?.session || !thinkingOption || !options || !supportsDynamicConfig)
+    return null;
 
   const currentIndex = options.findIndex((opt) => opt.value === currentValue);
   const activeIndex = currentIndex !== -1 ? currentIndex : 0;
@@ -357,6 +366,11 @@ export function AdvancedSettingsPopover({ isLoading }: { isLoading: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
 
   if (isLoading || !sessionData?.session) return null;
+
+  const activeProvider = sessionData.capabilities.find(
+    (provider) => provider.id === sessionData.session.selectedProvider,
+  );
+  if (!resolveAgentFeatures(activeProvider).configuration.options) return null;
 
   const hasAdditionalConfig = sessionData.session.sessionConfigOptions.some((opt) => {
     const cat = opt.category ?? 'other';

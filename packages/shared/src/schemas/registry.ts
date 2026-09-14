@@ -55,6 +55,28 @@ export const EMPTY_AGENT_FEATURES: AgentFeatures = {
   authentication: { logout: false },
 };
 
+/** Resolves the canonical feature snapshot while accepting legacy provider fields. */
+export function resolveAgentFeatures(source?: {
+  features?: AgentFeatures;
+  agent?: { features?: AgentFeatures };
+  supportsDynamicModel?: boolean;
+  supportsDynamicConfig?: boolean;
+  supportsLogout?: boolean;
+}): AgentFeatures {
+  const advertised = source?.features ?? source?.agent?.features;
+  return {
+    sessions: { ...EMPTY_AGENT_FEATURES.sessions, ...advertised?.sessions },
+    prompts: { ...EMPTY_AGENT_FEATURES.prompts, ...advertised?.prompts },
+    configuration: {
+      model: advertised?.configuration.model ?? source?.supportsDynamicModel ?? false,
+      options: advertised?.configuration.options ?? source?.supportsDynamicConfig ?? false,
+    },
+    authentication: {
+      logout: advertised?.authentication.logout ?? source?.supportsLogout ?? false,
+    },
+  };
+}
+
 export const authMethodSchema = z.object({
   id: z.string(),
   name: z.string(),

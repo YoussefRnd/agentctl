@@ -1,4 +1,4 @@
-import type { ProviderDiscovery } from '@agentctl/shared';
+import { resolveAgentFeatures, type ProviderDiscovery } from '@agentctl/shared';
 import {
   Download,
   Trash2,
@@ -222,7 +222,7 @@ function RegistryCardActions({
     (provider.agent?.authMethods && provider.agent.authMethods.length > 0) ||
     (provider.authMethods && provider.authMethods.length > 0);
   const isAuthed = provider.authState === 'authenticated';
-  const canLogout = provider.supportsLogout && isAuthed;
+  const canLogout = resolveAgentFeatures(provider).authentication.logout && isAuthed;
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
