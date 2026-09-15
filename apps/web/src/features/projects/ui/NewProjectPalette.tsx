@@ -1,18 +1,14 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DirectoryExplorer } from './DirectoryExplorer';
-import { RecentWorkspacesGrid } from './RecentWorkspacesGrid';
-import { NewProjectToolbar } from './NewProjectToolbar';
+import { DirectoryExplorer } from './DirectoryExplorer.js';
+import { RecentWorkspacesGrid } from './RecentWorkspacesGrid.js';
+import { NewProjectToolbar } from './NewProjectToolbar.js';
 import { AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
-import {
-  apiClient,
-  openProjectSession,
-  providerService,
-  type SidebarProject,
-} from '@agentctl/api-client';
+import { openProjectSession, providerService } from '@agentctl/api-client';
 import { cn } from '@agentctl/ui';
 import type { SessionMode, ProviderDiscovery } from '@agentctl/shared';
+import { projectQueries } from '../api/projectQueries.js';
 
 export function NewProjectPalette() {
   const navigate = useNavigate();
@@ -26,11 +22,8 @@ export function NewProjectPalette() {
   const [showExplorer, setShowExplorer] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Fetch projects list
-  const { data: projects = [] } = useQuery<SidebarProject[]>({
-    queryKey: ['projects'],
-    queryFn: () => apiClient.fetch<SidebarProject[]>('/api/projects'),
-  });
+  // Fetch projects list via query options
+  const { data: projects = [] } = useQuery(projectQueries.all());
 
   // Fetch available providers
   const { data: providers = [] } = useQuery<ProviderDiscovery[]>({
@@ -114,7 +107,7 @@ export function NewProjectPalette() {
   };
 
   return (
-    <div className="relative flex h-full w-full flex-col items-center justify-center overflow-y-auto p-4 py-8">
+    <div className="relative flex h-full w-full flex-col items-center justify-center overflow-y-auto p-4 py-8 select-none">
       <div className="flex w-full max-w-2xl flex-col items-center space-y-6">
         {showExplorer ? (
           <div className="w-full space-y-4">
