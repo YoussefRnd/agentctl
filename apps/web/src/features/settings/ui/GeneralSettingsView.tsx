@@ -1,6 +1,6 @@
-import { useTheme } from '../../../contexts/ThemeProvider';
-import { useProviders } from '../../../hooks/useProviders';
-import { useSettings } from '../../../hooks/useSettings';
+import { useTheme } from '@/shared';
+import { useProviders } from '@/features/providers';
+import { useSettings } from '../api/useSettings';
 import { useNotificationStore } from '../../../shared/stores/useNotificationStore';
 import { requestNotificationPermission } from '../../../shared/lib/notifications';
 import { Card, Select, Switch } from '@agentctl/ui';

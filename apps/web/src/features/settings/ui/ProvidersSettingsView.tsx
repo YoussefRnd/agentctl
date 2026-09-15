@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useProviders } from '../../../hooks/useProviders';
-import { useSettings } from '../../../hooks/useSettings';
+import { useProviders } from '@/features/providers';
+import { useSettings } from '../api/useSettings';
 import { Button } from '@agentctl/ui';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { RegistryBrowser } from './RegistryBrowser';

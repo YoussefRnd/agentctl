@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button, Card } from '@agentctl/ui';
-import { useUpdate } from '../../../features/shell/hooks/useUpdate';
+import { useUpdate } from '@/features/updates';
 
 export function UpdateSettingsCard() {
   const { state, install, check } = useUpdate();

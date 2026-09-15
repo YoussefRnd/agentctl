@@ -1,4 +1,4 @@
-import { useSettings } from '../../../hooks/useSettings';
+import { useSettings } from '../api/useSettings';
 
 export function useSetupWizard() {
   const { settings, isLoading, updateSettings } = useSettings();

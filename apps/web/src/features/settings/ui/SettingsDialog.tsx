@@ -1,4 +1,5 @@
-import { useUIStore, type SettingsTab, AgentIcon } from '../../../shared';
+import { AgentIcon } from '@/shared';
+import { useSettingsOverlayStore, type SettingsTab } from '../model/useSettingsOverlayStore';
 import { GeneralSettingsView } from './GeneralSettingsView';
 import { ProvidersSettingsView } from './ProvidersSettingsView';
 import { McpSettings } from './McpSettings';
@@ -16,10 +17,10 @@ const TABS: {
 ];
 
 export function SettingsDialog() {
-  const isSettingsOpen = useUIStore((s) => s.isSettingsOpen);
-  const closeSettings = useUIStore((s) => s.closeSettings);
-  const settingsTab = useUIStore((s) => s.settingsTab);
-  const setSettingsTab = useUIStore((s) => s.setSettingsTab);
+  const isSettingsOpen = useSettingsOverlayStore((s) => s.isSettingsOpen);
+  const closeSettings = useSettingsOverlayStore((s) => s.closeSettings);
+  const settingsTab = useSettingsOverlayStore((s) => s.settingsTab);
+  const setSettingsTab = useSettingsOverlayStore((s) => s.setSettingsTab);
 
   return (
     <Dialog

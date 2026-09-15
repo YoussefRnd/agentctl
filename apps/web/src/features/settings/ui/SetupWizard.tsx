@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useSetupWizard } from '../hooks/useSetupWizard';
-import { useProviders } from '../../../hooks/useProviders';
-import { useSettings } from '../../../hooks/useSettings';
+import { useSetupWizard } from '../model/useSetupWizard';
+import { useProviders } from '@/features/providers';
+import { useSettings } from '../api/useSettings';
 import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
 import { Terminal, AlertOctagon } from 'lucide-react';
 import {

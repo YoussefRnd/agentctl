@@ -1,8 +1,8 @@
 import { type ReactNode } from 'react';
 import { Card, Button, Switch, Select } from '@agentctl/ui';
 import { Cpu, ChevronDown, Edit2, Trash2 } from 'lucide-react';
-import type { McpServerData } from '../../../hooks/useMcpServers';
-import { useMcpTools } from '../../../hooks/useMcpServers';
+import type { McpServerData } from '../api/useMcpServers';
+import { useMcpTools } from '../api/useMcpServers';
 import { formatKeyValuesJson, formatArgumentsJson, approvalPolicyOptions } from './McpUtils';
 import { McpToolPermissionEditor } from './McpToolPermissionEditor';
 

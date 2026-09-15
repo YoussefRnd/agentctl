@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMcpServers } from '../../../hooks/useMcpServers';
+import { useMcpServers } from '../api/useMcpServers';
 import { Card, Button } from '@agentctl/ui';
 import { Cpu, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,7 +14,7 @@ import {
 } from './McpUtils';
 import { McpServerForm } from './McpServerForm';
 import { McpServerCard } from './McpServerCard';
-import type { McpServerData } from '../../../hooks/useMcpServers';
+import type { McpServerData } from '../api/useMcpServers';
 
 export function McpSettings() {
   const { mcpServers, isLoading, addMcpServer, updateMcpServer, deleteMcpServer } = useMcpServers();
