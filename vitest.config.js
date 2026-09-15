@@ -34,7 +34,7 @@ export default defineConfig({
           name: 'browser',
           environment: 'jsdom',
           globals: true,
-          setupFiles: [path.resolve(import.meta.dirname, 'apps/web/test/setup.ts')],
+          setupFiles: [path.resolve(import.meta.dirname, 'apps/web/src/test-setup.ts')],
           include: [
             'packages/ui/**/*.{test,spec}.{ts,js,tsx,jsx}',
             'apps/web/**/*.{test,spec}.{ts,js,tsx,jsx}',

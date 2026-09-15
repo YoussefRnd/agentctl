@@ -3,10 +3,11 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
+    "architecture:check": "node scripts/check-architecture.mjs",
     "build": "tsc -b && vite build",
     "dev": "vite",
     "test": "vitest run --root ../.. apps/web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "pnpm architecture:check && tsc --noEmit"
   },
   "type": "module",
   "dependencies": {
