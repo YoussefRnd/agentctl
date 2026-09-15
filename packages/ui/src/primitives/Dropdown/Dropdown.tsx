@@ -1,6 +1,6 @@
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { cn } from '../utils.js';
+import { cn } from '../../utils.js';
 
 export function DropdownRoot({
   modal = false,
@@ -36,7 +36,7 @@ export function DropdownItem({
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        'flex cursor-pointer items-center rounded-md px-2 py-1.5 text-[11px] font-bold outline-none hover:bg-white/5 focus:bg-white/5',
+        'focus-visible:ring-accent/40 flex cursor-pointer items-center rounded-md px-2 py-1.5 text-[11px] font-bold outline-none select-none hover:bg-white/5 focus-visible:bg-white/5 focus-visible:ring-1',
         className,
       )}
       {...props}
@@ -65,7 +65,7 @@ export function DropdownSubTrigger({
   return (
     <DropdownMenuPrimitive.SubTrigger
       className={cn(
-        'flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-[11px] font-bold outline-none hover:bg-white/5 focus:bg-white/5 data-[state=open]:bg-white/5',
+        'flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-[11px] font-bold outline-none select-none hover:bg-white/5 focus-visible:bg-white/5 data-[state=open]:bg-white/5',
         className,
       )}
       {...props}

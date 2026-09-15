@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { ChevronDown } from 'lucide-react';
-import { Dropdown } from './Dropdown.js';
-import { cn } from '../utils.js';
+import { Dropdown } from '../Dropdown/index.js';
+import { cn } from '../../utils.js';
 
 export interface SelectOption {
   value: string;
@@ -94,9 +94,6 @@ export function Select({
                       : 'text-text-muted hover:text-text-main hover:bg-white/5',
                   )}
                   onSelect={() => {
-                    onChange(opt.value);
-                  }}
-                  onClick={() => {
                     onChange(opt.value);
                   }}
                 >

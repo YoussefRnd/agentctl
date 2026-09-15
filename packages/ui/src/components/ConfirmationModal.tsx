@@ -1,6 +1,12 @@
 import { memo, useRef } from 'react';
-import { Button } from './Button.js';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './Dialog.js';
+import { Button } from '../primitives/Button/index.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '../primitives/Dialog/index.js';
 
 export interface ConfirmationModalProps {
   isOpen: boolean;

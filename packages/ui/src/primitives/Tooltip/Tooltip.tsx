@@ -1,8 +1,8 @@
 import * as React from 'react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
-import { cn } from '../utils.js';
+import { cn } from '../../utils.js';
 
-interface TooltipProps {
+export interface TooltipProps {
   content: React.ReactNode;
   children: React.ReactNode;
   className?: string;
@@ -108,7 +108,7 @@ export function Tooltip({
             e.preventDefault();
           }}
           className={cn(
-            'bg-surface-secondary/95 border-border/30 text-text-main data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98 pointer-events-none z-[1000] origin-(--radix-popover-content-transform-origin) rounded-md border px-2 py-1 font-sans text-[10px] font-semibold tracking-wide whitespace-nowrap shadow-xl backdrop-blur-sm duration-100 ease-out outline-none',
+            'bg-surface-secondary/95 border-border/30 text-text-main data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98 z-tooltip pointer-events-none origin-(--radix-popover-content-transform-origin) rounded-md border px-2 py-1 font-sans text-[10px] font-semibold tracking-wide whitespace-nowrap shadow-xl backdrop-blur-sm duration-100 ease-out outline-none',
             className,
           )}
         >
