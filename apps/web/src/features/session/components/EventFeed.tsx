@@ -177,7 +177,10 @@ export function EventFeed({
 
       const scrollElement = parentRef.current;
       if (scrollElement) {
-        scrollElement.scrollTo({ top: scrollElement.scrollHeight, behavior: 'auto' });
+        const bottom = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
+        if (Math.abs(scrollElement.scrollTop - bottom) > 1) {
+          scrollElement.scrollTop = bottom;
+        }
       }
     });
   }, []);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SessionEngine } from './session-engine.js';
+import { SessionEngine, coalesceBufferedEvents } from './session-engine.js';
 import type { SessionEventRow } from '../schemas/session-event.js';
 
 // Helper class to mock ReadableStream
@@ -261,5 +261,29 @@ describe('SessionEngine', () => {
 
     await vi.advanceTimersByTimeAsync(0);
     expect(onError).toHaveBeenCalledWith('Failed to parse SSE message');
+  });
+});
+
+describe('coalesceBufferedEvents', () => {
+  const textEvent = (delta?: string, content = '') =>
+    ({
+      id: 1,
+      type: 'text',
+      sessionId: '00000000-0000-0000-0000-000000000000',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      data: { content, role: 'provider' },
+      ...(delta === undefined ? {} : { delta }),
+    }) as SessionEventRow;
+
+  it('combines adjacent deltas for the same streaming event', () => {
+    expect(coalesceBufferedEvents([textEvent('Hel'), textEvent('lo'), textEvent('!')])).toEqual([
+      expect.objectContaining({ delta: 'Hello!' }),
+    ]);
+  });
+
+  it('folds a delta into a buffered full row', () => {
+    const [event] = coalesceBufferedEvents([textEvent(undefined, 'Hello'), textEvent(' world')]);
+    expect(event.delta).toBeUndefined();
+    expect(event.data).toEqual({ content: 'Hello world', role: 'provider' });
   });
 });

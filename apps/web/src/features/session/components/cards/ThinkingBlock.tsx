@@ -105,9 +105,6 @@ export function ThinkingBlock({
                     content={(e.data as { content: string }).content}
                     isStreaming={isLastStreaming}
                   />
-                  {isLastStreaming && (
-                    <span className="bg-accent/40 ml-1 inline-block h-3 w-1 animate-pulse align-middle" />
-                  )}
                 </div>
               </div>
             );

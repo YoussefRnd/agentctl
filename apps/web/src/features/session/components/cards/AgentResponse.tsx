@@ -5,6 +5,7 @@ import { StreamingMarkdown } from './StreamingMarkdown';
 import { TurnChangesCard } from './TurnChangesCard';
 import { isSubagentToolCall, extractSubagentGroups } from './subagentBlockUtils';
 import { extractTurnChanges } from '../../lib/turnChanges';
+import { getAgentStreamPhase } from '../../lib/agentStreamPhase';
 import { useSession } from '../../../../contexts/SessionContext';
 import type { SessionEventRow } from '@agentctl/shared';
 import {
@@ -106,6 +107,7 @@ const AgentResponseComponent = function AgentResponse({
     subagentGroups.length > 0 ||
     responseEvent != null ||
     turnChanges.files.length > 0;
+  const isResponding = getAgentStreamPhase(events) === 'responding';
 
   if (!hasContent) {
     return null;
@@ -117,9 +119,10 @@ const AgentResponseComponent = function AgentResponse({
         <div className="mt-0.5 mb-2.5">
           <UnifiedActivityBlock
             events={activityEvents}
-            isStreaming={isStreaming}
+            isStreaming={isStreaming && !isResponding}
             isActive={isActive}
             isInitialThinking={isInitialThinking}
+            isResponding={isResponding}
           />
         </div>
       )}

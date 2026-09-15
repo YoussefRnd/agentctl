@@ -436,6 +436,7 @@ interface UnifiedActivityBlockProps {
   isStreaming?: boolean;
   isActive?: boolean;
   isInitialThinking?: boolean;
+  isResponding?: boolean;
 }
 
 export function UnifiedActivityBlock({
@@ -443,6 +444,7 @@ export function UnifiedActivityBlock({
   isStreaming = false,
   isActive = false,
   isInitialThinking = false,
+  isResponding = false,
 }: UnifiedActivityBlockProps) {
   const { settings } = useSettings();
   const { sessionData } = useSession();
@@ -450,7 +452,7 @@ export function UnifiedActivityBlock({
 
   const sessionStatus = sessionData?.session.status;
   const isSessionActive = sessionStatus === 'running' || sessionStatus === 'needs_attention';
-  const isCompleted = !isActive || !isSessionActive;
+  const isCompleted = isResponding || !isActive || !isSessionActive;
 
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
   const isOpen = userToggled ?? (!isCompleted && showThinking);

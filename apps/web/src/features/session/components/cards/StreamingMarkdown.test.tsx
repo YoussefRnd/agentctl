@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { StreamingMarkdown } from './StreamingMarkdown';
+import { StreamingMarkdown, getAdaptiveRevealRate, splitGraphemes } from './StreamingMarkdown';
 import { splitStreamingContent } from './streamingMarkdownUtils';
 
 describe('splitStreamingContent', () => {
@@ -81,11 +81,45 @@ describe('StreamingMarkdown', () => {
     });
   });
 
+  it('stabilizes completed markdown blocks while leaving the active tail lightweight', () => {
+    const { container, root } = render('**bold paragraph**\n\nstill streaming', true);
+    expect(container.querySelector('strong')?.textContent).toBe('bold paragraph');
+    expect(container.textContent).toContain('still streaming');
+    expect(container.querySelectorAll('.animate-pulse-block')).toHaveLength(1);
+    act(() => {
+      root.unmount();
+    });
+  });
+
   it('renders full markdown when complete', () => {
     const { container, root } = render('**bold** text', false);
     expect(container.querySelector('strong')).not.toBeNull();
     act(() => {
       root.unmount();
     });
+  });
+
+  it('keeps completed content formatted while removing the active caret immediately', () => {
+    const { container, root } = render('**finished**', true);
+    act(() => {
+      root.render(<StreamingMarkdown content="**finished**" isStreaming={false} />);
+    });
+    expect(container.querySelector('strong')?.textContent).toBe('finished');
+    expect(container.querySelector('.animate-pulse-block')).toBeNull();
+    act(() => {
+      root.unmount();
+    });
+  });
+});
+
+describe('stream cadence', () => {
+  it('keeps emoji and combining marks in one reveal unit', () => {
+    expect(splitGraphemes('A👨‍👩‍👧‍👦e\u0301')).toEqual(['A', '👨‍👩‍👧‍👦', 'é']);
+  });
+
+  it('tracks provider speed and increases pressure when buffered text grows', () => {
+    expect(getAdaptiveRevealRate(100, 0)).toBeCloseTo(115);
+    expect(getAdaptiveRevealRate(100, 50)).toBeCloseTo(215);
+    expect(getAdaptiveRevealRate(1_000, 500)).toBe(600);
   });
 });
