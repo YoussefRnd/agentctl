@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
-import { SessionWorkspace } from '../features/session/components/SessionWorkspace';
-import { SessionConfigProvider, SessionStreamProvider } from '../contexts/SessionContext';
+import { SessionConfigProvider, SessionStreamProvider } from '../features/sessions/index.js';
+import { SessionWorkspace } from './SessionWorkspace.js';
 
 export function SessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
