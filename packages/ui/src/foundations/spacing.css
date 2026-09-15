@@ -1,0 +1,34 @@
+@theme {
+  /* Radius Scale */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+@layer components {
+  /* Control Sizes */
+  .control-compact {
+    height: 1.75rem; /* h-7 */
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    font-size: 11px;
+    border-radius: var(--radius-md);
+  }
+
+  .control-default {
+    height: 2rem; /* h-8 */
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    font-size: 12px;
+    border-radius: var(--radius-md);
+  }
+
+  .control-large {
+    height: 2.25rem; /* h-9 */
+    padding-left: 1rem;
+    padding-right: 1rem;
+    font-size: 13px;
+    border-radius: var(--radius-lg);
+  }
+}

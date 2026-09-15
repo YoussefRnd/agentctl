@@ -1,0 +1,82 @@
+@theme {
+  /* Motion Tokens */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
+  --animate-pulse-block: pulse-block 1s steps(1) infinite;
+  --animate-pulse-scale: pulse-scale 2s ease-in-out infinite;
+  --animate-pulse-line: pulse-line 2s ease-in-out infinite;
+  --animate-ai-think: ai-think-spin 3.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+
+  @keyframes pulse-block {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes pulse-scale {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.15);
+    }
+  }
+
+  @keyframes pulse-line {
+    0%,
+    100% {
+      opacity: 0.15;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  @keyframes ai-think-spin {
+    0% {
+      transform: rotate(0deg) scale(0.92);
+    }
+    50% {
+      transform: rotate(180deg) scale(1.06);
+    }
+    100% {
+      transform: rotate(360deg) scale(0.92);
+    }
+  }
+}
+
+@layer components {
+  .click-press {
+    transition-property: transform, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+
+    &:active {
+      transform: scale(0.97);
+      opacity: 0.9;
+    }
+  }
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
