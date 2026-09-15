@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import { useActionStore } from './useActionStore';
+import { useActionStore } from '../stores/useActionStore';
 
 interface ActionOptions {
   silent?: boolean;

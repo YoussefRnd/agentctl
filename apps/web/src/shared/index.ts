@@ -6,6 +6,8 @@ export * from './ui/AgentIcon';
 export * from './ui/StreamingDots';
 export * from './ui/RelativeTime';
 export * from './components/FileIcon';
+export { ThemeProvider, useTheme } from './providers/ThemeProvider';
+export type { ThemeMode } from './hooks/useThemePreferences';
 
 // Libraries & Utilities
 export * from './lib/api-base-url';
@@ -14,6 +16,5 @@ export * from './lib/toolColors';
 export * from './lib/theme-registry';
 export * from './lib/queryKeys';
 
-// Global Client Stores
-export * from './stores/useUIStore';
+// Cross-feature client state
 export * from './stores/useMessageQueueStore';
