@@ -60,7 +60,14 @@ export function useSessionActions() {
         return old.map((p) => ({
           ...p,
           sessions: p.sessions.map((s) =>
-            s.id === sessionId ? { ...s, status: 'running', updatedAt: new Date() } : s,
+            s.id === sessionId
+              ? {
+                  ...s,
+                  status: 'running',
+                  updatedAt: new Date(),
+                  lastActivityAt: optimisticEvent.createdAt,
+                }
+              : s,
           ),
         }));
       });

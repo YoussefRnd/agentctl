@@ -12,8 +12,8 @@ function filterProjects(projects: SidebarProject[], options: FilterOptions): Sid
   const visibleProjects = projects.map((p) => {
     const validSessions = p.sessions.filter((s) => showArchived || s.status !== 'archived');
     const sortedSessions = validSessions.toSorted((a, b) => {
-      const timeA = new Date(a.updatedAt ?? a.createdAt).getTime();
-      const timeB = new Date(b.updatedAt ?? b.createdAt).getTime();
+      const timeA = new Date(a.lastActivityAt).getTime();
+      const timeB = new Date(b.lastActivityAt).getTime();
       return timeB - timeA;
     });
 

@@ -79,6 +79,9 @@ export const sessions = sqliteTable('sessions', {
   sessionMetrics: text('session_metrics').notNull().default('{}'), // JSON string for breakdown, costs, etc.
   agentPersona: text('agent_persona'),
   availableAgentPersonas: text('available_agent_personas').notNull().default('[]'),
+  lastActivityAt: integer('last_activity_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
   ...timestamps,
 });
 

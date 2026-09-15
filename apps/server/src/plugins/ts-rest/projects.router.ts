@@ -31,16 +31,16 @@ export function createProjectsRouter(
       let mapped = allProjects.map((p) => {
         const projSessions = allSessions.filter((s) => s.projectId === p.id);
         const lastSessionUpdate = projSessions.reduce(
-          (max, s) => (s.updatedAt.getTime() > max ? s.updatedAt.getTime() : max),
-          p.updatedAt.getTime(),
+          (latest, session) => Math.max(latest, session.lastActivityAt.getTime()),
+          p.createdAt.getTime(),
         );
 
         return {
           ...p,
           isGitRepo: p.repoRoot !== null,
           sessions: projSessions
-            .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-            .map((s) => sessionRowSchema.parse(s)),
+            .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime())
+            .map((session) => sessionRowSchema.parse(session)),
           lastActiveTime: lastSessionUpdate,
         };
       });

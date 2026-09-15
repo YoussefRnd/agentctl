@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { searchSessionEvents, type SearchResultItem } from '@agentctl/api-client';
 import type { SearchEventType } from '@agentctl/shared';
 import { MessageSquare, Wrench, Brain, Loader2, SearchX, RotateCw } from 'lucide-react';
-import { AgentIcon } from '@/shared';
+import { AgentIcon, RelativeTime } from '@/shared';
 import { cn } from '@agentctl/ui';
 
 interface SidebarTranscriptResultsProps {
@@ -48,23 +48,6 @@ function getEventBadge(type: SearchEventType) {
         color: 'text-accent bg-accent/10 border-accent/20',
       };
   }
-}
-
-function formatRelativeTime(dateStr?: string): string {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '';
-  const now = new Date();
-  const diffSec = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
-  if (diffSec < 60) return 'just now';
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours}h`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return '1d';
-  if (diffDays < 7) return `${diffDays}d`;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function HighlightedSnippet({ item }: { item: SearchResultItem }) {
@@ -221,7 +204,7 @@ export function SidebarTranscriptResults({
                   </div>
 
                   <span className="text-text-muted/40 shrink-0 font-mono text-[10px]">
-                    {formatRelativeTime(item.createdAt)}
+                    <RelativeTime value={item.createdAt} />
                   </span>
                 </div>
 

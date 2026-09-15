@@ -312,6 +312,7 @@ export const sessionRowSchema = sessionSchema.extend({
   estimatedCost: z.number(),
   lastHeartbeat: z.coerce.date().nullable(),
   closedAt: z.coerce.date().nullable(),
+  lastActivityAt: z.coerce.date(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   selectedProvider: providerSchema,

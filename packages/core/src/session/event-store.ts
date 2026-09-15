@@ -107,6 +107,13 @@ export class SessionEventStore {
       .returning();
 
     const first = inserted[0];
+    if (type === 'text') {
+      await this.db
+        .update(sessions)
+        .set({ lastActivityAt: new Date(first.createdAt) })
+        .where(eq(sessions.id, sessionId));
+    }
+
     this.eventBus.publish({
       ...first,
       createdAt: new Date(first.createdAt),

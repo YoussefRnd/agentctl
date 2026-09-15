@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Folder,
@@ -14,6 +14,7 @@ import {
 import type { SidebarProject } from '@agentctl/api-client';
 import { Dropdown, Tooltip } from '@agentctl/ui';
 import { RepoForkedIcon } from '@primer/octicons-react';
+import { RelativeTime } from '@/shared';
 import { QuickLaunchSessionDialog } from '../../session/components/QuickLaunchSessionDialog';
 
 interface ConfirmConfig {
@@ -43,23 +44,6 @@ interface ProjectItemProps {
   handleForkSession: (sessionId: string, title: string) => void;
 }
 
-function formatRelativeTime(dateStr?: string | Date | null): string {
-  if (!dateStr) return '';
-  const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-  if (Number.isNaN(date.getTime())) return '';
-  const now = new Date();
-  const diffSec = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
-  if (diffSec < 60) return 'just now';
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours}h`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return '1d';
-  if (diffDays < 7) return `${diffDays}d`;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 interface SessionRowProps {
   session: SidebarProject['sessions'][number];
   isActive: boolean;
@@ -81,7 +65,7 @@ function SessionRow({
 }: SessionRowProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const sessionTitle = s.title || s.taskSlug || s.branch || 'Untitled session';
-  const relativeTime = formatRelativeTime(s.updatedAt ?? s.createdAt);
+  const activityTime = s.lastActivityAt;
 
   return (
     <div className="group/session relative flex items-center">
@@ -126,14 +110,13 @@ function SessionRow({
                 <Loader2 className="h-3 w-3 animate-spin" />
               </span>
             </Tooltip>
-          ) : relativeTime ? (
-            <span
+          ) : activityTime ? (
+            <RelativeTime
+              value={activityTime}
               className={`text-text-muted/40 font-mono text-[10px] tabular-nums ${
                 isDropdownOpen ? 'hidden' : 'group-hover/session:hidden'
               }`}
-            >
-              {relativeTime}
-            </span>
+            />
           ) : null}
 
           <div
@@ -238,15 +221,6 @@ export function ProjectItem({
   const showSessions = searchQuery ? true : !isCollapsed;
   const isGit = proj.sessions.some((s) => s.mode === 'worktree');
   const FolderIcon = showSessions ? FolderOpen : Folder;
-
-  // Periodic re-render ticker to update relative timestamps live
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTick((t) => (t + 1) % 1000);
-    }, 15000);
-    return () => clearInterval(timer);
-  }, []);
 
   const runningSessionsCount = proj.sessions.filter((s) => s.status === 'running').length;
   const needsAttentionCount = proj.sessions.filter((s) => s.status === 'needs_attention').length;

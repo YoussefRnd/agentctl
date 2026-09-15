@@ -32,7 +32,7 @@ function getLastActiveTimestamp(project: SidebarProject): string {
   if (project.sessions.length === 0) return 'No recent activity';
   let latest = 0;
   for (const s of project.sessions) {
-    const time = new Date(s.updatedAt).getTime();
+    const time = new Date(s.lastActivityAt).getTime();
     if (!isNaN(time) && time > latest) {
       latest = time;
     }

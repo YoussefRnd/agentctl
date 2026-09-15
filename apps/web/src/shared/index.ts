@@ -4,6 +4,7 @@ export * from './ui/FontPicker';
 export * from './ui/ProviderIcon';
 export * from './ui/AgentIcon';
 export * from './ui/StreamingDots';
+export * from './ui/RelativeTime';
 export * from './components/FileIcon';
 
 // Libraries & Utilities

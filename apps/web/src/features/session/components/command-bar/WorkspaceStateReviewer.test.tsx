@@ -39,6 +39,7 @@ function createSessionData(
       availableAgentPersonas: [],
       sessionConfigOptions: [],
       sessionMetrics: {},
+      lastActivityAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
       closedAt: null,

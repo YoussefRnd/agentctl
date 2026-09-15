@@ -297,6 +297,7 @@ describe('SessionEventStore', () => {
 
     test('appends strongly typed text event and publishes correctly', async () => {
       let insertedPayload: unknown;
+      let sessionUpdate: unknown;
       const mockDb = {
         insert: () => ({
           values: (val: unknown) => {
@@ -315,6 +316,12 @@ describe('SessionEventStore', () => {
                   },
                 ]),
             };
+          },
+        }),
+        update: () => ({
+          set: (value: unknown) => {
+            sessionUpdate = value;
+            return { where: () => Promise.resolve() };
           },
         }),
       } as unknown as DbClient;
@@ -338,6 +345,7 @@ describe('SessionEventStore', () => {
           type: 'text',
         }),
       );
+      expect(sessionUpdate).toEqual({ lastActivityAt: expect.any(Date) });
     });
 
     test('safe decoding handles malformed and null data without throwing', async () => {

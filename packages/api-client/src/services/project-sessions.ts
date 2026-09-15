@@ -21,6 +21,7 @@ export interface SidebarProject {
     | 'taskSlug'
     | 'branch'
     | 'status'
+    | 'lastActivityAt'
     | 'updatedAt'
     | 'createdAt'
     | 'mode'
