@@ -32,7 +32,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { label: 'New line in composer', keys: ['Shift', '+', 'Enter'] },
       { label: 'Mention file or symbol', keys: ['@'] },
       { label: 'Trigger slash command', keys: ['/'] },
-      { label: 'Stop generation / Cancel edit', keys: ['Esc'] },
+      { label: 'Stop running agent', keys: ['Esc', 'Esc'] },
     ],
   },
   {
@@ -97,7 +97,7 @@ export function ShortcutsDialog() {
                             </span>
                           ) : (
                             <kbd
-                              key={k}
+                              key={`${k}-${i.toString()}`}
                               className="border-border/40 bg-surface-secondary/80 text-text-muted inline-flex h-5 min-w-5 items-center justify-center rounded border px-1.5 font-mono text-[10px] font-semibold shadow-xs"
                             >
                               {k}

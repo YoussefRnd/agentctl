@@ -137,6 +137,10 @@ export function useSessionActions() {
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
         void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Failed to stop agent';
+        toast.error(message);
       });
   };
 

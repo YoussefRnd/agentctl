@@ -2,7 +2,12 @@ import { useEffect, useMemo } from 'react';
 
 import { AppShell, Sidebar } from '@/app/shell';
 import { useShellStore } from '@/app/shell';
-import { SessionHeader } from '@/features/sessions';
+import {
+  SessionHeader,
+  useSession,
+  useSessionActions,
+  useDoubleEscToStop,
+} from '@/features/sessions';
 import { Workbench } from '@/features/workbench';
 import { MainFeed } from '@/features/conversation';
 import { useWorkbenchStore } from '@/features/workbench';
@@ -25,6 +30,15 @@ export function SessionWorkspace() {
   const toggleMaximized = useWorkbenchStore((s) => s.toggleMaximized);
   const moveWorkbenchTab = useWorkbenchStore((s) => s.moveWorkbenchTab);
   const setMobileSidebarOpen = useShellStore((s) => s.setMobileSidebarOpen);
+
+  const { sessionData } = useSession();
+  const { handleCancel } = useSessionActions();
+  const isRunning = sessionData?.session.status === 'running';
+
+  useDoubleEscToStop({
+    isRunning,
+    onStop: handleCancel,
+  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
