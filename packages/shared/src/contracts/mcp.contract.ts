@@ -34,7 +34,7 @@ export const mcpContract = {
     path: '/api/mcp-servers',
     body: mcpServerSchema,
     responses: {
-      200: mcpServerSchema,
+      201: mcpServerSchema,
     },
     summary: 'Register an MCP server',
   },
@@ -53,7 +53,7 @@ export const mcpContract = {
     path: '/api/mcp-servers/:id',
     pathParams: z.object({ id: z.string() }),
     responses: {
-      200: z.object({ success: z.boolean() }),
+      204: z.void(),
     },
     summary: 'Delete MCP server',
   },

@@ -65,9 +65,9 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
   const explore = async (path?: string) => {
     dispatch({ type: 'EXPLORE_START' });
     try {
-      const data = await apiClient.fetch<ExploreResponse>('/api/fs/explore', {
-        method: 'POST',
-        body: JSON.stringify({ path }),
+      const url = path ? `/api/fs?path=${encodeURIComponent(path)}` : '/api/fs';
+      const data = await apiClient.fetch<ExploreResponse>(url, {
+        method: 'GET',
       });
       dispatch({ type: 'EXPLORE_SUCCESS', payload: data });
     } catch {

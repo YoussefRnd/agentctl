@@ -276,12 +276,12 @@ export function createProjectsRouter(
       const { id } = params;
       await fastify.db.delete(projects).where(eq(projects.id, id));
       return {
-        status: 200 as const,
-        body: { success: true },
+        status: 204 as const,
+        body: undefined,
       };
     },
-    exploreFs: async ({ body }: { body: { path?: string } }) => {
-      const targetPath = body.path ?? os.homedir();
+    exploreFs: async ({ query }: { query: { path?: string } }) => {
+      const targetPath = query.path ?? os.homedir();
       try {
         const stats = await fs.stat(targetPath);
         if (!stats.isDirectory()) {

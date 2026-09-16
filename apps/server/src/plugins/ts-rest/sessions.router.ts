@@ -193,12 +193,66 @@ export function createSessionsRouter(
         };
       }
     },
+    patchSession: async ({
+      params,
+      body,
+    }: {
+      params: { id: string };
+      body: {
+        title?: string;
+        mode?: 'local' | 'worktree';
+        approvalMode?: 'review' | 'auto_approve' | 'yolo';
+        persona?: string;
+        providerId?: string;
+        modelId?: string;
+        thinkingEffort?: 'low' | 'medium' | 'high';
+        configId?: string;
+        configValue?: string;
+        branch?: string;
+      };
+    }) => {
+      const { id } = params;
+      if (body.title !== undefined) {
+        await fastify.sessionService.renameSession(id, body.title);
+      }
+      if (body.mode !== undefined) {
+        await fastify.sessionService.switchMode(id, body.mode);
+      }
+      if (body.approvalMode !== undefined) {
+        await fastify.sessionService.updateApprovalMode(id, body.approvalMode);
+      }
+      if (body.persona !== undefined) {
+        await fastify.sessionManager.setAgentPersona(id, body.persona);
+      }
+      if (body.providerId !== undefined) {
+        await fastify.sessionService.updateSessionProvider(id, {
+          selectedProvider: body.providerId,
+          selectedModel: body.modelId ?? '',
+          selectedThinkingEffort: body.thinkingEffort ?? 'medium',
+        });
+      }
+      if (body.configId !== undefined && body.configValue !== undefined) {
+        await fastify.sessionManager.setConfigOption(id, body.configId, body.configValue);
+      }
+      if (body.branch !== undefined) {
+        await fastify.sessionService.checkoutBranch(id, body.branch);
+      }
+
+      const result = await fastify.sessionService.getSessionWithCapabilities(id);
+      return {
+        status: 200 as const,
+        body: {
+          session: result.session,
+          capabilities: result.capabilities.map((c) => providerCapabilitySchema.parse(c)),
+        },
+      };
+    },
     deleteSession: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       await fastify.sessionService.deleteSession(id);
       return {
-        status: 200 as const,
-        body: { success: true },
+        status: 204 as const,
+        body: undefined,
       };
     },
     renameSession: async ({
@@ -528,13 +582,13 @@ export function createSessionsRouter(
     },
     checkMergeBranch: async ({
       params,
-      body,
+      query,
     }: {
       params: { id: string };
-      body: { branch: string };
+      query: { branch: string };
     }) => {
       const { id } = params;
-      const { branch } = body;
+      const { branch } = query;
       const result = await fastify.sessionService.checkMergeBranch(id, branch);
       return {
         status: 200 as const,
@@ -545,7 +599,7 @@ export function createSessionsRouter(
       const { id } = params;
       const session = await fastify.sessionService.spawnParallelAgent(id, body);
       return {
-        status: 200 as const,
+        status: 201 as const,
         body: { session },
       };
     },

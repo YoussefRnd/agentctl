@@ -115,7 +115,7 @@ describe('Parallel Subagents & Swarms API', () => {
       },
     });
 
-    expect(response.statusCode, response.body).toBe(200);
+    expect(response.statusCode, response.body).toBe(201);
     const body = response.json() as {
       session: { id: string; title: string; mode: string; branch: string };
     };
@@ -125,7 +125,7 @@ describe('Parallel Subagents & Swarms API', () => {
     expect(body.session.branch).toContain('agent-');
   });
 
-  test('POST /api/sessions/:id/check-merge detects clean merges and conflicts', async () => {
+  test('GET /api/sessions/:id/check-merge detects clean merges and conflicts', async () => {
     const startupToken = app.authManager.getStartupToken();
 
     // Create a clean parallel branch in git
@@ -136,13 +136,10 @@ describe('Parallel Subagents & Swarms API', () => {
     execSync('git checkout main', { cwd: testDir, stdio: 'ignore' });
 
     const response = await app.inject({
-      method: 'POST',
-      url: `/api/sessions/${sessionId}/check-merge`,
+      method: 'GET',
+      url: `/api/sessions/${sessionId}/check-merge?branch=clean-feature`,
       headers: {
         authorization: `Bearer ${startupToken}`,
-      },
-      payload: {
-        branch: 'clean-feature',
       },
     });
 

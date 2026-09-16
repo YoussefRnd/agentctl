@@ -1,6 +1,7 @@
 import {
   type SearchEventType,
   type SessionRow,
+  type SessionWithCapabilities,
   type SessionMode,
   type GitStatus,
   type CreatePullRequestBody,
@@ -227,13 +228,38 @@ export async function mergeSessionBranch(
   return res.body;
 }
 
+export async function patchSession(
+  sessionId: string,
+  data: {
+    title?: string;
+    mode?: SessionMode;
+    approvalMode?: 'review' | 'auto_approve' | 'yolo';
+    persona?: string;
+    providerId?: string;
+    modelId?: string;
+    thinkingEffort?: 'low' | 'medium' | 'high';
+    configId?: string;
+    configValue?: string;
+    branch?: string;
+  },
+): Promise<SessionWithCapabilities> {
+  const res = await api.patchSession({
+    params: { id: sessionId },
+    body: data,
+  });
+  if (res.status !== 200) {
+    throw new ApiError(`Failed to update session: ${String(res.status)}`, res.status);
+  }
+  return res.body;
+}
+
 export async function checkMergeBranch(
   sessionId: string,
   branch: string,
 ): Promise<{ canMerge: boolean; hasConflicts: boolean; conflictingFiles: string[] }> {
   const res = await api.checkMergeBranch({
     params: { id: sessionId },
-    body: { branch },
+    query: { branch },
   });
   if (res.status !== 200) {
     throw new ApiError(`Failed to check merge branch: ${String(res.status)}`, res.status);
@@ -255,7 +281,7 @@ export async function spawnParallelAgent(
     params: { id: parentSessionId },
     body: params,
   });
-  if (res.status !== 200) {
+  if (res.status !== 201) {
     throw new ApiError(`Failed to spawn background agent: ${String(res.status)}`, res.status);
   }
   return res.body;
@@ -312,20 +338,20 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
   const res = await api.deleteProject({
     params: { id: projectId },
   });
-  if (res.status !== 200) {
+  if (res.status !== 204 && (res.status as number) !== 200) {
     throw new ApiError(`Failed to delete project: ${String(res.status)}`, res.status);
   }
-  return res.body;
+  return { success: true };
 }
 
 export async function deleteSession(sessionId: string): Promise<{ success: boolean }> {
   const res = await api.deleteSession({
     params: { id: sessionId },
   });
-  if (res.status !== 200) {
+  if (res.status !== 204 && (res.status as number) !== 200) {
     throw new ApiError(`Failed to delete session: ${String(res.status)}`, res.status);
   }
-  return res.body;
+  return { success: true };
 }
 
 export async function renameSession(

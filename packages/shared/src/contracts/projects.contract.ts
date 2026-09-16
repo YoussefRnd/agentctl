@@ -142,14 +142,14 @@ export const projectsContract = {
       id: z.string(),
     }),
     responses: {
-      200: z.object({ success: z.boolean() }),
+      204: z.void(),
     },
     summary: 'Delete project permanently',
   },
   exploreFs: {
-    method: 'POST',
-    path: '/api/fs/explore',
-    body: z.object({
+    method: 'GET',
+    path: '/api/fs',
+    query: z.object({
       path: z.string().optional(),
     }),
     responses: {

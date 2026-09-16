@@ -40,7 +40,7 @@ describe('MCP Servers REST API endpoints - Bidirectional Sync', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(201);
     const body = JSON.parse(response.body) as McpServerResponse;
     expect(body.autoApprove).toBe(true);
     expect(body.approvalPolicy).toBe('auto_approve_all');
@@ -70,7 +70,7 @@ describe('MCP Servers REST API endpoints - Bidirectional Sync', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(201);
     const body = JSON.parse(response.body) as McpServerResponse;
     expect(body.autoApprove).toBe(false);
     expect(body.approvalPolicy).toBe('always_prompt');
@@ -94,7 +94,7 @@ describe('MCP Servers REST API endpoints - Bidirectional Sync', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(201);
     const body = JSON.parse(response.body) as McpServerResponse;
     expect(body.autoApprove).toBe(false);
     expect(body.approvalPolicy).toBe('deny_all');

@@ -184,6 +184,29 @@ export const sessionsContract = {
     },
     summary: 'Discard session changes and close',
   },
+  patchSession: {
+    method: 'PATCH',
+    path: '/api/sessions/:id',
+    pathParams: z.object({
+      id: z.uuid(),
+    }),
+    body: z.object({
+      title: z.string().optional(),
+      mode: z.enum(['local', 'worktree']).optional(),
+      approvalMode: z.enum(['review', 'auto_approve', 'yolo']).optional(),
+      persona: z.string().optional(),
+      providerId: z.string().optional(),
+      modelId: z.string().optional(),
+      thinkingEffort: z.enum(['low', 'medium', 'high']).optional(),
+      configId: z.string().optional(),
+      configValue: z.string().optional(),
+      branch: z.string().optional(),
+    }),
+    responses: {
+      200: sessionWithCapabilitiesSchema,
+    },
+    summary: 'Update session attributes',
+  },
   deleteSession: {
     method: 'DELETE',
     path: '/api/sessions/:id',
@@ -191,7 +214,7 @@ export const sessionsContract = {
       id: z.uuid(),
     }),
     responses: {
-      200: z.object({ success: z.boolean() }),
+      204: z.void(),
     },
     summary: 'Delete session permanently',
   },
@@ -542,12 +565,12 @@ export const sessionsContract = {
     summary: 'Merge parallel session branch into current session workspace',
   },
   checkMergeBranch: {
-    method: 'POST',
+    method: 'GET',
     path: '/api/sessions/:id/check-merge',
     pathParams: z.object({
       id: z.uuid(),
     }),
-    body: z.object({
+    query: z.object({
       branch: z.string(),
     }),
     responses: {
@@ -573,7 +596,7 @@ export const sessionsContract = {
       modelId: z.string().optional(),
     }),
     responses: {
-      200: z.object({
+      201: z.object({
         session: sessionRowSchema,
       }),
     },
