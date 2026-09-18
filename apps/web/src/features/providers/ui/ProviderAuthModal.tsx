@@ -167,7 +167,7 @@ function ProviderAuthModalBody({
                   </label>
                   {errorMsg && (
                     <span className="text-danger flex items-center gap-1 text-[11px] font-normal">
-                      <AlertCircle className="inline h-3 w-3" />
+                      <AlertCircle className="inline h-3.5 w-3.5" />
                       {errorMsg}
                     </span>
                   )}

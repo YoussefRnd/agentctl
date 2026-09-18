@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowRight, Bot, Loader2, Sparkles } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Loader2, Sparkles, PlusCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,12 @@ import {
   DialogTitle,
   DialogDescription,
   Button,
+  Input,
+  cn,
 } from '@agentctl/ui';
+import { useProviders } from '../api/useProviders.js';
+
+export type SwitchAgentMode = 'handoff' | 'new_session';
 
 export interface SwitchAgentModalProps {
   open: boolean;
@@ -15,90 +20,144 @@ export interface SwitchAgentModalProps {
   currentProvider: string;
   targetProvider: string;
   targetModel?: string;
-  onConfirm: (nextSessionFocus?: string) => void;
+  onConfirmHandoff: (nextSessionFocus?: string) => void;
+  onConfirmNewSession: () => void;
   isLoading?: boolean;
+}
+
+function formatProviderName(id: string): string {
+  return id
+    .split(/[-_]/)
+    .map((word) =>
+      word.length <= 3 ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(' ');
 }
 
 export function SwitchAgentModal({
   open,
   onOpenChange,
-  currentProvider,
   targetProvider,
   targetModel,
-  onConfirm,
+  onConfirmHandoff,
+  onConfirmNewSession,
   isLoading = false,
 }: SwitchAgentModalProps) {
+  const [selectedMode, setSelectedMode] = useState<SwitchAgentMode>('handoff');
   const [focusNotes, setFocusNotes] = useState('');
 
+  const { providers = [] } = useProviders(null);
+
+  const targetName = useMemo(() => {
+    const match = providers.find((p) => p.id === targetProvider);
+    return match?.label || formatProviderName(targetProvider);
+  }, [providers, targetProvider]);
+
   const handleConfirm = () => {
-    onConfirm(focusNotes.trim() || undefined);
+    if (selectedMode === 'handoff') {
+      onConfirmHandoff(focusNotes.trim() || undefined);
+    } else {
+      onConfirmNewSession();
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md overflow-hidden rounded-2xl p-0">
+      <DialogContent className="border-border/40 bg-surface max-w-sm overflow-hidden rounded-2xl border p-0 shadow-2xl">
         <div className="p-5">
-          <DialogHeader className="mb-4">
-            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
-              <Bot className="text-accent h-4.5 w-4.5" />
-            </div>
-            <DialogTitle>Switch Agent</DialogTitle>
-            <DialogDescription className="text-text-muted text-xs font-normal">
-              Transfer conversation context to {targetProvider} without changing workspaces
+          {/* Header */}
+          <DialogHeader className="mb-4 text-left">
+            <DialogTitle className="text-text-main text-sm font-semibold tracking-tight">
+              Switch to {targetName}
+            </DialogTitle>
+            <DialogDescription className="text-text-muted mt-0.5 text-xs">
+              {targetModel && targetModel !== 'default' && (
+                <span className="text-text-main/80 mr-1 font-mono">{targetModel} &middot;</span>
+              )}
+              Choose how to proceed in this workspace
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {/* Provider transition badge */}
-            <div className="flex items-center justify-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs">
-              <span className="text-text-muted font-mono font-medium capitalize">
-                {currentProvider}
-              </span>
-              <ArrowRight className="text-text-muted/60 h-3.5 w-3.5" />
-              <div className="flex items-center gap-1.5">
-                <span className="text-text-main font-mono font-semibold capitalize">
-                  {targetProvider}
-                </span>
-                {targetModel && targetModel !== 'default' && (
-                  <span className="text-text-muted rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
-                    {targetModel}
-                  </span>
+          {/* Segmented Control */}
+          <div className="border-border/30 bg-surface-secondary/40 grid grid-cols-2 gap-1 rounded-xl border p-1">
+            <button
+              type="button"
+              onClick={() => setSelectedMode('handoff')}
+              className={cn(
+                'flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all select-none',
+                selectedMode === 'handoff'
+                  ? 'border-border/40 bg-surface text-text-main border font-semibold shadow-xs'
+                  : 'text-text-muted hover:text-text-main',
+              )}
+            >
+              <Sparkles
+                className={cn(
+                  'h-3.5 w-3.5',
+                  selectedMode === 'handoff' ? 'text-accent' : 'text-text-muted/60',
                 )}
-              </div>
-            </div>
-
-            {/* Focus note input */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="session-focus-input"
-                className="text-text-main flex items-center justify-between text-xs font-medium"
-              >
-                <span>What will the next session be used for?</span>
-                <span className="text-text-muted text-[10px]">Optional</span>
-              </label>
-              <textarea
-                id="session-focus-input"
-                value={focusNotes}
-                onChange={(e) => setFocusNotes(e.target.value)}
-                placeholder="e.g. Focus on finishing animation curves, or pick up from the latest test failure..."
-                rows={3}
-                disabled={isLoading}
-                className="text-text-main placeholder:text-text-muted/50 focus:border-accent focus:ring-accent w-full resize-none rounded-xl border border-white/10 bg-black/20 p-2.5 text-xs focus:ring-1 focus:outline-none disabled:opacity-50"
               />
-            </div>
+              <span>Handoff</span>
+            </button>
 
-            {/* Handoff behavior */}
-            <div className="bg-accent/5 border-accent/15 text-text-muted flex items-start gap-2 rounded-xl border p-2.5 text-[11px]">
-              <Sparkles className="text-accent mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                Agentctl activates its managed handoff skill. If the source agent cannot complete
-                it, agentctl generates fallback transfer context.{' '}
-                <strong className="text-text-main capitalize">{targetProvider}</strong> continues in
-                this session and the same workspace.
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedMode('new_session')}
+              className={cn(
+                'flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all select-none',
+                selectedMode === 'new_session'
+                  ? 'border-border/40 bg-surface text-text-main border font-semibold shadow-xs'
+                  : 'text-text-muted hover:text-text-main',
+              )}
+            >
+              <PlusCircle
+                className={cn(
+                  'h-3.5 w-3.5',
+                  selectedMode === 'new_session' ? 'text-accent' : 'text-text-muted/60',
+                )}
+              />
+              <span>New Session</span>
+            </button>
           </div>
 
+          {/* Mode Details */}
+          <div className="mt-3.5 space-y-3 text-left">
+            {selectedMode === 'handoff' ? (
+              <>
+                <p className="text-text-muted text-xs leading-relaxed">
+                  Transfers conversation summary, modified files, and git state so{' '}
+                  <strong className="text-text-main font-medium">{targetName}</strong> continues
+                  this task.
+                </p>
+
+                <div className="space-y-1.5 pt-1">
+                  <label
+                    htmlFor="session-focus-input"
+                    className="text-text-muted/80 flex items-center justify-between text-[11px] font-medium"
+                  >
+                    <span>Focus instruction</span>
+                    <span className="text-text-muted/40 text-[10px] font-normal">Optional</span>
+                  </label>
+                  <Input
+                    id="session-focus-input"
+                    value={focusNotes}
+                    onChange={(e) => setFocusNotes(e.target.value)}
+                    placeholder="e.g. Focus on finishing animation curves..."
+                    disabled={isLoading}
+                    sizeVariant="sm"
+                    className="font-sans text-xs"
+                  />
+                </div>
+              </>
+            ) : (
+              <p className="text-text-muted py-1 text-xs leading-relaxed">
+                Starts a clean session with{' '}
+                <strong className="text-text-main font-medium">{targetName}</strong> in this
+                workspace. Your current session remains saved in the sidebar.
+              </p>
+            )}
+          </div>
+
+          {/* Actions */}
           <div className="mt-6 flex items-center justify-end gap-2">
             <Button
               type="button"
@@ -111,18 +170,20 @@ export function SwitchAgentModal({
             </Button>
             <Button
               type="button"
-              variant="solid"
               size="sm"
               onClick={handleConfirm}
               disabled={isLoading}
+              className="bg-accent text-brand-crust cursor-pointer shadow-[0_0_20px_rgba(203,166,247,0.25)] hover:opacity-90 active:scale-95"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  Transferring Context...
+                  {selectedMode === 'handoff' ? 'Transferring...' : 'Creating...'}
                 </>
+              ) : selectedMode === 'handoff' ? (
+                'Handoff & Continue'
               ) : (
-                `Switch to ${targetProvider}`
+                'Start Fresh Session'
               )}
             </Button>
           </div>
