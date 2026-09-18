@@ -7,7 +7,7 @@ import { DiffIcon } from '@primer/octicons-react';
 import { useWorkbenchStore, type WorkbenchTab } from '../model/useWorkbenchStore';
 
 const ReviewView = lazy(() =>
-  import('@/features/review').then((module) => ({ default: module.ReviewView })),
+  import('@/features/review/ui/ReviewView').then((module) => ({ default: module.ReviewView })),
 );
 const InteractiveTerminal = lazy(() =>
   import('./terminal/InteractiveTerminal').then((module) => ({
@@ -178,10 +178,10 @@ export function Workbench({
                       }
                     }}
                     className={cn(
-                      'group relative flex h-7.5 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[background-color,border-color,color,transform,opacity] duration-150 active:scale-[0.98]',
+                      'group relative flex h-7.5 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[background-color,border-color,color,opacity] duration-150',
                       isActive
-                        ? 'text-text-main border-white/10 bg-white/[0.08] shadow-xs'
-                        : 'text-text-muted/70 hover:text-text-main border-transparent hover:border-white/5 hover:bg-white/[0.03]',
+                        ? 'text-text-main border-border/40 bg-surface/60 shadow-xs'
+                        : 'text-text-muted hover:text-text-main hover:border-border/20 hover:bg-surface/30 border-transparent',
                       isDragged && 'opacity-40',
                     )}
                   >
@@ -208,7 +208,7 @@ export function Workbench({
                         className={cn(
                           'py-0.2 ml-0.5 inline-flex items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
                           isActive
-                            ? 'text-text-main bg-white/15'
+                            ? 'text-text-main bg-accent/20 text-accent'
                             : 'bg-surface-secondary text-text-muted group-hover:text-text-main',
                         )}
                       >
@@ -225,7 +225,7 @@ export function Workbench({
                         e.stopPropagation();
                         handleCloseTab(t);
                       }}
-                      className="text-text-muted hover:text-text-main -mr-1.5 ml-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,background-color] duration-150 group-hover:opacity-80 hover:bg-white/10 hover:!opacity-100 active:scale-[0.95]"
+                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary -mr-1.5 ml-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,background-color] duration-150 group-hover:opacity-80 hover:!opacity-100"
                       title="Close tab"
                     >
                       <X className="h-2.5 w-2.5" />
@@ -247,8 +247,8 @@ export function Workbench({
                   </button>
                 </Dropdown.Trigger>
                 <Dropdown.Portal>
-                  <Dropdown.Content align="start" className="w-52">
-                    <div className="text-text-muted/60 px-2 py-1.5 font-mono text-[10px] font-semibold tracking-wider uppercase">
+                  <Dropdown.Content align="start" className="w-60">
+                    <div className="text-role-eyebrow text-text-muted/60 px-2.5 py-1.5">
                       Open Panel
                     </div>
                     {ALL_TABS.map((item) => {
@@ -257,15 +257,24 @@ export function Workbench({
                       return (
                         <Dropdown.Item
                           key={item.id}
-                          className="hover:bg-surface-secondary flex cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors"
+                          className="hover:bg-surface-secondary flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-xs transition-colors"
                           onSelect={() => handleOpenTab(item.id)}
                         >
-                          <div className="flex items-center gap-2">
-                            <Icon className="text-accent/80 h-3.5 w-3.5" />
-                            <span className="text-text-main font-medium">{item.label}</span>
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <Icon className="text-accent icon-compact shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-text-main leading-tight font-medium">
+                                {item.label}
+                              </p>
+                              <p className="text-text-muted/70 truncate text-[10px] leading-tight">
+                                {item.description}
+                              </p>
+                            </div>
                           </div>
                           {isOpen && (
-                            <span className="text-text-muted/60 font-mono text-[10px]">Open</span>
+                            <span className="text-accent/80 bg-accent/10 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold tracking-wider uppercase">
+                              Open
+                            </span>
                           )}
                         </Dropdown.Item>
                       );
@@ -280,7 +289,7 @@ export function Workbench({
               <button
                 type="button"
                 onClick={onToggleMaximize}
-                className="text-text-muted/60 hover:text-text-main ml-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-white/[0.06] active:scale-[0.97]"
+                className="motion-disclosure text-text-muted/60 hover:text-text-main hover:bg-surface-secondary ml-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg transition-colors"
                 title={isMaximized ? 'Contract panel' : 'Maximize panel'}
                 aria-label={isMaximized ? 'Contract panel' : 'Maximize panel'}
               >
@@ -295,42 +304,58 @@ export function Workbench({
 
           <div className="bg-surface-secondary/5 min-h-0 flex-1 overflow-hidden" role="tabpanel">
             {tabs.length === 0 || tab === null ? (
-              <div className="flex h-full flex-col items-center justify-center p-8 text-center select-none">
-                <div className="flex max-w-xs flex-col items-center gap-3">
-                  <div className="border-border/20 bg-surface-secondary/50 text-text-muted/60 flex h-10 w-10 items-center justify-center rounded-xl border">
-                    <Layout className="h-5 w-5" />
+              <div className="flex h-full flex-col items-center justify-center overflow-y-auto p-6 text-center select-none">
+                <div className="flex w-full max-w-sm flex-col items-center gap-4">
+                  <div className="border-border/30 bg-surface/40 text-accent flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm">
+                    <Layout className="icon-prominent" />
                   </div>
                   <div className="space-y-1">
-                    <h4 className="text-text-main text-xs font-semibold">No open tabs</h4>
-                    <p className="text-text-muted/60 text-[11px]">
-                      Open a view from the plus menu or pick a panel below.
+                    <h3 className="text-role-title text-text-main">No open panels</h3>
+                    <p className="text-role-body text-text-muted text-xs">
+                      Select a workspace tool below or click{' '}
+                      <span className="text-text-main/80 font-mono">+</span> in the tab bar.
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenTab('changes')}
-                      className="border-border/30 bg-surface-secondary/50 text-text-main hover:bg-surface-secondary hover:border-accent/40 group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors active:scale-[0.97]"
-                    >
-                      <DiffIcon className="text-accent/80 h-3.5 w-3.5" />
-                      <span>Changes</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenTab('terminal')}
-                      className="border-border/30 bg-surface-secondary/50 text-text-main hover:bg-surface-secondary hover:border-accent/40 group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors active:scale-[0.97]"
-                    >
-                      <Terminal className="text-accent/80 h-3.5 w-3.5" />
-                      <span>Terminal</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenTab('status')}
-                      className="border-border/30 bg-surface-secondary/50 text-text-main hover:bg-surface-secondary hover:border-accent/40 group flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors active:scale-[0.97]"
-                    >
-                      <FileText className="text-accent/80 h-3.5 w-3.5" />
-                      <span>Status</span>
-                    </button>
+
+                  <div className="grid w-full grid-cols-1 gap-2 pt-1 text-left">
+                    {ALL_TABS.map((item) => {
+                      const Icon = item.icon;
+                      const isChanges = item.id === 'changes';
+                      const hasChanges = isChanges && changesCount > 0;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleOpenTab(item.id)}
+                          className="motion-disclosure border-border/30 bg-surface/30 hover:border-accent/40 hover:bg-surface/60 group relative flex cursor-pointer items-center justify-between rounded-xl border p-3 text-left transition-colors"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="border-border/20 bg-surface-secondary/60 text-accent group-hover:border-accent/30 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors">
+                              <Icon className="icon-compact" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-role-control text-text-main font-semibold">
+                                  {item.label}
+                                </span>
+                                {hasChanges && (
+                                  <span className="bg-accent/15 text-accent border-accent/30 py-0.2 rounded-full border px-1.5 text-[10px] font-bold tabular-nums">
+                                    {changesCount} changed
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-role-caption text-text-muted mt-0.5 truncate">
+                                {item.description}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-text-muted/40 group-hover:text-text-main ml-2 shrink-0 text-xs transition-colors">
+                            →
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

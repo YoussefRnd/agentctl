@@ -1,4 +1,3 @@
-export { ReviewView } from './ui/ReviewView.js';
 export { ReviewHeader, type ReviewFile } from './ui/ReviewHeader.js';
 export { ReviewGitActions } from './ui/ReviewGitActions.js';
 export { ReviewFileList } from './ui/ReviewFileList.js';
