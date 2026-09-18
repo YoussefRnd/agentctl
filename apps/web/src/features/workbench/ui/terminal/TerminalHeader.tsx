@@ -94,7 +94,7 @@ export function TerminalHeader({
               ) : (
                 <>
                   <div className="flex min-w-0 items-center gap-1">
-                    <Terminal className="h-3 w-3 shrink-0 opacity-60" />
+                    <Terminal className="h-3.5 w-3.5 shrink-0 opacity-60" />
                     <span className="truncate">{tab.name}</span>
                   </div>
 
@@ -163,7 +163,7 @@ export function TerminalHeader({
             className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded-md transition-colors active:scale-[0.95]"
             aria-label="Restart shell"
           >
-            <RotateCcw className="h-3 w-3" />
+            <RotateCcw className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
 
@@ -174,7 +174,7 @@ export function TerminalHeader({
             className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded-md transition-colors active:scale-[0.95]"
             aria-label="Clear terminal"
           >
-            <Trash2 className="h-3 w-3" />
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
       </div>

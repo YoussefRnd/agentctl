@@ -38,9 +38,9 @@ export function TitleBarWindowControls({
           className={`${controlBase} hover:bg-white/5`}
         >
           {isMaximized ? (
-            <Copy className="h-3 w-3" strokeWidth={2.5} />
+            <Copy className="h-3.5 w-3.5" strokeWidth={2.5} />
           ) : (
-            <Square className="h-3 w-3" strokeWidth={2.5} />
+            <Square className="h-3.5 w-3.5" strokeWidth={2.5} />
           )}
         </button>
       )}

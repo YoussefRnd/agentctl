@@ -239,7 +239,7 @@ export function Workbench({
                 <Dropdown.Trigger asChild>
                   <button
                     type="button"
-                    className="text-text-muted/70 hover:text-text-main flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-white/[0.06] active:scale-[0.97]"
+                    className="motion-disclosure text-text-muted/70 hover:text-text-main data-[state=open]:bg-accent/10 data-[state=open]:text-accent flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg hover:bg-white/[0.06]"
                     title="Add panel tab"
                     aria-label="Add panel tab"
                   >

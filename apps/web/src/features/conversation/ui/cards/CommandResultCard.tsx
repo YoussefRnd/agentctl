@@ -43,7 +43,7 @@ export const CommandResultCard = memo(function CommandResultCard({
                 <span className="text-text-main/90 font-mono text-[11.5px] font-semibold tracking-tight">
                   /{command}
                 </span>
-                {isError && <AlertCircle className="h-3 w-3 text-rose-400" />}
+                {isError && <AlertCircle className="h-3.5 w-3.5 text-rose-400" />}
               </div>
               <span className="text-text-muted/50 truncate font-mono text-[10px] tracking-tight">
                 {argKeys.length > 0
@@ -54,7 +54,7 @@ export const CommandResultCard = memo(function CommandResultCard({
           </div>
           <div className="text-text-muted/40 group-hover/command:text-text-main shrink-0 transition-colors">
             <ChevronRight
-              className={cn('h-3 w-3 transition-transform duration-150', open && 'rotate-90')}
+              className={cn('h-3.5 w-3.5 transition-transform duration-150', open && 'rotate-90')}
             />
           </div>
         </Card>

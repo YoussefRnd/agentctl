@@ -63,13 +63,9 @@ function SubagentCard({
         {(isRunning || isFailed) && (
           <div className="flex shrink-0 items-center justify-center">
             {isRunning ? (
-              <div className="relative flex h-3.5 w-3.5 items-center justify-center">
-                <Loader2 className="text-accent h-3.5 w-3.5 animate-spin" />
-              </div>
+              <Loader2 className="text-accent h-3.5 w-3.5 animate-spin" />
             ) : (
-              <div className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500/20 text-rose-400">
-                <AlertCircle className="h-3 w-3" />
-              </div>
+              <AlertCircle className="h-3.5 w-3.5 text-rose-400" />
             )}
           </div>
         )}

@@ -136,28 +136,24 @@ export function ReviewHeader({
           <Dropdown.Trigger asChild>
             <button
               type="button"
-              className="text-text-main hover:bg-surface/60 border-border/20 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-colors active:scale-[0.97]"
+              className="motion-disclosure text-text-main hover:bg-surface/60 border-border/20 data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-xs font-medium"
             >
               <span>{currentOption.label}</span>
               <span className="text-text-muted/60 font-mono text-[10px] tabular-nums">
                 {currentOption.count}
               </span>
-              <ChevronDown className="text-text-muted/50 h-3 w-3" />
+              <ChevronDown className="text-text-muted/50 h-3.5 w-3.5" />
             </button>
           </Dropdown.Trigger>
           <Dropdown.Portal>
-            <Dropdown.Content
-              align="start"
-              sideOffset={5}
-              className="border-border/30 bg-brand-mantle/95 z-50 min-w-44 rounded-xl border p-1 shadow-2xl backdrop-blur-md"
-            >
+            <Dropdown.Content align="start" sideOffset={5} className="min-w-44">
               {scopeOptions.map(({ id, label, count }) => (
                 <Dropdown.Item
                   key={id}
                   onSelect={() => {
                     onScopeChange(id);
                   }}
-                  className={`flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-colors ${
+                  className={`flex cursor-pointer items-center justify-between ${
                     scope === id
                       ? 'bg-accent/10 text-accent font-medium'
                       : 'text-text-muted hover:bg-surface/60 hover:text-text-main'
@@ -166,7 +162,7 @@ export function ReviewHeader({
                   <span>{label}</span>
                   <span className="flex items-center gap-2">
                     <span className="font-mono text-[10px] opacity-60">{count}</span>
-                    {scope === id && <Check className="h-3 w-3" />}
+                    {scope === id && <Check className="h-3.5 w-3.5" />}
                   </span>
                 </Dropdown.Item>
               ))}
@@ -184,7 +180,7 @@ export function ReviewHeader({
                 <Dropdown.Trigger asChild>
                   <button
                     type="button"
-                    className="border-border/20 bg-surface/50 text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6.5 cursor-pointer items-center gap-1.5 rounded-md border px-1.5 text-xs transition-colors active:scale-[0.97]"
+                    className="motion-disclosure border-border/20 bg-surface/50 text-text-muted hover:text-text-main hover:bg-surface-secondary data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 flex h-6.5 cursor-pointer items-center gap-1.5 rounded-md border px-1.5 text-xs"
                     aria-label="Jump to file"
                   >
                     <Menu className="h-3.5 w-3.5" />
@@ -196,7 +192,7 @@ export function ReviewHeader({
                 <Dropdown.Content
                   align="end"
                   sideOffset={5}
-                  className="border-border/30 bg-brand-mantle/95 z-50 max-h-72 w-64 overflow-y-auto rounded-xl border p-1 shadow-2xl backdrop-blur-md"
+                  className="max-h-72 w-64 overflow-y-auto"
                 >
                   <div className="text-text-muted/60 px-2 py-1 font-mono text-[9.5px] font-semibold tracking-wider uppercase">
                     Changed Files ({files.length})
@@ -284,7 +280,7 @@ export function ReviewHeader({
                 }`}
                 aria-label="Inline diff view"
               >
-                <Rows className="h-3 w-3" />
+                <Rows className="h-3.5 w-3.5" />
               </button>
             </Tooltip>
             <Tooltip content="Split side-by-side view">
@@ -300,7 +296,7 @@ export function ReviewHeader({
                 }`}
                 aria-label="Split side-by-side view"
               >
-                <Columns className="h-3 w-3" />
+                <Columns className="h-3.5 w-3.5" />
               </button>
             </Tooltip>
           </div>

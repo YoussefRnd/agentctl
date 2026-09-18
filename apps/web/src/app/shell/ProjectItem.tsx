@@ -146,9 +146,9 @@ function SessionRow({
               } data-[state=open]:bg-surface-secondary disabled:opacity-50 data-[state=open]:flex data-[state=open]:opacity-100`}
             >
               {isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <MoreHorizontal className="h-3 w-3" />
+                <MoreHorizontal className="h-3.5 w-3.5" />
               )}
             </button>
           </Dropdown.Trigger>
@@ -253,7 +253,7 @@ export function ProjectItem({
                   content={`${runningSessionsCount} session${runningSessionsCount > 1 ? 's' : ''} running`}
                 >
                   <span className="text-accent flex items-center justify-center">
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   </span>
                 </Tooltip>
               )}
@@ -289,9 +289,9 @@ export function ProjectItem({
                 aria-label="New session"
               >
                 {isCreatingSession ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Plus className="h-3 w-3" />
+                  <Plus className="h-3.5 w-3.5" />
                 )}
               </button>
             </Tooltip>
@@ -333,9 +333,9 @@ export function ProjectItem({
               aria-label="Remove workspace"
             >
               {pendingActions.has(`delete-project-${proj.id}`) ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Trash2 className="h-3 w-3" />
+                <Trash2 className="h-3.5 w-3.5" />
               )}
             </button>
           </Tooltip>

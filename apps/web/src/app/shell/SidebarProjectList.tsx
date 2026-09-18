@@ -70,7 +70,7 @@ export function SidebarProjectList({
           }}
           className="bg-danger/10 hover:bg-danger/20 text-danger inline-flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors"
         >
-          <RefreshCw className="h-3 w-3" />
+          <RefreshCw className="h-3.5 w-3.5" />
           Retry
         </button>
       </div>

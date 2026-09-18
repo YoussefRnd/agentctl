@@ -52,9 +52,9 @@ export function ProvidersSettingsView() {
             className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold"
           >
             {isExportingDiagnostics ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Download className="h-3 w-3" />
+              <Download className="h-3.5 w-3.5" />
             )}
             Export diagnostics
           </Button>
@@ -67,9 +67,9 @@ export function ProvidersSettingsView() {
             className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold"
           >
             {providersApi.isSyncing ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <RefreshCw className="h-3 w-3 transition-transform duration-500 hover:rotate-180" />
+              <RefreshCw className="h-3.5 w-3.5 transition-transform duration-500 hover:rotate-180" />
             )}
             Sync All
           </Button>

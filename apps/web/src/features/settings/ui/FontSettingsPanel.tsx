@@ -58,7 +58,7 @@ export function FontSettingsPanel({ fontConfig, onUpdate }: FontSettingsPanelPro
               </div>
               <p className="text-text-muted/70 text-[10px]">{desc}</p>
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="max-w-xs min-w-0 flex-1">
               <FontPicker
                 value={ctx.family}
                 onChange={(family) => {

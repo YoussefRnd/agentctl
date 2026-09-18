@@ -171,7 +171,7 @@ export function SessionHeader({
 
       {/* Center Zone: Prominent Command & Session Bar */}
       <div className="flex min-w-0 flex-1 items-center justify-center px-2">
-        <div className="border-border/35 bg-surface-secondary/40 hover:border-border/60 hover:bg-surface-secondary/70 inline-flex h-7.5 max-w-[380px] items-center gap-1.5 rounded-full border px-2 shadow-xs backdrop-blur-md transition-[border-color,background-color] duration-150">
+        <div className="border-border/35 bg-surface-secondary/40 hover:border-border/60 hover:bg-surface-secondary/70 inline-flex h-7 max-w-[380px] items-center gap-1.5 rounded-full border px-2 shadow-xs backdrop-blur-md transition-[border-color,background-color] duration-150">
           {/* Status Indicator Dot */}
           <Tooltip content={`Status: ${statusConfig.label}`}>
             <div
@@ -205,10 +205,10 @@ export function SessionHeader({
             <Dropdown.Trigger asChild>
               <button
                 type="button"
-                className="text-text-muted/60 hover:text-text-main flex h-5 w-5 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-white/10 active:scale-[0.97]"
+                className="motion-disclosure text-text-muted/60 hover:text-text-main data-[state=open]:bg-accent/10 data-[state=open]:text-accent flex h-5 w-5 cursor-pointer items-center justify-center rounded-full hover:bg-white/10"
                 aria-label="Session options"
               >
-                <MoreHorizontal className="h-3 w-3" />
+                <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
             </Dropdown.Trigger>
             <Dropdown.Portal>
@@ -288,7 +288,7 @@ export function SessionHeader({
           <button
             type="button"
             onClick={handleOpenChanges}
-            className="border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors"
+            className="border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors active:scale-[0.97]"
             title="View modified files in review"
           >
             <DiffIcon className="h-3.5 w-3.5" />
@@ -303,7 +303,7 @@ export function SessionHeader({
             type="button"
             onClick={onToggleWorkbench}
             aria-label="Toggle Inspector"
-            className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-colors ${
+            className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-colors active:scale-[0.97] ${
               isWorkbenchOpen
                 ? 'border-accent/40 bg-accent/15 text-accent font-bold'
                 : 'border-border/30 bg-surface/50 text-text-muted hover:text-text-main hover:border-border/60 hover:bg-surface-secondary'

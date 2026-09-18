@@ -444,7 +444,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
                   : 'text-text-muted hover:text-text-main',
               )}
             >
-              <Folder className="h-3 w-3" />
+              <Folder className="h-3.5 w-3.5" />
               <span>Workspaces</span>
               <span className="font-mono text-[10px] opacity-70">({totalSessionsCount})</span>
             </button>
@@ -460,7 +460,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
                   : 'text-text-muted hover:text-text-main',
               )}
             >
-              <MessageSquare className="h-3 w-3" />
+              <MessageSquare className="h-3.5 w-3.5" />
               <span>Messages</span>
             </button>
           </div>

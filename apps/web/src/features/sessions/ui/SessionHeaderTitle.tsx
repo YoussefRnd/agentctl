@@ -60,7 +60,7 @@ export function SessionHeaderTitle({
           className="text-accent hover:text-accent/80 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.97]"
           title="Save title"
         >
-          <Check className="h-3 w-3" />
+          <Check className="h-3.5 w-3.5" />
         </button>
         <button
           type="button"
@@ -70,7 +70,7 @@ export function SessionHeaderTitle({
           className="text-text-muted hover:text-text-main flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.97]"
           title="Cancel"
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
         </button>
       </form>
     );
@@ -95,7 +95,7 @@ export function SessionHeaderTitle({
           className="text-text-main hover:text-accent flex max-w-[260px] min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold tracking-tight transition-[color,background-color] duration-150 hover:bg-white/[0.08] active:scale-[0.97]"
         >
           <span className="truncate">{sessionDisplayTitle}</span>
-          <Pencil className="h-2.5 w-2.5 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-60" />
+          <Pencil className="h-3.5 w-3.5 shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-60" />
         </button>
       </div>
     </div>

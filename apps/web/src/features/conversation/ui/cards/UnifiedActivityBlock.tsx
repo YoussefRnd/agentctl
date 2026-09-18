@@ -382,11 +382,11 @@ export const ToolStepRow = memo(function ToolStepRow({
           {isStillInProgress ? (
             <StreamingDots className="ml-0" />
           ) : isFailed ? (
-            <AlertCircle className="h-3 w-3 text-rose-500" />
+            <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
           ) : isPending ? (
             <span className="bg-text-muted/40 h-1.5 w-1.5 rounded-full" />
           ) : (
-            <Check className="h-3 w-3 stroke-[2.5] text-emerald-400/80" />
+            <Check className="h-3.5 w-3.5 stroke-[2.5] text-emerald-400/80" />
           )}
 
           {durationMs != null && durationMs > 0 && !isStreaming && (
@@ -397,7 +397,7 @@ export const ToolStepRow = memo(function ToolStepRow({
 
           {hasDetails && (
             <ChevronRight
-              className={`text-text-muted/30 h-3 w-3 transition-transform duration-150 ${
+              className={`text-text-muted/30 h-3.5 w-3.5 transition-transform duration-150 ${
                 isOpen ? 'text-text-muted rotate-90' : ''
               }`}
             />

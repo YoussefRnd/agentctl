@@ -4,3 +4,4 @@ export { EventFeedItem } from './ui/EventFeedItem.js';
 export { TurnMinimap } from './ui/TurnMinimap.js';
 export { UnifiedActivityBlock } from './ui/cards/UnifiedActivityBlock.js';
 export { StreamingMarkdown } from './ui/cards/StreamingMarkdown.js';
+export { NewSessionEmptyState } from './ui/NewSessionEmptyState.js';

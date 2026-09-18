@@ -14,9 +14,17 @@ import {
 import { useProviders, SwitchAgentModal } from '@/features/providers';
 import { CommandBar } from '@/features/composer';
 import { EventFeed } from './EventFeed';
+import { NewSessionEmptyState } from './NewSessionEmptyState';
 import { SubagentChatView, extractSubagentGroups, useSubagentStore } from '@/features/subagents';
 import { ApprovalCard } from './cards/ApprovalCard';
-import { rewindSession, restoreSession, undoRewind, handoffSession } from '@agentctl/api-client';
+import {
+  rewindSession,
+  restoreSession,
+  undoRewind,
+  handoffSession,
+  createProjectSession,
+  updateSessionProvider,
+} from '@agentctl/api-client';
 import { FileIcon } from '@/shared';
 import { useReviewUIStore } from '@/features/review';
 import { useWorkbenchStore } from '@/features/workbench';
@@ -124,6 +132,30 @@ export function MainFeed() {
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to switch agent');
+    } finally {
+      setIsHandoffLoading(false);
+    }
+  };
+
+  const handleConfirmNewSession = async () => {
+    const projectId = sessionData?.session.projectId;
+    if (!projectId || !switchAgentTarget) return;
+    const target = switchAgentTarget;
+    setIsHandoffLoading(true);
+    setSwitchAgentTarget(null);
+    try {
+      const newSession = await createProjectSession(projectId, sessionData.session.mode);
+      if (target.targetProvider) {
+        await updateSessionProvider(newSession.id, target.targetProvider, target.targetModel);
+      }
+      toast.success(`Started new session with ${target.targetProvider}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['session', newSession.id] }),
+        queryClient.invalidateQueries({ queryKey: ['projects'] }),
+      ]);
+      void navigate(`/sessions/${newSession.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create new session');
     } finally {
       setIsHandoffLoading(false);
     }
@@ -377,245 +409,272 @@ export function MainFeed() {
         </div>
       )}
 
-      <main className="min-h-0 w-full flex-1 overflow-hidden">
-        {isLoadingEvents ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
-            <div className="relative h-8 w-8">
-              <div className="absolute inset-0 rounded-full border-2 border-white/5" />
-              <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
-            </div>
-            <span className="text-text-muted/50 text-[11px] tracking-wide">Loading session...</span>
-          </div>
-        ) : (
-          <EventFeed
-            events={events}
-            targetEventId={targetEventId}
-            onTargetEventHandled={handleTargetEventHandled}
-            isConnected={isConnected}
-            hasGitRepo={sessionData?.session.project?.repoRoot != null}
-            isSessionRunning={sessionData?.session.status === 'running'}
-            onRewind={handleRewindRequest}
-            onEditSubmit={handleEditAndSubmit}
-          />
-        )}
-      </main>
-
-      <RewindConfirmDialog
-        open={confirmRewind !== null}
-        onOpenChange={(open: boolean) => {
-          if (!open) {
-            setConfirmRewind(null);
-            setRewindError(null);
-          }
-        }}
-        sessionId={sessionId}
-        eventId={confirmRewind?.eventId}
-        mode={confirmRewind?.mode ?? 'conversation'}
-        messageCount={confirmRewind?.messageCount ?? 0}
-        onConfirm={() => {
-          void handleRewindConfirm();
-        }}
-        isLoading={isRewinding}
-        error={rewindError}
-      />
-
-      <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-6 pb-4">
-        {approvalEvent && (
-          <div className="pb-4">
-            <div className="animate-in slide-in-from-bottom-4">
-              <ApprovalCard
-                eventId={approvalEvent.id}
-                data={approvalEvent.data}
-                onApprove={handleApprove}
-                onDeny={handleDeny}
-              />
-            </div>
-          </div>
-        )}
-
-        {rewindUndoState && (
-          <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 overflow-hidden rounded-xl border shadow-xs backdrop-blur-md duration-200">
-            <div className="flex items-center justify-between px-3.5 py-2 text-[12px]">
-              <div
-                onClick={() => {
-                  if (rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0) {
-                    setIsDiffExpanded((prev) => !prev);
-                  }
-                }}
-                className={cn(
-                  'text-text-muted flex min-w-0 items-center gap-2 pr-2 select-none',
-                  rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
-                    ? 'hover:text-text-main group/undo-header cursor-pointer'
-                    : '',
-                )}
-                role={
-                  rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
-                    ? 'button'
-                    : undefined
-                }
-                tabIndex={
-                  rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
-                    ? 0
-                    : undefined
-                }
-              >
-                <RotateCcw className="text-text-muted/70 h-3.5 w-3.5 shrink-0" />
-                <span className="text-text-main font-medium">Rewound conversation</span>
-                {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span className="text-text-muted/70 truncate">
-                      • Reverted {rewindUndoState.restoredFiles.length}{' '}
-                      {rewindUndoState.restoredFiles.length === 1 ? 'file' : 'files'}
-                    </span>
-                    {(totalAdditions > 0 || totalDeletions > 0) && (
-                      <span className="flex items-center gap-1 font-mono text-[11.5px] font-medium">
-                        {totalAdditions > 0 && (
-                          <span className="text-emerald-400">+{totalAdditions}</span>
-                        )}
-                        {totalDeletions > 0 && (
-                          <span className="text-rose-400">-{totalDeletions}</span>
-                        )}
-                      </span>
-                    )}
-                    {isDiffExpanded ? (
-                      <ChevronDown className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
-                    ) : (
-                      <ChevronRight className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleOpenReview}
-                    className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2 py-1 text-[12px] font-medium transition-colors"
-                    title="Review reverted file changes in Changes tab"
-                  >
-                    Review
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleUndoRewind();
-                  }}
-                  disabled={isUndoing}
-                  className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
-                >
-                  {isUndoing ? 'Undoing...' : 'Undo'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRewindUndoState(null)}
-                  className="text-text-muted/50 hover:text-text-main hover:bg-surface-secondary/80 cursor-pointer rounded p-1 transition-colors"
-                  title="Dismiss"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Expanded diff file list */}
-            {isDiffExpanded &&
-              rewindUndoState.restoredFiles &&
-              rewindUndoState.restoredFiles.length > 0 && (
-                <div className="border-border/20 bg-surface-secondary/20 border-t px-2 py-1.5">
-                  {rewindUndoState.restoredFiles.map((file) => {
-                    const fileName = file.path.split('/').pop() ?? file.path;
-                    const dirPath = file.path.includes('/')
-                      ? file.path.substring(0, file.path.lastIndexOf('/'))
-                      : '';
-
-                    return (
-                      <div
-                        key={file.path}
-                        className="hover:bg-surface/50 group/file-row flex items-center rounded-lg transition-colors"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleOpenFileReview(file.path);
-                          }}
-                          className="flex min-w-0 flex-1 cursor-pointer items-center justify-between px-2.5 py-1.5 text-left"
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
-                            <FileIcon path={file.path} className="shrink-0" />
-                            <span className="text-text-main group-hover/file-row:text-accent truncate font-mono text-[12px] font-medium">
-                              {fileName}
-                            </span>
-                            {dirPath && (
-                              <span className="text-text-muted/60 truncate font-mono text-[11px]">
-                                {dirPath}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="ml-3 flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] font-medium">
-                            {file.additions != null && file.additions > 0 && (
-                              <span className="text-emerald-400">+{file.additions}</span>
-                            )}
-                            {file.deletions != null && file.deletions > 0 && (
-                              <span className="text-rose-400">-{file.deletions}</span>
-                            )}
-                            {(file.additions == null || file.additions === 0) &&
-                              (file.deletions == null || file.deletions === 0) && (
-                                <span className="text-text-muted/60 text-[10px]">
-                                  {file.status}
-                                </span>
-                              )}
-                          </div>
-                        </button>
-
-                        <Tooltip content="Open in editor">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void openWorkspaceFile(file.path);
-                            }}
-                            className="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,color,background-color] duration-150 group-hover/file-row:opacity-100 focus-visible:opacity-100 active:scale-[0.97]"
-                            aria-label={`Open ${fileName} in editor`}
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </button>
-                        </Tooltip>
-                      </div>
-                    );
-                  })}
+      {!hasUserMessages && !isLoadingEvents ? (
+        <main className="relative flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-y-auto select-none">
+          <NewSessionEmptyState projectName={sessionData?.session.project?.name ?? 'agentctl'}>
+            <CommandBar
+              variant="hero"
+              onSend={(val, attachmentIds) => {
+                setRewindUndoState(null);
+                void handleSend(val, attachmentIds);
+              }}
+              disabled={!isConnected || isSwitching || isLoadingSession}
+              selectedProviderId={sessionData?.session.selectedProvider}
+              selectedModelId={sessionData?.session.selectedModel}
+              onProviderSelect={handleProviderSelect}
+              initialInput={rewindInput || initialPrompt}
+            />
+          </NewSessionEmptyState>
+        </main>
+      ) : (
+        <>
+          <main className="min-h-0 w-full flex-1 overflow-hidden">
+            {isLoadingEvents ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3">
+                <div className="relative h-8 w-8">
+                  <div className="absolute inset-0 rounded-full border-2 border-white/5" />
+                  <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
                 </div>
-              )}
-          </div>
-        )}
+                <span className="text-text-muted/50 text-[11px] tracking-wide">
+                  Loading session...
+                </span>
+              </div>
+            ) : (
+              <EventFeed
+                events={events}
+                targetEventId={targetEventId}
+                onTargetEventHandled={handleTargetEventHandled}
+                isConnected={isConnected}
+                hasGitRepo={sessionData?.session.project?.repoRoot != null}
+                isSessionRunning={sessionData?.session.status === 'running'}
+                onRewind={handleRewindRequest}
+                onEditSubmit={handleEditAndSubmit}
+              />
+            )}
+          </main>
 
-        <CommandBar
-          onSend={(val, attachmentIds) => {
-            setRewindUndoState(null);
-            void handleSend(val, attachmentIds);
-          }}
-          disabled={!isConnected || isSwitching || isLoadingSession}
-          selectedProviderId={sessionData?.session.selectedProvider}
-          selectedModelId={sessionData?.session.selectedModel}
-          onProviderSelect={handleProviderSelect}
-          initialInput={rewindInput || initialPrompt}
-        />
-
-        {switchAgentTarget && (
-          <SwitchAgentModal
-            open={Boolean(switchAgentTarget)}
-            onOpenChange={(open) => {
-              if (!open && !isHandoffLoading) {
-                setSwitchAgentTarget(null);
+          <RewindConfirmDialog
+            open={confirmRewind !== null}
+            onOpenChange={(open: boolean) => {
+              if (!open) {
+                setConfirmRewind(null);
+                setRewindError(null);
               }
             }}
-            currentProvider={sessionData?.session.selectedProvider ?? 'agent'}
-            targetProvider={switchAgentTarget.targetProvider}
-            targetModel={switchAgentTarget.targetModel}
-            onConfirm={handleConfirmHandoff}
-            isLoading={isHandoffLoading}
+            sessionId={sessionId}
+            eventId={confirmRewind?.eventId}
+            mode={confirmRewind?.mode ?? 'conversation'}
+            messageCount={confirmRewind?.messageCount ?? 0}
+            onConfirm={() => {
+              void handleRewindConfirm();
+            }}
+            isLoading={isRewinding}
+            error={rewindError}
           />
-        )}
-      </div>
+
+          <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-6 pb-4">
+            {approvalEvent && (
+              <div className="pb-4">
+                <div className="animate-in slide-in-from-bottom-4">
+                  <ApprovalCard
+                    eventId={approvalEvent.id}
+                    data={approvalEvent.data}
+                    onApprove={handleApprove}
+                    onDeny={handleDeny}
+                  />
+                </div>
+              </div>
+            )}
+
+            {rewindUndoState && (
+              <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 overflow-hidden rounded-xl border shadow-xs backdrop-blur-md duration-200">
+                <div className="flex items-center justify-between px-3.5 py-2 text-[12px]">
+                  <div
+                    onClick={() => {
+                      if (
+                        rewindUndoState.restoredFiles &&
+                        rewindUndoState.restoredFiles.length > 0
+                      ) {
+                        setIsDiffExpanded((prev) => !prev);
+                      }
+                    }}
+                    className={cn(
+                      'text-text-muted flex min-w-0 items-center gap-2 pr-2 select-none',
+                      rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
+                        ? 'hover:text-text-main group/undo-header cursor-pointer'
+                        : '',
+                    )}
+                    role={
+                      rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
+                        ? 'button'
+                        : undefined
+                    }
+                    tabIndex={
+                      rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
+                        ? 0
+                        : undefined
+                    }
+                  >
+                    <RotateCcw className="text-text-muted/70 h-3.5 w-3.5 shrink-0" />
+                    <span className="text-text-main font-medium">Rewound conversation</span>
+                    {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="text-text-muted/70 truncate">
+                          • Reverted {rewindUndoState.restoredFiles.length}{' '}
+                          {rewindUndoState.restoredFiles.length === 1 ? 'file' : 'files'}
+                        </span>
+                        {(totalAdditions > 0 || totalDeletions > 0) && (
+                          <span className="flex items-center gap-1 font-mono text-[11.5px] font-medium">
+                            {totalAdditions > 0 && (
+                              <span className="text-emerald-400">+{totalAdditions}</span>
+                            )}
+                            {totalDeletions > 0 && (
+                              <span className="text-rose-400">-{totalDeletions}</span>
+                            )}
+                          </span>
+                        )}
+                        {isDiffExpanded ? (
+                          <ChevronDown className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
+                        ) : (
+                          <ChevronRight className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleOpenReview}
+                        className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
+                        title="Review reverted file changes in Changes tab"
+                      >
+                        Review
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleUndoRewind();
+                      }}
+                      disabled={isUndoing}
+                      className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
+                    >
+                      {isUndoing ? 'Undoing...' : 'Undo'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRewindUndoState(null)}
+                      className="text-text-muted/50 hover:text-text-main hover:bg-surface-secondary/80 cursor-pointer rounded p-1 transition-colors"
+                      title="Dismiss"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded diff file list */}
+                {isDiffExpanded &&
+                  rewindUndoState.restoredFiles &&
+                  rewindUndoState.restoredFiles.length > 0 && (
+                    <div className="border-border/20 bg-surface-secondary/20 border-t px-2 py-1.5">
+                      {rewindUndoState.restoredFiles.map((file) => {
+                        const fileName = file.path.split('/').pop() ?? file.path;
+                        const dirPath = file.path.includes('/')
+                          ? file.path.substring(0, file.path.lastIndexOf('/'))
+                          : '';
+
+                        return (
+                          <div
+                            key={file.path}
+                            className="hover:bg-surface/50 group/file-row flex items-center rounded-lg transition-colors"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleOpenFileReview(file.path);
+                              }}
+                              className="flex min-w-0 flex-1 cursor-pointer items-center justify-between px-2.5 py-1.5 text-left"
+                            >
+                              <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
+                                <FileIcon path={file.path} className="shrink-0" />
+                                <span className="text-text-main group-hover/file-row:text-accent truncate font-mono text-[12px] font-medium">
+                                  {fileName}
+                                </span>
+                                {dirPath && (
+                                  <span className="text-text-muted/60 truncate font-mono text-[11px]">
+                                    {dirPath}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="ml-3 flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] font-medium">
+                                {file.additions != null && file.additions > 0 && (
+                                  <span className="text-emerald-400">+{file.additions}</span>
+                                )}
+                                {file.deletions != null && file.deletions > 0 && (
+                                  <span className="text-rose-400">-{file.deletions}</span>
+                                )}
+                                {(file.additions == null || file.additions === 0) &&
+                                  (file.deletions == null || file.deletions === 0) && (
+                                    <span className="text-text-muted/60 text-[10px]">
+                                      {file.status}
+                                    </span>
+                                  )}
+                              </div>
+                            </button>
+
+                            <Tooltip content="Open in editor">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void openWorkspaceFile(file.path);
+                                }}
+                                className="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,color,background-color] duration-150 group-hover/file-row:opacity-100 focus-visible:opacity-100 active:scale-[0.97]"
+                                aria-label={`Open ${fileName} in editor`}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </button>
+                            </Tooltip>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+              </div>
+            )}
+
+            <CommandBar
+              onSend={(val, attachmentIds) => {
+                setRewindUndoState(null);
+                void handleSend(val, attachmentIds);
+              }}
+              disabled={!isConnected || isSwitching || isLoadingSession}
+              selectedProviderId={sessionData?.session.selectedProvider}
+              selectedModelId={sessionData?.session.selectedModel}
+              onProviderSelect={handleProviderSelect}
+              initialInput={rewindInput || initialPrompt}
+            />
+          </div>
+        </>
+      )}
+
+      {switchAgentTarget && (
+        <SwitchAgentModal
+          open={Boolean(switchAgentTarget)}
+          onOpenChange={(open) => {
+            if (!open && !isHandoffLoading) {
+              setSwitchAgentTarget(null);
+            }
+          }}
+          currentProvider={sessionData?.session.selectedProvider ?? 'agent'}
+          targetProvider={switchAgentTarget.targetProvider}
+          targetModel={switchAgentTarget.targetModel}
+          onConfirmHandoff={handleConfirmHandoff}
+          onConfirmNewSession={handleConfirmNewSession}
+          isLoading={isHandoffLoading}
+        />
+      )}
     </div>
   );
 }

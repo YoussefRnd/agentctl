@@ -118,6 +118,12 @@ html {
   font-weight: 500;
 }
 
+@layer base {
+  svg.lucide {
+    stroke-width: 1.5;
+  }
+}
+
 @layer utilities {
   .app-region-drag {
     -webkit-app-region: drag;

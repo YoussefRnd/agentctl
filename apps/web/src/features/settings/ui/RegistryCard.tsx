@@ -172,11 +172,11 @@ function InstallButton({
       }`}
     >
       {isInstalling ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
       ) : isFailed ? (
-        <RefreshCw className="h-3 w-3" />
+        <RefreshCw className="h-3.5 w-3.5" />
       ) : (
-        <Download className="h-3 w-3" />
+        <Download className="h-3.5 w-3.5" />
       )}
       {isInstalling ? 'Installing...' : isFailed ? 'Retry' : 'Install'}
     </Button>
@@ -192,7 +192,11 @@ function RemoveButton({ isRemoving, onClick }: { isRemoving: boolean; onClick: (
       onClick={onClick}
       className="flex h-8 items-center gap-1 rounded-lg border-red-500/10 px-3 py-1.5 text-[10.5px] font-bold tracking-wide text-red-400 uppercase hover:bg-red-500/5 hover:text-red-300"
     >
-      {isRemoving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+      {isRemoving ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <Trash2 className="h-3.5 w-3.5" />
+      )}
       Remove
     </Button>
   );
@@ -235,7 +239,7 @@ function RegistryCardActions({
           }}
           className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
         >
-          <LogOut className="h-3 w-3" />
+          <LogOut className="h-3.5 w-3.5" />
           Logout
         </Button>
       )}
@@ -251,7 +255,7 @@ function RegistryCardActions({
             !isAuthed ? 'bg-accent text-brand-crust hover:opacity-90' : ''
           }`}
         >
-          <KeyRound className="h-3 w-3" />
+          <KeyRound className="h-3.5 w-3.5" />
           {isAuthed ? 'Configure' : 'Authenticate'}
         </Button>
       )}

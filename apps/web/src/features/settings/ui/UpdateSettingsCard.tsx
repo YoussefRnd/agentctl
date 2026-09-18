@@ -33,7 +33,7 @@ export function UpdateSettingsCard() {
           onClick={check}
           className="flex shrink-0 items-center gap-2"
         >
-          <RefreshCw className="h-3 w-3" />
+          <RefreshCw className="h-3.5 w-3.5" />
           CHECK
         </Button>
       </div>

@@ -148,7 +148,7 @@ export function SidebarTranscriptResults({
             }}
             className="text-accent hover:bg-accent/10 mt-2 flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors"
           >
-            <RotateCw className="h-3 w-3" />
+            <RotateCw className="h-3.5 w-3.5" />
             Retry
           </button>
         </div>

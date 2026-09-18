@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, FolderClosed, Terminal, Copy, Check } from 'lucide-react';
-import { Dropdown, Tooltip } from '@agentctl/ui';
+import { Dropdown, Tooltip, cn } from '@agentctl/ui';
 import { openInEditor, getAvailableEditors, EDITORS } from '@agentctl/api-client';
 import { toast } from 'sonner';
 import { EditorBrandIcon } from '@/features/review';
@@ -113,7 +113,7 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
           onClick={() => {
             void handleLaunch(activeOption.id);
           }}
-          className="text-text-muted hover:text-text-main flex h-full cursor-pointer items-center gap-1.5 px-2 text-xs font-medium transition-colors"
+          className="motion-disclosure text-text-muted hover:text-text-main flex h-full cursor-pointer items-center gap-1.5 px-2 text-xs font-medium"
         >
           {activeOption.id === 'file-manager' ? (
             <FolderClosed className="h-3.5 w-3.5 opacity-80" />
@@ -131,15 +131,15 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
         <Dropdown.Trigger asChild>
           <button
             type="button"
-            className="border-border/30 text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-full w-5 cursor-pointer items-center justify-center border-l transition-colors"
+            className="motion-disclosure border-border/30 text-text-muted hover:text-text-main hover:bg-surface-secondary data-[state=open]:bg-accent/10 data-[state=open]:text-accent flex h-full w-5 cursor-pointer items-center justify-center border-l"
             title="Choose editor or tool"
             aria-label="Choose editor"
           >
-            <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+            <ChevronDown className="h-3 w-3 opacity-70" />
           </button>
         </Dropdown.Trigger>
         <Dropdown.Portal>
-          <Dropdown.Content align="end" className="max-h-[380px] w-54 overflow-y-auto">
+          <Dropdown.Content align="end" className="max-h-[380px] w-48 overflow-y-auto">
             {installedCodeEditors.length > 0 && (
               <>
                 <div className="text-text-dim px-2.5 py-1 text-[10px] font-semibold tracking-wider uppercase">
@@ -152,25 +152,28 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
                   return (
                     <Dropdown.Item
                       key={editor.id}
-                      className="hover:bg-surface-secondary text-text-main flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                      className={cn(
+                        'flex items-center justify-between',
+                        isSelected
+                          ? 'bg-accent/10 text-accent'
+                          : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
+                      )}
                       onSelect={() => {
                         void handleLaunch(editor.id);
                       }}
                     >
                       <div className="flex items-center gap-2">
-                        {isSelected ? (
-                          <Check className="text-accent h-3 w-3 shrink-0" />
-                        ) : (
-                          <div className="h-3 w-3 shrink-0" />
-                        )}
                         <EditorBrandIcon editorId={editor.id} className="h-3.5 w-3.5 shrink-0" />
                         <span>{editor.label}</span>
                       </div>
-                      {editor.badge && (
-                        <span className="bg-surface border-border/40 text-text-muted/60 rounded border px-1 font-mono text-[9px]">
-                          {editor.badge}
-                        </span>
-                      )}
+                      <span className="flex items-center gap-2">
+                        {editor.badge && (
+                          <span className="bg-surface border-border/40 text-text-muted/60 rounded border px-1 font-mono text-[9px]">
+                            {editor.badge}
+                          </span>
+                        )}
+                        {isSelected && <Check className="h-3.5 w-3.5 shrink-0" />}
+                      </span>
                     </Dropdown.Item>
                   );
                 })}
@@ -180,46 +183,47 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
             )}
 
             <Dropdown.Item
-              className="hover:bg-surface-secondary text-text-main flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+              className={cn(
+                'flex items-center justify-between',
+                preferredEditor === 'file-manager'
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
+              )}
               onSelect={() => {
                 void handleLaunch('file-manager');
               }}
             >
               <div className="flex items-center gap-2">
-                {preferredEditor === 'file-manager' ? (
-                  <Check className="text-accent h-3 w-3 shrink-0" />
-                ) : (
-                  <div className="h-3 w-3 shrink-0" />
-                )}
                 <FolderClosed className="h-3.5 w-3.5 opacity-70" />
                 <span>File Manager</span>
               </div>
+              {preferredEditor === 'file-manager' && <Check className="h-3.5 w-3.5 shrink-0" />}
             </Dropdown.Item>
 
             <Dropdown.Item
-              className="hover:bg-surface-secondary text-text-main flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+              className={cn(
+                'flex items-center justify-between',
+                preferredEditor === 'terminal'
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
+              )}
               onSelect={() => {
                 void handleLaunch('terminal');
               }}
             >
               <div className="flex items-center gap-2">
-                {preferredEditor === 'terminal' ? (
-                  <Check className="text-accent h-3 w-3 shrink-0" />
-                ) : (
-                  <div className="h-3 w-3 shrink-0" />
-                )}
                 <Terminal className="h-3.5 w-3.5 opacity-70" />
                 <span>Terminal</span>
               </div>
+              {preferredEditor === 'terminal' && <Check className="h-3.5 w-3.5 shrink-0" />}
             </Dropdown.Item>
 
             <div className="bg-border/30 my-1 h-px" />
 
             <Dropdown.Item
-              className="hover:bg-surface-secondary text-text-main flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+              className="text-text-muted hover:bg-surface-secondary hover:text-text-main flex items-center gap-2"
               onSelect={handleCopyPath}
             >
-              <div className="h-3 w-3 shrink-0" />
               <Copy className="h-3.5 w-3.5 opacity-60" />
               <span>Copy Path</span>
             </Dropdown.Item>

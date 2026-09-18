@@ -206,7 +206,7 @@ export function McpServerCard({
               }}
               className="border-border/20 hover:bg-surface-secondary/40 text-text-muted hover:text-text-main flex h-8 items-center gap-1.5 border px-3 text-[10px] font-bold tracking-widest uppercase"
             >
-              <Edit2 className="h-3 w-3" />
+              <Edit2 className="h-3.5 w-3.5" />
               EDIT_SERVER
             </Button>
             <Button
@@ -214,7 +214,7 @@ export function McpServerCard({
               onClick={onDelete}
               className="text-text-muted flex h-8 items-center gap-1.5 border border-red-500/20 px-3 text-[10px] font-bold tracking-widest uppercase hover:bg-red-500/10 hover:text-rose-400"
             >
-              <Trash2 className="h-3 w-3" />
+              <Trash2 className="h-3.5 w-3.5" />
               DELETE_SERVER
             </Button>
           </div>

@@ -244,7 +244,7 @@ function AuthDialogBody({
                     )}
                     {errorMsg && (
                       <span className="text-danger flex items-center gap-1 text-[10px] font-medium">
-                        <AlertCircle className="h-3 w-3" />
+                        <AlertCircle className="h-3.5 w-3.5" />
                         {errorMsg}
                       </span>
                     )}
@@ -290,7 +290,7 @@ function AuthDialogBody({
           onClick={handleTestConnection}
           className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs"
         >
-          <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
           {isRefreshing ? 'Checking...' : 'Refresh Status'}
         </Button>
 
