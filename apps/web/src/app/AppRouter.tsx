@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import { HomeRoute } from '../routes/HomeRoute.js';
 import { LoginRoute } from '../routes/LoginRoute.js';
 import { SettingsRoute } from '../routes/SettingsRoute.js';
+import { UiGalleryRoute } from '../routes/UiGalleryRoute.js';
 import { Spinner } from '@agentctl/ui';
 
 const SessionRoute = lazy(() =>
@@ -23,6 +24,7 @@ export function AppRouter() {
         <Route path="/" element={<HomeRoute />} />
         <Route path="/settings" element={<SettingsRoute />} />
         <Route path="/sessions/:sessionId" element={<SessionRoute />} />
+        {import.meta.env.DEV && <Route path="/_dev/ui" element={<UiGalleryRoute />} />}
       </Routes>
     </Suspense>
   );
