@@ -46,8 +46,8 @@ export function GeneralSettingsView() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-text-main text-lg font-bold">General Settings</h2>
-        <p className="text-text-muted mt-0.5 text-xs">
+        <h2 className="text-text-main pr-10 text-lg leading-8 font-bold">General Settings</h2>
+        <p className="text-text-muted mt-1 text-xs">
           Manage your application appearance, agent behavior, and typography.
         </p>
       </div>

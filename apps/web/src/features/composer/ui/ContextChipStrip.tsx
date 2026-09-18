@@ -35,7 +35,7 @@ export function ContextChipStrip({ contexts, onRemove }: ContextChipStripProps) 
       {contexts.map((ctx) => (
         <div
           key={ctx.id}
-          className="border-border/40 bg-surface-secondary/50 group/chip hover:border-accent/40 flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs shadow-sm transition-colors duration-150"
+          className="border-border/30 bg-surface/70 hover:bg-surface hover:border-accent/40 group/chip flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs shadow-xs backdrop-blur-sm transition-all duration-150"
         >
           {renderContextIcon(ctx)}
           <span className="text-text-main max-w-[180px] truncate font-mono text-[11px] font-medium">
@@ -44,7 +44,7 @@ export function ContextChipStrip({ contexts, onRemove }: ContextChipStripProps) 
           <button
             type="button"
             onClick={() => onRemove(ctx.id)}
-            className="text-text-muted -mr-0.5 ml-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded transition-colors hover:bg-rose-500/10 hover:text-rose-400 active:scale-[0.97]"
+            className="text-text-muted -mr-1 ml-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-rose-500/15 hover:text-rose-400 active:scale-[0.97]"
             title={`Remove ${ctx.title}`}
             aria-label={`Remove ${ctx.title}`}
           >

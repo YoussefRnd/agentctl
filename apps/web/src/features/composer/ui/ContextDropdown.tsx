@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Folder, Code2, Loader2 } from 'lucide-react';
+import { Folder, Code2, Loader2, CornerDownLeft } from 'lucide-react';
 import { cn } from '@agentctl/ui';
 import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem, ContextItemType } from '@agentctl/api-client';
@@ -17,19 +17,21 @@ interface ContextDropdownProps {
 
 function renderDropdownIcon(item: ContextItem) {
   if (item.type === 'file') {
-    return <FileIcon path={item.title} className="h-4 w-4 shrink-0" />;
+    return <FileIcon path={item.title} className="h-3.5 w-3.5 shrink-0" />;
   }
   if (item.type === 'folder') {
-    return <Folder className="h-4 w-4 shrink-0 text-amber-400" />;
+    return <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400/90" />;
   }
   if (item.type === 'git') {
-    if (item.id === 'git:diff') return <DiffIcon className="h-4 w-4 shrink-0 text-purple-400" />;
+    if (item.id === 'git:diff')
+      return <DiffIcon className="h-3.5 w-3.5 shrink-0 text-purple-400" />;
     if (item.id === 'git:staged')
-      return <GitBranchIcon className="h-4 w-4 shrink-0 text-emerald-400" />;
-    if (item.id === 'git:log') return <GitCommitIcon className="h-4 w-4 shrink-0 text-blue-400" />;
-    return <GitBranchIcon className="h-4 w-4 shrink-0 text-purple-400" />;
+      return <GitBranchIcon className="h-3.5 w-3.5 shrink-0 text-emerald-400" />;
+    if (item.id === 'git:log')
+      return <GitCommitIcon className="h-3.5 w-3.5 shrink-0 text-blue-400" />;
+    return <GitBranchIcon className="h-3.5 w-3.5 shrink-0 text-purple-400" />;
   }
-  return <Code2 className="text-accent h-4 w-4 shrink-0" />;
+  return <Code2 className="text-accent h-3.5 w-3.5 shrink-0" />;
 }
 
 export function ContextDropdown({
@@ -55,23 +57,30 @@ export function ContextDropdown({
   if (!isOpen) return null;
 
   return (
-    <div className="border-border/40 bg-brand-mantle/95 absolute bottom-full left-0 z-50 mb-3 flex max-h-80 w-full flex-col overflow-hidden rounded-xl border p-1.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
-      {/* Top Filter Category Tabs */}
-      <div className="border-border/30 bg-surface-secondary/30 flex items-center gap-1 border-b px-2 py-1.5 text-xs">
-        <span className="text-text-muted/70 font-mono text-[10px] tracking-wider uppercase">
-          Context
-        </span>
-        <div className="ml-auto flex items-center gap-1">
+    <div className="border-border/30 bg-brand-mantle/95 motion-floating animate-in fade-in-0 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2.5 flex max-h-80 w-full flex-col overflow-hidden rounded-xl border p-1 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl duration-150">
+      {/* Header with Segmented Filter Pills */}
+      <div className="border-border/20 flex items-center justify-between border-b px-2.5 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="bg-accent/15 text-accent flex h-4.5 w-4.5 items-center justify-center rounded font-mono text-[11px] font-bold">
+            @
+          </span>
+          <span className="text-text-main text-[11px] font-semibold tracking-tight">
+            Add Context
+          </span>
+        </div>
+
+        {/* Segmented filter pills */}
+        <div className="border-border/20 bg-surface-secondary/40 flex items-center rounded-lg border p-0.5">
           {(['all', 'file', 'folder', 'git'] as const).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setFilterType(tab)}
               className={cn(
-                'rounded px-2 py-0.5 text-[10px] font-medium capitalize transition-colors duration-150',
+                'cursor-pointer rounded-md px-2 py-0.5 text-[10px] font-medium capitalize transition-all duration-150 select-none',
                 filterType === tab
-                  ? 'bg-accent/20 text-accent font-semibold'
-                  : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary/50',
+                  ? 'border-border/40 bg-surface text-text-main font-semibold shadow-xs'
+                  : 'text-text-muted hover:text-text-main',
               )}
             >
               {tab}
@@ -81,14 +90,14 @@ export function ContextDropdown({
       </div>
 
       {/* Items List */}
-      <div className="flex max-h-64 [scrollbar-width:thin] flex-col gap-0.5 overflow-y-auto p-1">
+      <div className="custom-scrollbar flex max-h-64 flex-col gap-0.5 overflow-y-auto p-1">
         {isLoading && items.length === 0 ? (
-          <div className="text-text-muted flex items-center justify-center gap-2 py-6 text-xs">
+          <div className="text-text-muted flex items-center justify-center gap-2 py-8 text-xs font-medium">
             <Loader2 className="text-accent h-4 w-4 animate-spin" />
             <span>Searching workspace...</span>
           </div>
         ) : items.length === 0 ? (
-          <div className="text-text-muted py-6 text-center text-xs">
+          <div className="text-text-muted py-8 text-center text-xs">
             No matching files or git context found.
           </div>
         ) : (
@@ -103,33 +112,45 @@ export function ContextDropdown({
                 type="button"
                 onClick={() => onSelectItem(item)}
                 className={cn(
-                  'group/item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150',
+                  'group/item flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 select-none',
                   isActive
-                    ? 'bg-accent/15 border-accent/30 text-text-main border shadow-sm'
-                    : 'hover:bg-surface-secondary/60 text-text-muted hover:text-text-main border border-transparent',
+                    ? 'bg-accent/15 text-text-main shadow-xs'
+                    : 'text-text-muted hover:text-text-main hover:bg-white/5',
                 )}
               >
-                {renderDropdownIcon(item)}
+                <div
+                  className={cn(
+                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors',
+                    isActive ? 'bg-accent/20' : 'bg-surface-secondary/70',
+                  )}
+                >
+                  {renderDropdownIcon(item)}
+                </div>
 
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span
                     className={cn(
-                      'truncate font-mono text-xs font-semibold',
+                      'truncate font-mono text-xs font-medium',
                       isActive ? 'text-accent' : 'text-text-main',
                     )}
                   >
                     {item.title}
                   </span>
                   {item.subtitle && (
-                    <span className="text-text-muted/60 truncate font-mono text-[10px]">
+                    <span className="text-text-muted/50 truncate font-mono text-[10px]">
                       {item.subtitle}
                     </span>
                   )}
                 </div>
 
-                <span className="bg-surface-secondary/60 text-text-muted/70 border-border/30 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase">
-                  {item.type}
-                </span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <span className="border-border/30 bg-surface-secondary/60 text-text-muted/60 rounded border px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase">
+                    {item.type}
+                  </span>
+                  {isActive && (
+                    <CornerDownLeft className="text-accent/80 h-3 w-3 shrink-0 opacity-80" />
+                  )}
+                </div>
               </button>
             );
           })
@@ -137,9 +158,28 @@ export function ContextDropdown({
       </div>
 
       {/* Keyboard navigation helper footer */}
-      <div className="border-border/20 bg-surface-secondary/20 text-text-muted/60 flex items-center justify-between border-t px-3 py-1 text-[10px]">
-        <span>Type to filter files</span>
-        <span>↑↓ navigate · Enter to attach · Esc to close</span>
+      <div className="border-border/15 bg-surface-secondary/20 text-text-muted/50 flex items-center justify-between border-t px-2.5 py-1.5 text-[10px]">
+        <span className="truncate">Attach file, folder, or git diff</span>
+        <div className="flex items-center gap-2 font-mono text-[9px]">
+          <span className="flex items-center gap-1">
+            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
+              ↑↓
+            </kbd>
+            navigate
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
+              ↵
+            </kbd>
+            attach
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
+              Esc
+            </kbd>
+            close
+          </span>
+        </div>
       </div>
     </div>
   );

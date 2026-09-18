@@ -110,25 +110,26 @@ export function McpSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between pr-10">
-        <div>
-          <h2 className="text-text-main text-lg font-bold">MCP Servers</h2>
-          <p className="text-text-muted mt-0.5 text-xs">
-            Connect local and remote Model Context Protocol tools to extend your agents.
-          </p>
+      <div>
+        <div className="flex items-center justify-between gap-4 pr-10">
+          <h2 className="text-text-main text-lg leading-8 font-bold">MCP Servers</h2>
+          {!showForm && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsAddingNew(true);
+              }}
+              className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold whitespace-nowrap"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span>Add Server</span>
+            </Button>
+          )}
         </div>
-        {!showForm && (
-          <Button
-            variant="outline"
-            onClick={() => {
-              setIsAddingNew(true);
-            }}
-            className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Server
-          </Button>
-        )}
+        <p className="text-text-muted mt-1 text-xs">
+          Connect local and remote Model Context Protocol tools to extend your agents.
+        </p>
       </div>
 
       <div className="space-y-4">

@@ -1,18 +1,11 @@
-import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button, Card } from '@agentctl/ui';
 import { useUpdate } from '@/features/updates';
+import { useAppVersion } from '@/shared';
 
 export function UpdateSettingsCard() {
   const { state, install, check } = useUpdate();
-  const [version, setVersion] = useState<string>('');
-
-  useEffect(() => {
-    void window.electronAPI
-      ?.getAppVersion()
-      .then(setVersion)
-      .catch(() => undefined);
-  }, []);
+  const version = useAppVersion();
 
   const updatable =
     state.status === 'available' || state.status === 'downloading' || state.status === 'downloaded';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, FileUp } from 'lucide-react';
+import { Plus, FileUp, CornerDownLeft } from 'lucide-react';
 import { cn } from '@agentctl/ui';
 import { AttachmentStrip } from './AttachmentStrip';
 import { ContextDropdown } from './ContextDropdown';
@@ -31,19 +31,22 @@ function SlashCommandsDropdown({
 }: SlashCommandsDropdownProps) {
   if (!showSlashMenu || filteredCommands.length === 0) return null;
   return (
-    <div className="border-border/40 bg-brand-mantle/95 absolute bottom-full left-0 z-50 mb-3 flex max-h-72 w-full flex-col overflow-hidden rounded-xl border p-1.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
-      {/* Top Header */}
-      <div className="border-border/30 bg-surface-secondary/30 flex items-center justify-between border-b px-3 py-1.5 text-xs">
-        <span className="text-text-muted/70 font-mono text-[10px] tracking-wider uppercase">
-          Slash Commands
-        </span>
+    <div className="border-border/30 bg-brand-mantle/95 motion-floating animate-in fade-in-0 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2.5 flex max-h-76 w-full flex-col overflow-hidden rounded-xl border p-1 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl duration-150">
+      {/* Header */}
+      <div className="border-border/20 flex items-center justify-between border-b px-2.5 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className="bg-accent/15 text-accent flex h-4.5 w-4.5 items-center justify-center rounded font-mono text-[11px] font-bold">
+            /
+          </span>
+          <span className="text-text-main text-[11px] font-semibold tracking-tight">Commands</span>
+        </div>
         <span className="text-text-muted/50 font-mono text-[10px]">
-          {filteredCommands.length} available
+          {filteredCommands.length} {filteredCommands.length === 1 ? 'command' : 'commands'}
         </span>
       </div>
 
       {/* Commands List */}
-      <div className="flex max-h-56 [scrollbar-width:thin] flex-col gap-0.5 overflow-y-auto p-1">
+      <div className="custom-scrollbar flex max-h-60 flex-col gap-0.5 overflow-y-auto p-1">
         {filteredCommands.map((cmd, index) => {
           const isActive = index === activeCommandIndex;
           return (
@@ -57,49 +60,89 @@ function SlashCommandsDropdown({
                 onSelectCommand(cmd);
               }}
               className={cn(
-                'group/item flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150',
+                'group/item flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 select-none',
                 isActive
-                  ? 'bg-accent/15 border-accent/30 text-text-main border shadow-sm'
-                  : 'hover:bg-surface-secondary/60 text-text-muted hover:text-text-main border border-transparent',
+                  ? 'bg-accent/15 text-text-main shadow-xs'
+                  : 'text-text-muted hover:text-text-main hover:bg-white/5',
               )}
             >
-              <span
+              <div
                 className={cn(
-                  'shrink-0 font-mono text-xs font-bold',
-                  isActive ? 'text-accent' : 'text-text-main',
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold transition-colors',
+                  isActive
+                    ? 'bg-accent/20 text-accent'
+                    : 'bg-surface-secondary/70 text-text-muted/80 group-hover/item:text-text-main',
                 )}
               >
-                /{cmd.name}
-              </span>
-              <span className="text-text-muted/80 flex-1 truncate text-xs leading-normal">
-                {cmd.description}
-              </span>
-              {cmd.category && (
+                /
+              </div>
+
+              <div className="flex min-w-0 flex-1 items-center gap-2">
                 <span
                   className={cn(
-                    'shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase',
-                    cmd.category === 'Skill'
-                      ? 'border-accent/30 bg-accent/15 text-accent border'
-                      : 'border-border/30 bg-surface-secondary/60 text-text-muted/70 border',
+                    'shrink-0 font-mono text-xs font-semibold',
+                    isActive ? 'text-accent' : 'text-text-main',
                   )}
                 >
-                  {cmd.category}
+                  {cmd.name}
                 </span>
-              )}
-              {cmd.input?.hint && (
-                <span className="border-border/30 bg-surface-secondary/60 text-text-muted/70 shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px]">
-                  {cmd.input.hint}
-                </span>
-              )}
+                {cmd.description && (
+                  <span className="text-text-muted/70 truncate text-[11px] leading-normal">
+                    {cmd.description}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-1.5">
+                {cmd.input?.hint && (
+                  <span className="border-border/30 bg-surface-secondary/60 text-text-muted/70 rounded border px-1.5 py-0.5 font-mono text-[9px]">
+                    {cmd.input.hint}
+                  </span>
+                )}
+                {cmd.category && (
+                  <span
+                    className={cn(
+                      'rounded px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase',
+                      cmd.category === 'Skill'
+                        ? 'border-accent/30 bg-accent/15 text-accent border'
+                        : 'border-border/30 bg-surface-secondary/60 text-text-muted/60 border',
+                    )}
+                  >
+                    {cmd.category}
+                  </span>
+                )}
+                {isActive && (
+                  <CornerDownLeft className="text-accent/80 h-3 w-3 shrink-0 opacity-80" />
+                )}
+              </div>
             </button>
           );
         })}
       </div>
 
       {/* Keyboard navigation helper footer */}
-      <div className="border-border/20 bg-surface-secondary/20 text-text-muted/60 flex items-center justify-between border-t px-3 py-1 text-[10px]">
-        <span>Type command name</span>
-        <span>↑↓ navigate · Tab/Enter select · Esc close</span>
+      <div className="border-border/15 bg-surface-secondary/20 text-text-muted/50 flex items-center justify-between border-t px-2.5 py-1.5 text-[10px]">
+        <span className="truncate">Execute shortcut or skill</span>
+        <div className="flex items-center gap-2 font-mono text-[9px]">
+          <span className="flex items-center gap-1">
+            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
+              ↑↓
+            </kbd>
+            navigate
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
+              Tab
+            </kbd>
+            select
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
+              Esc
+            </kbd>
+            close
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -113,23 +156,32 @@ interface CommandInputHintProps {
 function CommandInputHint({ showSlashMenu, matchingCommand }: CommandInputHintProps) {
   if (showSlashMenu || !matchingCommand) return null;
   return (
-    <div className="border-accent/20 bg-brand-mantle animate-in fade-in-0 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-3 flex w-full items-center justify-between gap-3 rounded-md border px-4 py-3 shadow-2xl ring-1 ring-white/5 backdrop-blur-xl duration-150 ease-out">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
-        <div className="flex items-center gap-2">
-          <span className="text-accent font-mono text-sm font-bold">/{matchingCommand.name}</span>
-          {matchingCommand.input?.hint && (
-            <span className="text-text-muted bg-accent/10 border-accent/20 rounded-md border px-1.5 py-0.5 text-[10px] font-bold">
-              [{matchingCommand.input.hint}]
+    <div className="border-accent/30 bg-brand-mantle/95 animate-in fade-in-0 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2.5 flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl duration-150 ease-out">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+        <div className="bg-accent/20 text-accent flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold">
+          /
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center gap-2">
+            <span className="text-accent font-mono text-xs font-semibold">
+              /{matchingCommand.name}
+            </span>
+            {matchingCommand.input?.hint && (
+              <span className="border-accent/20 bg-accent/10 text-accent rounded border px-1.5 py-0.5 font-mono text-[9px] font-medium">
+                [{matchingCommand.input.hint}]
+              </span>
+            )}
+          </div>
+          {matchingCommand.description && (
+            <span className="text-text-muted truncate text-[11px] leading-normal opacity-80">
+              {matchingCommand.description}
             </span>
           )}
         </div>
-        <span className="text-text-muted truncate text-xs leading-normal opacity-80">
-          {matchingCommand.description}
-        </span>
       </div>
       {matchingCommand.input?.hint && (
-        <span className="text-accent shrink-0 animate-pulse text-[10px] font-bold">
-          Provide the {matchingCommand.input.hint}...
+        <span className="text-accent shrink-0 animate-pulse font-mono text-[10px] font-medium">
+          Enter {matchingCommand.input.hint}...
         </span>
       )}
     </div>

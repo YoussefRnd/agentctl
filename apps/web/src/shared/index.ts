@@ -8,6 +8,7 @@ export * from './ui/RelativeTime';
 export * from './components/FileIcon';
 export { ThemeProvider, useTheme } from './providers/ThemeProvider';
 export type { ThemeMode } from './hooks/useThemePreferences';
+export { useAppVersion } from './hooks/useAppVersion';
 
 // Libraries & Utilities
 export * from './lib/api-base-url';

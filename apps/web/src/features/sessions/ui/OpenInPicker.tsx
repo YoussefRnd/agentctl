@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, FolderClosed, Terminal, Copy, Check } from 'lucide-react';
+import { ChevronDown, FolderClosed, Copy, Check } from 'lucide-react';
 import { Dropdown, Tooltip, cn } from '@agentctl/ui';
 import { openInEditor, getAvailableEditors, EDITORS } from '@agentctl/api-client';
 import { toast } from 'sonner';
@@ -37,7 +37,6 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
   const effectiveEditor = useMemo(() => {
     if (
       preferredEditor === 'file-manager' ||
-      preferredEditor === 'terminal' ||
       installedCodeEditors.some((e) => e.id === preferredEditor)
     ) {
       return preferredEditor;
@@ -48,9 +47,6 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
   const activeOption = useMemo(() => {
     if (effectiveEditor === 'file-manager') {
       return { id: 'file-manager', label: 'File Manager' };
-    }
-    if (effectiveEditor === 'terminal') {
-      return { id: 'terminal', label: 'Terminal' };
     }
     return (
       installedCodeEditors.find((e) => e.id === effectiveEditor) ??
@@ -74,9 +70,7 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
       const editorName =
         editorId === 'file-manager'
           ? 'File Manager'
-          : editorId === 'terminal'
-            ? 'Terminal'
-            : (EDITORS.find((e) => e.id === editorId)?.label ?? editorId);
+          : (EDITORS.find((e) => e.id === editorId)?.label ?? editorId);
 
       try {
         await openInEditor(editorId, targetPath);
@@ -117,8 +111,6 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
         >
           {activeOption.id === 'file-manager' ? (
             <FolderClosed className="h-3.5 w-3.5 opacity-80" />
-          ) : activeOption.id === 'terminal' ? (
-            <Terminal className="h-3.5 w-3.5 opacity-80" />
           ) : (
             <EditorBrandIcon editorId={activeOption.id} className="h-3.5 w-3.5 shrink-0" />
           )}
@@ -198,24 +190,6 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
                 <span>File Manager</span>
               </div>
               {preferredEditor === 'file-manager' && <Check className="h-3.5 w-3.5 shrink-0" />}
-            </Dropdown.Item>
-
-            <Dropdown.Item
-              className={cn(
-                'flex items-center justify-between',
-                preferredEditor === 'terminal'
-                  ? 'bg-accent/10 text-accent'
-                  : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
-              )}
-              onSelect={() => {
-                void handleLaunch('terminal');
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <Terminal className="h-3.5 w-3.5 opacity-70" />
-                <span>Terminal</span>
-              </div>
-              {preferredEditor === 'terminal' && <Check className="h-3.5 w-3.5 shrink-0" />}
             </Dropdown.Item>
 
             <div className="bg-border/30 my-1 h-px" />

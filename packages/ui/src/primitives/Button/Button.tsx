@@ -34,7 +34,7 @@ const sizes: Record<ButtonSize, string> = {
 };
 
 const baseStyles =
-  'text-role-control inline-flex items-center justify-center gap-1.5 font-sans transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:pointer-events-none cursor-pointer select-none';
+  'text-role-control inline-flex items-center justify-center gap-1.5 font-sans whitespace-nowrap shrink-0 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:pointer-events-none cursor-pointer select-none';
 
 const ButtonComponent = <T extends ElementType = 'button'>({
   as,

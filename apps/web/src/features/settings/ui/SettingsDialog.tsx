@@ -1,4 +1,4 @@
-import { AgentIcon } from '@/shared';
+import { AgentIcon, useAppVersion } from '@/shared';
 import { useSettingsOverlayStore, type SettingsTab } from '../model/useSettingsOverlayStore';
 import { GeneralSettingsView } from './GeneralSettingsView';
 import { ProvidersSettingsView } from './ProvidersSettingsView';
@@ -17,6 +17,7 @@ const TABS: {
 ];
 
 export function SettingsDialog() {
+  const version = useAppVersion();
   const isSettingsOpen = useSettingsOverlayStore((s) => s.isSettingsOpen);
   const closeSettings = useSettingsOverlayStore((s) => s.closeSettings);
   const settingsTab = useSettingsOverlayStore((s) => s.settingsTab);
@@ -69,7 +70,7 @@ export function SettingsDialog() {
           {/* Footer inside sidebar */}
           <div className="border-border/20 hidden border-t pt-3 md:block">
             <div className="text-text-muted/60 flex items-center justify-between text-[10px]">
-              <span className="font-mono">AgentCTL v1.0.0</span>
+              <span className="font-mono">AgentCTL v{version}</span>
               <kbd className="bg-surface/60 rounded px-1.5 py-0.5 font-mono text-[9px]">Esc</kbd>
             </div>
           </div>
@@ -80,7 +81,7 @@ export function SettingsDialog() {
           {/* Top Close Button */}
           <DialogClose
             aria-label="Close settings"
-            className="text-text-muted hover:text-text-main hover:bg-surface/60 absolute top-3.5 right-3.5 z-20 flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg transition-colors"
+            className="text-text-muted hover:text-text-main hover:bg-surface/60 absolute top-6 right-6 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors"
           >
             <X className="h-4 w-4" />
           </DialogClose>
