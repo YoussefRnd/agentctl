@@ -175,6 +175,7 @@ interface CommandInputComposerProps {
   status?: string;
   authPanelContent?: React.ReactNode;
   children?: React.ReactNode;
+  variant?: 'default' | 'hero';
 }
 
 export function CommandInputComposer({
@@ -183,6 +184,7 @@ export function CommandInputComposer({
   input,
   handleInputChange,
   setIsFocused,
+  variant = 'default',
   handleSubmit,
   handlePaste,
   handleDrop,
@@ -219,7 +221,10 @@ export function CommandInputComposer({
   const getPlaceholder = () => {
     if (disabled) return disabledReason ?? 'Connecting to session...';
     if (status === 'running') return 'Type a message to queue...';
-    return placeholder ?? 'Ask a question, type @ for context, or / for commands...';
+    if (placeholder) return placeholder;
+    return variant === 'hero'
+      ? 'Ask for changes, send follow-ups, or attach images...'
+      : 'Ask a question, type @ for context, or / for commands...';
   };
 
   return (
@@ -249,14 +254,20 @@ export function CommandInputComposer({
       <div
         data-font-ctx="buffer"
         className={cn(
-          'bg-brand-mantle border-border/30 relative flex flex-col overflow-visible rounded-xl border transition-colors duration-200',
+          variant === 'hero'
+            ? 'border-border/40 bg-surface-secondary/50 relative flex flex-col overflow-visible rounded-2xl border shadow-2xl ring-1 ring-white/5 backdrop-blur-2xl transition-all duration-300'
+            : 'bg-brand-mantle border-border/30 relative flex flex-col overflow-visible rounded-xl border transition-colors duration-200',
           hasQueuedMessages && 'rounded-t-none border-t-0',
           disabled ? 'opacity-55' : 'opacity-100',
           isDraggingOver
             ? 'border-accent/60 ring-accent/30 bg-accent/[0.02] ring-1'
             : isFocused
-              ? 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'
-              : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
+              ? variant === 'hero'
+                ? 'border-accent/60 ring-accent/30 shadow-[0_12px_40px_rgba(203,166,247,0.18)] ring-2'
+                : 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'
+              : variant === 'hero'
+                ? 'hover:border-border/70'
+                : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
         )}
         onDragOver={(e) => {
           e.preventDefault();
@@ -294,15 +305,11 @@ export function CommandInputComposer({
             <div className="flex w-full items-start gap-3 px-5 pt-4 pb-4">
               <button
                 type="button"
-                disabled={disabled || !supportsImageAttachments}
+                disabled={disabled}
                 onClick={handleAttachClick}
-                className="text-text-muted hover:text-accent hover:bg-accent/10 focus-visible:ring-accent/50 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40"
-                title={
-                  supportsImageAttachments
-                    ? 'Attach image'
-                    : 'This agent does not support image attachments'
-                }
-                aria-label="Attach image"
+                className="text-text-muted hover:text-accent hover:bg-accent/10 focus-visible:ring-accent/50 mt-[3px] flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40"
+                title={supportsImageAttachments ? 'Attach image or file' : 'Attach file as context'}
+                aria-label="Attach files"
               >
                 <Plus className="h-4 w-4" />
               </button>

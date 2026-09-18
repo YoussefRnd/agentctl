@@ -91,7 +91,7 @@ export function AttachmentStrip({ attachments, onRemove, onRetry }: AttachmentSt
               className="absolute top-1 right-1 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-black/70 text-white/80 opacity-0 shadow-sm backdrop-blur-xs transition-opacity duration-150 group-hover:opacity-100 hover:bg-black hover:text-white"
               aria-label="Remove attachment"
             >
-              <X className="h-3 w-3" />
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
 

@@ -42,7 +42,7 @@ export function useCommandBarState(
   } = useSession();
 
   const { handleCancel } = useSessionActions();
-  const { providers, isLoadingProviders } = useProviders(sessionId);
+  const { providers, isLoadingProviders, switchProvider } = useProviders(sessionId);
 
   const {
     attachments,
@@ -288,20 +288,24 @@ export function useCommandBarState(
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
-  const activeProvider = useMemo<ProviderDiscovery | undefined>(() => {
-    if (!selectedProviderId) return installedProviders[0];
-    return installedProviders.find((p) => p.id === selectedProviderId) ?? installedProviders[0];
-  }, [installedProviders, selectedProviderId]);
+  const effectiveProviderId =
+    selectedProviderId ?? sessionData?.session.selectedProvider ?? undefined;
+  const effectiveModelId = selectedModelId ?? sessionData?.session.selectedModel ?? undefined;
 
-  const resolvedId = activeProvider?.id ?? selectedProviderId ?? '';
+  const activeProvider = useMemo<ProviderDiscovery | undefined>(() => {
+    if (!effectiveProviderId) return installedProviders[0];
+    return installedProviders.find((p) => p.id === effectiveProviderId) ?? installedProviders[0];
+  }, [installedProviders, effectiveProviderId]);
+
+  const resolvedId = activeProvider?.id ?? effectiveProviderId ?? '';
   const supportsImageAttachments = resolveAgentFeatures(activeProvider).prompts.image;
 
   const selectedProviderLabel = useMemo(() => {
-    if (!activeProvider) return selectedProviderId ?? 'Select Agent';
+    if (!activeProvider) return effectiveProviderId ?? 'Select Agent';
     const providerName = activeProvider.label;
-    const modelLabel = selectedModelId ?? undefined;
+    const modelLabel = effectiveModelId ?? undefined;
     return modelLabel ? `${providerName} · ${modelLabel}` : providerName;
-  }, [activeProvider, selectedProviderId, selectedModelId]);
+  }, [activeProvider, effectiveProviderId, effectiveModelId]);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = input.trim();
@@ -374,23 +378,58 @@ export function useCommandBarState(
 
   const handleProviderSelect = useCallback(
     (providerId: string, modelId?: string) => {
-      onProviderSelect?.(providerId, modelId);
+      if (onProviderSelect) {
+        onProviderSelect(providerId, modelId);
+      } else {
+        void switchProvider(providerId, modelId, sessionData);
+      }
       setIsPickerOpen(false);
     },
-    [onProviderSelect],
+    [onProviderSelect, switchProvider, sessionData],
   );
 
-  const handleAttachClick = () => {
-    if (!supportsImageAttachments) return;
+  const handleAttachClick = useCallback(() => {
     fileInputRef.current?.click();
-  };
+  }, []);
 
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (supportsImageAttachments && e.target.files && e.target.files.length > 0) {
-      addFiles(e.target.files);
-    }
-    e.target.value = '';
-  };
+  const handleFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+        const files = Array.from(e.target.files);
+        const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+        const otherFiles = files.filter((f) => !f.type.startsWith('image/'));
+
+        if (supportsImageAttachments && imageFiles.length > 0) {
+          addFiles(imageFiles);
+        } else {
+          // Images can't be uploaded for this agent — attach them as file context instead.
+          for (const file of imageFiles) {
+            const filePath = (file as { path?: string }).path || file.name;
+            contextAutocomplete.selectItem({
+              id: `file:${filePath}`,
+              type: 'file',
+              title: file.name,
+              subtitle: filePath,
+              value: filePath,
+            });
+          }
+        }
+
+        for (const file of otherFiles) {
+          const filePath = (file as { path?: string }).path || file.name;
+          contextAutocomplete.selectItem({
+            id: `file:${filePath}`,
+            type: 'file',
+            title: file.name,
+            subtitle: filePath,
+            value: filePath,
+          });
+        }
+      }
+      e.target.value = '';
+    },
+    [addFiles, contextAutocomplete, supportsImageAttachments],
+  );
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {

@@ -47,19 +47,19 @@ function renderComposer(supportsImageAttachments: boolean, handleAttachClick = v
 }
 
 describe('CommandInputComposer attachment capability', () => {
-  it('disables image attachment when the provider does not advertise image prompts', () => {
+  it('keeps attach button clickable when the provider does not advertise image prompts', () => {
     const { container, handleAttachClick } = renderComposer(false);
-    const button = container.querySelector<HTMLButtonElement>('button[aria-label="Attach image"]');
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="Attach files"]');
 
-    expect(button?.disabled).toBe(true);
-    expect(button?.title).toBe('This agent does not support image attachments');
-    button?.click();
-    expect(handleAttachClick).not.toHaveBeenCalled();
+    expect(button?.disabled).toBe(false);
+    expect(button?.title).toBe('Attach file as context');
+    act(() => button?.click());
+    expect(handleAttachClick).toHaveBeenCalledOnce();
   });
 
   it('allows image attachment when the provider advertises image prompts', () => {
     const { container, handleAttachClick } = renderComposer(true);
-    const button = container.querySelector<HTMLButtonElement>('button[aria-label="Attach image"]');
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="Attach files"]');
 
     expect(button?.disabled).toBe(false);
     act(() => button?.click());

@@ -11,19 +11,20 @@ interface ContextChipStripProps {
 
 function renderContextIcon(ctx: ContextItem) {
   if (ctx.type === 'file') {
-    return <FileIcon path={ctx.title} className="h-3 w-3 shrink-0" />;
+    return <FileIcon path={ctx.title} className="h-3.5 w-3.5 shrink-0" />;
   }
   if (ctx.type === 'folder') {
-    return <Folder className="h-3 w-3 shrink-0 text-amber-400" />;
+    return <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400" />;
   }
   if (ctx.type === 'git') {
-    if (ctx.id === 'git:diff') return <DiffIcon className="h-3 w-3 shrink-0 text-purple-400" />;
+    if (ctx.id === 'git:diff') return <DiffIcon className="h-3.5 w-3.5 shrink-0 text-purple-400" />;
     if (ctx.id === 'git:staged')
-      return <GitBranchIcon className="h-3 w-3 shrink-0 text-emerald-400" />;
-    if (ctx.id === 'git:log') return <GitCommitIcon className="h-3 w-3 shrink-0 text-blue-400" />;
-    return <GitBranchIcon className="h-3 w-3 shrink-0 text-purple-400" />;
+      return <GitBranchIcon className="h-3.5 w-3.5 shrink-0 text-emerald-400" />;
+    if (ctx.id === 'git:log')
+      return <GitCommitIcon className="h-3.5 w-3.5 shrink-0 text-blue-400" />;
+    return <GitBranchIcon className="h-3.5 w-3.5 shrink-0 text-purple-400" />;
   }
-  return <Code2 className="text-accent h-3 w-3 shrink-0" />;
+  return <Code2 className="text-accent h-3.5 w-3.5 shrink-0" />;
 }
 
 export function ContextChipStrip({ contexts, onRemove }: ContextChipStripProps) {

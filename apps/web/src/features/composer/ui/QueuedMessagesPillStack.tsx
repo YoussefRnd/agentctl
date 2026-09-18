@@ -38,7 +38,7 @@ export function QueuedMessagesPillStack() {
                   className="text-text-muted bg-surface-tertiary border-border/30 inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px]"
                   title={`${String(msg.attachmentIds.length)} attachment(s)`}
                 >
-                  <Paperclip className="h-3 w-3" />
+                  <Paperclip className="h-3.5 w-3.5" />
                   <span>{msg.attachmentIds.length}</span>
                 </span>
               )}

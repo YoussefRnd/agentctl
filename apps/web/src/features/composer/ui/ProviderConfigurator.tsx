@@ -97,10 +97,10 @@ export function ProviderPickerTrigger({
               aria-label="Select AI provider"
               aria-expanded={isOpen}
               className={cn(
-                'focus-visible:ring-accent/50 flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
+                'motion-disclosure focus-visible:ring-accent/50 flex h-8 cursor-pointer items-center gap-2 rounded-full border px-3 text-xs font-medium focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
                 isOpen
                   ? 'bg-accent/20 text-accent border-accent/50'
-                  : 'border-border/40 bg-surface-secondary/50 text-text-main hover:bg-surface-secondary hover:border-border/60',
+                  : 'border-border/35 bg-surface-secondary/50 text-text-main hover:border-border/60 hover:bg-surface-secondary',
                 isLoading && 'pointer-events-none opacity-50',
               )}
             >
@@ -120,9 +120,12 @@ export function ProviderPickerTrigger({
                   )}
                 />
               )}
-              <span className="max-w-[220px] truncate text-xs font-medium">{badgeLabel}</span>
+              <span className="max-w-[170px] truncate text-xs font-medium">{badgeLabel}</span>
               <ChevronUp
-                className={cn('h-3 w-3 transition-transform duration-200', isOpen && 'rotate-180')}
+                className={cn(
+                  'text-text-muted/60 h-3.5 w-3.5 transition-transform duration-200',
+                  isOpen && 'rotate-180',
+                )}
               />
             </button>
           </PopoverTrigger>
@@ -130,21 +133,25 @@ export function ProviderPickerTrigger({
             align="start"
             side="top"
             avoidCollisions={false}
-            className="border-border w-[480px] overflow-hidden rounded-md p-0"
+            surface="none"
+            motion="none"
+            className="bounded-glass-shell w-[380px]"
           >
-            <ProviderPicker
-              key={isOpen ? 'open' : 'closed'}
-              sessionId={sessionId}
-              isOpen={isOpen}
-              onClose={() => {
-                onOpenChange(false);
-              }}
-              providers={providers}
-              selectedId={resolvedId}
-              selectedModelId={selectedModelId ?? null}
-              onSelect={handleProviderSelect}
-              onOpenAuthModal={onOpenAuthModal}
-            />
+            <div className="bounded-glass-surface">
+              <ProviderPicker
+                key={isOpen ? 'open' : 'closed'}
+                sessionId={sessionId}
+                isOpen={isOpen}
+                onClose={() => {
+                  onOpenChange(false);
+                }}
+                providers={providers}
+                selectedId={resolvedId}
+                selectedModelId={selectedModelId ?? null}
+                onSelect={handleProviderSelect}
+                onOpenAuthModal={onOpenAuthModal}
+              />
+            </div>
           </PopoverContent>
         </Popover>
       )}
@@ -221,16 +228,16 @@ export function ThinkingEffortSelector({
           type="button"
           disabled={isUpdating}
           className={cn(
-            'group flex h-8 items-center gap-1.5 rounded-full border border-transparent px-2.5 transition-colors duration-200',
-            'text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
+            'motion-disclosure group flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium',
+            'border-border/25 bg-surface-secondary/35 text-text-muted hover:border-border/50 hover:bg-surface-secondary/70 hover:text-text-main focus-visible:ring-accent/50 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
             'disabled:pointer-events-none disabled:opacity-40',
             isOpen ? 'bg-accent/20 text-accent border-accent/50' : '',
           )}
         >
-          <span className="font-mono text-xs font-semibold">{activeOptionName}</span>
+          <span className="text-xs font-medium">{activeOptionName}</span>
           <ChevronUp
             className={cn(
-              'h-3.5 w-3.5 opacity-40 transition-transform duration-200',
+              'text-text-muted/60 h-3.5 w-3.5 transition-transform duration-200',
               isOpen && 'rotate-180',
             )}
           />
@@ -388,8 +395,8 @@ export function AdvancedSettingsPopover({ isLoading }: { isLoading: boolean }) {
           type="button"
           disabled={isLoading}
           className={cn(
-            'group border-border/10 text-text-muted hover:text-text-main hover:bg-text-main/5 focus-visible:ring-accent/50 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border transition-colors duration-300 focus-visible:ring-2 focus-visible:outline-none',
-            isOpen ? 'bg-accent/10 text-accent border-accent/40' : '',
+            'motion-disclosure group border-border/25 bg-surface-secondary/35 text-text-muted hover:border-border/50 hover:bg-surface-secondary/70 hover:text-text-main focus-visible:ring-accent/50 flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-full border focus-visible:ring-2 focus-visible:outline-none',
+            isOpen ? 'bg-accent/20 text-accent border-accent/50' : '',
           )}
           title="Advanced Settings"
         >

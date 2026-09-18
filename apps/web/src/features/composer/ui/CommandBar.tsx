@@ -16,9 +16,8 @@ interface ControlBarProps {
   onProviderSelect?: (id: string, modelId?: string) => void;
   placeholder?: string;
   initialInput?: string;
+  variant?: 'default' | 'hero';
 }
-
-const ACCEPTED_IMAGE_TYPES = 'image/png,image/jpeg,image/gif,image/webp';
 
 export function CommandBar({
   onSend,
@@ -27,8 +26,9 @@ export function CommandBar({
   selectedProviderId: propSelectedProviderId,
   selectedModelId: propSelectedModelId,
   onProviderSelect,
-  placeholder = 'Ask for follow-up changes or attach images',
+  placeholder,
   initialInput,
+  variant = 'default',
 }: ControlBarProps) {
   const {
     sessionId,
@@ -104,12 +104,10 @@ export function CommandBar({
       <input
         ref={fileInputRef}
         type="file"
-        accept={ACCEPTED_IMAGE_TYPES}
         multiple
         className="sr-only"
         aria-hidden="true"
         tabIndex={-1}
-        disabled={!supportsImageAttachments}
         onChange={handleFileInputChange}
       />
 
@@ -155,6 +153,7 @@ export function CommandBar({
           handleHistoryDown={handleHistoryDown}
           placeholder={placeholder}
           status={sessionData?.session.status}
+          variant={variant}
         >
           <CommandBarToolbar
             status={{
@@ -191,15 +190,17 @@ export function CommandBar({
           />
         </CommandInputComposer>
       </form>
-      <CommandBarFooter
-        isLoadingSession={isLoadingSession}
-        sessionData={sessionData}
-        isSwitchingMode={isSwitchingMode}
-        switchMode={switchMode}
-        isSwitchingBranch={isSwitchingBranch}
-        switchBranch={switchBranch}
-        branches={branches}
-      />
+      {variant !== 'hero' && (
+        <CommandBarFooter
+          isLoadingSession={isLoadingSession}
+          sessionData={sessionData}
+          isSwitchingMode={isSwitchingMode}
+          switchMode={switchMode}
+          isSwitchingBranch={isSwitchingBranch}
+          switchBranch={switchBranch}
+          branches={branches}
+        />
+      )}
 
       <ProviderAuthModal
         isOpen={isAuthModalOpen}

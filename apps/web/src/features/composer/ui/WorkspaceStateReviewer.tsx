@@ -264,7 +264,7 @@ export function CommandBarFooter({
   if (!isLoadingSession && !sessionData?.session) return null;
 
   return (
-    <div className="text-text-muted mt-3 flex items-center justify-between px-2 text-[10px] font-bold tracking-widest">
+    <div className="text-text-muted/80 mt-3 flex items-center justify-between px-2 text-[11px] font-medium">
       {isLoadingSession ? (
         <div className="text-text-muted/60 flex items-center gap-1.5 py-1">
           <Monitor className="h-3.5 w-3.5" />
@@ -330,7 +330,7 @@ export function CommandBarFooter({
                       },
                     );
                   }}
-                  className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-6 w-6 cursor-pointer items-center justify-center border-r transition-colors disabled:opacity-30"
+                  className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 border-border/10 flex h-6 w-6 cursor-pointer items-center justify-center border-r transition-all duration-150 active:scale-[0.95] disabled:pointer-events-none disabled:opacity-30"
                   title={
                     !canUseRemote
                       ? 'Configure a remote and check out a branch before pulling'
@@ -339,7 +339,7 @@ export function CommandBarFooter({
                         : 'Pull from remote'
                   }
                 >
-                  <RepoPullIcon className="h-3 w-3" />
+                  <RepoPullIcon className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
@@ -358,14 +358,14 @@ export function CommandBarFooter({
                       },
                     );
                   }}
-                  className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 flex h-6 w-6 cursor-pointer items-center justify-center transition-colors disabled:opacity-30"
+                  className="text-text-muted/55 hover:text-accent hover:bg-surface-tertiary/20 flex h-6 w-6 cursor-pointer items-center justify-center transition-all duration-150 active:scale-[0.95] disabled:pointer-events-none disabled:opacity-30"
                   title={
                     canUseRemote
                       ? `Push to ${gitStatus.remoteName ?? 'remote'}`
                       : 'Configure a remote and check out a branch before pushing'
                   }
                 >
-                  <RepoPushIcon className="h-3 w-3" />
+                  <RepoPushIcon className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
