@@ -11,12 +11,19 @@ function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimiti
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
 }
 
+type PopoverContentProps = React.ComponentProps<typeof PopoverPrimitive.Content> & {
+  surface?: 'glass' | 'none';
+  motion?: 'floating' | 'none';
+};
+
 function PopoverContent({
   className,
   align = 'center',
   sideOffset = 4,
+  surface = 'glass',
+  motion = 'floating',
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: PopoverContentProps) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -24,7 +31,10 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          'liquid-glass data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 z-popover w-64 origin-(--radix-popover-content-transform-origin) rounded-md p-2 shadow-2xl outline-hidden',
+          'z-popover w-64 origin-(--radix-popover-content-transform-origin) outline-hidden',
+          motion === 'floating' &&
+            'motion-floating data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
+          surface === 'glass' && 'liquid-glass rounded-md p-2 shadow-2xl',
           className,
         )}
         {...props}
@@ -47,7 +57,7 @@ function PopoverTitle({ className, ...props }: React.ComponentProps<'h2'>) {
   return (
     <div
       data-slot="popover-title"
-      className={cn('text-[11px] font-black tracking-widest text-white uppercase', className)}
+      className={cn('text-role-eyebrow text-white', className)}
       {...props}
     />
   );
@@ -57,10 +67,7 @@ function PopoverDescription({ className, ...props }: React.ComponentProps<'p'>) 
   return (
     <p
       data-slot="popover-description"
-      className={cn(
-        'text-text-muted text-[10px] font-bold tracking-tight uppercase opacity-60',
-        className,
-      )}
+      className={cn('text-role-caption text-text-muted opacity-70', className)}
       {...props}
     />
   );

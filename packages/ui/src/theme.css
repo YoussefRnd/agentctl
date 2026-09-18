@@ -22,6 +22,11 @@
   :focus:not(:focus-visible) {
     outline: none;
   }
+
+  /* Global Lucide icon stroke normalization: crisp 1.5px dev tool aesthetic */
+  svg.lucide {
+    stroke-width: 1.5;
+  }
 }
 
 @layer components {

@@ -11,10 +11,9 @@ export interface CardProps {
 
 const STATUS_CLASSES = {
   default: 'bg-surface/30 border-border/50 hover:border-accent/20 hover:bg-surface/50',
-  success:
-    'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/10',
+  success: 'bg-success/5 border-success/20 hover:border-success/40 hover:bg-success/10',
   warning: 'bg-warning/5 border-warning/20 hover:border-warning/40 hover:bg-warning/10',
-  error: 'bg-rose-500/5 border-rose-500/20 hover:border-rose-500/40 hover:bg-rose-500/10',
+  error: 'bg-danger/5 border-danger/20 hover:border-danger/40 hover:bg-danger/10',
   pending:
     'bg-surface-secondary/10 border-border/20 opacity-70 hover:opacity-100 hover:border-accent/20',
 };
@@ -28,8 +27,8 @@ export const Card = ({
   return (
     <div
       className={cn(
-        'liquid-glass flex flex-col overflow-hidden rounded-lg border transition-colors duration-200',
-        intensity === 'high' && 'bg-surface/40 backdrop-blur-[32px]',
+        'relative flex flex-col overflow-hidden rounded-lg border transition-colors duration-200',
+        intensity === 'high' && 'liquid-glass bg-surface/40 backdrop-blur-[32px]',
         STATUS_CLASSES[status],
         className,
       )}

@@ -51,7 +51,7 @@ function DialogContent({
         <DialogPrimitive.Content
           data-slot="dialog-content"
           className={cn(
-            'liquid-glass data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 pointer-events-auto grid w-full max-w-[calc(100%-2rem)] gap-3 rounded-2xl p-4 shadow-2xl duration-200 outline-none sm:max-w-md',
+            'liquid-glass motion-dialog data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 pointer-events-auto grid w-full max-w-[calc(100%-2rem)] gap-3 rounded-2xl p-4 shadow-2xl outline-none sm:max-w-md',
             className,
           )}
           {...props}
@@ -97,7 +97,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn('text-text-main text-sm font-semibold', className)}
+      className={cn('text-role-title text-text-main', className)}
       {...props}
     />
   );
@@ -110,7 +110,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn('text-text-muted text-xs font-normal opacity-70', className)}
+      className={cn('text-role-body text-text-muted opacity-70', className)}
       {...props}
     />
   );

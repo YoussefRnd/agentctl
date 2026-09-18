@@ -10,12 +10,12 @@ export interface InputProps extends ComponentPropsWithoutRef<'input'> {
 }
 
 const sizes: Record<InputSize, string> = {
-  sm: 'h-7 px-2 text-[11px]',
-  compact: 'h-7 px-2 text-[11px]',
-  md: 'h-8 px-2.5 text-[12px]',
-  default: 'h-8 px-2.5 text-[12px]',
-  lg: 'h-9 px-3 text-[13px]',
-  large: 'h-9 px-3 text-[13px]',
+  sm: 'control-compact',
+  compact: 'control-compact',
+  md: 'control-default',
+  default: 'control-default',
+  lg: 'control-large',
+  large: 'control-large',
 };
 
 export const Input = memo(function Input({
@@ -31,7 +31,7 @@ export const Input = memo(function Input({
     <input
       ref={ref}
       className={cn(
-        'border-border placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/10 rounded-md border bg-transparent font-mono transition-colors outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-30',
+        'text-role-control border-border bg-surface/40 placeholder:text-text-muted/40 focus:border-accent/40 focus:ring-accent/10 border transition-colors outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-40',
         sizes[sizeVariant],
         isError && 'border-danger focus:border-danger focus:ring-danger/20',
         className,

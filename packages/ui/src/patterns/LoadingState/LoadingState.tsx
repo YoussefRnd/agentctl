@@ -36,7 +36,7 @@ export function LoadingState({ message = 'Loading...', className }: LoadingState
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
         />
       </svg>
-      {message && <p className="text-text-muted/70 mt-2.5 text-xs">{message}</p>}
+      {message && <p className="text-role-body text-text-muted/70 mt-2.5">{message}</p>}
     </div>
   );
 }

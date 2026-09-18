@@ -18,24 +18,23 @@ export type ButtonProps<T extends ElementType = 'button'> = ButtonBaseProps & {
 } & Omit<ComponentPropsWithoutRef<T>, keyof ButtonBaseProps | 'as'>;
 
 const variants: Record<ButtonVariant, string> = {
-  solid: 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.97]',
-  outline:
-    'bg-transparent border border-border hover:bg-white/5 text-text-main active:scale-[0.97]',
-  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main active:scale-[0.97]',
-  danger: 'bg-danger text-white hover:opacity-90 active:scale-[0.97]',
+  solid: 'bg-accent text-brand-crust hover:opacity-90 click-press',
+  outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main',
+  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main',
+  danger: 'bg-danger text-white hover:opacity-90 click-press',
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: 'px-2.5 py-1 text-[11px] h-7',
-  compact: 'px-2.5 py-1 text-[11px] h-7',
-  md: 'px-3.5 py-1.5 text-[12px] h-8',
-  default: 'px-3.5 py-1.5 text-[12px] h-8',
-  lg: 'px-5 py-2 text-[14px] h-9',
-  large: 'px-5 py-2 text-[14px] h-9',
+  sm: 'control-compact',
+  compact: 'control-compact',
+  md: 'control-default',
+  default: 'control-default',
+  lg: 'control-large',
+  large: 'control-large',
 };
 
 const baseStyles =
-  'inline-flex items-center justify-center gap-1.5 rounded-md font-sans font-bold tracking-tight transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:pointer-events-none cursor-pointer select-none';
+  'text-role-control inline-flex items-center justify-center gap-1.5 font-sans transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:pointer-events-none cursor-pointer select-none';
 
 const ButtonComponent = <T extends ElementType = 'button'>({
   as,

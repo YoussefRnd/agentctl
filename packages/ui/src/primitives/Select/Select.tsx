@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { Dropdown } from '../Dropdown/index.js';
 import { cn } from '../../utils.js';
 
@@ -43,7 +43,9 @@ export function Select({
 
   return (
     <div className={cn('relative w-full', className)}>
-      <Dropdown.Root>
+      {/* Select menus must form their own modal interaction layer so their
+          portaled content remains interactive inside dialogs. */}
+      <Dropdown.Root modal>
         <Dropdown.Trigger asChild>
           <button
             id={id}
@@ -51,7 +53,7 @@ export function Select({
             disabled={disabled}
             aria-label={ariaLabel}
             className={cn(
-              'border-border/50 bg-surface/40 hover:bg-surface/60 text-text-main focus:border-accent/30 focus:ring-accent/20 relative flex h-9 w-full cursor-pointer items-center justify-between rounded-xl border pr-8 pl-3 text-[11px] font-bold transition-colors outline-none select-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-40',
+              'motion-disclosure border-border/30 bg-surface/40 hover:bg-surface/60 text-text-main focus:border-accent/30 focus:ring-accent/20 data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 group relative flex h-8 w-full cursor-pointer items-center justify-between rounded-full border pr-8 pl-3 text-[11px] font-medium outline-none select-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-40',
               triggerClassName,
             )}
           >
@@ -69,7 +71,7 @@ export function Select({
                 <span className="text-text-muted/50">{placeholder}</span>
               )}
             </span>
-            <ChevronDown className="text-text-muted pointer-events-none absolute right-2.5 h-3.5 w-3.5 transition-transform" />
+            <ChevronDown className="text-text-muted pointer-events-none absolute right-2.5 h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180" />
           </button>
         </Dropdown.Trigger>
         <Dropdown.Portal>
@@ -88,7 +90,7 @@ export function Select({
                 <Dropdown.Item
                   key={opt.value}
                   className={cn(
-                    'flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-[11px] font-bold transition-colors',
+                    'flex w-full cursor-pointer items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[11px] font-medium transition-colors',
                     isSelected
                       ? 'bg-accent/10 text-accent hover:bg-accent/15'
                       : 'text-text-muted hover:text-text-main hover:bg-white/5',
@@ -97,12 +99,15 @@ export function Select({
                     onChange(opt.value);
                   }}
                 >
-                  {opt.element ?? (
-                    <>
-                      {opt.icon}
-                      <span>{opt.label}</span>
-                    </>
-                  )}
+                  <span className="flex min-w-0 items-center gap-2">
+                    {opt.element ?? (
+                      <>
+                        {opt.icon}
+                        <span>{opt.label}</span>
+                      </>
+                    )}
+                  </span>
+                  {isSelected && <Check className="h-3 w-3 shrink-0" />}
                 </Dropdown.Item>
               );
             })}

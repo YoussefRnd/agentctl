@@ -19,11 +19,10 @@ export type IconButtonProps<T extends ElementType = 'button'> = IconButtonBasePr
 } & Omit<ComponentPropsWithoutRef<T>, keyof IconButtonBaseProps | 'as'>;
 
 const variants: Record<IconButtonVariant, string> = {
-  solid: 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.97]',
-  outline:
-    'bg-transparent border border-border hover:bg-white/5 text-text-main active:scale-[0.97]',
-  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main active:scale-[0.97]',
-  danger: 'bg-danger text-white hover:opacity-90 active:scale-[0.97]',
+  solid: 'bg-accent text-brand-crust hover:opacity-90 click-press',
+  outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main',
+  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main',
+  danger: 'bg-danger text-white hover:opacity-90 click-press',
 };
 
 const sizes: Record<IconButtonSize, string> = {
@@ -36,7 +35,7 @@ const sizes: Record<IconButtonSize, string> = {
 };
 
 const baseStyles =
-  'inline-flex items-center justify-center rounded-md font-sans transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:pointer-events-none cursor-pointer select-none';
+  'inline-flex items-center justify-center rounded-lg font-sans transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-40 disabled:pointer-events-none cursor-pointer select-none';
 
 const IconButtonComponent = <T extends ElementType = 'button'>({
   as,

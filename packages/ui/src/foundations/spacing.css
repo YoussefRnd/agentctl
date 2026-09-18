@@ -31,4 +31,25 @@
     font-size: 13px;
     border-radius: var(--radius-lg);
   }
+
+  /* Semantic icon sizes */
+  .icon-inline {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  .icon-compact {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .icon-default {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .icon-prominent {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
 }

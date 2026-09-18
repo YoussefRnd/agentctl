@@ -57,10 +57,26 @@
 }
 
 @layer components {
+  .motion-disclosure {
+    transition-property: color, background-color, border-color, opacity;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-out);
+  }
+
+  .motion-floating {
+    animation-duration: var(--duration-fast);
+    animation-timing-function: var(--ease-out);
+  }
+
+  .motion-dialog {
+    animation-duration: var(--duration-normal);
+    animation-timing-function: var(--ease-out);
+  }
+
   .click-press {
     transition-property: transform, opacity;
-    transition-duration: 150ms;
-    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-out);
 
     &:active {
       transform: scale(0.97);
@@ -78,5 +94,9 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .click-press:active {
+    transform: none;
   }
 }

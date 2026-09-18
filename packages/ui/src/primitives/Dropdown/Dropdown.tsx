@@ -14,18 +14,20 @@ export const DropdownPortal = DropdownMenuPrimitive.Portal;
 
 export function DropdownContent({
   className,
+  children,
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
     <DropdownMenuPrimitive.Content
       sideOffset={sideOffset}
-      className={cn(
-        'liquid-glass z-dropdown animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 min-w-40 origin-(--radix-dropdown-menu-content-transform-origin) rounded-md p-1 duration-150 ease-out',
-        className,
-      )}
+      className="bounded-glass-shell motion-floating z-dropdown animate-in fade-in-0 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 min-w-32 origin-(--radix-dropdown-menu-content-transform-origin) rounded-xl outline-none"
       {...props}
-    />
+    >
+      <div className={cn('bounded-glass-surface min-w-32 rounded-xl p-1', className)}>
+        {children}
+      </div>
+    </DropdownMenuPrimitive.Content>
   );
 }
 
@@ -36,7 +38,7 @@ export function DropdownItem({
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        'focus-visible:ring-accent/40 flex cursor-pointer items-center rounded-md px-2 py-1.5 text-[11px] font-bold outline-none select-none hover:bg-white/5 focus-visible:bg-white/5 focus-visible:ring-1',
+        'focus-visible:ring-accent/40 flex cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-[11px] font-medium outline-none select-none hover:bg-white/5 focus-visible:bg-white/5 focus-visible:ring-1',
         className,
       )}
       {...props}
@@ -75,18 +77,20 @@ export function DropdownSubTrigger({
 
 export function DropdownSubContent({
   className,
+  children,
   sideOffset = 2,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
   return (
     <DropdownMenuPrimitive.SubContent
       sideOffset={sideOffset}
-      className={cn(
-        'liquid-glass z-dropdown animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 min-w-32 origin-(--radix-dropdown-menu-content-transform-origin) rounded-md p-1 duration-150 ease-out',
-        className,
-      )}
+      className="bounded-glass-shell motion-floating z-dropdown animate-in fade-in-0 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 min-w-32 origin-(--radix-dropdown-menu-content-transform-origin) rounded-xl outline-none"
       {...props}
-    />
+    >
+      <div className={cn('bounded-glass-surface min-w-32 rounded-xl p-1', className)}>
+        {children}
+      </div>
+    </DropdownMenuPrimitive.SubContent>
   );
 }
 
