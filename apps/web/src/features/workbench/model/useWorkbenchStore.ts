@@ -2,6 +2,14 @@ import { create } from 'zustand';
 
 export type WorkbenchTab = 'status' | 'changes' | 'terminal';
 
+export function isTerminalTab(tab: string | null | undefined): boolean {
+  return tab === 'terminal';
+}
+
+export function getTerminalTabId(_tab: string | null | undefined): string {
+  return '1';
+}
+
 export interface WorkbenchState {
   workbenchTab: WorkbenchTab | null;
   openWorkbenchTabs: WorkbenchTab[];

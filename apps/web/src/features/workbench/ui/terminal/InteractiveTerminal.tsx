@@ -1,356 +1,294 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
-import { CanvasAddon } from '@xterm/addon-canvas';
-import '@xterm/xterm/css/xterm.css';
-import { getApiBaseUrl } from '@/shared/lib/api-base-url';
-import { getAuthToken } from '@agentctl/api-client';
+import { useRef, useCallback, Fragment, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { Group, Panel, Separator } from 'react-resizable-panels';
+import { Plus, Columns2, Rows2, PanelRight } from 'lucide-react';
+import { Tooltip } from '@agentctl/ui';
 import { useSession } from '@/features/sessions';
 import { useSettings } from '@/features/settings';
-import { TerminalHeader, type TerminalTabItem } from './TerminalHeader';
+import { TerminalPane, type TerminalPaneHandle } from './TerminalPane';
+import { TerminalTabsSidebar } from './TerminalTabsSidebar';
+import { useTerminalTabsStore, type TerminalTabData } from '../../model/useTerminalTabsStore';
 
-const NERD_FONT_FAMILY = [
-  '"JetBrainsMono Nerd Font"',
-  '"FiraCode Nerd Font"',
-  '"CaskaydiaCove Nerd Font"',
-  '"MesloLGS NF"',
-  '"Symbols Nerd Font"',
-  '"Geist Mono"',
-  '"JetBrains Mono"',
-  '"Fira Code"',
-  '"Cascadia Code"',
-  'Menlo',
-  'Monaco',
-  'Consolas',
-  'monospace',
-].join(', ');
-
-export function InteractiveTerminal() {
-  const { sessionId } = useSession();
-  const { settings } = useSettings();
-  const codeFont = settings?.fontConfig?.code;
-
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const xtermInstance = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-
-  const [tabs, setTabs] = useState<TerminalTabItem[]>([{ id: '1', name: 'Terminal 1' }]);
-  const [activeTabId, setActiveTabId] = useState<string>('1');
-
-  const [shellName, setShellName] = useState<string>('sh');
-  const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
-
-  const [connectKey, setConnectKey] = useState<number>(0);
-  const reconnect = useCallback(() => {
-    setStatus('connecting');
-    setConnectKey((k) => k + 1);
-  }, []);
-
-  const sendResize = useCallback((cols: number, rows: number) => {
-    if (socketRef.current?.readyState === WebSocket.OPEN && cols > 0 && rows > 0) {
-      socketRef.current.send(JSON.stringify({ type: 'resize', cols, rows }));
-    }
-  }, []);
-
-  const handleAddTab = useCallback(() => {
-    setTabs((prev) => {
-      const nextNum = prev.length + 1;
-      const newId = String(Date.now());
-      const newTab = { id: newId, name: `Terminal ${String(nextNum)}` };
-      setActiveTabId(newId);
-      return [...prev, newTab];
-    });
-  }, []);
-
-  const handleCloseTab = useCallback(
-    (idToClose: string) => {
-      setTabs((prev) => {
-        if (prev.length <= 1) return prev;
-        const filtered = prev.filter((t) => t.id !== idToClose);
-        if (activeTabId === idToClose) {
-          const nextActive = filtered[filtered.length - 1]?.id ?? '1';
-          setActiveTabId(nextActive);
-        }
-        return filtered;
-      });
-    },
-    [activeTabId],
-  );
-
-  const handleRenameTab = useCallback((id: string, newName: string) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, name: newName } : t)));
-  }, []);
-
-  // WebSocket connection management for the active tab
-  useEffect(() => {
-    if (!sessionId) return;
-
-    const baseUrl = getApiBaseUrl();
-    let wsUrl: string;
-
-    if (baseUrl) {
-      const urlObj = new URL(baseUrl);
-      const wsProtocol = urlObj.protocol === 'https:' ? 'wss:' : 'ws:';
-      wsUrl = `${wsProtocol}//${urlObj.host}/api/sessions/${sessionId}/terminal/ws?termId=${activeTabId}`;
-    } else {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
-      wsUrl = `${protocol}//${host}/api/sessions/${sessionId}/terminal/ws?termId=${activeTabId}`;
-    }
-
-    const token = getAuthToken();
-    if (token) {
-      wsUrl += `&token=${encodeURIComponent(token)}`;
-    }
-
-    let ws: WebSocket | null = null;
-    xtermInstance.current?.clear();
-
-    try {
-      ws = new WebSocket(wsUrl);
-      socketRef.current = ws;
-
-      ws.onopen = () => {
-        setStatus('connected');
-        if (xtermInstance.current && fitAddonRef.current) {
-          fitAddonRef.current.fit();
-          xtermInstance.current.focus();
-          sendResize(xtermInstance.current.cols, xtermInstance.current.rows);
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data as string) as {
-            type?: string;
-            data?: string;
-            shell?: string;
-            error?: string;
-          };
-
-          if (msg.type === 'init' && msg.shell) {
-            setShellName(msg.shell);
-          } else if (msg.type === 'data' && msg.data) {
-            xtermInstance.current?.write(msg.data);
-          } else if (msg.type === 'error' && msg.error) {
-            xtermInstance.current?.write(`\r\n\x1b[31m[Error] ${msg.error}\x1b[0m\r\n`);
-          }
-        } catch {
-          if (typeof event.data === 'string') {
-            xtermInstance.current?.write(event.data);
-          }
-        }
-      };
-
-      ws.onclose = () => {
-        setStatus('disconnected');
-      };
-
-      ws.onerror = () => {
-        setStatus('disconnected');
-      };
-    } catch {
-      queueMicrotask(() => {
-        setStatus('disconnected');
-      });
-    }
-
-    return () => {
-      if (ws) {
-        ws.close();
-      }
-      if (socketRef.current === ws) {
-        socketRef.current = null;
-      }
-    };
-  }, [sessionId, activeTabId, connectKey, sendResize]);
-
-  // Terminal lifecycle & xterm initialization
-  useEffect(() => {
-    if (!terminalRef.current) return;
-
-    let term: Terminal | null = null;
-    let fitAddon: FitAddon | null = null;
-    let canvasAddon: CanvasAddon | null = null;
-    let resizeObserver: ResizeObserver | null = null;
-    let resizeRaf: number | null = null;
-
-    try {
-      term = new Terminal({
-        cursorBlink: true,
-        cursorStyle: 'block',
-        fontSize: codeFont?.size ?? 13,
-        lineHeight: 1.25,
-        fontFamily: codeFont?.family
-          ? `"${codeFont.family}", ${NERD_FONT_FAMILY}`
-          : NERD_FONT_FAMILY,
-        theme: {
-          background: '#090a0f',
-          foreground: '#cdd6f4',
-          cursor: '#f5e0dc',
-          cursorAccent: '#11111b',
-          selectionBackground: '#45475a',
-          black: '#45475a',
-          red: '#f38ba8',
-          green: '#a6e3a1',
-          yellow: '#f9e2af',
-          blue: '#89b4fa',
-          magenta: '#cba6f7',
-          cyan: '#94e2d5',
-          white: '#bac2de',
-          brightBlack: '#585b70',
-          brightRed: '#f38ba8',
-          brightGreen: '#a6e3a1',
-          brightYellow: '#f9e2af',
-          brightBlue: '#89b4fa',
-          brightMagenta: '#cba6f7',
-          brightCyan: '#94e2d5',
-          brightWhite: '#a6adc8',
-        },
-        convertEol: true,
-        allowTransparency: true,
-        scrollback: 5000,
-      });
-
-      fitAddon = new FitAddon();
-      term.loadAddon(fitAddon);
-      term.loadAddon(new WebLinksAddon());
-
-      term.open(terminalRef.current);
-
-      try {
-        canvasAddon = new CanvasAddon();
-        term.loadAddon(canvasAddon);
-      } catch {
-        // Fallback to standard DOM renderer
-      }
-
-      xtermInstance.current = term;
-      fitAddonRef.current = fitAddon;
-
-      term.onData((data) => {
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({ type: 'input', data }));
-        }
-      });
-
-      term.onResize(({ cols, rows }) => {
-        sendResize(cols, rows);
-      });
-
-      requestAnimationFrame(() => {
-        fitAddon?.fit();
-        if (term) {
-          term.focus();
-          sendResize(term.cols, term.rows);
-        }
-      });
-
-      resizeObserver = new ResizeObserver(() => {
-        if (resizeRaf) {
-          cancelAnimationFrame(resizeRaf);
-        }
-        resizeRaf = requestAnimationFrame(() => {
-          try {
-            if (fitAddonRef.current && xtermInstance.current) {
-              fitAddonRef.current.fit();
-              sendResize(xtermInstance.current.cols, xtermInstance.current.rows);
-            }
-          } catch {
-            // Ignored
-          }
-        });
-      });
-
-      resizeObserver.observe(terminalRef.current);
-    } catch (err) {
-      console.error('Failed to initialize xterm:', err);
-    }
-
-    return () => {
-      if (resizeRaf) {
-        cancelAnimationFrame(resizeRaf);
-      }
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-      if (canvasAddon) {
-        try {
-          canvasAddon.dispose();
-        } catch {
-          // Ignore
-        }
-      }
-      if (term) {
-        try {
-          term.dispose();
-        } catch {
-          // Ignore disposal errors
-        }
-      }
-      xtermInstance.current = null;
-      fitAddonRef.current = null;
-    };
-  }, [codeFont?.family, codeFont?.size, sendResize]);
-
-  // Synchronize dynamic terminal font size and family from settings
-  useEffect(() => {
-    if (!xtermInstance.current || !codeFont) return;
-    if (typeof codeFont.size === 'number' && codeFont.size > 0) {
-      xtermInstance.current.options.fontSize = codeFont.size;
-    }
-    if (codeFont.family) {
-      xtermInstance.current.options.fontFamily = `"${codeFont.family}", ${NERD_FONT_FAMILY}`;
-    }
-    requestAnimationFrame(() => {
-      try {
-        if (fitAddonRef.current && xtermInstance.current) {
-          fitAddonRef.current.fit();
-          sendResize(xtermInstance.current.cols, xtermInstance.current.rows);
-        }
-      } catch {
-        // ignore
-      }
-    });
-  }, [codeFont?.size, codeFont?.family, sendResize]);
-
-  const handleRestart = () => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ type: 'restart' }));
-    } else {
-      reconnect();
-    }
-  };
-
-  const handleClear = () => {
-    xtermInstance.current?.clear();
-  };
-
-  return (
-    <div data-font-ctx="terminal" className="flex h-full min-w-0 flex-col bg-[#090a0f]">
-      <TerminalHeader
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onSelectTab={setActiveTabId}
-        onAddTab={handleAddTab}
-        onCloseTab={handleCloseTab}
-        onRenameTab={handleRenameTab}
-        status={status}
-        shellName={shellName}
-        reconnect={reconnect}
-        handleRestart={handleRestart}
-        handleClear={handleClear}
-      />
-
-      {/* Terminal View Container */}
-      <div
-        className="relative min-h-0 flex-1 cursor-text p-2"
-        onClick={() => xtermInstance.current?.focus()}
-      >
-        <div ref={terminalRef} className="h-full w-full overflow-hidden font-mono" />
-      </div>
-    </div>
-  );
+export interface InteractiveTerminalHandle {
+  split: () => void;
+  toggleOrientation: () => void;
+  restart: () => void;
+  clear: () => void;
+  reconnect: () => void;
 }
+
+export interface TerminalMeta {
+  status: 'connecting' | 'connected' | 'disconnected';
+  shell: string;
+  isSplit: boolean;
+  splitOrientation: 'horizontal' | 'vertical';
+  splitCount: number;
+}
+
+export interface InteractiveTerminalProps {
+  tabId?: string;
+  onMetaChange?: (meta: TerminalMeta) => void;
+}
+
+export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, InteractiveTerminalProps>(
+  function InteractiveTerminal({ onMetaChange }, ref) {
+    const { sessionId } = useSession();
+    const { settings } = useSettings();
+    const codeFont = settings?.fontConfig?.code;
+
+    const tabs = useTerminalTabsStore((s) => s.tabs);
+    const activeTabId = useTerminalTabsStore((s) => s.activeTabId);
+    const isSidebarOpen = useTerminalTabsStore((s) => s.isSidebarOpen);
+    const addTab = useTerminalTabsStore((s) => s.addTab);
+    const splitTab = useTerminalTabsStore((s) => s.splitTab);
+    const closePane = useTerminalTabsStore((s) => s.closePane);
+    const setActivePane = useTerminalTabsStore((s) => s.setActivePane);
+    const setPaneShell = useTerminalTabsStore((s) => s.setPaneShell);
+    const setPaneStatus = useTerminalTabsStore((s) => s.setPaneStatus);
+    const toggleSplitOrientation = useTerminalTabsStore((s) => s.toggleSplitOrientation);
+    const toggleSidebar = useTerminalTabsStore((s) => s.toggleSidebar);
+
+    // Get current active tab
+    const activeTab: TerminalTabData = tabs.find((t) => t.id === activeTabId) ??
+      tabs[0] ?? {
+        id: 'tab-1',
+        name: 'Terminal 1',
+        panes: [{ id: 'term-1', name: 'Terminal 1', shell: 'sh', status: 'connecting' }],
+        activePaneId: 'term-1',
+        splitOrientation: 'horizontal',
+      };
+
+    const isSplit = activeTab.panes.length > 1;
+    const activePane =
+      activeTab.panes.find((p) => p.id === activeTab.activePaneId) ?? activeTab.panes[0];
+
+    const paneRefs = useRef<Map<string, TerminalPaneHandle>>(new Map());
+
+    const registerPaneRef = useCallback((paneId: string, handle: TerminalPaneHandle | null) => {
+      if (handle) {
+        paneRefs.current.set(paneId, handle);
+      } else {
+        paneRefs.current.delete(paneId);
+      }
+    }, []);
+
+    const handleRestart = useCallback(() => {
+      if (activePane?.id) {
+        paneRefs.current.get(activePane.id)?.restart();
+      }
+    }, [activePane?.id]);
+
+    const handleClear = useCallback(() => {
+      if (activePane?.id) {
+        paneRefs.current.get(activePane.id)?.clear();
+      }
+    }, [activePane?.id]);
+
+    const handleReconnect = useCallback(() => {
+      if (activePane?.id) {
+        paneRefs.current.get(activePane.id)?.restart();
+      }
+    }, [activePane?.id]);
+
+    const handleSplit = useCallback(() => {
+      const container = document.querySelector('[data-font-ctx="terminal"]');
+      const width = container?.clientWidth ?? 800;
+      const height = container?.clientHeight ?? 600;
+      // If container is narrow (<640px) or taller than wide, vertical split (top/bottom) gives full column width
+      const preferredOrientation = width < 640 || height > width * 1.1 ? 'vertical' : 'horizontal';
+      splitTab(activeTab.id, activeTab.panes.length === 1 ? preferredOrientation : undefined);
+    }, [splitTab, activeTab.id, activeTab.panes.length]);
+
+    const handleToggleOrientation = useCallback(() => {
+      toggleSplitOrientation(activeTab.id);
+      setTimeout(() => {
+        activeTab.panes.forEach((p) => {
+          paneRefs.current.get(p.id)?.fit();
+        });
+      }, 60);
+    }, [toggleSplitOrientation, activeTab]);
+
+    // Expose actions to imperative handle
+    useImperativeHandle(
+      ref,
+      () => ({
+        split: handleSplit,
+        toggleOrientation: handleToggleOrientation,
+        restart: handleRestart,
+        clear: handleClear,
+        reconnect: handleReconnect,
+      }),
+      [handleSplit, handleToggleOrientation, handleRestart, handleClear, handleReconnect],
+    );
+
+    // Notify parent if meta changes
+    useEffect(() => {
+      onMetaChange?.({
+        status: activePane?.status ?? 'connecting',
+        shell: activePane?.shell ?? 'sh',
+        isSplit,
+        splitOrientation: activeTab.splitOrientation,
+        splitCount: activeTab.panes.length,
+      });
+    }, [
+      activePane?.status,
+      activePane?.shell,
+      isSplit,
+      activeTab.splitOrientation,
+      activeTab.panes.length,
+      onMetaChange,
+    ]);
+
+    // Refit all panes on window resize
+    useEffect(() => {
+      const onResize = () => {
+        activeTab.panes.forEach((p) => {
+          paneRefs.current.get(p.id)?.fit();
+        });
+      };
+      window.addEventListener('resize', onResize);
+      return () => {
+        window.removeEventListener('resize', onResize);
+      };
+    }, [activeTab.panes]);
+
+    const handleFocusPane = useCallback(
+      (pId: string) => {
+        setActivePane(activeTab.id, pId);
+      },
+      [activeTab.id, setActivePane],
+    );
+
+    const handleClosePane = useCallback(
+      (pId: string) => {
+        closePane(activeTab.id, pId);
+      },
+      [activeTab.id, closePane],
+    );
+
+    const handleShellChange = useCallback(
+      (pId: string, shell: string) => {
+        setPaneShell(pId, shell);
+      },
+      [setPaneShell],
+    );
+
+    const handleStatusChange = useCallback(
+      (pId: string, st: 'connecting' | 'connected' | 'disconnected') => {
+        setPaneStatus(pId, st);
+      },
+      [setPaneStatus],
+    );
+
+    return (
+      <div
+        data-font-ctx="terminal"
+        className="relative flex h-full min-w-0 flex-1 overflow-hidden bg-[#11111b]"
+      >
+        {/* Main Terminal Canvas Stage */}
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#11111b]">
+          {/* Floating Minimal Action Capsule when Sidebar is Hidden */}
+          {!isSidebarOpen && (
+            <div className="border-border/30 bg-surface/85 absolute top-2 right-2 z-20 flex items-center gap-0.5 rounded-md border p-0.5 opacity-60 shadow-md backdrop-blur-md transition-opacity hover:opacity-100">
+              <Tooltip content="New Terminal">
+                <button
+                  type="button"
+                  onClick={() => addTab()}
+                  className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
+                  aria-label="New terminal"
+                >
+                  <Plus className="icon-inline" />
+                </button>
+              </Tooltip>
+
+              <Tooltip content="Split Terminal">
+                <button
+                  type="button"
+                  onClick={handleSplit}
+                  className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
+                  aria-label="Split terminal"
+                >
+                  <Columns2 className="icon-inline" />
+                </button>
+              </Tooltip>
+
+              {isSplit && (
+                <Tooltip
+                  content={`Switch to ${activeTab.splitOrientation === 'horizontal' ? 'Vertical (Top/Bottom)' : 'Horizontal (Side-by-side)'} Split`}
+                >
+                  <button
+                    type="button"
+                    onClick={handleToggleOrientation}
+                    className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
+                    aria-label="Toggle split orientation"
+                  >
+                    {activeTab.splitOrientation === 'horizontal' ? (
+                      <Rows2 className="icon-inline" />
+                    ) : (
+                      <Columns2 className="icon-inline" />
+                    )}
+                  </button>
+                </Tooltip>
+              )}
+
+              <div className="bg-border/40 mx-0.5 h-3 w-px" />
+
+              <Tooltip content="Show Terminal Tabs">
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
+                  aria-label="Show terminal tabs"
+                >
+                  <PanelRight className="icon-inline" />
+                </button>
+              </Tooltip>
+            </div>
+          )}
+
+          {/* Terminal Panes - Always rendered within Group/Panel to preserve terminal lifecycle on split */}
+          <Group orientation={activeTab.splitOrientation} className="h-full w-full">
+            {activeTab.panes.map((pane, index) => (
+              <Fragment key={pane.id}>
+                {index > 0 && (
+                  <Separator
+                    className={`bg-border/25 hover:bg-border/60 active:bg-border/80 relative flex shrink-0 items-center justify-center transition-colors ${
+                      activeTab.splitOrientation === 'horizontal'
+                        ? 'w-px cursor-col-resize hover:w-0.5'
+                        : 'h-px cursor-row-resize hover:h-0.5'
+                    }`}
+                  />
+                )}
+                <Panel
+                  id={pane.id}
+                  minSize="15%"
+                  defaultSize={Math.floor(100 / activeTab.panes.length)}
+                  className="flex h-full w-full flex-col overflow-hidden"
+                >
+                  <TerminalPane
+                    key={pane.id}
+                    ref={(handle) => registerPaneRef(pane.id, handle)}
+                    id={pane.id}
+                    name={pane.name}
+                    sessionId={sessionId ?? ''}
+                    isActive={(activeTab.activePaneId || activeTab.panes[0]?.id) === pane.id}
+                    isSplit={isSplit}
+                    splitOrientation={activeTab.splitOrientation}
+                    codeFont={codeFont}
+                    onFocus={handleFocusPane}
+                    onClose={handleClosePane}
+                    onToggleOrientation={handleToggleOrientation}
+                    onShellChange={handleShellChange}
+                    onStatusChange={handleStatusChange}
+                  />
+                </Panel>
+              </Fragment>
+            ))}
+          </Group>
+        </div>
+
+        {/* VS Code-Style Terminal Tabs Sidebar (Right side) */}
+        {isSidebarOpen && <TerminalTabsSidebar />}
+      </div>
+    );
+  },
+);

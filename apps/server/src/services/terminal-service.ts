@@ -116,7 +116,6 @@ def main():
                         msg = json.loads(line)
                         if 'cols' in msg and 'rows' in msg:
                             fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', int(msg['rows']), int(msg['cols']), 0, 0))
-                            os.kill(pid, signal.SIGWINCH)
                 except Exception:
                     pass
 

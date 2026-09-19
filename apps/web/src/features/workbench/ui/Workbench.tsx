@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect, Suspense, lazy } from 'react';
 import { StatusPane } from './StatusPane';
 import { useSession } from '@/features/sessions';
-import { GlassPanel, Spinner, Dropdown, cn } from '@agentctl/ui';
+import { GlassPanel, Spinner, Dropdown, Tooltip, cn } from '@agentctl/ui';
 import { Maximize2, Minimize2, Terminal, FileText, X, Plus, Layout } from 'lucide-react';
 import { DiffIcon } from '@primer/octicons-react';
 import { useWorkbenchStore, type WorkbenchTab } from '../model/useWorkbenchStore';
 
 const ReviewView = lazy(() =>
-  import('@/features/review/ui/ReviewView').then((module) => ({ default: module.ReviewView })),
+  import('@/features/review').then((module) => ({ default: module.ReviewView })),
 );
 const InteractiveTerminal = lazy(() =>
   import('./terminal/InteractiveTerminal').then((module) => ({
@@ -24,7 +24,7 @@ interface TabDefinition {
   description: string;
 }
 
-const ALL_TABS: TabDefinition[] = [
+const STATIC_TABS: TabDefinition[] = [
   {
     id: 'changes',
     label: 'Changes',
@@ -35,7 +35,7 @@ const ALL_TABS: TabDefinition[] = [
     id: 'terminal',
     label: 'Terminal',
     icon: Terminal,
-    description: 'Interactive session shell',
+    description: 'Interactive shells and split terminals',
   },
   {
     id: 'status',
@@ -99,14 +99,15 @@ export function Workbench({
         className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
       >
         <div className="flex h-full min-w-0 flex-col">
-          {/* Dynamic Tab Bar Header: Tabs | [+] | Maximize */}
-          <div className="border-border/20 bg-surface-secondary/10 flex h-10 shrink-0 items-center justify-between gap-1 border-b px-2">
-            <div className="flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto">
+          {/* Unified Workbench Top Header: Tabs | [+] | Maximize */}
+          <div className="border-border/20 bg-surface-secondary/15 flex h-9 shrink-0 items-center justify-between gap-1.5 border-b px-2">
+            {/* Left: Tab Strip */}
+            <div className="flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto py-1">
               {tabs.map((t, idx) => {
                 const isActive = tab === t;
-                const tabMeta = ALL_TABS.find((item) => item.id === t);
-                const Icon = tabMeta?.icon ?? FileText;
-                const label = tabMeta?.label ?? t;
+                const tabDef = STATIC_TABS.find((def) => def.id === t);
+                const Icon = tabDef?.icon ?? FileText;
+                const label = tabDef?.label ?? t;
                 const isDragged = draggedTab === t;
 
                 return (
@@ -115,7 +116,7 @@ export function Workbench({
                     role="tab"
                     tabIndex={0}
                     aria-selected={isActive}
-                    draggable={true}
+                    draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', t);
                       e.dataTransfer.effectAllowed = 'move';
@@ -178,27 +179,28 @@ export function Workbench({
                       }
                     }}
                     className={cn(
-                      'group relative flex h-7.5 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-[background-color,border-color,color,opacity] duration-150',
+                      'group relative flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-[background-color,border-color,color,opacity] duration-150',
                       isActive
-                        ? 'text-text-main border-border/40 bg-surface/60 shadow-xs'
+                        ? 'text-text-main border-border/40 bg-surface/80 shadow-xs'
                         : 'text-text-muted hover:text-text-main hover:border-border/20 hover:bg-surface/30 border-transparent',
                       isDragged && 'opacity-40',
                     )}
                   >
                     <Icon
                       className={cn(
-                        'h-3.5 w-3.5 shrink-0 transition-opacity',
+                        'icon-inline shrink-0 transition-opacity',
                         isActive
-                          ? 'text-text-main opacity-90'
+                          ? 'text-accent opacity-100'
                           : 'text-text-muted opacity-70 group-hover:opacity-90',
                       )}
                     />
                     <span
-                      className={
+                      className={cn(
+                        'truncate',
                         isActive
                           ? 'text-text-main font-medium'
-                          : 'text-text-muted group-hover:text-text-main'
-                      }
+                          : 'text-text-muted group-hover:text-text-main',
+                      )}
                     >
                       {label}
                     </span>
@@ -216,7 +218,7 @@ export function Workbench({
                       </span>
                     )}
 
-                    {/* Quiet hover-only close button */}
+                    {/* Close button */}
                     <button
                       type="button"
                       aria-label={`Close ${label} tab`}
@@ -225,10 +227,10 @@ export function Workbench({
                         e.stopPropagation();
                         handleCloseTab(t);
                       }}
-                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary -mr-1.5 ml-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,background-color] duration-150 group-hover:opacity-80 hover:!opacity-100"
+                      className="text-text-muted hover:bg-surface-secondary -mr-1 ml-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,background-color] duration-150 group-hover:opacity-80 hover:text-rose-400 hover:!opacity-100"
                       title="Close tab"
                     >
-                      <X className="h-2.5 w-2.5" />
+                      <X className="icon-inline" />
                     </button>
                   </div>
                 );
@@ -239,19 +241,20 @@ export function Workbench({
                 <Dropdown.Trigger asChild>
                   <button
                     type="button"
-                    className="motion-disclosure text-text-muted/70 hover:text-text-main data-[state=open]:bg-accent/10 data-[state=open]:text-accent flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg hover:bg-white/[0.06]"
-                    title="Add panel tab"
-                    aria-label="Add panel tab"
+                    className="motion-disclosure text-text-muted hover:text-text-main data-[state=open]:bg-accent/10 data-[state=open]:text-accent hover:bg-surface-secondary/60 flex h-6.5 w-6.5 shrink-0 cursor-pointer items-center justify-center rounded-md"
+                    title="Open view"
+                    aria-label="Add tab"
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="icon-compact" />
                   </button>
                 </Dropdown.Trigger>
                 <Dropdown.Portal>
-                  <Dropdown.Content align="start" className="w-60">
+                  <Dropdown.Content align="start" className="w-56">
                     <div className="text-role-eyebrow text-text-muted/60 px-2.5 py-1.5">
-                      Open Panel
+                      Open in Workbench
                     </div>
-                    {ALL_TABS.map((item) => {
+
+                    {STATIC_TABS.map((item) => {
                       const Icon = item.icon;
                       const isOpen = tabs.includes(item.id);
                       return (
@@ -284,41 +287,44 @@ export function Workbench({
               </Dropdown.Root>
             </div>
 
-            {/* Right: Maximize / Contract */}
+            {/* Right: Maximize */}
             {onToggleMaximize && (
-              <button
-                type="button"
-                onClick={onToggleMaximize}
-                className="motion-disclosure text-text-muted/60 hover:text-text-main hover:bg-surface-secondary ml-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg transition-colors"
-                title={isMaximized ? 'Contract panel' : 'Maximize panel'}
-                aria-label={isMaximized ? 'Contract panel' : 'Maximize panel'}
-              >
-                {isMaximized ? (
-                  <Minimize2 className="h-3.5 w-3.5" />
-                ) : (
-                  <Maximize2 className="h-3.5 w-3.5" />
-                )}
-              </button>
+              <div className="flex shrink-0 items-center pl-1">
+                <Tooltip content={isMaximized ? 'Restore Workbench' : 'Maximize Workbench'}>
+                  <button
+                    type="button"
+                    onClick={onToggleMaximize}
+                    className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6.5 w-6.5 cursor-pointer items-center justify-center rounded-md transition-colors"
+                    aria-label={isMaximized ? 'Restore Workbench' : 'Maximize Workbench'}
+                  >
+                    {isMaximized ? (
+                      <Minimize2 className="icon-compact" />
+                    ) : (
+                      <Maximize2 className="icon-compact" />
+                    )}
+                  </button>
+                </Tooltip>
+              </div>
             )}
           </div>
 
-          <div className="bg-surface-secondary/5 min-h-0 flex-1 overflow-hidden" role="tabpanel">
-            {tabs.length === 0 || tab === null ? (
-              <div className="flex h-full flex-col items-center justify-center overflow-y-auto p-6 text-center select-none">
-                <div className="flex w-full max-w-sm flex-col items-center gap-4">
-                  <div className="border-border/30 bg-surface/40 text-accent flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm">
-                    <Layout className="icon-prominent" />
+          {/* Tab Content */}
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            {tabs.length === 0 ? (
+              <div className="bg-surface/20 flex h-full flex-col items-center justify-center p-8 text-center">
+                <div className="border-border/30 bg-surface/50 max-w-sm rounded-2xl border p-6 backdrop-blur-md">
+                  <div className="border-border/20 bg-surface-secondary/40 text-text-muted mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl border">
+                    <Layout className="h-5 w-5" />
                   </div>
-                  <div className="space-y-1">
-                    <h3 className="text-role-title text-text-main">No open panels</h3>
-                    <p className="text-role-body text-text-muted text-xs">
-                      Select a workspace tool below or click{' '}
-                      <span className="text-text-main/80 font-mono">+</span> in the tab bar.
-                    </p>
-                  </div>
+                  <h3 className="text-role-body text-text-main font-semibold">
+                    No open workbench tabs
+                  </h3>
+                  <p className="text-role-caption text-text-muted mt-1 text-xs">
+                    Select a tab below or use the + menu in the top bar to inspect your workspace.
+                  </p>
 
-                  <div className="grid w-full grid-cols-1 gap-2 pt-1 text-left">
-                    {ALL_TABS.map((item) => {
+                  <div className="mt-4 flex flex-col gap-2">
+                    {STATIC_TABS.map((item) => {
                       const Icon = item.icon;
                       const isChanges = item.id === 'changes';
                       const hasChanges = isChanges && changesCount > 0;
