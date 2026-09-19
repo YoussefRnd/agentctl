@@ -16,6 +16,7 @@ export const patchSettingsSchema = z.object({
   setupStep: z.string().nullable().optional(),
   defaultProviderId: z.string().nullable().optional(),
   showThinking: z.boolean().optional(),
+  defaultToWorktree: z.boolean().optional(),
   registrySyncError: z.string().nullable().optional(),
   fontConfig: fontConfigSchema.optional(),
 });
@@ -26,6 +27,7 @@ export const settingsResponseSchema = z.object({
   setupStep: z.string().nullable(),
   defaultProviderId: z.string().nullable(),
   showThinking: z.boolean(),
+  defaultToWorktree: z.boolean(),
   registrySyncError: z.string().nullable().optional(),
   fontConfig: z.object({
     ui: fontContextSchema,

@@ -3,6 +3,7 @@ import type { ManagedSession } from '../managed-session.js';
 import { sessions, sessionEvents } from '../../db/schema.js';
 import {
   EMPTY_AGENT_FEATURES,
+  createTaskSlug,
   type AgentConfigOption,
   type AgentFeatures,
   type SessionMode,
@@ -215,19 +216,21 @@ export class SessionLauncher {
       selectedThinkingEffort,
     );
 
-    const context = await this.deps.sessionWorkspace.establish(
-      projectId,
-      taskSlug ?? 'new-session',
-      {
-        mode,
-        agent: resolvedProviderId,
-        selectedProvider: resolvedProviderId,
-        selectedModel: selection.selectedModel,
-        selectedThinkingEffort: selection.selectedThinkingEffort,
-        contextLimit: 0,
-        sessionConfigOptions: JSON.stringify(configOptions),
-      },
-    );
+    const settings = await this.deps.providerRegistry.getSettings();
+    const defaultToWorktree =
+      settings.defaultToWorktree !== undefined ? settings.defaultToWorktree === 'true' : true;
+    const effectiveMode: SessionMode = mode ?? (defaultToWorktree ? 'worktree' : 'local');
+    const effectiveSlug = createTaskSlug(taskSlug);
+
+    const context = await this.deps.sessionWorkspace.establish(projectId, effectiveSlug, {
+      mode: effectiveMode,
+      agent: resolvedProviderId,
+      selectedProvider: resolvedProviderId,
+      selectedModel: selection.selectedModel,
+      selectedThinkingEffort: selection.selectedThinkingEffort,
+      contextLimit: 0,
+      sessionConfigOptions: JSON.stringify(configOptions),
+    });
 
     return { sessionId: context.sessionId };
   }

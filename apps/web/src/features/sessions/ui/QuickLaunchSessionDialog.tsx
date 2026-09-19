@@ -33,7 +33,7 @@ export function QuickLaunchSessionDialog({
   onClose,
   projectId,
   projectName,
-  defaultMode = 'worktree',
+  defaultMode,
   initialProviderId,
 }: QuickLaunchSessionDialogProps) {
   const navigate = useNavigate();
@@ -46,10 +46,13 @@ export function QuickLaunchSessionDialog({
     [providers],
   );
 
+  const effectiveDefaultMode: SessionMode =
+    defaultMode ?? (settings?.defaultToWorktree === false ? 'local' : 'worktree');
+
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('default');
   const [selectedThinkingEffort, setSelectedThinkingEffort] = useState<ThinkingEffort>('medium');
-  const [selectedMode, setSelectedMode] = useState<SessionMode>(defaultMode);
+  const [selectedMode, setSelectedMode] = useState<SessionMode>(effectiveDefaultMode);
   const [taskSlug, setTaskSlug] = useState<string>('');
   const [isLaunching, setIsLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +62,7 @@ export function QuickLaunchSessionDialog({
     if (open) {
       setError(null);
       setTaskSlug('');
-      setSelectedMode(defaultMode);
+      setSelectedMode(effectiveDefaultMode);
 
       const candidateProviderId =
         initialProviderId ||
@@ -76,7 +79,7 @@ export function QuickLaunchSessionDialog({
     settings?.defaultProviderId,
     installedProviders,
     providers,
-    defaultMode,
+    effectiveDefaultMode,
   ]);
 
   const activeProvider = useMemo(() => {

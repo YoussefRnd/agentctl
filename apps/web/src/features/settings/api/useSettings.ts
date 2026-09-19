@@ -10,6 +10,7 @@ export interface SystemSettings {
   setupStep: string | null;
   defaultProviderId: string | null;
   showThinking: boolean;
+  defaultToWorktree?: boolean;
   registrySyncError: string | null;
   fontConfig?: FontConfig;
 }

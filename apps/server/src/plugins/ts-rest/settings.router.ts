@@ -31,6 +31,8 @@ export function createSettingsRouter(
           setupStep: raw.setupStep ?? null,
           defaultProviderId: raw.defaultProviderId ?? null,
           showThinking: raw.showThinking === 'true',
+          defaultToWorktree:
+            raw.defaultToWorktree !== undefined ? raw.defaultToWorktree === 'true' : true,
           registrySyncError: raw.registrySyncError ?? null,
           fontConfig,
         },
@@ -45,6 +47,7 @@ export function createSettingsRouter(
         setupStep?: string | null;
         defaultProviderId?: string | null;
         showThinking?: boolean;
+        defaultToWorktree?: boolean;
         registrySyncError?: string | null;
         fontConfig?: {
           ui?: { family: string; size: number };
@@ -69,6 +72,9 @@ export function createSettingsRouter(
       }
       if (body.showThinking !== undefined) {
         fastify.providerRegistry.updateSetting('showThinking', String(body.showThinking));
+      }
+      if (body.defaultToWorktree !== undefined) {
+        fastify.providerRegistry.updateSetting('defaultToWorktree', String(body.defaultToWorktree));
       }
       if (body.registrySyncError !== undefined) {
         fastify.providerRegistry.updateSetting('registrySyncError', body.registrySyncError ?? '');
@@ -120,6 +126,8 @@ export function createSettingsRouter(
           setupStep: raw.setupStep ?? null,
           defaultProviderId: raw.defaultProviderId ?? null,
           showThinking: raw.showThinking === 'true',
+          defaultToWorktree:
+            raw.defaultToWorktree !== undefined ? raw.defaultToWorktree === 'true' : true,
           registrySyncError: raw.registrySyncError ?? null,
           fontConfig,
         },

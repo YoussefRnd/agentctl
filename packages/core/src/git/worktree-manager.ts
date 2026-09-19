@@ -303,15 +303,17 @@ export class WorkspaceManager {
   ): Promise<WorktreeResult> {
     const projectName = this.sanitize(path.basename(repoPath));
     const cleanSessionId = this.sanitize(sessionId);
-    const cleanTaskSlug = this.sanitize(taskSlug).slice(0, 30);
+    const cleanTaskSlug = this.sanitize(taskSlug).slice(0, 40);
     const branchName = `agentctl/${cleanSessionId}/${cleanTaskSlug}`;
 
     const list = await this.listWorktrees(repoPath).catch(() => []);
     const activeCleanIds = new Set(activeSessionIds.map((id) => this.sanitize(id)));
 
+    const baseFolderName = cleanTaskSlug || 'workspace';
     let storagePath = '';
-    for (let slotIndex = 0; slotIndex < 1000; slotIndex++) {
-      const candidatePath = path.join(this.baseDir, projectName, `slot-${slotIndex.toString()}`);
+    for (let i = 0; i < 1000; i++) {
+      const folderName = i === 0 ? baseFolderName : `${baseFolderName}-${i + 1}`;
+      const candidatePath = path.join(this.baseDir, projectName, folderName);
       const matchingWorktree = list.find((w) => w.path === candidatePath);
       let isSlotActive = false;
       if (matchingWorktree) {

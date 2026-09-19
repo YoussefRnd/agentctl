@@ -681,6 +681,7 @@ export class ProviderRegistry {
       'setupStep',
       'defaultProviderId',
       'showThinking',
+      'defaultToWorktree',
       'registrySyncError',
       'fontConfig',
     ];

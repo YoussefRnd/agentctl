@@ -4,6 +4,7 @@ import type { WorkspaceManager, Workspace as WorkspaceHandle } from './worktree-
 import { sessions, projects, sessionEvents } from '../db/schema.js';
 import type { SnapshotService } from './snapshot-service.js';
 import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
+import { formatSlugToTitle } from '@agentctl/shared';
 import crypto from 'node:crypto';
 import { simpleGit } from 'simple-git';
 import { DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
@@ -149,7 +150,7 @@ export class SessionWorkspace {
     let worktreePath = project.path;
     let baseCommit = 'none';
     let baseBranch: string | null = null;
-    let resolvedMode: SessionMode = options.mode ?? (project.repoRoot ? 'worktree' : 'local');
+    let resolvedMode: SessionMode = project.repoRoot ? (options.mode ?? 'worktree') : 'local';
 
     if (project.repoRoot && resolvedMode === 'worktree') {
       try {
@@ -217,7 +218,7 @@ export class SessionWorkspace {
         DEFAULT_THINKING_EFFORT) as ThinkingEffort,
       contextLimit: options.contextLimit ?? 0,
       sessionConfigOptions: options.sessionConfigOptions ?? '[]',
-      title: options.title ?? 'new session',
+      title: options.title ?? formatSlugToTitle(taskSlug),
     });
 
     if (this.onEvent) {

@@ -173,6 +173,33 @@ export function GeneralSettingsView() {
         </Card>
       </div>
 
+      {/* Workspace Defaults Section */}
+      <div className="space-y-2.5">
+        <h3 className="text-text-muted px-1 text-[11px] font-bold tracking-wider uppercase">
+          Workspace Defaults
+        </h3>
+        <Card className="divide-border/30 divide-y overflow-hidden px-5 py-2">
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-text-main text-[13px] font-semibold">
+                Use Git Worktrees by Default
+              </p>
+              <p className="text-text-muted mt-0.5 text-[11px]">
+                Create new sessions in isolated Git worktrees so multiple agents can work
+                concurrently without branch conflicts
+              </p>
+            </div>
+            <Switch
+              checked={settings?.defaultToWorktree ?? true}
+              onCheckedChange={(checked) => {
+                void updateSettings({ defaultToWorktree: checked });
+              }}
+              size="md"
+            />
+          </div>
+        </Card>
+      </div>
+
       {/* Typography Section */}
       <div className="space-y-2.5">
         <h3 className="text-text-muted px-1 text-[11px] font-bold tracking-wider uppercase">

@@ -2,7 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
 import { eq } from 'drizzle-orm';
 import { projects, sessions } from '@agentctl/core/db';
-import { sessionsContract, sessionRowSchema, providerCapabilitySchema } from '@agentctl/shared';
+import {
+  sessionsContract,
+  sessionRowSchema,
+  providerCapabilitySchema,
+  createTaskSlug,
+} from '@agentctl/shared';
 import { AppError } from '../../errors/app-error.js';
 
 export function createSessionsRouter(
@@ -20,7 +25,7 @@ export function createSessionsRouter(
       const session = await fastify.sessionService.createSession({
         projectId: body.projectId,
         providerId: body.agent,
-        taskSlug: body.taskSlug ?? 'new-session',
+        taskSlug: createTaskSlug(body.taskSlug),
         mode: body.mode,
       });
       return {

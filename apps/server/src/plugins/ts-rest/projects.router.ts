@@ -6,7 +6,12 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { projects, sessions } from '@agentctl/core/db';
-import { projectsContract, sessionRowSchema, type SessionMode } from '@agentctl/shared';
+import {
+  projectsContract,
+  sessionRowSchema,
+  createTaskSlug,
+  type SessionMode,
+} from '@agentctl/shared';
 import { AppError } from '../../errors/app-error.js';
 import { launchEditorProcess, detectAvailableEditors } from '../../utils/launch-editor.js';
 
@@ -234,7 +239,7 @@ export function createProjectsRouter(
       const session = await fastify.sessionService.createSession({
         projectId: project.id,
         providerId: body.agent,
-        taskSlug: body.taskSlug ?? 'new-session',
+        taskSlug: createTaskSlug(body.taskSlug),
         mode: body.mode,
       });
 
