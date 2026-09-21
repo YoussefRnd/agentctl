@@ -70,7 +70,11 @@ export function GeneralSettingsView() {
                     : 'Always use dark theme appearance'}
               </p>
             </div>
-            <div className="border-border/40 bg-surface/40 flex shrink-0 gap-1 rounded-xl border p-1">
+            <div
+              className="border-border/40 bg-surface/40 flex shrink-0 gap-1 rounded-xl border p-1"
+              role="group"
+              aria-label="Theme mode"
+            >
               {[
                 { mode: 'system' as const, label: 'System', icon: Monitor },
                 { mode: 'dark' as const, label: 'Dark', icon: Moon },
@@ -79,6 +83,7 @@ export function GeneralSettingsView() {
                 <button
                   key={mode}
                   type="button"
+                  aria-pressed={themeMode === mode}
                   onClick={() => setThemeMode(mode)}
                   className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                     themeMode === mode

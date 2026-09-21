@@ -6,7 +6,11 @@ import { useSession } from '@/features/sessions';
 import { useSettings } from '@/features/settings';
 import { TerminalPane, type TerminalPaneHandle } from './TerminalPane';
 import { TerminalTabsSidebar } from './TerminalTabsSidebar';
-import { useTerminalTabsStore, type TerminalTabData } from '../../model/useTerminalTabsStore';
+import {
+  createInitialTerminalWorkspace,
+  useTerminalTabsStore,
+  type TerminalTabData,
+} from '../../model/useTerminalTabsStore';
 
 export interface InteractiveTerminalHandle {
   split: () => void;
@@ -35,9 +39,9 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     const { settings } = useSettings();
     const codeFont = settings?.fontConfig?.code;
 
-    const tabs = useTerminalTabsStore((s) => s.tabs);
-    const activeTabId = useTerminalTabsStore((s) => s.activeTabId);
-    const isSidebarOpen = useTerminalTabsStore((s) => s.isSidebarOpen);
+    const resolvedSessionId = sessionId ?? 'pending';
+    const storedWorkspace = useTerminalTabsStore((s) => s.workspaces[resolvedSessionId]);
+    const ensureWorkspace = useTerminalTabsStore((s) => s.ensureWorkspace);
     const addTab = useTerminalTabsStore((s) => s.addTab);
     const splitTab = useTerminalTabsStore((s) => s.splitTab);
     const closePane = useTerminalTabsStore((s) => s.closePane);
@@ -46,6 +50,13 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     const setPaneStatus = useTerminalTabsStore((s) => s.setPaneStatus);
     const toggleSplitOrientation = useTerminalTabsStore((s) => s.toggleSplitOrientation);
     const toggleSidebar = useTerminalTabsStore((s) => s.toggleSidebar);
+
+    useEffect(() => {
+      if (sessionId) ensureWorkspace(sessionId);
+    }, [ensureWorkspace, sessionId]);
+
+    const workspace = storedWorkspace ?? createInitialTerminalWorkspace(resolvedSessionId);
+    const { tabs, activeTabId, isSidebarOpen } = workspace;
 
     // Get current active tab
     const activeTab: TerminalTabData = tabs.find((t) => t.id === activeTabId) ??
@@ -95,17 +106,21 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       const height = container?.clientHeight ?? 600;
       // If container is narrow (<640px) or taller than wide, vertical split (top/bottom) gives full column width
       const preferredOrientation = width < 640 || height > width * 1.1 ? 'vertical' : 'horizontal';
-      splitTab(activeTab.id, activeTab.panes.length === 1 ? preferredOrientation : undefined);
-    }, [splitTab, activeTab.id, activeTab.panes.length]);
+      splitTab(
+        resolvedSessionId,
+        activeTab.id,
+        activeTab.panes.length === 1 ? preferredOrientation : undefined,
+      );
+    }, [splitTab, resolvedSessionId, activeTab.id, activeTab.panes.length]);
 
     const handleToggleOrientation = useCallback(() => {
-      toggleSplitOrientation(activeTab.id);
+      toggleSplitOrientation(resolvedSessionId, activeTab.id);
       setTimeout(() => {
         activeTab.panes.forEach((p) => {
           paneRefs.current.get(p.id)?.fit();
         });
       }, 60);
-    }, [toggleSplitOrientation, activeTab]);
+    }, [toggleSplitOrientation, resolvedSessionId, activeTab]);
 
     // Expose actions to imperative handle
     useImperativeHandle(
@@ -153,30 +168,30 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
 
     const handleFocusPane = useCallback(
       (pId: string) => {
-        setActivePane(activeTab.id, pId);
+        setActivePane(resolvedSessionId, activeTab.id, pId);
       },
-      [activeTab.id, setActivePane],
+      [activeTab.id, resolvedSessionId, setActivePane],
     );
 
     const handleClosePane = useCallback(
       (pId: string) => {
-        closePane(activeTab.id, pId);
+        closePane(resolvedSessionId, activeTab.id, pId);
       },
-      [activeTab.id, closePane],
+      [activeTab.id, closePane, resolvedSessionId],
     );
 
     const handleShellChange = useCallback(
       (pId: string, shell: string) => {
-        setPaneShell(pId, shell);
+        setPaneShell(resolvedSessionId, pId, shell);
       },
-      [setPaneShell],
+      [resolvedSessionId, setPaneShell],
     );
 
     const handleStatusChange = useCallback(
       (pId: string, st: 'connecting' | 'connected' | 'disconnected') => {
-        setPaneStatus(pId, st);
+        setPaneStatus(resolvedSessionId, pId, st);
       },
-      [setPaneStatus],
+      [resolvedSessionId, setPaneStatus],
     );
 
     return (
@@ -192,7 +207,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
               <Tooltip content="New Terminal">
                 <button
                   type="button"
-                  onClick={() => addTab()}
+                  onClick={() => addTab(resolvedSessionId)}
                   className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
                   aria-label="New terminal"
                 >
@@ -235,7 +250,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
               <Tooltip content="Show Terminal Tabs">
                 <button
                   type="button"
-                  onClick={toggleSidebar}
+                  onClick={() => toggleSidebar(resolvedSessionId)}
                   className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
                   aria-label="Show terminal tabs"
                 >
@@ -287,7 +302,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
         </div>
 
         {/* VS Code-Style Terminal Tabs Sidebar (Right side) */}
-        {isSidebarOpen && <TerminalTabsSidebar />}
+        {isSidebarOpen && <TerminalTabsSidebar sessionId={resolvedSessionId} />}
       </div>
     );
   },

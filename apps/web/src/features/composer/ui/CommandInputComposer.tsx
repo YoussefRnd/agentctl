@@ -307,7 +307,7 @@ export function CommandInputComposer({
         data-font-ctx="buffer"
         className={cn(
           variant === 'hero'
-            ? 'border-border/40 bg-surface-secondary/50 relative flex flex-col overflow-visible rounded-2xl border shadow-2xl ring-1 ring-white/5 backdrop-blur-2xl transition-all duration-300'
+            ? 'border-border/40 bg-surface-secondary/50 relative flex flex-col overflow-visible rounded-2xl border shadow-2xl ring-1 ring-white/5 backdrop-blur-2xl transition-[border-color,background-color,box-shadow,opacity] duration-200 ease-out'
             : 'bg-brand-mantle border-border/30 relative flex flex-col overflow-visible rounded-xl border transition-colors duration-200',
           hasQueuedMessages && 'rounded-t-none border-t-0',
           disabled ? 'opacity-55' : 'opacity-100',
@@ -333,7 +333,7 @@ export function CommandInputComposer({
       >
         {/* Visual drop overlay when dragging files or folders over the composer */}
         {isDraggingOver && (
-          <div className="border-accent/40 bg-accent/[0.04] ring-accent/20 pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border border-dashed ring-1 backdrop-blur-[2px] transition-all duration-150">
+          <div className="border-accent/40 bg-accent/[0.04] ring-accent/20 pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border border-dashed ring-1 backdrop-blur-[2px] transition-[border-color,background-color,opacity] duration-150 ease-out">
             <div className="text-accent flex items-center gap-2 text-xs font-medium tracking-tight">
               <FileUp className="h-4 w-4" />
               <span>Drop files or folders to attach</span>

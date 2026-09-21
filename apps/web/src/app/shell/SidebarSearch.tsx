@@ -14,6 +14,7 @@ export const SidebarSearch = forwardRef<HTMLInputElement, SidebarSearchProps>(
       <div className="group/search relative">
         <SearchBar
           ref={ref}
+          aria-label="Search sessions"
           placeholder="Search sessions..."
           value={value}
           onChange={(e) => {

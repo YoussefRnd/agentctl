@@ -21,13 +21,86 @@ import { CommandBar } from '@/features/composer';
 interface HomeWorkspaceContentProps {
   projects: SidebarProject[];
   activeProject: SidebarProject;
+  initialInput?: string;
   onSelectProject: (id: string) => void;
   onOpenDirectory: () => void;
+}
+
+export interface SessionStartRequest {
+  projectId: string;
+  initialInput?: string;
+}
+
+export function findReusableDraftSession(project: SidebarProject) {
+  return project.sessions?.find(
+    (session) =>
+      session.status !== 'running' &&
+      (!session.lastActivityAt ||
+        session.title === 'New Session' ||
+        session.title.startsWith('new-session')),
+  );
+}
+
+export function shouldCreateHomeSession(
+  activeProjectId: string | undefined,
+  hasReusableDraft: boolean,
+  request: SessionStartRequest | null,
+) {
+  return !!activeProjectId && !hasReusableDraft && request?.projectId === activeProjectId;
+}
+
+function StartSessionLauncher({
+  projects,
+  activeProject,
+  isStarting,
+  onSelectProject,
+  onOpenDirectory,
+  onStart,
+}: HomeWorkspaceContentProps & {
+  isStarting: boolean;
+  onStart: (initialInput?: string) => void;
+}) {
+  return (
+    <div className="relative flex h-full w-full flex-1 flex-col items-center justify-center overflow-y-auto select-none">
+      <NewSessionEmptyState
+        projectName={activeProject.name}
+        activeProjectId={activeProject.id}
+        allowProjectSwitch={true}
+        projects={projects}
+        onSelectProject={onSelectProject}
+        onOpenDirectory={onOpenDirectory}
+        onSelectStarterPrompt={(prompt) => onStart(prompt)}
+      >
+        <button
+          type="button"
+          onClick={() => onStart()}
+          disabled={isStarting}
+          className="border-border/40 bg-surface-secondary/50 hover:border-accent/50 focus-visible:ring-accent/40 group flex min-h-36 w-full cursor-text flex-col items-stretch overflow-hidden rounded-2xl border text-left shadow-2xl ring-1 ring-white/5 backdrop-blur-2xl transition-[border-color,background-color,box-shadow,opacity] duration-200 ease-out focus-visible:ring-2 focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
+          aria-label="Start a new session"
+        >
+          <span className="text-text-muted/55 flex flex-1 items-start gap-3 px-5 py-4 text-[15px] leading-relaxed">
+            <span className="text-text-muted group-hover:text-accent text-xl leading-5 transition-colors">
+              +
+            </span>
+            <span>
+              {isStarting
+                ? 'Starting a new session...'
+                : 'Start a session to ask for changes, send follow-ups, or attach images...'}
+            </span>
+          </span>
+          <span className="border-border/20 text-text-muted/65 mx-5 flex h-12 items-center border-t text-xs font-medium">
+            Session settings will appear here once you start.
+          </span>
+        </button>
+      </NewSessionEmptyState>
+    </div>
+  );
 }
 
 function HomeWorkspaceContent({
   projects,
   activeProject,
+  initialInput,
   onSelectProject,
   onOpenDirectory,
 }: HomeWorkspaceContentProps) {
@@ -39,6 +112,7 @@ function HomeWorkspaceContent({
     <div className="relative flex h-full w-full flex-1 flex-col items-center justify-center overflow-y-auto select-none">
       <NewSessionEmptyState
         projectName={activeProject.name}
+        activeProjectId={activeProject.id}
         allowProjectSwitch={true}
         projects={projects}
         onSelectProject={onSelectProject}
@@ -46,6 +120,7 @@ function HomeWorkspaceContent({
       >
         <CommandBar
           variant="hero"
+          initialInput={initialInput}
           onSend={(val, attachmentIds) => {
             void handleSend(val, attachmentIds);
             void navigate(`/sessions/${sessionId}`);
@@ -61,29 +136,37 @@ export function HomeRoute() {
   const queryClient = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [showExplorer, setShowExplorer] = useState(false);
+  const [sessionStartRequest, setSessionStartRequest] = useState<SessionStartRequest | null>(null);
 
   const { data: projects = [], isLoading: isLoadingProjects } = useQuery(projectQueries.all());
 
   const activeProject =
     projects.find((p) => p.id === selectedProjectId) ?? (projects.length > 0 ? projects[0] : null);
 
-  const { data: activeSession, isLoading: isLoadingSession } = useQuery({
-    queryKey: ['home-active-session', activeProject?.id],
+  const reusableDraftSession = activeProject ? findReusableDraftSession(activeProject) : undefined;
+  const shouldCreateSession = shouldCreateHomeSession(
+    activeProject?.id,
+    !!reusableDraftSession,
+    sessionStartRequest,
+  );
+
+  const { data: createdSession, isLoading: isCreatingSession } = useQuery({
+    queryKey: ['home-created-session', activeProject?.id],
     queryFn: async () => {
       if (!activeProject) return null;
-      const existingEmpty = activeProject.sessions?.find(
-        (s) =>
-          s.status !== 'running' &&
-          (!s.lastActivityAt || s.title === 'New Session' || s.title.startsWith('new-session')),
-      );
-      if (existingEmpty) {
-        return existingEmpty;
-      }
       return createProjectSession(activeProject.id);
     },
-    enabled: !!activeProject && !showExplorer,
+    enabled: shouldCreateSession && !showExplorer,
     staleTime: Infinity,
   });
+
+  const requestedCreatedSession =
+    sessionStartRequest?.projectId === activeProject?.id ? createdSession : undefined;
+  const activeSession = reusableDraftSession ?? requestedCreatedSession;
+  const pendingInitialInput =
+    activeProject && sessionStartRequest?.projectId === activeProject.id
+      ? sessionStartRequest.initialInput
+      : undefined;
 
   return (
     <AppShell
@@ -124,16 +207,28 @@ export function HomeRoute() {
             />
           </div>
         </div>
-      ) : isLoadingSession || !activeSession || !activeProject ? (
+      ) : !activeProject ? (
         <div className="flex h-full w-full items-center justify-center">
           <Loader2 className="text-accent h-6 w-6 animate-spin" />
         </div>
+      ) : !activeSession ? (
+        <StartSessionLauncher
+          projects={projects}
+          activeProject={activeProject}
+          isStarting={isCreatingSession}
+          onSelectProject={(id) => setSelectedProjectId(id)}
+          onOpenDirectory={() => setShowExplorer(true)}
+          onStart={(initialInput) => {
+            setSessionStartRequest({ projectId: activeProject.id, initialInput });
+          }}
+        />
       ) : (
         <SessionConfigProvider key={`config-${activeSession.id}`} sessionId={activeSession.id}>
           <SessionStreamProvider key={`stream-${activeSession.id}`} sessionId={activeSession.id}>
             <HomeWorkspaceContent
               projects={projects}
               activeProject={activeProject}
+              initialInput={pendingInitialInput}
               onSelectProject={(id) => setSelectedProjectId(id)}
               onOpenDirectory={() => setShowExplorer(true)}
             />

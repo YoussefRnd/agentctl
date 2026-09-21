@@ -33,6 +33,7 @@ export const STARTER_SUGGESTIONS: StarterSuggestion[] = [
 
 export interface NewSessionEmptyStateProps {
   projectName?: string;
+  activeProjectId?: string;
   allowProjectSwitch?: boolean;
   projects?: SidebarProject[];
   onSelectProject?: (projectId: string) => void;
@@ -44,6 +45,7 @@ export interface NewSessionEmptyStateProps {
 
 export function NewSessionEmptyState({
   projectName = 'agentctl',
+  activeProjectId,
   allowProjectSwitch = false,
   projects = [],
   onSelectProject,
@@ -86,7 +88,7 @@ export function NewSessionEmptyState({
                     Select Workspace
                   </div>
                   {projects.map((proj) => {
-                    const isSelected = proj.name === projectName || proj.id === projectName;
+                    const isSelected = proj.id === activeProjectId;
                     return (
                       <Dropdown.Item
                         key={proj.id}
@@ -147,7 +149,7 @@ export function NewSessionEmptyState({
             onClick={() => handleSelectSuggestion(item.prompt)}
             className={cn(
               'group border-border/30 bg-surface-secondary/40 text-text-muted hover:border-border/60 hover:bg-surface-secondary/80 hover:text-text-main',
-              'flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium shadow-xs backdrop-blur-xs transition-all duration-150 active:scale-[0.97]',
+              'flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium shadow-xs backdrop-blur-xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.97]',
             )}
           >
             <span>{item.label}</span>
@@ -157,7 +159,7 @@ export function NewSessionEmptyState({
       </div>
 
       {/* Subtle Hint / Keyboard Shortcuts Footer */}
-      <p className="text-text-muted/40 mt-6 text-center text-[11px] font-medium tracking-wide">
+      <p className="text-text-muted/65 mt-6 text-center text-[11px] font-medium tracking-wide">
         Use <kbd className="text-accent font-mono">@</kbd> for context &middot;{' '}
         <kbd className="text-accent font-mono">/</kbd> for skills &middot; Double-Esc to stop
       </p>

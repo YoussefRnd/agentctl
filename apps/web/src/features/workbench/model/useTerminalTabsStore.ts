@@ -15,270 +15,322 @@ export interface TerminalTabData {
   splitOrientation: 'horizontal' | 'vertical';
 }
 
-export interface TerminalTabsState {
+export interface TerminalWorkspaceState {
   tabs: TerminalTabData[];
   activeTabId: string;
   isSidebarOpen: boolean;
-
-  // Tab management
-  addTab: (customName?: string) => string;
-  closeTab: (tabId: string) => void;
-  setActiveTab: (tabId: string) => void;
-  renameTab: (tabId: string, name: string) => void;
-
-  // Split pane management
-  splitTab: (tabId?: string, orientation?: 'horizontal' | 'vertical') => string;
-  closePane: (tabId: string, paneId: string) => void;
-  setActivePane: (tabId: string, paneId: string) => void;
-  renamePane: (tabId: string, paneId: string, name: string) => void;
-  setPaneShell: (paneId: string, shell: string) => void;
-  setPaneStatus: (paneId: string, status: 'connecting' | 'connected' | 'disconnected') => void;
-  toggleSplitOrientation: (tabId?: string) => void;
-
-  // Sidebar toggle
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
+  nextTabNumber: number;
+  nextPaneNumber: number;
 }
 
-let nextTabCounter = 2;
-let nextPaneCounter = 2;
+export interface TerminalTabsState {
+  workspaces: Record<string, TerminalWorkspaceState>;
+  ensureWorkspace: (sessionId: string) => void;
+  resetWorkspace: (sessionId: string) => void;
+  addTab: (sessionId: string, customName?: string) => string;
+  closeTab: (sessionId: string, tabId: string) => void;
+  setActiveTab: (sessionId: string, tabId: string) => void;
+  renameTab: (sessionId: string, tabId: string, name: string) => void;
+  splitTab: (sessionId: string, tabId?: string, orientation?: 'horizontal' | 'vertical') => string;
+  closePane: (sessionId: string, tabId: string, paneId: string) => void;
+  setActivePane: (sessionId: string, tabId: string, paneId: string) => void;
+  renamePane: (sessionId: string, tabId: string, paneId: string, name: string) => void;
+  setPaneShell: (sessionId: string, paneId: string, shell: string) => void;
+  setPaneStatus: (
+    sessionId: string,
+    paneId: string,
+    status: 'connecting' | 'connected' | 'disconnected',
+  ) => void;
+  toggleSplitOrientation: (sessionId: string, tabId?: string) => void;
+  toggleSidebar: (sessionId: string) => void;
+  setSidebarOpen: (sessionId: string, open: boolean) => void;
+}
+
+export function createInitialTerminalWorkspace(sessionId: string): TerminalWorkspaceState {
+  const tabId = `tab-${sessionId}-1`;
+  const paneId = `term-${sessionId}-1`;
+  return {
+    tabs: [
+      {
+        id: tabId,
+        name: 'Terminal 1',
+        panes: [
+          {
+            id: paneId,
+            name: 'Terminal 1',
+            shell: 'sh',
+            status: 'connecting',
+          },
+        ],
+        activePaneId: paneId,
+        splitOrientation: 'horizontal',
+      },
+    ],
+    activeTabId: tabId,
+    isSidebarOpen: true,
+    nextTabNumber: 2,
+    nextPaneNumber: 2,
+  };
+}
+
+function workspaceFor(state: TerminalTabsState, sessionId: string): TerminalWorkspaceState {
+  return state.workspaces[sessionId] ?? createInitialTerminalWorkspace(sessionId);
+}
+
+function replaceWorkspace(
+  state: TerminalTabsState,
+  sessionId: string,
+  workspace: TerminalWorkspaceState,
+) {
+  return { workspaces: { ...state.workspaces, [sessionId]: workspace } };
+}
 
 export const useTerminalTabsStore = create<TerminalTabsState>((set, get) => ({
-  tabs: [
-    {
-      id: 'tab-1',
-      name: 'Terminal 1',
-      panes: [
-        {
-          id: 'term-1',
-          name: 'Terminal 1',
-          shell: 'sh',
-          status: 'connecting',
-        },
-      ],
-      activePaneId: 'term-1',
-      splitOrientation: 'horizontal',
-    },
-  ],
-  activeTabId: 'tab-1',
-  isSidebarOpen: true,
+  workspaces: {},
 
-  addTab: (customName) => {
-    const tabNum = nextTabCounter++;
-    const tabId = `tab-${Date.now()}`;
-    const paneId = `term-${Date.now()}-${nextPaneCounter++}`;
-    const tabName = customName || `Terminal ${tabNum}`;
+  ensureWorkspace: (sessionId) => {
+    if (!sessionId || get().workspaces[sessionId]) return;
+    set((state) => replaceWorkspace(state, sessionId, createInitialTerminalWorkspace(sessionId)));
+  },
 
+  resetWorkspace: (sessionId) => {
+    set((state) => replaceWorkspace(state, sessionId, createInitialTerminalWorkspace(sessionId)));
+  },
+
+  addTab: (sessionId, customName) => {
+    const workspace = workspaceFor(get(), sessionId);
+    const tabNumber = workspace.nextTabNumber;
+    const paneNumber = workspace.nextPaneNumber;
+    const timestamp = Date.now();
+    const tabId = `tab-${sessionId}-${timestamp}-${tabNumber}`;
+    const paneId = `term-${sessionId}-${timestamp}-${paneNumber}`;
+    const tabName = customName || `Terminal ${tabNumber}`;
     const newTab: TerminalTabData = {
       id: tabId,
       name: tabName,
-      panes: [
-        {
-          id: paneId,
-          name: tabName,
-          shell: 'sh',
-          status: 'connecting',
-        },
-      ],
+      panes: [{ id: paneId, name: tabName, shell: 'sh', status: 'connecting' }],
       activePaneId: paneId,
       splitOrientation: 'horizontal',
     };
 
-    set((state) => ({
-      tabs: [...state.tabs, newTab],
-      activeTabId: tabId,
-    }));
-
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
+        tabs: [...workspace.tabs, newTab],
+        activeTabId: tabId,
+        nextTabNumber: tabNumber + 1,
+        nextPaneNumber: paneNumber + 1,
+      });
+    });
     return tabId;
   },
 
-  closeTab: (tabId) => {
+  closeTab: (sessionId, tabId) => {
     set((state) => {
-      const remainingTabs = state.tabs.filter((t) => t.id !== tabId);
-
-      // If all tabs are closed, create a fresh terminal tab like VS Code does
+      const workspace = workspaceFor(state, sessionId);
+      const remainingTabs = workspace.tabs.filter((tab) => tab.id !== tabId);
       if (remainingTabs.length === 0) {
-        const freshTabNum = 1;
-        const freshTabId = `tab-${Date.now()}`;
-        const freshPaneId = `term-${Date.now()}`;
-        const freshTab: TerminalTabData = {
-          id: freshTabId,
-          name: `Terminal ${freshTabNum}`,
-          panes: [
-            {
-              id: freshPaneId,
-              name: `Terminal ${freshTabNum}`,
-              shell: 'sh',
-              status: 'connecting',
-            },
-          ],
-          activePaneId: freshPaneId,
-          splitOrientation: 'horizontal',
-        };
-        return {
-          tabs: [freshTab],
-          activeTabId: freshTabId,
-        };
+        return replaceWorkspace(state, sessionId, createInitialTerminalWorkspace(sessionId));
       }
 
-      let nextActiveId = state.activeTabId;
-      if (state.activeTabId === tabId) {
-        const closedIdx = state.tabs.findIndex((t) => t.id === tabId);
+      let nextActiveId = workspace.activeTabId;
+      if (workspace.activeTabId === tabId) {
+        const closedIndex = workspace.tabs.findIndex((tab) => tab.id === tabId);
         nextActiveId =
-          remainingTabs[closedIdx]?.id ?? remainingTabs[closedIdx - 1]?.id ?? remainingTabs[0]!.id;
+          remainingTabs[closedIndex]?.id ??
+          remainingTabs[closedIndex - 1]?.id ??
+          remainingTabs[0]!.id;
       }
-
-      return {
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
         tabs: remainingTabs,
         activeTabId: nextActiveId,
-      };
+      });
     });
   },
 
-  setActiveTab: (tabId) => {
-    set({ activeTabId: tabId });
+  setActiveTab: (sessionId, tabId) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, { ...workspace, activeTabId: tabId });
+    });
   },
 
-  renameTab: (tabId, name) => {
-    set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === tabId
-          ? {
-              ...t,
-              name,
-              panes: t.panes.length === 1 ? [{ ...t.panes[0]!, name }] : t.panes,
-            }
-          : t,
-      ),
-    }));
+  renameTab: (sessionId, tabId, name) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
+        tabs: workspace.tabs.map((tab) =>
+          tab.id === tabId
+            ? {
+                ...tab,
+                name,
+                panes: tab.panes.length === 1 ? [{ ...tab.panes[0]!, name }] : tab.panes,
+              }
+            : tab,
+        ),
+      });
+    });
   },
 
-  splitTab: (targetTabId, orientation) => {
-    const tabId = targetTabId || get().activeTabId;
-    const newPaneId = `term-${Date.now()}-${nextPaneCounter++}`;
-
-    set((state) => ({
-      tabs: state.tabs.map((tab) => {
-        if (tab.id !== tabId) return tab;
-        const newPaneName = tab.panes[0]?.shell || 'zsh';
-        const updatedPanes = [
-          ...tab.panes,
-          {
-            id: newPaneId,
-            name: newPaneName,
-            shell: 'sh',
-            status: 'connecting' as const,
-          },
-        ];
-        return {
-          ...tab,
-          panes: updatedPanes,
-          activePaneId: newPaneId,
-          splitOrientation: orientation ?? tab.splitOrientation,
-        };
-      }),
-      activeTabId: tabId,
-    }));
-
+  splitTab: (sessionId, targetTabId, orientation) => {
+    const workspace = workspaceFor(get(), sessionId);
+    const tabId = targetTabId || workspace.activeTabId;
+    const paneNumber = workspace.nextPaneNumber;
+    const newPaneId = `term-${sessionId}-${Date.now()}-${paneNumber}`;
+    set((state) => {
+      const currentWorkspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...currentWorkspace,
+        activeTabId: tabId,
+        nextPaneNumber: paneNumber + 1,
+        tabs: currentWorkspace.tabs.map((tab) =>
+          tab.id === tabId
+            ? {
+                ...tab,
+                panes: [
+                  ...tab.panes,
+                  {
+                    id: newPaneId,
+                    name: tab.panes[0]?.shell || 'zsh',
+                    shell: 'sh',
+                    status: 'connecting' as const,
+                  },
+                ],
+                activePaneId: newPaneId,
+                splitOrientation: orientation ?? tab.splitOrientation,
+              }
+            : tab,
+        ),
+      });
+    });
     return newPaneId;
   },
 
-  closePane: (tabId, paneId) => {
-    const state = get();
-    const targetTab = state.tabs.find((t) => t.id === tabId);
+  closePane: (sessionId, tabId, paneId) => {
+    const workspace = workspaceFor(get(), sessionId);
+    const targetTab = workspace.tabs.find((tab) => tab.id === tabId);
     if (!targetTab) return;
-
     if (targetTab.panes.length <= 1) {
-      // Last pane in this tab, close the entire tab
-      state.closeTab(tabId);
+      get().closeTab(sessionId, tabId);
       return;
     }
 
-    set((s) => ({
-      tabs: s.tabs.map((tab) => {
-        if (tab.id !== tabId) return tab;
-        const remainingPanes = tab.panes.filter((p) => p.id !== paneId);
-        let nextActivePaneId = tab.activePaneId;
-        if (tab.activePaneId === paneId) {
-          const closedIdx = tab.panes.findIndex((p) => p.id === paneId);
-          nextActivePaneId =
-            remainingPanes[closedIdx]?.id ??
-            remainingPanes[closedIdx - 1]?.id ??
-            remainingPanes[0]!.id;
-        }
-        return {
-          ...tab,
-          panes: remainingPanes,
-          activePaneId: nextActivePaneId,
-        };
-      }),
-    }));
-  },
-
-  setActivePane: (tabId, paneId) => {
-    set((state) => ({
-      activeTabId: tabId,
-      tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, activePaneId: paneId } : t)),
-    }));
-  },
-
-  renamePane: (tabId, paneId, name) => {
-    set((state) => ({
-      tabs: state.tabs.map((t) => {
-        if (t.id !== tabId) return t;
-        return {
-          ...t,
-          panes: t.panes.map((p) => (p.id === paneId ? { ...p, name } : p)),
-        };
-      }),
-    }));
-  },
-
-  setPaneShell: (paneId, shell) => {
-    set((state) => ({
-      tabs: state.tabs.map((t) => ({
-        ...t,
-        panes: t.panes.map((p) => {
-          if (p.id !== paneId) return p;
-          const isGeneric = !p.name || p.name.startsWith('Terminal') || p.name === 'sh';
-          return {
-            ...p,
-            shell,
-            name: isGeneric ? shell : p.name,
-          };
+    set((state) => {
+      const currentWorkspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...currentWorkspace,
+        tabs: currentWorkspace.tabs.map((tab) => {
+          if (tab.id !== tabId) return tab;
+          const remainingPanes = tab.panes.filter((pane) => pane.id !== paneId);
+          let nextActivePaneId = tab.activePaneId;
+          if (tab.activePaneId === paneId) {
+            const closedIndex = tab.panes.findIndex((pane) => pane.id === paneId);
+            nextActivePaneId =
+              remainingPanes[closedIndex]?.id ??
+              remainingPanes[closedIndex - 1]?.id ??
+              remainingPanes[0]!.id;
+          }
+          return { ...tab, panes: remainingPanes, activePaneId: nextActivePaneId };
         }),
-      })),
-    }));
+      });
+    });
   },
 
-  setPaneStatus: (paneId, status) => {
-    set((state) => ({
-      tabs: state.tabs.map((t) => ({
-        ...t,
-        panes: t.panes.map((p) => (p.id === paneId ? { ...p, status } : p)),
-      })),
-    }));
+  setActivePane: (sessionId, tabId, paneId) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
+        activeTabId: tabId,
+        tabs: workspace.tabs.map((tab) =>
+          tab.id === tabId ? { ...tab, activePaneId: paneId } : tab,
+        ),
+      });
+    });
   },
 
-  toggleSplitOrientation: (targetTabId) => {
-    const tabId = targetTabId || get().activeTabId;
-    set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === tabId
-          ? {
-              ...t,
-              splitOrientation: t.splitOrientation === 'horizontal' ? 'vertical' : 'horizontal',
-            }
-          : t,
-      ),
-    }));
+  renamePane: (sessionId, tabId, paneId, name) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
+        tabs: workspace.tabs.map((tab) =>
+          tab.id === tabId
+            ? {
+                ...tab,
+                panes: tab.panes.map((pane) => (pane.id === paneId ? { ...pane, name } : pane)),
+              }
+            : tab,
+        ),
+      });
+    });
   },
 
-  toggleSidebar: () => {
-    set((state) => ({ isSidebarOpen: !state.isSidebarOpen }));
+  setPaneShell: (sessionId, paneId, shell) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
+        tabs: workspace.tabs.map((tab) => ({
+          ...tab,
+          panes: tab.panes.map((pane) => {
+            if (pane.id !== paneId) return pane;
+            const isGeneric = !pane.name || pane.name.startsWith('Terminal') || pane.name === 'sh';
+            return { ...pane, shell, name: isGeneric ? shell : pane.name };
+          }),
+        })),
+      });
+    });
   },
 
-  setSidebarOpen: (open) => {
-    set({ isSidebarOpen: open });
+  setPaneStatus: (sessionId, paneId, status) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
+        tabs: workspace.tabs.map((tab) => ({
+          ...tab,
+          panes: tab.panes.map((pane) => (pane.id === paneId ? { ...pane, status } : pane)),
+        })),
+      });
+    });
+  },
+
+  toggleSplitOrientation: (sessionId, targetTabId) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      const tabId = targetTabId || workspace.activeTabId;
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
+        tabs: workspace.tabs.map((tab) =>
+          tab.id === tabId
+            ? {
+                ...tab,
+                splitOrientation: tab.splitOrientation === 'horizontal' ? 'vertical' : 'horizontal',
+              }
+            : tab,
+        ),
+      });
+    });
+  },
+
+  toggleSidebar: (sessionId) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, {
+        ...workspace,
+        isSidebarOpen: !workspace.isSidebarOpen,
+      });
+    });
+  },
+
+  setSidebarOpen: (sessionId, open) => {
+    set((state) => {
+      const workspace = workspaceFor(state, sessionId);
+      return replaceWorkspace(state, sessionId, { ...workspace, isSidebarOpen: open });
+    });
   },
 }));

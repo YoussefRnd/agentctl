@@ -15,9 +15,22 @@ import {
   type TerminalPaneData,
 } from '../../model/useTerminalTabsStore';
 
-export function TerminalTabsSidebar() {
-  const tabs = useTerminalTabsStore((s) => s.tabs);
-  const activeTabId = useTerminalTabsStore((s) => s.activeTabId);
+function TerminalTreeBranch({ isFirst, isLast }: { isFirst: boolean; isLast: boolean }) {
+  const path = isFirst ? 'M7 14V7h7' : isLast ? 'M7 0v7h7' : 'M7 0v14 M7 7h7';
+  return (
+    <span
+      className="text-border/70 flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+      aria-hidden="true"
+    >
+      <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+        <path d={path} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
+export function TerminalTabsSidebar({ sessionId }: { sessionId: string }) {
+  const workspace = useTerminalTabsStore((s) => s.workspaces[sessionId]);
   const addTab = useTerminalTabsStore((s) => s.addTab);
   const closeTab = useTerminalTabsStore((s) => s.closeTab);
   const setActiveTab = useTerminalTabsStore((s) => s.setActiveTab);
@@ -29,6 +42,8 @@ export function TerminalTabsSidebar() {
   const toggleSplitOrientation = useTerminalTabsStore((s) => s.toggleSplitOrientation);
   const toggleSidebar = useTerminalTabsStore((s) => s.toggleSidebar);
 
+  const tabs = workspace?.tabs ?? [];
+  const activeTabId = workspace?.activeTabId ?? '';
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
   const isCurrentTabSplit = Boolean(activeTab && activeTab.panes.length > 1);
 
@@ -53,9 +68,9 @@ export function TerminalTabsSidebar() {
     const trimmed = editingTitle.trim();
     if (trimmed) {
       if (paneId) {
-        renamePane(tabId, paneId, trimmed);
+        renamePane(sessionId, tabId, paneId, trimmed);
       } else {
-        renameTab(tabId, trimmed);
+        renameTab(sessionId, tabId, trimmed);
       }
     }
     setEditingItemId(null);
@@ -68,13 +83,15 @@ export function TerminalTabsSidebar() {
     } else if (status === 'connecting') {
       colorClass = 'bg-amber-400 animate-pulse';
     }
-    return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${colorClass}`} />;
+    return (
+      <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${colorClass}`} />
+    );
   };
 
   return (
     <aside
       data-font-ctx="terminal-sidebar"
-      className="border-border/20 bg-surface/40 flex h-full w-44 shrink-0 flex-col border-l backdrop-blur-md select-none"
+      className="border-border/20 bg-surface/40 flex h-full w-48 shrink-0 flex-col border-l backdrop-blur-md select-none"
       aria-label="Terminal tabs"
     >
       {/* Sidebar Header */}
@@ -94,8 +111,8 @@ export function TerminalTabsSidebar() {
           <Tooltip content="New Terminal">
             <button
               type="button"
-              onClick={() => addTab()}
-              className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 items-center justify-center rounded transition-colors"
+              onClick={() => addTab(sessionId)}
+              className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-8 w-8 items-center justify-center rounded-md transition-colors"
               aria-label="New terminal"
             >
               <Plus className="icon-inline" />
@@ -105,8 +122,8 @@ export function TerminalTabsSidebar() {
           <Tooltip content="Split Active Terminal">
             <button
               type="button"
-              onClick={() => splitTab()}
-              className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 items-center justify-center rounded transition-colors"
+              onClick={() => splitTab(sessionId)}
+              className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-8 w-8 items-center justify-center rounded-md transition-colors"
               aria-label="Split active terminal"
             >
               <Columns2 className="icon-inline" />
@@ -119,8 +136,8 @@ export function TerminalTabsSidebar() {
             >
               <button
                 type="button"
-                onClick={() => toggleSplitOrientation(activeTab.id)}
-                className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 items-center justify-center rounded transition-colors"
+                onClick={() => toggleSplitOrientation(sessionId, activeTab.id)}
+                className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-8 w-8 items-center justify-center rounded-md transition-colors"
                 aria-label="Toggle split orientation"
               >
                 {activeTab.splitOrientation === 'horizontal' ? (
@@ -135,8 +152,8 @@ export function TerminalTabsSidebar() {
           <Tooltip content="Hide Terminal Tabs">
             <button
               type="button"
-              onClick={toggleSidebar}
-              className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 items-center justify-center rounded transition-colors"
+              onClick={() => toggleSidebar(sessionId)}
+              className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-8 w-8 items-center justify-center rounded-md transition-colors"
               aria-label="Hide tabs"
             >
               <PanelRightClose className="icon-inline" />
@@ -159,31 +176,22 @@ export function TerminalTabsSidebar() {
             return (
               <div
                 key={tab.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setActiveTab(tab.id)}
-                onDoubleClick={(e) => handleStartRename(tab.id, tab.name, e)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setActiveTab(tab.id);
-                  }
-                }}
-                className={`group/row relative flex h-6.5 cursor-pointer items-center justify-between rounded px-1.5 font-mono text-xs transition-colors ${
+                className={`group/row relative flex h-7 items-center justify-between rounded px-1 font-mono text-xs transition-colors ${
                   isTabActive
                     ? 'bg-surface-secondary/70 text-text-main ring-border/30 font-medium shadow-2xs ring-1'
                     : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/30'
                 }`}
               >
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="text-text-muted/50 w-2.5 shrink-0 text-right text-[10px] tabular-nums">
-                    {tabIndex + 1}
-                  </span>
-                  {singlePane && renderStatusDot(singlePane.status)}
-                  <TerminalIcon className="icon-inline text-text-muted/70 shrink-0" />
-                  {isEditing ? (
+                {isEditing ? (
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5 px-0.5">
+                    <span className="text-text-muted/50 w-2.5 shrink-0 text-right text-[10px] tabular-nums">
+                      {tabIndex + 1}
+                    </span>
+                    {singlePane && renderStatusDot(singlePane.status)}
                     <input
                       ref={editInputRef}
                       type="text"
+                      aria-label="Terminal name"
                       value={editingTitle}
                       onChange={(e) => setEditingTitle(e.target.value)}
                       onBlur={() => handleFinishRename(tab.id)}
@@ -191,24 +199,34 @@ export function TerminalTabsSidebar() {
                         if (e.key === 'Enter') handleFinishRename(tab.id);
                         if (e.key === 'Escape') setEditingItemId(null);
                       }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="bg-surface ring-accent/60 h-4.5 w-24 rounded px-1 text-xs text-inherit ring-1 outline-hidden"
+                      className="bg-surface ring-accent/60 h-6 min-w-0 flex-1 rounded px-1 text-xs text-inherit ring-1 outline-hidden"
                     />
-                  ) : (
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    aria-pressed={isTabActive}
+                    aria-label={`${tab.name}, ${singlePane?.status ?? 'unknown status'}`}
+                    onClick={() => setActiveTab(sessionId, tab.id)}
+                    onDoubleClick={(e) => handleStartRename(tab.id, tab.name, e)}
+                    className="focus-visible:ring-accent/40 flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded px-0.5 text-left focus-visible:ring-1 focus-visible:outline-none"
+                  >
+                    <span className="text-text-muted/50 w-2.5 shrink-0 text-right text-[10px] tabular-nums">
+                      {tabIndex + 1}
+                    </span>
+                    {singlePane && renderStatusDot(singlePane.status)}
+                    <TerminalIcon className="icon-inline text-text-muted/70 shrink-0" />
                     <span className="truncate">{tab.name}</span>
-                  )}
-                </div>
+                  </button>
+                )}
 
                 {/* Hover Actions */}
-                <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/row:opacity-100">
+                <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100">
                   <Tooltip content="Split Terminal">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        splitTab(tab.id);
-                      }}
-                      className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface flex h-4.5 w-4.5 items-center justify-center rounded transition-colors"
+                      onClick={() => splitTab(sessionId, tab.id)}
+                      className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface flex h-7 w-7 items-center justify-center rounded transition-colors"
                       aria-label="Split terminal"
                     >
                       <Columns2 className="h-2.5 w-2.5" />
@@ -218,11 +236,8 @@ export function TerminalTabsSidebar() {
                   <Tooltip content="Kill Terminal">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTab(tab.id);
-                      }}
-                      className="motion-disclosure text-text-muted hover:bg-surface flex h-4.5 w-4.5 items-center justify-center rounded transition-colors hover:text-rose-400"
+                      onClick={() => closeTab(sessionId, tab.id)}
+                      className="motion-disclosure text-text-muted hover:bg-surface flex h-7 w-7 items-center justify-center rounded transition-colors hover:text-rose-400"
                       aria-label="Kill terminal"
                     >
                       <Trash2 className="h-2.5 w-2.5" />
@@ -245,16 +260,7 @@ export function TerminalTabsSidebar() {
                 return (
                   <div
                     key={pane.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setActivePane(tab.id, pane.id)}
-                    onDoubleClick={(e) => handleStartRename(pane.id, pane.name, e)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        setActivePane(tab.id, pane.id);
-                      }
-                    }}
-                    className={`group/pane relative flex h-6.5 cursor-pointer items-center justify-between rounded px-1.5 font-mono text-xs transition-colors ${
+                    className={`group/pane relative flex h-7 items-center justify-between rounded px-1 font-mono text-xs transition-colors ${
                       isPaneActive
                         ? 'bg-surface-secondary/80 text-text-main ring-accent/40 font-medium shadow-2xs ring-1'
                         : isTabActive
@@ -262,65 +268,17 @@ export function TerminalTabsSidebar() {
                           : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/30'
                     }`}
                   >
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      {/* Left Tab Index (only on first pane of group) */}
-                      <span className="text-text-muted/50 w-2.5 shrink-0 text-right text-[10px] tabular-nums">
-                        {isFirst ? `${tabIndex + 1}` : ''}
-                      </span>
-
-                      {/* Tree Branch Vector */}
-                      <div className="text-border/70 flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-                        {isFirst ? (
-                          <svg
-                            className="h-3.5 w-3.5"
-                            viewBox="0 0 14 14"
-                            fill="none"
-                            stroke="currentColor"
-                          >
-                            <path
-                              d="M7 14V7h7"
-                              strokeWidth="1.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        ) : isLast ? (
-                          <svg
-                            className="h-3.5 w-3.5"
-                            viewBox="0 0 14 14"
-                            fill="none"
-                            stroke="currentColor"
-                          >
-                            <path
-                              d="M7 0v7h7"
-                              strokeWidth="1.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            className="h-3.5 w-3.5"
-                            viewBox="0 0 14 14"
-                            fill="none"
-                            stroke="currentColor"
-                          >
-                            <path
-                              d="M7 0v14 M7 7h7"
-                              strokeWidth="1.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
-                      </div>
-
-                      {renderStatusDot(pane.status)}
-
-                      {isEditing ? (
+                    {isEditing ? (
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5 px-0.5">
+                        <span className="text-text-muted/50 w-2.5 shrink-0 text-right text-[10px] tabular-nums">
+                          {isFirst ? `${tabIndex + 1}` : ''}
+                        </span>
+                        <TerminalTreeBranch isFirst={isFirst} isLast={isLast} />
+                        {renderStatusDot(pane.status)}
                         <input
                           ref={editInputRef}
                           type="text"
+                          aria-label="Terminal pane name"
                           value={editingTitle}
                           onChange={(e) => setEditingTitle(e.target.value)}
                           onBlur={() => handleFinishRename(tab.id, pane.id)}
@@ -328,24 +286,34 @@ export function TerminalTabsSidebar() {
                             if (e.key === 'Enter') handleFinishRename(tab.id, pane.id);
                             if (e.key === 'Escape') setEditingItemId(null);
                           }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="bg-surface ring-accent/60 h-4.5 w-20 rounded px-1 text-xs text-inherit ring-1 outline-hidden"
+                          className="bg-surface ring-accent/60 h-6 min-w-0 flex-1 rounded px-1 text-xs text-inherit ring-1 outline-hidden"
                         />
-                      ) : (
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-pressed={isPaneActive}
+                        aria-label={`${pane.name}, ${pane.status}`}
+                        onClick={() => setActivePane(sessionId, tab.id, pane.id)}
+                        onDoubleClick={(e) => handleStartRename(pane.id, pane.name, e)}
+                        className="focus-visible:ring-accent/40 flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded px-0.5 text-left focus-visible:ring-1 focus-visible:outline-none"
+                      >
+                        <span className="text-text-muted/50 w-2.5 shrink-0 text-right text-[10px] tabular-nums">
+                          {isFirst ? `${tabIndex + 1}` : ''}
+                        </span>
+                        <TerminalTreeBranch isFirst={isFirst} isLast={isLast} />
+                        {renderStatusDot(pane.status)}
                         <span className="truncate">{pane.name}</span>
-                      )}
-                    </div>
+                      </button>
+                    )}
 
                     {/* Quick Actions on Pane Hover */}
-                    <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/pane:opacity-100">
+                    <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/pane:opacity-100 group-hover/pane:opacity-100">
                       <Tooltip content="Split Again">
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            splitTab(tab.id);
-                          }}
-                          className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface flex h-4.5 w-4.5 items-center justify-center rounded transition-colors"
+                          onClick={() => splitTab(sessionId, tab.id)}
+                          className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface flex h-7 w-7 items-center justify-center rounded transition-colors"
                           aria-label="Split terminal"
                         >
                           <Plus className="h-2.5 w-2.5" />
@@ -355,11 +323,8 @@ export function TerminalTabsSidebar() {
                       <Tooltip content="Close Pane">
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            closePane(tab.id, pane.id);
-                          }}
-                          className="motion-disclosure text-text-muted hover:bg-surface flex h-4.5 w-4.5 items-center justify-center rounded transition-colors hover:text-rose-400"
+                          onClick={() => closePane(sessionId, tab.id, pane.id)}
+                          className="motion-disclosure text-text-muted hover:bg-surface flex h-7 w-7 items-center justify-center rounded transition-colors hover:text-rose-400"
                           aria-label="Close pane"
                         >
                           <X className="h-2.5 w-2.5" />

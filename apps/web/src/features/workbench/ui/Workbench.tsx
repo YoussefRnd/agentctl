@@ -102,7 +102,11 @@ export function Workbench({
           {/* Unified Workbench Top Header: Tabs | [+] | Maximize */}
           <div className="border-border/20 bg-surface-secondary/15 flex h-9 shrink-0 items-center justify-between gap-1.5 border-b px-2">
             {/* Left: Tab Strip */}
-            <div className="flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto py-1">
+            <div
+              className="flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto py-1"
+              role="tablist"
+              aria-label="Workbench views"
+            >
               {tabs.map((t, idx) => {
                 const isActive = tab === t;
                 const tabDef = STATIC_TABS.find((def) => def.id === t);
@@ -113,9 +117,7 @@ export function Workbench({
                 return (
                   <div
                     key={t}
-                    role="tab"
-                    tabIndex={0}
-                    aria-selected={isActive}
+                    role="presentation"
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', t);
@@ -155,23 +157,6 @@ export function Workbench({
                       draggedTabRef.current = null;
                       setDraggedTab(null);
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleTabChange(t);
-                      } else if ((e.altKey || e.metaKey) && e.key === 'ArrowLeft' && idx > 0) {
-                        e.preventDefault();
-                        handleMoveTab(idx, idx - 1);
-                      } else if (
-                        (e.altKey || e.metaKey) &&
-                        e.key === 'ArrowRight' &&
-                        idx < tabs.length - 1
-                      ) {
-                        e.preventDefault();
-                        handleMoveTab(idx, idx + 1);
-                      }
-                    }}
-                    onClick={() => handleTabChange(t)}
                     onMouseDown={(e) => {
                       if (e.button === 1) {
                         e.preventDefault();
@@ -179,44 +164,77 @@ export function Workbench({
                       }
                     }}
                     className={cn(
-                      'group relative flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-[background-color,border-color,color,opacity] duration-150',
+                      'group relative flex h-7 shrink-0 items-center rounded-md border text-xs font-medium transition-[background-color,border-color,color,opacity] duration-150',
                       isActive
                         ? 'text-text-main border-border/40 bg-surface/80 shadow-xs'
                         : 'text-text-muted hover:text-text-main hover:border-border/20 hover:bg-surface/30 border-transparent',
                       isDragged && 'opacity-40',
                     )}
                   >
-                    <Icon
-                      className={cn(
-                        'icon-inline shrink-0 transition-opacity',
-                        isActive
-                          ? 'text-accent opacity-100'
-                          : 'text-text-muted opacity-70 group-hover:opacity-90',
-                      )}
-                    />
-                    <span
-                      className={cn(
-                        'truncate',
-                        isActive
-                          ? 'text-text-main font-medium'
-                          : 'text-text-muted group-hover:text-text-main',
-                      )}
+                    <button
+                      type="button"
+                      role="tab"
+                      tabIndex={isActive ? 0 : -1}
+                      aria-selected={isActive}
+                      onClick={() => handleTabChange(t)}
+                      onKeyDown={(e) => {
+                        if ((e.altKey || e.metaKey) && e.key === 'ArrowLeft' && idx > 0) {
+                          e.preventDefault();
+                          handleMoveTab(idx, idx - 1);
+                        } else if (
+                          (e.altKey || e.metaKey) &&
+                          e.key === 'ArrowRight' &&
+                          idx < tabs.length - 1
+                        ) {
+                          e.preventDefault();
+                          handleMoveTab(idx, idx + 1);
+                        } else if (!e.altKey && !e.metaKey && e.key === 'ArrowLeft' && idx > 0) {
+                          e.preventDefault();
+                          handleTabChange(tabs[idx - 1]!);
+                        } else if (
+                          !e.altKey &&
+                          !e.metaKey &&
+                          e.key === 'ArrowRight' &&
+                          idx < tabs.length - 1
+                        ) {
+                          e.preventDefault();
+                          handleTabChange(tabs[idx + 1]!);
+                        }
+                      }}
+                      className="focus-visible:ring-accent/40 flex h-full min-w-0 cursor-pointer items-center gap-1.5 rounded-l-md py-0 pr-1 pl-2.5 focus-visible:ring-1 focus-visible:outline-none"
                     >
-                      {label}
-                    </span>
-
-                    {t === 'changes' && changesCount > 0 && (
+                      <Icon
+                        className={cn(
+                          'icon-inline shrink-0 transition-opacity',
+                          isActive
+                            ? 'text-accent opacity-100'
+                            : 'text-text-muted opacity-70 group-hover:opacity-90',
+                        )}
+                      />
                       <span
                         className={cn(
-                          'py-0.2 ml-0.5 inline-flex items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+                          'truncate',
                           isActive
-                            ? 'text-text-main bg-accent/20 text-accent'
-                            : 'bg-surface-secondary text-text-muted group-hover:text-text-main',
+                            ? 'text-text-main font-medium'
+                            : 'text-text-muted group-hover:text-text-main',
                         )}
                       >
-                        {changesCount}
+                        {label}
                       </span>
-                    )}
+
+                      {t === 'changes' && changesCount > 0 && (
+                        <span
+                          className={cn(
+                            'py-0.2 ml-0.5 inline-flex items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+                            isActive
+                              ? 'text-text-main bg-accent/20 text-accent'
+                              : 'bg-surface-secondary text-text-muted group-hover:text-text-main',
+                          )}
+                        >
+                          {changesCount}
+                        </span>
+                      )}
+                    </button>
 
                     {/* Close button */}
                     <button
@@ -227,7 +245,7 @@ export function Workbench({
                         e.stopPropagation();
                         handleCloseTab(t);
                       }}
-                      className="text-text-muted hover:bg-surface-secondary -mr-1 ml-0.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,background-color] duration-150 group-hover:opacity-80 hover:text-rose-400 hover:!opacity-100"
+                      className="text-text-muted hover:bg-surface-secondary mr-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,background-color] duration-150 group-focus-within:opacity-80 group-hover:opacity-80 hover:text-rose-400 hover:!opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
                       title="Close tab"
                     >
                       <X className="icon-inline" />

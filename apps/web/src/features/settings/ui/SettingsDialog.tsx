@@ -45,13 +45,20 @@ export function SettingsDialog() {
             </div>
 
             {/* Nav Tabs */}
-            <div className="flex gap-1 overflow-x-auto md:flex-col md:space-y-1 md:overflow-visible">
+            <div
+              className="flex gap-1 overflow-x-auto md:flex-col md:space-y-1 md:overflow-visible"
+              role="tablist"
+              aria-label="Settings sections"
+            >
               {TABS.map(({ id, label, icon: Icon }) => {
                 const isActive = settingsTab === id;
                 return (
                   <button
                     key={id}
                     type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    tabIndex={isActive ? 0 : -1}
                     onClick={() => setSettingsTab(id)}
                     className={`flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
                       isActive
