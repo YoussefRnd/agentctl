@@ -20,11 +20,18 @@ export function useProviders(sessionId: string | null) {
   const { data: providers = [], isLoading: isLoadingProviders } = useQuery({
     queryKey: providerKeys.all,
     queryFn: () => providerService.getProviders(),
+    staleTime: 2_000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: registry = [], isLoading: isLoadingRegistry } = useQuery({
     queryKey: providerKeys.registry,
     queryFn: () => providerService.getRegistry(),
+    // The catalog endpoint may contact the remote registry. Refresh it when
+    // the view is opened or revisited, while provider state itself is polled.
+    staleTime: 30_000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const invalidateProviderCaches = useCallback(() => {

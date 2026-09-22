@@ -7,8 +7,8 @@ describe('formatRelativeTime', () => {
   it.each([
     [0, 'just now'],
     [4_999, 'just now'],
-    [5_000, '5s'],
-    [59_999, '59s'],
+    [5_000, 'just now'],
+    [59_999, 'just now'],
     [60_000, '1m'],
     [3_599_999, '59m'],
     [3_600_000, '1h'],
@@ -29,7 +29,7 @@ describe('formatRelativeTime', () => {
 
 describe('getRelativeTimeRefreshDelay', () => {
   it('aligns refreshes with the next visible label boundary', () => {
-    expect(getRelativeTimeRefreshDelay(new Date(NOW - 5_250), NOW)).toBe(750);
+    expect(getRelativeTimeRefreshDelay(new Date(NOW - 5_250), NOW)).toBe(54_750);
     expect(getRelativeTimeRefreshDelay(new Date(NOW - 61_250), NOW)).toBe(58_750);
     expect(getRelativeTimeRefreshDelay(new Date(NOW - 3_601_000), NOW)).toBe(3_599_000);
   });

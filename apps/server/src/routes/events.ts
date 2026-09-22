@@ -22,6 +22,10 @@ function formatSSEEvent(event: SessionEventRow): string {
   return `id: ${String(event.id)}\nevent: session_event\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
+function formatStateChange(event: import('@agentctl/shared').StateChangeEvent): string {
+  return `id: ${String(event.sequence)}\nevent: state_change\ndata: ${JSON.stringify(event)}\n\n`;
+}
+
 function parseBusEvent(raw: unknown): SessionEventRow {
   if (isSessionEventRow(raw)) {
     return raw;
@@ -41,6 +45,36 @@ function parseBusEvent(raw: unknown): SessionEventRow {
 }
 
 export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
+  fastify.get('/events/stream', async (request, reply) => {
+    await reply.hijack();
+
+    if (request.headers.origin) {
+      reply.raw.setHeader('Access-Control-Allow-Origin', request.headers.origin);
+      reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    reply.raw.setHeader('Content-Type', 'text/event-stream');
+    reply.raw.setHeader('Cache-Control', 'no-cache');
+    reply.raw.setHeader('Connection', 'keep-alive');
+    reply.raw.setHeader('Transfer-Encoding', 'chunked');
+    reply.raw.statusCode = 200;
+    reply.raw.write('event: state_ready\ndata: {}\n\n');
+
+    const unsubscribe = fastify.eventBus.subscribeState((event) => {
+      if (!reply.raw.destroyed) {
+        reply.raw.write(formatStateChange(event));
+      }
+    });
+
+    const heartbeatInterval = setInterval(() => {
+      if (!reply.raw.destroyed) reply.raw.write(':\n\n');
+    }, 15000);
+
+    request.raw.on('close', () => {
+      clearInterval(heartbeatInterval);
+      unsubscribe();
+    });
+  });
+
   fastify.withTypeProvider<ZodTypeProvider>().get(
     '/sessions/:id/events',
     {

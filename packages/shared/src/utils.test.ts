@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { createTaskSlug, formatSlugToTitle, validateApiKey } from './utils.js';
+import {
+  createTaskSlug,
+  formatSlugToTitle,
+  getSessionDisplayTitle,
+  isDefaultSessionTitle,
+  isPlaceholderSessionTitle,
+  validateApiKey,
+} from './utils.js';
 
 describe('createTaskSlug', () => {
   it('generates a memorable adjective-noun slug when no prefix is given', () => {
@@ -25,6 +32,32 @@ describe('formatSlugToTitle', () => {
     expect(formatSlugToTitle('swift-falcon')).toBe('Swift Falcon');
     expect(formatSlugToTitle('add_user_authentication')).toBe('Add User Authentication');
     expect(formatSlugToTitle('')).toBe('New Session');
+  });
+});
+
+describe('session titles', () => {
+  it('recognizes placeholder and legacy generated titles', () => {
+    expect(isPlaceholderSessionTitle('New Session')).toBe(true);
+    expect(isPlaceholderSessionTitle('new-session')).toBe(true);
+    expect(isDefaultSessionTitle('Mighty Wave', 'mighty-wave')).toBe(true);
+    expect(isDefaultSessionTitle('Fix authentication', 'mighty-wave')).toBe(false);
+  });
+
+  it('hides a generated slug only for a draft without user activity', () => {
+    expect(
+      getSessionDisplayTitle({
+        title: 'Mighty Wave',
+        taskSlug: 'mighty-wave',
+        hasUserActivity: false,
+      }),
+    ).toBe('New Session');
+    expect(
+      getSessionDisplayTitle({
+        title: 'Mighty Wave',
+        taskSlug: 'mighty-wave',
+        hasUserActivity: true,
+      }),
+    ).toBe('Mighty Wave');
   });
 });
 

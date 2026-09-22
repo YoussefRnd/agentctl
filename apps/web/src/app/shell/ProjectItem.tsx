@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getSessionDisplayTitle } from '@agentctl/shared';
 import { Link } from 'react-router-dom';
 import {
   Folder,
@@ -64,7 +65,7 @@ function SessionRow({
   onDelete,
 }: SessionRowProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const sessionTitle = s.title || s.taskSlug || s.branch || 'Untitled session';
+  const sessionTitle = getSessionDisplayTitle(s);
   const activityTime = s.lastActivityAt;
 
   return (

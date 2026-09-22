@@ -76,7 +76,7 @@ describe('Projects routes', () => {
 
     expect(response.statusCode).toBe(200);
     const [project] = response.json() as Array<{
-      sessions: Array<{ id: string; lastActivityAt: string }>;
+      sessions: Array<{ id: string; lastActivityAt: string; hasUserActivity: boolean }>;
     }>;
 
     expect(project.sessions.map(({ id, lastActivityAt }) => ({ id, lastActivityAt }))).toEqual([
@@ -88,6 +88,10 @@ describe('Projects routes', () => {
         id: sessionWithMessageId,
         lastActivityAt: '2026-01-02T00:00:00.000Z',
       },
+    ]);
+    expect(project.sessions.map(({ id, hasUserActivity }) => ({ id, hasUserActivity }))).toEqual([
+      { id: emptySessionId, hasUserActivity: false },
+      { id: sessionWithMessageId, hasUserActivity: true },
     ]);
   });
 });

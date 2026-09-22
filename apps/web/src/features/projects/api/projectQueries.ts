@@ -6,5 +6,7 @@ export const projectQueries = {
     queryOptions({
       queryKey: ['projects'] as const,
       queryFn: () => apiClient.fetch<SidebarProject[]>('/api/projects'),
+      staleTime: 2_000,
+      refetchOnWindowFocus: true,
     }),
 };

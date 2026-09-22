@@ -27,6 +27,7 @@ export interface SidebarProject {
     | 'createdAt'
     | 'mode'
     | 'worktreePath'
+    | 'hasUserActivity'
   >[];
 }
 

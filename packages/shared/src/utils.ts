@@ -129,6 +129,32 @@ export function formatSlugToTitle(slug: string): string {
     .join(' ');
 }
 
+export const NEW_SESSION_TITLE = 'New Session';
+
+export function isPlaceholderSessionTitle(title: string | null | undefined): boolean {
+  return title?.trim().toLowerCase().replaceAll('-', ' ') === 'new session';
+}
+
+export function isDefaultSessionTitle(
+  title: string | null | undefined,
+  taskSlug: string | null | undefined,
+): boolean {
+  if (isPlaceholderSessionTitle(title)) return true;
+  return !!title && !!taskSlug && title.trim() === formatSlugToTitle(taskSlug);
+}
+
+export function getSessionDisplayTitle(session: {
+  title?: string | null;
+  taskSlug?: string | null;
+  branch?: string | null;
+  hasUserActivity?: boolean;
+}): string {
+  if (session.hasUserActivity === false && isDefaultSessionTitle(session.title, session.taskSlug)) {
+    return NEW_SESSION_TITLE;
+  }
+  return session.title || session.taskSlug || session.branch || 'Untitled session';
+}
+
 export function validateApiKey(keyName: string, value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {

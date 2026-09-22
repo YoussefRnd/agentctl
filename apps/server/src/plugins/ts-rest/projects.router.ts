@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc, sql } from 'drizzle-orm';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { projects, sessions } from '@agentctl/core/db';
+import { projects, sessionEvents, sessions } from '@agentctl/core/db';
 import {
   projectsContract,
   sessionRowSchema,
@@ -32,6 +32,19 @@ export function createProjectsRouter(
       const { search, gitOnly, sortBy = 'lastActive', sortOrder = 'desc' } = query;
       const allProjects = await fastify.db.select().from(projects);
       const allSessions = await fastify.db.select().from(sessions);
+      const sessionsWithUserActivity = new Set(
+        (
+          await fastify.db
+            .selectDistinct({ sessionId: sessionEvents.sessionId })
+            .from(sessionEvents)
+            .where(
+              and(
+                eq(sessionEvents.type, 'text'),
+                sql`json_extract(${sessionEvents.data}, '$.role') = 'user'`,
+              ),
+            )
+        ).map((row) => row.sessionId),
+      );
 
       let mapped = allProjects.map((p) => {
         const projSessions = allSessions.filter((s) => s.projectId === p.id);
@@ -45,7 +58,12 @@ export function createProjectsRouter(
           isGitRepo: p.repoRoot !== null,
           sessions: projSessions
             .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime())
-            .map((session) => sessionRowSchema.parse(session)),
+            .map((session) =>
+              sessionRowSchema.parse({
+                ...session,
+                hasUserActivity: sessionsWithUserActivity.has(session.id),
+              }),
+            ),
           lastActiveTime: lastSessionUpdate,
         };
       });
@@ -190,6 +208,7 @@ export function createProjectsRouter(
         .limit(1);
 
       let project;
+      let projectChanged = false;
       if (existing.length > 0) {
         project = existing[0];
 
@@ -200,6 +219,7 @@ export function createProjectsRouter(
             .where(eq(projects.id, project.id))
             .returning();
           project = updated;
+          projectChanged = true;
         }
       } else {
         const projectName = path.basename(normalizedPath);
@@ -216,6 +236,7 @@ export function createProjectsRouter(
           })
           .returning();
         project = createdProject;
+        projectChanged = true;
       }
 
       const existingSessions = await fastify.db
@@ -226,6 +247,9 @@ export function createProjectsRouter(
         .limit(1);
 
       if (existingSessions.length > 0) {
+        if (projectChanged) {
+          fastify.eventBus.publishState({ topics: ['projects'] });
+        }
         return {
           status: 200 as const,
           body: {
@@ -241,6 +265,10 @@ export function createProjectsRouter(
         providerId: body.agent,
         taskSlug: createTaskSlug(body.taskSlug),
         mode: body.mode,
+      });
+      fastify.eventBus.publishState({
+        topics: ['projects', 'session'],
+        sessionId: session.id,
       });
 
       return {
@@ -280,6 +308,7 @@ export function createProjectsRouter(
     deleteProject: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       await fastify.db.delete(projects).where(eq(projects.id, id));
+      fastify.eventBus.publishState({ topics: ['projects'] });
       return {
         status: 204 as const,
         body: undefined,

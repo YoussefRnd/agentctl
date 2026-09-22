@@ -23,6 +23,7 @@ describe('ManagedSession Observability & StreamBuffer Integration', () => {
       branch: 'main',
       worktreePath: '/tmp/proj-obs',
       taskSlug: 'test-obs',
+      title: 'Test Obs',
       agent: 'claude-acp',
       selectedProvider: 'claude-acp',
       baseCommit: 'hash',
@@ -109,6 +110,11 @@ describe('ManagedSession Observability & StreamBuffer Integration', () => {
 
     // Execute prompt
     await session.prompt('Test prompt');
+
+    const renamedSession = await db.query.sessions.findFirst({
+      where: eq(sessions.id, 'sess-obs'),
+    });
+    expect(renamedSession?.title).toBe('Test prompt');
 
     // Retrieve events from DB to assert their state
     const dbEvents = await db

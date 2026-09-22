@@ -102,6 +102,7 @@ export function createSettingsRouter(
         };
         fastify.providerRegistry.updateSetting('fontConfig', JSON.stringify(merged));
       }
+      fastify.eventBus.publishState({ topics: ['settings'] });
       const raw = fastify.providerRegistry.getSettings();
       let fontConfig: FontConfig = DEFAULT_FONT_CONFIG;
       if (raw.fontConfig) {

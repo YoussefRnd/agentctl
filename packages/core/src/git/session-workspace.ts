@@ -4,7 +4,7 @@ import type { WorkspaceManager, Workspace as WorkspaceHandle } from './worktree-
 import { sessions, projects, sessionEvents } from '../db/schema.js';
 import type { SnapshotService } from './snapshot-service.js';
 import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
-import { formatSlugToTitle } from '@agentctl/shared';
+import { NEW_SESSION_TITLE } from '@agentctl/shared';
 import crypto from 'node:crypto';
 import { simpleGit } from 'simple-git';
 import { DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
@@ -218,7 +218,7 @@ export class SessionWorkspace {
         DEFAULT_THINKING_EFFORT) as ThinkingEffort,
       contextLimit: options.contextLimit ?? 0,
       sessionConfigOptions: options.sessionConfigOptions ?? '[]',
-      title: options.title ?? formatSlugToTitle(taskSlug),
+      title: options.title ?? NEW_SESSION_TITLE,
     });
 
     if (this.onEvent) {

@@ -1,5 +1,5 @@
-import { sessions, projects, type db as defaultDb } from '@agentctl/core/db';
-import { eq } from 'drizzle-orm';
+import { sessions, sessionEvents, projects, type db as defaultDb } from '@agentctl/core/db';
+import { and, eq, sql } from 'drizzle-orm';
 import { AppError } from '../errors/app-error.js';
 import type { SessionManager } from '@agentctl/core/session';
 import type { WorktreeManager } from '@agentctl/core/git';
@@ -25,6 +25,21 @@ export class SessionService {
     return sessionRowSchema.parse(raw);
   }
 
+  private async hasUserActivity(sessionId: string): Promise<boolean> {
+    const rows = await this.db
+      .select({ id: sessionEvents.id })
+      .from(sessionEvents)
+      .where(
+        and(
+          eq(sessionEvents.sessionId, sessionId),
+          eq(sessionEvents.type, 'text'),
+          sql`json_extract(${sessionEvents.data}, '$.role') = 'user'`,
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async createSession(params: {
     projectId: string;
     providerId?: string;
@@ -42,7 +57,7 @@ export class SessionService {
       throw new AppError('Failed to retrieve created session', 500);
     }
 
-    return this.parseSessionRow(sessionRecord);
+    return this.parseSessionRow({ ...sessionRecord, hasUserActivity: false });
   }
 
   async getSessionWithCapabilities(sessionId: string) {
@@ -101,7 +116,10 @@ export class SessionService {
 
     const providersList = await this.providerRegistry.discover();
     return {
-      session: this.parseSessionRow(session),
+      session: this.parseSessionRow({
+        ...session,
+        hasUserActivity: await this.hasUserActivity(sessionId),
+      }),
       capabilities: providersList,
     };
   }

@@ -16,7 +16,6 @@ export function useGitStatus(sessionId: string) {
     queryFn: () => getGitStatus(sessionId),
     enabled: !!sessionId,
     staleTime: 5000,
-    refetchInterval: 30000,
     refetchOnWindowFocus: true,
   });
 

@@ -10,6 +10,17 @@ import {
 } from '@agentctl/shared';
 import { AppError } from '../../errors/app-error.js';
 
+function publishSessionChange(fastify: FastifyInstance, sessionId: string): void {
+  fastify.eventBus.publishState({ topics: ['projects', 'session'], sessionId });
+}
+
+function publishWorkspaceChange(fastify: FastifyInstance, sessionId: string): void {
+  fastify.eventBus.publishState({
+    topics: ['projects', 'session', 'workspace'],
+    sessionId,
+  });
+}
+
 export function createSessionsRouter(
   fastify: FastifyInstance,
 ): RouterImplementation<typeof sessionsContract> {
@@ -28,6 +39,7 @@ export function createSessionsRouter(
         taskSlug: createTaskSlug(body.taskSlug),
         mode: body.mode,
       });
+      publishSessionChange(fastify, session.id);
       return {
         status: 201 as const,
         body: session,
@@ -78,6 +90,7 @@ export function createSessionsRouter(
       const { commitMessage } = body;
       try {
         await fastify.sessionService.finalizeSession(id, 'merge', commitMessage);
+        publishWorkspaceChange(fastify, id);
         return {
           status: 200 as const,
           body: { success: true },
@@ -93,6 +106,7 @@ export function createSessionsRouter(
       const { id } = params;
       try {
         await fastify.sessionService.finalizeSession(id, 'discard');
+        publishWorkspaceChange(fastify, id);
         return {
           status: 200 as const,
           body: { success: true },
@@ -150,6 +164,11 @@ export function createSessionsRouter(
       }
 
       const result = await fastify.sessionService.getSessionWithCapabilities(id);
+      if (body.branch !== undefined || body.mode !== undefined) {
+        publishWorkspaceChange(fastify, id);
+      } else {
+        publishSessionChange(fastify, id);
+      }
       return {
         status: 200 as const,
         body: {
@@ -161,6 +180,7 @@ export function createSessionsRouter(
     deleteSession: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       await fastify.sessionService.deleteSession(id);
+      publishSessionChange(fastify, id);
       return {
         status: 204 as const,
         body: undefined,
@@ -169,6 +189,7 @@ export function createSessionsRouter(
     archiveSession: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       await fastify.sessionService.archiveSession(id);
+      publishSessionChange(fastify, id);
       return {
         status: 200 as const,
         body: { success: true },
@@ -177,6 +198,7 @@ export function createSessionsRouter(
     restoreSession: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       await fastify.sessionService.restartSession(id);
+      publishSessionChange(fastify, id);
       return {
         status: 200 as const,
         body: { success: true },
@@ -208,6 +230,7 @@ export function createSessionsRouter(
       });
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
       await fastify.worktreeManager.stageFile(project.repoRoot, session.worktreePath, filePath);
+      publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
     revertFile: async ({
@@ -226,6 +249,7 @@ export function createSessionsRouter(
       });
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
       await fastify.worktreeManager.revertFile(project.repoRoot, session.worktreePath, filePath);
+      publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
     unstageFile: async ({
@@ -244,6 +268,7 @@ export function createSessionsRouter(
       });
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
       await fastify.worktreeManager.unstageFile(project.repoRoot, session.worktreePath, filePath);
+      publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
     stageAllFiles: async ({ params }: { params: { id: string } }) => {
@@ -255,6 +280,7 @@ export function createSessionsRouter(
       });
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
       await fastify.worktreeManager.stageAll(project.repoRoot, session.worktreePath);
+      publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
     unstageAllFiles: async ({ params }: { params: { id: string } }) => {
@@ -266,6 +292,7 @@ export function createSessionsRouter(
       });
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
       await fastify.worktreeManager.unstageAll(project.repoRoot, session.worktreePath);
+      publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
     commitChanges: async ({
@@ -285,6 +312,7 @@ export function createSessionsRouter(
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
       try {
         await fastify.worktreeManager.commit(project.repoRoot, session.worktreePath, message);
+        publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: { success: true } };
       } catch (err) {
         return {
@@ -303,6 +331,7 @@ export function createSessionsRouter(
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
       try {
         const result = await fastify.worktreeManager.push(project.repoRoot, session.worktreePath);
+        publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: result };
       } catch (err) {
         return {
@@ -321,6 +350,7 @@ export function createSessionsRouter(
       if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
       try {
         const result = await fastify.worktreeManager.pull(project.repoRoot, session.worktreePath);
+        publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: result };
       } catch (err) {
         return {
@@ -378,6 +408,7 @@ export function createSessionsRouter(
             baseBranch: body.baseBranch,
           },
         );
+        publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: result };
       } catch (err) {
         return {
@@ -396,6 +427,7 @@ export function createSessionsRouter(
       const { id } = params;
       const { eventId, mode } = body;
       const result = await fastify.sessionService.rewindSession(id, eventId, mode);
+      publishWorkspaceChange(fastify, result.forkSessionId ?? id);
       return {
         status: 200 as const,
         body: {
@@ -409,6 +441,7 @@ export function createSessionsRouter(
     undoRewind: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       await fastify.sessionService.undoRewind(id);
+      publishWorkspaceChange(fastify, id);
       return {
         status: 200 as const,
         body: {
@@ -425,6 +458,7 @@ export function createSessionsRouter(
         targetModel,
         nextSessionFocus,
       );
+      publishSessionChange(fastify, result.sessionId);
       return {
         status: 200 as const,
         body: {
@@ -445,6 +479,7 @@ export function createSessionsRouter(
       const { id } = params;
       const { snapshotHash } = body;
       const result = await fastify.sessionService.restoreSnapshot(id, snapshotHash);
+      publishWorkspaceChange(fastify, id);
       return {
         status: 200 as const,
         body: {
@@ -471,6 +506,7 @@ export function createSessionsRouter(
       const { id } = params;
       const { branch } = body;
       await fastify.sessionService.mergeSessionBranch(id, branch);
+      publishWorkspaceChange(fastify, id);
       return {
         status: 200 as const,
         body: { success: true },
@@ -494,6 +530,7 @@ export function createSessionsRouter(
     spawnParallelAgent: async ({ params, body }) => {
       const { id } = params;
       const session = await fastify.sessionService.spawnParallelAgent(id, body);
+      publishSessionChange(fastify, session.id);
       return {
         status: 201 as const,
         body: { session },

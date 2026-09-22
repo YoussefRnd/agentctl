@@ -143,9 +143,14 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.decorate('embedded', deps.embedded ?? false);
 
   // Sync provider metadata in the background on startup (lazy probing on session demand)
-  void providerRegistry.sync().catch((err: unknown) => {
-    fastify.log.error(err, 'Failed to sync provider registry on startup');
-  });
+  void providerRegistry
+    .sync()
+    .then(() => {
+      eventBus.publishState({ topics: ['providers'] });
+    })
+    .catch((err: unknown) => {
+      fastify.log.error(err, 'Failed to sync provider registry on startup');
+    });
 
   // Prune orphaned worktrees on startup
   if (typeof sessionManager.syncOrphans === 'function') {

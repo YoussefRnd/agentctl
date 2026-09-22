@@ -99,6 +99,7 @@ describe('SessionWorkspace Integration Tests (Mock-Free)', () => {
     expect(sessionRecord).toBeDefined();
     expect(sessionRecord?.status).toBe('idle');
     expect(sessionRecord?.mode).toBe('worktree');
+    expect(sessionRecord?.title).toBe('New Session');
 
     // 3. getHandle and write some files
     const handle = await sessionWorkspace.getHandle(context.sessionId);

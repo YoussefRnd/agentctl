@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, ArrowLeft } from 'lucide-react';
+import { isDefaultSessionTitle } from '@agentctl/shared';
 import {
   createProjectSession,
   openProjectSession,
@@ -34,19 +35,18 @@ export interface SessionStartRequest {
 export function findReusableDraftSession(project: SidebarProject) {
   return project.sessions?.find(
     (session) =>
-      session.status !== 'running' &&
-      (!session.lastActivityAt ||
-        session.title === 'New Session' ||
-        session.title.startsWith('new-session')),
+      session.status === 'idle' &&
+      (session.hasUserActivity === false ||
+        (session.hasUserActivity === undefined &&
+          isDefaultSessionTitle(session.title, session.taskSlug))),
   );
 }
 
 export function shouldCreateHomeSession(
   activeProjectId: string | undefined,
   hasReusableDraft: boolean,
-  request: SessionStartRequest | null,
 ) {
-  return !!activeProjectId && !hasReusableDraft && request?.projectId === activeProjectId;
+  return !!activeProjectId && !hasReusableDraft;
 }
 
 function StartSessionLauncher({
@@ -144,13 +144,14 @@ export function HomeRoute() {
     projects.find((p) => p.id === selectedProjectId) ?? (projects.length > 0 ? projects[0] : null);
 
   const reusableDraftSession = activeProject ? findReusableDraftSession(activeProject) : undefined;
-  const shouldCreateSession = shouldCreateHomeSession(
-    activeProject?.id,
-    !!reusableDraftSession,
-    sessionStartRequest,
-  );
+  const shouldCreateSession = shouldCreateHomeSession(activeProject?.id, !!reusableDraftSession);
 
-  const { data: createdSession, isLoading: isCreatingSession } = useQuery({
+  const {
+    data: createdSession,
+    isLoading: isCreatingSession,
+    isError: didCreateSessionFail,
+    refetch: retryCreateSession,
+  } = useQuery({
     queryKey: ['home-created-session', activeProject?.id],
     queryFn: async () => {
       if (!activeProject) return null;
@@ -158,11 +159,10 @@ export function HomeRoute() {
     },
     enabled: shouldCreateSession && !showExplorer,
     staleTime: Infinity,
+    gcTime: 0,
   });
 
-  const requestedCreatedSession =
-    sessionStartRequest?.projectId === activeProject?.id ? createdSession : undefined;
-  const activeSession = reusableDraftSession ?? requestedCreatedSession;
+  const activeSession = reusableDraftSession ?? createdSession;
   const pendingInitialInput =
     activeProject && sessionStartRequest?.projectId === activeProject.id
       ? sessionStartRequest.initialInput
@@ -220,6 +220,9 @@ export function HomeRoute() {
           onOpenDirectory={() => setShowExplorer(true)}
           onStart={(initialInput) => {
             setSessionStartRequest({ projectId: activeProject.id, initialInput });
+            if (didCreateSessionFail) {
+              void retryCreateSession();
+            }
           }}
         />
       ) : (

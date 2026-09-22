@@ -24,7 +24,11 @@ import {
   isPersistentPermissionOption,
 } from '../security/permission-options.js';
 
-import type { ElicitationRequest, ElicitationResponse } from '@agentctl/shared';
+import {
+  isDefaultSessionTitle,
+  type ElicitationRequest,
+  type ElicitationResponse,
+} from '@agentctl/shared';
 import { jsonCodecs } from '../db/json-codecs.js';
 
 function isDeniedOption(optionId?: string): boolean {
@@ -218,13 +222,13 @@ export class ManagedSession {
         where: eq(sessions.id, this.sessionId),
       });
 
-      if (sessionRecord?.title === 'new session') {
+      if (sessionRecord && isDefaultSessionTitle(sessionRecord.title, sessionRecord.taskSlug)) {
         const summary = text.trim();
         const firstLine = summary.split('\n')[0] || '';
         const titleVal = firstLine.length > 40 ? firstLine.slice(0, 40) + '...' : firstLine;
         await this.db
           .update(sessions)
-          .set({ title: titleVal || 'new session' })
+          .set({ title: titleVal || sessionRecord.title })
           .where(eq(sessions.id, this.sessionId));
       }
 

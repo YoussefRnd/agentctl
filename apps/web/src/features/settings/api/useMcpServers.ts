@@ -26,7 +26,7 @@ export function useMcpServers() {
   const { data: mcpServers = [], isLoading } = useQuery<McpServerData[]>({
     queryKey: mcpKeys.all,
     queryFn: () => apiClient.fetch<McpServerData[]>('/api/mcp-servers'),
-    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
   });
 
   const addMcpServerMutation = useMutation({
@@ -96,7 +96,7 @@ export function useMcpTools() {
   const { data: tools = [], isLoading } = useQuery<McpToolData[]>({
     queryKey: ['mcpTools'],
     queryFn: () => apiClient.fetch<McpToolData[]>('/api/mcp/tools'),
-    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
   });
 
   return { tools, isLoading };

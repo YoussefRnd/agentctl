@@ -52,10 +52,31 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       // 4. Stream terminal data to WebSocket
+      let commandMayChangeWorkspace = false;
+      let workspaceChangeTimer: ReturnType<typeof setTimeout> | null = null;
+      const markCommandInput = (data: string) => {
+        if (data.includes('\n') || data.includes('\r')) {
+          commandMayChangeWorkspace = true;
+        }
+      };
+      const scheduleWorkspaceChange = () => {
+        if (!commandMayChangeWorkspace) return;
+        if (workspaceChangeTimer) clearTimeout(workspaceChangeTimer);
+        workspaceChangeTimer = setTimeout(() => {
+          workspaceChangeTimer = null;
+          commandMayChangeWorkspace = false;
+          fastify.eventBus.publishState({
+            topics: ['projects', 'session', 'workspace'],
+            sessionId,
+          });
+        }, 300);
+      };
+
       const onData = (data: string) => {
         if (socket.readyState === socket.OPEN) {
           socket.send(JSON.stringify({ type: 'data', data }));
         }
+        scheduleWorkspaceChange();
       };
 
       const onExit = (exitInfo: { code: number | null; signal: string | null }) => {
@@ -93,6 +114,7 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 (parsed.type === 'input' || parsed.type === 'data') &&
                 typeof parsed.data === 'string'
               ) {
+                markCommandInput(parsed.data);
                 fastify.terminalService.writeInput(terminalKey, parsed.data);
                 return;
               }
@@ -125,6 +147,7 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
 
           // Fallback to raw string input
+          markCommandInput(text);
           fastify.terminalService.writeInput(terminalKey, text);
         } catch {
           // Ignored
@@ -132,6 +155,13 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       socket.on('close', () => {
+        if (workspaceChangeTimer) clearTimeout(workspaceChangeTimer);
+        if (commandMayChangeWorkspace) {
+          fastify.eventBus.publishState({
+            topics: ['projects', 'session', 'workspace'],
+            sessionId,
+          });
+        }
         fastify.terminalService.off(`data:${terminalKey}`, onData);
         fastify.terminalService.off(`exit:${terminalKey}`, onExit);
       });

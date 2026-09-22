@@ -315,6 +315,7 @@ export const sessionRowSchema = sessionSchema.extend({
   lastActivityAt: z.coerce.date(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
+  hasUserActivity: z.boolean().optional(),
   selectedProvider: providerSchema,
   selectedModel: z.string().min(1),
   selectedThinkingEffort: thinkingEffortSchema,

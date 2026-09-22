@@ -211,6 +211,51 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     expect(body).toContain('Hello from stream');
   });
 
+  test('GET /api/events/stream publishes app-wide state changes', async () => {
+    await app.listen({ port: 0 });
+    const address = app.server.address();
+    const port = typeof address === 'string' ? 3000 : (address?.port ?? 3000);
+
+    let req!: http.ClientRequest;
+    const promise = new Promise<string>((resolve, reject) => {
+      let buffer = '';
+      req = http.get(
+        `http://localhost:${String(port)}/api/events/stream`,
+        { headers: { authorization: 'Bearer test-secret' } },
+        (res) => {
+          res.on('data', (chunk: Buffer | string) => {
+            buffer += chunk.toString();
+            if (buffer.includes('"topics":["providers"]')) {
+              req.destroy();
+              resolve(buffer);
+            }
+          });
+        },
+      );
+      activeRequests.push(req);
+      req.on('error', (err) => {
+        if (buffer.includes('"topics":["providers"]')) resolve(buffer);
+        else reject(err);
+      });
+    });
+
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(() => {
+        if (app.eventBus.stateListenerCount() > 0) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 5);
+    });
+
+    app.eventBus.publishState({ topics: ['providers'] });
+
+    const body = await promise;
+    expect(body).toContain('event: state_ready');
+    expect(body).toContain('event: state_change');
+    expect(body).toContain('"topics":["providers"]');
+  });
+
   test('GET /api/sessions/:id/events/stream replays missed events based on Last-Event-ID', async () => {
     const projectId = 'proj-123';
     const sessionId = '66666666-6666-4666-8666-666666666666';

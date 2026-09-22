@@ -19,8 +19,7 @@ export function formatRelativeTime(value: Timestamp, now = Date.now()): string {
   if (timestamp === null) return '';
 
   const age = Math.max(0, now - timestamp);
-  if (age < 5 * SECOND) return 'just now';
-  if (age < MINUTE) return `${Math.floor(age / SECOND)}s`;
+  if (age < MINUTE) return 'just now';
   if (age < HOUR) return `${Math.floor(age / MINUTE)}m`;
   if (age < DAY) return `${Math.floor(age / HOUR)}h`;
   if (age < WEEK) return `${Math.floor(age / DAY)}d`;
@@ -39,12 +38,11 @@ export function getRelativeTimeRefreshDelay(value: Timestamp, now = Date.now()):
   const timestamp = timestampValue(value);
   if (timestamp === null) return null;
 
-  // Treat small clock differences as "just now", then refresh once the timestamp is in the past.
-  if (timestamp > now) return timestamp - now + 5 * SECOND;
+  // Treat future clock differences as "just now", then refresh after the first minute.
+  if (timestamp > now) return timestamp - now + MINUTE;
 
   const age = now - timestamp;
-  if (age < 5 * SECOND) return 5 * SECOND - age;
-  if (age < MINUTE) return SECOND - (age % SECOND);
+  if (age < MINUTE) return MINUTE - age;
   if (age < HOUR) return MINUTE - (age % MINUTE);
   if (age < DAY) return HOUR - (age % HOUR);
   if (age < WEEK) return DAY - (age % DAY);

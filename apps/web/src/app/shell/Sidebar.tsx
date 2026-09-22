@@ -108,14 +108,8 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       apiClient.fetch<SidebarProject[]>(
         `/api/projects?sortBy=${sortBy}&gitOnly=${gitOnly ? 'true' : 'false'}`,
       ),
-    refetchInterval: (query) => {
-      if (typeof document !== 'undefined' && document.hidden) return false;
-      const data = query.state.data;
-      const hasRunning = data?.some((p) => p.sessions?.some((s) => s.status === 'running'));
-      return hasRunning ? 3000 : 10000;
-    },
-    refetchIntervalInBackground: false,
     staleTime: 2000,
+    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {

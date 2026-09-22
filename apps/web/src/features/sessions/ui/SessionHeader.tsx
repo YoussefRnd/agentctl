@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Menu, PanelRight, Pencil, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
 import { Dropdown, Tooltip } from '@agentctl/ui';
+import { getSessionDisplayTitle } from '@agentctl/shared';
 import { DiffIcon, RepoForkedIcon, GitPullRequestIcon } from '@primer/octicons-react';
 import {
   renameSession,
@@ -55,8 +56,8 @@ export function SessionHeader({
   const currentProject = projects.find((p) => p.id === currentProjectId);
   const worktreePath = sessionData?.session.worktreePath || currentProject?.path || '';
 
-  const rawTitle = sessionData?.session.title ?? '';
-  const sessionDisplayTitle = rawTitle.trim().length > 0 ? rawTitle : 'Untitled session';
+  const rawTitle = sessionData ? getSessionDisplayTitle(sessionData.session) : '';
+  const sessionDisplayTitle = rawTitle || 'Untitled session';
 
   const status = sessionData?.session.status ?? 'idle';
 

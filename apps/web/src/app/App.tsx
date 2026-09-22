@@ -8,6 +8,7 @@ import {
 import { CommandPalette, useCommandPaletteStore } from '../features/command-palette/index.js';
 import { useShellStore } from './shell/index.js';
 import { AppRouter } from './AppRouter.js';
+import { useServerStateSync } from './useServerStateSync.js';
 
 const SetupWizard = lazy(() =>
   import('../features/settings/index.js').then((m) => ({
@@ -16,6 +17,7 @@ const SetupWizard = lazy(() =>
 );
 
 export function App() {
+  useServerStateSync();
   const { settings } = useSettings();
   const toggleSettings = useSettingsOverlayStore((s) => s.toggleSettings);
   const toggleCommandPalette = useCommandPaletteStore((s) => s.toggle);

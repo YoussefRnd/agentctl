@@ -5,7 +5,6 @@ import { SessionEngine } from '@agentctl/shared';
 
 import { apiClient, getDesktopCapability } from '@agentctl/api-client';
 import { getApiBaseUrl } from '@/shared/lib/api-base-url';
-import { sessionKeys } from '@/shared/lib/queryKeys';
 
 const fetchEvents = async (sessionId: string): Promise<SessionEventRow[]> => {
   return apiClient.fetch<SessionEventRow[]>(`/api/sessions/${sessionId}/events`);
@@ -126,39 +125,12 @@ export function useSessionEvents(sessionId: string | null) {
           }
           return result;
         });
-
-        const hasToolOrStateEvents = newEvents.some(
-          (evt) =>
-            evt.type === 'tool_call' ||
-            evt.type === 'subagent_update' ||
-            evt.type === 'diff' ||
-            evt.type === 'terminal_exit' ||
-            evt.type === 'status',
-        );
-
-        const shouldInvalidateSession = newEvents.some(
-          (evt) => evt.type !== 'text' || !('delta' in (evt as { delta?: string })),
-        );
-        if (shouldInvalidateSession) {
-          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-          void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        }
-        if (hasToolOrStateEvents) {
-          void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-          void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        }
       },
       onStatusChange: (status) => {
         setIsConnected(status);
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
       },
       onStreamingChange: (id) => {
         setStreamingEventId(id);
-        if (id === null) {
-          void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-          void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        }
       },
     });
 

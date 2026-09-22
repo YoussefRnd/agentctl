@@ -62,6 +62,8 @@ export function useWorkspaceReviewState(sessionId: string) {
       return res.body;
     },
     enabled: !!sessionId,
+    staleTime: 2_000,
+    refetchOnWindowFocus: true,
   });
 
   const switchBranchMutation = useMutation({

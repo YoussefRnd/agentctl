@@ -74,6 +74,7 @@ export function createMcpRouter(
         fastify.log.error(err, 'Failed to reload MCP gateway on createMcpServer');
       }
       const isConnected = created.enabled && fastify.mcpGateway.isServerConnected(created.id);
+      fastify.eventBus.publishState({ topics: ['mcp'] });
       return {
         status: 201 as const,
         body: {
@@ -136,6 +137,7 @@ export function createMcpRouter(
       }
       const updated = results[0];
       const isConnected = updated.enabled && fastify.mcpGateway.isServerConnected(updated.id);
+      fastify.eventBus.publishState({ topics: ['mcp'] });
       return {
         status: 200 as const,
         body: {
@@ -165,6 +167,7 @@ export function createMcpRouter(
       if (result.length === 0) {
         throw new AppError('MCP server not found', 404);
       }
+      fastify.eventBus.publishState({ topics: ['mcp'] });
       return {
         status: 204 as const,
         body: undefined,

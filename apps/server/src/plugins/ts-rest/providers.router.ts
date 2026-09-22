@@ -23,6 +23,7 @@ export function createProvidersRouter(
     installProvider: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       const result = await fastify.providerRegistry.install(id);
+      fastify.eventBus.publishState({ topics: ['providers'] });
       return {
         status: 200 as const,
         body: result,
@@ -31,6 +32,7 @@ export function createProvidersRouter(
     removeProvider: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       const result = await fastify.providerRegistry.remove(id);
+      fastify.eventBus.publishState({ topics: ['providers'] });
       return {
         status: 200 as const,
         body: result,
@@ -46,6 +48,7 @@ export function createProvidersRouter(
       const { id } = params;
       const { methodId, params: loginParams } = body;
       await fastify.providerRegistry.login(id, methodId, loginParams);
+      fastify.eventBus.publishState({ topics: ['providers'] });
       return {
         status: 200 as const,
         body: { success: true },
@@ -54,6 +57,7 @@ export function createProvidersRouter(
     logoutProvider: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       await fastify.providerRegistry.logout(id);
+      fastify.eventBus.publishState({ topics: ['providers'] });
       return {
         status: 200 as const,
         body: { success: true },
@@ -62,6 +66,7 @@ export function createProvidersRouter(
     activateProvider: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       const result = await fastify.providerRegistry.activate(id);
+      fastify.eventBus.publishState({ topics: ['providers'] });
       return {
         status: 200 as const,
         body: result,
@@ -70,6 +75,7 @@ export function createProvidersRouter(
     refreshProvider: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       const result = await fastify.providerRegistry.refreshProvider(id);
+      fastify.eventBus.publishState({ topics: ['providers'] });
       return {
         status: 200 as const,
         body: result,
@@ -88,6 +94,7 @@ export function createProvidersRouter(
         customEnv,
         nativelyLoadsSkills,
       });
+      fastify.eventBus.publishState({ topics: ['providers'] });
       return {
         status: 200 as const,
         body: result,
@@ -95,6 +102,7 @@ export function createProvidersRouter(
     },
     syncProviders: async () => {
       await fastify.providerRegistry.sync();
+      fastify.eventBus.publishState({ topics: ['providers'] });
       const providers = await fastify.providerRegistry.discover();
       return {
         status: 200 as const,

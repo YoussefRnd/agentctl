@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { getSessionDisplayTitle } from '@agentctl/shared';
 import {
   Search,
   Folder,
@@ -17,9 +18,9 @@ import {
   ArrowRight,
   FolderGit2,
 } from 'lucide-react';
-import { apiClient, type SidebarProject } from '@agentctl/api-client';
 import { useSettingsOverlayStore } from '@/features/settings';
 import { useWorkbenchStore } from '@/features/workbench';
+import { projectQueries } from '@/features/projects';
 import { useCommandPaletteStore } from '../model/useCommandPaletteStore';
 import { useTheme } from '@/shared';
 
@@ -49,9 +50,8 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const { data: projects = [] } = useQuery<SidebarProject[]>({
-    queryKey: ['projects'],
-    queryFn: () => apiClient.fetch<SidebarProject[]>('/api/projects'),
+  const { data: projects = [] } = useQuery({
+    ...projectQueries.all(),
     enabled: isOpen,
   });
 
@@ -73,7 +73,7 @@ export function CommandPalette() {
     // 1. Sessions across all workspaces
     for (const proj of projects) {
       for (const s of proj.sessions) {
-        const sessionTitle = s.title || s.taskSlug || s.branch || 'Untitled session';
+        const sessionTitle = getSessionDisplayTitle(s);
         const badgeType =
           s.status === 'running'
             ? 'running'
