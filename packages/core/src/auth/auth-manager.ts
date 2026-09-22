@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import { and, eq, gt, isNull } from 'drizzle-orm';
+import type { CoreDatabase } from '../db/index.js';
+import { authSessions } from '../db/schema.js';
 
 export interface PairingToken {
   token: string;
@@ -8,38 +11,53 @@ export interface PairingToken {
   consumed: boolean;
 }
 
-export interface ClientSession {
+export interface BrowserSession {
   id: string;
-  sessionToken: string;
   clientLabel: string;
   ip: string;
   createdAt: number;
   lastActiveAt: number;
-  revoked: boolean;
+  expiresAt: number;
+}
+
+export interface AuthManagerOptions {
+  db: CoreDatabase;
+  startupTokenTtlMs?: number;
+  browserSessionTtlMs?: number;
+  desktopCapability?: string;
+  now?: () => number;
 }
 
 export class AuthManager {
   private pairingTokens = new Map<string, PairingToken>();
-  private clientSessions = new Map<string, ClientSession>();
-  private tokenToSessionId = new Map<string, string>();
   private startupToken: string | null = null;
+  private readonly db: CoreDatabase;
+  private readonly startupTokenTtlMs: number;
+  private readonly browserSessionTtlMs: number;
+  private readonly desktopCapability: string | null;
+  private readonly now: () => number;
 
-  constructor() {
-    // Generate initial startup token
-    this.startupToken = this.createPairingToken({
-      label: 'startup-bootstrap',
-      ttlMs: 15 * 60 * 1000, // 15 mins for initial startup
-    }).token;
+  constructor(options: AuthManagerOptions) {
+    this.db = options.db;
+    this.startupTokenTtlMs = options.startupTokenTtlMs ?? 15 * 60 * 1000;
+    this.browserSessionTtlMs = options.browserSessionTtlMs ?? 30 * 24 * 60 * 60 * 1000;
+    this.desktopCapability = options.desktopCapability ?? null;
+    this.now = options.now ?? Date.now;
+    this.rotateStartupToken();
   }
 
-  getStartupToken(): string {
-    if (!this.startupToken) {
-      this.startupToken = this.createPairingToken({
-        label: 'startup-bootstrap',
-        ttlMs: 15 * 60 * 1000,
-      }).token;
+  getStartupPairingToken(): string {
+    if (!this.startupToken || !this.isPairingTokenUsable(this.startupToken)) {
+      this.rotateStartupToken();
     }
-    return this.startupToken;
+    return this.startupToken!;
+  }
+
+  isDesktopCapability(token: string): boolean {
+    if (!this.desktopCapability) return false;
+    const actual = Buffer.from(token);
+    const expected = Buffer.from(this.desktopCapability);
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
   }
 
   createPairingToken(opts?: { label?: string; ttlMs?: number }): {
@@ -48,7 +66,7 @@ export class AuthManager {
   } {
     const token = crypto.randomBytes(24).toString('hex');
     const ttl = opts?.ttlMs ?? 5 * 60 * 1000; // default 5 minutes
-    const now = Date.now();
+    const now = this.now();
     const expiresAt = now + ttl;
 
     this.pairingTokens.set(token, {
@@ -65,7 +83,7 @@ export class AuthManager {
   consumePairingToken(
     token: string,
     clientMetadata?: { userAgent?: string; ip?: string },
-  ): { sessionToken: string; sessionId: string } {
+  ): BrowserSession {
     const pairing = this.pairingTokens.get(token);
     if (!pairing) {
       throw new Error('Invalid pairing token');
@@ -75,7 +93,7 @@ export class AuthManager {
       throw new Error('Pairing token has already been consumed');
     }
 
-    if (Date.now() > pairing.expiresAt) {
+    if (this.now() > pairing.expiresAt) {
       this.pairingTokens.delete(token);
       throw new Error('Pairing token has expired');
     }
@@ -84,69 +102,75 @@ export class AuthManager {
     pairing.consumed = true;
     this.pairingTokens.delete(token);
 
-    // Create client session
-    const sessionId = `csess_${crypto.randomBytes(12).toString('hex')}`;
-    const sessionToken = `agtoken_${crypto.randomBytes(32).toString('hex')}`;
-    const now = Date.now();
+    return this.createBrowserSession(clientMetadata);
+  }
 
-    const session: ClientSession = {
+  createBrowserSession(clientMetadata?: { userAgent?: string; ip?: string }): BrowserSession {
+    const sessionId = `csess_${crypto.randomBytes(12).toString('hex')}`;
+    const now = this.now();
+
+    const session: BrowserSession = {
       id: sessionId,
-      sessionToken,
       clientLabel: clientMetadata?.userAgent || 'Unknown device',
       ip: clientMetadata?.ip || '127.0.0.1',
       createdAt: now,
       lastActiveAt: now,
-      revoked: false,
+      expiresAt: now + this.browserSessionTtlMs,
     };
 
-    this.clientSessions.set(sessionId, session);
-    this.tokenToSessionId.set(sessionToken, sessionId);
+    this.db
+      .insert(authSessions)
+      .values({
+        id: session.id,
+        clientLabel: session.clientLabel,
+        ip: session.ip,
+        createdAt: new Date(session.createdAt),
+        lastActiveAt: new Date(session.lastActiveAt),
+        expiresAt: new Date(session.expiresAt),
+      })
+      .run();
 
-    return { sessionToken, sessionId };
+    return session;
   }
 
-  createDirectSession(clientMetadata?: { userAgent?: string; ip?: string }): {
-    sessionToken: string;
-    sessionId: string;
-  } {
-    const sessionId = `csess_${crypto.randomBytes(12).toString('hex')}`;
-    const sessionToken = `agtoken_${crypto.randomBytes(32).toString('hex')}`;
-    const now = Date.now();
+  validateBrowserSession(sessionId: string): boolean {
+    const now = new Date(this.now());
+    const session = this.db
+      .select({ id: authSessions.id, lastActiveAt: authSessions.lastActiveAt })
+      .from(authSessions)
+      .where(
+        and(
+          eq(authSessions.id, sessionId),
+          isNull(authSessions.revokedAt),
+          gt(authSessions.expiresAt, now),
+        ),
+      )
+      .get();
+    if (!session) return false;
 
-    const session: ClientSession = {
-      id: sessionId,
-      sessionToken,
-      clientLabel: clientMetadata?.userAgent || 'Local Desktop / Dev',
-      ip: clientMetadata?.ip || '127.0.0.1',
-      createdAt: now,
-      lastActiveAt: now,
-      revoked: false,
-    };
-
-    this.clientSessions.set(sessionId, session);
-    this.tokenToSessionId.set(sessionToken, sessionId);
-
-    return { sessionToken, sessionId };
-  }
-
-  validateSessionToken(token: string): { valid: boolean; sessionId?: string } {
-    const sessionId = this.tokenToSessionId.get(token);
-    if (!sessionId) return { valid: false };
-
-    const session = this.clientSessions.get(sessionId);
-    if (!session || session.revoked) return { valid: false };
-
-    session.lastActiveAt = Date.now();
-    return { valid: true, sessionId };
+    if (now.getTime() - session.lastActiveAt.getTime() >= 60_000) {
+      this.db
+        .update(authSessions)
+        .set({ lastActiveAt: now })
+        .where(eq(authSessions.id, sessionId))
+        .run();
+    }
+    return true;
   }
 
   revokeSession(sessionId: string): boolean {
-    const session = this.clientSessions.get(sessionId);
+    const session = this.db
+      .select({ id: authSessions.id })
+      .from(authSessions)
+      .where(and(eq(authSessions.id, sessionId), isNull(authSessions.revokedAt)))
+      .get();
     if (!session) return false;
 
-    session.revoked = true;
-    this.tokenToSessionId.delete(session.sessionToken);
-    this.clientSessions.delete(sessionId);
+    this.db
+      .update(authSessions)
+      .set({ revokedAt: new Date(this.now()) })
+      .where(eq(authSessions.id, sessionId))
+      .run();
     return true;
   }
 
@@ -156,6 +180,7 @@ export class AuthManager {
     ip: string;
     createdAt: Date;
     lastActiveAt: Date;
+    expiresAt: Date;
   }> {
     const result: Array<{
       id: string;
@@ -163,20 +188,43 @@ export class AuthManager {
       ip: string;
       createdAt: Date;
       lastActiveAt: Date;
+      expiresAt: Date;
     }> = [];
 
-    for (const s of this.clientSessions.values()) {
-      if (!s.revoked) {
-        result.push({
-          id: s.id,
-          clientLabel: s.clientLabel,
-          ip: s.ip,
-          createdAt: new Date(s.createdAt),
-          lastActiveAt: new Date(s.lastActiveAt),
-        });
-      }
+    const rows = this.db
+      .select()
+      .from(authSessions)
+      .where(and(isNull(authSessions.revokedAt), gt(authSessions.expiresAt, new Date(this.now()))))
+      .all();
+
+    for (const session of rows) {
+      result.push({
+        id: session.id,
+        clientLabel: session.clientLabel,
+        ip: session.ip,
+        createdAt: session.createdAt,
+        lastActiveAt: session.lastActiveAt,
+        expiresAt: session.expiresAt,
+      });
     }
 
     return result;
+  }
+
+  private rotateStartupToken(): void {
+    if (this.startupToken) this.pairingTokens.delete(this.startupToken);
+    this.startupToken = this.createPairingToken({
+      label: 'startup-bootstrap',
+      ttlMs: this.startupTokenTtlMs,
+    }).token;
+  }
+
+  private isPairingTokenUsable(token: string): boolean {
+    const pairing = this.pairingTokens.get(token);
+    if (!pairing || pairing.consumed || this.now() > pairing.expiresAt) {
+      this.pairingTokens.delete(token);
+      return false;
+    }
+    return true;
   }
 }

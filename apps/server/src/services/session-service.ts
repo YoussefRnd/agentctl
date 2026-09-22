@@ -480,8 +480,6 @@ export class SessionService {
     return this.parseSessionRow(sessionRecord);
   }
 
-  spawnSwarmSubagent = this.spawnParallelAgent;
-
   async renameSession(sessionId: string, title: string) {
     const session = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),

@@ -156,6 +156,7 @@ export class SessionEngine {
         const response = await fetch(url, {
           headers,
           signal: this.abortController.signal,
+          credentials: 'include',
         });
 
         if (!response.ok) {

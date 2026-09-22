@@ -52,100 +52,6 @@ export function createSessionsRouter(
         body: result,
       };
     },
-    switchSessionBranch: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { branch: string };
-    }) => {
-      const { id } = params;
-      const { branch } = body;
-      await fastify.sessionService.checkoutBranch(id, branch);
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
-    },
-    updateSessionProvider: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { providerId: string; modelId?: string };
-    }) => {
-      const { id } = params;
-      const { providerId, modelId } = body;
-      await fastify.sessionService.updateSessionProvider(id, {
-        selectedProvider: providerId,
-        selectedModel: modelId ?? '',
-        selectedThinkingEffort: 'medium',
-      });
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
-    },
-    switchSessionMode: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { mode: 'local' | 'worktree' };
-    }) => {
-      const { id } = params;
-      const { mode } = body;
-      await fastify.sessionService.switchMode(id, mode);
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
-    },
-    setApprovalMode: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { approvalMode: 'review' | 'auto_approve' | 'yolo' };
-    }) => {
-      const { id } = params;
-      const { approvalMode } = body;
-      await fastify.sessionService.updateApprovalMode(id, approvalMode);
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
-    },
-    setAgentPersona: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { persona: string };
-    }) => {
-      const { id } = params;
-      const { persona } = body;
-      await fastify.sessionManager.setAgentPersona(id, persona);
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
-    },
-    setSessionConfigOption: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { configId: string; value: string };
-    }) => {
-      const { id } = params;
-      const { configId, value } = body;
-      await fastify.sessionManager.setConfigOption(id, configId, value);
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
-    },
     sendTerminalInput: ({
       params,
       body,
@@ -258,21 +164,6 @@ export function createSessionsRouter(
       return {
         status: 204 as const,
         body: undefined,
-      };
-    },
-    renameSession: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { title: string };
-    }) => {
-      const { id } = params;
-      const { title } = body;
-      await fastify.sessionService.renameSession(id, title);
-      return {
-        status: 200 as const,
-        body: { success: true },
       };
     },
     archiveSession: async ({ params }: { params: { id: string } }) => {

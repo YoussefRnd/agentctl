@@ -1,6 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { setApiBaseUrl, extractAndPersistUrlToken, setAuthToken } from '@agentctl/api-client';
+import {
+  extractPairingTokenFromUrl,
+  setApiBaseUrl,
+  setDesktopCapability,
+} from '@agentctl/api-client';
 import { AppProviders } from './app/AppProviders.js';
 import { App } from './app/App.js';
 import './index.css';
@@ -12,28 +16,30 @@ const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 const rootElement = document.getElementById('root');
 if (rootElement) {
   async function bootstrap(element: HTMLElement) {
-    extractAndPersistUrlToken();
+    const pairingToken = extractPairingTokenFromUrl();
     const baseUrl = await initApiBaseUrl();
     setApiBaseUrl(baseUrl);
 
-    // Auto-login for Electron desktop app
+    // Electron keeps its per-launch capability in memory only.
     if (isElectron && window.electronAPI?.getServerSecret) {
       try {
         const secret = await window.electronAPI.getServerSecret();
         if (secret) {
-          setAuthToken(secret);
-          await fetch(`${baseUrl}/api/login`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${secret}`,
-            },
-            body: JSON.stringify({ secret }),
-            credentials: 'include',
-          });
+          setDesktopCapability(secret);
         }
       } catch {
-        // Auto-login failed — user lands on login page
+        // Protected requests will surface the startup failure.
+      }
+    } else if (pairingToken) {
+      try {
+        await fetch(`${baseUrl}/api/auth/pairing/consume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pairingToken }),
+          credentials: 'include',
+        });
+      } catch {
+        // The next protected request redirects to the manual pairing screen.
       }
     }
 

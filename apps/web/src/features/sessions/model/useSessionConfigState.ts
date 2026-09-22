@@ -1,22 +1,14 @@
 import { useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@agentctl/api-client';
+import { patchSession } from '@agentctl/api-client';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 
 export function useSessionConfigState(sessionId: string) {
   const queryClient = useQueryClient();
 
   const updateProviderMutation = useMutation({
-    mutationFn: async ({ providerId, modelId }: { providerId: string; modelId?: string }) => {
-      const res = await api.updateSessionProvider({
-        params: { id: sessionId },
-        body: { providerId, modelId },
-      });
-      if (res.status !== 200) {
-        throw new Error(`Failed to update provider: ${String(res.status)}`);
-      }
-      return res.body;
-    },
+    mutationFn: ({ providerId, modelId }: { providerId: string; modelId?: string }) =>
+      patchSession(sessionId, { providerId, modelId }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
@@ -30,16 +22,8 @@ export function useSessionConfigState(sessionId: string) {
   );
 
   const setApprovalModeMutation = useMutation({
-    mutationFn: async (approvalMode: 'review' | 'auto_approve' | 'yolo') => {
-      const res = await api.setApprovalMode({
-        params: { id: sessionId },
-        body: { approvalMode },
-      });
-      if (res.status !== 200) {
-        throw new Error(`Failed to set approval mode: ${String(res.status)}`);
-      }
-      return res.body;
-    },
+    mutationFn: (approvalMode: 'review' | 'auto_approve' | 'yolo') =>
+      patchSession(sessionId, { approvalMode }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
@@ -53,16 +37,7 @@ export function useSessionConfigState(sessionId: string) {
   );
 
   const setAgentPersonaMutation = useMutation({
-    mutationFn: async (persona: string) => {
-      const res = await api.setAgentPersona({
-        params: { id: sessionId },
-        body: { persona },
-      });
-      if (res.status !== 200) {
-        throw new Error(`Failed to set agent persona: ${String(res.status)}`);
-      }
-      return res.body;
-    },
+    mutationFn: (persona: string) => patchSession(sessionId, { persona }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
@@ -76,16 +51,8 @@ export function useSessionConfigState(sessionId: string) {
   );
 
   const setSessionConfigOptionMutation = useMutation({
-    mutationFn: async ({ configId, value }: { configId: string; value: string }) => {
-      const res = await api.setSessionConfigOption({
-        params: { id: sessionId },
-        body: { configId, value },
-      });
-      if (res.status !== 200) {
-        throw new Error(`Failed to set config option: ${String(res.status)}`);
-      }
-      return res.body;
-    },
+    mutationFn: ({ configId, value }: { configId: string; value: string }) =>
+      patchSession(sessionId, { configId, configValue: value }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },

@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AuthManager } from './auth-manager.js';
+import { createDatabase } from '../db/index.js';
 
 describe('AuthManager', () => {
   let auth: AuthManager;
 
   beforeEach(() => {
-    auth = new AuthManager();
+    auth = new AuthManager({ db: createDatabase(':memory:') });
   });
 
   it('generates a startup pairing token upon initialization', () => {
-    const startupToken = auth.getStartupToken();
+    const startupToken = auth.getStartupPairingToken();
     expect(startupToken).toBeDefined();
     expect(startupToken.length).toBeGreaterThan(16);
   });
@@ -23,13 +24,8 @@ describe('AuthManager', () => {
       ip: '192.168.1.50',
     });
 
-    expect(session.sessionId).toMatch(/^csess_/);
-    expect(session.sessionToken).toMatch(/^agtoken_/);
-
-    // Validate the issued session token
-    const validation = auth.validateSessionToken(session.sessionToken);
-    expect(validation.valid).toBe(true);
-    expect(validation.sessionId).toBe(session.sessionId);
+    expect(session.id).toMatch(/^csess_/);
+    expect(auth.validateBrowserSession(session.id)).toBe(true);
 
     // Ensure pairing token cannot be reused (one-time use / self-destructing)
     expect(() => auth.consumePairingToken(token)).toThrow('Invalid pairing token');
@@ -38,6 +34,37 @@ describe('AuthManager', () => {
   it('rejects expired pairing tokens', () => {
     const { token } = auth.createPairingToken({ label: 'short-lived', ttlMs: -1000 });
     expect(() => auth.consumePairingToken(token)).toThrow('Pairing token has expired');
+  });
+
+  it('rotates an expired or consumed startup token', () => {
+    let now = 1_000;
+    const expiringAuth = new AuthManager({
+      db: createDatabase(':memory:'),
+      startupTokenTtlMs: 100,
+      now: () => now,
+    });
+    const firstToken = expiringAuth.getStartupPairingToken();
+
+    now += 101;
+    const secondToken = expiringAuth.getStartupPairingToken();
+    expect(secondToken).not.toBe(firstToken);
+
+    expiringAuth.consumePairingToken(secondToken);
+    expect(expiringAuth.getStartupPairingToken()).not.toBe(secondToken);
+  });
+
+  it('expires client sessions and removes them from the active list', () => {
+    let now = 1_000;
+    const expiringAuth = new AuthManager({
+      db: createDatabase(':memory:'),
+      browserSessionTtlMs: 100,
+      now: () => now,
+    });
+    const session = expiringAuth.createBrowserSession();
+
+    now += 101;
+    expect(expiringAuth.validateBrowserSession(session.id)).toBe(false);
+    expect(expiringAuth.listActiveSessions()).toHaveLength(0);
   });
 
   it('lists active sessions and supports single-device revocation', () => {
@@ -49,18 +76,37 @@ describe('AuthManager', () => {
 
     const activeSessions = auth.listActiveSessions();
     expect(activeSessions.length).toBeGreaterThanOrEqual(1);
-    expect(activeSessions.some((s) => s.id === session.sessionId)).toBe(true);
+    expect(activeSessions.some((s) => s.id === session.id)).toBe(true);
 
     // Revoke the session
-    const revoked = auth.revokeSession(session.sessionId);
+    const revoked = auth.revokeSession(session.id);
     expect(revoked).toBe(true);
 
     // Validation should now fail
-    const check = auth.validateSessionToken(session.sessionToken);
-    expect(check.valid).toBe(false);
+    expect(auth.validateBrowserSession(session.id)).toBe(false);
 
     // Should no longer appear in active list
     const updatedSessions = auth.listActiveSessions();
-    expect(updatedSessions.some((s) => s.id === session.sessionId)).toBe(false);
+    expect(updatedSessions.some((s) => s.id === session.id)).toBe(false);
+  });
+
+  it('persists browser sessions across manager restarts', () => {
+    const db = createDatabase(':memory:');
+    const firstManager = new AuthManager({ db });
+    const session = firstManager.createBrowserSession({ userAgent: 'Firefox' });
+
+    const restartedManager = new AuthManager({ db });
+    expect(restartedManager.validateBrowserSession(session.id)).toBe(true);
+  });
+
+  it('accepts the desktop capability only when explicitly configured', () => {
+    const desktopAuth = new AuthManager({
+      db: createDatabase(':memory:'),
+      desktopCapability: 'ephemeral-desktop-capability',
+    });
+
+    expect(desktopAuth.isDesktopCapability('ephemeral-desktop-capability')).toBe(true);
+    expect(desktopAuth.isDesktopCapability('wrong-capability')).toBe(false);
+    expect(auth.isDesktopCapability('ephemeral-desktop-capability')).toBe(false);
   });
 });

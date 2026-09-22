@@ -1,5 +1,5 @@
 import { ApiError } from '../api-error.js';
-import { redirectToLogin, getApiBaseUrl, getAuthToken } from '../api-client.js';
+import { redirectToLogin, getApiBaseUrl, getDesktopCapability } from '../api-client.js';
 
 export interface UploadAttachmentResult {
   attachmentId: string;
@@ -41,7 +41,7 @@ export function uploadAttachment(
     xhr.open('POST', url);
     xhr.withCredentials = true;
 
-    const token = getAuthToken();
+    const token = getDesktopCapability();
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }

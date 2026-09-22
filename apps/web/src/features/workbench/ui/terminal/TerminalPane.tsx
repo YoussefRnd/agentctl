@@ -6,7 +6,7 @@ import '@xterm/xterm/css/xterm.css';
 import { X, Columns2, Rows2 } from 'lucide-react';
 import { Tooltip } from '@agentctl/ui';
 import { getApiBaseUrl } from '@/shared/lib/api-base-url';
-import { getAuthToken } from '@agentctl/api-client';
+import { getDesktopCapability } from '@agentctl/api-client';
 
 const NERD_FONT_FAMILY = [
   '"JetBrainsMono Nerd Font"',
@@ -367,12 +367,10 @@ export const TerminalPane = forwardRef<TerminalPaneHandle, TerminalPaneProps>(fu
         wsUrl = `${protocol}//${host}/api/sessions/${sessionId}/terminal/ws?termId=${id}`;
       }
 
-      const token = getAuthToken();
-      if (token) {
-        wsUrl += `&token=${encodeURIComponent(token)}`;
-      }
-
-      const activeWs = new WebSocket(wsUrl);
+      const capability = getDesktopCapability();
+      const activeWs = capability
+        ? new WebSocket(wsUrl, [`agentctl.desktop.${capability}`])
+        : new WebSocket(wsUrl);
       ws = activeWs;
       socketRef.current = activeWs;
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiClient, setAuthToken, clearAuthToken } from '@agentctl/api-client';
+import { apiClient } from '@agentctl/api-client';
 import { GlassPanel, Input, Button } from '@agentctl/ui';
 import { KeyRound, ShieldAlert, Laptop } from 'lucide-react';
 
@@ -27,38 +27,18 @@ export function LoginView() {
     void (async () => {
       try {
         // Try pairing token consumption first
-        const res = await apiClient.fetch<{ sessionToken?: string; user?: unknown }>(
-          '/api/auth/pairing/consume',
-          {
-            method: 'POST',
-            body: JSON.stringify({ pairingToken: tokenInput }),
-          },
-        );
-
-        if (res?.sessionToken) {
-          setAuthToken(res.sessionToken);
-        } else {
-          setAuthToken(tokenInput);
-        }
+        await apiClient.fetch<{ success: true }>('/api/auth/pairing/consume', {
+          method: 'POST',
+          body: JSON.stringify({ pairingToken: tokenInput }),
+        });
 
         void navigate('/');
-      } catch {
-        // Fallback to traditional /api/login
-        try {
-          setAuthToken(tokenInput);
-          await apiClient.fetch('/api/login', {
-            method: 'POST',
-            body: JSON.stringify({ secret: tokenInput }),
-          });
-          void navigate('/');
-        } catch (err) {
-          clearAuthToken();
-          setError(
-            err instanceof Error
-              ? err.message
-              : 'Invalid or expired pairing code. Please generate a new link.',
-          );
-        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Invalid or expired pairing code. Please generate a new link.',
+        );
       } finally {
         setIsLoading(false);
       }
@@ -76,7 +56,8 @@ export function LoginView() {
             Pair with Agentctl
           </h1>
           <p className="text-text-muted text-xs leading-relaxed opacity-75">
-            Enter the one-time pairing code from your server terminal or desktop app to connect.
+            Enter the one-time pairing code from your server terminal or an existing AgentCtl
+            session.
           </p>
         </div>
 

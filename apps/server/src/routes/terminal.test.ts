@@ -6,6 +6,7 @@ import { parseServerEnv } from '@agentctl/shared';
 import os from 'node:os';
 
 describe('Interactive Terminal WebSocket Route', () => {
+  const desktopCapability = 'terminal-test-desktop-capability';
   let app: FastifyInstance;
   let db: ReturnType<typeof createDatabase>;
   let serverPort: number;
@@ -38,7 +39,7 @@ describe('Interactive Terminal WebSocket Route', () => {
     });
 
     const testEnv = parseServerEnv({
-      AGENTCTL_SECRET: 'test-secret',
+      NODE_ENV: 'production',
       AGENTCTL_SESSION_KEY: 'test-session-key-test-session-key-123456',
       AGENTCTL_SESSION_SALT: 'test-session-sal',
       PORT: '0',
@@ -47,6 +48,8 @@ describe('Interactive Terminal WebSocket Route', () => {
     app = await buildApp({
       db,
       env: testEnv,
+      embedded: true,
+      desktopCapability,
     });
 
     await app.listen({ port: 0, host: '127.0.0.1' });
@@ -59,10 +62,9 @@ describe('Interactive Terminal WebSocket Route', () => {
   });
 
   test('connects to terminal websocket and streams shell output', async () => {
-    const startupToken = app.authManager.getStartupToken();
-    const wsUrl = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws?token=${startupToken}`;
+    const wsUrl = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws`;
 
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl, [`agentctl.desktop.${desktopCapability}`]);
     let receivedEcho = false;
 
     await new Promise<void>((resolve, reject) => {
@@ -98,12 +100,11 @@ describe('Interactive Terminal WebSocket Route', () => {
   });
 
   test('supports concurrent distinct terminal tabs with termId query param', async () => {
-    const startupToken = app.authManager.getStartupToken();
-    const wsUrl1 = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws?token=${startupToken}&termId=tab-1`;
-    const wsUrl2 = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws?token=${startupToken}&termId=tab-2`;
+    const wsUrl1 = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws?termId=tab-1`;
+    const wsUrl2 = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws?termId=tab-2`;
 
-    const ws1 = new WebSocket(wsUrl1);
-    const ws2 = new WebSocket(wsUrl2);
+    const ws1 = new WebSocket(wsUrl1, [`agentctl.desktop.${desktopCapability}`]);
+    const ws2 = new WebSocket(wsUrl2, [`agentctl.desktop.${desktopCapability}`]);
 
     let tab1Init = false;
     let tab2Init = false;

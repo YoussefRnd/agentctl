@@ -55,92 +55,6 @@ export const sessionsContract = {
     },
     summary: 'Get session git branches',
   },
-  switchSessionBranch: {
-    method: 'POST',
-    path: '/api/sessions/:id/branch',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      branch: z.string(),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Switch session branch',
-  },
-  updateSessionProvider: {
-    method: 'PATCH',
-    path: '/api/sessions/:id/provider',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      providerId: z.string(),
-      modelId: z.string().optional(),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Update session provider and model',
-  },
-  switchSessionMode: {
-    method: 'PATCH',
-    path: '/api/sessions/:id/mode',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      mode: z.enum(['local', 'worktree']),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Switch session execution mode',
-  },
-  setApprovalMode: {
-    method: 'PATCH',
-    path: '/api/sessions/:id/approval-mode',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      approvalMode: z.enum(['review', 'auto_approve', 'yolo']),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Update session approval mode',
-  },
-  setAgentPersona: {
-    method: 'PATCH',
-    path: '/api/sessions/:id/persona',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      persona: z.string(),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Update agent persona (ACP mode)',
-  },
-  setSessionConfigOption: {
-    method: 'PATCH',
-    path: '/api/sessions/:id/config-option',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      configId: z.string(),
-      value: z.string(),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Set a session config option value',
-  },
   sendTerminalInput: {
     method: 'POST',
     path: '/api/sessions/:id/terminal/:terminalId/input',
@@ -217,20 +131,6 @@ export const sessionsContract = {
       204: z.void(),
     },
     summary: 'Delete session permanently',
-  },
-  renameSession: {
-    method: 'PATCH',
-    path: '/api/sessions/:id/title',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      title: z.string(),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Rename session title',
   },
   archiveSession: {
     method: 'POST',

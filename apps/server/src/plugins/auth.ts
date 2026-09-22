@@ -1,16 +1,32 @@
 import fp from 'fastify-plugin';
+import type { AuthManager } from '@agentctl/core';
 
-const PUBLIC_PATHS = new Set([
-  '/health',
-  '/api/login',
-  '/api/logout',
-  '/api/auth/status',
-  '/api/auth/pairing/consume',
-]);
+const PUBLIC_PATHS = new Set(['/health', '/api/auth/status', '/api/auth/pairing/consume']);
 
 function isLoopback(ip?: string): boolean {
   if (!ip) return false;
   return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
+}
+
+function isSafeMethod(method: string): boolean {
+  return method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+}
+
+function isAllowedBrowserOrigin(
+  origin: string,
+  host: string | undefined,
+  configuredOrigins: string | undefined,
+): boolean {
+  const allowedOrigins = new Set(
+    configuredOrigins
+      ? configuredOrigins.split(',').map((value) => value.trim())
+      : ['http://localhost:5173', 'http://localhost:5174'],
+  );
+  if (host) {
+    allowedOrigins.add(`http://${host}`);
+    allowedOrigins.add(`https://${host}`);
+  }
+  return allowedOrigins.has(origin);
 }
 
 export default fp((fastify) => {
@@ -22,80 +38,56 @@ export default fp((fastify) => {
       return Promise.resolve();
     }
 
-    const isDev = process.env.NODE_ENV !== 'production';
+    const isDev = fastify.config.NODE_ENV !== 'production';
     const isEmbedded = fastify.embedded;
     const clientIp = request.ip;
-    const authManager = fastify.authManager;
+    const authManager = fastify.authManager as AuthManager;
 
-    // 1. Desktop embedded mode & Local dev loopback auto-auth
-    if (isEmbedded && isLoopback(clientIp)) {
-      return Promise.resolve();
-    }
-
+    // 1. Local development loopback auto-auth
     if (isDev && isLoopback(clientIp)) {
       return Promise.resolve();
     }
 
-    // 2. Check session cookie auth
-    if (request.session.get('authenticated')) {
+    // 2. Electron uses a per-launch capability kept only in renderer memory.
+    const authHeader = request.headers.authorization;
+    if (isEmbedded && authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      if (authManager.isDesktopCapability(token)) {
+        return Promise.resolve();
+      }
+    }
+
+    // Browser WebSockets cannot set Authorization, so Electron sends its
+    // ephemeral capability as a WebSocket subprotocol instead of leaking it
+    // through a query string and request logs.
+    if (isEmbedded) {
+      const protocols = request.headers['sec-websocket-protocol']
+        ?.split(',')
+        .map((protocol) => protocol.trim());
+      const capabilityProtocol = protocols?.find((protocol) =>
+        protocol.startsWith('agentctl.desktop.'),
+      );
+      const capability = capabilityProtocol?.slice('agentctl.desktop.'.length);
+      if (capability && authManager.isDesktopCapability(capability)) {
+        return Promise.resolve();
+      }
+    }
+
+    // 3. Remote browsers authenticate only with a server-backed cookie session.
+    const authSessionId = request.session.get('authSessionId');
+    if (authSessionId && authManager.validateBrowserSession(authSessionId)) {
+      const origin = request.headers.origin;
+      if (
+        !isSafeMethod(request.method) &&
+        origin &&
+        !isAllowedBrowserOrigin(origin, request.headers.host, fastify.config.CORS_ALLOWED_ORIGINS)
+      ) {
+        return reply.code(403).send({ error: 'Origin not allowed' });
+      }
       return Promise.resolve();
     }
-
-    // 3. Check Authorization Bearer token auth (Client session token or startup token)
-    const authHeader = request.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      if (token === authManager.getStartupToken()) {
-        return Promise.resolve();
-      }
-      const validation = authManager.validateSessionToken(token);
-      if (validation.valid) {
-        return Promise.resolve();
-      }
-      if (isDev && token === 'dev-secret') {
-        return Promise.resolve();
-      }
-    }
-
-    // 4. Check custom header x-agentctl-token or x-agentctl-secret
-    const customHeaderToken =
-      (request.headers['x-agentctl-token'] as string | undefined) ||
-      (request.headers['x-agentctl-secret'] as string | undefined);
-
-    if (customHeaderToken) {
-      if (customHeaderToken === authManager.getStartupToken()) {
-        return Promise.resolve();
-      }
-      const validation = authManager.validateSessionToken(customHeaderToken);
-      if (validation.valid) {
-        return Promise.resolve();
-      }
-    }
-
-    // 5. Check URL query token (for WebSockets / EventSource / Pairing links)
-    const queryToken = parsedUrl.searchParams.get('token');
-    if (queryToken) {
-      if (queryToken === authManager.getStartupToken()) {
-        return Promise.resolve();
-      }
-      const validation = authManager.validateSessionToken(queryToken);
-      if (validation.valid) {
-        return Promise.resolve();
-      }
-      if (isDev && queryToken === 'dev-secret') {
-        return Promise.resolve();
-      }
-      try {
-        const result = authManager.consumePairingToken(queryToken, {
-          userAgent: request.headers['user-agent'],
-          ip: clientIp,
-        });
-        request.session.set('authenticated', true);
-        reply.header('x-agentctl-session-token', result.sessionToken);
-        return Promise.resolve();
-      } catch {
-        // Pairing token expired or invalid
-      }
+    if (authSessionId) {
+      request.session.delete();
     }
 
     return reply.code(401).send({ error: 'Unauthorized' });

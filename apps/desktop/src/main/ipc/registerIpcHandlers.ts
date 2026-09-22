@@ -83,7 +83,15 @@ export function registerWindowIpcHandlers(): void {
 
 export function registerIpcHandlers(): void {
   ipcMain.handle('server:get-port', () => getServerPort());
-  ipcMain.handle('server:get-secret', () => getServerSecret());
+  ipcMain.handle('server:get-secret', (event) => {
+    if (
+      event.sender !== getMainWindow()?.webContents ||
+      event.senderFrame !== event.sender.mainFrame
+    ) {
+      throw new Error('Unauthorized IPC sender');
+    }
+    return getServerSecret();
+  });
   ipcMain.handle('app:get-version', () => app.getVersion());
   ipcMain.on('tray:update-status', (_event, status: TrayStatus) => {
     updateTrayStatus(status);

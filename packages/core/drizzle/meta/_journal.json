@@ -253,6 +253,13 @@
       "when": 1789404149584,
       "tag": "0035_youthful_james_howlett",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1790007377749,
+      "tag": "0036_auth_sessions",
+      "breakpoints": true
     }
   ]
 }

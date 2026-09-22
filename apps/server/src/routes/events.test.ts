@@ -23,7 +23,6 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     db = createDatabase(':memory:');
 
     const testEnv = parseServerEnv({
-      AGENTCTL_SECRET: 'test-secret',
       AGENTCTL_SESSION_KEY: 'test-session-key-test-session-key-123456',
       AGENTCTL_SESSION_SALT: 'test-session-sal',
       PORT: '0',

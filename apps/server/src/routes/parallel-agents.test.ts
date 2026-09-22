@@ -57,7 +57,6 @@ describe('Parallel Subagents & Swarms API', () => {
     });
 
     const testEnv = parseServerEnv({
-      AGENTCTL_SECRET: 'test-secret',
       AGENTCTL_SESSION_KEY: 'test-session-key-test-session-key-123456',
       AGENTCTL_SESSION_SALT: 'test-session-sal',
       PORT: '0',
@@ -101,14 +100,9 @@ describe('Parallel Subagents & Swarms API', () => {
   });
 
   test('POST /api/sessions/:id/agents spawns a background agent in an isolated workspace', async () => {
-    const startupToken = app.authManager.getStartupToken();
-
     const response = await app.inject({
       method: 'POST',
       url: `/api/sessions/${sessionId}/agents`,
-      headers: {
-        authorization: `Bearer ${startupToken}`,
-      },
       payload: {
         prompt: 'Build auth module in parallel',
         title: 'Auth Agent',
@@ -126,8 +120,6 @@ describe('Parallel Subagents & Swarms API', () => {
   });
 
   test('GET /api/sessions/:id/check-merge detects clean merges and conflicts', async () => {
-    const startupToken = app.authManager.getStartupToken();
-
     // Create a clean parallel branch in git
     execSync('git checkout -b clean-feature && git commit --allow-empty -m "clean feature"', {
       cwd: testDir,
@@ -138,9 +130,6 @@ describe('Parallel Subagents & Swarms API', () => {
     const response = await app.inject({
       method: 'GET',
       url: `/api/sessions/${sessionId}/check-merge?branch=clean-feature`,
-      headers: {
-        authorization: `Bearer ${startupToken}`,
-      },
     });
 
     expect(response.statusCode, response.body).toBe(200);

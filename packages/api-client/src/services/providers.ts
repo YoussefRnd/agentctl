@@ -14,7 +14,7 @@ export const providerService = {
   },
 
   updateSessionProvider(sessionId: string, providerId: string, modelId?: string) {
-    return apiClient.fetch(`/api/sessions/${sessionId}/provider`, {
+    return apiClient.fetch(`/api/sessions/${sessionId}`, {
       method: 'PATCH',
       body: JSON.stringify({ providerId, modelId }),
     });

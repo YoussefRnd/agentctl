@@ -3,15 +3,19 @@
 import { buildApp } from '@agentctl/server/app';
 import { registerGracefulShutdown } from '@agentctl/server/lifecycle';
 import { Config } from '@agentctl/core/config';
+import { randomBytes } from 'node:crypto';
 
 async function startServer() {
   process.env.NODE_ENV = 'production';
+  process.env.AGENTCTL_SESSION_KEY = randomBytes(32).toString('hex');
+  process.env.AGENTCTL_SESSION_SALT = randomBytes(8).toString('hex');
+  const desktopCapability = randomBytes(32).toString('base64url');
   const env = Config.load();
 
   // Dynamic port allocation
   env.PORT = 0;
 
-  const fastify = await buildApp({ env, embedded: true });
+  const fastify = await buildApp({ env, embedded: true, desktopCapability });
 
   // Standardized graceful shutdown for desktop embedded server
   const shutdown = registerGracefulShutdown(fastify, { timeoutMs: 4000 });
@@ -29,17 +33,14 @@ async function startServer() {
 
   const address = fastify.server.address();
   const port = typeof address === 'object' && address ? address.port : env.PORT;
-  const startupToken = fastify.authManager.getStartupToken();
-
   // Notify the main Electron process that the server is ready
   process.parentPort.postMessage({
     type: 'ready',
     port,
-    secret: startupToken,
+    secret: desktopCapability,
   });
 
   fastify.log.info(`Embedded server listening on http://${host}:${port.toString()}`);
-  fastify.log.info(`Startup pairing token: ${startupToken}`);
 }
 
 startServer().catch((err: unknown) => {

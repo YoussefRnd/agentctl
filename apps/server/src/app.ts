@@ -37,6 +37,7 @@ export interface AppDependencies {
   sessionManager?: SessionManager;
   runtimeServices?: AgentRuntimeServices;
   authManager?: AuthManager;
+  desktopCapability?: string;
   terminalService?: InteractiveTerminalService;
   contextService?: ContextService;
   env?: ReturnType<typeof parseServerEnv>;
@@ -64,7 +65,7 @@ declare module 'fastify' {
 
 declare module '@fastify/secure-session' {
   interface SessionData {
-    authenticated: boolean;
+    authSessionId: string;
   }
 }
 
@@ -116,7 +117,13 @@ export async function buildApp(deps: AppDependencies = {}) {
     fastify.log,
   );
 
-  const authManager = deps.authManager ?? new AuthManager();
+  const authManager =
+    deps.authManager ??
+    new AuthManager({
+      db,
+      browserSessionTtlMs: config.AGENTCTL_PAIRED_SESSION_MAX_AGE_SECONDS * 1000,
+      desktopCapability: deps.desktopCapability,
+    });
   const terminalService = deps.terminalService ?? new InteractiveTerminalService(fastify.log);
   const contextService = deps.contextService ?? new ContextService();
 
@@ -181,6 +188,9 @@ export async function buildApp(deps: AppDependencies = {}) {
     if (error instanceof AppError) {
       return reply.code(error.statusCode).send({ error: error.message });
     }
+    if (error.message === 'Not allowed by CORS') {
+      return reply.code(403).send({ error: 'Origin not allowed' });
+    }
     // Zod / validation errors carry a statusCode < 500 set by the type provider
     if (error.statusCode && error.statusCode < 500) {
       return reply.code(error.statusCode).send({ error: error.message });
@@ -192,7 +202,7 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = config.NODE_ENV === 'production';
   const allowedOrigins = config.CORS_ALLOWED_ORIGINS
     ? config.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim())
     : ['http://localhost:5173', 'http://localhost:5174'];
@@ -205,11 +215,7 @@ export async function buildApp(deps: AppDependencies = {}) {
               cb(null, true);
               return;
             }
-            if (
-              allowedOrigins.includes(origin) ||
-              origin.startsWith('http://localhost:') ||
-              origin.startsWith('http://127.0.0.1:')
-            ) {
+            if (allowedOrigins.includes(origin)) {
               cb(null, true);
               return;
             }
@@ -229,17 +235,37 @@ export async function buildApp(deps: AppDependencies = {}) {
     ],
   });
 
+  fastify.addHook('onSend', (_request, reply, payload, done) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('Referrer-Policy', 'no-referrer');
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (isProd) {
+      reply.header(
+        'Content-Security-Policy',
+        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss: http: https:",
+      );
+    }
+    done(null, payload);
+  });
+
   // Register Secure Session
   await fastify.register(secureSession, {
+    cookieName: 'agentctl_session',
     secret: config.AGENTCTL_SESSION_KEY,
     salt: config.AGENTCTL_SESSION_SALT,
-    expiry: config.AGENTCTL_SESSION_MAX_AGE_SECONDS,
+    // The encrypted envelope must remain valid for at least as long as the
+    // server-backed paired session stored inside it.
+    expiry: Math.max(
+      config.AGENTCTL_SESSION_MAX_AGE_SECONDS,
+      config.AGENTCTL_PAIRED_SESSION_MAX_AGE_SECONDS,
+    ),
     cookie: {
       path: '/',
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production' && !deps.embedded,
+      secure: isProd && !deps.embedded,
       maxAge: config.AGENTCTL_SESSION_MAX_AGE_SECONDS,
-      sameSite: 'lax',
+      sameSite: 'strict',
     },
   });
 

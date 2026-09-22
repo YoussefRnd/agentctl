@@ -14,10 +14,12 @@ const start = async () => {
     const host = process.env.AGENTCTL_HOST ?? '127.0.0.1';
 
     await fastify.listen({ port, host });
-    const startupToken = fastify.authManager.getStartupToken();
+    const startupToken = fastify.authManager.getStartupPairingToken();
 
     fastify.log.info(`Server listening on http://${host}:${String(port)}`);
-    fastify.log.info(`Pairing URL: http://${host}:${String(port)}/#token=${startupToken}`);
+    fastify.log.info(
+      `Pairing URL: http://${host}:${String(port)}/#pairing=${encodeURIComponent(startupToken)}`,
+    );
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

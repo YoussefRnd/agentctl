@@ -14,7 +14,6 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<{
 }> {
   const db = options.db ?? createDatabase(':memory:');
   const env = parseServerEnv({
-    AGENTCTL_SECRET: 'test-secret',
     AGENTCTL_SESSION_KEY: 'test-session-key-test-session-key-123456',
     AGENTCTL_SESSION_SALT: 'test-session-sal',
     PORT: '0',

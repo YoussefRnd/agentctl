@@ -135,6 +135,24 @@ export const registrySnapshots = sqliteTable('registry_snapshots', {
     .default(sql`(unixepoch())`),
 });
 
+export const authSessions = sqliteTable(
+  'auth_sessions',
+  {
+    id: text('id').primaryKey(),
+    clientLabel: text('client_label').notNull(),
+    ip: text('ip').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    lastActiveAt: integer('last_active_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    revokedAt: integer('revoked_at', { mode: 'timestamp' }),
+  },
+  (table) => [index('auth_sessions_expires_at_idx').on(table.expiresAt)],
+);
+
 export const sessionEvents = sqliteTable(
   'session_events',
   {

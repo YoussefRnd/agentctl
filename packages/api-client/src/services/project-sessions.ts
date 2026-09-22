@@ -287,20 +287,12 @@ export async function spawnParallelAgent(
   return res.body;
 }
 
-export const spawnSwarmSubagent = spawnParallelAgent;
-
 export async function switchSessionMode(
   sessionId: string,
   mode: SessionMode,
 ): Promise<{ success: boolean }> {
-  const res = await api.switchSessionMode({
-    params: { id: sessionId },
-    body: { mode },
-  });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to switch session mode: ${String(res.status)}`, res.status);
-  }
-  return res.body;
+  await patchSession(sessionId, { mode });
+  return { success: true };
 }
 
 export async function mergeSession(
@@ -358,14 +350,8 @@ export async function renameSession(
   sessionId: string,
   title: string,
 ): Promise<{ success: boolean }> {
-  const res = await api.renameSession({
-    params: { id: sessionId },
-    body: { title },
-  });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to rename session: ${String(res.status)}`, res.status);
-  }
-  return res.body;
+  await patchSession(sessionId, { title });
+  return { success: true };
 }
 
 export async function archiveSession(sessionId: string): Promise<{ success: boolean }> {
@@ -394,28 +380,16 @@ export async function setApprovalMode(
   sessionId: string,
   approvalMode: 'review' | 'auto_approve' | 'yolo',
 ): Promise<{ success: boolean }> {
-  const res = await api.setApprovalMode({
-    params: { id: sessionId },
-    body: { approvalMode },
-  });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to set approval mode: ${String(res.status)}`, res.status);
-  }
-  return res.body;
+  await patchSession(sessionId, { approvalMode });
+  return { success: true };
 }
 
 export async function setAgentPersona(
   sessionId: string,
   persona: string,
 ): Promise<{ success: boolean }> {
-  const res = await api.setAgentPersona({
-    params: { id: sessionId },
-    body: { persona },
-  });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to set agent persona: ${String(res.status)}`, res.status);
-  }
-  return res.body;
+  await patchSession(sessionId, { persona });
+  return { success: true };
 }
 
 export async function setSessionConfigOption(
@@ -423,14 +397,8 @@ export async function setSessionConfigOption(
   configId: string,
   value: string,
 ): Promise<{ success: boolean }> {
-  const res = await api.setSessionConfigOption({
-    params: { id: sessionId },
-    body: { configId, value },
-  });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to set session config option: ${String(res.status)}`, res.status);
-  }
-  return res.body;
+  await patchSession(sessionId, { configId, configValue: value });
+  return { success: true };
 }
 
 export async function rewindSession(
@@ -532,14 +500,8 @@ export async function updateSessionProvider(
   providerId: string,
   modelId?: string,
 ): Promise<{ success: boolean }> {
-  const res = await api.updateSessionProvider({
-    params: { id: sessionId },
-    body: { providerId, modelId },
-  });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to update session provider: ${String(res.status)}`, res.status);
-  }
-  return res.body;
+  await patchSession(sessionId, { providerId, modelId });
+  return { success: true };
 }
 
 export async function sendTerminalInput(

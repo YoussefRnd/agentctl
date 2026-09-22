@@ -10,68 +10,28 @@ export function getApiBaseUrl(): string {
   return apiBaseUrl;
 }
 
-const CREDENTIAL_KEY = 'agentctl_session_key';
-let inMemoryCredential: string | null = null;
+let desktopCapability: string | null = null;
 
-function readStoredCredential(): string | null {
-  if (inMemoryCredential) return inMemoryCredential;
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(CREDENTIAL_KEY);
-    inMemoryCredential = raw;
-    return raw;
-  } catch {
-    return null;
-  }
+export function getDesktopCapability(): string | null {
+  return desktopCapability;
 }
 
-function writeStoredCredential(val: string | null): void {
-  inMemoryCredential = val;
-  if (typeof window === 'undefined') return;
-  try {
-    if (val === null) {
-      window.localStorage.removeItem(CREDENTIAL_KEY);
-    } else {
-      window.localStorage.setItem(CREDENTIAL_KEY, val);
-    }
-  } catch {
-    // Ignore storage quota/permission errors
-  }
+export function setDesktopCapability(value: string): void {
+  desktopCapability = value;
 }
 
-export function getAuthToken(): string | null {
-  return readStoredCredential();
-}
-
-export function setAuthToken(value: string): void {
-  writeStoredCredential(value);
-}
-
-export function clearAuthToken(): void {
-  writeStoredCredential(null);
-}
-
-export function extractAndPersistUrlToken(): string | null {
+export function extractPairingTokenFromUrl(): string | null {
   if (typeof window === 'undefined') return null;
 
   try {
     const url = new URL(window.location.href);
-    let token = url.searchParams.get('token');
-
-    // Also check hash query params if hash routing is used (e.g. #/?token=...)
-    if (!token && window.location.hash.includes('token=')) {
-      const hashParts = window.location.hash.split('?');
-      if (hashParts[1]) {
-        const hashParams = new URLSearchParams(hashParts[1]);
-        token = hashParams.get('token');
-      }
-    }
+    const hashParams = new URLSearchParams(url.hash.slice(1));
+    const token = hashParams.get('pairing');
 
     if (token) {
-      setAuthToken(token);
-
       // Strip token from URL to prevent accidental sharing
-      url.searchParams.delete('token');
+      hashParams.delete('pairing');
+      url.hash = hashParams.size > 0 ? hashParams.toString() : '';
       const cleanUrl = url.pathname + (url.search ? url.search : '') + url.hash;
       window.history.replaceState({}, document.title, cleanUrl);
       return token;
@@ -108,7 +68,7 @@ export const apiClient = {
     if (hasBody && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
-    const token = getAuthToken();
+    const token = getDesktopCapability();
     if (token && !headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${token}`);
     }
@@ -178,7 +138,7 @@ export const apiClient = {
     if (hasBody && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
-    const token = getAuthToken();
+    const token = getDesktopCapability();
     if (token && !headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${token}`);
     }

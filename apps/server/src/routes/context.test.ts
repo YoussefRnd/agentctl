@@ -50,7 +50,6 @@ describe('Context Routes API', () => {
     });
 
     const testEnv = parseServerEnv({
-      AGENTCTL_SECRET: 'test-secret',
       AGENTCTL_SESSION_KEY: 'test-session-key-test-session-key-123456',
       AGENTCTL_SESSION_SALT: 'test-session-sal',
       PORT: '0',
@@ -68,14 +67,9 @@ describe('Context Routes API', () => {
   });
 
   test('GET /api/sessions/:id/context/search returns workspace files and git items', async () => {
-    const startupToken = app.authManager.getStartupToken();
-
     const response = await app.inject({
       method: 'GET',
       url: '/api/sessions/sess-context-1/context/search?q=server',
-      headers: {
-        authorization: `Bearer ${startupToken}`,
-      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -85,14 +79,9 @@ describe('Context Routes API', () => {
   });
 
   test('POST /api/sessions/:id/context/resolve returns formatted markdown bundle', async () => {
-    const startupToken = app.authManager.getStartupToken();
-
     const response = await app.inject({
       method: 'POST',
       url: '/api/sessions/sess-context-1/context/resolve',
-      headers: {
-        authorization: `Bearer ${startupToken}`,
-      },
       payload: {
         items: [{ type: 'file', value: 'src/server.ts' }],
       },

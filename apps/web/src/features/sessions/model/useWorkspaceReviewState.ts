@@ -14,6 +14,7 @@ import {
   switchSessionMode,
   mergeSession,
   discardSession,
+  patchSession,
 } from '@agentctl/api-client';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import type { ReviewFile } from '@/features/review';
@@ -64,16 +65,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   });
 
   const switchBranchMutation = useMutation({
-    mutationFn: async (branch: string) => {
-      const res = await api.switchSessionBranch({
-        params: { id: sessionId },
-        body: { branch },
-      });
-      if (res.status !== 200) {
-        throw new Error(`Failed to switch branch: ${String(res.status)}`);
-      }
-      return res.body;
-    },
+    mutationFn: (branch: string) => patchSession(sessionId, { branch }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       void queryClient.invalidateQueries({ queryKey: sessionKeys.branches(sessionId) });
