@@ -35,6 +35,8 @@ export function ProviderPicker({
     isActivating,
     login,
     isLoggingIn,
+    verifyProvider,
+    isVerifying,
   } = useProviders(sessionId);
   const [search, setSearch] = useState('');
   const [internalProviderIdOverride, setInternalProviderIdOverride] = useState<string | null>(null);
@@ -51,9 +53,14 @@ export function ProviderPicker({
   const autoRefreshedRef = useRef<Set<string>>(new Set());
 
   const activeProvider = useMemo<ProviderDiscovery | null>(() => {
+    const installedProviders = providers.filter(
+      (provider) =>
+        provider.installState === 'installed_local' || provider.installState === 'system_available',
+    );
     return (
-      providers.find((p) => p.id === internalProviderId) ??
-      (providers.length > 0 ? providers[0] : null)
+      installedProviders.find((provider) => provider.id === internalProviderId) ??
+      installedProviders[0] ??
+      null
     );
   }, [providers, internalProviderId]);
 
@@ -91,7 +98,8 @@ export function ProviderPicker({
   const isInstalled =
     activeProvider?.installState === 'installed_local' ||
     activeProvider?.installState === 'system_available';
-  const isAuthenticated = activeProvider?.authState === 'authenticated';
+  const isReady =
+    activeProvider?.authState === 'authenticated' || activeProvider?.authState === 'not_required';
   const modelsCount = models.length;
 
   useEffect(() => {
@@ -99,7 +107,7 @@ export function ProviderPicker({
       isOpen &&
       activeProviderId &&
       isInstalled &&
-      isAuthenticated &&
+      isReady &&
       modelsCount === 0 &&
       !search &&
       !isRefreshing &&
@@ -112,7 +120,7 @@ export function ProviderPicker({
     isOpen,
     activeProviderId,
     isInstalled,
-    isAuthenticated,
+    isReady,
     modelsCount,
     search,
     isRefreshing,
@@ -121,7 +129,7 @@ export function ProviderPicker({
 
   if (!isOpen || !activeProvider) return null;
 
-  const isPending = isUpdatingConfig || isActivating || isLoggingIn;
+  const isPending = isUpdatingConfig || isActivating || isLoggingIn || isVerifying;
 
   const handleSaveAndConnect = () => {
     const hasKeys = envKeys.length > 0;
@@ -129,8 +137,9 @@ export function ProviderPicker({
 
     const proceed = () => {
       if (
-        activeProvider.installState === 'not_installed' ||
-        (activeProvider.authState !== 'authenticated' && activeProvider.authState !== 'needs_auth')
+        activeProvider.authState !== 'authenticated' &&
+        activeProvider.authState !== 'not_required' &&
+        activeProvider.authState !== 'required'
       ) {
         activate(activeProvider.id, {
           onSuccess: () => {
@@ -204,7 +213,8 @@ export function ProviderPicker({
 
         <div className="h-[280px] space-y-1 overflow-y-auto p-1.5">
           {activeProvider.installState === 'not_installed' ||
-          activeProvider.authState !== 'authenticated' ? (
+          (activeProvider.authState !== 'authenticated' &&
+            activeProvider.authState !== 'not_required') ? (
             <ProviderSetupPanel
               activeProvider={activeProvider}
               envKeys={envKeys}
@@ -215,8 +225,8 @@ export function ProviderPicker({
               isLoggingIn={isLoggingIn}
               login={login}
               handleSaveAndConnect={handleSaveAndConnect}
-              onSelect={onSelect}
               onOpenAuthModal={onOpenAuthModal}
+              onVerify={() => verifyProvider(activeProvider.id)}
             />
           ) : models.length === 0 ? (
             <div className="p-2">
@@ -297,7 +307,7 @@ function ProviderSidebar({
           p.installState === 'installed_local' || p.installState === 'system_available';
         if (!isInstalled) return null;
         const isSelected = p.id === internalProviderId;
-        const needsAuth = p.authState !== 'authenticated';
+        const needsAuth = p.authState === 'required' || p.authState === 'error';
 
         return (
           <button
@@ -336,8 +346,8 @@ function ProviderSetupPanel({
   isLoggingIn,
   login,
   handleSaveAndConnect,
-  onSelect,
   onOpenAuthModal,
+  onVerify,
 }: {
   activeProvider: ProviderDiscovery;
   envKeys: string[];
@@ -350,11 +360,11 @@ function ProviderSetupPanel({
   isLoggingIn: boolean;
   login: (args: { providerId: string; methodId: string }) => void;
   handleSaveAndConnect: () => void;
-  onSelect: (providerId: string, modelId?: string) => void;
   onOpenAuthModal?: () => void;
+  onVerify: () => void;
 }) {
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
-  const authMethods = activeProvider.authMethods;
+  const authMethods = activeProvider.authMethods.filter((method) => method.type !== 'env_var');
   const hasAuthMethods = authMethods.length > 0;
   const hasEnvKeys = envKeys.length > 0;
 
@@ -371,10 +381,12 @@ function ProviderSetupPanel({
   return (
     <div className="flex h-full flex-col items-center justify-center p-4 text-center">
       <h3 className="text-text-main mb-1 text-xs font-semibold">
-        Authenticate to {activeProvider.label}
+        {hasAuthMethods || hasEnvKeys ? 'Authenticate' : 'Connect'} to {activeProvider.label}
       </h3>
       <p className="text-text-muted mb-4 max-w-[240px] text-xs">
-        Choose one of the following authentication options:
+        {hasAuthMethods || hasEnvKeys
+          ? 'Choose one of the following authentication options:'
+          : 'Check the provider connection before using it.'}
       </p>
 
       <div className="flex w-full max-w-[240px] flex-col gap-2 text-left">
@@ -384,14 +396,12 @@ function ProviderSetupPanel({
               key={method.id}
               type="button"
               onClick={() => {
-                if (method.id === 'api_key') {
-                  if (onOpenAuthModal) {
-                    onOpenAuthModal();
-                  } else {
-                    setShowApiKeyInput((prev) => !prev);
-                  }
-                } else {
+                if (onOpenAuthModal) {
+                  onOpenAuthModal();
+                } else if (method.type === 'agent') {
                   login({ providerId: activeProvider.id, methodId: method.id });
+                } else {
+                  setShowApiKeyInput((prev) => !prev);
                 }
               }}
               disabled={isPending}
@@ -423,6 +433,17 @@ function ProviderSetupPanel({
               }`}
             >
               API key
+            </button>
+          )}
+
+          {!hasAuthMethods && !hasEnvKeys && (
+            <button
+              type="button"
+              onClick={onVerify}
+              disabled={isPending}
+              className="bg-accent text-brand-crust flex h-8 w-full items-center justify-center rounded-lg text-xs font-semibold transition-colors hover:opacity-90 disabled:opacity-30"
+            >
+              {isPending ? 'Checking...' : 'Check connection'}
             </button>
           )}
         </div>
@@ -472,16 +493,6 @@ function ProviderSetupPanel({
             </button>
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={() => {
-            onSelect(activeProvider.id);
-          }}
-          className="border-border/30 text-text-muted hover:bg-text-main/5 hover:text-text-main mt-1 flex h-7 w-full items-center justify-center rounded-lg border text-center text-xs font-medium transition-colors"
-        >
-          Select provider
-        </button>
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ import {
   AuthManager,
   ContextService,
   createAgentRuntimeServices,
+  defaultCredentialVault,
   type AgentRuntimeServices,
 } from '@agentctl/core';
 import websocket from '@fastify/websocket';
@@ -94,6 +95,18 @@ export async function buildApp(deps: AppDependencies = {}) {
   const config = deps.env ?? parseServerEnv(process.env);
   const eventBus = new EventBus();
 
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const { migratedCount } = await defaultCredentialVault.migratePlaintextCustomEnv(db);
+      if (migratedCount > 0) {
+        fastify.log.info({ migratedCount }, 'Migrated provider environment secrets to vault');
+      }
+    } catch (error) {
+      fastify.log.error(error, 'Failed to initialize provider credential vault');
+      throw error;
+    }
+  }
+
   const mcpGateway = new McpGateway(db, fastify.log);
 
   const sessionManager =
@@ -142,10 +155,17 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.decorate('mcpGateway', mcpGateway);
   fastify.decorate('embedded', deps.embedded ?? false);
 
+  providerRegistry.setOnStateChange(() => {
+    eventBus.publishState({ topics: ['providers'] });
+  });
+
+  await providerRegistry.recoverInterruptedOperations();
+
   // Sync provider metadata in the background on startup (lazy probing on session demand)
   void providerRegistry
     .sync()
-    .then(() => {
+    .then(async () => {
+      await providerRegistry.probeAllInstalledProviders();
       eventBus.publishState({ topics: ['providers'] });
     })
     .catch((err: unknown) => {

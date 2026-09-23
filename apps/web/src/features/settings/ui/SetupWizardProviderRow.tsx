@@ -1,17 +1,18 @@
 import { Input, Button } from '@agentctl/ui';
 import { ProviderIcon } from '@/shared';
-import { getProviderEnvKeys, validateApiKey, type ProviderDiscovery } from '@agentctl/shared';
+import {
+  getProviderEnvKeys,
+  isProviderEnvKeyOptional,
+  validateApiKey,
+  type ProviderDiscovery,
+} from '@agentctl/shared';
 
 interface SetupWizardProviderRowProps {
   provider: ProviderDiscovery;
   localCustomEnvs: Record<string, Record<string, string> | undefined>;
   onEnvChange: (providerId: string, key: string, value: string) => void;
-  onSaveConfig: (providerId: string, customEnv: Record<string, string>) => void;
+  onSaveConfig: (providerId: string, customEnv: Record<string, string>) => Promise<void>;
   isUpdatingConfig: boolean;
-}
-
-function readCustomEnv(env: Record<string, string> | undefined, key: string): string | undefined {
-  return env?.[key];
 }
 
 export function SetupWizardProviderRow({
@@ -24,19 +25,22 @@ export function SetupWizardProviderRow({
   const isActive = provider.installState !== 'not_installed';
   const envKeys = getProviderEnvKeys(provider);
   const hasKeys = envKeys.length > 0;
+  const localEnv = localCustomEnvs[provider.id] ?? {};
 
   const keysValues = envKeys.reduce<Record<string, string>>((acc, key) => {
-    acc[key] =
-      readCustomEnv(localCustomEnvs[provider.id], key) ??
-      readCustomEnv(provider.customEnv, key) ??
-      '';
+    acc[key] = localEnv[key] ?? '';
     return acc;
   }, {});
 
-  const hasChanges = envKeys.some((key) => {
-    const val = keysValues[key];
-    return val !== (provider.customEnv[key] ?? '');
-  });
+  const hasChanges = Object.keys(localEnv).length > 0;
+
+  const getKeyError = (key: string): string | null => {
+    if (isProviderEnvKeyOptional(provider, key) && (localEnv[key]?.trim() ?? '') === '')
+      return null;
+    if (key in localEnv) return validateApiKey(key, localEnv[key] ?? '');
+    if (provider.customEnvConfigured[key]) return null;
+    return validateApiKey(key, '');
+  };
 
   return (
     <div className="bg-surface-secondary/20 border-border/10 hover:border-border/30 animate-in fade-in flex flex-col gap-2.5 rounded-xl border p-3 transition-colors">
@@ -50,11 +54,13 @@ export function SetupWizardProviderRow({
                 ? 'Supported'
                 : provider.authState === 'authenticated'
                   ? 'Authenticated'
-                  : provider.authState === 'needs_auth'
-                    ? 'Auth Required'
-                    : provider.authState === 'error'
-                      ? 'Error'
-                      : 'Not Authenticated'}
+                  : provider.authState === 'not_required'
+                    ? 'Connected · No authentication needed'
+                    : provider.authState === 'required'
+                      ? 'Auth Required'
+                      : provider.authState === 'error'
+                        ? 'Error'
+                        : 'Not Authenticated'}
             </div>
           </div>
         </div>
@@ -63,7 +69,7 @@ export function SetupWizardProviderRow({
         <div className="border-border/10 space-y-2 border-t pt-2.5">
           <div className="space-y-2">
             {envKeys.map((key) => {
-              const errorMsg = validateApiKey(key, keysValues[key]);
+              const errorMsg = getKeyError(key);
               return (
                 <div key={key} className="space-y-1">
                   <div className="flex items-baseline justify-between">
@@ -81,6 +87,11 @@ export function SetupWizardProviderRow({
                     id={`setup-${provider.id}-${key}`}
                     type="password"
                     value={keysValues[key]}
+                    placeholder={
+                      provider.customEnvConfigured[key]
+                        ? 'Configured (enter to replace)'
+                        : `Enter ${key}...`
+                    }
                     onChange={(e) => {
                       onEnvChange(provider.id, key, e.target.value);
                     }}
@@ -93,12 +104,9 @@ export function SetupWizardProviderRow({
               <div className="flex justify-end pt-1">
                 <Button
                   onClick={() => {
-                    onSaveConfig(provider.id, keysValues);
+                    void onSaveConfig(provider.id, localEnv);
                   }}
-                  disabled={
-                    isUpdatingConfig ||
-                    envKeys.some((key) => validateApiKey(key, keysValues[key]) !== null)
-                  }
+                  disabled={isUpdatingConfig || envKeys.some((key) => getKeyError(key) !== null)}
                   className="bg-accent text-brand-crust h-7 px-3 text-xs font-medium hover:opacity-90"
                 >
                   {isUpdatingConfig ? 'Connecting...' : 'Save configuration'}

@@ -3,6 +3,7 @@ import {
   type RegistryAgent,
   type AgentConfigOption,
 } from '@agentctl/shared';
+import path from 'node:path';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentDriver } from '../agent/types.js';
 import type { AgentRuntimeServices } from '../agent/runtime-services.js';
@@ -12,21 +13,30 @@ import {
   createDefaultAgentDriver,
   defaultAgentDiagnostics,
 } from '../default-agent-driver.js';
-import { isAgentAuthenticationRequiredError } from '../agent/errors.js';
 import type { DbClient } from '../db/index.js';
 import { jsonCodecs } from '../db/json-codecs.js';
 import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
 import { BinaryInstaller, getPlatformKey } from './registry/binary-installer.js';
 import { RegistryFetcher } from './registry/registry-fetcher.js';
-import { ProviderLauncher, resolveNpxPackageSpec } from './registry/provider-launcher.js';
-import { AuthProvider } from './registry/auth-provider.js';
+import {
+  ProviderLauncher,
+  probeResultUpdate,
+  resolveNpxPackageSpec,
+  resolveUvxPackageSpec,
+} from './registry/provider-launcher.js';
 import { ProviderSync } from './registry/provider-sync.js';
 
 import { ProviderOperationCoordinator } from './registry/provider-operation-coordinator.js';
 import { ProviderProbingService } from './registry/provider-probing-service.js';
 import { parseRegistryAgents } from './registry/registry-parser.js';
+import { ProviderAuthCoordinator } from './registry/provider-auth-coordinator.js';
+import { defaultCredentialVault } from '../security/credential-vault.js';
 import type { AgentConnectionManager } from '../acp/types.js';
+import {
+  ProviderLifecycleError,
+  type ProviderLifecycleErrorCode,
+} from './registry/provider-lifecycle-error.js';
 
 export { getPlatformKey };
 export { parseRegistryAgents } from './registry/registry-parser.js';
@@ -36,15 +46,17 @@ export class ProviderRegistry {
   private installer: BinaryInstaller;
   private store: ProviderStore;
   private launcher: ProviderLauncher;
-  private authProvider: AuthProvider;
+  private authCoordinator: ProviderAuthCoordinator;
   private syncProvider: ProviderSync;
   private runtime: AgentDriver;
   private coordinator: ProviderOperationCoordinator;
   private probing: ProviderProbingService;
+  private onStateChangeCallback?: () => void;
 
   private activeSync?: Promise<void>;
   private connectionManager: AgentConnectionManager;
   private diagnostics: AgentDiagnosticsRecorder;
+  private installControllers = new Map<string, AbortController>();
 
   constructor(
     private db: DbClient,
@@ -69,8 +81,16 @@ export class ProviderRegistry {
         logger,
         this.diagnostics,
       );
-    this.authProvider = new AuthProvider(this.launcher, this.store, this.runtime);
-    this.syncProvider = new ProviderSync(this.fetcher, this.store, this.installer, this.launcher);
+    this.authCoordinator = new ProviderAuthCoordinator({
+      store: this.store,
+      launcher: this.launcher,
+      runtime: this.runtime,
+      fetcher: this.fetcher,
+      connectionManager: this.connectionManager,
+      logger: this.logger,
+      onStateChange: () => this.onStateChangeCallback?.(),
+    });
+    this.syncProvider = new ProviderSync(this.fetcher, this.store, this.launcher);
     this.coordinator = new ProviderOperationCoordinator();
     this.probing = new ProviderProbingService(
       this.store,
@@ -79,6 +99,38 @@ export class ProviderRegistry {
       this.runtime,
       this.logger,
     );
+  }
+
+  getAuthCoordinator(): ProviderAuthCoordinator {
+    return this.authCoordinator;
+  }
+
+  setOnStateChange(cb: () => void): void {
+    this.onStateChangeCallback = cb;
+  }
+
+  private notifyStateChange(): void {
+    try {
+      this.onStateChangeCallback?.();
+    } catch (error) {
+      this.logger.error(error, 'Failed to publish provider state change');
+    }
+  }
+
+  private getAgent(providerId: string, fallback?: ProviderData): RegistryAgent | undefined {
+    const snapshot = this.fetcher.getSnapshot();
+    if (snapshot) {
+      try {
+        const agent = parseRegistryAgents(snapshot.data).find(
+          (candidate) => candidate.id === providerId,
+        );
+        if (agent) return agent;
+      } catch (error) {
+        this.logger.warn({ error }, 'Ignoring invalid provider registry snapshot');
+      }
+    }
+    const row = fallback ?? this.store.get(providerId);
+    return row ? new Provider(row).toDiscovery().agent : undefined;
   }
 
   getConnectionManager(): AgentConnectionManager {
@@ -114,7 +166,9 @@ export class ProviderRegistry {
 
     if (rows.length === 0) {
       this.logger.info('Registry is empty, performing initial sync...');
-      await this.sync();
+      await this.sync().catch((error: unknown) => {
+        this.logger.warn({ error }, 'Initial provider registry sync failed');
+      });
       rows = this.store.list();
       if (rows.length === 0) {
         this.logger.warn('Provider registry sync completed without any discoverable providers');
@@ -124,17 +178,26 @@ export class ProviderRegistry {
 
     // Auto-probe any installed & ready providers that have empty/missing model options
     const unprobedInstalled = rows.filter((row) => {
-      if (row.installState === 'not_installed' || row.authState === 'needs_auth') return false;
+      if (
+        row.installState === 'not_installed' ||
+        row.authState === 'required' ||
+        row.authState === 'error' ||
+        row.authState === 'authenticating' ||
+        row.authState === 'verifying'
+      ) {
+        return false;
+      }
+      if (row.lastVerifiedAt && Date.now() - row.lastVerifiedAt.getTime() < 5 * 60_000) {
+        return false;
+      }
       const opts = jsonCodecs.agentConfigOptions(row.configOptions);
       const hasModel = opts.some((o) => o.id === 'model' || o.id === 'selectedModel');
       return !hasModel;
     });
 
     if (unprobedInstalled.length > 0) {
-      const snapshot = this.fetcher.getSnapshot();
-      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
       for (const row of unprobedInstalled) {
-        const agent = agents.find((a) => a.id === row.id);
+        const agent = this.getAgent(row.id, row);
         if (agent) {
           void this.probeWithStatePreserved(row.id, agent, row.authState, 'discover-probe').catch(
             (err) => {
@@ -152,7 +215,22 @@ export class ProviderRegistry {
   }
 
   async catalog(): Promise<ProviderDiscovery[]> {
-    const agents = await this.fetcher.fetch();
+    const cachedAgents = this.fetcher.getCachedAgents();
+    let agents: RegistryAgent[];
+    try {
+      agents = cachedAgents ?? (await this.fetcher.fetch());
+      if (!cachedAgents) this.store.deleteSetting('registrySyncError');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.store.updateSetting('registrySyncError', message);
+      this.logger.warn({ error }, 'Provider catalog refresh failed; using persisted providers');
+      return this.store.list().map((row) => new Provider(row).toDiscovery());
+    }
+    if (cachedAgents) {
+      void this.sync().catch((error: unknown) => {
+        this.logger.debug({ error }, 'Background registry refresh failed');
+      });
+    }
     return agents.map((agent) => {
       const row = this.store.get(agent.id);
       let discovery: ProviderDiscovery;
@@ -207,33 +285,40 @@ export class ProviderRegistry {
   }
 
   private async doInstall(providerId: string): Promise<ProviderDiscovery> {
-    const snapshot = this.fetcher.getSnapshot();
-    if (!snapshot) {
-      throw new Error('No registry snapshot found. Please sync first.');
-    }
-
-    const agents = parseRegistryAgents(snapshot.data);
-    const agent = agents.find((a) => a.id === providerId);
+    const agent = this.getAgent(providerId);
     if (!agent) {
       throw new Error(`Agent ${providerId} not found in registry`);
     }
 
-    // Step 1: Mark provider as installing in DB
+    const previous = this.store.get(providerId);
+    const hadWorkingInstall =
+      previous?.installState === 'installed_local' || previous?.installState === 'system_available';
+    const controller = new AbortController();
+
+    // Mark the operation without discarding the last known-good launch or credentials.
     this.store.upsert(providerId, {
       name: agent.name,
       version: agent.version,
       description: agent.description,
-      icon: agent.icon,
-      command: providerId,
-      installState: 'installing',
+      icon: agent.icon ?? null,
+      distribution: JSON.stringify(agent.distribution),
+      command: previous?.command ?? providerId,
+      installState: hadWorkingInstall ? previous.installState : 'installing',
       installError: null,
-      authState: (agent.authMethods ?? []).length ? 'unknown' : 'authenticated',
-      configOptions: JSON.stringify(agent.configOptions ?? []),
-      authMethods: JSON.stringify(agent.authMethods ?? []),
-      supportsDynamicModel: agent.supportsDynamicModel ?? false,
-      supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
-      supportsLogout: agent.supportsLogout ?? false,
+      installStage: 'preparing',
+      authState:
+        previous?.authState === 'needs_auth' ? 'required' : (previous?.authState ?? 'unknown'),
+      ...(hadWorkingInstall
+        ? {}
+        : {
+            configOptions: JSON.stringify(agent.configOptions ?? []),
+            authMethods: JSON.stringify(agent.authMethods ?? []),
+            supportsDynamicModel: agent.supportsDynamicModel ?? false,
+            supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
+            supportsLogout: agent.supportsLogout ?? false,
+          }),
     });
+    this.installControllers.set(providerId, controller);
 
     const platform = getPlatformKey();
     const binary = agent.distribution.binary;
@@ -243,11 +328,63 @@ export class ProviderRegistry {
     let command: string;
     let launchArgs: string[];
     let launchEnv: Record<string, string>;
+    let installSource: 'managed' | 'system' | 'npx' | 'uvx';
+    let installedVersion: string | null;
+    let managedVersionDir: string | undefined;
+    let managedVersionDiscarded = false;
+
+    const discardManagedCandidate = async () => {
+      if (!managedVersionDir || managedVersionDiscarded) return;
+      const relativePreviousCommand = previous
+        ? path.relative(managedVersionDir, previous.command)
+        : null;
+      const candidateWasAlreadyActive =
+        relativePreviousCommand !== null &&
+        relativePreviousCommand.length > 0 &&
+        !relativePreviousCommand.startsWith(`..${path.sep}`) &&
+        relativePreviousCommand !== '..' &&
+        !path.isAbsolute(relativePreviousCommand);
+      if (candidateWasAlreadyActive) return;
+
+      managedVersionDiscarded = true;
+      await this.installer
+        .removeVersionedDir(providerId, managedVersionDir, this.logger)
+        .catch((error: unknown) => {
+          this.logger.warn({ error, providerId }, 'Failed to discard rejected provider version');
+        });
+    };
+
+    const setStage = (
+      stage: 'preparing' | 'downloading' | 'verifying' | 'extracting' | 'activating' | 'connecting',
+    ) => {
+      this.store.setInstallDetails(providerId, { stage });
+      this.notifyStateChange();
+    };
 
     try {
-      // Step 2: Check if binary / CLI is already available on local system PATH
-      const detected = await this.launcher.detectSystemBinary(agent, platform);
-      if (detected) {
+      const previousSource = previous?.installSource;
+      const detected =
+        !previousSource || previousSource === 'system'
+          ? await this.launcher.detectSystemBinary(agent, platform)
+          : null;
+      const desiredSource =
+        previousSource === 'managed' && platformTarget
+          ? 'managed'
+          : previousSource === 'npx' && agent.distribution.npx
+            ? 'npx'
+            : previousSource === 'uvx' && agent.distribution.uvx
+              ? 'uvx'
+              : detected
+                ? 'system'
+                : platformTarget
+                  ? 'managed'
+                  : agent.distribution.npx
+                    ? 'npx'
+                    : agent.distribution.uvx
+                      ? 'uvx'
+                      : null;
+
+      if (desiredSource === 'system' && detected) {
         this.logger.info(
           { providerId, detectedCommand: detected.command },
           'Detected agent binary on local system PATH',
@@ -256,13 +393,21 @@ export class ProviderRegistry {
         command = detected.command;
         launchArgs = detected.args ?? [];
         launchEnv = {};
-      } else if (platformTarget) {
-        const result = await this.installer.install(agent, platform, this.logger);
+        installSource = 'system';
+        installedVersion = null;
+      } else if (desiredSource === 'managed' && platformTarget) {
+        const result = await this.installer.install(agent, platform, this.logger, {
+          signal: controller.signal,
+          onStage: setStage,
+        });
         installState = 'installed_local';
         command = result.command;
         launchArgs = result.args;
         launchEnv = result.env;
-      } else if (agent.distribution.npx) {
+        installSource = 'managed';
+        installedVersion = agent.version;
+        managedVersionDir = result.versionedDir;
+      } else if (desiredSource === 'npx' && agent.distribution.npx) {
         const onPath = await this.launcher.isBinaryOnPath('npx');
         if (!onPath) {
           throw new Error('npx not found on PATH. Install Node.js/npm first.');
@@ -275,64 +420,211 @@ export class ProviderRegistry {
           ...(agent.distribution.npx.args ?? []),
         ];
         launchEnv = agent.distribution.npx.env;
-      } else if (agent.distribution.uvx) {
+        installSource = 'npx';
+        installedVersion = agent.version;
+      } else if (desiredSource === 'uvx' && agent.distribution.uvx) {
         const onPath = await this.launcher.isBinaryOnPath('uvx');
         if (!onPath) {
           throw new Error('uvx not found on PATH. Install uv first.');
         }
         installState = 'system_available';
         command = 'uvx';
-        launchArgs = [agent.distribution.uvx.package, ...(agent.distribution.uvx.args ?? [])];
+        launchArgs = [
+          resolveUvxPackageSpec(agent.distribution.uvx.package, agent.version),
+          ...(agent.distribution.uvx.args ?? []),
+        ];
         launchEnv = agent.distribution.uvx.env;
+        installSource = 'uvx';
+        installedVersion = agent.version;
       } else if (binary) {
         throw new Error(`Agent ${providerId} binary not available for platform ${platform}`);
       } else {
         throw new Error(`Agent ${providerId} does not support installation`);
       }
 
-      this.store.upsert(providerId, {
+      const candidateValues = {
         name: agent.name,
         version: agent.version,
         description: agent.description,
-        icon: agent.icon,
+        icon: agent.icon ?? null,
+        distribution: JSON.stringify(agent.distribution),
         command,
         launchArgs: JSON.stringify(launchArgs),
         launchEnv: JSON.stringify(launchEnv),
-        customEnv: '{}',
         configOptions: JSON.stringify(agent.configOptions ?? []),
         authMethods: JSON.stringify(agent.authMethods ?? []),
         installState,
         installError: null,
-        authState: (agent.authMethods ?? []).length ? 'unknown' : 'authenticated',
+        installStage: null,
+        installSource,
+        installedVersion,
         supportsDynamicModel: agent.supportsDynamicModel ?? false,
         supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
         supportsLogout: agent.supportsLogout ?? false,
-      });
+      } as const;
 
-      // Step 3: Run probe to populate config options (model list, currentValue, etc.)
+      setStage('connecting');
       this.launcher.invalidateProbe(providerId, this.runtime, agent);
+      let probeSucceeded = false;
       try {
-        await this.launcher.probe(providerId, this.runtime, agent);
-      } catch (probeErr) {
-        const msg = probeErr instanceof Error ? probeErr.message : String(probeErr);
-        this.logger.warn({ probeErr, providerId }, 'Install probe verification failed for agent');
-        this.store.setInstallState(providerId, 'failed', `Probe verification failed: ${msg}`);
-        throw new Error(`Failed to verify agent installation for ${providerId}: ${msg}`, {
-          cause: probeErr,
+        const rowForProbe = this.store.get(providerId);
+        if (!rowForProbe) throw new Error(`Provider ${providerId} vanished during install`);
+        const candidateRow: ProviderData = {
+          ...rowForProbe,
+          ...candidateValues,
+          launchArgs: JSON.stringify(launchArgs),
+          launchEnv: JSON.stringify(launchEnv),
+        };
+        const candidateLaunch = this.launcher.resolveLaunchFromBase(candidateRow, {
+          command,
+          args: launchArgs,
+          env: launchEnv,
         });
+        const probeResult = await this.launcher.inspectLaunch(
+          providerId,
+          this.runtime,
+          candidateLaunch,
+          installedVersion ?? agent.version,
+        );
+        controller.signal.throwIfAborted();
+        this.store.upsert(providerId, {
+          ...candidateValues,
+          ...probeResultUpdate(probeResult, candidateRow),
+        });
+        probeSucceeded = true;
+      } catch (probeErr) {
+        if (controller.signal.aborted) {
+          throw controller.signal.reason;
+        }
+        const message = probeErr instanceof Error ? probeErr.message : String(probeErr);
+        this.logger.warn({ probeErr, providerId }, 'Install probe verification failed for agent');
+        if (hadWorkingInstall && previous) {
+          await discardManagedCandidate();
+          this.store.update(providerId, {
+            command: previous.command,
+            launchArgs: previous.launchArgs,
+            launchEnv: previous.launchEnv,
+            installState: previous.installState,
+            installStage: null,
+            installSource: previous.installSource,
+            installedVersion: previous.installedVersion,
+            installError: `ACP_HANDSHAKE_FAILED: ${message}`,
+            authState: previous.authState === 'needs_auth' ? 'required' : previous.authState,
+            connectionState: previous.connectionState,
+          });
+        } else {
+          // The first installation succeeded. Report connection/auth health independently.
+          this.store.upsert(providerId, {
+            ...candidateValues,
+            connectionState: 'error',
+            authError: JSON.stringify({
+              code: 'ACP_HANDSHAKE_FAILED',
+              message: `Provider installed, but its ACP handshake failed: ${message}`,
+              retryable: true,
+            }),
+          });
+        }
+      }
+
+      controller.signal.throwIfAborted();
+
+      if (managedVersionDir && probeSucceeded) {
+        await this.installer.removeStaleVersionedDirs(providerId, managedVersionDir, this.logger);
+      }
+
+      if (probeSucceeded) {
+        this.store.setInstallDetails(providerId, { stage: null, error: null });
       }
 
       const row = this.store.get(providerId);
       if (!row) throw new Error(`Provider ${providerId} vanished`);
       return new Provider(row).toDiscovery();
     } catch (err) {
+      await discardManagedCandidate();
       const msg = err instanceof Error ? err.message : String(err);
-      this.store.setInstallState(providerId, 'failed', msg);
-      throw err;
+      const code: ProviderLifecycleErrorCode =
+        err instanceof ProviderLifecycleError
+          ? err.code
+          : controller.signal.aborted
+            ? 'INSTALL_CANCELLED'
+            : 'ACTIVATION_FAILED';
+      if (code === 'INSTALL_CANCELLED') {
+        if (
+          previous &&
+          (previous.installState === 'installed_local' ||
+            previous.installState === 'system_available')
+        ) {
+          this.store.update(providerId, {
+            command: previous.command,
+            launchArgs: previous.launchArgs,
+            launchEnv: previous.launchEnv,
+            installState: previous.installState,
+            installStage: null,
+            installSource: previous.installSource,
+            installedVersion: previous.installedVersion,
+            installError: previous.installError,
+            authState: previous.authState === 'needs_auth' ? 'required' : previous.authState,
+            connectionState: previous.connectionState,
+          });
+        } else {
+          this.store.setInstallDetails(providerId, {
+            state: 'not_installed',
+            stage: null,
+            source: null,
+            installedVersion: null,
+            error: null,
+          });
+        }
+        const cancelledRow = this.store.get(providerId);
+        if (!cancelledRow) throw err;
+        return new Provider(cancelledRow).toDiscovery();
+      }
+      if (
+        previous &&
+        (previous.installState === 'installed_local' ||
+          previous.installState === 'system_available')
+      ) {
+        this.store.update(providerId, {
+          command: previous.command,
+          launchArgs: previous.launchArgs,
+          launchEnv: previous.launchEnv,
+          installState: previous.installState,
+          installStage: null,
+          installSource: previous.installSource,
+          installedVersion: previous.installedVersion,
+          installError: `${code}: ${msg}`,
+          authState: previous.authState === 'needs_auth' ? 'required' : previous.authState,
+          connectionState: previous.connectionState,
+        });
+      } else {
+        this.store.setInstallDetails(providerId, {
+          state: 'failed',
+          stage: null,
+          error: `${code}: ${msg}`,
+        });
+      }
+      throw err instanceof ProviderLifecycleError
+        ? err
+        : new ProviderLifecycleError(code, msg, { cause: err });
+    } finally {
+      if (this.installControllers.get(providerId) === controller) {
+        this.installControllers.delete(providerId);
+      }
+      this.notifyStateChange();
     }
   }
 
+  cancelInstall(providerId: string): void {
+    this.installControllers.get(providerId)?.abort(new Error('Install cancelled'));
+    const agent = this.getAgent(providerId);
+    this.launcher.invalidateProbe(providerId, this.runtime, agent);
+  }
+
   async remove(providerId: string): Promise<ProviderDiscovery> {
+    // Cancellation must happen before queueing; otherwise removal would wait for
+    // the operation it is trying to stop.
+    this.cancelInstall(providerId);
+    this.authCoordinator.cancelLogin(providerId);
     return this.runProviderOperation(providerId, 'remove', () => this.doRemove(providerId));
   }
 
@@ -340,18 +632,28 @@ export class ProviderRegistry {
     const provider = this.store.get(providerId);
     if (!provider) throw new Error(`Provider ${providerId} not found`);
 
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((a) => a.id === providerId);
+    const agent = this.getAgent(providerId, provider);
     const wasDefault = this.store.getDefaultProviderId() === providerId;
 
+    this.cancelInstall(providerId);
+    this.authCoordinator.cancelLogin(providerId);
+    this.connectionManager.closeConnection(providerId);
     this.launcher.invalidateProbe(providerId, this.runtime, agent);
 
     if (provider.installState === 'installed_local') {
       await this.installer.remove(providerId, this.logger);
+    } else {
+      await this.installer.removeStaging(providerId, this.logger);
     }
 
-    this.store.delete(providerId);
+    const vaultSnapshot = defaultCredentialVault.snapshotProviderSecrets(providerId);
+    await defaultCredentialVault.deleteProviderSecrets(providerId);
+    try {
+      this.store.delete(providerId);
+    } catch (error) {
+      await defaultCredentialVault.restoreProviderSecrets(providerId, vaultSnapshot);
+      throw error;
+    }
 
     if (wasDefault) {
       const nextDefault = this.store
@@ -379,6 +681,9 @@ export class ProviderRegistry {
           description: agent.description,
           icon: agent.icon ?? null,
           customEnv: '{}',
+          connectionState: 'unknown',
+          authError: null,
+          lastVerifiedAt: null,
           supportsDynamicModel: !!agent.supportsDynamicModel,
           supportsDynamicConfig: !!agent.supportsDynamicConfig,
           supportsLogout: !!agent.supportsLogout,
@@ -394,6 +699,9 @@ export class ProviderRegistry {
           installState: 'not_installed',
           installError: null,
           authState: 'unknown',
+          connectionState: 'unknown',
+          authError: null,
+          lastVerifiedAt: null,
           enabled: true,
           hidden: false,
           distribution: '{}',
@@ -417,29 +725,28 @@ export class ProviderRegistry {
     return new Provider(synthetic).toDiscovery();
   }
 
-  async login(
-    providerId: string,
-    methodId: string,
-    params: Record<string, unknown> = {},
-  ): Promise<void> {
+  async login(providerId: string, methodId: string): Promise<void> {
     return this.runProviderOperation(providerId, `login:${methodId}`, async () => {
-      const snapshot = this.fetcher.getSnapshot();
-      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-      const agent = agents.find((a) => a.id === providerId);
+      await this.authCoordinator.login(providerId, methodId);
+    });
+  }
 
-      this.connectionManager.closeConnection(providerId);
-      await this.authProvider.login(providerId, agent, methodId, params);
+  cancelLogin(providerId: string): void {
+    this.authCoordinator.cancelLogin(providerId);
+  }
+
+  async verify(providerId: string): Promise<ProviderDiscovery> {
+    return this.runProviderOperation(providerId, 'verify', async () => {
+      await this.authCoordinator.verify(providerId);
+      const row = this.store.get(providerId);
+      if (!row) throw new Error(`Provider ${providerId} not found`);
+      return new Provider(row).toDiscovery();
     });
   }
 
   async logout(providerId: string): Promise<void> {
     return this.runProviderOperation(providerId, 'logout', async () => {
-      const snapshot = this.fetcher.getSnapshot();
-      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-      const agent = agents.find((a) => a.id === providerId);
-
-      this.connectionManager.closeConnection(providerId);
-      await this.authProvider.logout(providerId, agent);
+      await this.authCoordinator.logout(providerId);
     });
   }
 
@@ -449,9 +756,7 @@ export class ProviderRegistry {
       if (!row) throw new Error(`Provider ${providerId} not found`);
 
       if (row.authState === 'unknown' && row.installState !== 'not_installed') {
-        const snapshot = this.fetcher.getSnapshot();
-        const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-        const agent = agents.find((a) => a.id === providerId);
+        const agent = this.getAgent(providerId, row);
         if (agent) {
           await this.probeWithStatePreserved(providerId, agent, row.authState, 'activate');
         }
@@ -468,9 +773,7 @@ export class ProviderRegistry {
       const rowBeforeProbe = this.store.get(providerId);
       if (!rowBeforeProbe) throw new Error(`Provider ${providerId} not found`);
 
-      const snapshot = this.fetcher.getSnapshot();
-      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-      const agent = agents.find((a) => a.id === providerId);
+      const agent = this.getAgent(providerId, rowBeforeProbe);
 
       this.launcher.invalidateProbe(providerId, this.runtime, agent);
 
@@ -500,7 +803,6 @@ export class ProviderRegistry {
           );
         } catch (err) {
           this.logger.warn({ err, providerId }, 'Failed to refresh probe for provider');
-          this.store.setAuthState(providerId, 'error');
         }
       }
 
@@ -512,6 +814,96 @@ export class ProviderRegistry {
 
   async probeAllInstalledProviders(): Promise<void> {
     return this.probing.probeAllInstalledProviders((id) => this.refreshProvider(id));
+  }
+
+  async recoverInterruptedOperations(): Promise<void> {
+    const snapshot = this.fetcher.getSnapshot();
+    let agents: RegistryAgent[] = [];
+    if (snapshot) {
+      try {
+        agents = parseRegistryAgents(snapshot.data);
+      } catch (error) {
+        this.logger.warn({ error }, 'Recovering providers without invalid registry snapshot');
+      }
+    }
+    let changed = false;
+
+    await this.installer.removeStaleStaging(this.logger).catch((error: unknown) => {
+      this.logger.warn({ error }, 'Failed to clean orphaned provider staging directories');
+    });
+
+    for (const row of this.store.listAll()) {
+      const agent = agents.find((candidate) => candidate.id === row.id);
+      if (row.installState === 'installing') {
+        const hasPreviousInstall =
+          !!row.installedVersion ||
+          row.installSource === 'system' ||
+          row.installSource === 'npx' ||
+          row.installSource === 'uvx';
+        const hasCurrentManagedInstall = !!agent && this.installer.isInstalled(row.id, agent);
+        const interruptedError =
+          'INSTALL_INTERRUPTED: Installation was interrupted by application shutdown';
+
+        if (!hasPreviousInstall && hasCurrentManagedInstall && agent) {
+          const target = agent.distribution.binary?.[getPlatformKey()];
+          if (target) {
+            const versionedDir = this.installer.getVersionedInstallDir(
+              agent.id,
+              agent.version,
+              target.archive,
+            );
+            this.store.update(row.id, {
+              command: path.resolve(versionedDir, target.cmd),
+              launchArgs: JSON.stringify(target.args ?? []),
+              launchEnv: JSON.stringify(target.env),
+              installState: 'installed_local',
+              installStage: null,
+              installSource: 'managed',
+              installedVersion: agent.version,
+              installError: interruptedError,
+            });
+          }
+        } else {
+          this.store.setInstallDetails(row.id, {
+            state: hasPreviousInstall
+              ? row.installSource === 'managed'
+                ? 'installed_local'
+                : 'system_available'
+              : 'failed',
+            stage: null,
+            source: row.installSource,
+            installedVersion: row.installedVersion,
+            error: interruptedError,
+          });
+        }
+        changed = true;
+      } else if (row.installStage !== null && row.installStage !== undefined) {
+        this.store.setInstallDetails(row.id, {
+          stage: null,
+          error: 'INSTALL_INTERRUPTED: Installation was interrupted by application shutdown',
+        });
+        changed = true;
+      }
+
+      if (row.authState === 'authenticating' || row.authState === 'verifying') {
+        const authError = {
+          code: 'AUTH_INTERRUPTED',
+          message: 'Authentication was interrupted by application shutdown',
+          retryable: true,
+        };
+        this.store.setAuthDetails(row.id, {
+          authState: 'required',
+          connectionState: 'unknown',
+          authError: JSON.stringify(authError),
+        });
+        changed = true;
+      } else if (row.connectionState === 'checking') {
+        this.store.setAuthDetails(row.id, { connectionState: 'unknown' });
+        changed = true;
+      }
+    }
+
+    if (changed) this.notifyStateChange();
   }
 
   async setProviderConfig(
@@ -528,20 +920,23 @@ export class ProviderRegistry {
 
       if (updates.customEnv !== undefined) {
         const existingCustomEnv = jsonCodecs.stringRecord(rowBeforeUpdate.customEnv);
-
-        const merged: Record<string, string> = {};
-        const removeKeys = new Set(
-          Object.entries(updates.customEnv)
-            .filter(([, value]) => value.trim().length === 0)
-            .map(([key]) => key),
-        );
-        for (const [key, value] of Object.entries(existingCustomEnv)) {
-          if (!removeKeys.has(key)) merged[key] = value;
-        }
+        const merged: Record<string, string> = { ...existingCustomEnv };
+        const vaultSnapshot = defaultCredentialVault.snapshotProviderSecrets(providerId);
+        const secretUpdates: Record<string, string | null> = {};
         for (const [key, value] of Object.entries(updates.customEnv)) {
-          if (value.trim().length > 0) merged[key] = value;
+          secretUpdates[key] = value.trim().length === 0 ? null : value;
         }
-        this.store.setCustomEnv(providerId, merged);
+        try {
+          const refs = await defaultCredentialVault.setProviderSecrets(providerId, secretUpdates);
+          for (const [key, value] of Object.entries(updates.customEnv)) {
+            if (value.trim().length === 0) delete merged[key];
+            else merged[key] = refs[key];
+          }
+          this.store.setCustomEnv(providerId, merged);
+        } catch (error) {
+          await defaultCredentialVault.restoreProviderSecrets(providerId, vaultSnapshot);
+          throw error;
+        }
       }
       if (updates.nativelyLoadsSkills !== undefined) {
         this.store.update(providerId, { nativelyLoadsSkills: updates.nativelyLoadsSkills });
@@ -550,9 +945,7 @@ export class ProviderRegistry {
         this.store.setDefaultConfigOptions(providerId, updates.defaultConfigOptions);
       }
 
-      const snapshot = this.fetcher.getSnapshot();
-      const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-      const agent = agents.find((a) => a.id === providerId);
+      const agent = this.getAgent(providerId, rowBeforeUpdate);
 
       this.launcher.invalidateProbe(providerId, this.runtime, agent);
       if (agent && rowBeforeUpdate.installState !== 'not_installed') {
@@ -565,7 +958,6 @@ export class ProviderRegistry {
           );
         } catch (err) {
           this.logger.warn({ err, providerId }, 'Failed to probe provider after config update');
-          this.store.setAuthState(providerId, 'error');
         }
       }
 
@@ -581,13 +973,20 @@ export class ProviderRegistry {
     previousAuthState: ProviderData['authState'],
     action: string,
   ): Promise<void> {
-    return this.probing.probeWithStatePreserved(providerId, agent, previousAuthState, action);
+    try {
+      await this.probing.probeWithStatePreserved(providerId, agent, previousAuthState, action);
+    } finally {
+      this.notifyStateChange();
+    }
   }
 
   async sync(): Promise<void> {
     if (this.activeSync) return this.activeSync;
 
-    const promise = this.runSync(() => this.syncProvider.sync());
+    const promise = this.runSync(async () => {
+      await this.syncProvider.sync();
+      this.notifyStateChange();
+    });
     this.activeSync = promise;
     void promise.then(
       () => {
@@ -611,9 +1010,7 @@ export class ProviderRegistry {
     }
     if (!row) throw new Error(`Provider ${providerId} not found`);
 
-    const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((candidate) => candidate.id === providerId);
+    const agent = this.getAgent(providerId, row);
 
     if (row.installState === 'installed_local' && !this.installer.isInstalled(providerId, agent)) {
       this.logger.warn(
@@ -632,36 +1029,27 @@ export class ProviderRegistry {
       return new Provider(updated);
     }
 
-    if (!options.force && row.authState === 'needs_auth') {
+    if (!options.force && row.authState === 'required') {
       return new Provider(row);
     }
 
-    if (!options.force && row.authState === 'authenticated') {
+    if (!options.force && row.authState === 'not_required' && row.connectionState === 'ready') {
+      return new Provider(row);
+    }
+
+    if (!options.force && row.authState === 'authenticated' && row.connectionState === 'ready') {
       const opts = jsonCodecs.agentConfigOptions(row.configOptions);
       const hasModelConfig = opts.some((opt) => opt.id === 'model' || opt.id === 'selectedModel');
-      if (hasModelConfig) {
+      const recentlyVerified =
+        !!row.lastVerifiedAt && Date.now() - row.lastVerifiedAt.getTime() < 5 * 60_000;
+      if (hasModelConfig || recentlyVerified) {
         return new Provider(row);
       }
     }
 
     if (agent) {
       this.launcher.invalidateProbe(providerId, this.runtime, agent);
-      try {
-        await this.launcher.probe(providerId, this.runtime, agent);
-      } catch (err) {
-        if (isAgentAuthenticationRequiredError(err)) {
-          this.logger.info(
-            { providerId },
-            'Probe failed due to auth error, setting state to needs_auth',
-          );
-          this.store.setAuthState(providerId, 'needs_auth');
-          const rowNow = this.store.get(providerId);
-          if (rowNow) return new Provider(rowNow);
-        }
-        this.logger.error({ err, providerId }, 'Probe failed, setting auth state to error');
-        this.store.setAuthState(providerId, 'error');
-        throw err;
-      }
+      await this.probeWithStatePreserved(providerId, agent, row.authState, 'prepare');
     }
 
     const updated = this.store.get(providerId);
@@ -726,6 +1114,11 @@ export class ProviderRegistry {
   }
 
   dispose(): void {
+    for (const controller of this.installControllers.values()) {
+      controller.abort(new Error('Application shutting down'));
+    }
+    this.installControllers.clear();
+    this.authCoordinator.dispose();
     this.connectionManager.closeAll();
   }
 }

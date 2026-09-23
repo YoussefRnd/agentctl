@@ -1,6 +1,7 @@
 import { z, type ZodType } from 'zod';
 import {
   agentFeaturesSchema,
+  authErrorSchema,
   EMPTY_AGENT_FEATURES,
   authMethodSchema,
   capabilitySnapshotSchema,
@@ -21,6 +22,7 @@ import {
   sessionEventSubagentUpdateDataSchema,
   type AgentConfigOption,
   type AgentFeatures,
+  type AuthError,
   type AuthMethod,
   type CapabilitySnapshot,
   type RegistryDistribution,
@@ -178,6 +180,9 @@ export const jsonCodecs = {
   },
   authMethods(value: string | null | undefined): AuthMethod[] {
     return decodeJson(value, z.array(authMethodSchema), []);
+  },
+  authError(value: string | null | undefined): AuthError | null {
+    return decodeJson(value, authErrorSchema.nullable(), null);
   },
   registryDistribution(value: string | null | undefined): RegistryDistribution {
     return decodeJson(value, registryDistributionSchema, {});

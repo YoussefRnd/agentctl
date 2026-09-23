@@ -17,6 +17,7 @@ import {
 import { createCapabilitySnapshot, type AgentConfigOption } from '@agentctl/shared';
 import type {
   AgentDescriptor,
+  AgentAuthenticationOptions,
   AgentDriver,
   AgentInspectionOptions,
   AgentPermissionRequest,
@@ -64,14 +65,34 @@ function descriptorFromInitialization(
   configOptions: AgentConfigOption[],
   options?: AgentInspectionOptions,
 ): AgentDescriptor {
-  const authMethods = (initialization.authMethods ?? [])
-    .filter((method) => method.type === 'agent')
-    .map((method) => ({
+  const authMethods = (initialization.authMethods ?? []).map((method) => {
+    if (method.type === 'terminal') {
+      const terminalMethod = method as {
+        methodId: string;
+        name: string;
+        description?: string | null;
+        args?: string[];
+        env?: Record<string, string>;
+      };
+      return {
+        id: terminalMethod.methodId,
+        name: terminalMethod.name,
+        type: 'terminal' as const,
+        description: terminalMethod.description ?? null,
+        args: Array.isArray(terminalMethod.args) ? terminalMethod.args : undefined,
+        env:
+          typeof terminalMethod.env === 'object' && terminalMethod.env !== null
+            ? terminalMethod.env
+            : undefined,
+      };
+    }
+    return {
       id: method.methodId,
       name: method.name,
       type: 'agent' as const,
       description: method.description ?? null,
-    }));
+    };
+  });
   const modes = configOptions
     .filter((option) => option.category === 'mode' || option.id === 'mode')
     .flatMap((option) => option.options?.map((entry) => entry.value) ?? []);
@@ -443,7 +464,7 @@ export class AcpV2AgentDriver implements AgentDriver {
         connection.agent.request(methods.agent.initialize, {
           protocolVersion: PROTOCOL_VERSION,
           info: { name: 'agentctl', version: '1.0.0' },
-          capabilities: {},
+          capabilities: process.platform === 'win32' ? {} : { auth: { terminal: {} } },
         }),
         getAgentRequestTimeoutMs(),
         'initializing ACP v2 connection',
@@ -625,18 +646,26 @@ export class AcpV2AgentDriver implements AgentDriver {
     );
     let initialization: InitializeResponse | undefined;
     try {
-      initialization = await connection.agent.request(methods.agent.initialize, {
-        protocolVersion: PROTOCOL_VERSION,
-        info: { name: 'agentctl-probe', version: '1.0.0' },
-        capabilities: {},
-      });
+      initialization = await withTimeout(
+        connection.agent.request(methods.agent.initialize, {
+          protocolVersion: PROTOCOL_VERSION,
+          info: { name: 'agentctl-probe', version: '1.0.0' },
+          capabilities: process.platform === 'win32' ? {} : { auth: { terminal: {} } },
+        }),
+        getAgentRequestTimeoutMs(),
+        'initializing provider probe',
+      );
       const capabilities = advertised(initialization.capabilities);
       let configOptions: AgentConfigOption[] = [];
       if (capabilities.sessions) {
-        const created = await connection.agent.request(methods.agent.session.new, {
-          cwd: os.tmpdir(),
-          mcpServers: [],
-        });
+        const created = await withTimeout(
+          connection.agent.request(methods.agent.session.new, {
+            cwd: os.tmpdir(),
+            mcpServers: [],
+          }),
+          getAgentRequestTimeoutMs(),
+          'opening provider probe session',
+        );
         configOptions = productConfigOptions(created.configOptions);
         await connection.agent
           .request(methods.agent.session.close, { sessionId: created.sessionId })
@@ -693,14 +722,31 @@ export class AcpV2AgentDriver implements AgentDriver {
     args: string[],
     env: Record<string, string> | undefined,
     methodId: string,
-    params: Record<string, unknown> = {},
+    options: AgentAuthenticationOptions = {},
   ): Promise<void> {
-    await this.withControlConnection(command, args, env, 'agentctl-login', async (connection) => {
-      await connection.agent.request(methods.agent.auth.login, {
-        methodId,
-        _meta: Object.keys(params).length > 0 ? params : undefined,
-      });
-    });
+    await this.withControlConnection(
+      command,
+      args,
+      env,
+      'agentctl-login',
+      async (connection, initialization) => {
+        const targetMethod = initialization.authMethods?.find(
+          (m) => m.methodId === methodId || (m as { id?: string }).id === methodId,
+        );
+        if (!targetMethod) {
+          throw new Error(`Authentication method '${methodId}' was not advertised by the agent`);
+        }
+        if (targetMethod?.type === 'terminal') {
+          throw new Error(
+            `Cannot pass terminal authentication method '${methodId}' to auth/login. Terminal authentication must be run in an interactive terminal.`,
+          );
+        }
+        await connection.agent.request(methods.agent.auth.login, {
+          methodId,
+        });
+      },
+      options,
+    );
   }
 
   async logoutProvider(
@@ -708,9 +754,18 @@ export class AcpV2AgentDriver implements AgentDriver {
     args: string[],
     env?: Record<string, string>,
   ): Promise<void> {
-    await this.withControlConnection(command, args, env, 'agentctl-logout', async (connection) => {
-      await connection.agent.request(methods.agent.auth.logout, {});
-    });
+    await this.withControlConnection(
+      command,
+      args,
+      env,
+      'agentctl-logout',
+      async (connection, initialization) => {
+        if (!initialization.authMethods || initialization.authMethods.length === 0) {
+          throw new Error('Agent does not support logout: no auth methods advertised');
+        }
+        await connection.agent.request(methods.agent.auth.logout, {});
+      },
+    );
   }
 
   private async withControlConnection(
@@ -719,6 +774,7 @@ export class AcpV2AgentDriver implements AgentDriver {
     env: Record<string, string> | undefined,
     name: string,
     operation: (connection: ClientConnection, initialization: InitializeResponse) => Promise<void>,
+    options: AgentAuthenticationOptions = {},
   ): Promise<void> {
     const managed = spawnManagedProcess({
       command,
@@ -730,6 +786,8 @@ export class AcpV2AgentDriver implements AgentDriver {
       createTransport: this.createTransport,
     });
     const { transport } = managed;
+    const abort = () => transport.kill('SIGTERM');
+    options.signal?.addEventListener('abort', abort, { once: true });
     const app = client({ name });
     app.onNotification(methods.client.session.update, () => undefined);
     app.onRequest(methods.client.session.requestPermission, () => ({
@@ -737,13 +795,23 @@ export class AcpV2AgentDriver implements AgentDriver {
     }));
     const connection = app.connect(ndJsonStream(transport.stdin, transport.stdout));
     try {
-      const initialization = await connection.agent.request(methods.agent.initialize, {
-        protocolVersion: PROTOCOL_VERSION,
-        info: { name, version: '1.0.0' },
-        capabilities: {},
-      });
-      await operation(connection, initialization);
+      if (options.signal?.aborted) throw new Error('Authentication cancelled');
+      const initialization = await withTimeout(
+        connection.agent.request(methods.agent.initialize, {
+          protocolVersion: PROTOCOL_VERSION,
+          info: { name, version: '1.0.0' },
+          capabilities: process.platform === 'win32' ? {} : { auth: { terminal: {} } },
+        }),
+        options.timeoutMs ?? 120_000,
+        'initializing provider control connection',
+      );
+      await withTimeout(
+        operation(connection, initialization),
+        options.timeoutMs ?? 120_000,
+        'performing provider control operation',
+      );
     } finally {
+      options.signal?.removeEventListener('abort', abort);
       connection.close();
       transport.kill();
     }

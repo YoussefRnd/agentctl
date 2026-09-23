@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { providers, systemSettings } from '../../db/schema.js';
 import type { DbClient } from '../../db/index.js';
 import type { ProviderData } from '../provider.js';
+import type { InstallSource, InstallStage, InstallState } from '@agentctl/shared';
 
 export class ProviderStore {
   constructor(private db: DbClient) {}
@@ -52,7 +53,7 @@ export class ProviderStore {
     this.db.delete(providers).where(eq(providers.id, id)).run();
   }
 
-  setInstallState(id: string, state: ProviderData['installState'], error?: string | null): void {
+  setInstallState(id: string, state: InstallState, error?: string | null): void {
     const updateValues: Partial<typeof providers.$inferInsert> = { installState: state };
     if (error !== undefined) {
       updateValues.installError = error;
@@ -60,8 +61,51 @@ export class ProviderStore {
     this.update(id, updateValues);
   }
 
+  setInstallDetails(
+    id: string,
+    details: {
+      state?: InstallState;
+      stage?: InstallStage | null;
+      source?: InstallSource | null;
+      installedVersion?: string | null;
+      error?: string | null;
+    },
+  ): void {
+    this.update(id, {
+      ...(details.state !== undefined ? { installState: details.state } : {}),
+      ...(details.stage !== undefined ? { installStage: details.stage } : {}),
+      ...(details.source !== undefined ? { installSource: details.source } : {}),
+      ...(details.installedVersion !== undefined
+        ? { installedVersion: details.installedVersion }
+        : {}),
+      ...(details.error !== undefined ? { installError: details.error } : {}),
+    });
+  }
+
   setAuthState(id: string, state: ProviderData['authState']): void {
-    this.update(id, { authState: state });
+    this.update(id, { authState: state === 'needs_auth' ? 'required' : state });
+  }
+
+  setAuthDetails(
+    id: string,
+    details: {
+      authState?: ProviderData['authState'];
+      connectionState?: ProviderData['connectionState'];
+      authError?: string | null;
+      lastVerifiedAt?: Date | null;
+    },
+  ): void {
+    const updateValues: Partial<typeof providers.$inferInsert> = {
+      ...(details.authState !== undefined
+        ? { authState: details.authState === 'needs_auth' ? 'required' : details.authState }
+        : {}),
+      ...(details.connectionState !== undefined
+        ? { connectionState: details.connectionState }
+        : {}),
+      ...(details.authError !== undefined ? { authError: details.authError } : {}),
+      ...(details.lastVerifiedAt !== undefined ? { lastVerifiedAt: details.lastVerifiedAt } : {}),
+    };
+    this.update(id, updateValues);
   }
 
   setCustomEnv(id: string, env: Record<string, string>): void {

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import { SearchBar, Card } from '@agentctl/ui';
 import { RegistryCard } from './RegistryCard';
-import { AuthDialog } from './AuthDialog';
+import { ProviderAuthDialog } from '@/features/providers';
 
 interface ProvidersApi {
   providers: ProviderDiscovery[];
@@ -12,6 +12,7 @@ interface ProvidersApi {
   syncProviders: () => void;
   isSyncing: boolean;
   installProvider: (id: string) => void;
+  cancelInstall: (id: string) => void;
   isInstalling: boolean;
   installingProviderId: string | null;
   removeProvider: (id: string) => void;
@@ -174,6 +175,8 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
               key={p.id}
               provider={p}
               onInstall={api.installProvider}
+              onCancelInstall={api.cancelInstall}
+              onRefresh={api.refreshProvider}
               onRemove={api.removeProvider}
               onAuth={(provider) => {
                 setAuthProvider(provider);
@@ -194,21 +197,12 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
         </div>
       )}
 
-      <AuthDialog
+      <ProviderAuthDialog
         provider={activeDialogProvider}
+        isOpen={!!activeDialogProvider}
         onClose={() => {
           setAuthProvider(null);
         }}
-        onSaveEnv={(id, env) => {
-          api.updateProviderConfig({ providerId: id, customEnv: env });
-        }}
-        onRefresh={(id) => {
-          api.refreshProvider(id);
-        }}
-        onLogin={api.login}
-        isLoggingIn={api.isLoggingIn}
-        isUpdatingConfig={api.isUpdatingConfig}
-        isRefreshing={api.isRefreshing}
       />
     </div>
   );

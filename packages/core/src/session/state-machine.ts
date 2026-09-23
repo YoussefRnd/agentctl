@@ -219,6 +219,7 @@ export class SessionStateMachine {
     );
 
     let session: ManagedSession | undefined;
+    let providerId = 'default';
 
     try {
       const activeMcpConfigs = await this.db
@@ -257,7 +258,7 @@ export class SessionStateMachine {
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, sessionId),
       });
-      const providerId = sessionRecord?.selectedProvider ?? 'default';
+      providerId = sessionRecord?.selectedProvider ?? 'default';
 
       const runtimeHandle = await this.runtime.startSession(
         command,
@@ -343,6 +344,10 @@ export class SessionStateMachine {
     } catch (err: unknown) {
       if (err instanceof AgentAuthenticationRequiredError) {
         this.logger.warn(`Session ${sessionId} requires authentication`);
+        this.providerRegistry
+          .getAuthCoordinator()
+          .markAuthRequired(providerId, { message: 'Authentication required' });
+
         await this.db
           .update(sessions)
           .set({ status: 'needs_attention' })
@@ -350,7 +355,7 @@ export class SessionStateMachine {
 
         await this.eventStore.append(sessionId, 'status', {
           status: 'needs_auth',
-          message: 'Authentication required. Please check your API keys or log in via CLI.',
+          message: 'Authentication required. Open the provider authentication dialog to continue.',
         });
 
         const runtimeHandle: AgentSession = err.pendingSession;

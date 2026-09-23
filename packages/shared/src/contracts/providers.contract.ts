@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { providerDiscoverySchema } from '../schemas/session.js';
+import { environmentVariableNameSchema } from '../schemas/registry.js';
 
 const emptyBodySchema = z.record(z.string(), z.unknown()).optional().default({});
 
@@ -30,6 +31,16 @@ export const providersContract = {
     },
     summary: 'Install provider',
   },
+  cancelInstallProvider: {
+    method: 'POST',
+    path: '/api/providers/:id/install/cancel',
+    pathParams: z.object({ id: z.string() }),
+    body: emptyBodySchema,
+    responses: {
+      200: z.object({ success: z.boolean() }),
+    },
+    summary: 'Cancel an in-progress provider installation',
+  },
   removeProvider: {
     method: 'POST',
     path: '/api/providers/:id/remove',
@@ -46,12 +57,31 @@ export const providersContract = {
     pathParams: z.object({ id: z.string() }),
     body: z.object({
       methodId: z.string(),
-      params: z.record(z.string(), z.unknown()).optional(),
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
     },
     summary: 'Login to provider',
+  },
+  cancelLoginProvider: {
+    method: 'POST',
+    path: '/api/providers/:id/login/cancel',
+    pathParams: z.object({ id: z.string() }),
+    body: emptyBodySchema,
+    responses: {
+      200: z.object({ success: z.boolean() }),
+    },
+    summary: 'Cancel in-progress login for provider',
+  },
+  verifyProvider: {
+    method: 'POST',
+    path: '/api/providers/:id/verify',
+    pathParams: z.object({ id: z.string() }),
+    body: emptyBodySchema,
+    responses: {
+      200: providerDiscoverySchema,
+    },
+    summary: 'Verify provider connection and authentication',
   },
   logoutProvider: {
     method: 'POST',
@@ -88,7 +118,7 @@ export const providersContract = {
     path: '/api/providers/:id/config',
     pathParams: z.object({ id: z.string() }),
     body: z.object({
-      customEnv: z.record(z.string(), z.string()).optional(),
+      customEnv: z.record(environmentVariableNameSchema, z.string()).optional(),
       nativelyLoadsSkills: z.boolean().optional(),
     }),
     responses: {

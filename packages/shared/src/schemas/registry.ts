@@ -1,7 +1,11 @@
 import { z } from 'zod';
 
+export const environmentVariableNameSchema = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Invalid environment variable name');
+
 export const authEnvVarSchema = z.object({
-  name: z.string(),
+  name: environmentVariableNameSchema,
   label: z.string().optional(),
   secret: z.boolean().default(true),
   optional: z.boolean().default(false),
@@ -108,32 +112,84 @@ export function createCapabilitySnapshot(
   };
 }
 
-export const authMethodSchema = z.object({
+export const authMethodTerminalSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.enum(['agent', 'env_var']).optional().default('agent'),
+  type: z.literal('terminal'),
   description: z.string().nullable().optional(),
-  vars: z.array(authEnvVarSchema).optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(environmentVariableNameSchema, z.string()).optional(),
+  _meta: z.record(z.string(), z.unknown()).nullable().optional(),
 });
+
+export const authMethodAgentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.literal('agent').default('agent'),
+  description: z.string().nullable().optional(),
+  _meta: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
+/** Legacy registry authentication for agents that still read credentials from env. */
+export const authMethodEnvVarSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.literal('env_var'),
+  description: z.string().nullable().optional(),
+  vars: z.array(authEnvVarSchema).min(1),
+  _meta: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
+export const authMethodSchema = z.preprocess(
+  (val: unknown) => {
+    if (typeof val === 'object' && val !== null) {
+      const obj = val as Record<string, unknown>;
+      const id = (obj.id ?? obj.methodId) as string | undefined;
+      const type =
+        obj.type === 'terminal' ? 'terminal' : obj.type === 'env_var' ? 'env_var' : 'agent';
+      return { ...obj, id, type };
+    }
+    return val;
+  },
+  z.discriminatedUnion('type', [
+    authMethodAgentSchema,
+    authMethodTerminalSchema,
+    authMethodEnvVarSchema,
+  ]),
+);
+
+export type AuthMethodTerminal = z.infer<typeof authMethodTerminalSchema>;
+export type AuthMethodAgent = z.infer<typeof authMethodAgentSchema>;
+export type AuthMethodEnvVar = z.infer<typeof authMethodEnvVarSchema>;
+export type AuthMethod = z.infer<typeof authMethodSchema>;
 
 export const registryDistributionNpxSchema = z.object({
   package: z.string().min(1),
   args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional().default({}),
+  env: z.record(environmentVariableNameSchema, z.string()).optional().default({}),
 });
 
+const httpsUrlSchema = z.url().refine((value) => new URL(value).protocol === 'https:', {
+  message: 'Provider downloads must use HTTPS',
+});
+
+const webUrlSchema = z.url().refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === 'https:' || protocol === 'http:';
+}, 'Provider links must use HTTP or HTTPS');
+
 export const registryDistributionBinaryTargetSchema = z.object({
-  archive: z.url(),
+  archive: httpsUrlSchema,
   cmd: z.string().min(1),
   args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional().default({}),
+  env: z.record(environmentVariableNameSchema, z.string()).optional().default({}),
   sha256: z.string().optional(),
 });
 
 export const registryDistributionUvxSchema = z.object({
   package: z.string().min(1),
   args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional().default({}),
+  env: z.record(environmentVariableNameSchema, z.string()).optional().default({}),
 });
 
 export const registryDistributionSchema = z.object({
@@ -143,16 +199,19 @@ export const registryDistributionSchema = z.object({
 });
 
 export const registryAgentSchema = z.object({
-  id: z.string().min(1),
+  id: z
+    .string()
+    .min(1)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'Provider id must be a safe path segment'),
   name: z.string().min(1),
   version: z.string().min(1),
   description: z.string().optional().default(''),
-  repository: z.url().optional(),
-  website: z.url().optional(),
+  repository: webUrlSchema.optional(),
+  website: webUrlSchema.optional(),
   authors: z.array(z.string()).optional().default([]),
   license: z.string().optional(),
   distribution: registryDistributionSchema,
-  icon: z.url().optional(),
+  icon: webUrlSchema.optional(),
   configOptions: z.array(agentConfigOptionSchema).optional(),
   authMethods: z.array(authMethodSchema).optional(),
   supportsDynamicModel: z.boolean().optional(),

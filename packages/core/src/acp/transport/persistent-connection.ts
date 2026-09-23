@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
+import type { RegistryAgent } from '@agentctl/shared';
 import type { ProviderLauncher } from '../../providers/registry/provider-launcher.js';
 import type { ProviderStore } from '../../providers/registry/provider-store.js';
 import type { RegistryFetcher } from '../../providers/registry/registry-fetcher.js';
@@ -18,6 +19,7 @@ import type {
   AgentDiagnosticsRecorder,
 } from '../../agent/diagnostics.js';
 import type { AgentFeatures } from '../../agent/types.js';
+import { Provider } from '../../providers/provider.js';
 
 const PERSISTENT_CONNECTION_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -45,6 +47,7 @@ export interface ActiveSession {
 export class PersistentAgentConnectionManager {
   private connections = new Map<string, PersistentConnection>();
   private pendingConnections = new Map<string, Promise<PersistentConnection>>();
+  private pendingTransports = new Map<string, ProcessStreamTransport>();
   private providerEpochs = new Map<string, number>();
   private activeSessions = new Map<string, ActiveSession>(); // key: acpSessionId
   private terminalToSession = new Map<string, string>(); // key: terminalId, value: acpSessionId
@@ -117,9 +120,16 @@ export class PersistentAgentConnectionManager {
     if (!provider) throw new Error(`Provider ${providerId} not found`);
 
     const snapshot = this.fetcher.getSnapshot();
-    const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
-    const agent = agents.find((a) => a.id === providerId);
-    if (!agent) throw new Error(`Registry agent data not found for ${providerId}`);
+    let registryAgent: RegistryAgent | undefined;
+    if (snapshot) {
+      try {
+        registryAgent = parseRegistryAgents(snapshot.data).find((a) => a.id === providerId);
+      } catch (error) {
+        this.logger.warn({ error }, 'Ignoring invalid provider registry snapshot for connection');
+      }
+    }
+    const agent = registryAgent ?? new Provider(provider).toDiscovery().agent;
+    if (!agent) throw new Error(`Provider launch metadata not found for ${providerId}`);
 
     const launch = this.launcher.resolveLaunch(provider, agent);
     const epoch = this.providerEpochs.get(providerId) ?? 0;
@@ -157,6 +167,7 @@ export class PersistentAgentConnectionManager {
     });
 
     const transport = new ProcessStreamTransport(child, this.logger);
+    this.pendingTransports.set(providerId, transport);
     const rawStream = ndJsonStream(transport.stdin, transport.stdout);
     const stream = wrapDebug(rawStream, (direction, message) => {
       debugLog.recordLine(direction === 'send' ? 'outgoing' : 'incoming', JSON.stringify(message));
@@ -237,6 +248,10 @@ export class PersistentAgentConnectionManager {
       transport.kill();
       await terminalManager.dispose();
       throw error;
+    } finally {
+      if (this.pendingTransports.get(providerId) === transport) {
+        this.pendingTransports.delete(providerId);
+      }
     }
     const parsedCapabilities = acpInitRes.parsedCapabilities;
 
@@ -319,6 +334,11 @@ export class PersistentAgentConnectionManager {
 
   closeConnection(providerId: string) {
     this.providerEpochs.set(providerId, (this.providerEpochs.get(providerId) ?? 0) + 1);
+    const pendingTransport = this.pendingTransports.get(providerId);
+    if (pendingTransport) {
+      pendingTransport.kill();
+      this.pendingTransports.delete(providerId);
+    }
     const conn = this.connections.get(providerId);
     if (conn) {
       this.diagnostics?.record({
@@ -423,7 +443,12 @@ export class PersistentAgentConnectionManager {
   }
 
   closeAll() {
-    for (const providerId of this.connections.keys()) {
+    const providerIds = new Set([
+      ...this.connections.keys(),
+      ...this.pendingConnections.keys(),
+      ...this.pendingTransports.keys(),
+    ]);
+    for (const providerId of providerIds) {
       this.closeConnection(providerId);
     }
   }

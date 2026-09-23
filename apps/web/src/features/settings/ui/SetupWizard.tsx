@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSetupWizard } from '../model/useSetupWizard';
 import { useProviders } from '@/features/providers';
 import { useSettings } from '../api/useSettings';
-import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
+import { getProviderEnvKeys, isProviderEnvKeyOptional, validateApiKey } from '@agentctl/shared';
 import { Terminal, AlertOctagon } from 'lucide-react';
 import {
   Dialog,
@@ -18,14 +18,10 @@ import {
 import { ChecklistItem } from './SetupWizardChecklistItem';
 import { SetupWizardProviderRow } from './SetupWizardProviderRow';
 
-function readCustomEnv(env: Record<string, string> | undefined, key: string): string | undefined {
-  return env?.[key];
-}
-
 export function SetupWizard() {
   const { showWizard, markDone } = useSetupWizard();
   const { settings, updateSettings } = useSettings();
-  const { providers, isLoadingProviders, updateProviderConfig, isUpdatingConfig } =
+  const { providers, isLoadingProviders, updateProviderConfigAsync, isUpdatingConfig } =
     useProviders(null);
   const [localCustomEnvs, setLocalCustomEnvs] = useState<
     Record<string, Record<string, string> | undefined>
@@ -35,12 +31,18 @@ export function SetupWizard() {
   const hasAnyInvalidProvider = providers.some((provider) => {
     if (provider.installState === 'not_installed') return false;
     const envKeys = getProviderEnvKeys(provider);
+    const localEnv = localCustomEnvs[provider.id] ?? {};
     return envKeys.some((key) => {
-      const val =
-        readCustomEnv(localCustomEnvs[provider.id], key) ??
-        readCustomEnv(provider.customEnv, key) ??
-        '';
-      return validateApiKey(key, val) !== null;
+      const localValue = localEnv[key];
+      if (isProviderEnvKeyOptional(provider, key) && (localValue?.trim() ?? '') === '') {
+        return false;
+      }
+      if (key in localEnv) {
+        if (authDeferred && (localValue?.trim() ?? '') === '') return false;
+        return validateApiKey(key, localValue ?? '') !== null;
+      }
+      if (provider.customEnvConfigured[key]) return false;
+      return !authDeferred;
     });
   });
 
@@ -50,7 +52,10 @@ export function SetupWizard() {
   const registryOk = !settings?.registrySyncError && providers.length > 0;
   const atLeastOneEnabled = providers.some((p) => p.installState !== 'not_installed');
   const allEnabledReady = providers.every(
-    (p) => p.installState === 'not_installed' || p.authState === 'authenticated',
+    (p) =>
+      p.installState === 'not_installed' ||
+      p.authState === 'authenticated' ||
+      p.authState === 'not_required',
   );
   const authOk = (allEnabledReady || authDeferred) && !hasAnyInvalidProvider;
   const defaultSelected =
@@ -71,8 +76,13 @@ export function SetupWizard() {
     }));
   };
 
-  const handleSaveConfig = (providerId: string, customEnv: Record<string, string>) => {
-    updateProviderConfig({ providerId, customEnv });
+  const handleSaveConfig = async (providerId: string, customEnv: Record<string, string>) => {
+    await updateProviderConfigAsync({ providerId, customEnv });
+    setLocalCustomEnvs((previous) => {
+      const next = { ...previous };
+      delete next[providerId];
+      return next;
+    });
   };
 
   return (
@@ -125,7 +135,7 @@ export function SetupWizard() {
         </div>
 
         {providers.some(
-          (p) => p.installState !== 'not_installed' && p.authState === 'needs_auth',
+          (p) => p.installState !== 'not_installed' && p.authState === 'required',
         ) && (
           <div className="bg-surface-secondary/10 border-border/10 flex items-center gap-3 rounded-xl border p-3 select-none">
             <Switch id="deferAuth" checked={authDeferred} onCheckedChange={setAuthDeferred} />
@@ -133,7 +143,7 @@ export function SetupWizard() {
               htmlFor="deferAuth"
               className="text-text-main cursor-pointer text-xs font-medium"
             >
-              Defer authentication for now (I will configure API keys later)
+              Defer authentication for now (I will configure provider credentials later)
             </label>
           </div>
         )}

@@ -7,7 +7,16 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
-import type { SessionStatus, SessionEvent, SessionMode } from '@agentctl/shared';
+import type {
+  AuthState,
+  ConnectionState,
+  InstallSource,
+  InstallStage,
+  InstallState,
+  SessionStatus,
+  SessionEvent,
+  SessionMode,
+} from '@agentctl/shared';
 import {
   DEFAULT_AGENT_MODEL,
   DEFAULT_CONTEXT_LIMIT,
@@ -88,9 +97,15 @@ export const sessions = sqliteTable('sessions', {
 export const providers = sqliteTable('providers', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  installState: text('install_state').notNull().default('not_installed'),
+  installState: text('install_state').$type<InstallState>().notNull().default('not_installed'),
   installError: text('install_error'),
-  authState: text('auth_state').notNull().default('unknown'),
+  installStage: text('install_stage').$type<InstallStage>(),
+  installSource: text('install_source').$type<InstallSource>(),
+  installedVersion: text('installed_version'),
+  connectionState: text('connection_state').$type<ConnectionState>().notNull().default('unknown'),
+  authState: text('auth_state').$type<AuthState>().notNull().default('unknown'),
+  authError: text('auth_error'),
+  lastVerifiedAt: integer('last_verified_at', { mode: 'timestamp' }),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
   distribution: text('distribution').notNull().default('{}'),
@@ -102,7 +117,7 @@ export const providers = sqliteTable('providers', {
   version: text('version'),
   description: text('description'),
   icon: text('icon'),
-  customEnv: text('custom_env').notNull().default('{}'), // Store user-configured credentials as a JSON string
+  customEnv: text('custom_env').notNull().default('{}'), // JSON map of env names to encrypted-vault references
   supportsDynamicModel: integer('supports_dynamic_model', { mode: 'boolean' })
     .notNull()
     .default(false),

@@ -5,7 +5,7 @@ import { CommandBarFooter } from './WorkspaceStateReviewer';
 import { useCommandBarState } from '../model/useCommandBarState';
 import { CommandInputComposer } from './CommandInputComposer';
 import { QueuedMessagesPillStack } from './QueuedMessagesPillStack';
-import { ProviderAuthModal } from '@/features/providers';
+import { ProviderAuthDialog } from '@/features/providers';
 
 interface ControlBarProps {
   onSend: (val: string, attachmentIds?: string[]) => void;
@@ -202,13 +202,16 @@ export function CommandBar({
         />
       )}
 
-      <ProviderAuthModal
+      <ProviderAuthDialog
         isOpen={isAuthModalOpen}
         onClose={() => {
           setIsAuthModalOpen(false);
         }}
-        activeProvider={activeProvider}
+        provider={activeProvider ?? null}
         sessionId={sessionId}
+        onSuccess={(providerId) => {
+          handleProviderSelect(providerId);
+        }}
       />
     </div>
   );

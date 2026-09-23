@@ -10,6 +10,8 @@ import { type Logger, noopLogger } from '../../logger.js';
 const CDN_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
 
 export class RegistryFetcher {
+  private activeFetch?: Promise<RegistryAgent[]>;
+
   constructor(
     private db: DbClient,
     private logger: Logger = noopLogger,
@@ -25,7 +27,36 @@ export class RegistryFetcher {
     return row.length > 0 ? row[0] : undefined;
   }
 
-  async fetch(): Promise<RegistryAgent[]> {
+  getCachedAgents(): RegistryAgent[] | undefined {
+    const snapshot = this.getSnapshot();
+    if (!snapshot) return undefined;
+    try {
+      const data: unknown = JSON.parse(snapshot.data);
+      const validated = registrySchema.parse(data);
+      return this.mergeAgents(this.readLocalOverride(), validated.agents);
+    } catch (error) {
+      this.logger.warn(error, 'Ignoring invalid cached registry snapshot');
+      return undefined;
+    }
+  }
+
+  private async fetchRemote(headers: Record<string, string> = {}): Promise<Response> {
+    const signal = AbortSignal.timeout(8_000);
+    return fetch(CDN_URL, { headers, signal });
+  }
+
+  fetch(): Promise<RegistryAgent[]> {
+    if (this.activeFetch) return this.activeFetch;
+    const request = this.fetchUncached();
+    this.activeFetch = request;
+    const clear = () => {
+      if (this.activeFetch === request) this.activeFetch = undefined;
+    };
+    void request.then(clear, clear);
+    return request;
+  }
+
+  private async fetchUncached(): Promise<RegistryAgent[]> {
     const localAgents = this.readLocalOverride();
     const lastSnapshot = this.getSnapshot();
 
@@ -34,7 +65,7 @@ export class RegistryFetcher {
     if (lastSnapshot?.lastModified) headers['If-Modified-Since'] = lastSnapshot.lastModified;
 
     try {
-      const response = await fetch(CDN_URL, { headers });
+      const response = await this.fetchRemote(headers);
 
       if (response.status === 304 && lastSnapshot) {
         const safe = registrySchema.safeParse(JSON.parse(lastSnapshot.data));
@@ -71,12 +102,13 @@ export class RegistryFetcher {
           this.clearSnapshot();
         }
       }
-      return localAgents;
+      if (localAgents.length > 0) return localAgents;
+      throw err;
     }
   }
 
   private async fetchFresh(localAgents: RegistryAgent[]): Promise<RegistryAgent[]> {
-    const response = await fetch(CDN_URL);
+    const response = await this.fetchRemote();
     if (!response.ok) {
       throw new Error(`Failed to fetch registry CDN: ${String(response.status)}`);
     }
@@ -95,13 +127,20 @@ export class RegistryFetcher {
 
   private readLocalOverride(): RegistryAgent[] {
     const localPath =
-      process.env.AGENTCTL_REGISTRY_PATH ?? path.join(os.homedir(), '.agentctl', 'registry.json');
+      process.env.AGENTCTL_REGISTRY_PATH ??
+      path.join(process.env.AGENTCTL_HOME ?? path.join(os.homedir(), '.agentctl'), 'registry.json');
     if (fs.existsSync(localPath)) {
       try {
-        const content = JSON.parse(fs.readFileSync(localPath, 'utf8')) as {
-          agents?: RegistryAgent[];
-        };
-        return content.agents ?? [];
+        const content: unknown = JSON.parse(fs.readFileSync(localPath, 'utf8'));
+        if (typeof content !== 'object' || content === null) {
+          throw new Error('Local registry override must be an object');
+        }
+        const validated = registrySchema.parse({
+          version: 'local',
+          extensions: [],
+          ...(content as Record<string, unknown>),
+        });
+        return validated.agents;
       } catch (err) {
         this.logger.warn(err, 'Failed to read local override file');
       }

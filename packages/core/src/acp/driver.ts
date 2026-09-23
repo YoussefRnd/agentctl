@@ -1,6 +1,7 @@
 import type { spawn } from 'node:child_process';
 import type {
   AgentDriver,
+  AgentAuthenticationOptions,
   AgentInspectionOptions,
   AgentSessionCallbacks,
   AgentSessionOptions,
@@ -97,13 +98,13 @@ export class AcpAgentDriver implements AgentDriver {
     args: string[],
     env: Record<string, string> | undefined,
     methodId: string,
-    params?: Record<string, unknown>,
+    options?: AgentAuthenticationOptions,
   ): Promise<void> {
     const driver = this.forEnv(env);
     if (!driver.authenticateProvider) {
       return Promise.reject(new Error('Agent adapter does not support authentication'));
     }
-    return driver.authenticateProvider(command, args, env, methodId, params);
+    return driver.authenticateProvider(command, args, env, methodId, options);
   }
 
   logoutProvider(command: string, args: string[], env?: Record<string, string>): Promise<void> {

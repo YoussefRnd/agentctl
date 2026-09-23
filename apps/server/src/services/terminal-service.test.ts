@@ -1,6 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { InteractiveTerminalService } from './terminal-service.js';
 import os from 'node:os';
+import { afterEach, describe, expect, it } from 'vitest';
+import { InteractiveTerminalService } from './terminal-service.js';
 
 describe('InteractiveTerminalService', () => {
   let service: InteractiveTerminalService;
@@ -18,7 +18,6 @@ describe('InteractiveTerminalService', () => {
     expect(term).toBeDefined();
     expect(term.process.pid).toBeDefined();
 
-    // Listen for data output
     const outputReceived = await new Promise<boolean>((resolve) => {
       const onData = (data: string) => {
         if (data.length > 0) {
@@ -28,16 +27,13 @@ describe('InteractiveTerminalService', () => {
       };
       service.on(`data:${sessionId}`, onData);
 
-      // Trigger echo command
       setTimeout(() => {
         service.writeInput(sessionId, 'echo "interactive-terminal-alive"\n');
       }, 50);
     });
 
     expect(outputReceived).toBe(true);
-
-    const history = service.getHistory(sessionId);
-    expect(history.length).toBeGreaterThan(0);
+    expect(service.getHistory(sessionId).length).toBeGreaterThan(0);
   });
 
   it('kills and cleans up terminal process', () => {
@@ -46,8 +42,7 @@ describe('InteractiveTerminalService', () => {
     const term = service.spawnTerminal(sessionId, os.tmpdir());
 
     expect(term.process.killed).toBe(false);
-    const killed = service.killTerminal(sessionId);
-    expect(killed).toBe(true);
+    expect(service.killTerminal(sessionId)).toBe(true);
   });
 
   it('resizes terminal dimensions', () => {
@@ -58,9 +53,33 @@ describe('InteractiveTerminalService', () => {
     expect(term.cols).toBe(80);
     expect(term.rows).toBe(24);
 
-    const resized = service.resizeTerminal(sessionId, 120, 40);
-    expect(resized).toBe(true);
+    expect(service.resizeTerminal(sessionId, 120, 40)).toBe(true);
     expect(term.cols).toBe(120);
     expect(term.rows).toBe(40);
+  });
+
+  it.skipIf(process.platform === 'win32')('runs provider commands inside a real PTY', async () => {
+    service = new InteractiveTerminalService();
+    const terminal = service.spawnCommandTerminal(
+      'provider-auth-test',
+      '/bin/sh',
+      ['-c', 'if [ -t 0 ] && [ -t 1 ]; then printf PTY_OK; else printf NO_PTY; fi'],
+      {},
+      os.tmpdir(),
+    );
+
+    let output = '';
+    service.on('data:provider-auth-test', (data: string) => {
+      output += data;
+    });
+
+    const exitCode = await new Promise<number | null>((resolve, reject) => {
+      terminal.process.once('exit', resolve);
+      terminal.process.once('error', reject);
+    });
+
+    expect(exitCode).toBe(0);
+    expect(output).toContain('PTY_OK');
+    expect(output).not.toContain('NO_PTY');
   });
 });

@@ -32,21 +32,29 @@ export class ProviderProbingService {
     } catch (cause) {
       if (isAgentAuthenticationRequiredError(cause)) {
         if (previousAuthState !== 'authenticated') {
-          this.store.setAuthState(providerId, 'needs_auth');
+          this.store.setAuthState(providerId, 'required');
         }
         return;
       }
+      const detail = cause instanceof Error ? cause.message : String(cause);
       if (this.store.get(providerId)) {
         const restoredAuthState =
           previousAuthState === 'authenticated' ||
           previousAuthState === 'error' ||
-          previousAuthState === 'needs_auth' ||
+          previousAuthState === 'required' ||
           previousAuthState === 'unknown'
             ? previousAuthState
             : 'unknown';
-        this.store.setAuthState(providerId, restoredAuthState);
+        this.store.setAuthDetails(providerId, {
+          authState: restoredAuthState,
+          connectionState: 'error',
+          authError: JSON.stringify({
+            code: 'CONNECTION_FAILED',
+            message: detail,
+            retryable: true,
+          }),
+        });
       }
-      const detail = cause instanceof Error ? cause.message : String(cause);
       throw new Error(`Failed to ${action} provider ${providerId}: ${detail}`, { cause });
     }
   }
@@ -55,9 +63,7 @@ export class ProviderProbingService {
     refreshProviderFn?: (id: string) => Promise<unknown>,
   ): Promise<void> {
     const allProviders = this.store.list();
-    const candidates = allProviders.filter(
-      (row) => row.installState !== 'not_installed' && row.authState !== 'needs_auth',
-    );
+    const candidates = allProviders.filter((row) => row.installState !== 'not_installed');
 
     const snapshot = this.fetcher.getSnapshot();
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];
@@ -91,6 +97,7 @@ export class ProviderProbingService {
       id: agent.id,
       name: agent.name,
       installState: 'system_available',
+      installSource: 'system',
       installError: null,
       authState: 'unknown',
       enabled: true,
@@ -105,6 +112,9 @@ export class ProviderProbingService {
       description: agent.description,
       icon: agent.icon ?? null,
       customEnv: '{}',
+      connectionState: 'unknown',
+      authError: null,
+      lastVerifiedAt: null,
       supportsDynamicModel: agent.supportsDynamicModel ?? false,
       supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
       supportsLogout: agent.supportsLogout ?? false,
@@ -133,7 +143,15 @@ export class ProviderProbingService {
       supportsLogout: agent.supportsLogout ?? false,
       nativelyLoadsSkills: false,
       installState: 'system_available',
-      authState: authMethods.length > 0 ? 'needs_auth' : 'authenticated',
+      installSource: 'system',
+      installedVersion: null,
+      availableVersion: agent.version,
+      updateAvailable: false,
+      connectionState: 'unknown',
+      authState: 'unknown',
+      authError: null,
+      lastVerifiedAt: null,
+      status: 'inactive',
       enabled: true,
       agent,
     };

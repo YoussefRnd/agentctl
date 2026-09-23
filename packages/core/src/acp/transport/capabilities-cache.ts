@@ -19,6 +19,7 @@ export { withTimeout };
 
 export const AGENTCTL_CLIENT_CAPABILITIES: ClientCapabilities = {
   terminal: true,
+  ...(process.platform === 'win32' ? {} : { auth: { terminal: true } }),
   fs: { readTextFile: true, writeTextFile: true },
   session: { configOptions: { boolean: {} } },
   elicitation: { form: {}, url: {} },

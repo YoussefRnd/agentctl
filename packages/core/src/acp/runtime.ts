@@ -18,6 +18,7 @@ import { createCapabilitySnapshot, type AgentConfigOption } from '@agentctl/shar
 import type { AgentStreamTransport, IConnectionManager, CacheStorage } from './types.js';
 import type {
   AgentDescriptor,
+  AgentAuthenticationOptions,
   AgentDriver,
   AgentInspectionOptions,
   AgentPromptResult,
@@ -654,7 +655,7 @@ export class AcpV1AgentDriver implements AgentDriver {
     );
 
     try {
-      const result = await Promise.race([
+      const result = await withTimeout(
         (async (): Promise<AgentDescriptor> => {
           let status: 'ready' | 'needs_auth' = 'ready';
           let configOptions: AgentConfigOption[] = [];
@@ -673,12 +674,32 @@ export class AcpV1AgentDriver implements AgentDriver {
             parsedCapabilities = initialized.parsedCapabilities;
 
             agentCapabilities = initResult.agentCapabilities;
-            authMethods = (initResult.authMethods ?? []).map((method) => ({
-              id: method.id,
-              name: method.name,
-              type: 'agent' as const,
-              description: method.description ?? null,
-            }));
+            authMethods = (initResult.authMethods ?? []).map((method) => {
+              if ((method as { type?: string }).type === 'terminal') {
+                const term = method as {
+                  id: string;
+                  name: string;
+                  type: 'terminal';
+                  description?: string | null;
+                  args?: string[];
+                  env?: Record<string, string>;
+                };
+                return {
+                  id: term.id,
+                  name: term.name,
+                  type: 'terminal' as const,
+                  description: term.description ?? null,
+                  args: term.args,
+                  env: term.env,
+                };
+              }
+              return {
+                id: method.id,
+                name: method.name,
+                type: 'agent' as const,
+                description: method.description ?? null,
+              };
+            });
 
             const sessionResult = await connection.newSession({
               cwd: os.tmpdir(),
@@ -749,12 +770,9 @@ export class AcpV1AgentDriver implements AgentDriver {
 
           return probeResult;
         })(),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error('Probe timed out'));
-          }, getAgentRequestTimeoutMs());
-        }),
-      ]);
+        getAgentRequestTimeoutMs(),
+        'probing provider',
+      );
 
       return result;
     } finally {
@@ -837,24 +855,39 @@ export class AcpV1AgentDriver implements AgentDriver {
     args: string[],
     env: Record<string, string> | undefined,
     methodId: string,
-    params: Record<string, unknown> = {},
+    options: AgentAuthenticationOptions = {},
   ): Promise<void> {
-    const providerId = this.connectionManager?.getProviderIdByCommand(command);
-    if (providerId && this.connectionManager) {
-      const persistent = await this.connectionManager.getConnection(providerId);
-      await authenticateConnection(persistent.connection, methodId, params);
-      return;
-    }
     const { child, connection } = createAgentConnection(
       command,
       args,
       cleanEnv(env),
       this.spawnImpl,
     );
+    const abort = () => child.kill('SIGTERM');
+    options.signal?.addEventListener('abort', abort, { once: true });
     try {
-      await initializeAuthConnection(connection, 'agentctl-login');
-      await authenticateConnection(connection, methodId, params);
+      if (options.signal?.aborted) throw new Error('Authentication cancelled');
+      const initResult = await withTimeout(
+        initializeAuthConnection(connection, 'agentctl-login'),
+        options.timeoutMs ?? 120_000,
+        'initializing authentication',
+      );
+      const targetMethod = initResult.authMethods?.find((m) => m.id === methodId);
+      if (!targetMethod) {
+        throw new Error(`Authentication method '${methodId}' was not advertised by the agent`);
+      }
+      if ((targetMethod as { type?: string })?.type === 'terminal') {
+        throw new Error(
+          `Cannot pass terminal authentication method '${methodId}' to authenticate. Terminal authentication must be run in an interactive terminal.`,
+        );
+      }
+      await withTimeout(
+        authenticateConnection(connection, methodId),
+        options.timeoutMs ?? 120_000,
+        'authenticating provider',
+      );
     } finally {
+      options.signal?.removeEventListener('abort', abort);
       child.kill();
     }
   }
@@ -877,7 +910,12 @@ export class AcpV1AgentDriver implements AgentDriver {
       this.spawnImpl,
     );
     try {
-      await initializeAuthConnection(connection, 'agentctl-logout');
+      const initResult = await initializeAuthConnection(connection, 'agentctl-logout');
+      if (!initResult.agentCapabilities?.auth?.logout) {
+        throw new Error(
+          'Agent does not advertise logout capability (agentCapabilities.auth.logout)',
+        );
+      }
       await connection.logout({});
     } finally {
       child.kill();

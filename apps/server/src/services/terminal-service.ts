@@ -27,6 +27,7 @@ import pty, os, sys, struct, fcntl, termios, select, signal, json
 
 def main():
     cwd = sys.argv[1] if len(sys.argv) > 1 else '.'
+    command_args = sys.argv[2:]
     try:
         os.chdir(cwd)
     except Exception:
@@ -59,9 +60,12 @@ def main():
             pass
         if slave > 2:
             os.close(slave)
+        if command_args:
+            os.execvpe(command_args[0], command_args, os.environ)
         os.execlp(shell, shell, '-i')
     else:
         os.close(slave)
+        exit_status = None
 
         def forward_signal(sig, frame):
             try:
@@ -83,6 +87,7 @@ def main():
             try:
                 wpid, status = os.waitpid(pid, os.WNOHANG)
                 if wpid != 0:
+                    exit_status = status
                     break
             except Exception:
                 pass
@@ -137,10 +142,17 @@ def main():
         except Exception:
             pass
 
+        if exit_status is None:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                _, exit_status = os.waitpid(pid, 0)
+            except Exception:
+                exit_status = 1 << 8
+
         try:
-            os.kill(pid, signal.SIGTERM)
+            sys.exit(os.waitstatus_to_exitcode(exit_status))
         except Exception:
-            pass
+            sys.exit(1)
 
 if __name__ == '__main__':
     main()
@@ -151,6 +163,10 @@ export class InteractiveTerminalService extends EventEmitter {
 
   constructor(private logger: Logger = noopLogger) {
     super();
+  }
+
+  supportsCommandTerminal(): boolean {
+    return os.platform() !== 'win32';
   }
 
   getOrCreateTerminal(sessionId: string, cwd: string, cols = 80, rows = 24): TerminalSession {
@@ -260,13 +276,112 @@ export class InteractiveTerminalService extends EventEmitter {
     child.on('exit', (code, signal) => {
       this.logger.info({ sessionId, code, signal }, 'Interactive terminal process exited');
       this.emit(`exit:${sessionId}`, { code, signal });
-      this.activeTerminals.delete(sessionId);
+      if (this.activeTerminals.get(sessionId) === terminalSession) {
+        this.activeTerminals.delete(sessionId);
+      }
     });
 
     child.on('error', (err) => {
       this.logger.error({ sessionId, err }, 'Interactive terminal process error');
       this.emit(`error:${sessionId}`, err);
     });
+
+    this.activeTerminals.set(sessionId, terminalSession);
+    return terminalSession;
+  }
+
+  spawnCommandTerminal(
+    sessionId: string,
+    command: string,
+    args: string[],
+    env: Record<string, string>,
+    cwd: string,
+    cols = 80,
+    rows = 24,
+  ): TerminalSession {
+    this.killTerminal(sessionId);
+
+    const childEnv: Record<string, string> = {
+      ...(process.env as Record<string, string>),
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      COLUMNS: cols.toString(),
+      LINES: rows.toString(),
+      PROMPT_EOL_MARK: '',
+      ...env,
+    };
+
+    if (!this.supportsCommandTerminal()) {
+      throw new Error('Interactive provider authentication is not supported on Windows yet');
+    }
+
+    const child = spawn('python3', ['-u', '-c', PYTHON_PTY_SCRIPT, cwd, command, ...args], {
+      cwd,
+      env: childEnv,
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+      shell: false,
+    });
+    const controlStream = (child.stdio[3] as Writable) || null;
+
+    const terminalSession: TerminalSession = {
+      id: `term_${sessionId}`,
+      sessionId,
+      cwd,
+      cols,
+      rows,
+      process: child,
+      controlStream,
+      historyBuffer: [],
+      maxHistoryBytes: 512 * 1024,
+      currentHistoryBytes: 0,
+      createdAt: Date.now(),
+      lastActiveAt: Date.now(),
+    };
+
+    const appendHistory = (chunk: string) => {
+      terminalSession.historyBuffer.push(chunk);
+      terminalSession.currentHistoryBytes += chunk.length;
+      while (
+        terminalSession.currentHistoryBytes > terminalSession.maxHistoryBytes &&
+        terminalSession.historyBuffer.length > 1
+      ) {
+        const removed = terminalSession.historyBuffer.shift();
+        if (removed) terminalSession.currentHistoryBytes -= removed.length;
+      }
+    };
+
+    child.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString('utf-8');
+      appendHistory(text);
+      this.emit(`data:${sessionId}`, text);
+    });
+
+    child.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString('utf-8');
+      appendHistory(text);
+      this.emit(`data:${sessionId}`, text);
+    });
+
+    child.on('exit', (code, signal) => {
+      this.logger.info({ sessionId, code, signal }, 'Interactive command terminal exited');
+      this.emit(`exit:${sessionId}`, { code, signal });
+      if (this.activeTerminals.get(sessionId) === terminalSession) {
+        this.activeTerminals.delete(sessionId);
+      }
+    });
+
+    child.on('error', (err) => {
+      this.logger.error({ sessionId, err }, 'Interactive command terminal error');
+      this.emit(`error:${sessionId}`, err);
+    });
+
+    const onStreamError = (err: Error) => {
+      this.logger.debug({ sessionId, err }, 'Interactive command terminal stream closed');
+    };
+    child.stdin?.on('error', onStreamError);
+    child.stdout?.on('error', onStreamError);
+    child.stderr?.on('error', onStreamError);
+    controlStream?.on('error', onStreamError);
 
     this.activeTerminals.set(sessionId, terminalSession);
     return terminalSession;

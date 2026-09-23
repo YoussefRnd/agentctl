@@ -98,7 +98,44 @@ export const installStateSchema = z.enum([
   'system_available',
   'failed',
 ]);
-export const authStateSchema = z.enum(['unknown', 'authenticated', 'needs_auth', 'error']);
+export type InstallState = z.infer<typeof installStateSchema>;
+export const installStageSchema = z.enum([
+  'preparing',
+  'downloading',
+  'verifying',
+  'extracting',
+  'activating',
+  'connecting',
+]);
+export type InstallStage = z.infer<typeof installStageSchema>;
+export const installSourceSchema = z.enum(['managed', 'system', 'npx', 'uvx']);
+export type InstallSource = z.infer<typeof installSourceSchema>;
+export const connectionStateSchema = z.enum(['unknown', 'checking', 'ready', 'error']);
+export type ConnectionState = z.infer<typeof connectionStateSchema>;
+
+export const authErrorSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  retryable: z.boolean(),
+});
+export type AuthError = z.infer<typeof authErrorSchema>;
+
+export const canonicalAuthStateSchema = z.enum([
+  'unknown',
+  'not_required',
+  'required',
+  'authenticating',
+  'verifying',
+  'authenticated',
+  'error',
+]);
+
+export const authStateSchema = z.preprocess((val: unknown) => {
+  if (val === 'needs_auth') return 'required';
+  return val;
+}, canonicalAuthStateSchema);
+
+export type AuthState = z.infer<typeof canonicalAuthStateSchema>;
 
 export const providerDiscoverySchema = z.object({
   // Legacy fields (retained to keep the monolith compiling)
@@ -119,8 +156,15 @@ export const providerDiscoverySchema = z.object({
   // New fields
   installState: installStateSchema.optional(),
   installError: z.string().nullable().optional(),
-  installStage: z.string().nullable().optional(),
-  authState: authStateSchema.optional(),
+  installStage: installStageSchema.nullable().optional(),
+  installSource: installSourceSchema.nullable().optional(),
+  installedVersion: z.string().nullable().optional(),
+  availableVersion: z.string().optional(),
+  updateAvailable: z.boolean().optional().default(false),
+  connectionState: connectionStateSchema.optional().default('unknown'),
+  authState: authStateSchema.optional().default('unknown'),
+  authError: authErrorSchema.nullable().optional(),
+  lastVerifiedAt: z.coerce.date().nullable().optional(),
   status: providerStatusSchema.optional(),
   enabled: z.boolean().default(true),
   hidden: z.boolean().optional(),
@@ -137,11 +181,29 @@ export const providerDiscoverySchema = z.object({
 export function getProviderEnvKeys(provider: {
   id: string;
   authMethods?: { type?: string; vars?: { name: string }[] }[] | null;
+  customEnv?: Record<string, string>;
+  customEnvConfigured?: Record<string, boolean>;
 }): string[] {
-  return (
+  const fromMethods =
     provider.authMethods
       ?.filter((m) => m.type === 'env_var')
-      .flatMap((m) => m.vars?.map((v) => v.name) ?? []) ?? []
+      .flatMap((m) => m.vars?.map((v) => v.name) ?? []) ?? [];
+  const fromConfig = Object.keys(provider.customEnvConfigured ?? {});
+  const fromEnv = Object.keys(provider.customEnv ?? {});
+  return [...new Set([...fromMethods, ...fromConfig, ...fromEnv])];
+}
+
+export function isProviderEnvKeyOptional(
+  provider: {
+    authMethods?: { type?: string; vars?: { name: string; optional?: boolean }[] }[] | null;
+  },
+  key: string,
+): boolean {
+  return (
+    provider.authMethods
+      ?.filter((method) => method.type === 'env_var')
+      .flatMap((method) => method.vars ?? [])
+      .some((variable) => variable.name === key && variable.optional === true) ?? false
   );
 }
 
@@ -454,7 +516,6 @@ export type ApprovalMode = z.infer<typeof approvalModeSchema>;
 export type ProviderStatus = z.infer<typeof providerStatusSchema>;
 export type SessionConfigOptions = z.infer<typeof sessionConfigOptionsSchema>;
 export type ProviderDiscovery = z.infer<typeof providerDiscoverySchema>;
-export type AuthMethod = z.infer<typeof authMethodSchema>;
 export type ProjectListRow = z.infer<typeof projectListRowSchema>;
 export type McpToolResult = z.infer<typeof mcpToolResultSchema>;
 

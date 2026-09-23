@@ -29,6 +29,11 @@ export function createProvidersRouter(
         body: result,
       };
     },
+    cancelInstallProvider: async ({ params }: { params: { id: string } }) => {
+      fastify.providerRegistry.cancelInstall(params.id);
+      fastify.eventBus.publishState({ topics: ['providers'] });
+      return { status: 200 as const, body: { success: true } };
+    },
     removeProvider: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
       const result = await fastify.providerRegistry.remove(id);
@@ -43,15 +48,33 @@ export function createProvidersRouter(
       body,
     }: {
       params: { id: string };
-      body: { methodId: string; params?: Record<string, unknown> };
+      body: { methodId: string };
     }) => {
       const { id } = params;
-      const { methodId, params: loginParams } = body;
-      await fastify.providerRegistry.login(id, methodId, loginParams);
+      const { methodId } = body;
+      await fastify.providerRegistry.login(id, methodId);
       fastify.eventBus.publishState({ topics: ['providers'] });
       return {
         status: 200 as const,
         body: { success: true },
+      };
+    },
+    cancelLoginProvider: async ({ params }: { params: { id: string } }) => {
+      const { id } = params;
+      fastify.providerRegistry.cancelLogin(id);
+      fastify.eventBus.publishState({ topics: ['providers'] });
+      return {
+        status: 200 as const,
+        body: { success: true },
+      };
+    },
+    verifyProvider: async ({ params }: { params: { id: string } }) => {
+      const { id } = params;
+      const result = await fastify.providerRegistry.verify(id);
+      fastify.eventBus.publishState({ topics: ['providers'] });
+      return {
+        status: 200 as const,
+        body: result,
       };
     },
     logoutProvider: async ({ params }: { params: { id: string } }) => {

@@ -2,12 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { RegistryAgent, RegistryDistributionBinaryTarget } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../../logger.js';
+import { isAbortError, ProviderLifecycleError } from './provider-lifecycle-error.js';
 
 const execFilePromise = promisify(execFile);
 
@@ -35,25 +36,96 @@ function hashString(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex').slice(0, 16);
 }
 
-async function extractArchive(archivePath: string, destDir: string): Promise<void> {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function assertSafePathSegment(value: string, label: string): void {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value)) {
+    throw new ProviderLifecycleError('UNSAFE_ARCHIVE', `${label} is not a safe path segment`);
+  }
+}
+
+function assertSafeArchiveEntry(entry: string): void {
+  const normalized = entry.replaceAll('\\', '/').replace(/^\.\//, '');
+  if (
+    normalized.length === 0 ||
+    normalized.startsWith('/') ||
+    /^[a-zA-Z]:\//.test(normalized) ||
+    normalized.split('/').includes('..')
+  ) {
+    throw new ProviderLifecycleError(
+      'UNSAFE_ARCHIVE',
+      `Archive contains an unsafe path: ${entry}`,
+      { retryable: false },
+    );
+  }
+}
+
+async function validateArchive(archivePath: string, signal?: AbortSignal): Promise<void> {
+  const lowercasePath = archivePath.toLowerCase();
+  const isTar = lowercasePath.endsWith('.tar.gz') || lowercasePath.endsWith('.tgz');
+  const listing = isTar
+    ? await execFilePromise('tar', ['-tzf', archivePath], {
+        maxBuffer: 10 * 1024 * 1024,
+        signal,
+      })
+    : await execFilePromise('unzip', ['-Z1', archivePath], {
+        maxBuffer: 10 * 1024 * 1024,
+        signal,
+      });
+  for (const entry of listing.stdout.split(/\r?\n/).filter(Boolean)) assertSafeArchiveEntry(entry);
+
+  const verbose = isTar
+    ? await execFilePromise('tar', ['-tvzf', archivePath], {
+        maxBuffer: 20 * 1024 * 1024,
+        signal,
+      })
+    : await execFilePromise('unzip', ['-Z', '-l', archivePath], {
+        maxBuffer: 20 * 1024 * 1024,
+        signal,
+      });
+  if (verbose.stdout.split(/\r?\n/).some((line) => /^[lh]/.test(line.trimStart()))) {
+    throw new ProviderLifecycleError(
+      'UNSAFE_ARCHIVE',
+      'Provider archives may not contain symbolic or hard links',
+      { retryable: false },
+    );
+  }
+}
+
+async function extractArchive(
+  archivePath: string,
+  destDir: string,
+  signal?: AbortSignal,
+): Promise<void> {
   const lowercasePath = archivePath.toLowerCase();
   if (lowercasePath.endsWith('.tar.gz') || lowercasePath.endsWith('.tgz')) {
-    await execFilePromise('tar', ['-xzf', archivePath, '-C', destDir]);
+    await execFilePromise('tar', ['-xzf', archivePath, '-C', destDir], { signal });
   } else if (lowercasePath.endsWith('.zip')) {
-    await execFilePromise('unzip', ['-o', archivePath, '-d', destDir]);
+    await execFilePromise('unzip', ['-o', archivePath, '-d', destDir], { signal });
   } else {
     // If not a tar.gz or zip, try tar, fallback to unzip
     try {
-      await execFilePromise('tar', ['-xzf', archivePath, '-C', destDir]);
+      await execFilePromise('tar', ['-xzf', archivePath, '-C', destDir], { signal });
     } catch {
-      await execFilePromise('unzip', ['-o', archivePath, '-d', destDir]);
+      await execFilePromise('unzip', ['-o', archivePath, '-d', destDir], { signal });
     }
   }
 }
 
-async function computeSha256(filePath: string): Promise<string> {
-  const content = await fs.promises.readFile(filePath);
-  return crypto.hash('sha256', content);
+async function computeSha256(filePath: string, signal?: AbortSignal): Promise<string> {
+  const hash = crypto.createHash('sha256');
+  const stream = fs.createReadStream(filePath);
+  try {
+    for await (const chunk of stream) {
+      signal?.throwIfAborted();
+      hash.update(chunk as Buffer);
+    }
+  } finally {
+    stream.destroy();
+  }
+  return hash.digest('hex');
 }
 
 async function copyDir(src: string, dest: string): Promise<void> {
@@ -98,7 +170,12 @@ const UNSAFE_ARCHIVE_EXTENSIONS = new Set([
 ]);
 
 export function isUnsafeArchiveType(archiveUrl: string): boolean {
-  const lower = archiveUrl.toLowerCase();
+  let lower: string;
+  try {
+    lower = new URL(archiveUrl).pathname.toLowerCase();
+  } catch {
+    return true;
+  }
   if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz') || lower.endsWith('.zip')) {
     return false;
   }
@@ -111,6 +188,7 @@ export function isUnsafeArchiveType(archiveUrl: string): boolean {
 export async function resolveGitHubSha256(
   archiveUrl: string,
   logger: Pick<Logger, 'warn'> = noopLogger,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   let parsed: URL;
   try {
@@ -127,13 +205,20 @@ export async function resolveGitHubSha256(
   try {
     const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`, {
       headers: { 'User-Agent': 'agentctl', Accept: 'application/vnd.github+json' },
+      signal,
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { assets?: { name: string; digest?: string }[] };
     const match = (data.assets ?? []).find((a) => a.name === asset);
     if (!match?.digest) return null;
-    return Buffer.from(match.digest, 'base64').toString('hex');
+    const digest = match.digest.trim();
+    const prefixed = /^sha256:([a-f0-9]{64})$/i.exec(digest);
+    if (prefixed) return prefixed[1].toLowerCase();
+    if (/^[a-f0-9]{64}$/i.test(digest)) return digest.toLowerCase();
+    logger.warn(`Ignoring unsupported GitHub checksum format for ${archiveUrl}`);
+    return null;
   } catch {
+    if (signal?.aborted) throw signal.reason;
     logger.warn(`GitHub checksum lookup failed for ${archiveUrl}`);
     return null;
   }
@@ -141,6 +226,7 @@ export async function resolveGitHubSha256(
 
 export class BinaryInstaller {
   getInstallDir(providerId: string): string {
+    assertSafePathSegment(providerId, 'Provider id');
     return path.join(getHome(), 'bin', providerId);
   }
 
@@ -152,6 +238,7 @@ export class BinaryInstaller {
   }
 
   getStagingDir(providerId: string): string {
+    assertSafePathSegment(providerId, 'Provider id');
     return path.join(
       getHome(),
       'staging',
@@ -202,15 +289,75 @@ export class BinaryInstaller {
     }
   }
 
+  async removeVersionedDir(
+    providerId: string,
+    versionedDir: string,
+    logger: Pick<Logger, 'warn'> = noopLogger,
+  ): Promise<void> {
+    const base = path.resolve(this.getInstallDir(providerId));
+    const target = path.resolve(versionedDir);
+    if (!target.startsWith(`${base}${path.sep}`)) {
+      throw new Error('Refusing to remove a provider version outside its install directory');
+    }
+    await removeDirWithRetry(target, { logger });
+  }
+
   async remove(providerId: string, logger: Pick<Logger, 'warn'> = noopLogger): Promise<void> {
     await removeDirWithRetry(this.getInstallDir(providerId), { logger });
+    await this.removeStaging(providerId, logger);
+  }
+
+  async removeStaging(
+    providerId: string,
+    logger: Pick<Logger, 'warn'> = noopLogger,
+  ): Promise<void> {
+    assertSafePathSegment(providerId, 'Provider id');
+    const stagingRoot = path.join(getHome(), 'staging');
+    if (!fs.existsSync(stagingRoot)) return;
+    const stagingName = new RegExp(`^${escapeRegExp(providerId)}-\\d+-[a-z0-9]+$`);
+    for (const entry of fs.readdirSync(stagingRoot)) {
+      if (stagingName.test(entry)) {
+        await removeDirWithRetry(path.join(stagingRoot, entry), { logger });
+      }
+    }
+  }
+
+  async removeStaleStaging(
+    logger: Pick<Logger, 'warn'> = noopLogger,
+    olderThanMs = 60 * 60_000,
+  ): Promise<void> {
+    const stagingRoot = path.join(getHome(), 'staging');
+    if (!fs.existsSync(stagingRoot)) return;
+    for (const entry of fs.readdirSync(stagingRoot)) {
+      const fullPath = path.join(stagingRoot, entry);
+      try {
+        const stats = await fs.promises.stat(fullPath);
+        if (Date.now() - stats.mtimeMs >= olderThanMs) {
+          await removeDirWithRetry(fullPath, { logger });
+        }
+      } catch (error) {
+        logger.warn({ error, entry }, 'Failed to inspect provider staging entry');
+      }
+    }
   }
 
   async install(
     agent: RegistryAgent,
     platform: string,
     logger: Pick<Logger, 'warn'> = noopLogger,
-  ): Promise<{ command: string; args: string[]; env: Record<string, string> }> {
+    options: {
+      signal?: AbortSignal;
+      onStage?: (stage: 'downloading' | 'verifying' | 'extracting' | 'activating') => void;
+      downloadTimeoutMs?: number;
+      maxDownloadBytes?: number;
+    } = {},
+  ): Promise<{
+    command: string;
+    args: string[];
+    env: Record<string, string>;
+    versionedDir: string;
+  }> {
+    assertSafePathSegment(agent.id, 'Provider id');
     const binaryDist = agent.distribution.binary;
     const target: RegistryDistributionBinaryTarget | undefined = binaryDist
       ? binaryDist[platform]
@@ -228,9 +375,81 @@ export class BinaryInstaller {
     const stagingDir = this.getStagingDir(agent.id);
 
     const archiveUrl = target.archive;
-    const response = await fetch(archiveUrl);
+    const parsedArchiveUrl = new URL(archiveUrl);
+    if (parsedArchiveUrl.protocol !== 'https:') {
+      throw new ProviderLifecycleError(
+        'DOWNLOAD_FAILED',
+        `Provider downloads must use HTTPS: ${archiveUrl}`,
+        { retryable: false },
+      );
+    }
+
+    const existingBinary = path.resolve(versionedDir, target.cmd);
+    if (!existingBinary.startsWith(`${path.resolve(versionedDir)}${path.sep}`)) {
+      throw new ProviderLifecycleError(
+        'UNSAFE_ARCHIVE',
+        'Provider command escapes install directory',
+        {
+          retryable: false,
+        },
+      );
+    }
+    try {
+      const existing = await fs.promises.stat(existingBinary);
+      if (existing.isFile() && (process.platform === 'win32' || (existing.mode & 0o111) !== 0)) {
+        return {
+          command: existingBinary,
+          args: target.args ?? [],
+          env: target.env,
+          versionedDir,
+        };
+      }
+    } catch {
+      // A missing or incomplete target is replaced below without touching other versions.
+    }
+
+    const downloadTimeoutSignal = AbortSignal.timeout(options.downloadTimeoutMs ?? 60_000);
+    const downloadSignal = options.signal
+      ? AbortSignal.any([options.signal, downloadTimeoutSignal])
+      : downloadTimeoutSignal;
+    options.onStage?.('downloading');
+    let response: Response;
+    try {
+      response = await fetch(archiveUrl, { signal: downloadSignal, redirect: 'follow' });
+    } catch (error) {
+      if (isAbortError(error) || downloadSignal.aborted) {
+        throw new ProviderLifecycleError(
+          options.signal?.aborted ? 'INSTALL_CANCELLED' : 'DOWNLOAD_FAILED',
+          options.signal?.aborted ? 'Install cancelled' : 'Provider download timed out',
+          { cause: error },
+        );
+      }
+      throw new ProviderLifecycleError('DOWNLOAD_FAILED', 'Failed to download provider archive', {
+        cause: error,
+      });
+    }
     if (!response.ok || !response.body) {
-      throw new Error(`Failed to download binary archive: ${response.statusText}`);
+      throw new ProviderLifecycleError(
+        'DOWNLOAD_FAILED',
+        `Failed to download binary archive: ${String(response.status)} ${response.statusText}`,
+      );
+    }
+    if (response.url && new URL(response.url).protocol !== 'https:') {
+      throw new ProviderLifecycleError(
+        'DOWNLOAD_FAILED',
+        'Provider download redirected to an insecure URL',
+        { retryable: false },
+      );
+    }
+
+    const maxDownloadBytes = options.maxDownloadBytes ?? 512 * 1024 * 1024;
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > maxDownloadBytes) {
+      throw new ProviderLifecycleError(
+        'DOWNLOAD_TOO_LARGE',
+        `Provider archive exceeds the ${String(maxDownloadBytes)} byte limit`,
+        { retryable: false },
+      );
     }
 
     const urlPath = new URL(archiveUrl).pathname;
@@ -244,50 +463,167 @@ export class BinaryInstaller {
       await fs.promises.mkdir(stagingDir, { recursive: true });
 
       try {
-        await pipeline(
-          Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
-          fs.createWriteStream(tempFile),
-        );
-        await extractArchive(tempFile, stagingDir);
+        let downloadedBytes = 0;
+        const limiter = new Transform({
+          transform(chunk: Buffer, _encoding, callback) {
+            downloadedBytes += chunk.length;
+            if (downloadedBytes > maxDownloadBytes) {
+              callback(
+                new ProviderLifecycleError(
+                  'DOWNLOAD_TOO_LARGE',
+                  `Provider archive exceeds the ${String(maxDownloadBytes)} byte limit`,
+                  { retryable: false },
+                ),
+              );
+              return;
+            }
+            callback(null, chunk);
+          },
+        });
+        try {
+          await pipeline(
+            Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+            limiter,
+            fs.createWriteStream(tempFile),
+            { signal: downloadSignal },
+          );
+        } catch (error) {
+          if (isAbortError(error) || downloadSignal.aborted) {
+            throw new ProviderLifecycleError(
+              options.signal?.aborted ? 'INSTALL_CANCELLED' : 'DOWNLOAD_FAILED',
+              options.signal?.aborted ? 'Install cancelled' : 'Provider download timed out',
+              { cause: error },
+            );
+          }
+          throw error;
+        }
 
-        const actualHash = await computeSha256(tempFile);
-        const expected = target.sha256 ?? (await resolveGitHubSha256(archiveUrl, logger));
+        options.onStage?.('verifying');
+        const actualHash = await computeSha256(tempFile, options.signal);
+        const configuredExpected = target.sha256?.trim().replace(/^sha256:/i, '');
+        const checksumTimeoutSignal = AbortSignal.timeout(8_000);
+        const checksumSignal = options.signal
+          ? AbortSignal.any([options.signal, checksumTimeoutSignal])
+          : checksumTimeoutSignal;
+        let expected = configuredExpected;
+        if (!expected) {
+          try {
+            expected = (await resolveGitHubSha256(archiveUrl, logger, checksumSignal)) ?? undefined;
+          } catch (error) {
+            if (options.signal?.aborted) {
+              throw new ProviderLifecycleError('INSTALL_CANCELLED', 'Install cancelled', {
+                cause: error,
+              });
+            }
+            if (!checksumTimeoutSignal.aborted) throw error;
+            logger.warn(`Checksum lookup timed out for ${archiveUrl}; skipping verification`);
+          }
+        }
+        if (expected && !/^[a-f0-9]{64}$/i.test(expected)) {
+          throw new ProviderLifecycleError(
+            'CHECKSUM_MISMATCH',
+            `Invalid SHA-256 checksum configured for provider ${agent.id}`,
+            { retryable: false },
+          );
+        }
         if (expected && expected.toLowerCase() !== actualHash.toLowerCase()) {
-          throw new Error(
+          throw new ProviderLifecycleError(
+            'CHECKSUM_MISMATCH',
             `Checksum mismatch for provider ${agent.id}: expected ${expected}, got ${actualHash}`,
+            { retryable: false },
           );
         }
         if (!expected) {
           logger.warn(`No checksum available for provider ${agent.id}; skipping verification`);
         }
+
+        options.signal?.throwIfAborted();
+        await validateArchive(tempFile, options.signal);
+        options.onStage?.('extracting');
+        options.signal?.throwIfAborted();
+        await extractArchive(tempFile, stagingDir, options.signal);
       } finally {
         await fs.promises.unlink(tempFile).catch(() => undefined);
       }
 
-      await removeDirWithRetry(this.getInstallDir(agent.id), { logger });
+      const stagedBinary = path.resolve(stagingDir, target.cmd);
+      if (!stagedBinary.startsWith(`${path.resolve(stagingDir)}${path.sep}`)) {
+        throw new ProviderLifecycleError(
+          'UNSAFE_ARCHIVE',
+          'Provider command escapes the extracted archive',
+          { retryable: false },
+        );
+      }
+      const stagedStats = await fs.promises.lstat(stagedBinary);
+      if (!stagedStats.isFile() || stagedStats.isSymbolicLink()) {
+        throw new ProviderLifecycleError(
+          'UNSAFE_ARCHIVE',
+          `Provider executable is not a regular file: ${target.cmd}`,
+          { retryable: false },
+        );
+      }
+      if (process.platform !== 'win32') await fs.promises.chmod(stagedBinary, 0o755);
+
+      options.onStage?.('activating');
+      options.signal?.throwIfAborted();
       await fs.promises.mkdir(path.dirname(versionedDir), { recursive: true });
+      const backupDir = `${versionedDir}.backup-${crypto.randomUUID()}`;
+      let hadPreviousTarget = false;
       try {
-        await fs.promises.rename(stagingDir, versionedDir);
-      } catch (err: unknown) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code === 'EXDEV') {
-          await copyDir(stagingDir, versionedDir);
-        } else {
-          throw err;
+        try {
+          await fs.promises.rename(versionedDir, backupDir);
+          hadPreviousTarget = true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         }
+
+        try {
+          await fs.promises.rename(stagingDir, versionedDir);
+        } catch (err: unknown) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code !== 'EXDEV') throw err;
+          const activationDir = `${versionedDir}.activating-${crypto.randomUUID()}`;
+          try {
+            await copyDir(stagingDir, activationDir);
+            await fs.promises.rename(activationDir, versionedDir);
+          } finally {
+            await removeDirWithRetry(activationDir, { logger }).catch(() => undefined);
+          }
+        }
+
+        const finalStats = await fs.promises.stat(existingBinary);
+        if (
+          !finalStats.isFile() ||
+          (process.platform !== 'win32' && (finalStats.mode & 0o111) === 0)
+        ) {
+          throw new Error('Activated provider executable is not runnable');
+        }
+        if (hadPreviousTarget) {
+          await removeDirWithRetry(backupDir, { logger }).catch((error: unknown) => {
+            logger.warn({ error }, `Failed to remove provider backup directory: ${backupDir}`);
+          });
+        }
+      } catch (err: unknown) {
+        await removeDirWithRetry(versionedDir, { logger }).catch(() => undefined);
+        if (hadPreviousTarget) {
+          await fs.promises.rename(backupDir, versionedDir).catch(() => undefined);
+        }
+        throw new ProviderLifecycleError(
+          'ACTIVATION_FAILED',
+          `Failed to activate provider ${agent.id}`,
+          { cause: err },
+        );
       }
     } finally {
       await removeDirWithRetry(stagingDir, { logger }).catch(() => undefined);
       await fs.promises.rmdir(path.dirname(stagingDir)).catch(() => undefined);
     }
 
-    const finalBinary = path.resolve(versionedDir, target.cmd);
-    if (process.platform !== 'win32') {
-      await fs.promises.chmod(finalBinary, 0o755).catch(() => undefined);
-    }
-
-    void this.removeStaleVersionedDirs(agent.id, versionedDir, logger).catch(() => undefined);
-
-    return { command: finalBinary, args: target.args ?? [], env: target.env };
+    return {
+      command: existingBinary,
+      args: target.args ?? [],
+      env: target.env,
+      versionedDir,
+    };
   }
 }

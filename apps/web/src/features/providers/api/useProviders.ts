@@ -28,7 +28,7 @@ export function useProviders(sessionId: string | null) {
     queryKey: providerKeys.registry,
     queryFn: () => providerService.getRegistry(),
     // The catalog endpoint may contact the remote registry. Refresh it when
-    // the view is opened or revisited, while provider state itself is polled.
+    // the view is opened or revisited; live lifecycle changes arrive via SSE.
     staleTime: 30_000,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
@@ -87,49 +87,54 @@ export function useProviders(sessionId: string | null) {
     mutationFn: async ({ providerId, methodId }: { providerId: string; methodId: string }) => {
       return providerService.login(providerId, methodId);
     },
-    onSuccess: invalidateProviderCaches,
+    onSettled: invalidateProviderCaches,
   });
 
   const logoutMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.logout(providerId);
     },
-    onSuccess: invalidateProviderCaches,
+    onSettled: invalidateProviderCaches,
   });
 
   const activateMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.activate(providerId);
     },
-    onSuccess: invalidateProviderCaches,
+    onSettled: invalidateProviderCaches,
   });
 
   const syncMutation = useMutation({
     mutationFn: async () => {
       return providerService.sync();
     },
-    onSuccess: invalidateProviderCaches,
+    onSettled: invalidateProviderCaches,
   });
 
   const refreshMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.refresh(providerId);
     },
-    onSuccess: invalidateProviderCaches,
+    onSettled: invalidateProviderCaches,
   });
 
   const installMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.install(providerId);
     },
-    onSuccess: invalidateProviderCaches,
+    onSettled: invalidateProviderCaches,
+  });
+
+  const cancelInstallMutation = useMutation({
+    mutationFn: async (providerId: string) => providerService.cancelInstall(providerId),
+    onSettled: invalidateProviderCaches,
   });
 
   const removeMutation = useMutation({
     mutationFn: async (providerId: string) => {
       return providerService.remove(providerId);
     },
-    onSuccess: invalidateProviderCaches,
+    onSettled: invalidateProviderCaches,
   });
 
   const updateProviderConfigMutation = useMutation({
@@ -144,7 +149,7 @@ export function useProviders(sessionId: string | null) {
     }) => {
       return providerService.updateConfig(providerId, customEnv, nativelyLoadsSkills);
     },
-    onSuccess: invalidateProviderCaches,
+    onSettled: invalidateProviderCaches,
   });
 
   const wrapMutate = useCallback(
@@ -198,6 +203,20 @@ export function useProviders(sessionId: string | null) {
     () => wrapMutate('refresh', refreshMutation, { successMessage: 'Provider refreshed' }),
     [wrapMutate, refreshMutation],
   );
+  const cancelLoginMutation = useMutation({
+    mutationFn: async (providerId: string) => {
+      return providerService.cancelLogin(providerId);
+    },
+    onSettled: invalidateProviderCaches,
+  });
+
+  const verifyMutation = useMutation({
+    mutationFn: async (providerId: string) => {
+      return providerService.verify(providerId);
+    },
+    onSettled: invalidateProviderCaches,
+  });
+
   const updateProviderConfig = useMemo(
     () =>
       wrapMutate('config', updateProviderConfigMutation, {
@@ -205,9 +224,29 @@ export function useProviders(sessionId: string | null) {
       }),
     [wrapMutate, updateProviderConfigMutation],
   );
+  const updateProviderConfigAsync = useCallback(
+    (params: {
+      providerId: string;
+      customEnv?: Record<string, string>;
+      nativelyLoadsSkills?: boolean;
+    }) => updateProviderConfigMutation.mutateAsync(params),
+    [updateProviderConfigMutation],
+  );
+  const cancelLogin = useMemo(
+    () => wrapMutate('cancelLogin', cancelLoginMutation),
+    [wrapMutate, cancelLoginMutation],
+  );
+  const verifyProvider = useMemo(
+    () => wrapMutate('verify', verifyMutation, { successMessage: 'Verification successful' }),
+    [wrapMutate, verifyMutation],
+  );
   const installProvider = useMemo(
-    () => wrapMutate('install', installMutation, { successMessage: 'Provider installed' }),
+    () => wrapMutate('install', installMutation),
     [wrapMutate, installMutation],
+  );
+  const cancelInstall = useMemo(
+    () => wrapMutate('cancelInstall', cancelInstallMutation),
+    [wrapMutate, cancelInstallMutation],
   );
   const removeProvider = useMemo(
     () => wrapMutate('remove', removeMutation, { successMessage: 'Provider removed' }),
@@ -222,6 +261,11 @@ export function useProviders(sessionId: string | null) {
     switchProvider,
     login,
     isLoggingIn: loginMutation.isPending,
+    authenticatingProviderId: loginMutation.isPending ? loginMutation.variables?.providerId : null,
+    cancelLogin,
+    verifyProvider,
+    isVerifying: verifyMutation.isPending,
+    verifyingProviderId: verifyMutation.isPending ? verifyMutation.variables : null,
     logoutProvider,
     isLoggingOut: logoutMutation.isPending,
     isSwitching: updateProviderMutation.isPending,
@@ -232,8 +276,10 @@ export function useProviders(sessionId: string | null) {
     refreshProvider,
     isRefreshing: refreshMutation.isPending,
     updateProviderConfig,
+    updateProviderConfigAsync,
     isUpdatingConfig: updateProviderConfigMutation.isPending,
     installProvider,
+    cancelInstall,
     isInstalling: installMutation.isPending,
     installingProviderId: installMutation.isPending ? installMutation.variables : null,
     removeProvider,

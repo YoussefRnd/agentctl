@@ -212,6 +212,11 @@ export interface AgentInspectionOptions {
   providerVersion?: string;
 }
 
+export interface AgentAuthenticationOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
 export interface AgentDriver {
   startSession(
     command: string,
@@ -242,7 +247,7 @@ export interface AgentDriver {
     args: string[],
     env: Record<string, string> | undefined,
     methodId: string,
-    params?: Record<string, unknown>,
+    options?: AgentAuthenticationOptions,
   ): Promise<void>;
   logoutProvider?(command: string, args: string[], env?: Record<string, string>): Promise<void>;
 }

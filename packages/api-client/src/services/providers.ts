@@ -27,6 +27,18 @@ export const providerService = {
     });
   },
 
+  cancelLogin(providerId: string) {
+    return apiClient.fetch(`/api/providers/${providerId}/login/cancel`, {
+      method: 'POST',
+    });
+  },
+
+  verify(providerId: string): Promise<ProviderDiscovery> {
+    return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/verify`, {
+      method: 'POST',
+    });
+  },
+
   logout(providerId: string) {
     return apiClient.fetch(`/api/providers/${providerId}/logout`, {
       method: 'POST',
@@ -53,6 +65,12 @@ export const providerService = {
 
   install(providerId: string): Promise<ProviderDiscovery> {
     return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/install`, {
+      method: 'POST',
+    });
+  },
+
+  cancelInstall(providerId: string) {
+    return apiClient.fetch(`/api/providers/${providerId}/install/cancel`, {
       method: 'POST',
     });
   },

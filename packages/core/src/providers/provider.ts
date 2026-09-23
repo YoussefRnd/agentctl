@@ -1,6 +1,10 @@
 import type {
   AgentConfigOption,
+  AuthState,
   AuthMethod,
+  ConnectionState,
+  InstallSource,
+  InstallStage,
   ProviderDiscovery,
   ProviderStatus,
   ThinkingEffort,
@@ -9,13 +13,29 @@ import type {
 import type { providers } from '../db/schema.js';
 import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 import { jsonCodecs } from '../db/json-codecs.js';
+import { defaultCredentialVault } from '../security/credential-vault.js';
 
 export type ProviderData = Omit<
   typeof providers.$inferSelect,
-  'features' | 'capabilitySnapshot'
+  | 'features'
+  | 'capabilitySnapshot'
+  | 'authError'
+  | 'lastVerifiedAt'
+  | 'connectionState'
+  | 'authState'
+  | 'installStage'
+  | 'installSource'
+  | 'installedVersion'
 > & {
   features?: string;
   capabilitySnapshot?: string | null;
+  authError?: string | null;
+  lastVerifiedAt?: Date | null;
+  connectionState?: ConnectionState;
+  authState: AuthState | 'needs_auth';
+  installStage?: InstallStage | null;
+  installSource?: InstallSource | null;
+  installedVersion?: string | null;
 };
 
 export interface ProviderLaunchConfig {
@@ -53,15 +73,26 @@ export class Provider {
   }
 
   get isReady(): boolean {
-    return this.isInstalled && this.data.authState === 'authenticated';
+    return (
+      this.isInstalled &&
+      this.data.connectionState !== 'error' &&
+      (this.data.authState === 'authenticated' || this.data.authState === 'not_required')
+    );
   }
 
   get needsAuth(): boolean {
-    return this.isInstalled && this.data.authState === 'needs_auth';
+    return (
+      this.isInstalled &&
+      (this.data.authState === 'required' || this.data.authState === 'needs_auth')
+    );
   }
 
   get hasError(): boolean {
-    return this.data.authState === 'error' || this.data.installState === 'failed';
+    return (
+      this.data.connectionState === 'error' ||
+      this.data.authState === 'error' ||
+      this.data.installState === 'failed'
+    );
   }
 
   get status(): ProviderStatus {
@@ -69,8 +100,17 @@ export class Provider {
     if (this.data.installState === 'failed') return 'error';
     if (this.data.installState === 'installing') return 'inactive';
     if (this.data.installState === 'not_installed') return 'not_found';
-    if (this.data.authState === 'needs_auth') return 'needs_auth';
+    if (this.data.connectionState === 'error') return 'error';
+    if (this.data.authState === 'required' || this.data.authState === 'needs_auth')
+      return 'needs_auth';
     if (this.data.authState === 'error') return 'error';
+    if (
+      this.data.authState === 'unknown' ||
+      this.data.authState === 'authenticating' ||
+      this.data.authState === 'verifying'
+    ) {
+      return 'inactive';
+    }
     return 'ready';
   }
 
@@ -135,7 +175,7 @@ export class Provider {
       args: [...this.parseStringArray(this.data.launchArgs), ...extraArgs],
       env: {
         ...this.parseStringRecord(this.data.launchEnv),
-        ...this.parseStringRecord(this.data.customEnv),
+        ...defaultCredentialVault.resolveEnvSync(this.parseStringRecord(this.data.customEnv)),
       },
     };
   }
@@ -212,7 +252,21 @@ export class Provider {
       nativelyLoadsSkills: this.data.nativelyLoadsSkills,
       installState: this.data.installState as ProviderDiscovery['installState'],
       installError: this.data.installError ?? null,
-      authState: this.data.authState as ProviderDiscovery['authState'],
+      installStage: this.data.installStage ?? null,
+      installSource: this.data.installSource ?? null,
+      installedVersion: this.data.installedVersion ?? null,
+      availableVersion: this.data.version ?? undefined,
+      updateAvailable:
+        !!this.data.installedVersion &&
+        !!this.data.version &&
+        this.data.installedVersion !== this.data.version,
+      connectionState: (this.data.connectionState ??
+        'unknown') as ProviderDiscovery['connectionState'],
+      authState: (this.data.authState === 'needs_auth'
+        ? 'required'
+        : this.data.authState) as ProviderDiscovery['authState'],
+      authError: jsonCodecs.authError(this.data.authError),
+      lastVerifiedAt: this.data.lastVerifiedAt ?? null,
       status: this.status,
       enabled: this.data.enabled,
       hidden: this.data.hidden,

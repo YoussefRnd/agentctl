@@ -89,7 +89,7 @@ function harness() {
         stopReason: 'end_turn',
       },
     });
-    return {};
+    return { messageId: 'message-1' };
   });
   app.onRequest(methods.agent.session.close, () => ({}));
   app.onRequest(methods.agent.session.resume, ({ params }) => {

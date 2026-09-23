@@ -48,7 +48,7 @@ export function ProviderPickerTrigger({
   sessionId: string | null;
   onOpenAuthModal?: () => void;
 }) {
-  const needsAuth = activeProvider?.authState === 'needs_auth';
+  const needsAuth = activeProvider?.authState === 'required';
 
   const modelOption = activeProvider?.configOptions?.find(
     (opt) => opt.id === 'model' || opt.id === 'selectedModel',
