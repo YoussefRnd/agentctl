@@ -63,7 +63,7 @@ export function NewSessionEmptyState({
   };
 
   return (
-    <div className="animate-in fade-in flex w-full max-w-[760px] flex-col items-center px-4 py-8 duration-300 select-none">
+    <div className="animate-in fade-in flex w-full max-w-[760px] flex-col items-center px-4 py-6 duration-200 select-none sm:py-8">
       {/* Hero Title */}
       <div className="mb-6 flex flex-col items-center justify-center text-center">
         <h1 className="font-display text-text-main flex flex-wrap items-center justify-center text-2xl font-extrabold tracking-tight sm:text-3xl">
@@ -73,7 +73,7 @@ export function NewSessionEmptyState({
               <Dropdown.Trigger asChild>
                 <button
                   type="button"
-                  className="group/trigger text-accent decoration-accent/50 hover:decoration-accent inline-flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 underline decoration-dotted underline-offset-4 transition-colors focus:outline-none"
+                  className="group/trigger text-accent decoration-accent/50 hover:decoration-accent focus-visible:ring-accent/40 click-press inline-flex max-w-full cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 underline decoration-dotted underline-offset-4 transition-[color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
                 >
                   <span>{projectName}</span>
                   <ChevronDown className="h-4 w-4 opacity-70 transition-transform duration-200 group-data-[state=open]/trigger:rotate-180" />
@@ -141,7 +141,7 @@ export function NewSessionEmptyState({
       {children && <div className="w-full">{children}</div>}
 
       {/* Starter Action Suggestion Pills */}
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+      <div className="mt-4 grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-center">
         {STARTER_SUGGESTIONS.map((item) => (
           <button
             key={item.label}
@@ -149,7 +149,7 @@ export function NewSessionEmptyState({
             onClick={() => handleSelectSuggestion(item.prompt)}
             className={cn(
               'group border-border/30 bg-surface-secondary/40 text-text-muted hover:border-border/60 hover:bg-surface-secondary/80 hover:text-text-main',
-              'flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium shadow-xs backdrop-blur-xs transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.97]',
+              'focus-visible:ring-accent/40 flex min-h-8 cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium shadow-xs backdrop-blur-xs transition-[color,background-color,border-color,transform] duration-150 ease-out focus-visible:ring-2 focus-visible:outline-none active:scale-[0.97]',
             )}
           >
             <span>{item.label}</span>

@@ -27,7 +27,7 @@ export function SubmitButton({
           <Button
             size="sm"
             className={cn(
-              'group/send animate-in fade-in zoom-in-95 flex h-8 w-8 items-center justify-center rounded-full border-none p-0 transition-all duration-200',
+              'group/send flex h-8 w-8 items-center justify-center rounded-full border-none p-0 transition-[color,background-color,box-shadow,opacity,transform] duration-150',
               isStop
                 ? 'cursor-pointer bg-rose-500 text-white shadow-[0_0_20px_rgba(244,63,94,0.25)] hover:bg-rose-600'
                 : 'bg-accent text-brand-crust cursor-pointer shadow-[0_0_20px_rgba(203,166,247,0.25)] hover:opacity-90 active:scale-95',

@@ -19,8 +19,8 @@ export type ButtonProps<T extends ElementType = 'button'> = ButtonBaseProps & {
 
 const variants: Record<ButtonVariant, string> = {
   solid: 'bg-accent text-brand-crust hover:opacity-90 click-press',
-  outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main',
-  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main',
+  outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main click-press',
+  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main click-press',
   danger: 'bg-danger text-white hover:opacity-90 click-press',
 };
 

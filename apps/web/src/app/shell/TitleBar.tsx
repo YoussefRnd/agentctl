@@ -66,7 +66,7 @@ export function TitleBar({ nav, onToggleSidebar }: TitleBarProps) {
               <button
                 type="button"
                 onClick={onToggleSidebar}
-                className="app-region-no-drag text-text-muted hover:text-text-main hover:bg-surface flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg transition-colors active:scale-[0.97]"
+                className="app-region-no-drag text-text-muted hover:text-text-main hover:bg-surface focus-visible:ring-accent/40 click-press flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
                 aria-label="Toggle Sidebar"
               >
                 <PanelLeft className="h-3.5 w-3.5" />
@@ -77,7 +77,7 @@ export function TitleBar({ nav, onToggleSidebar }: TitleBarProps) {
           <Tooltip content="Workspaces">
             <Link
               to="/"
-              className="app-region-no-drag text-text-muted hover:text-text-main hover:bg-surface flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-semibold tracking-tight transition-[color,background-color] duration-150 active:scale-[0.97]"
+              className="app-region-no-drag text-text-muted hover:text-text-main hover:bg-surface focus-visible:ring-accent/40 click-press flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-semibold tracking-tight transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
               aria-label="Agentctl Workspaces"
             >
               <div className="bg-accent/15 text-accent flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-bold">

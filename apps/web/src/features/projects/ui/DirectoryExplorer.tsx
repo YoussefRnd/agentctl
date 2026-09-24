@@ -92,8 +92,9 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
             onClick={() => {
               void explore();
             }}
-            className="hover:text-accent text-text-muted cursor-pointer rounded-sm p-1 transition-[color,transform] duration-150 ease-out active:scale-[0.97]"
-            title="Home"
+            className="hover:text-accent text-text-muted focus-visible:ring-accent/40 click-press flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-[color,background-color,transform] duration-150 ease-out hover:bg-white/5 focus-visible:ring-2 focus-visible:outline-none"
+            title="Go to home directory"
+            aria-label="Go to home directory"
           >
             <Home className="h-3.5 w-3.5" />
           </button>
@@ -103,8 +104,9 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
               onClick={() => {
                 void explore(parentPath);
               }}
-              className="hover:text-accent text-text-muted cursor-pointer rounded-sm p-1 transition-[color,transform] duration-150 ease-out active:scale-[0.97]"
-              title="Go Up"
+              className="hover:text-accent text-text-muted focus-visible:ring-accent/40 click-press flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-[color,background-color,transform] duration-150 ease-out hover:bg-white/5 focus-visible:ring-2 focus-visible:outline-none"
+              title="Go to parent directory"
+              aria-label="Go to parent directory"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
@@ -139,17 +141,20 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
         ) : (
           <div className="space-y-0.5">
             {folders.map((f) => (
-              <button
+              <div
                 key={f.path}
-                type="button"
-                className="group hover:bg-surface-secondary/60 flex w-full cursor-pointer items-center justify-between rounded-xl border-none bg-transparent px-3 py-2 text-left transition-colors"
-                onClick={() => {
-                  void explore(f.path);
-                }}
+                className="group hover:bg-surface-secondary/60 focus-within:bg-surface-secondary/60 flex w-full items-center justify-between gap-2 rounded-xl px-1.5 py-1 transition-colors"
               >
-                <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="focus-visible:ring-accent/40 flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg px-1.5 py-1 text-left focus-visible:ring-2 focus-visible:outline-none"
+                  onClick={() => {
+                    void explore(f.path);
+                  }}
+                  aria-label={`Browse ${f.name}`}
+                >
                   <div
-                    className={`bg-surface-secondary/40 rounded-lg p-1.5 ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}
+                    className={`bg-surface-secondary/40 group-hover:bg-surface-secondary/70 rounded-lg p-1.5 transition-colors ${f.isRepo ? 'text-accent' : 'text-text-muted'}`}
                   >
                     {f.isRepo ? (
                       <GitBranchIcon className="h-3.5 w-3.5" />
@@ -157,8 +162,8 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                       <Folder className="h-3.5 w-3.5" />
                     )}
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-text-main text-xs font-semibold tracking-tight">
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-text-main truncate text-xs font-semibold tracking-tight">
                       {f.name}
                     </span>
                     {f.isRepo && (
@@ -167,18 +172,20 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
                       </span>
                     )}
                   </div>
-                </div>
+                </button>
                 <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelect(f.path);
                   }}
                   size="sm"
-                  className="h-7 px-3 text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100"
+                  variant="outline"
+                  className="h-7 px-3 text-xs font-medium opacity-70 transition-[opacity,background-color,border-color,transform] group-focus-within:opacity-100 group-hover:opacity-100"
+                  aria-label={`Open ${f.name} as a workspace`}
                 >
                   Open
                 </Button>
-              </button>
+              </div>
             ))}
           </div>
         )}

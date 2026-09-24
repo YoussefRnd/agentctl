@@ -26,7 +26,7 @@ export function SearchBar({
         value={value}
         onChange={onChange}
         className={cn(
-          'border-border/30 bg-surface-secondary/35 placeholder:text-text-muted/50 focus:bg-surface-secondary/60 focus:border-accent/50 text-text-main h-9 w-full rounded-lg border pr-14 pl-9 text-[12px] transition-colors focus:outline-none',
+          'border-border/30 bg-surface-secondary/35 placeholder:text-text-muted/50 focus:bg-surface-secondary/60 focus:border-accent/50 focus:ring-accent/20 text-text-main h-9 w-full rounded-lg border pr-14 pl-9 text-[12px] transition-[background-color,border-color,box-shadow] duration-150 focus:ring-2 focus:outline-none',
           className,
         )}
         {...props}
@@ -36,7 +36,7 @@ export function SearchBar({
           type="button"
           aria-label="Clear search"
           onClick={onClear}
-          className="hover:bg-surface-secondary/80 text-text-muted/60 hover:text-text-main absolute top-1/2 right-2 z-10 -translate-y-1/2 cursor-pointer rounded-sm p-1 transition-colors"
+          className="hover:bg-surface-secondary/80 text-text-muted/60 hover:text-text-main focus-visible:ring-accent/40 click-press absolute top-1/2 right-1.5 z-10 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
         >
           <X className="h-3.5 w-3.5" />
         </button>

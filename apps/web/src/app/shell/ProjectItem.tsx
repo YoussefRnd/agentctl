@@ -72,7 +72,8 @@ function SessionRow({
     <div className="group/session relative flex items-center">
       <Link
         to={`/sessions/${s.id}`}
-        className={`flex w-full min-w-0 items-center justify-between rounded-lg px-2 py-1.5 text-[12px] transition-[background-color,color,box-shadow] duration-150 ${
+        aria-current={isActive ? 'page' : undefined}
+        className={`focus-visible:ring-accent/40 flex min-h-8 w-full min-w-0 items-center justify-between rounded-lg px-2 py-1.5 text-[12px] transition-[background-color,color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:outline-none ${
           isActive
             ? 'bg-accent/10 text-text-main font-medium shadow-xs'
             : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/50'
@@ -106,7 +107,9 @@ function SessionRow({
             <Tooltip content="Agent is running...">
               <span
                 className={`text-accent flex items-center justify-center ${
-                  isDropdownOpen ? 'hidden' : 'group-hover/session:hidden'
+                  isDropdownOpen
+                    ? 'hidden'
+                    : 'group-hover/session:hidden [@media(hover:none)]:hidden'
                 }`}
               >
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -116,7 +119,7 @@ function SessionRow({
             <RelativeTime
               value={activityTime}
               className={`text-text-muted/40 font-mono text-[10px] tabular-nums ${
-                isDropdownOpen ? 'hidden' : 'group-hover/session:hidden'
+                isDropdownOpen ? 'hidden' : 'group-hover/session:hidden [@media(hover:none)]:hidden'
               }`}
             />
           ) : null}
@@ -125,10 +128,8 @@ function SessionRow({
 
       {/* Keep actions above the full-row link without nesting a button inside it. */}
       <div
-        className={`absolute right-2 ${
-          isDropdownOpen
-            ? 'flex'
-            : 'hidden group-focus-within/session:flex group-hover/session:flex has-[[data-state=open]]:flex'
+        className={`pointer-events-none absolute right-1.5 flex opacity-0 transition-opacity duration-150 group-focus-within/session:pointer-events-auto group-focus-within/session:opacity-100 group-hover/session:pointer-events-auto group-hover/session:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 ${
+          isDropdownOpen ? 'pointer-events-auto opacity-100' : ''
         }`}
       >
         <Dropdown.Root open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
@@ -140,7 +141,7 @@ function SessionRow({
               onClick={(e) => {
                 e.stopPropagation();
               }}
-              className={`flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-colors ${
+              className={`focus-visible:ring-accent/40 click-press flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none ${
                 isActive || isDropdownOpen
                   ? 'text-text-main hover:bg-surface-secondary'
                   : 'text-text-muted hover:text-text-main hover:bg-surface-secondary'
@@ -232,14 +233,14 @@ export function ProjectItem({
   return (
     <div className="space-y-0.5">
       {/* Project Workspace Header Row */}
-      <div className="group/workspace hover:bg-surface-secondary/40 flex items-center justify-between rounded-lg px-2 py-1.5 transition-colors duration-150">
+      <div className="group/workspace hover:bg-surface-secondary/40 flex min-h-9 items-center justify-between rounded-lg px-2 py-1 transition-colors duration-150">
         <button
           type="button"
-          aria-expanded={!isCollapsed}
+          aria-expanded={showSessions}
           onClick={() => {
             toggleProject(proj.id, isCollapsed);
           }}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-left font-normal outline-none"
+          className="focus-visible:ring-accent/40 flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md border-none bg-transparent p-0 text-left font-normal outline-none focus-visible:ring-2"
         >
           <FolderIcon className="text-accent/80 group-hover/workspace:text-accent h-3.5 w-3.5 shrink-0 transition-colors" />
           <span className="text-text-main/90 group-hover/workspace:text-text-main truncate text-[12.5px] font-semibold tracking-tight">
@@ -276,12 +277,12 @@ export function ProjectItem({
           )}
         </button>
 
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within/workspace:opacity-100 group-hover/workspace:opacity-100">
+        <div className="pointer-events-none flex items-center gap-1 opacity-0 transition-opacity duration-150 group-focus-within/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-hover/workspace:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
           <div className="border-border/30 bg-surface-secondary/40 flex items-center rounded-md border">
             <Tooltip content="New session (Default / Inherited)">
               <button
                 type="button"
-                className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5 w-5 cursor-pointer items-center justify-center rounded-l-md transition-colors disabled:opacity-50"
+                className="text-text-muted hover:text-text-main hover:bg-surface-secondary focus-visible:ring-accent/40 click-press flex h-7 w-7 cursor-pointer items-center justify-center rounded-l-md transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
                 disabled={isCreatingSession}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -299,7 +300,7 @@ export function ProjectItem({
             <Tooltip content="Quick launch (Customize agent & model)">
               <button
                 type="button"
-                className="text-text-muted/70 hover:text-accent hover:bg-surface-secondary border-border/20 flex h-5 w-3.5 cursor-pointer items-center justify-center rounded-r-md border-l transition-colors disabled:opacity-50"
+                className="text-text-muted/70 hover:text-accent hover:bg-surface-secondary border-border/20 focus-visible:ring-accent/40 click-press flex h-7 w-5 cursor-pointer items-center justify-center rounded-r-md border-l transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
                 disabled={isCreatingSession}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -315,7 +316,7 @@ export function ProjectItem({
           <Tooltip content="Remove workspace">
             <button
               type="button"
-              className="text-text-muted/60 hover:text-danger hover:bg-danger/10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md transition-colors disabled:opacity-50"
+              className="text-text-muted/60 hover:text-danger hover:bg-danger/10 focus-visible:ring-danger/40 click-press flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
               disabled={pendingActions.has(`delete-project-${proj.id}`)}
               onClick={(event) => {
                 event.stopPropagation();
@@ -357,7 +358,7 @@ export function ProjectItem({
       {showSessions && (
         <div
           className="grid overflow-hidden transition-[grid-template-rows] duration-150 ease-out"
-          style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}
+          style={{ gridTemplateRows: showSessions ? '1fr' : '0fr' }}
         >
           <div className="border-border/15 ml-3 min-h-0 min-w-0 space-y-0.5 border-l py-0.5 pr-0.5 pl-2.5">
             {proj.sessions.map((s) => {

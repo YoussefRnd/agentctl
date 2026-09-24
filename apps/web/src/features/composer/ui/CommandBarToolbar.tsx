@@ -59,8 +59,8 @@ export function CommandBarToolbar({
   flags: { isUpdatingAgentPersona, isUpdatingConfigOption, canSend, isRunning },
 }: CommandBarToolbarProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-3">
-      <div className="flex items-center gap-1.5">
+    <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
+      <div className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto sm:gap-1.5">
         <ProviderPickerTrigger
           isLoading={status.isLoadingSession || status.isLoadingProviders}
           isOpen={picker.isOpen}
@@ -99,7 +99,7 @@ export function CommandBarToolbar({
         />
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5">
         <AdvancedSettingsPopover isLoading={status.isLoadingSession} />
         <SubmitButton
           canSend={canSend}

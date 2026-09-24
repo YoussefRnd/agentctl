@@ -1,5 +1,6 @@
 import { useState, useRef, type ComponentPropsWithoutRef } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { Button } from '@agentctl/ui';
 
 export function MarkdownCodeBlock({
   children,
@@ -28,10 +29,11 @@ export function MarkdownCodeBlock({
       >
         {children}
       </pre>
-      <button
-        type="button"
+      <Button
+        variant="outline"
+        size="sm"
         onClick={handleCopy}
-        className="border-border/40 bg-surface-primary/90 text-text-muted hover:bg-surface-secondary hover:text-text-main absolute top-2 right-2 flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 font-sans text-[11px] font-medium opacity-0 shadow-sm backdrop-blur-sm transition-colors group-hover/code:opacity-100 focus-visible:opacity-100"
+        className="bg-surface/90 pointer-events-none absolute top-2 right-2 h-7 gap-1.5 px-2 text-[11px] opacity-0 shadow-sm backdrop-blur-sm transition-[color,background-color,border-color,opacity,transform] group-focus-within/code:pointer-events-auto group-focus-within/code:opacity-100 group-hover/code:pointer-events-auto group-hover/code:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
         aria-label="Copy code"
         title="Copy code"
       >
@@ -46,7 +48,7 @@ export function MarkdownCodeBlock({
             <span>Copy code</span>
           </>
         )}
-      </button>
+      </Button>
     </div>
   );
 }

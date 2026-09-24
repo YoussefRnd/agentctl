@@ -5,7 +5,15 @@ import rehypeHighlight from 'rehype-highlight';
 import { RotateCcw, Copy, Check, Pencil } from 'lucide-react';
 import { RewindMenu, useSession, type RewindMode } from '@/features/sessions';
 import { StreamingDots } from '@/shared';
-import { Popover, PopoverTrigger, PopoverContent, Card, Tooltip } from '@agentctl/ui';
+import {
+  Button,
+  Card,
+  IconButton,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Tooltip,
+} from '@agentctl/ui';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 import { formatShortcut } from '@/shared/lib/platform';
 import { parseUserMessageContent } from '../../lib/userMessageParser';
@@ -161,21 +169,22 @@ export const TextCard = memo(function TextCard({
                     Esc to cancel • {formatShortcut('Enter')} to submit
                   </span>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={handleCancelEdit}
-                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary/60 cursor-pointer rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
+                      className="h-7 px-2.5 text-xs"
                     >
                       Cancel
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      size="sm"
                       onClick={handleSaveEdit}
                       disabled={!draftContent.trim()}
-                      className="bg-accent text-brand-crust hover:bg-accent/90 cursor-pointer rounded-lg px-3 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                      className="h-7 px-3 text-xs"
                     >
                       Save &amp; Submit
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -211,12 +220,12 @@ export const TextCard = memo(function TextCard({
                 )}
 
                 {/* Quick action bar anchored cleanly below user message bubble */}
-                <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100 focus-within:opacity-100">
+                <div className="pointer-events-none mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
                   <Tooltip content={copied ? 'Copied to clipboard' : 'Copy message'}>
-                    <button
-                      type="button"
+                    <IconButton
+                      size="compact"
                       onClick={handleCopy}
-                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                      className="hover:bg-surface-secondary/80"
                       aria-label="Copy message"
                     >
                       {copied ? (
@@ -224,31 +233,31 @@ export const TextCard = memo(function TextCard({
                       ) : (
                         <Copy className="h-3.5 w-3.5" />
                       )}
-                    </button>
+                    </IconButton>
                   </Tooltip>
 
                   <Tooltip content="Edit prompt">
-                    <button
-                      type="button"
+                    <IconButton
+                      size="compact"
                       onClick={handleStartEdit}
-                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                      className="hover:bg-surface-secondary/80"
                       aria-label="Edit prompt"
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                    </IconButton>
                   </Tooltip>
 
                   {eventId && onRewind && (
                     <Popover open={showMenu} onOpenChange={setShowMenu}>
                       <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                        <IconButton
+                          size="compact"
+                          className="hover:bg-surface-secondary/80"
                           aria-label="Rewind or fork options"
                           title="Rewind or fork session"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
-                        </button>
+                        </IconButton>
                       </PopoverTrigger>
                       <PopoverContent
                         align="end"
@@ -281,12 +290,12 @@ export const TextCard = memo(function TextCard({
     <div data-font-ctx="chat" className="group/provider relative py-3">
       <div className="group/provider-content relative min-w-0 flex-1">
         {/* Quick-action toolbar for provider response */}
-        <div className="mb-1 flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-200 group-hover/provider:opacity-100 focus-within:opacity-100">
+        <div className="pointer-events-none mb-1 flex items-center justify-end gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within/provider:pointer-events-auto group-focus-within/provider:opacity-100 group-hover/provider:pointer-events-auto group-hover/provider:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
           <Tooltip content={copied ? 'Copied to clipboard' : 'Copy response'}>
-            <button
-              type="button"
+            <IconButton
+              size="compact"
               onClick={handleCopy}
-              className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+              className="hover:bg-surface-secondary/80"
               aria-label="Copy response"
             >
               {copied ? (
@@ -294,20 +303,20 @@ export const TextCard = memo(function TextCard({
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}
-            </button>
+            </IconButton>
           </Tooltip>
 
           {eventId && onRewind && (
             <Popover open={showMenu} onOpenChange={setShowMenu}>
               <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md transition-colors"
+                <IconButton
+                  size="compact"
+                  className="hover:bg-surface-secondary/80"
                   aria-label="Rewind or fork options"
                   title="Rewind or fork session"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                </button>
+                </IconButton>
               </PopoverTrigger>
               <PopoverContent
                 align="end"

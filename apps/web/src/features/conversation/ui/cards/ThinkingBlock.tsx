@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useId } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { ThinkingSpinner } from '@/shared';
 import { useSettings } from '@/features/settings';
@@ -25,6 +25,7 @@ export function ThinkingBlock({
   const { settings } = useSettings();
   const { sessionData } = useSession();
   const showThinking = settings?.showThinking ?? false;
+  const detailsId = useId();
 
   const sessionStatus = sessionData?.session.status;
   const isSessionActive = sessionStatus === 'running' || sessionStatus === 'needs_attention';
@@ -69,10 +70,10 @@ export function ThinkingBlock({
       <button
         type="button"
         aria-expanded={isOpen}
-        aria-controls="activity-details"
+        aria-controls={detailsId}
         onClick={toggle}
         disabled={events.length === 0}
-        className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex items-center gap-2 text-[15px] font-normal tracking-tight transition-colors outline-none select-none ${
+        className={`text-text-muted/80 hover:text-text-main focus-visible:ring-accent/40 group/activity-btn inline-flex items-center gap-2 rounded-md text-[13px] font-normal tracking-tight transition-colors outline-none select-none focus-visible:ring-2 ${
           events.length > 0 ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
@@ -89,10 +90,7 @@ export function ThinkingBlock({
       </button>
 
       {isOpen && (
-        <div
-          id="activity-details"
-          className="animate-in fade-in slide-in-from-top-1 mt-2 space-y-2"
-        >
+        <div id={detailsId} className="mt-2 space-y-2">
           {events.map((e) => {
             const isLastStreaming = isStreaming && e.id === events[events.length - 1].id;
             return (

@@ -112,6 +112,9 @@ export function SessionWorkspace() {
         setWorkbenchOpen(true);
       }}
       isMobileSidebarOpen={isMobileSidebarOpen}
+      onOpenMobileSidebar={() => {
+        setMobileSidebarOpen(true);
+      }}
       onCloseMobileSidebar={() => {
         setMobileSidebarOpen(false);
       }}

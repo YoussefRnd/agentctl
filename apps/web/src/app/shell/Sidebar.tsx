@@ -432,7 +432,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
                 setSearchTab('workspaces');
               }}
               className={cn(
-                'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all select-none',
+                'click-press focus-visible:ring-accent/40 flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-[color,background-color,box-shadow,transform] duration-150 select-none focus-visible:ring-2 focus-visible:outline-none',
                 searchTab === 'workspaces'
                   ? 'bg-surface-secondary text-text-main font-semibold shadow-xs'
                   : 'text-text-muted hover:text-text-main',
@@ -448,7 +448,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
                 setSearchTab('messages');
               }}
               className={cn(
-                'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all select-none',
+                'click-press focus-visible:ring-accent/40 flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-[color,background-color,box-shadow,transform] duration-150 select-none focus-visible:ring-2 focus-visible:outline-none',
                 searchTab === 'messages'
                   ? 'bg-surface-secondary text-text-main font-semibold shadow-xs'
                   : 'text-text-muted hover:text-text-main',
@@ -484,7 +484,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
               <Tooltip content="Add workspace">
                 <Link
                   to="/"
-                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 flex h-7 w-7 items-center justify-center rounded-lg border border-transparent transition-colors"
+                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 focus-visible:ring-accent/40 click-press flex h-7 w-7 items-center justify-center rounded-lg border border-transparent transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
                   aria-label="Add workspace"
                 >
                   <Plus className="h-3.5 w-3.5" />

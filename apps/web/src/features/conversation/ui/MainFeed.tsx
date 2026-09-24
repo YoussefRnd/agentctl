@@ -28,7 +28,7 @@ import {
 import { FileIcon } from '@/shared';
 import { useReviewUIStore } from '@/features/review';
 import { useWorkbenchStore } from '@/features/workbench';
-import { cn, Tooltip } from '@agentctl/ui';
+import { Button, cn, IconButton, LoadingState, Tooltip } from '@agentctl/ui';
 import type { SessionEventRow } from '@agentctl/shared';
 
 export function MainFeed() {
@@ -386,8 +386,9 @@ export function MainFeed() {
           <span className="tracking-tight">
             This session is archived. Workspace files are cleared from disk.
           </span>
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => {
               void (async () => {
                 try {
@@ -402,10 +403,10 @@ export function MainFeed() {
                 }
               })();
             }}
-            className="bg-warning/20 hover:bg-warning/30 border-warning/40 hover:border-warning/60 rounded border px-3 py-1 text-xs font-medium transition-colors"
+            className="border-warning/40 bg-warning/20 text-warning hover:border-warning/60 hover:bg-warning/30"
           >
             Restore Session
-          </button>
+          </Button>
         </div>
       )}
 
@@ -430,15 +431,7 @@ export function MainFeed() {
         <>
           <main className="min-h-0 w-full flex-1 overflow-hidden">
             {isLoadingEvents ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3">
-                <div className="relative h-8 w-8">
-                  <div className="absolute inset-0 rounded-full border-2 border-white/5" />
-                  <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
-                </div>
-                <span className="text-text-muted/50 text-[11px] tracking-wide">
-                  Loading session...
-                </span>
-              </div>
+              <LoadingState message="Loading session..." className="h-full" />
             ) : (
               <EventFeed
                 events={events}
@@ -472,7 +465,7 @@ export function MainFeed() {
             error={rewindError}
           />
 
-          <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-6 pb-4">
+          <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-3 pb-3 sm:px-6 sm:pb-4">
             {approvalEvent && (
               <div className="pb-4">
                 <div className="animate-in slide-in-from-bottom-4">
@@ -489,7 +482,8 @@ export function MainFeed() {
             {rewindUndoState && (
               <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 overflow-hidden rounded-xl border shadow-xs backdrop-blur-md duration-200">
                 <div className="flex items-center justify-between px-3.5 py-2 text-[12px]">
-                  <div
+                  <button
+                    type="button"
                     onClick={() => {
                       if (
                         rewindUndoState.restoredFiles &&
@@ -499,19 +493,17 @@ export function MainFeed() {
                       }
                     }}
                     className={cn(
-                      'text-text-muted flex min-w-0 items-center gap-2 pr-2 select-none',
+                      'text-text-muted focus-visible:ring-accent/40 flex min-w-0 items-center gap-2 rounded-md pr-2 text-left outline-none select-none focus-visible:ring-2',
                       rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
                         ? 'hover:text-text-main group/undo-header cursor-pointer'
-                        : '',
+                        : 'cursor-default',
                     )}
-                    role={
-                      rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
-                        ? 'button'
-                        : undefined
+                    disabled={
+                      !rewindUndoState.restoredFiles || rewindUndoState.restoredFiles.length === 0
                     }
-                    tabIndex={
+                    aria-expanded={
                       rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
-                        ? 0
+                        ? isDiffExpanded
                         : undefined
                     }
                   >
@@ -540,36 +532,39 @@ export function MainFeed() {
                         )}
                       </div>
                     )}
-                  </div>
+                  </button>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={handleOpenReview}
-                        className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
+                        className="h-7 px-2.5 text-[12px]"
                         title="Review reverted file changes in Changes tab"
                       >
                         Review
-                      </button>
+                      </Button>
                     )}
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => {
                         void handleUndoRewind();
                       }}
                       disabled={isUndoing}
-                      className="hover:text-text-main hover:bg-surface-secondary/80 text-text-muted cursor-pointer rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors"
+                      className="h-7 px-2.5 text-[12px]"
                     >
                       {isUndoing ? 'Undoing...' : 'Undo'}
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <IconButton
+                      size="sm"
                       onClick={() => setRewindUndoState(null)}
-                      className="text-text-muted/50 hover:text-text-main hover:bg-surface-secondary/80 cursor-pointer rounded p-1 transition-colors"
+                      className="hover:bg-surface-secondary/80"
                       title="Dismiss"
+                      aria-label="Dismiss rewind summary"
                     >
                       <X className="h-3.5 w-3.5" />
-                    </button>
+                    </IconButton>
                   </div>
                 </div>
 
@@ -625,16 +620,16 @@ export function MainFeed() {
                             </button>
 
                             <Tooltip content="Open in editor">
-                              <button
-                                type="button"
+                              <IconButton
+                                size="sm"
                                 onClick={() => {
                                   void openWorkspaceFile(file.path);
                                 }}
-                                className="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,color,background-color] duration-150 group-hover/file-row:opacity-100 focus-visible:opacity-100 active:scale-[0.97]"
+                                className="hover:bg-surface-tertiary/60 pointer-events-none mr-2 h-6 w-6 opacity-0 transition-[opacity,color,background-color,transform] duration-150 group-focus-within/file-row:pointer-events-auto group-focus-within/file-row:opacity-100 group-hover/file-row:pointer-events-auto group-hover/file-row:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
                                 aria-label={`Open ${fileName} in editor`}
                               >
                                 <ExternalLink className="h-3 w-3" />
-                              </button>
+                              </IconButton>
                             </Tooltip>
                           </div>
                         );

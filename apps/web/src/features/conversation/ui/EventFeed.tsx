@@ -14,7 +14,7 @@ import { AgentIcon } from '@/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SessionEventRow } from '@agentctl/shared';
 import { useSession, useSessionStream, type RewindMode } from '@/features/sessions';
-import { Card } from '@agentctl/ui';
+import { Button, Card, IconButton, LoadingState } from '@agentctl/ui';
 import { groupFeedEvents, type FeedEventGroup } from '../lib/eventFeedGrouping';
 import { EventFeedItem } from './EventFeedItem';
 import { TurnMinimap } from './TurnMinimap';
@@ -314,24 +314,7 @@ export function EventFeed({
 
   if ((events.length === 0 || groupedEvents.length === 0) && !isSessionError) {
     if (!isConnected) {
-      return (
-        <div className="flex h-full items-center justify-center py-20">
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div className="relative h-8 w-8">
-              <div className="absolute inset-0 rounded-full border-2 border-white/5" />
-              <div className="border-accent absolute inset-0 animate-spin rounded-full border-2 border-t-transparent" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-text-main text-[12px] font-semibold tracking-wide uppercase">
-                Connecting...
-              </h3>
-              <p className="text-text-muted/60 text-[11px] tracking-wide">
-                Establishing session uplink
-              </p>
-            </div>
-          </div>
-        </div>
-      );
+      return <LoadingState message="Connecting to session..." className="h-full py-20" />;
     }
 
     return <NewSessionEmptyState />;
@@ -376,7 +359,7 @@ export function EventFeed({
                 className="w-full"
               >
                 <div
-                  className={`mx-auto max-w-[800px] rounded-2xl px-6 py-3 transition-[background-color,box-shadow] duration-300 ${
+                  className={`mx-auto max-w-[800px] rounded-xl px-3 py-2.5 transition-[background-color,box-shadow] duration-200 sm:rounded-2xl sm:px-6 sm:py-3 ${
                     isGroupHighlighted
                       ? 'bg-accent/10 ring-accent shadow-accent/10 shadow-lg ring-2'
                       : ''
@@ -396,7 +379,7 @@ export function EventFeed({
           })}
 
           {isSessionError && (
-            <div className="mx-auto max-w-[800px] px-6 pt-2 pb-4">
+            <div className="mx-auto max-w-[800px] px-3 pt-2 pb-4 sm:px-6">
               <div className="animate-in fade-in slide-in-from-left-2">
                 <Card status="error" className="flex flex-col gap-3 p-5">
                   <div className="flex items-center gap-3">
@@ -412,19 +395,20 @@ export function EventFeed({
                     resuscitate the session, or reconnect the stream.
                   </p>
                   <div className="mt-1 flex items-center gap-3">
-                    <button
-                      type="button"
+                    <Button
+                      variant="danger"
+                      size="sm"
                       onClick={() => {
                         void queryClient.invalidateQueries({
                           queryKey: ['session', sessionId],
                         });
                         void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
                       }}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/15 px-3 py-1.5 text-[11px] font-bold text-rose-300 transition-colors hover:bg-rose-500/25"
+                      className="border border-rose-500/30 bg-rose-500/15 px-3 text-[11px] text-rose-300 hover:bg-rose-500/25"
                     >
                       <RefreshCw className="h-3 w-3" />
                       Reconnect Stream
-                    </button>
+                    </Button>
                   </div>
                 </Card>
               </div>
@@ -434,9 +418,10 @@ export function EventFeed({
       </div>
 
       {!isFollowingOutput && (
-        <button
-          type="button"
-          className="group border-accent/40 bg-brand-mantle/95 text-accent hover:border-accent hover:bg-accent hover:text-brand-crust focus-visible:ring-accent/50 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 absolute bottom-6 left-1/2 z-50 flex h-8 w-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border shadow-xl ring-1 ring-white/10 backdrop-blur-xl transition-[transform,background-color,border-color,color] duration-150 ease-out hover:scale-110 focus-visible:ring-2 focus-visible:outline-none active:scale-[0.97]"
+        <IconButton
+          variant="outline"
+          size="default"
+          className="border-accent/40 bg-brand-mantle/95 text-accent hover:border-accent hover:bg-accent hover:text-brand-crust animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 absolute bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full shadow-xl ring-1 ring-white/10 backdrop-blur-xl"
           title="Scroll to bottom"
           aria-label="Scroll to bottom and follow new messages"
           onClick={() => {
@@ -444,8 +429,8 @@ export function EventFeed({
             scrollToBottom(true);
           }}
         >
-          <ArrowDown className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5" />
-        </button>
+          <ArrowDown className="h-4 w-4" />
+        </IconButton>
       )}
 
       {conversationTurns.length > 1 && (

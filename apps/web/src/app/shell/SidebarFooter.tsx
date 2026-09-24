@@ -12,7 +12,7 @@ export function SidebarFooter() {
       <button
         type="button"
         onClick={() => openSettings('general')}
-        className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 group flex flex-1 cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs font-medium transition-[color,background-color] duration-150 active:scale-[0.97]"
+        className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 focus-visible:ring-accent/40 click-press group flex flex-1 cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs font-medium transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
       >
         <div className="flex items-center gap-2">
           <Settings className="text-text-muted group-hover:text-accent h-3.5 w-3.5 transition-colors" />
@@ -26,7 +26,7 @@ export function SidebarFooter() {
       <button
         type="button"
         onClick={() => openShortcuts()}
-        className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 group flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-[color,background-color] duration-150 active:scale-[0.97]"
+        className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 focus-visible:ring-accent/40 click-press group flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
         title={`Keyboard Shortcuts (${formatShortcut('/')})`}
         aria-label="Keyboard Shortcuts"
       >

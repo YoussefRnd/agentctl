@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useEffect, useCallback } from 'react';
+import { type ReactNode, useRef, useEffect, useCallback, useState } from 'react';
 import {
   Group,
   Panel,
@@ -21,6 +21,7 @@ interface ShellProps {
   onCloseAside?: () => void;
   onExpandAside?: () => void;
   isMobileSidebarOpen?: boolean;
+  onOpenMobileSidebar?: () => void;
   onCloseMobileSidebar?: () => void;
 }
 
@@ -33,7 +34,8 @@ export function AppShell({
   isAsideMaximized = false,
   onCloseAside,
   onExpandAside,
-  isMobileSidebarOpen = false,
+  isMobileSidebarOpen,
+  onOpenMobileSidebar,
   onCloseMobileSidebar,
 }: ShellProps) {
   const sidebarPanelRef = usePanelRef();
@@ -44,6 +46,8 @@ export function AppShell({
   });
 
   const isInitialResize = useRef(true);
+  const [uncontrolledMobileSidebarOpen, setUncontrolledMobileSidebarOpen] = useState(false);
+  const mobileSidebarOpen = isMobileSidebarOpen ?? uncontrolledMobileSidebarOpen;
 
   const handleAsideResize = useCallback(
     (size: PanelSize) => {
@@ -60,7 +64,7 @@ export function AppShell({
     [onCloseAside, onExpandAside],
   );
 
-  const handleToggleSidebar = useCallback(() => {
+  const handleToggleDesktopSidebar = useCallback(() => {
     const panel = sidebarPanelRef.current;
     if (panel) {
       if (panel.isCollapsed()) {
@@ -70,6 +74,30 @@ export function AppShell({
       }
     }
   }, [sidebarPanelRef]);
+
+  const handleCloseMobileSidebar = useCallback(() => {
+    onCloseMobileSidebar?.();
+    setUncontrolledMobileSidebarOpen(false);
+  }, [onCloseMobileSidebar]);
+
+  const handleToggleSidebar = useCallback(() => {
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      if (mobileSidebarOpen) {
+        handleCloseMobileSidebar();
+      } else if (onOpenMobileSidebar) {
+        onOpenMobileSidebar();
+      } else {
+        setUncontrolledMobileSidebarOpen(true);
+      }
+      return;
+    }
+    handleToggleDesktopSidebar();
+  }, [
+    handleCloseMobileSidebar,
+    handleToggleDesktopSidebar,
+    mobileSidebarOpen,
+    onOpenMobileSidebar,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -101,11 +129,25 @@ export function AppShell({
     }
   }, [isAsideOpen, asidePanelRef]);
 
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCloseMobileSidebar();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [handleCloseMobileSidebar, mobileSidebarOpen]);
+
   return (
     <div className="bg-background text-text-main relative flex h-screen w-full flex-col overflow-hidden">
       <TitleBar nav={nav} onToggleSidebar={sidebar ? handleToggleSidebar : undefined} />
 
-      <div className="relative z-10 min-h-0 w-full flex-1 overflow-hidden p-3">
+      <div className="relative z-10 min-h-0 w-full flex-1 overflow-hidden p-2 sm:p-3">
         {isAsideMaximized && aside ? (
           <div className="bg-background border-border/20 absolute inset-3 z-30 flex flex-col overflow-hidden rounded-lg border shadow-2xl backdrop-blur-xl">
             {aside}
@@ -132,7 +174,9 @@ export function AppShell({
               </Panel>
             )}
 
-            {sidebar && <Separator className="hidden w-3 shrink-0 cursor-col-resize lg:block" />}
+            {sidebar && (
+              <Separator className="group after:bg-border/35 hover:after:bg-accent/60 data-[resize-handle-active]:after:bg-accent hidden w-3 shrink-0 cursor-col-resize items-center justify-center after:h-8 after:w-px after:rounded-full after:transition-[height,background-color] after:duration-150 hover:after:h-12 data-[resize-handle-active]:after:h-12 lg:flex" />
+            )}
 
             <Panel id="main" minSize="30%">
               <main className="relative flex h-full min-w-0 flex-col overflow-hidden">
@@ -147,7 +191,7 @@ export function AppShell({
 
             {aside && (
               <>
-                <Separator className="w-3 shrink-0 cursor-col-resize" />
+                <Separator className="group after:bg-border/35 hover:after:bg-accent/60 data-[resize-handle-active]:after:bg-accent flex w-3 shrink-0 cursor-col-resize items-center justify-center after:h-8 after:w-px after:rounded-full after:transition-[height,background-color] after:duration-150 hover:after:h-12 data-[resize-handle-active]:after:h-12" />
                 <Panel
                   id="aside"
                   panelRef={asidePanelRef}
@@ -165,22 +209,29 @@ export function AppShell({
           </Group>
         )}
 
-        {sidebar && onCloseMobileSidebar && (
+        {sidebar && (
           <>
             <aside
-              className={`bg-background/95 border-border fixed inset-y-0 left-0 z-50 w-[300px] border-r backdrop-blur-2xl transition-transform duration-250 ease-[cubic-bezier(0.32,0.72,0,1)] lg:hidden ${
-                isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+              className={`bg-background/95 border-border fixed inset-y-0 left-0 z-50 w-[min(320px,calc(100vw-48px))] border-r shadow-2xl backdrop-blur-2xl transition-transform duration-250 ease-[cubic-bezier(0.32,0.72,0,1)] lg:hidden ${
+                mobileSidebarOpen ? 'translate-x-0' : 'pointer-events-none -translate-x-full'
               }`}
+              aria-hidden={!mobileSidebarOpen}
+              inert={!mobileSidebarOpen}
+              onClickCapture={(event) => {
+                if ((event.target as HTMLElement).closest('a[href]')) {
+                  handleCloseMobileSidebar();
+                }
+              }}
             >
-              <div className="flex h-full flex-col p-4">{sidebar}</div>
+              <div className="flex h-full flex-col">{sidebar}</div>
             </aside>
 
-            {isMobileSidebarOpen && (
+            {mobileSidebarOpen && (
               <button
                 type="button"
                 aria-label="Close sidebar"
                 className="animate-in fade-in-0 fixed inset-0 z-40 border-none bg-black/60 backdrop-blur-md duration-200 ease-out outline-none lg:hidden"
-                onClick={onCloseMobileSidebar}
+                onClick={handleCloseMobileSidebar}
               />
             )}
           </>

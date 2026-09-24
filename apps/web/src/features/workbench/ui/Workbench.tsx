@@ -245,7 +245,7 @@ export function Workbench({
                         e.stopPropagation();
                         handleCloseTab(t);
                       }}
-                      className="text-text-muted hover:bg-surface-secondary mr-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,background-color] duration-150 group-focus-within:opacity-80 group-hover:opacity-80 hover:text-rose-400 hover:!opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+                      className="text-text-muted mr-1 flex h-6 w-6 cursor-pointer items-center justify-center opacity-0 transition-[opacity,color] duration-150 group-focus-within:opacity-80 group-hover:opacity-80 hover:text-rose-400 hover:!opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
                       title="Close tab"
                     >
                       <X className="icon-inline" />

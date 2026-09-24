@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import { Terminal, ChevronRight, AlertCircle } from 'lucide-react';
-import { cn, Card } from '@agentctl/ui';
+import { cn, Card, StatusBadge } from '@agentctl/ui';
 
 interface CommandResultCardProps {
   command: string;
@@ -27,7 +27,8 @@ export const CommandResultCard = memo(function CommandResultCard({
       <button
         type="button"
         aria-label="Toggle command output"
-        className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent text-left select-none"
+        aria-expanded={open}
+        className="focus-visible:ring-accent/40 flex w-full cursor-pointer items-center gap-2 rounded-lg border-none bg-transparent text-left outline-none select-none focus-visible:ring-2"
         onClick={() => {
           setUserToggled(!open);
         }}
@@ -82,18 +83,12 @@ export const CommandResultCard = memo(function CommandResultCard({
               <span className="text-text-muted text-[10px] font-bold tracking-widest uppercase">
                 Status
               </span>
-              <div
-                className={cn(
-                  'rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase',
-                  isError
-                    ? 'border border-rose-500/20 bg-rose-500/10 text-rose-400'
-                    : isPending
-                      ? 'bg-accent/10 text-accent border-accent/20 animate-pulse border'
-                      : 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
-                )}
-              >
-                {status}
-              </div>
+              <StatusBadge
+                status={isError ? 'error' : isPending ? 'running' : 'success'}
+                label={status}
+                pulse={isPending}
+                className="font-bold tracking-wider uppercase"
+              />
             </div>
           </div>
         </Card>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus, FileUp, CornerDownLeft } from 'lucide-react';
-import { cn } from '@agentctl/ui';
+import { cn, IconButton } from '@agentctl/ui';
 import { AttachmentStrip } from './AttachmentStrip';
 import { ContextDropdown } from './ContextDropdown';
 import { ContextChipStrip } from './ContextChipStrip';
@@ -31,7 +31,7 @@ function SlashCommandsDropdown({
 }: SlashCommandsDropdownProps) {
   if (!showSlashMenu || filteredCommands.length === 0) return null;
   return (
-    <div className="border-border/30 bg-brand-mantle/95 motion-floating animate-in fade-in-0 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2.5 flex max-h-76 w-full flex-col overflow-hidden rounded-xl border p-1 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl duration-150">
+    <div className="border-border/30 bg-brand-mantle/95 absolute bottom-full left-0 z-50 mb-2.5 flex max-h-76 w-full flex-col overflow-hidden rounded-xl border p-1 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
       {/* Header */}
       <div className="border-border/20 flex items-center justify-between border-b px-2.5 py-2">
         <div className="flex items-center gap-1.5">
@@ -156,7 +156,7 @@ interface CommandInputHintProps {
 function CommandInputHint({ showSlashMenu, matchingCommand }: CommandInputHintProps) {
   if (showSlashMenu || !matchingCommand) return null;
   return (
-    <div className="border-accent/30 bg-brand-mantle/95 animate-in fade-in-0 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2.5 flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl duration-150 ease-out">
+    <div className="border-accent/30 bg-brand-mantle/95 absolute bottom-full left-0 z-50 mb-2.5 flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
       <div className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
         <div className="bg-accent/20 text-accent flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold">
           /
@@ -354,17 +354,17 @@ export function CommandInputComposer({
             )}
 
             {/* Input row */}
-            <div className="flex w-full items-start gap-3 px-5 pt-4 pb-4">
-              <button
-                type="button"
+            <div className="flex w-full items-start gap-2 px-3 pt-3 pb-3 sm:gap-3 sm:px-5 sm:pt-4 sm:pb-4">
+              <IconButton
                 disabled={disabled}
                 onClick={handleAttachClick}
-                className="text-text-muted hover:text-accent hover:bg-accent/10 focus-visible:ring-accent/50 mt-[3px] flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40"
+                size="compact"
+                className="hover:text-accent hover:bg-accent/10 mt-[3px] shrink-0 rounded-full"
                 title={supportsImageAttachments ? 'Attach image or file' : 'Attach file as context'}
                 aria-label="Attach files"
               >
                 <Plus className="h-4 w-4" />
-              </button>
+              </IconButton>
               <div className="min-w-0 flex-1">
                 <textarea
                   ref={textareaRef}
@@ -386,7 +386,6 @@ export function CommandInputComposer({
                         setActiveCommandIndex(nextIndex);
                         commandRefs.current[nextIndex]?.scrollIntoView({
                           block: 'nearest',
-                          behavior: 'smooth',
                         });
                       } else if (e.key === 'ArrowUp') {
                         e.preventDefault();
@@ -396,7 +395,6 @@ export function CommandInputComposer({
                         setActiveCommandIndex(prevIndex);
                         commandRefs.current[prevIndex]?.scrollIntoView({
                           block: 'nearest',
-                          behavior: 'smooth',
                         });
                       } else if (e.key === 'Enter' || e.key === 'Tab') {
                         const selected = filteredCommands[activeCommandIndex];
@@ -470,7 +468,7 @@ export function CommandInputComposer({
             {/* Attachment strip — only visible when there are files */}
             {attachments.length > 0 && (
               <>
-                <div className="bg-border/20 mx-5 h-px" />
+                <div className="bg-border/20 mx-3 h-px sm:mx-5" />
                 <AttachmentStrip
                   attachments={attachments}
                   onRemove={removeAttachment}
@@ -482,7 +480,7 @@ export function CommandInputComposer({
         )}
 
         {/* Hairline separator anchors toolbar below input */}
-        <div className="bg-border/20 mx-5 h-px" />
+        <div className="bg-border/20 mx-3 h-px sm:mx-5" />
 
         {/* Render children/toolbar here */}
         {children}

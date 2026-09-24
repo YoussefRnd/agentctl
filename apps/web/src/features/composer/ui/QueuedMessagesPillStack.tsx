@@ -1,5 +1,6 @@
 import { ListOrdered, ChevronUp, ChevronDown, X, Paperclip } from 'lucide-react';
 import { useSessionStream } from '@/features/sessions';
+import { IconButton } from '@agentctl/ui';
 
 export function QueuedMessagesPillStack() {
   const { queuedMessages, dequeueMessage, moveQueuedMessage } = useSessionStream();
@@ -7,15 +8,15 @@ export function QueuedMessagesPillStack() {
   if (queuedMessages.length === 0) return null;
 
   return (
-    <div className="bg-brand-mantle/95 border-border/30 animate-in fade-in slide-in-from-bottom-2 relative z-20 -mb-px flex w-full flex-col gap-2 rounded-t-xl border-x border-t px-4 py-2.5 shadow-md backdrop-blur-xl">
-      <div className="flex items-center justify-between">
+    <div className="bg-brand-mantle/95 border-border/30 animate-in fade-in slide-in-from-bottom-2 relative z-20 -mb-px flex w-full flex-col gap-2 rounded-t-xl border-x border-t px-3 py-2.5 shadow-md backdrop-blur-xl sm:px-4">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ListOrdered className="text-accent h-3.5 w-3.5" />
           <span className="text-text-main text-[13px] font-semibold tracking-normal">
             Queued prompts ({queuedMessages.length})
           </span>
         </div>
-        <span className="text-text-muted text-[11px] font-medium opacity-70">
+        <span className="text-text-muted hidden text-[11px] font-medium opacity-70 sm:inline">
           Will execute in order
         </span>
       </div>
@@ -44,42 +45,42 @@ export function QueuedMessagesPillStack() {
               )}
             </div>
 
-            <div className="flex shrink-0 items-center gap-1 opacity-80 group-hover/pill:opacity-100">
-              <button
-                type="button"
+            <div className="flex shrink-0 items-center gap-0.5 opacity-80 transition-opacity group-focus-within/pill:opacity-100 group-hover/pill:opacity-100">
+              <IconButton
                 disabled={index === 0}
                 onClick={() => {
                   moveQueuedMessage(index, 'up');
                 }}
-                className="text-text-muted hover:text-text-main hover:bg-surface-tertiary cursor-pointer rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-20"
+                size="sm"
+                className="hover:bg-surface-tertiary disabled:opacity-20"
                 title="Move up"
                 aria-label="Move up in queue"
               >
                 <ChevronUp className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
+              </IconButton>
+              <IconButton
                 disabled={index === queuedMessages.length - 1}
                 onClick={() => {
                   moveQueuedMessage(index, 'down');
                 }}
-                className="text-text-muted hover:text-text-main hover:bg-surface-tertiary cursor-pointer rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-20"
+                size="sm"
+                className="hover:bg-surface-tertiary disabled:opacity-20"
                 title="Move down"
                 aria-label="Move down in queue"
               >
                 <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
+              </IconButton>
+              <IconButton
                 onClick={() => {
                   dequeueMessage(msg.id);
                 }}
-                className="ml-1 cursor-pointer rounded p-1 text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
+                size="sm"
+                className="ml-0.5 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
                 title="Cancel prompt"
                 aria-label="Cancel prompt"
               >
                 <X className="h-3.5 w-3.5" />
-              </button>
+              </IconButton>
             </div>
           </div>
         ))}
