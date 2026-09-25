@@ -135,6 +135,62 @@ describe('SessionStreamProvider queued message send', () => {
     expect(remaining.some((e) => e.id < 0)).toBe(false);
   });
 
+  it('keeps queued prompts in their originating session', () => {
+    const queue = useMessageQueueStore.getState();
+    queue.enqueueMessage('sess-1', 'first');
+    queue.enqueueMessage('sess-2', 'second');
+
+    expect(
+      useMessageQueueStore.getState().queuedMessages['sess-1']?.map((msg) => msg.text),
+    ).toEqual(['first']);
+    expect(
+      useMessageQueueStore.getState().queuedMessages['sess-2']?.map((msg) => msg.text),
+    ).toEqual(['second']);
+
+    queue.dequeueMessage('sess-1', useMessageQueueStore.getState().queuedMessages['sess-1'][0].id);
+    expect(useMessageQueueStore.getState().queuedMessages['sess-2']).toHaveLength(1);
+  });
+
+  it('waits for the current turn before submitting the next queued prompt', async () => {
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+    mockedSendInput.mockImplementation(() => new Promise(() => {}));
+
+    act(() => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SessionStreamProvider sessionId="sess-1">
+            <Harness />
+          </SessionStreamProvider>
+        </QueryClientProvider>,
+      );
+    });
+    act(() => {
+      const queue = useMessageQueueStore.getState();
+      queue.enqueueMessage('sess-1', 'first');
+      queue.enqueueMessage('sess-1', 'second');
+    });
+
+    await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(1));
+    expect(mockedSendInput).toHaveBeenCalledWith({
+      params: { id: 'sess-1' },
+      body: { input: 'first' },
+    });
+    expect(useMessageQueueStore.getState().queuedMessages['sess-1']).toHaveLength(1);
+
+    await act(async () => {
+      queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('running'));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    await act(async () => {
+      queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+    });
+    await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(2));
+    expect(mockedSendInput).toHaveBeenLastCalledWith({
+      params: { id: 'sess-1' },
+      body: { input: 'second' },
+    });
+  });
+
   it('sends a queued message successfully when the session is idle', async () => {
     queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
     mockedSendInput.mockResolvedValueOnce({

@@ -1,4 +1,13 @@
-import { createContext, use, useMemo, useEffect, useRef, type ReactNode } from 'react';
+import {
+  createContext,
+  use,
+  useMemo,
+  useEffect,
+  useRef,
+  useCallback,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { SessionEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
@@ -125,6 +134,7 @@ export function useSession() {
 // ==========================================
 import { useMessageQueueStore, type QueuedMessage } from '@/shared';
 export type { QueuedMessage };
+const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];
 
 interface SessionStreamContextValue {
   events: SessionEventRow[];
@@ -157,11 +167,37 @@ export function SessionStreamProvider({
     streamingEventId,
   } = useSessionEvents(sessionId);
 
-  const queuedMessages = useMessageQueueStore((s) => s.queuedMessages);
-  const enqueueMessage = useMessageQueueStore((s) => s.enqueueMessage);
-  const dequeueMessage = useMessageQueueStore((s) => s.dequeueMessage);
-  const reorderQueuedMessages = useMessageQueueStore((s) => s.reorderQueuedMessages);
-  const moveQueuedMessage = useMessageQueueStore((s) => s.moveQueuedMessage);
+  const queuedMessages = useMessageQueueStore(
+    (s) => s.queuedMessages[sessionId] ?? EMPTY_QUEUED_MESSAGES,
+  );
+  const enqueueQueuedMessage = useMessageQueueStore((s) => s.enqueueMessage);
+  const dequeueQueuedMessage = useMessageQueueStore((s) => s.dequeueMessage);
+  const reorderQueuedMessagesForSession = useMessageQueueStore((s) => s.reorderQueuedMessages);
+  const moveQueuedMessageForSession = useMessageQueueStore((s) => s.moveQueuedMessage);
+  const enqueueMessage = useCallback(
+    (text: string, attachmentIds?: string[]) =>
+      enqueueQueuedMessage(sessionId, text, attachmentIds),
+    [enqueueQueuedMessage, sessionId],
+  );
+  const dequeueMessage = useCallback(
+    (id: string) => dequeueQueuedMessage(sessionId, id),
+    [dequeueQueuedMessage, sessionId],
+  );
+  const reorderQueuedMessages = useCallback(
+    (newQueue: QueuedMessage[]) => reorderQueuedMessagesForSession(sessionId, newQueue),
+    [reorderQueuedMessagesForSession, sessionId],
+  );
+  const moveQueuedMessage = useCallback(
+    (index: number, direction: 'up' | 'down') =>
+      moveQueuedMessageForSession(sessionId, index, direction),
+    [moveQueuedMessageForSession, sessionId],
+  );
+  const awaitingQueuedTurnRef = useRef(false);
+  const [queueRetryTick, setQueueRetryTick] = useState(0);
+
+  useEffect(() => {
+    awaitingQueuedTurnRef.current = false;
+  }, [sessionId]);
 
   const { data: sessionData } = useQuery({
     queryKey: sessionKeys.detail(sessionId),
@@ -171,49 +207,62 @@ export function SessionStreamProvider({
 
   useEffect(() => {
     const isIdle = sessionData?.session.status === 'idle';
-    if (isIdle && queuedMessages.length > 0) {
-      const nextMessage = queuedMessages[0];
-      queueMicrotask(() => {
-        dequeueMessage(nextMessage.id);
-        void api
-          .sendInput({
-            params: { id: sessionId },
-            body: {
-              input: nextMessage.text,
-              ...(nextMessage.attachmentIds && nextMessage.attachmentIds.length > 0
-                ? { attachmentIds: nextMessage.attachmentIds }
-                : {}),
-            },
-          })
-          .catch((err: unknown) => {
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            toast.error('Failed to send queued message', {
-              description: errorMessage,
-              action: {
-                label: 'Re-send',
-                onClick: () => {
-                  enqueueMessage(nextMessage.text, nextMessage.attachmentIds);
-                },
-              },
-            });
-            const cleaned = (
-              queryClient.getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId)) ?? []
-            ).filter(
-              (e) =>
-                !(
-                  e.id < 0 &&
-                  e.type === 'text' &&
-                  (e.data as { role?: string }).role === 'user' &&
-                  (e.data as { content?: string }).content === nextMessage.text
-                ),
-            );
-            queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), cleaned);
-          });
-      });
+    if (!isIdle) {
+      if (sessionData?.session.status && sessionData.session.status !== 'idle') {
+        awaitingQueuedTurnRef.current = false;
+      }
+      return;
     }
+    if (awaitingQueuedTurnRef.current || queuedMessages.length === 0) return;
+
+    awaitingQueuedTurnRef.current = true;
+    const nextMessage = queuedMessages[0];
+    queueMicrotask(() => {
+      dequeueMessage(nextMessage.id);
+      void api
+        .sendInput({
+          params: { id: sessionId },
+          body: {
+            input: nextMessage.text,
+            ...(nextMessage.attachmentIds && nextMessage.attachmentIds.length > 0
+              ? { attachmentIds: nextMessage.attachmentIds }
+              : {}),
+          },
+        })
+        .then(() => {
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+        })
+        .catch((err: unknown) => {
+          awaitingQueuedTurnRef.current = false;
+          setQueueRetryTick((tick) => tick + 1);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          toast.error('Failed to send queued message', {
+            description: errorMessage,
+            action: {
+              label: 'Re-send',
+              onClick: () => {
+                enqueueMessage(nextMessage.text, nextMessage.attachmentIds);
+              },
+            },
+          });
+          const cleaned = (
+            queryClient.getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId)) ?? []
+          ).filter(
+            (e) =>
+              !(
+                e.id < 0 &&
+                e.type === 'text' &&
+                (e.data as { role?: string }).role === 'user' &&
+                (e.data as { content?: string }).content === nextMessage.text
+              ),
+          );
+          queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), cleaned);
+        });
+    });
   }, [
     sessionData?.session.status,
     queuedMessages,
+    queueRetryTick,
     sessionId,
     queryClient,
     dequeueMessage,

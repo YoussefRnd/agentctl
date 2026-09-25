@@ -7,45 +7,57 @@ export interface QueuedMessage {
 }
 
 interface MessageQueueState {
-  queuedMessages: QueuedMessage[];
-  enqueueMessage: (text: string, attachmentIds?: string[]) => void;
-  dequeueMessage: (id: string) => void;
-  reorderQueuedMessages: (newQueue: QueuedMessage[]) => void;
-  moveQueuedMessage: (index: number, direction: 'up' | 'down') => void;
+  queuedMessages: Record<string, QueuedMessage[]>;
+  enqueueMessage: (sessionId: string, text: string, attachmentIds?: string[]) => void;
+  dequeueMessage: (sessionId: string, id: string) => void;
+  reorderQueuedMessages: (sessionId: string, newQueue: QueuedMessage[]) => void;
+  moveQueuedMessage: (sessionId: string, index: number, direction: 'up' | 'down') => void;
   clearQueue: () => void;
 }
 
 export const useMessageQueueStore = create<MessageQueueState>((set) => ({
-  queuedMessages: [],
+  queuedMessages: {},
 
-  enqueueMessage: (text: string, attachmentIds?: string[]) => {
+  enqueueMessage: (sessionId, text, attachmentIds) => {
     set((state) => ({
-      queuedMessages: [...state.queuedMessages, { id: crypto.randomUUID(), text, attachmentIds }],
+      queuedMessages: {
+        ...state.queuedMessages,
+        [sessionId]: [
+          ...(state.queuedMessages[sessionId] ?? []),
+          { id: crypto.randomUUID(), text, attachmentIds },
+        ],
+      },
     }));
   },
 
-  dequeueMessage: (id: string) => {
+  dequeueMessage: (sessionId, id) => {
     set((state) => ({
-      queuedMessages: state.queuedMessages.filter((msg) => msg.id !== id),
+      queuedMessages: {
+        ...state.queuedMessages,
+        [sessionId]: (state.queuedMessages[sessionId] ?? []).filter((msg) => msg.id !== id),
+      },
     }));
   },
 
-  reorderQueuedMessages: (newQueue: QueuedMessage[]) => {
-    set({ queuedMessages: newQueue });
+  reorderQueuedMessages: (sessionId, newQueue) => {
+    set((state) => ({ queuedMessages: { ...state.queuedMessages, [sessionId]: newQueue } }));
   },
 
-  moveQueuedMessage: (index: number, direction: 'up' | 'down') => {
+  moveQueuedMessage: (sessionId, index, direction) => {
     set((state) => {
+      const queue = state.queuedMessages[sessionId] ?? [];
       const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= state.queuedMessages.length) return state;
-      const next = [...state.queuedMessages];
+      if (index < 0 || index >= queue.length || targetIndex < 0 || targetIndex >= queue.length) {
+        return state;
+      }
+      const next = [...queue];
       const [item] = next.splice(index, 1);
       next.splice(targetIndex, 0, item);
-      return { queuedMessages: next };
+      return { queuedMessages: { ...state.queuedMessages, [sessionId]: next } };
     });
   },
 
   clearQueue: () => {
-    set({ queuedMessages: [] });
+    set({ queuedMessages: {} });
   },
 }));
