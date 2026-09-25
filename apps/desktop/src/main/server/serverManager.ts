@@ -5,6 +5,7 @@ import type { ReadyMessage } from '../../shared/platform-types';
 let serverProcess: Electron.UtilityProcess | null = null;
 let serverPort = 0;
 let serverSecret = '';
+let stopPromise: Promise<void> | null = null;
 
 export function formatJsonLog(line: string): string {
   try {
@@ -131,16 +132,40 @@ export function startServer(): Promise<number> {
   });
 }
 
-export function stopServer(): void {
-  if (serverProcess) {
+export function stopServer(): Promise<void> {
+  if (stopPromise) return stopPromise;
+  const child = serverProcess;
+  if (!child) return Promise.resolve();
+
+  const stopping = new Promise<void>((resolve) => {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      child.removeListener('exit', finish);
+      if (serverProcess === child) serverProcess = null;
+      resolve();
+    };
+    const timeout = setTimeout(() => {
+      child.kill();
+      finish();
+    }, 4_500);
+    timeout.unref();
+    child.once('exit', finish);
+
     try {
-      serverProcess.postMessage({ type: 'shutdown' });
+      child.postMessage({ type: 'shutdown' });
     } catch {
-      // process may have already exited
+      // The utility process may have exited before receiving the message.
+      child.kill();
+      finish();
     }
-    serverProcess.kill();
-    serverProcess = null;
-  }
+  });
+  stopPromise = stopping.finally(() => {
+    stopPromise = null;
+  });
+  return stopPromise;
 }
 
 export function getServerPort(): number {

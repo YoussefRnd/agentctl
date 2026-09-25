@@ -111,10 +111,22 @@ export function initAppLifecycle(): boolean {
     }
   });
 
-  app.on('will-quit', () => {
+  let shutdownStarted = false;
+  let shutdownComplete = false;
+  app.on('before-quit', (event) => {
+    if (shutdownComplete) return;
+    event.preventDefault();
+    if (shutdownStarted) return;
+    shutdownStarted = true;
     destroyTray();
-    stopServer();
+    void stopServer().finally(() => {
+      shutdownComplete = true;
+      app.quit();
+    });
   });
+
+  process.once('SIGINT', () => app.quit());
+  process.once('SIGTERM', () => app.quit());
 
   return true;
 }
