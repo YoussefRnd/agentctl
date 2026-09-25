@@ -57,6 +57,10 @@ export class ProviderRegistry {
   private connectionManager: AgentConnectionManager;
   private diagnostics: AgentDiagnosticsRecorder;
   private installControllers = new Map<string, AbortController>();
+  private installProgress = new Map<
+    string,
+    { downloadedBytes: number; totalBytes: number | null }
+  >();
 
   constructor(
     private db: DbClient,
@@ -117,6 +121,10 @@ export class ProviderRegistry {
     }
   }
 
+  private withInstallProgress(discovery: ProviderDiscovery): ProviderDiscovery {
+    return { ...discovery, installProgress: this.installProgress.get(discovery.id) ?? null };
+  }
+
   private getAgent(providerId: string, fallback?: ProviderData): RegistryAgent | undefined {
     const snapshot = this.fetcher.getSnapshot();
     if (snapshot) {
@@ -162,75 +170,21 @@ export class ProviderRegistry {
   }
 
   async discover(): Promise<ProviderDiscovery[]> {
-    let rows = this.store.list();
-
-    if (rows.length === 0) {
-      this.logger.info('Registry is empty, performing initial sync...');
-      await this.sync().catch((error: unknown) => {
-        this.logger.warn({ error }, 'Initial provider registry sync failed');
-      });
-      rows = this.store.list();
-      if (rows.length === 0) {
-        this.logger.warn('Provider registry sync completed without any discoverable providers');
-        return [];
-      }
-    }
-
-    // Auto-probe any installed & ready providers that have empty/missing model options
-    const unprobedInstalled = rows.filter((row) => {
-      if (
-        row.installState === 'not_installed' ||
-        row.authState === 'required' ||
-        row.authState === 'error' ||
-        row.authState === 'authenticating' ||
-        row.authState === 'verifying'
-      ) {
-        return false;
-      }
-      if (row.lastVerifiedAt && Date.now() - row.lastVerifiedAt.getTime() < 5 * 60_000) {
-        return false;
-      }
-      const opts = jsonCodecs.agentConfigOptions(row.configOptions);
-      const hasModel = opts.some((o) => o.id === 'model' || o.id === 'selectedModel');
-      return !hasModel;
-    });
-
-    if (unprobedInstalled.length > 0) {
-      for (const row of unprobedInstalled) {
-        const agent = this.getAgent(row.id, row);
-        if (agent) {
-          void this.probeWithStatePreserved(row.id, agent, row.authState, 'discover-probe').catch(
-            (err) => {
-              this.logger.debug(
-                { err, providerId: row.id },
-                'Background discover probe skipped/failed',
-              );
-            },
-          );
-        }
-      }
-    }
-
-    return rows.map((row) => new Provider(row).toDiscovery());
+    return this.store
+      .list()
+      .map((row) => this.withInstallProgress(new Provider(row).toDiscovery()));
   }
 
   async catalog(): Promise<ProviderDiscovery[]> {
-    const cachedAgents = this.fetcher.getCachedAgents();
-    let agents: RegistryAgent[];
-    try {
-      agents = cachedAgents ?? (await this.fetcher.fetch());
-      if (!cachedAgents) this.store.deleteSetting('registrySyncError');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.store.updateSetting('registrySyncError', message);
-      this.logger.warn({ error }, 'Provider catalog refresh failed; using persisted providers');
-      return this.store.list().map((row) => new Provider(row).toDiscovery());
+    // Catalog reads must not fetch, sync, or probe. Startup and explicit Sync All
+    // update the cache and publish the resulting provider state change.
+    const agents = this.fetcher.getCachedAgents();
+    if (!agents) {
+      return this.store
+        .list()
+        .map((row) => this.withInstallProgress(new Provider(row).toDiscovery()));
     }
-    if (cachedAgents) {
-      void this.sync().catch((error: unknown) => {
-        this.logger.debug({ error }, 'Background registry refresh failed');
-      });
-    }
+
     return agents.map((agent) => {
       const row = this.store.get(agent.id);
       let discovery: ProviderDiscovery;
@@ -276,7 +230,7 @@ export class ProviderRegistry {
         };
       }
 
-      return discovery;
+      return this.withInstallProgress(discovery);
     });
   }
 
@@ -318,6 +272,7 @@ export class ProviderRegistry {
             supportsLogout: agent.supportsLogout ?? false,
           }),
     });
+    this.installProgress.delete(providerId);
     this.installControllers.set(providerId, controller);
 
     const platform = getPlatformKey();
@@ -399,6 +354,10 @@ export class ProviderRegistry {
         const result = await this.installer.install(agent, platform, this.logger, {
           signal: controller.signal,
           onStage: setStage,
+          onProgress: (progress) => {
+            this.installProgress.set(providerId, progress);
+            this.notifyStateChange();
+          },
         });
         installState = 'installed_local';
         command = result.command;
@@ -609,6 +568,7 @@ export class ProviderRegistry {
     } finally {
       if (this.installControllers.get(providerId) === controller) {
         this.installControllers.delete(providerId);
+        this.installProgress.delete(providerId);
       }
       this.notifyStateChange();
     }
@@ -1118,6 +1078,7 @@ export class ProviderRegistry {
       controller.abort(new Error('Application shutting down'));
     }
     this.installControllers.clear();
+    this.installProgress.clear();
     this.authCoordinator.dispose();
     this.connectionManager.closeAll();
   }

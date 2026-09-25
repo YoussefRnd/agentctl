@@ -24,7 +24,10 @@ export class ProviderProbingService {
     action: string,
   ): Promise<void> {
     const row = this.store.get(providerId);
-    if (row && row.installState === 'not_installed') {
+    if (
+      !row ||
+      (row.installState !== 'installed_local' && row.installState !== 'system_available')
+    ) {
       return;
     }
     try {
@@ -63,7 +66,9 @@ export class ProviderProbingService {
     refreshProviderFn?: (id: string) => Promise<unknown>,
   ): Promise<void> {
     const allProviders = this.store.list();
-    const candidates = allProviders.filter((row) => row.installState !== 'not_installed');
+    const candidates = allProviders.filter(
+      (row) => row.installState === 'installed_local' || row.installState === 'system_available',
+    );
 
     const snapshot = this.fetcher.getSnapshot();
     const agents = snapshot ? parseRegistryAgents(snapshot.data) : [];

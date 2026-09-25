@@ -157,6 +157,13 @@ export const providerDiscoverySchema = z.object({
   installState: installStateSchema.optional(),
   installError: z.string().nullable().optional(),
   installStage: installStageSchema.nullable().optional(),
+  installProgress: z
+    .object({
+      downloadedBytes: z.number().nonnegative(),
+      totalBytes: z.number().positive().nullable(),
+    })
+    .nullable()
+    .optional(),
   installSource: installSourceSchema.nullable().optional(),
   installedVersion: z.string().nullable().optional(),
   availableVersion: z.string().optional(),

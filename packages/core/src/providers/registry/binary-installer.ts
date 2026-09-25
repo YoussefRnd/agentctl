@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { RegistryAgent, RegistryDistributionBinaryTarget } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../../logger.js';
-import { isAbortError, ProviderLifecycleError } from './provider-lifecycle-error.js';
+import { ProviderLifecycleError } from './provider-lifecycle-error.js';
 
 const execFilePromise = promisify(execFile);
 
@@ -348,7 +348,7 @@ export class BinaryInstaller {
     options: {
       signal?: AbortSignal;
       onStage?: (stage: 'downloading' | 'verifying' | 'extracting' | 'activating') => void;
-      downloadTimeoutMs?: number;
+      onProgress?: (progress: { downloadedBytes: number; totalBytes: number | null }) => void;
       maxDownloadBytes?: number;
     } = {},
   ): Promise<{
@@ -408,21 +408,15 @@ export class BinaryInstaller {
       // A missing or incomplete target is replaced below without touching other versions.
     }
 
-    const downloadTimeoutSignal = AbortSignal.timeout(options.downloadTimeoutMs ?? 60_000);
-    const downloadSignal = options.signal
-      ? AbortSignal.any([options.signal, downloadTimeoutSignal])
-      : downloadTimeoutSignal;
     options.onStage?.('downloading');
     let response: Response;
     try {
-      response = await fetch(archiveUrl, { signal: downloadSignal, redirect: 'follow' });
+      response = await fetch(archiveUrl, { signal: options.signal, redirect: 'follow' });
     } catch (error) {
-      if (isAbortError(error) || downloadSignal.aborted) {
-        throw new ProviderLifecycleError(
-          options.signal?.aborted ? 'INSTALL_CANCELLED' : 'DOWNLOAD_FAILED',
-          options.signal?.aborted ? 'Install cancelled' : 'Provider download timed out',
-          { cause: error },
-        );
+      if (options.signal?.aborted) {
+        throw new ProviderLifecycleError('INSTALL_CANCELLED', 'Install cancelled', {
+          cause: error,
+        });
       }
       throw new ProviderLifecycleError('DOWNLOAD_FAILED', 'Failed to download provider archive', {
         cause: error,
@@ -443,8 +437,11 @@ export class BinaryInstaller {
     }
 
     const maxDownloadBytes = options.maxDownloadBytes ?? 512 * 1024 * 1024;
-    const contentLength = Number(response.headers.get('content-length'));
-    if (Number.isFinite(contentLength) && contentLength > maxDownloadBytes) {
+    const contentLengthHeader = response.headers.get('content-length');
+    const parsedContentLength = contentLengthHeader === null ? NaN : Number(contentLengthHeader);
+    const totalBytes =
+      Number.isFinite(parsedContentLength) && parsedContentLength > 0 ? parsedContentLength : null;
+    if (totalBytes !== null && totalBytes > maxDownloadBytes) {
       throw new ProviderLifecycleError(
         'DOWNLOAD_TOO_LARGE',
         `Provider archive exceeds the ${String(maxDownloadBytes)} byte limit`,
@@ -464,6 +461,8 @@ export class BinaryInstaller {
 
       try {
         let downloadedBytes = 0;
+        let lastProgressAt = 0;
+        options.onProgress?.({ downloadedBytes: 0, totalBytes });
         const limiter = new Transform({
           transform(chunk: Buffer, _encoding, callback) {
             downloadedBytes += chunk.length;
@@ -477,6 +476,11 @@ export class BinaryInstaller {
               );
               return;
             }
+            const now = Date.now();
+            if (now - lastProgressAt >= 500) {
+              lastProgressAt = now;
+              options.onProgress?.({ downloadedBytes, totalBytes });
+            }
             callback(null, chunk);
           },
         });
@@ -485,38 +489,32 @@ export class BinaryInstaller {
             Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
             limiter,
             fs.createWriteStream(tempFile),
-            { signal: downloadSignal },
+            { signal: options.signal },
           );
         } catch (error) {
-          if (isAbortError(error) || downloadSignal.aborted) {
-            throw new ProviderLifecycleError(
-              options.signal?.aborted ? 'INSTALL_CANCELLED' : 'DOWNLOAD_FAILED',
-              options.signal?.aborted ? 'Install cancelled' : 'Provider download timed out',
-              { cause: error },
-            );
+          if (options.signal?.aborted) {
+            throw new ProviderLifecycleError('INSTALL_CANCELLED', 'Install cancelled', {
+              cause: error,
+            });
           }
           throw error;
         }
 
+        options.onProgress?.({ downloadedBytes, totalBytes });
         options.onStage?.('verifying');
         const actualHash = await computeSha256(tempFile, options.signal);
         const configuredExpected = target.sha256?.trim().replace(/^sha256:/i, '');
-        const checksumTimeoutSignal = AbortSignal.timeout(8_000);
-        const checksumSignal = options.signal
-          ? AbortSignal.any([options.signal, checksumTimeoutSignal])
-          : checksumTimeoutSignal;
         let expected = configuredExpected;
         if (!expected) {
           try {
-            expected = (await resolveGitHubSha256(archiveUrl, logger, checksumSignal)) ?? undefined;
+            expected = (await resolveGitHubSha256(archiveUrl, logger, options.signal)) ?? undefined;
           } catch (error) {
             if (options.signal?.aborted) {
               throw new ProviderLifecycleError('INSTALL_CANCELLED', 'Install cancelled', {
                 cause: error,
               });
             }
-            if (!checksumTimeoutSignal.aborted) throw error;
-            logger.warn(`Checksum lookup timed out for ${archiveUrl}; skipping verification`);
+            throw error;
           }
         }
         if (expected && !/^[a-f0-9]{64}$/i.test(expected)) {

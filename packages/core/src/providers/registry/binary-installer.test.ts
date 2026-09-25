@@ -108,6 +108,64 @@ describe('BinaryInstaller installation checks', () => {
     await fs.rm(home, { recursive: true, force: true });
   });
 
+  it('reports download bytes and cancels a stalled transfer', async () => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-binary-progress-'));
+    process.env.AGENTCTL_HOME = home;
+    const controller = new AbortController();
+    const progress: Array<{ downloadedBytes: number; totalBytes: number | null }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          new ReadableStream({
+            start(streamController) {
+              streamController.enqueue(new Uint8Array([1, 2, 3, 4]));
+            },
+          }),
+          { status: 200, headers: { 'content-length': '10' } },
+        ),
+      ),
+    );
+
+    try {
+      await expect(
+        new BinaryInstaller().install(
+          {
+            id: 'progress-agent',
+            name: 'Progress Agent',
+            version: '1.0.0',
+            description: '',
+            authors: [],
+            distribution: {
+              binary: {
+                'linux-x86_64': {
+                  archive: 'https://example.com/progress-agent.tar.gz',
+                  cmd: 'progress-agent',
+                  env: {},
+                },
+              },
+            },
+          },
+          'linux-x86_64',
+          undefined,
+          {
+            signal: controller.signal,
+            onProgress: (update) => {
+              progress.push(update);
+              if (update.downloadedBytes > 0) controller.abort();
+            },
+          },
+        ),
+      ).rejects.toMatchObject({ code: 'INSTALL_CANCELLED' });
+      expect(progress).toEqual([
+        { downloadedBytes: 0, totalBytes: 10 },
+        { downloadedBytes: 4, totalBytes: 10 },
+      ]);
+    } finally {
+      await fs.rm(home, { recursive: true, force: true });
+    }
+  });
+
   it('removes only staging directories belonging to the exact provider id', async () => {
     const home = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-staging-scope-'));
     process.env.AGENTCTL_HOME = home;

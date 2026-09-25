@@ -125,7 +125,6 @@ export function createProvidersRouter(
     },
     syncProviders: async () => {
       await fastify.providerRegistry.sync();
-      fastify.eventBus.publishState({ topics: ['providers'] });
       const providers = await fastify.providerRegistry.discover();
       return {
         status: 200 as const,

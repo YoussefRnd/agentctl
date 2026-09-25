@@ -161,7 +161,7 @@ export async function buildApp(deps: AppDependencies = {}) {
 
   await providerRegistry.recoverInterruptedOperations();
 
-  // Sync provider metadata in the background on startup (lazy probing on session demand)
+  // Sync the catalog and probe installed providers in the background on startup.
   void providerRegistry
     .sync()
     .then(async () => {

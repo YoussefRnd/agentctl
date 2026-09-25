@@ -44,6 +44,104 @@ describe('ProviderRegistry', () => {
     expect(providersList[0].authState).toBe('authenticated');
   });
 
+  test('catalog and provider reads do not fetch, sync, probe, or publish state', async () => {
+    const db = createDatabase(':memory:');
+    const agent: RegistryAgent = {
+      id: 'offline-agent',
+      name: 'Offline Agent',
+      version: '1.0.0',
+      description: '',
+      authors: [],
+      distribution: {},
+    };
+    await db.insert(registrySnapshots).values({
+      data: JSON.stringify({ version: '1', agents: [agent] }),
+      fetchedAt: new Date(),
+    });
+    await db.insert(providers).values({
+      id: agent.id,
+      name: agent.name,
+      command: 'offline-agent',
+      installState: 'installed_local',
+      authState: 'unknown',
+      configOptions: '[]',
+    });
+
+    const registry = new ProviderRegistry(db, noopLogger);
+    const { fetcher, launcher } = registry as unknown as {
+      fetcher: { fetch: () => Promise<RegistryAgent[]> };
+      launcher: ProviderLauncher;
+    };
+    const fetch = vi.spyOn(fetcher, 'fetch');
+    const sync = vi.spyOn(registry, 'sync');
+    const probe = vi.spyOn(launcher, 'probe');
+    const onStateChange = vi.fn();
+    registry.setOnStateChange(onStateChange);
+
+    for (let index = 0; index < 3; index++) {
+      expect((await registry.catalog()).some((provider) => provider.id === agent.id)).toBe(true);
+      expect((await registry.discover()).some((provider) => provider.id === agent.id)).toBe(true);
+    }
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(sync).not.toHaveBeenCalled();
+    expect(probe).not.toHaveBeenCalled();
+    expect(onStateChange).not.toHaveBeenCalled();
+  });
+
+  test('catalog falls back to persisted providers when no snapshot exists', async () => {
+    const db = createDatabase(':memory:');
+    await db.insert(providers).values({
+      id: 'saved-agent',
+      name: 'Saved Agent',
+      command: 'saved-agent',
+      installState: 'installed_local',
+    });
+
+    const registry = new ProviderRegistry(db, noopLogger);
+    const { fetcher } = registry as unknown as {
+      fetcher: { fetch: () => Promise<RegistryAgent[]> };
+    };
+    const fetch = vi.spyOn(fetcher, 'fetch');
+
+    expect((await registry.catalog()).map((provider) => provider.id)).toContain('saved-agent');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test('does not launch a placeholder editor command while an agent is installing', async () => {
+    const db = createDatabase(':memory:');
+    const agent: RegistryAgent = {
+      id: 'cursor',
+      name: 'Cursor',
+      version: '1.0.0',
+      description: '',
+      authors: [],
+      distribution: {},
+    };
+    await db.insert(registrySnapshots).values({
+      data: JSON.stringify({ version: '1', agents: [agent] }),
+      fetchedAt: new Date(),
+    });
+    await db.insert(providers).values({
+      id: 'cursor',
+      name: 'Cursor',
+      command: 'cursor',
+      installState: 'installing',
+      installStage: 'downloading',
+      authState: 'unknown',
+    });
+
+    const registry = new ProviderRegistry(db, noopLogger);
+    const { launcher } = registry as unknown as { launcher: ProviderLauncher };
+    const probe = vi.spyOn(launcher, 'probe');
+
+    await registry.discover();
+    await registry.probeAllInstalledProviders();
+    await registry.refreshProvider('cursor');
+
+    expect(probe).not.toHaveBeenCalled();
+  });
+
   test('ProviderRegistry getProvider returns specific provider from DB', async () => {
     const db = createDatabase(':memory:');
 
@@ -330,23 +428,32 @@ describe('ProviderRegistry', () => {
       installer: BinaryInstaller;
     };
     vi.spyOn(internals.launcher, 'detectSystemBinary').mockResolvedValue(null);
-    vi.spyOn(internals.installer, 'install').mockImplementation(
-      (_agent, _platform, _logger, options) =>
-        new Promise((_, reject) => {
+    const installerSpy = vi
+      .spyOn(internals.installer, 'install')
+      .mockImplementation((_agent, _platform, _logger, options) => {
+        options?.onStage?.('downloading');
+        options?.onProgress?.({ downloadedBytes: 25, totalBytes: 100 });
+        return new Promise((_, reject) => {
           options?.signal?.addEventListener('abort', () => reject(new Error('Install cancelled')), {
             once: true,
           });
-        }),
-    );
+        });
+      });
 
     const install = registry.install(agent.id);
     await vi.waitFor(() => {
-      expect(registry.getProvider(agent.id)?.installState).toBe('installing');
+      expect(installerSpy).toHaveBeenCalledOnce();
     });
+    expect(
+      (await registry.catalog()).find((provider) => provider.id === agent.id)?.installProgress,
+    ).toEqual({ downloadedBytes: 25, totalBytes: 100 });
     registry.cancelInstall(agent.id);
 
     await expect(install).resolves.toMatchObject({ installState: 'not_installed' });
     expect(registry.getProvider(agent.id)?.installError).toBeNull();
+    expect(
+      (await registry.catalog()).find((provider) => provider.id === agent.id)?.installProgress,
+    ).toBeNull();
     platformSpy.mockRestore();
     archSpy.mockRestore();
   });
