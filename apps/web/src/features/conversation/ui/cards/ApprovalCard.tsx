@@ -1,7 +1,43 @@
 import { useEffect, useRef, memo } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ChevronDown, ShieldCheck } from 'lucide-react';
 import type { SessionEventApprovalRequestData } from '@agentctl/shared';
 import { GlassPanel } from '@agentctl/ui';
+
+type ApprovalOption = {
+  optionId: string;
+  label: string;
+  kind?: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+  description?: string;
+};
+
+type ToolCall = { name: string; arguments?: Record<string, unknown> };
+
+function isRejectOption(option: ApprovalOption): boolean {
+  return (
+    option.kind === 'reject_once' ||
+    option.kind === 'reject_always' ||
+    /^(deny|reject|no)(?:\b|[_-])/i.test(option.optionId) ||
+    /^(deny|reject|no)\b/i.test(option.label)
+  );
+}
+
+function isPersistentAllowOption(option: ApprovalOption): boolean {
+  return (
+    !isRejectOption(option) &&
+    (option.kind === 'allow_always' ||
+      /(?:always|session|forever|permanent)/i.test(option.optionId))
+  );
+}
+
+function getToolTarget(toolCall: ToolCall | undefined): string | null {
+  const args = toolCall?.arguments;
+  if (!args) return null;
+  for (const key of ['url', 'uri', 'path', 'filePath', 'command', 'cmd']) {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return null;
+}
 
 export const ApprovalCard = memo(function ApprovalCard({
   eventId,
@@ -16,38 +52,41 @@ export const ApprovalCard = memo(function ApprovalCard({
 }) {
   const approveButtonRef = useRef<HTMLButtonElement>(null);
   const denyButtonRef = useRef<HTMLButtonElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Focus Deny button on mount so hitting Enter/Space accidentally
-    // safely denies the action rather than auto-approving.
+    // Keep the safe response focused when the request appears.
     denyButtonRef.current?.focus();
   }, []);
 
   const request = data.request as
     | {
-        toolCall?: {
-          name: string;
-          arguments?: Record<string, unknown>;
-        };
-        options?: {
-          optionId: string;
-          label: string;
-          description?: string;
-        }[];
+        description?: string;
+        toolCall?: ToolCall;
+        options?: ApprovalOption[];
       }
     | undefined;
-
   const toolCall = request?.toolCall;
-
-  const btnBase =
-    'inline-flex items-center justify-center rounded-xl font-sans font-bold tracking-tight transition-colors focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-30 disabled:pointer-events-none cursor-pointer';
-  const btnSolid = 'bg-accent text-brand-crust hover:opacity-90 active:scale-[0.98]';
-  const btnGhost = 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main';
+  const target = getToolTarget(toolCall);
+  const options = request?.options ?? [];
+  const hasRejectOption = options.some(isRejectOption);
+  const orderedOptions = [
+    ...options.filter(isRejectOption),
+    ...options.filter((option) => !isRejectOption(option) && !isPersistentAllowOption(option)),
+    ...options.filter(isPersistentAllowOption),
+  ];
+  const firstRejectId = orderedOptions.find(isRejectOption)?.optionId;
+  const firstAllowId = orderedOptions.find((option) => !isRejectOption(option))?.optionId;
+  const message = request?.description ?? data.message;
+  const showMessage =
+    !!message &&
+    message !== 'This action requires your explicit approval before continuing.' &&
+    (!target || !message.toLowerCase().includes(target.toLowerCase()));
+  const hasArguments = !!toolCall?.arguments && Object.keys(toolCall.arguments).length > 0;
+  const actionClassName =
+    'border-border/45 bg-surface-secondary/20 text-text-main hover:border-accent/40 hover:bg-accent/5 focus-visible:ring-accent/50 flex h-full min-h-10 w-full min-w-0 cursor-pointer items-center justify-center rounded-lg border px-2.5 py-1.5 text-center text-[13px] leading-snug font-medium [overflow-wrap:anywhere] transition-colors focus-visible:outline-none focus-visible:ring-2';
 
   return (
     <div
-      ref={containerRef}
       role="region"
       aria-labelledby="approval-title"
       aria-live="polite"
@@ -66,88 +105,98 @@ export const ApprovalCard = memo(function ApprovalCard({
           approveButtonRef.current?.focus();
         }
       }}
-      className="animate-in fade-in zoom-in-95"
+      className="animate-in fade-in zoom-in-95 mx-auto w-full max-w-[760px] min-w-0"
     >
       <GlassPanel
         intensity="high"
-        className="border-border/40 flex flex-col items-stretch justify-between gap-4 rounded-2xl border p-5 shadow-2xl sm:flex-row sm:items-start"
+        className="border-border/40 flex w-full min-w-0 flex-col gap-0 overflow-hidden rounded-xl border shadow-lg"
       >
-        <div className="flex min-w-0 flex-1 gap-3">
+        <div className="flex min-w-0 items-start gap-2.5 px-3 py-2.5">
           <ShieldCheck className="text-accent mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
-            <div
-              id="approval-title"
-              className="text-text-main mb-0.5 text-[12px] font-bold tracking-wide uppercase"
-            >
-              Approval required
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                id="approval-title"
+                className="text-text-main shrink-0 text-[13px] font-semibold"
+              >
+                Permission request
+              </span>
+              {toolCall && (
+                <span
+                  className="text-text-muted truncate font-mono text-[11px]"
+                  title={toolCall.name}
+                >
+                  {toolCall.name}
+                </span>
+              )}
             </div>
-            <div className="text-text-muted text-[11px] leading-relaxed opacity-85">
-              {data.message ?? 'This action requires your explicit approval before continuing.'}
-            </div>
-            {toolCall && (
-              <div className="border-border/30 bg-surface-secondary/40 mt-3 rounded-xl border p-3.5 font-mono text-[11px] leading-relaxed">
-                <div className="mb-1.5 flex items-center gap-1.5">
-                  <span className="text-text-muted/40 text-[9px] font-bold tracking-wider uppercase">
-                    Tool:
-                  </span>
-                  <span className="text-accent font-semibold">{toolCall.name}</span>
-                </div>
-                {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                  <div className="text-text-muted/80 border-border/20 bg-background/50 max-h-[150px] overflow-y-auto rounded-lg border p-2.5 whitespace-pre-wrap">
-                    {Object.entries(toolCall.arguments).map(([key, val]) => (
-                      <div key={key} className="flex gap-2">
-                        <span className="text-text-muted/40 shrink-0 font-medium">{key}:</span>
-                        <span className="text-text-main/90 break-all">
-                          {typeof val === 'string'
-                            ? val
-                            : typeof val === 'number' || typeof val === 'boolean'
-                              ? String(val)
-                              : JSON.stringify(val, null, 2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {target ? (
+              <p
+                className="text-text-muted mt-0.5 line-clamp-2 min-w-0 font-mono text-xs leading-relaxed [overflow-wrap:anywhere]"
+                title={target}
+              >
+                {target}
+              </p>
+            ) : (
+              <p className="text-text-muted mt-0.5 text-xs leading-relaxed">
+                {showMessage ? message : 'Agent requests approval to continue'}
+              </p>
+            )}
+            {target && showMessage && (
+              <p className="text-text-muted mt-0.5 text-xs leading-relaxed">{message}</p>
             )}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <button
-            ref={denyButtonRef}
-            type="button"
-            onClick={() => {
-              onDeny(eventId);
-            }}
-            className={`${btnBase} ${btnGhost} text-text-muted hover:text-danger h-8 px-4 text-[10px] font-bold tracking-widest uppercase focus:ring-rose-500/50`}
-          >
-            Deny
-          </button>
-          {request?.options && request.options.length > 0 ? (
-            request.options.map((option, idx) => (
-              <button
-                key={option.optionId}
-                ref={idx === 0 ? approveButtonRef : undefined}
-                type="button"
-                onClick={() => {
-                  onApprove(eventId, option.optionId);
-                }}
-                title={option.description}
-                className={`${btnBase} ${btnSolid} h-8 px-4 text-[10px] font-bold tracking-widest uppercase`}
-              >
-                {option.label}
-              </button>
-            ))
-          ) : (
+
+        {hasArguments && (
+          <details open={!target} className="group min-w-0 px-3 pb-2">
+            <summary className="text-text-muted hover:text-text-main flex w-fit cursor-pointer list-none items-center gap-1 text-[11px] transition-colors [&::-webkit-details-marker]:hidden">
+              <ChevronDown className="h-3 w-3 -rotate-90 transition-transform group-open:rotate-0" />
+              Details
+            </summary>
+            <pre className="border-border/25 bg-background/50 text-text-muted mt-2 max-h-40 min-w-0 overflow-auto rounded-md border p-2.5 font-mono text-[11px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap">
+              {JSON.stringify(toolCall?.arguments, null, 2)}
+            </pre>
+          </details>
+        )}
+
+        <div className="border-border/25 grid auto-rows-fr grid-cols-2 gap-1.5 border-t px-3 py-2.5">
+          {!hasRejectOption && (
+            <button
+              ref={denyButtonRef}
+              type="button"
+              onClick={() => onDeny(eventId)}
+              className={actionClassName}
+            >
+              Deny
+            </button>
+          )}
+          {orderedOptions.map((option) => (
+            <button
+              key={option.optionId}
+              ref={
+                option.optionId === firstRejectId
+                  ? denyButtonRef
+                  : option.optionId === firstAllowId
+                    ? approveButtonRef
+                    : undefined
+              }
+              type="button"
+              onClick={() => onApprove(eventId, option.optionId)}
+              title={option.description ?? option.label}
+              className={actionClassName}
+            >
+              {option.label}
+            </button>
+          ))}
+          {options.length === 0 && (
             <button
               ref={approveButtonRef}
               type="button"
-              onClick={() => {
-                onApprove(eventId);
-              }}
-              className={`${btnBase} ${btnSolid} h-8 px-4 text-[10px] font-bold tracking-widest uppercase`}
+              onClick={() => onApprove(eventId)}
+              className={actionClassName}
             >
-              Approve
+              Approve once
             </button>
           )}
         </div>

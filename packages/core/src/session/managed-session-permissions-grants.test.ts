@@ -115,6 +115,57 @@ describe('Permission grant semantics', () => {
     expect(second.allowed).toBe(true);
   });
 
+  test('agent persistent options with opaque ids retain a grant', async () => {
+    const { session, eventBus } = await makeSession();
+    const toolCall = {
+      name: 'mock-srv__fs_write',
+      toolCallId: 'tc-grant-opaque',
+      arguments: { path: '/tmp/proj/file.txt' },
+    };
+    const pendingEventPromise = eventBus.waitForEvent('approval_request');
+    const pending = session.handleRequestPermission({
+      permissionId: 'p-grant-opaque',
+      toolCall,
+      options: [
+        { optionId: 'choice-1', label: 'Allow once', kind: 'allow_once' },
+        { optionId: 'choice-2', label: 'Allow for this project', kind: 'allow_always' },
+      ],
+    });
+    const pendingEvent = await pendingEventPromise;
+    await Promise.resolve();
+
+    session.resolvePermission(String(pendingEvent.id), { allowed: true, optionId: 'choice-2' });
+    await expect(pending).resolves.toEqual({ allowed: true, optionId: 'choice-2' });
+
+    await expect(
+      session.handleRequestPermission({
+        permissionId: 'p-grant-opaque-again',
+        toolCall,
+        options: [{ optionId: 'choice-1', label: 'Allow once', kind: 'allow_once' }],
+      }),
+    ).resolves.toEqual({ allowed: true });
+  });
+
+  test('agent reject options with opaque ids remain denied', async () => {
+    const { session, eventBus } = await makeSession();
+
+    const pendingEventPromise = eventBus.waitForEvent('approval_request');
+    const pending = session.handleRequestPermission({
+      permissionId: 'p-deny-opaque',
+      toolCall: { name: 'mock-srv__danger', toolCallId: 'tc-deny-opaque' },
+      options: [
+        { optionId: 'choice-1', label: 'Allow once', kind: 'allow_once' },
+        { optionId: 'choice-2', label: 'No, and tell the agent why', kind: 'reject_once' },
+      ],
+    });
+    const pendingEvent = await pendingEventPromise;
+    await Promise.resolve();
+
+    session.resolvePermission(String(pendingEvent.id), { allowed: true, optionId: 'choice-2' });
+
+    await expect(pending).resolves.toEqual({ allowed: false, optionId: 'choice-2' });
+  });
+
   test('deny option ids never map onto a positive agent option', async () => {
     const { session, eventBus } = await makeSession();
 

@@ -499,10 +499,18 @@ export class ManagedSession {
       this.pendingRequests.delete(permissionId);
 
       let finalResponse = response;
-      if (finalResponse.allowed && isDeniedOption(finalResponse.optionId)) {
-        // UI options like reject_once must never map onto a positive
-        // agent option below.
-        finalResponse = { allowed: false };
+      const selectedOption = request?.options?.find(
+        (option) => option.optionId === response.optionId,
+      );
+      const isRejectChoice =
+        isDeniedOption(response.optionId) ||
+        selectedOption?.kind === 'reject_once' ||
+        selectedOption?.kind === 'reject_always' ||
+        /^(deny|reject|no)\b/i.test(selectedOption?.label ?? '');
+      if (finalResponse.allowed && isRejectChoice) {
+        // An explicitly selected rejection must not grant permission, even
+        // when the agent uses an opaque option id.
+        finalResponse = { allowed: false, optionId: selectedOption?.optionId };
       }
       if (finalResponse.allowed && request) {
         const reqOptions = request.options;
@@ -524,17 +532,17 @@ export class ManagedSession {
       }
 
       if (finalResponse.allowed) {
-        // Persistent agent-native options (allow_always / allow-session /
-        // allow forever, ...) map onto pattern grants so the engine can
-        // auto-approve subsequent matching calls.
-        if (isPersistentPermissionOption(finalResponse.optionId) && request) {
+        // Agent-native persistent choices may use opaque ids. Honor their
+        // advertised kind when deciding whether to retain a grant.
+        const isPersistentChoice =
+          isPersistentPermissionOption(finalResponse.optionId) ||
+          selectedOption?.kind === 'allow_always';
+        if (isPersistentChoice && request) {
           this.permissionEngine.grantForDomainRequest(request);
         } else {
           this.permissionEngine.applyOutcome({
             option_id: finalResponse.optionId ?? 'allow_once',
-            option_kind: isPersistentPermissionOption(finalResponse.optionId)
-              ? 'allow_always'
-              : 'allow_once',
+            option_kind: isPersistentChoice ? 'allow_always' : 'allow_once',
             params: (response as { params?: Record<string, unknown> }).params,
           });
         }

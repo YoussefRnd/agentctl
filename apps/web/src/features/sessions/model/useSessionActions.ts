@@ -113,6 +113,9 @@ export function useSessionActions() {
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
         void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      })
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'Failed to respond to approval');
       });
   };
 
@@ -125,6 +128,9 @@ export function useSessionActions() {
       .then(() => {
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
         void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+      })
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'Failed to respond to approval');
       });
   };
 

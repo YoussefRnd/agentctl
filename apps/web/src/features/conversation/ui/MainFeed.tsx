@@ -15,8 +15,8 @@ import { useProviders, SwitchAgentModal } from '@/features/providers';
 import { CommandBar } from '@/features/composer';
 import { EventFeed } from './EventFeed';
 import { NewSessionEmptyState } from './NewSessionEmptyState';
+import { ApprovalComposerSlot } from './ApprovalComposerSlot';
 import { SubagentChatView, extractSubagentGroups, useSubagentStore } from '@/features/subagents';
-import { ApprovalCard } from './cards/ApprovalCard';
 import {
   rewindSession,
   restoreSession,
@@ -29,7 +29,6 @@ import { FileIcon } from '@/shared';
 import { useReviewUIStore } from '@/features/review';
 import { useWorkbenchStore } from '@/features/workbench';
 import { Button, cn, IconButton, LoadingState, Tooltip } from '@agentctl/ui';
-import type { SessionEventRow } from '@agentctl/shared';
 
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
@@ -322,12 +321,11 @@ export function MainFeed() {
     [sessionId, handleSend, queryClient],
   );
 
-  const lastEvent = events[events.length - 1] as SessionEventRow | undefined;
-
-  const approvalEvent =
+  const lastEvent = events[events.length - 1];
+  const approval =
     lastEvent?.type === 'approval_request' &&
     (lastEvent.data as { status?: string }).status === 'pending'
-      ? lastEvent
+      ? { id: lastEvent.id, data: lastEvent.data }
       : undefined;
 
   const activeSubagentId = useSubagentStore((s) => s.activeSubagentId);
@@ -410,7 +408,7 @@ export function MainFeed() {
         </div>
       )}
 
-      {!hasUserMessages && !isLoadingEvents ? (
+      {!hasUserMessages && !isLoadingEvents && !approval ? (
         <main className="relative flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-y-auto select-none">
           <NewSessionEmptyState projectName={sessionData?.session.project?.name ?? 'agentctl'}>
             <CommandBar
@@ -466,20 +464,7 @@ export function MainFeed() {
           />
 
           <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-3 pb-3 sm:px-6 sm:pb-4">
-            {approvalEvent && (
-              <div className="pb-4">
-                <div className="animate-in slide-in-from-bottom-4">
-                  <ApprovalCard
-                    eventId={approvalEvent.id}
-                    data={approvalEvent.data}
-                    onApprove={handleApprove}
-                    onDeny={handleDeny}
-                  />
-                </div>
-              </div>
-            )}
-
-            {rewindUndoState && (
+            {rewindUndoState && !approval && (
               <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 overflow-hidden rounded-xl border shadow-xs backdrop-blur-md duration-200">
                 <div className="flex items-center justify-between px-3.5 py-2 text-[12px]">
                   <button
@@ -639,17 +624,19 @@ export function MainFeed() {
               </div>
             )}
 
-            <CommandBar
-              onSend={(val, attachmentIds) => {
-                setRewindUndoState(null);
-                void handleSend(val, attachmentIds);
-              }}
-              disabled={!isConnected || isSwitching || isLoadingSession}
-              selectedProviderId={sessionData?.session.selectedProvider}
-              selectedModelId={sessionData?.session.selectedModel}
-              onProviderSelect={handleProviderSelect}
-              initialInput={rewindInput || initialPrompt}
-            />
+            <ApprovalComposerSlot approval={approval} onApprove={handleApprove} onDeny={handleDeny}>
+              <CommandBar
+                onSend={(val, attachmentIds) => {
+                  setRewindUndoState(null);
+                  void handleSend(val, attachmentIds);
+                }}
+                disabled={!isConnected || isSwitching || isLoadingSession}
+                selectedProviderId={sessionData?.session.selectedProvider}
+                selectedModelId={sessionData?.session.selectedModel}
+                onProviderSelect={handleProviderSelect}
+                initialInput={rewindInput || initialPrompt}
+              />
+            </ApprovalComposerSlot>
           </div>
         </>
       )}
