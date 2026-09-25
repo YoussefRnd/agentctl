@@ -38,7 +38,15 @@ export function SettingsDialog() {
         <div className="border-border/30 bg-surface/20 flex w-full shrink-0 flex-col justify-between border-b p-3 md:w-56 md:border-r md:border-b-0 md:p-4">
           <div className="space-y-3">
             <div className="px-2 pt-1">
-              <DialogTitle className="text-sm font-bold tracking-tight">Settings</DialogTitle>
+              <div className="flex items-start justify-between gap-2">
+                <DialogTitle className="text-sm font-bold tracking-tight">Settings</DialogTitle>
+                <DialogClose
+                  aria-label="Close settings"
+                  className="text-text-muted hover:text-text-main hover:bg-surface/60 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </DialogClose>
+              </div>
               <DialogDescription className="mt-0.5 text-[11px] opacity-100">
                 Preferences & Integrations
               </DialogDescription>
@@ -85,14 +93,6 @@ export function SettingsDialog() {
 
         {/* Right Content Area */}
         <div className="bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* Top Close Button */}
-          <DialogClose
-            aria-label="Close settings"
-            className="text-text-muted hover:text-text-main hover:bg-surface/60 absolute top-6 right-6 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </DialogClose>
-
           {/* Scrollable Content Body */}
           <div className="flex-1 overflow-y-auto p-6">
             {settingsTab === 'general' && <GeneralSettingsView />}

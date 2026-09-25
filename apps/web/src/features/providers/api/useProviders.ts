@@ -13,7 +13,10 @@ import { useActionDispatcher } from '@/shared/hooks/useActionDispatcher';
 
 type SessionResponse = SessionWithCapabilities;
 
-export function useProviders(sessionId: string | null) {
+export function useProviders(
+  sessionId: string | null,
+  { includeRegistry = false }: { includeRegistry?: boolean } = {},
+) {
   const queryClient = useQueryClient();
   const { execute } = useActionDispatcher();
 
@@ -27,8 +30,9 @@ export function useProviders(sessionId: string | null) {
   const { data: registry = [], isLoading: isLoadingRegistry } = useQuery({
     queryKey: providerKeys.registry,
     queryFn: () => providerService.getRegistry(),
-    // The catalog endpoint may contact the remote registry. Refresh it when
-    // the view is opened or revisited; live lifecycle changes arrive via SSE.
+    enabled: includeRegistry,
+    // Only the provider settings view needs catalog data. The server returns
+    // its cached catalog; Sync All performs an explicit remote refresh.
     staleTime: 30_000,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,

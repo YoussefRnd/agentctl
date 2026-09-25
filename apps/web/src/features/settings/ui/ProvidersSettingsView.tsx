@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 export function ProvidersSettingsView() {
   const { settings } = useSettings();
-  const providersApi = useProviders(null);
+  const providersApi = useProviders(null, { includeRegistry: true });
   const [isExportingDiagnostics, setIsExportingDiagnostics] = useState(false);
 
   const exportDiagnostics = async () => {
@@ -37,7 +37,7 @@ export function ProvidersSettingsView() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <div className="flex items-center justify-between gap-4 pr-10">
+        <div className="flex items-center justify-between gap-4">
           <h2 className="text-text-main text-lg leading-8 font-bold">AI Providers</h2>
           <div className="flex shrink-0 items-center gap-2">
             <Button

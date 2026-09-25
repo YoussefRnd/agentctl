@@ -1,16 +1,26 @@
 import { resolveAgentFeatures, type ProviderDiscovery } from '@agentctl/shared';
 import {
+  AlertTriangle,
+  ChevronDown,
   Download,
-  Trash2,
+  ExternalLink,
   KeyRound,
   Loader2,
-  ExternalLink,
   LogOut,
-  AlertTriangle,
+  MoreHorizontal,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { ProviderIcon } from '@/shared';
-import { Card, Button } from '@agentctl/ui';
+import {
+  Button,
+  Card,
+  DropdownContent,
+  DropdownItem,
+  DropdownRoot,
+  DropdownSeparator,
+  DropdownTrigger,
+} from '@agentctl/ui';
 
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -41,15 +51,17 @@ interface RegistryCardProps {
   isRemoving: boolean;
 }
 
+function formatMiB(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 const authStateConfig: Record<string, { label: string; className: string }> = {
-  authenticated: { label: 'Authenticated', className: 'text-emerald-400 bg-emerald-500/10' },
-  required: { label: 'Auth Required', className: 'text-amber-400 bg-amber-500/10' },
-  needs_auth: { label: 'Auth Required', className: 'text-amber-400 bg-amber-500/10' },
-  authenticating: { label: 'Authenticating', className: 'text-blue-400 bg-blue-500/10' },
-  verifying: { label: 'Verifying', className: 'text-purple-400 bg-purple-500/10' },
-  not_required: { label: 'No Auth Needed', className: 'text-slate-400 bg-slate-500/10' },
-  error: { label: 'Error', className: 'text-red-400 bg-red-500/10' },
-  unknown: { label: 'Status Unknown', className: 'text-slate-400 bg-slate-500/10' },
+  authenticated: { label: 'Authenticated', className: 'bg-emerald-400' },
+  required: { label: 'Auth required', className: 'bg-amber-400' },
+  needs_auth: { label: 'Auth required', className: 'bg-amber-400' },
+  authenticating: { label: 'Authenticating', className: 'bg-blue-400' },
+  verifying: { label: 'Verifying', className: 'bg-purple-400' },
+  error: { label: 'Auth error', className: 'bg-red-400' },
 };
 
 export function RegistryCard({
@@ -64,298 +76,240 @@ export function RegistryCard({
   isRemoving,
 }: RegistryCardProps) {
   const name = provider.agent?.name ?? provider.label;
-  const subtitle = provider.agent?.id ?? provider.id;
+  const providerId = provider.agent?.id ?? provider.id;
   const isInstalled =
     provider.installState === 'installed_local' || provider.installState === 'system_available';
   const isInstalling =
     isInstallingProp || provider.installState === 'installing' || provider.installStage != null;
   const isFailed = provider.installState === 'failed';
-  const repositoryUrl = provider.agent?.repository;
-  const websiteUrl = provider.agent?.website;
   const hasAuth =
     (provider.agent?.authMethods?.length ?? 0) > 0 || (provider.authMethods?.length ?? 0) > 0;
-  const authStatus =
-    hasAuth && provider.authState ? authStateConfig[provider.authState] : undefined;
-
-  return (
-    <Card className="border-border/20 bg-surface-secondary/5 hover:border-border/35 hover:bg-surface-secondary/10 flex flex-col gap-2.5 rounded-xl border p-4 transition-colors duration-200 [&::before]:hidden">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <ProviderIcon provider={provider} size="sm" className="shrink-0" />
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 className="text-text-main text-[13.5px] font-bold tracking-tight">{name}</h3>
-            <span className="text-text-muted font-mono text-[10.5px] opacity-70">
-              {provider.updateAvailable && provider.installedVersion
-                ? `v${provider.installedVersion} → v${provider.availableVersion ?? provider.version}`
-                : `v${provider.installedVersion ?? provider.version ?? '0.0.1'}`}
-            </span>
-            {provider.updateAvailable && (
-              <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-[9.5px] font-bold tracking-wider text-blue-400 uppercase">
-                Update available
-              </span>
-            )}
-            {isFailed && (
-              <span className="rounded-md bg-red-500/10 px-2 py-0.5 text-[9.5px] font-bold tracking-wider text-red-400 uppercase">
-                Install Failed
-              </span>
-            )}
-            {authStatus && isInstalled && (
-              <span
-                className={`rounded-md px-2 py-0.5 text-[9.5px] font-bold tracking-wider uppercase ${authStatus.className}`}
-              >
-                {authStatus.label}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center self-start sm:self-auto">
-          <RegistryCardActions
-            provider={provider}
-            onInstall={onInstall}
-            onCancelInstall={onCancelInstall}
-            onRefresh={onRefresh}
-            onRemove={onRemove}
-            onAuth={onAuth}
-            onLogout={onLogout}
-            isInstalling={isInstalling}
-            isRemoving={isRemoving}
-          />
-        </div>
-      </div>
-
-      <p className="text-text-muted text-[11px] leading-relaxed opacity-85">
-        {provider.description ?? 'No description available for this agent provider.'}
-      </p>
-
-      {isInstalling && provider.installStage && (
-        <p className="text-text-muted text-[10.5px] font-semibold tracking-wide capitalize">
-          {provider.installStage}…
-        </p>
-      )}
-
-      {isInstalled && provider.connectionState === 'error' && (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-[11px] text-amber-200">
-          <div className="flex items-center gap-1.5 font-semibold text-amber-300">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            Provider installed, but connection failed
-          </div>
-          {provider.authError?.message && <p className="mt-1">{provider.authError.message}</p>}
-        </div>
-      )}
-
-      {isFailed && provider.installError && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-[11px] text-red-300">
-          <div className="flex items-center gap-1.5 font-semibold text-red-400">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            Installation Failed
-          </div>
-          <p className="mt-1 font-mono text-[10.5px] break-words whitespace-pre-wrap text-red-300/90">
-            {provider.installError}
-          </p>
-        </div>
-      )}
-
-      {isInstalled && provider.installError && (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-[11px] text-amber-200">
-          <div className="flex items-center gap-1.5 font-semibold text-amber-300">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            Update failed — the previous version is still active
-          </div>
-          <p className="mt-1 font-mono text-[10.5px] break-words whitespace-pre-wrap">
-            {provider.installError}
-          </p>
-        </div>
-      )}
-
-      <div className="text-text-muted mt-1 flex items-center justify-end gap-2 text-[10.5px] opacity-70">
-        {provider.installSource && <span className="capitalize">{provider.installSource}</span>}
-        <span className="font-mono">ID: {subtitle}</span>
-
-        {repositoryUrl && (
-          <a
-            href={repositoryUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-text-main ml-1 p-0.5 transition-colors"
-            title="Repository"
-          >
-            <GithubIcon className="h-3.5 w-3.5" />
-          </a>
-        )}
-
-        {websiteUrl && (
-          <a
-            href={websiteUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-text-main p-0.5 transition-colors"
-            title="Website"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function InstallButton({
-  isInstalling,
-  isFailed,
-  onClick,
-  onCancel,
-}: {
-  isInstalling: boolean;
-  isFailed: boolean;
-  onClick: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <Button
-      variant={isFailed ? 'solid' : 'outline'}
-      size="sm"
-      onClick={isInstalling ? onCancel : onClick}
-      className={`flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase ${
-        isFailed ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' : ''
-      }`}
-    >
-      {isInstalling ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : isFailed ? (
-        <RefreshCw className="h-3.5 w-3.5" />
-      ) : (
-        <Download className="h-3.5 w-3.5" />
-      )}
-      {isInstalling ? 'Cancel' : isFailed ? 'Retry' : 'Install'}
-    </Button>
-  );
-}
-
-function RemoveButton({ isRemoving, onClick }: { isRemoving: boolean; onClick: () => void }) {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={isRemoving}
-      onClick={onClick}
-      className="flex h-8 items-center gap-1 rounded-lg border-red-500/10 px-3 py-1.5 text-[10.5px] font-bold tracking-wide text-red-400 uppercase hover:bg-red-500/5 hover:text-red-300"
-    >
-      {isRemoving ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        <Trash2 className="h-3.5 w-3.5" />
-      )}
-      Remove
-    </Button>
-  );
-}
-
-function RegistryCardActions({
-  provider,
-  onInstall,
-  onCancelInstall,
-  onRefresh,
-  onRemove,
-  onAuth,
-  onLogout,
-  isInstalling,
-  isRemoving,
-}: {
-  provider: ProviderDiscovery;
-  onInstall: (id: string) => void;
-  onCancelInstall: (id: string) => void;
-  onRefresh: (id: string) => void;
-  onRemove: (id: string) => void;
-  onAuth: (provider: ProviderDiscovery) => void;
-  onLogout: (id: string) => void;
-  isInstalling: boolean;
-  isRemoving: boolean;
-}) {
-  const isInstalled =
-    provider.installState === 'installed_local' || provider.installState === 'system_available';
-  const isFailed = provider.installState === 'failed';
-  const hasAuth =
-    (provider.agent?.authMethods && provider.agent.authMethods.length > 0) ||
-    (provider.authMethods && provider.authMethods.length > 0);
   const isAuthed = provider.authState === 'authenticated';
   const canLogout = resolveAgentFeatures(provider).authentication.logout && isAuthed;
+  const authStatus = isInstalled && hasAuth ? authStateConfig[provider.authState] : undefined;
+  const repositoryUrl = provider.agent?.repository;
+  const websiteUrl = provider.agent?.website;
+  const showMenu = isInstalled || !!repositoryUrl || !!websiteUrl;
+  const errorText = provider.installError?.replace(/^[A-Z_]+:\s*/, '');
+  const hasInstallError = !!provider.installError && (isInstalled || isFailed);
+  const hasConnectionError = isInstalled && provider.connectionState === 'error';
+  const currentVersion = provider.installedVersion ?? provider.version;
+  const downloadProgress =
+    provider.installStage === 'downloading' ? provider.installProgress : null;
+  const downloadPercent = downloadProgress?.totalBytes
+    ? Math.min(
+        100,
+        Math.floor((downloadProgress.downloadedBytes / downloadProgress.totalBytes) * 100),
+      )
+    : null;
+  const versionLabel =
+    provider.updateAvailable && provider.installedVersion
+      ? `v${provider.installedVersion} → v${provider.availableVersion ?? provider.version}`
+      : currentVersion
+        ? `v${currentVersion}`
+        : null;
 
+  let primaryAction: React.ReactNode;
   if (isInstalling) {
-    return (
-      <InstallButton
-        isInstalling
-        isFailed={false}
+    primaryAction = (
+      <Button variant="outline" size="sm" onClick={() => onCancelInstall(provider.id)}>
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Cancel
+      </Button>
+    );
+  } else if (!isInstalled) {
+    primaryAction = (
+      <Button
+        variant={isFailed ? 'solid' : 'outline'}
+        size="sm"
         onClick={() => onInstall(provider.id)}
-        onCancel={() => onCancelInstall(provider.id)}
-      />
+      >
+        {isFailed ? <RefreshCw className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+        {isFailed ? 'Retry install' : 'Install'}
+      </Button>
+    );
+  } else if (provider.updateAvailable) {
+    primaryAction = (
+      <Button variant="solid" size="sm" onClick={() => onInstall(provider.id)}>
+        <Download className="h-3.5 w-3.5" />
+        {provider.installError ? 'Retry update' : 'Update'}
+      </Button>
+    );
+  } else if (hasConnectionError) {
+    primaryAction = (
+      <Button variant="outline" size="sm" onClick={() => onRefresh(provider.id)}>
+        <RefreshCw className="h-3.5 w-3.5" />
+        Retry connection
+      </Button>
+    );
+  } else if (hasAuth && !isAuthed) {
+    primaryAction = (
+      <Button variant="solid" size="sm" onClick={() => onAuth(provider)}>
+        <KeyRound className="h-3.5 w-3.5" />
+        Authenticate
+      </Button>
     );
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      {isInstalled && provider.connectionState === 'error' && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onRefresh(provider.id)}
-          className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Retry connection
-        </Button>
-      )}
-      {isInstalled && provider.updateAvailable && (
-        <Button
-          variant="solid"
-          size="sm"
-          onClick={() => onInstall(provider.id)}
-          className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
-        >
-          <Download className="h-3.5 w-3.5" />
-          Update
-        </Button>
-      )}
-      {canLogout && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            onLogout(provider.id);
-          }}
-          className="flex h-8 items-center gap-1 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          Logout
-        </Button>
+    <Card className="border-border/25 bg-surface-secondary/5 hover:border-border/40 flex flex-col gap-2 rounded-xl border p-3.5 transition-colors [&::before]:hidden">
+      <div className="flex min-w-0 items-start gap-3">
+        <ProviderIcon provider={provider} size="sm" className="mt-0.5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <h3 className="text-text-main truncate text-[13px] font-semibold" title={providerId}>
+              {name}
+            </h3>
+            {versionLabel && (
+              <span className="text-text-muted font-mono text-[10.5px]">{versionLabel}</span>
+            )}
+          </div>
+          <p
+            className="text-text-muted mt-0.5 truncate text-[11px]"
+            title={provider.description ?? undefined}
+          >
+            {provider.description ?? 'No description available'}
+          </p>
+          {(authStatus || isInstalling) && !downloadProgress && (
+            <div className="text-text-muted mt-1 flex items-center gap-1.5 text-[10.5px]">
+              {authStatus && (
+                <span className={`h-1.5 w-1.5 rounded-full ${authStatus.className}`} />
+              )}
+              <span>
+                {isInstalling ? `${provider.installStage ?? 'Installing'}…` : authStatus?.label}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {primaryAction}
+          {showMenu && (
+            <DropdownRoot>
+              <DropdownTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`More actions for ${name}`}
+                  className="h-8 w-8 rounded-lg p-0"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownTrigger>
+              <DropdownContent align="end" className="min-w-40">
+                {hasAuth && isInstalled && (
+                  <DropdownItem onSelect={() => onAuth(provider)}>
+                    <KeyRound className="mr-2 h-3.5 w-3.5" />
+                    Configure
+                  </DropdownItem>
+                )}
+                {hasConnectionError && provider.updateAvailable && (
+                  <DropdownItem onSelect={() => onRefresh(provider.id)}>
+                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                    Retry connection
+                  </DropdownItem>
+                )}
+                {canLogout && (
+                  <DropdownItem onSelect={() => onLogout(provider.id)}>
+                    <LogOut className="mr-2 h-3.5 w-3.5" />
+                    Log out
+                  </DropdownItem>
+                )}
+                {repositoryUrl && (
+                  <DropdownItem asChild>
+                    <a href={repositoryUrl} target="_blank" rel="noopener noreferrer">
+                      <GithubIcon className="mr-2 h-3.5 w-3.5" />
+                      Repository
+                    </a>
+                  </DropdownItem>
+                )}
+                {websiteUrl && (
+                  <DropdownItem asChild>
+                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                      Website
+                    </a>
+                  </DropdownItem>
+                )}
+                {isInstalled && (
+                  <>
+                    <DropdownSeparator />
+                    <DropdownItem
+                      disabled={isRemoving}
+                      onSelect={() => onRemove(provider.id)}
+                      className="text-red-400 focus-visible:text-red-300"
+                    >
+                      {isRemoving ? (
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-2 h-3.5 w-3.5" />
+                      )}
+                      Remove
+                    </DropdownItem>
+                  </>
+                )}
+              </DropdownContent>
+            </DropdownRoot>
+          )}
+        </div>
+      </div>
+
+      {downloadProgress && (
+        <div className="space-y-1.5">
+          <div className="text-text-muted flex items-center justify-between gap-2 text-[10.5px]">
+            <span>
+              {downloadPercent === null ? 'Downloading' : `Downloading ${downloadPercent}%`}
+            </span>
+            <span className="font-mono">
+              {formatMiB(downloadProgress.downloadedBytes)}
+              {downloadProgress.totalBytes ? ` / ${formatMiB(downloadProgress.totalBytes)}` : ''}
+            </span>
+          </div>
+          <div
+            role="progressbar"
+            aria-label={`${name} download`}
+            aria-valuemin={0}
+            aria-valuemax={downloadPercent === null ? undefined : 100}
+            aria-valuenow={downloadPercent ?? undefined}
+            className="bg-border/40 h-1.5 overflow-hidden rounded-full"
+          >
+            <div
+              className={`bg-accent h-full rounded-full transition-all duration-300 ${downloadPercent === null ? 'w-1/3 animate-pulse' : ''}`}
+              style={downloadPercent === null ? undefined : { width: `${downloadPercent}%` }}
+            />
+          </div>
+        </div>
       )}
 
-      {hasAuth && isInstalled && (
-        <Button
-          variant={isAuthed ? 'outline' : 'solid'}
-          size="sm"
-          onClick={() => {
-            onAuth(provider);
-          }}
-          className={`flex h-8 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10.5px] font-bold tracking-wide uppercase ${
-            !isAuthed ? 'bg-accent text-brand-crust hover:opacity-90' : ''
-          }`}
-        >
-          <KeyRound className="h-3.5 w-3.5" />
-          {isAuthed ? 'Configure' : 'Authenticate'}
-        </Button>
+      {hasInstallError && (
+        <details className="group rounded-lg border border-amber-500/20 bg-amber-500/8 px-2.5 py-1.5 text-[11px] text-amber-200">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <span className="min-w-0 flex-1 truncate" title={errorText}>
+              {isInstalled ? 'Update failed' : 'Install failed'}
+              {errorText ? `: ${errorText}` : ''}
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
+          </summary>
+          <p className="mt-1.5 pl-5 font-mono text-[10.5px] break-words text-amber-200/80">
+            {provider.installError}
+            {isInstalled && currentVersion ? ` · v${currentVersion} remains active` : ''}
+          </p>
+        </details>
       )}
 
-      {isInstalled ? (
-        <RemoveButton isRemoving={isRemoving} onClick={() => onRemove(provider.id)} />
-      ) : (
-        <InstallButton
-          isInstalling={isInstalling}
-          isFailed={isFailed}
-          onClick={() => onInstall(provider.id)}
-          onCancel={() => onCancelInstall(provider.id)}
-        />
+      {!hasInstallError && hasConnectionError && (
+        <details className="group rounded-lg border border-amber-500/20 bg-amber-500/8 px-2.5 py-1.5 text-[11px] text-amber-200">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <span className="min-w-0 flex-1 truncate">Connection failed</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
+          </summary>
+          <p className="mt-1.5 pl-5 font-mono text-[10.5px] break-words text-amber-200/80">
+            {provider.authError?.message ?? 'The provider did not complete the ACP handshake.'}
+          </p>
+        </details>
       )}
-    </div>
+    </Card>
   );
 }
