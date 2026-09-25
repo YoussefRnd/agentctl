@@ -85,6 +85,62 @@ describe('SessionEngine', () => {
     expect(engine.getIsConnected()).toBe(true);
   });
 
+  it('does not restart a connection while it is opening', async () => {
+    let resolveFetch!: (value: unknown) => void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    engine.connect(5);
+    engine.connect(6);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('lastEventId=5'),
+      expect.any(Object),
+    );
+
+    resolveFetch({ ok: true, status: 200, body: mockController.stream });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(engine.getIsConnected()).toBe(true);
+  });
+
+  it('flushes received events when disconnected before the next animation frame', async () => {
+    engine.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const event = {
+      id: 7,
+      type: 'status',
+      sessionId: '00000000-0000-0000-0000-000000000000',
+      createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      data: {},
+    } as SessionEventRow;
+    mockController.enqueue(`id: 7\nevent: acp_event\ndata: ${JSON.stringify(event)}\n\n`);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onEventsUpdate).not.toHaveBeenCalled();
+
+    engine.disconnect();
+    expect(onEventsUpdate).toHaveBeenCalledWith([event]);
+  });
+
+  it('keeps an immediate replacement connection alive after disconnect', async () => {
+    engine.connect();
+    await vi.advanceTimersByTimeAsync(0);
+    engine.disconnect();
+
+    const replacement = new MockStreamController();
+    fetchMock.mockResolvedValue({ ok: true, status: 200, body: replacement.stream });
+    engine.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(engine.getIsConnected()).toBe(true);
+    replacement.close();
+  });
+
   it('should handle disconnect', async () => {
     engine.connect();
     await vi.advanceTimersByTimeAsync(0);

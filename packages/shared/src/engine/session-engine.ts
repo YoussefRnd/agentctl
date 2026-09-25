@@ -56,6 +56,8 @@ export class SessionEngine {
   private lastEventId: number | null = null;
   private abortController: AbortController | null = null;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private resolveReconnectWait: (() => void) | null = null;
+  private runId = 0;
 
   private buffer: SessionEventRow[] = [];
   private flushTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -69,23 +71,21 @@ export class SessionEngine {
   constructor(private options: SessionEngineOptions) {}
 
   public connect(lastEventId?: number) {
+    if (this.active) return;
+
     if (lastEventId !== undefined) {
       this.lastEventId = lastEventId;
     }
 
-    if (this.active) {
-      this.disconnect();
-    }
-
     this.active = true;
     this.isConnected = false;
-    this.clearReconnectTimeout();
-    void this.startStreaming();
+    const runId = ++this.runId;
+    void this.startStreaming(runId);
   }
 
   public disconnect() {
     this.active = false;
-    this.isConnected = false;
+    ++this.runId;
     this.clearReconnectTimeout();
 
     if (this.abortController) {
@@ -94,18 +94,17 @@ export class SessionEngine {
     }
 
     this.handleDisconnect();
+    this.currentEventId = null;
+    this.currentEventName = null;
+    this.currentEventData = '';
   }
 
   public getIsConnected() {
     return this.isConnected;
   }
 
-  private readActive(): boolean {
-    return this.active;
-  }
-
-  private readAbortController(): AbortController | null {
-    return this.abortController;
+  private readActive(runId: number): boolean {
+    return this.active && this.runId === runId;
   }
 
   private clearReconnectTimeout() {
@@ -113,9 +112,24 @@ export class SessionEngine {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
+    this.resolveReconnectWait?.();
+    this.resolveReconnectWait = null;
+  }
+
+  private flushBufferedEvents() {
+    if (this.flushTimeout) {
+      clearTimeout(this.flushTimeout);
+      this.flushTimeout = null;
+    }
+    if (this.buffer.length > 0) {
+      const eventsToFlush = coalesceBufferedEvents(this.buffer);
+      this.buffer = [];
+      this.options.onEventsUpdate(eventsToFlush);
+    }
   }
 
   private handleDisconnect() {
+    this.flushBufferedEvents();
     this.isConnected = false;
     this.options.onStatusChange(false);
     this.options.onStreamingChange(null);
@@ -124,15 +138,12 @@ export class SessionEngine {
       clearTimeout(this.streamingTimeout);
       this.streamingTimeout = null;
     }
-    if (this.flushTimeout) {
-      clearTimeout(this.flushTimeout);
-      this.flushTimeout = null;
-    }
   }
 
-  private async startStreaming() {
-    while (this.readActive()) {
-      this.abortController = new AbortController();
+  private async startStreaming(runId: number) {
+    while (this.readActive(runId)) {
+      const controller = new AbortController();
+      this.abortController = controller;
 
       try {
         let url = this.options.sseUrl;
@@ -155,10 +166,11 @@ export class SessionEngine {
 
         const response = await fetch(url, {
           headers,
-          signal: this.abortController.signal,
+          signal: controller.signal,
           credentials: 'include',
         });
 
+        if (!this.readActive(runId)) break;
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${String(response.status)}`);
         }
@@ -174,9 +186,9 @@ export class SessionEngine {
         const decoder = new TextDecoder();
         let leftover = '';
 
-        while (this.readActive()) {
+        while (this.readActive(runId)) {
           const { value, done } = await reader.read();
-          if (done) {
+          if (done || !this.readActive(runId)) {
             break;
           }
 
@@ -190,34 +202,37 @@ export class SessionEngine {
           }
         }
 
-        if (leftover) {
+        if (leftover && this.readActive(runId)) {
           this.processLine(leftover);
         }
       } catch (error: unknown) {
         const err = error as { name?: string; message?: string };
-        if (err.name === 'AbortError' || !this.readActive()) {
-          // Normal abort/disconnect, stop reconnect loop
+        if (err.name === 'AbortError' || !this.readActive(runId)) {
           break;
         }
 
         this.options.onError?.(err.message ?? 'SSE connection error');
       } finally {
-        if (this.isConnected) {
-          this.isConnected = false;
-          this.options.onStatusChange(false);
-          this.options.onStreamingChange(null);
+        if (this.runId === runId) {
+          this.flushBufferedEvents();
+          if (this.isConnected) {
+            this.isConnected = false;
+            this.options.onStatusChange(false);
+            this.options.onStreamingChange(null);
+          }
         }
-        const controller = this.readAbortController();
-        if (controller) {
-          controller.abort();
+        controller.abort();
+        if (this.abortController === controller) {
           this.abortController = null;
         }
       }
 
-      if (this.readActive()) {
+      if (this.readActive(runId)) {
         await new Promise<void>((resolve) => {
+          this.resolveReconnectWait = resolve;
           this.reconnectTimeout = setTimeout(() => {
             this.reconnectTimeout = null;
+            this.resolveReconnectWait = null;
             resolve();
           }, 2000);
         });
@@ -324,14 +339,6 @@ export class SessionEngine {
 
   private scheduleFlush() {
     if (this.flushTimeout) return;
-
-    this.flushTimeout = setTimeout(() => {
-      this.flushTimeout = null;
-      if (this.buffer.length > 0) {
-        const eventsToFlush = coalesceBufferedEvents(this.buffer);
-        this.buffer = [];
-        this.options.onEventsUpdate(eventsToFlush);
-      }
-    }, 16);
+    this.flushTimeout = setTimeout(() => this.flushBufferedEvents(), 16);
   }
 }

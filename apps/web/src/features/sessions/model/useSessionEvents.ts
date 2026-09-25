@@ -15,6 +15,7 @@ export function useSessionEvents(sessionId: string | null) {
   const [isConnected, setIsConnected] = useState(false);
   const [streamingEventId, setStreamingEventId] = useState<number | null>(null);
   const engineRef = useRef<SessionEngine | null>(null);
+  const startedEngineRef = useRef<SessionEngine | null>(null);
 
   // 1. Fetch historical data
   const {
@@ -138,15 +139,22 @@ export function useSessionEvents(sessionId: string | null) {
 
     return () => {
       engine.disconnect();
-      engineRef.current = null;
+      if (startedEngineRef.current === engine) startedEngineRef.current = null;
+      if (engineRef.current === engine) engineRef.current = null;
     };
   }, [sessionId, queryClient]);
 
   // 3. Connect to SessionEngine once history is loaded
   useEffect(() => {
-    if (!isLoading && sessionId && engineRef.current && !engineRef.current.getIsConnected()) {
+    if (
+      !isLoading &&
+      sessionId &&
+      engineRef.current &&
+      startedEngineRef.current !== engineRef.current
+    ) {
       const engine = engineRef.current;
-      const lastEventId = history.length > 0 ? history[history.length - 1].id : 0;
+      const lastEventId = history.reduce((max, event) => Math.max(max, event.id), 0);
+      startedEngineRef.current = engine;
       engine.connect(lastEventId);
     }
   }, [isLoading, sessionId, history]);
