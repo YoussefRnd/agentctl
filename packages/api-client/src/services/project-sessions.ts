@@ -7,6 +7,7 @@ import {
   type CreatePullRequestBody,
   type CreatePullRequestResult,
   createTaskSlug,
+  type ThinkingEffort,
 } from '@agentctl/shared';
 import { api } from '../api.js';
 import { ApiError } from '../api-error.js';
@@ -53,18 +54,35 @@ export async function openProjectSession(
   if (res.status !== 200) {
     throw new ApiError(`Failed to open project: ${String(res.status)}`, res.status);
   }
-  return res.body;
+  if (!res.body.session) throw new ApiError('Failed to open project session', 500);
+  return { ...res.body, session: res.body.session };
+}
+
+export async function openProjectFolder(path: string): Promise<OpenProjectResponse['project']> {
+  const res = await api.openProject({ body: { path, startSession: false } });
+  if (res.status !== 200) throw new ApiError('Failed to open folder', res.status);
+  return res.body.project;
+}
+
+export interface InitialSessionSettings {
+  taskSlug?: string;
+  selectedModel?: string;
+  selectedThinkingEffort?: ThinkingEffort;
+  approvalMode?: 'review' | 'auto_approve' | 'yolo';
+  agentPersona?: string;
 }
 
 export async function createProjectSession(
   projectId: string,
   mode?: SessionMode,
   agent?: string,
+  settings: InitialSessionSettings = {},
 ): Promise<SessionRow> {
   const res = await api.createSession({
     body: {
       projectId,
-      taskSlug: createTaskSlug('new-session'),
+      ...settings,
+      taskSlug: createTaskSlug(settings.taskSlug || 'new-session'),
       ...(mode ? { mode } : {}),
       ...(agent ? { agent } : {}),
     },

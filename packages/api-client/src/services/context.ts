@@ -32,6 +32,7 @@ export async function searchContext(
   sessionId: string,
   query = '',
   type: 'all' | ContextItemType = 'all',
+  scope: 'sessions' | 'projects' = 'sessions',
 ): Promise<ContextItem[]> {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
@@ -39,7 +40,7 @@ export async function searchContext(
 
   const qs = params.toString() ? `?${params.toString()}` : '';
   const response = await apiClient.fetch<{ items: ContextItem[] }>(
-    `/api/sessions/${sessionId}/context/search${qs}`,
+    `/api/${scope}/${sessionId}/context/search${qs}`,
   );
   return response.items;
 }
@@ -47,9 +48,10 @@ export async function searchContext(
 export async function resolveContext(
   sessionId: string,
   items: ContextItemReference[],
+  scope: 'sessions' | 'projects' = 'sessions',
 ): Promise<ResolvedContextResult> {
   const response = await apiClient.fetch<ResolvedContextResult>(
-    `/api/sessions/${sessionId}/context/resolve`,
+    `/api/${scope}/${sessionId}/context/resolve`,
     {
       method: 'POST',
       body: JSON.stringify({ items }),

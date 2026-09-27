@@ -12,19 +12,12 @@ import {
   type RewindMode,
 } from '@/features/sessions';
 import { useProviders, SwitchAgentModal } from '@/features/providers';
-import { CommandBar } from '@/features/composer';
+import { CommandBar, useDraftStore } from '@/features/composer';
 import { EventFeed } from './EventFeed';
 import { NewSessionEmptyState } from './NewSessionEmptyState';
 import { ApprovalComposerSlot } from './ApprovalComposerSlot';
 import { SubagentChatView, extractSubagentGroups, useSubagentStore } from '@/features/subagents';
-import {
-  rewindSession,
-  restoreSession,
-  undoRewind,
-  handoffSession,
-  createProjectSession,
-  updateSessionProvider,
-} from '@agentctl/api-client';
+import { rewindSession, restoreSession, undoRewind, handoffSession } from '@agentctl/api-client';
 import { FileIcon } from '@/shared';
 import { useReviewUIStore } from '@/features/review';
 import { useWorkbenchStore } from '@/features/workbench';
@@ -136,28 +129,20 @@ export function MainFeed() {
     }
   };
 
-  const handleConfirmNewSession = async () => {
+  const handleConfirmNewSession = () => {
     const projectId = sessionData?.session.projectId;
     if (!projectId || !switchAgentTarget) return;
     const target = switchAgentTarget;
-    setIsHandoffLoading(true);
     setSwitchAgentTarget(null);
-    try {
-      const newSession = await createProjectSession(projectId, sessionData.session.mode);
-      if (target.targetProvider) {
-        await updateSessionProvider(newSession.id, target.targetProvider, target.targetModel);
-      }
-      toast.success(`Started new session with ${target.targetProvider}`);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['session', newSession.id] }),
-        queryClient.invalidateQueries({ queryKey: ['projects'] }),
-      ]);
-      void navigate(`/sessions/${newSession.id}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create new session');
-    } finally {
-      setIsHandoffLoading(false);
-    }
+    useDraftStore.getState().updateHomeDraft(projectId, {
+      mode: sessionData.session.mode,
+      providerId: target.targetProvider,
+      selectedModel: target.targetModel,
+      selectedThinkingEffort: undefined,
+      thinkingConfig: undefined,
+      agentPersona: undefined,
+    });
+    void navigate(`/?project=${encodeURIComponent(projectId)}`);
   };
 
   const [confirmRewind, setConfirmRewind] = useState<{

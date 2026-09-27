@@ -92,6 +92,7 @@ export const projectsContract = {
       agent: z.string().optional(),
       taskSlug: z.string().optional(),
       mode: sessionModeSchema.optional(),
+      startSession: z.boolean().optional(),
     }),
     responses: {
       200: z.object({
@@ -100,7 +101,7 @@ export const projectsContract = {
           name: z.string(),
           path: z.string(),
         }),
-        session: sessionRowSchema,
+        session: sessionRowSchema.nullable(),
         created: z.boolean(),
       }),
     },

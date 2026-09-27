@@ -22,6 +22,9 @@ export interface EstablishOptions {
   contextLimit?: number;
   sessionConfigOptions?: string;
   title?: string;
+  approvalMode?: 'review' | 'auto_approve' | 'yolo';
+  agentPersona?: string;
+  availableAgentPersonas?: string[];
   dbTx?: unknown;
 }
 
@@ -226,6 +229,9 @@ export class SessionWorkspace {
       contextLimit: options.contextLimit ?? 0,
       sessionConfigOptions: options.sessionConfigOptions ?? '[]',
       title: options.title ?? NEW_SESSION_TITLE,
+      approvalMode: options.approvalMode ?? 'review',
+      agentPersona: options.agentPersona,
+      availableAgentPersonas: JSON.stringify(options.availableAgentPersonas ?? []),
     });
 
     if (this.onEvent) {

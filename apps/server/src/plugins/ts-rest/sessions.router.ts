@@ -38,6 +38,10 @@ export function createSessionsRouter(
         providerId: body.agent,
         taskSlug: createTaskSlug(body.taskSlug),
         mode: body.mode,
+        selectedModel: body.selectedModel,
+        selectedThinkingEffort: body.selectedThinkingEffort,
+        approvalMode: body.approvalMode,
+        agentPersona: body.agentPersona,
       });
       publishSessionChange(fastify, session.id);
       return {
@@ -146,15 +150,15 @@ export function createSessionsRouter(
       if (body.approvalMode !== undefined) {
         await fastify.sessionService.updateApprovalMode(id, body.approvalMode);
       }
-      if (body.persona !== undefined) {
-        await fastify.sessionManager.setAgentPersona(id, body.persona);
-      }
       if (body.providerId !== undefined) {
         await fastify.sessionService.updateSessionProvider(id, {
           selectedProvider: body.providerId,
           selectedModel: body.modelId ?? '',
           selectedThinkingEffort: body.thinkingEffort ?? 'medium',
         });
+      }
+      if (body.persona !== undefined) {
+        await fastify.sessionManager.setAgentPersona(id, body.persona);
       }
       if (body.configId !== undefined && body.configValue !== undefined) {
         await fastify.sessionManager.setConfigOption(id, body.configId, body.configValue);

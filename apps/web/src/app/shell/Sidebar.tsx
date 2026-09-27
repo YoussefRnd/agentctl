@@ -5,8 +5,7 @@ import { Plus, MessageSquare, Folder, FolderUp } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import {
   apiClient,
-  createProjectSession,
-  openProjectSession,
+  openProjectFolder,
   deleteProject,
   archiveSession,
   deleteSession,
@@ -159,15 +158,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   }, []);
 
   const handleCreateSession = (projectId: string) => {
-    void execute(`create-session-${projectId}`, () => createProjectSession(projectId), {
-      successMessage: 'Session created',
-      errorMessage: 'Failed to create session',
-    }).then((session) => {
-      if (session) {
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        void navigate(`/sessions/${session.id}`);
-      }
-    });
+    void navigate(`/?project=${encodeURIComponent(projectId)}`);
   };
 
   const handleDeleteProject = (projectId: string, projectName: string) => {
@@ -386,12 +377,10 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
     }
 
     try {
-      const res = await openProjectSession(pathToOpen);
-      if (res?.session?.id) {
-        await queryClient.invalidateQueries({ queryKey: ['projects'] });
-        void navigate(`/sessions/${res.session.id}`);
-        toast.success('Workspace opened');
-      }
+      const project = await openProjectFolder(pathToOpen);
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+      void navigate(`/?project=${encodeURIComponent(project.id)}`);
+      toast.success('Workspace opened');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to open workspace';
       toast.error(msg);

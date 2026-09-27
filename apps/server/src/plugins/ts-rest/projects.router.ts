@@ -113,7 +113,13 @@ export function createProjectsRouter(
     openProject: async ({
       body,
     }: {
-      body: { path: string; agent?: string; taskSlug?: string; mode?: SessionMode };
+      body: {
+        path: string;
+        agent?: string;
+        taskSlug?: string;
+        mode?: SessionMode;
+        startSession?: boolean;
+      };
     }) => {
       const trimmedPath = body.path?.trim();
       if (!trimmedPath) {
@@ -237,6 +243,18 @@ export function createProjectsRouter(
           .returning();
         project = createdProject;
         projectChanged = true;
+      }
+
+      if (body.startSession === false) {
+        if (projectChanged) fastify.eventBus.publishState({ topics: ['projects'] });
+        return {
+          status: 200 as const,
+          body: {
+            project: { id: project.id, name: project.name, path: project.path },
+            session: null,
+            created: projectChanged,
+          },
+        };
       }
 
       const existingSessions = await fastify.db

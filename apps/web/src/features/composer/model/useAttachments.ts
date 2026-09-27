@@ -25,6 +25,7 @@ export interface UseAttachmentsReturn {
   clearAll: () => void;
   readyAttachmentIds: string[];
   isAnyUploading: boolean;
+  pendingFiles: File[];
 }
 
 // ---------------------------------------------------------------------------
@@ -39,8 +40,9 @@ const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useAttachments(sessionId: string): UseAttachmentsReturn {
+export function useAttachments(sessionId: string, initialFiles: File[] = []): UseAttachmentsReturn {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const initialFilesRef = useRef(initialFiles);
 
   // -------------------------------------------------------------------------
   // Helpers
@@ -101,8 +103,8 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
           objectUrl,
           mimeType: file.type,
           sizeBytes: file.size,
-          state: 'uploading',
-          progress: 0,
+          state: sessionId ? 'uploading' : 'ready',
+          progress: sessionId ? 0 : 100,
         };
 
         newAttachments.push(attachment);
@@ -114,10 +116,10 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
 
       // Kick off uploads after state is committed.
       for (const attachment of newAttachments) {
-        uploadFile(attachment.localId, attachment.file);
+        if (sessionId) uploadFile(attachment.localId, attachment.file);
       }
     },
-    [uploadFile],
+    [uploadFile, sessionId],
   );
 
   // -------------------------------------------------------------------------
@@ -127,11 +129,11 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
   const retryAttachment = useCallback(
     (localId: string) => {
       const target = attachments.find((a) => a.localId === localId);
-      if (target) {
+      if (target && sessionId) {
         uploadFile(target.localId, target.file);
       }
     },
-    [attachments, uploadFile],
+    [attachments, uploadFile, sessionId],
   );
 
   // -------------------------------------------------------------------------
@@ -168,10 +170,19 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
   }, [attachments]);
 
   useEffect(() => {
+    const restored: PendingAttachment[] = initialFilesRef.current.map((file) => ({
+      localId: crypto.randomUUID(),
+      file,
+      objectUrl: URL.createObjectURL(file),
+      mimeType: file.type,
+      sizeBytes: file.size,
+      state: 'ready',
+      progress: 100,
+    }));
+    attachmentsRef.current = restored;
+    setAttachments(restored);
     return () => {
-      for (const attachment of attachmentsRef.current) {
-        URL.revokeObjectURL(attachment.objectUrl);
-      }
+      for (const attachment of attachmentsRef.current) URL.revokeObjectURL(attachment.objectUrl);
     };
   }, [sessionId]);
 
@@ -195,5 +206,6 @@ export function useAttachments(sessionId: string): UseAttachmentsReturn {
     clearAll,
     readyAttachmentIds,
     isAnyUploading,
+    pendingFiles: sessionId ? [] : attachments.map((attachment) => attachment.file),
   };
 }

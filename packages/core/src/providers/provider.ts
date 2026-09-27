@@ -271,6 +271,7 @@ export class Provider {
       enabled: this.data.enabled,
       hidden: this.data.hidden,
       agent: this.buildAgent(),
+      modes: this.parseStringArray(this.data.modes),
     };
   }
 

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -13,9 +12,8 @@ import {
   Select,
   type SelectOption,
 } from '@agentctl/ui';
-import { Loader2 } from 'lucide-react';
 import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
-import { createProjectSession } from '@agentctl/api-client';
+import { useDraftStore } from '@/features/composer';
 import { useProviders } from '@/features/providers';
 import { useSettings } from '@/features/settings';
 
@@ -37,7 +35,6 @@ export function QuickLaunchSessionDialog({
   initialProviderId,
 }: QuickLaunchSessionDialogProps) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { providers } = useProviders(null);
   const { settings } = useSettings();
 
@@ -54,13 +51,10 @@ export function QuickLaunchSessionDialog({
   const [selectedThinkingEffort, setSelectedThinkingEffort] = useState<ThinkingEffort>('medium');
   const [selectedMode, setSelectedMode] = useState<SessionMode>(effectiveDefaultMode);
   const [taskSlug, setTaskSlug] = useState<string>('');
-  const [isLaunching, setIsLaunching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Initialize selection when dialog opens
   useEffect(() => {
     if (open) {
-      setError(null);
       setTaskSlug('');
       setSelectedMode(effectiveDefaultMode);
 
@@ -132,36 +126,26 @@ export function QuickLaunchSessionDialog({
     }));
   }, [installedProviders, providers]);
 
-  const handleLaunch = async (e?: React.SyntheticEvent) => {
-    if (e) e.preventDefault();
-    setIsLaunching(true);
-    setError(null);
-
-    try {
-      const session = await createProjectSession(
-        projectId,
-        selectedMode,
-        selectedProviderId || undefined,
-      );
-
-      if (session?.id) {
-        await queryClient.invalidateQueries({ queryKey: ['projects'] });
-        onClose();
-        void navigate(`/sessions/${session.id}`);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to launch session';
-      setError(msg);
-    } finally {
-      setIsLaunching(false);
-    }
+  const handleLaunch = (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    useDraftStore.getState().updateHomeDraft(projectId, {
+      providerId: selectedProviderId || undefined,
+      selectedModel,
+      selectedThinkingEffort,
+      thinkingConfig: undefined,
+      mode: selectedMode,
+      taskSlug: taskSlug.trim() || undefined,
+      agentPersona: undefined,
+    });
+    onClose();
+    void navigate(`/?project=${encodeURIComponent(projectId)}`);
   };
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && !isLaunching) onClose();
+        if (!nextOpen) onClose();
       }}
     >
       <DialogContent showCloseButton className="max-w-md p-6">
@@ -174,12 +158,6 @@ export function QuickLaunchSessionDialog({
         </DialogHeader>
 
         <form onSubmit={handleLaunch} className="mt-4 space-y-4">
-          {error && (
-            <div className="bg-danger/10 border-danger/20 text-danger rounded-lg border p-2.5 text-xs">
-              {error}
-            </div>
-          )}
-
           {/* Provider Selection */}
           <div className="space-y-1.5">
             <label className="text-text-muted text-[11px] font-bold tracking-wider uppercase">
@@ -267,30 +245,11 @@ export function QuickLaunchSessionDialog({
           </div>
 
           <DialogFooter className="mt-6 flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onClose}
-              disabled={isLaunching}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="solid"
-              size="sm"
-              disabled={isLaunching}
-              className="font-semibold"
-            >
-              {isLaunching ? (
-                <span className="flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Launching...
-                </span>
-              ) : (
-                'Launch Session'
-              )}
+            <Button type="submit" variant="solid" size="sm" className="font-semibold">
+              Continue
             </Button>
           </DialogFooter>
         </form>

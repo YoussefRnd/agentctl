@@ -1,7 +1,24 @@
 import { create } from 'zustand';
+import type { InitialSessionSettings } from '@agentctl/api-client';
+import type { SessionMode, SessionRow } from '@agentctl/shared';
 import type { ContextItem } from '@agentctl/api-client';
 
+export interface HomeDraft extends InitialSessionSettings {
+  providerId?: string;
+  thinkingConfig?: { id: string; value: string };
+  mode?: SessionMode;
+  files: File[];
+  contexts: ContextItem[];
+  session?: SessionRow;
+  uploadedFiles?: Array<{ file: File; attachmentId: string }>;
+}
+
+export const EMPTY_HOME_DRAFT: HomeDraft = { files: [], contexts: [] };
+
 export interface DraftState {
+  homeDrafts: Record<string, HomeDraft>;
+  updateHomeDraft: (projectId: string, patch: Partial<HomeDraft>) => void;
+  clearHomeDraft: (projectId: string) => void;
   sessionDrafts: Record<string, string>;
   pendingComposerInsert: string | null;
   pendingContextItem: ContextItem | null;
@@ -15,6 +32,22 @@ export interface DraftState {
 }
 
 export const useDraftStore = create<DraftState>((set) => ({
+  homeDrafts: {},
+  updateHomeDraft: (projectId, patch) =>
+    set((state) => ({
+      homeDrafts: {
+        ...state.homeDrafts,
+        [projectId]: { ...(state.homeDrafts[projectId] ?? EMPTY_HOME_DRAFT), ...patch },
+      },
+    })),
+  clearHomeDraft: (projectId) =>
+    set((state) => {
+      const homeDrafts = { ...state.homeDrafts };
+      const sessionDrafts = { ...state.sessionDrafts };
+      delete homeDrafts[projectId];
+      delete sessionDrafts[`home:${projectId}`];
+      return { homeDrafts, sessionDrafts };
+    }),
   sessionDrafts: {},
   pendingComposerInsert: null,
   pendingContextItem: null,

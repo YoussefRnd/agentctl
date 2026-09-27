@@ -1502,6 +1502,72 @@ describe('SessionManager tests', () => {
         updatedAt: new Date(),
       });
 
+    it('saves first-message settings before any agent process starts', async () => {
+      const db = createDatabase(':memory:');
+      await db
+        .insert(projects)
+        .values({ id: 'proj-draft', name: 'Draft', path: '/tmp/proj-draft' });
+      const provider = createTestProvider('draft-provider');
+      const discovery = provider.toDiscovery.bind(provider);
+      provider.toDiscovery = () => ({ ...discovery(), modes: ['build', 'plan'] });
+      const registry = {
+        ensureProviderReady: () => Promise.resolve(provider),
+        getSettings: () => Promise.resolve({}),
+      } as unknown as ProviderRegistry;
+      const runtime = { ...fakeRuntime, startSession: vi.fn(fakeRuntime.startSession) };
+      const manager = new SessionManager(
+        db,
+        mockWorkspaceManager,
+        registry,
+        eventBus,
+        noopLogger,
+        runtime,
+      );
+      const { sessionId } = await manager.createSession({
+        projectId: 'proj-draft',
+        taskSlug: 'draft',
+        mode: 'local',
+        providerId: 'draft-provider',
+        selectedModel: 'custom-model',
+        selectedThinkingEffort: 'high',
+        approvalMode: 'auto_approve',
+        agentPersona: 'plan',
+      });
+      const saved = await db.query.sessions.findFirst({
+        where: (row, { eq }) => eq(row.id, sessionId),
+      });
+      expect(saved).toMatchObject({
+        selectedProvider: 'draft-provider',
+        selectedModel: 'custom-model',
+        selectedThinkingEffort: 'high',
+        approvalMode: 'auto_approve',
+        agentPersona: 'plan',
+      });
+      expect(JSON.parse(saved!.availableAgentPersonas)).toEqual(['build', 'plan']);
+      expect(runtime.startSession).not.toHaveBeenCalled();
+      const restart = vi.spyOn(manager, 'restartSession').mockResolvedValue({} as ManagedSession);
+      await manager.updateSessionConfig(sessionId, {
+        selectedProvider: 'different-provider',
+        selectedModel: 'custom-model',
+        selectedThinkingEffort: 'high',
+      });
+      const switched = await db.query.sessions.findFirst({
+        where: (row, { eq }) => eq(row.id, sessionId),
+      });
+      expect(switched?.agentPersona).toBeNull();
+      expect(restart).toHaveBeenCalledWith(sessionId);
+
+      await expect(
+        manager.createSession({
+          projectId: 'proj-draft',
+          taskSlug: 'invalid',
+          providerId: 'draft-provider',
+          agentPersona: 'missing',
+        }),
+      ).rejects.toThrow('Agent persona is not available');
+      expect(await db.select().from(sessions)).toHaveLength(1);
+    });
+
     it('inherits provider, model, and thinking effort from the most recent project session when providerId is omitted', async () => {
       const db = createDatabase(':memory:');
       await db.insert(projects).values({

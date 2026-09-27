@@ -163,6 +163,19 @@ describe('Draft workspace lifecycle through projects routes', () => {
     await expect(fs.stat(draft.worktreePath)).rejects.toMatchObject({ code: 'ENOENT' });
   }, 15_000);
 
+  it('registers a folder without creating a session or worktree', async () => {
+    app = await buildApp({ db, worktreeManager: manager, embedded: true });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/projects/open',
+      payload: { path: repoPath, startSession: false },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().session).toBeNull();
+    expect(await db.select().from(sessions)).toHaveLength(0);
+    expect(await git(repoPath, 'worktree', 'list', '--porcelain')).not.toContain('agentctl/');
+  });
+
   it('keeps worktrees from every project sharing a repository during startup', async () => {
     await fs.mkdir(path.join(repoPath, 'subdir'));
     await fs.writeFile(path.join(repoPath, 'subdir', 'file.txt'), 'subdir');

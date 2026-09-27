@@ -97,4 +97,21 @@ describe('Context Routes API', () => {
     expect(body.formattedContent).toContain('Context Attachment: `src/server.ts`');
     expect(body.formattedContent).toContain('export const port = 3000;');
   });
+  test('searches and resolves project context before any session exists', async () => {
+    await db.delete(sessions);
+    const search = await app.inject({
+      method: 'GET',
+      url: '/api/projects/proj-context-1/context/search?q=server',
+    });
+    expect(search.statusCode).toBe(200);
+    expect(search.json().items[0].title).toBe('server.ts');
+    const resolved = await app.inject({
+      method: 'POST',
+      url: '/api/projects/proj-context-1/context/resolve',
+      payload: { items: [{ type: 'file', value: 'src/server.ts' }] },
+    });
+    expect(resolved.statusCode).toBe(200);
+    expect(resolved.json().formattedContent).toContain('export const port = 3000;');
+    expect(await db.select().from(sessions)).toHaveLength(0);
+  });
 });

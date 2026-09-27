@@ -28,6 +28,8 @@ export interface CreateSessionParams {
   mode?: SessionMode;
   selectedModel?: string;
   selectedThinkingEffort?: ThinkingEffort;
+  approvalMode?: 'review' | 'auto_approve' | 'yolo';
+  agentPersona?: string;
 }
 
 export interface SessionLauncherDependencies {
@@ -222,6 +224,21 @@ export class SessionLauncher {
     const effectiveMode: SessionMode = mode ?? (defaultToWorktree ? 'worktree' : 'local');
     const effectiveSlug = createTaskSlug(taskSlug);
 
+    const provider = await this.deps.providerRegistry.ensureProviderReady(resolvedProviderId, {
+      force: false,
+    });
+    const discovery = provider.toDiscovery();
+    const modeOption = discovery.configOptions?.find((option) => option.category === 'mode');
+    const availableAgentPersonas = [
+      ...new Set([
+        ...(discovery.modes ?? []),
+        ...(modeOption?.options?.map((option) => option.value) ?? []),
+      ]),
+    ];
+    if (params.agentPersona && !availableAgentPersonas.includes(params.agentPersona)) {
+      throw new Error(`Agent persona is not available: ${params.agentPersona}`);
+    }
+
     const context = await this.deps.sessionWorkspace.establish(projectId, effectiveSlug, {
       mode: effectiveMode,
       agent: resolvedProviderId,
@@ -230,6 +247,9 @@ export class SessionLauncher {
       selectedThinkingEffort: selection.selectedThinkingEffort,
       contextLimit: 0,
       sessionConfigOptions: JSON.stringify(configOptions),
+      approvalMode: params.approvalMode,
+      agentPersona: params.agentPersona,
+      availableAgentPersonas,
     });
 
     return { sessionId: context.sessionId };

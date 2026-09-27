@@ -9,6 +9,8 @@ import {
 
 export interface UseContextAutocompleteProps {
   sessionId: string;
+  projectId?: string;
+  initialContexts?: ContextItem[];
   input: string;
   setInput: (value: string) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -55,6 +57,8 @@ function getAtMatchRange(input: string, textarea: HTMLTextAreaElement | null) {
 
 export function useContextAutocomplete({
   sessionId,
+  projectId,
+  initialContexts = [],
   input,
   setInput,
   textareaRef,
@@ -64,10 +68,11 @@ export function useContextAutocomplete({
   const [isLoading, setIsLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [filterType, setFilterType] = useState<'all' | ContextItemType>('all');
-  const [attachedContexts, setAttachedContexts] = useState<ContextItem[]>([]);
+  const [attachedContexts, setAttachedContexts] = useState<ContextItem[]>(initialContexts);
 
   const atMatchRange = getAtMatchRange(input, textareaRef.current);
-  const isOpen = Boolean(sessionId && atMatchRange && !isDismissed);
+  const contextId = sessionId || projectId || '';
+  const isOpen = Boolean(contextId && atMatchRange && !isDismissed);
 
   const setIsOpen = useCallback((open: boolean) => {
     setIsDismissed(!open);
@@ -77,7 +82,7 @@ export function useContextAutocomplete({
 
   // Fetch search suggestions when open
   useEffect(() => {
-    if (!isOpen || !sessionId) return;
+    if (!isOpen || !contextId) return;
 
     const query = atMatchRange?.query ?? '';
 
@@ -88,7 +93,10 @@ export function useContextAutocomplete({
     debounceTimerRef.current = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const results = await searchContext(sessionId, query, filterType);
+        const results =
+          projectId && !sessionId
+            ? await searchContext(contextId, query, filterType, 'projects')
+            : await searchContext(contextId, query, filterType);
         setItems(results);
         setActiveIndex(0);
       } catch {
@@ -103,7 +111,7 @@ export function useContextAutocomplete({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [isOpen, atMatchRange?.query, filterType, sessionId]);
+  }, [isOpen, atMatchRange?.query, filterType, contextId, projectId, sessionId]);
 
   const selectItem = useCallback(
     (item: ContextItem) => {
@@ -150,7 +158,7 @@ export function useContextAutocomplete({
   }, []);
 
   const resolveAttachedContexts = useCallback(async (): Promise<ResolvedContextResult | null> => {
-    if (attachedContexts.length === 0 || !sessionId) return null;
+    if (attachedContexts.length === 0 || !contextId) return null;
 
     try {
       const itemsToResolve = attachedContexts.map((c) => ({
@@ -160,12 +168,15 @@ export function useContextAutocomplete({
         target: c.type === 'git' ? c.value : undefined,
       }));
 
-      const resolved = await resolveContext(sessionId, itemsToResolve);
+      const resolved =
+        projectId && !sessionId
+          ? await resolveContext(contextId, itemsToResolve, 'projects')
+          : await resolveContext(contextId, itemsToResolve);
       return resolved;
     } catch {
       return null;
     }
-  }, [attachedContexts, sessionId]);
+  }, [attachedContexts, contextId, projectId, sessionId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {

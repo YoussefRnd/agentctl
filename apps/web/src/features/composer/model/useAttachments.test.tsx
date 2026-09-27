@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { useAttachments } from './useAttachments';
 
 vi.mock('@agentctl/api-client', () => ({
@@ -93,5 +93,49 @@ describe('useAttachments retryAttachment', () => {
     });
     expect(mockedUpload).toHaveBeenCalledTimes(2);
     expect(mockedUpload).toHaveBeenLastCalledWith('sess-1', expect.any(File), expect.any(Function));
+  });
+});
+
+describe('Home attachments', () => {
+  it('buffers image files until first Send without uploading them', () => {
+    let hook!: ReturnType<typeof useAttachments>;
+    function DraftHarness() {
+      hook = useAttachments('');
+      return null;
+    }
+    act(() => root.render(<DraftHarness />));
+    const image = makePngFile();
+    act(() => hook.addFiles([image, new File(['x'], 'file.txt', { type: 'text/plain' })]));
+    expect(mockedUpload).not.toHaveBeenCalled();
+    expect(hook.attachments).toHaveLength(1);
+    expect(hook.pendingFiles).toEqual([image]);
+    expect(hook.isAnyUploading).toBe(false);
+    expect(hook.readyAttachmentIds).toEqual([]);
+    act(() => hook.removeAttachment(hook.attachments[0].localId));
+    expect(hook.pendingFiles).toEqual([]);
+  });
+  it('restores draft image previews after a remount, including StrictMode effect replay', () => {
+    let hook!: ReturnType<typeof useAttachments>;
+    const image = makePngFile();
+    let next = 0;
+    URL.createObjectURL = vi.fn(() => `blob:${++next}`);
+    function DraftHarness() {
+      hook = useAttachments('', [image]);
+      return null;
+    }
+    act(() =>
+      root.render(
+        <StrictMode>
+          <DraftHarness />
+        </StrictMode>,
+      ),
+    );
+    expect(hook.pendingFiles).toEqual([image]);
+    expect(hook.attachments[0].objectUrl).toBe('blob:2');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:1');
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:2');
+    expect(mockedUpload).not.toHaveBeenCalled();
+    act(() => root.render(null));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:2');
   });
 });

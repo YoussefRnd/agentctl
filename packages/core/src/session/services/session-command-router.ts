@@ -79,7 +79,8 @@ export class SessionCommandRouter {
       throw new Error(`Provider ${params.selectedProvider} did not negotiate a model`);
     }
 
-    const configOptions = provider.toDiscovery().configOptions ?? [];
+    const discovery = provider.toDiscovery();
+    const configOptions = discovery.configOptions ?? [];
     const newConfigOptions = this.deps.launcher.buildInitialConfigOptions(
       configOptions,
       selection.selectedModel,
@@ -109,6 +110,19 @@ export class SessionCommandRouter {
           contextLimit: preservedLimit,
           availableCommands: '[]',
           sessionConfigOptions: JSON.stringify(newConfigOptions),
+          ...(providerIdChanged
+            ? {
+                agentPersona: null,
+                availableAgentPersonas: JSON.stringify([
+                  ...new Set([
+                    ...(discovery.modes ?? []),
+                    ...configOptions
+                      .filter((option) => option.category === 'mode')
+                      .flatMap((option) => option.options?.map((item) => item.value) ?? []),
+                  ]),
+                ]),
+              }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(sessions.id, sessionId));
@@ -122,6 +136,8 @@ export class SessionCommandRouter {
           selectedModel: sessionRecord.selectedModel,
           selectedThinkingEffort: sessionRecord.selectedThinkingEffort,
           agent: sessionRecord.agent,
+          agentPersona: sessionRecord.agentPersona,
+          availableAgentPersonas: sessionRecord.availableAgentPersonas,
           contextLimit: sessionRecord.contextLimit,
           availableCommands: sessionRecord.availableCommands,
           sessionConfigOptions: sessionRecord.sessionConfigOptions,

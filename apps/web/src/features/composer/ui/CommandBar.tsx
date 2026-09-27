@@ -3,7 +3,7 @@ import { useSessionStream } from '@/features/sessions';
 import { CommandBarToolbar } from './CommandBarToolbar';
 import { CommandBarFooter } from './WorkspaceStateReviewer';
 import { useCommandBarState } from '../model/useCommandBarState';
-import { CommandInputComposer } from './CommandInputComposer';
+import { ComposerInput } from './ComposerInput';
 import { QueuedMessagesPillStack } from './QueuedMessagesPillStack';
 import { ProviderAuthDialog } from '@/features/providers';
 
@@ -30,6 +30,14 @@ export function CommandBar({
   initialInput,
   variant = 'default',
 }: ControlBarProps) {
+  const state = useCommandBarState(
+    onSend,
+    disabled,
+    propSelectedProviderId ?? undefined,
+    propSelectedModelId ?? undefined,
+    onProviderSelect,
+    initialInput,
+  );
   const {
     sessionId,
     sessionData,
@@ -47,51 +55,17 @@ export function CommandBar({
     isLoadingSession,
     providers,
     isLoadingProviders,
-    input,
-    handleInputChange,
-    activeCommandIndex,
-    setActiveCommandIndex,
     isRunning,
     handleCancel,
-    commandRefs,
-    showSlashMenu,
-    filteredCommands,
-    matchingCommand,
     isPickerOpen,
     setIsPickerOpen,
-    isFocused,
-    setIsFocused,
-    textareaRef,
-    fileInputRef,
-    attachments,
-    removeAttachment,
-    retryAttachment,
     resolvedId,
     activeProvider,
     selectedProviderLabel,
     handleSubmit,
     handleProviderSelect,
-    handleAttachClick,
-    supportsImageAttachments,
-    handleFileInputChange,
-    handlePaste,
-    handleDrop,
-    isDraggingOver,
-    handleDragEnter,
-    handleDragLeave,
     canSend,
-    handleSelectCommand,
-    contextAutocomplete,
-    handleHistoryUp,
-    handleHistoryDown,
-  } = useCommandBarState(
-    onSend,
-    disabled,
-    propSelectedProviderId ?? undefined,
-    propSelectedModelId ?? undefined,
-    onProviderSelect,
-    initialInput,
-  );
+  } = state;
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const { queuedMessages } = useSessionStream();
@@ -101,95 +75,48 @@ export function CommandBar({
     <div className="flex w-full flex-col">
       <QueuedMessagesPillStack />
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="sr-only"
-        aria-hidden="true"
-        tabIndex={-1}
-        onChange={handleFileInputChange}
-      />
-
-      <form
-        className="relative w-full"
-        aria-label="Command interface"
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSubmit();
-        }}
+      <ComposerInput
+        state={state}
+        variant={variant}
+        disabled={disabled}
+        disabledReason={disabledReason}
+        placeholder={placeholder}
+        hasQueuedMessages={hasQueuedMessages}
       >
-        <CommandInputComposer
-          flags={{
-            hasQueuedMessages,
-            disabled,
-            isFocused,
-            showSlashMenu,
-            isDraggingOver,
+        <CommandBarToolbar
+          status={{
+            isLoadingSession,
+            isLoadingProviders,
+            isUpdatingApprovalMode,
           }}
-          disabledReason={disabledReason}
-          input={input}
-          handleInputChange={handleInputChange}
-          setIsFocused={setIsFocused}
+          picker={{
+            isOpen: isPickerOpen,
+            setIsOpen: setIsPickerOpen,
+          }}
+          activeProvider={activeProvider}
+          providers={providers}
+          propSelectedModelId={propSelectedModelId}
+          selectedProviderLabel={selectedProviderLabel}
+          resolvedId={resolvedId}
+          handleProviderSelect={handleProviderSelect}
+          sessionId={sessionId}
+          sessionData={sessionData}
+          setApprovalMode={setApprovalMode}
+          setAgentPersona={setAgentPersona}
+          handleSetConfigOption={setSessionConfigOption}
           handleSubmit={handleSubmit}
-          handlePaste={handlePaste}
-          handleDrop={handleDrop}
-          handleDragEnter={handleDragEnter}
-          handleDragLeave={handleDragLeave}
-          handleAttachClick={handleAttachClick}
-          supportsImageAttachments={supportsImageAttachments}
-          textareaRef={textareaRef}
-          filteredCommands={filteredCommands}
-          activeCommandIndex={activeCommandIndex}
-          setActiveCommandIndex={setActiveCommandIndex}
-          commandRefs={commandRefs}
-          handleSelectCommand={handleSelectCommand}
-          matchingCommand={matchingCommand}
-          attachments={attachments}
-          removeAttachment={removeAttachment}
-          retryAttachment={retryAttachment}
-          contextAutocomplete={contextAutocomplete}
-          handleHistoryUp={handleHistoryUp}
-          handleHistoryDown={handleHistoryDown}
-          placeholder={placeholder}
-          status={sessionData?.session.status}
-          variant={variant}
-        >
-          <CommandBarToolbar
-            status={{
-              isLoadingSession,
-              isLoadingProviders,
-              isUpdatingApprovalMode,
-            }}
-            picker={{
-              isOpen: isPickerOpen,
-              setIsOpen: setIsPickerOpen,
-            }}
-            activeProvider={activeProvider}
-            providers={providers}
-            propSelectedModelId={propSelectedModelId}
-            selectedProviderLabel={selectedProviderLabel}
-            resolvedId={resolvedId}
-            handleProviderSelect={handleProviderSelect}
-            sessionId={sessionId}
-            sessionData={sessionData}
-            setApprovalMode={setApprovalMode}
-            setAgentPersona={setAgentPersona}
-            handleSetConfigOption={setSessionConfigOption}
-            handleSubmit={handleSubmit}
-            onCancel={handleCancel}
-            onOpenAuthModal={() => {
-              setIsAuthModalOpen(true);
-            }}
-            flags={{
-              isUpdatingAgentPersona,
-              isUpdatingConfigOption,
-              canSend,
-              isRunning,
-            }}
-          />
-        </CommandInputComposer>
-      </form>
+          onCancel={handleCancel}
+          onOpenAuthModal={() => {
+            setIsAuthModalOpen(true);
+          }}
+          flags={{
+            isUpdatingAgentPersona,
+            isUpdatingConfigOption,
+            canSend,
+            isRunning,
+          }}
+        />
+      </ComposerInput>
       {variant !== 'hero' && (
         <CommandBarFooter
           isLoadingSession={isLoadingSession}

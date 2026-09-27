@@ -38,6 +38,10 @@ export const createSessionSchema = z.object({
   agent: providerSchema.optional(),
   mode: sessionModeSchema.optional(),
   taskSlug: z.string().optional(),
+  selectedModel: z.string().min(1).optional(),
+  selectedThinkingEffort: thinkingEffortSchema.optional(),
+  approvalMode: approvalModeSchema.optional(),
+  agentPersona: z.string().min(1).optional(),
 });
 
 export const handoffSessionSchema = z.object({
@@ -152,6 +156,7 @@ export const providerDiscoverySchema = z.object({
   features: agentFeaturesSchema.optional(),
   snapshot: capabilitySnapshotSchema.optional(),
   nativelyLoadsSkills: z.boolean().optional().default(false),
+  modes: z.array(z.string()).optional(),
 
   // New fields
   installState: installStateSchema.optional(),

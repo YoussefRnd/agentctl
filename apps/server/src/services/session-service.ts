@@ -45,6 +45,10 @@ export class SessionService {
     providerId?: string;
     taskSlug: string;
     mode?: SessionMode;
+    selectedModel?: string;
+    selectedThinkingEffort?: 'low' | 'medium' | 'high';
+    approvalMode?: 'review' | 'auto_approve' | 'yolo';
+    agentPersona?: string;
   }) {
     const session = await this.sessionManager.createSession(params);
 
