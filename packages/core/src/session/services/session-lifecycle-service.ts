@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { ManagedSession } from '../managed-session.js';
 import { sessions, projects } from '../../db/schema.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
@@ -24,11 +24,14 @@ export class SessionLifecycleService {
   constructor(private readonly deps: SessionLifecycleDependencies) {}
 
   async syncOrphans(): Promise<void> {
-    const activeSessions = await this.deps.db.query.sessions.findMany({
-      where: inArray(sessions.status, ['idle', 'running', 'needs_attention', 'error']),
-    });
-    const activeIds = activeSessions.map((s) => s.id);
-    await this.deps.sessionWorkspace.syncOrphans(activeIds);
+    // Derive protection and ownership from the same database snapshot. A
+    // session created by another server after this read must remain unknown.
+    const knownSessions = await this.deps.db.query.sessions.findMany();
+    const activeIds = knownSessions
+      .filter((session) => !['merged', 'discarded'].includes(session.status))
+      .map((session) => session.id);
+    const knownIds = knownSessions.map((session) => session.id);
+    await this.deps.sessionWorkspace.syncOrphans(activeIds, knownIds);
   }
 
   async switchMode(sessionId: string, newMode: SessionMode): Promise<ManagedSession | null> {

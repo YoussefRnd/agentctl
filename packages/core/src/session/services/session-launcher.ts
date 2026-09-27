@@ -248,6 +248,7 @@ export class SessionLauncher {
     intent: AgentSessionIntent = { kind: 'new' },
     resolvedModelConfigId?: string,
   ): Promise<ManagedSession> {
+    await this.ensureWorkspaceAvailable(sessionId);
     return this.deps.stateMachine.startSession(
       sessionId,
       worktreePath,
@@ -261,6 +262,10 @@ export class SessionLauncher {
       intent,
       resolvedModelConfigId,
     );
+  }
+
+  async ensureWorkspaceAvailable(sessionId: string): Promise<boolean> {
+    return this.deps.sessionWorkspace.ensureAvailable(sessionId);
   }
 
   async restartSession(
@@ -306,6 +311,8 @@ export class SessionLauncher {
         baseBranch: sessionRecord.baseBranch ?? 'main',
       });
       workspacePath = context.worktreePath;
+    } else {
+      await this.ensureWorkspaceAvailable(sessionId);
     }
 
     let hasUserMessages = false;
@@ -347,6 +354,7 @@ export class SessionLauncher {
     sessionId: string,
     options?: { allowArchived?: boolean },
   ): Promise<ManagedSession | null> {
+    await this.ensureWorkspaceAvailable(sessionId);
     const session = this.deps.stateMachine.getSession(sessionId);
     if (session && !session.isDead) {
       return session;

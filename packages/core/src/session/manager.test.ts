@@ -2,7 +2,6 @@ import { test, it, expect, describe, vi } from 'vitest';
 import { SessionManager, resolveAgentSessionId, type IEventBus } from './manager.js';
 import type { ManagedSession } from './managed-session.js';
 import type { DbClient } from '../db/index.js';
-import type { WorkspaceManager } from '../git/worktree-manager.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
 import { Provider } from '../providers/provider.js';
 import { noopLogger } from '../logger.js';
@@ -11,9 +10,15 @@ import { PassThrough } from 'node:stream';
 import type { AgentDriver } from '../agent/types.js';
 import type { ChildProcess } from 'node:child_process';
 import { createDatabase } from '../db/index.js';
-import { projects, sessions } from '../db/schema.js';
+import { projects, sessions, providers } from '../db/schema.js';
 import { SessionEventStore } from './event-store.js';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
+import { WorkspaceManager } from '../git/worktree-manager.js';
+import { GitMutex } from '../git/mutex.js';
+import { simpleGit } from 'simple-git';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 
 describe('SessionManager tests', () => {
   const mockDb = {
@@ -463,6 +468,87 @@ describe('SessionManager tests', () => {
     expect(newSession?.isDead).toBe(false);
 
     newSession?.kill();
+  });
+
+  test('model switching restores a missing worktree and replaces its live runtime before configuring the model', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-model-recovery-'));
+    let manager: SessionManager | undefined;
+    try {
+      const repoPath = path.join(tempDir, 'repo');
+      await fs.mkdir(repoPath);
+      const git = simpleGit(repoPath);
+      await git.init();
+      await git.addConfig('user.name', 'Test');
+      await git.addConfig('user.email', 'test@example.com');
+      await git.addConfig('commit.gpgSign', 'false');
+      await fs.writeFile(path.join(repoPath, 'file.txt'), 'baseline');
+      await git.add('file.txt');
+      await git.commit('Initial');
+      const db = createDatabase(':memory:');
+      await db.insert(projects).values({
+        id: 'model-recovery-project',
+        name: 'Project',
+        path: repoPath,
+        repoRoot: repoPath,
+      });
+      const [providerRow] = await db
+        .insert(providers)
+        .values({
+          id: 'model-recovery-provider',
+          name: 'Dynamic Provider',
+          command: 'test-agent',
+          installState: 'installed_local',
+          authState: 'authenticated',
+          supportsDynamicModel: true,
+        })
+        .returning();
+      const provider = new Provider(providerRow);
+      const registry = {
+        ensureProviderReady: async () => provider,
+        getSettings: async () => ({ defaultProviderId: provider.id, defaultToWorktree: 'true' }),
+      } as unknown as ProviderRegistry;
+      const startRuntime = vi.fn<AgentDriver['startSession']>(async (...args) => {
+        // The provider must never receive a missing cwd.
+        expect((await fs.stat(args[2].cwd)).isDirectory()).toBe(true);
+        return fakeRuntime.startSession(...args);
+      });
+      const workspaceManager = new WorkspaceManager(
+        new GitMutex(),
+        path.join(tempDir, 'worktrees'),
+      );
+      manager = new SessionManager(db, workspaceManager, registry, eventBus, noopLogger, {
+        ...fakeRuntime,
+        startSession: startRuntime,
+      });
+      const { sessionId } = await manager.createSession({
+        projectId: 'model-recovery-project',
+        selectedModel: 'model-1',
+      });
+      const active = await manager.restartSession(sessionId);
+      const updateOldModel = vi.spyOn(active, 'updateModel');
+      const record = await db.query.sessions.findFirst();
+      if (!record) throw new Error('Missing test session');
+      await fs.rm(record.worktreePath, { recursive: true });
+
+      const replacement = await manager.updateSessionConfig(sessionId, {
+        selectedProvider: provider.id,
+        selectedModel: 'model-2',
+        selectedThinkingEffort: 'medium',
+      });
+
+      expect(replacement).not.toBe(active);
+      expect(active.isDead).toBe(true);
+      expect(updateOldModel).not.toHaveBeenCalled();
+      expect(startRuntime).toHaveBeenCalledTimes(2);
+      expect(startRuntime.mock.calls[1][2]).toMatchObject({
+        cwd: record.worktreePath,
+        selectedModel: 'model-2',
+      });
+      expect((await db.query.sessions.findFirst())?.selectedModel).toBe('model-2');
+    } finally {
+      await manager?.stopAll();
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   test('SessionManager updateSessionConfig updates dynamically when supported, otherwise restarts', async () => {

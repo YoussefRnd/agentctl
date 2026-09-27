@@ -8,7 +8,7 @@ import tsRestPlugin from './plugins/ts-rest.js';
 import { eventsRoutes } from './routes/events.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
-import { db as defaultDb, projects, sessions } from '@agentctl/core/db';
+import { db as defaultDb } from '@agentctl/core/db';
 import { WorktreeManager, GitMutex } from '@agentctl/core/git';
 import { ProviderRegistry } from '@agentctl/core/providers';
 import { SessionManager } from '@agentctl/core/session';
@@ -172,13 +172,6 @@ export async function buildApp(deps: AppDependencies = {}) {
       fastify.log.error(err, 'Failed to sync provider registry on startup');
     });
 
-  // Prune orphaned worktrees on startup
-  if (typeof sessionManager.syncOrphans === 'function') {
-    void sessionManager.syncOrphans().catch((err: unknown) => {
-      fastify.log.error(err, 'Failed to sync orphaned worktrees on startup');
-    });
-  }
-
   fastify.addHook('onClose', async () => {
     await fastify.sessionManager.stopAll();
     providerRegistry.dispose();
@@ -187,20 +180,6 @@ export async function buildApp(deps: AppDependencies = {}) {
   });
 
   fastify.ready(async () => {
-    try {
-      const activeProjects = await db.select().from(projects);
-      const activeSessions = await db.select().from(sessions);
-      const activeSessionIds = activeSessions.map((s) => s.id);
-
-      for (const project of activeProjects) {
-        if (project.repoRoot) {
-          await worktreeManager.sync(project.repoRoot, activeSessionIds);
-        }
-      }
-    } catch (err) {
-      fastify.log.error(err, 'Failed to sync orphaned worktrees on startup');
-    }
-
     try {
       await mcpGateway.start();
     } catch (err) {

@@ -179,6 +179,10 @@ export class SessionManager {
 
   // --- Delegated Facade Methods ---
 
+  async ensureWorkspaceAvailable(sessionId: string): Promise<boolean> {
+    return this.launcher.ensureWorkspaceAvailable(sessionId);
+  }
+
   async syncOrphans(): Promise<void> {
     return this.lifecycle.syncOrphans();
   }

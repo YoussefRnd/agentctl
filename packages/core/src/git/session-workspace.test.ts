@@ -3,7 +3,7 @@ import { SessionWorkspace } from './session-workspace.js';
 import { WorkspaceManager } from './worktree-manager.js';
 import { GitMutex } from './mutex.js';
 import { createDatabase } from '../db/index.js';
-import { projects, sessions } from '../db/schema.js';
+import { projects, sessions, sessionEvents } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { simpleGit } from 'simple-git';
 import fs from 'node:fs/promises';
@@ -68,6 +68,98 @@ describe('SessionWorkspace Integration Tests (Mock-Free)', () => {
   afterEach(async () => {
     // Clean up test directory
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  });
+
+  async function establishDraft(projectId: string) {
+    await db
+      .insert(projects)
+      .values({ id: projectId, name: projectId, path: repoPath, repoRoot: repoPath });
+    return sessionWorkspace.establish(projectId, projectId, {
+      mode: 'worktree',
+      selectedProvider: 'test-provider',
+      selectedModel: 'default',
+    });
+  }
+
+  test('restores a missing idle worktree from its branch without changing its baseline', async () => {
+    const context = await establishDraft('recover-branch');
+    await fs.writeFile(path.join(context.worktreePath, 'feature.txt'), 'committed feature');
+    const git = simpleGit(context.worktreePath);
+    await git.add('feature.txt');
+    await git.commit('Feature');
+    const head = (await git.revparse(['HEAD'])).trim();
+    await db.insert(sessionEvents).values({
+      sessionId: context.sessionId,
+      type: 'text',
+      data: JSON.stringify({ role: 'user', content: 'Build feature' }),
+    });
+    // Simulate external removal, leaving Git's administrative entry stale.
+    await fs.rm(context.worktreePath, { recursive: true });
+
+    expect(await sessionWorkspace.ensureAvailable(context.sessionId)).toBe(true);
+    expect(stopSessionCalled).toBe(true);
+    expect(await fs.readFile(path.join(context.worktreePath, 'feature.txt'), 'utf8')).toBe(
+      'committed feature',
+    );
+    expect((await git.revparse(['HEAD'])).trim()).toBe(head);
+    const record = await db.query.sessions.findFirst({ where: eq(sessions.id, context.sessionId) });
+    expect(record?.baseCommit).toBe(context.baseCommit);
+    expect(record?.branch).toBe(context.branch);
+    expect(record?.worktreePath).toBe(context.worktreePath);
+  });
+
+  test('recreates an unused missing draft from its saved commit, not the current project HEAD', async () => {
+    const context = await establishDraft('recover-draft');
+    await workspaceManager.cleanup(repoPath, context.worktreePath, context.branch);
+    await fs.writeFile(path.join(repoPath, 'hello.txt'), 'new project content');
+    await simpleGit(repoPath).add('hello.txt');
+    await simpleGit(repoPath).commit('Advance project');
+    await fs.writeFile(path.join(repoPath, '.env.test'), 'TEST_VALUE=example');
+    // Metadata does not turn an unused draft into a conversation.
+    await db
+      .insert(sessionEvents)
+      .values({ sessionId: context.sessionId, type: 'status', data: '{}' });
+
+    const results = await Promise.all([
+      sessionWorkspace.ensureAvailable(context.sessionId),
+      sessionWorkspace.ensureAvailable(context.sessionId),
+    ]);
+    expect(results).toEqual([true, true]);
+    expect(await fs.readFile(path.join(context.worktreePath, 'hello.txt'), 'utf8')).toBe(
+      'initial content',
+    );
+    expect(await fs.readFile(path.join(context.worktreePath, '.env.test'), 'utf8')).toBe(
+      'TEST_VALUE=example',
+    );
+    expect((await simpleGit(context.worktreePath).revparse(['HEAD'])).trim()).toBe(
+      context.baseCommit,
+    );
+  });
+
+  test('refuses to recreate a missing conversation branch from an unrelated baseline', async () => {
+    const context = await establishDraft('missing-history');
+    await db.insert(sessionEvents).values({
+      sessionId: context.sessionId,
+      type: 'text',
+      data: JSON.stringify({ role: 'user', content: 'Existing conversation' }),
+    });
+    await workspaceManager.cleanup(repoPath, context.worktreePath, context.branch);
+
+    await expect(sessionWorkspace.ensureAvailable(context.sessionId)).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining('session branch is also missing'),
+    });
+    await expect(fs.stat(context.worktreePath)).rejects.toThrow();
+  });
+
+  test('leaves an existing dirty worktree untouched', async () => {
+    const context = await establishDraft('existing-dirty');
+    await fs.writeFile(path.join(context.worktreePath, 'hello.txt'), 'unsaved changes');
+    expect(await sessionWorkspace.ensureAvailable(context.sessionId)).toBe(false);
+    expect(stopSessionCalled).toBe(false);
+    expect(await fs.readFile(path.join(context.worktreePath, 'hello.txt'), 'utf8')).toBe(
+      'unsaved changes',
+    );
   });
 
   test('should establish, activate, getHandle, archive, finalize, and teardown workspace lifecycle in worktree mode', async () => {

@@ -201,44 +201,14 @@ export class WorkspaceManager {
   ): Promise<void> {
     const git = simpleGit(repoPath);
 
-    const worktrees = await this.listWorktrees(repoPath);
-    const worktreeExists = worktrees.some((w) => w.path === storagePath);
-
-    if (worktreeExists) {
-      // Reusing slot!
-      const wtGit = simpleGit(storagePath);
-      const currentBranch = (await wtGit.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
-      const currentHead = (await wtGit.raw(['rev-parse', 'HEAD'])).trim();
-
-      if (currentHead && currentBranch.startsWith('agentctl/')) {
-        await wtGit
-          .raw(['update-ref', 'refs/agentctl/pre-refresh', currentHead])
-          .catch(() => undefined);
-      }
-
-      // Force clean it
-      await wtGit.raw(['reset', '--hard']).catch(() => undefined);
-      await wtGit.raw(['clean', '-ffdx']).catch(() => undefined);
-      // Checkout and reset to target ref
-      await wtGit.raw(['checkout', '-B', branchName, baseRef]);
-
-      // Delete the old branch if it was an agentctl branch and is not the current branch
-      if (currentBranch !== branchName && currentBranch.startsWith('agentctl/')) {
-        await git.raw(['branch', '-D', currentBranch]).catch(() => undefined);
-      }
-    } else {
-      // Clear directory from disk
-      await fs.rm(storagePath, { recursive: true, force: true }).catch(() => undefined);
-
-      const branches = await git.branchLocal();
-      const branchExists = branches.all.includes(branchName);
-
-      if (branchExists) {
-        await git.raw(['worktree', 'add', storagePath, branchName]);
-      } else {
-        await git.raw(['worktree', 'add', '-b', branchName, storagePath, baseRef]);
-      }
-    }
+    const branchExists = (await git.branchLocal()).all.includes(branchName);
+    // Let Git reject an occupied directory; never reset or delete a workspace
+    // simply because it is absent from this process's database.
+    await git.raw(
+      branchExists
+        ? ['worktree', 'add', storagePath, branchName]
+        : ['worktree', 'add', '-b', branchName, storagePath, baseRef],
+    );
   }
 
   async getActiveBranchesInWorktrees(repoPath: string): Promise<string[]> {
@@ -299,41 +269,35 @@ export class WorkspaceManager {
     taskSlug: string,
     baseBranch = 'main',
     workdirPrefix = '',
-    activeSessionIds: string[] = [],
+    _activeSessionIds: string[] = [],
   ): Promise<WorktreeResult> {
     const projectName = this.sanitize(path.basename(repoPath));
     const cleanSessionId = this.sanitize(sessionId);
     const cleanTaskSlug = this.sanitize(taskSlug).slice(0, 40);
     const branchName = `agentctl/${cleanSessionId}/${cleanTaskSlug}`;
 
-    const list = await this.listWorktrees(repoPath).catch(() => []);
-    const activeCleanIds = new Set(activeSessionIds.map((id) => this.sanitize(id)));
-
-    const baseFolderName = cleanTaskSlug || 'workspace';
-    let storagePath = '';
-    for (let i = 0; i < 1000; i++) {
-      const folderName = i === 0 ? baseFolderName : `${baseFolderName}-${i + 1}`;
-      const candidatePath = path.join(this.baseDir, projectName, folderName);
-      const matchingWorktree = list.find((w) => w.path === candidatePath);
-      let isSlotActive = false;
-      if (matchingWorktree) {
-        const parts = matchingWorktree.branch.split('/');
-        if (parts.length >= 2 && parts[0] === 'agentctl') {
-          const slotSessionId = parts[1];
-          if (activeCleanIds.has(slotSessionId)) {
-            isSlotActive = true;
-          }
+    // Reserve a fresh directory while holding the repository lock. A worktree
+    // absent from this process's session list may belong to another database.
+    return await this.gitMutex.run(repoPath, async () => {
+      const baseFolderName = cleanTaskSlug || 'workspace';
+      let storagePath = '';
+      for (let i = 0; i < 1000; i++) {
+        const folderName = i === 0 ? baseFolderName : `${baseFolderName}-${i + 1}`;
+        const candidatePath = path.join(this.baseDir, projectName, folderName);
+        const exists = await fs
+          .lstat(candidatePath)
+          .then(() => true)
+          .catch((err: NodeJS.ErrnoException) => {
+            if (err.code !== 'ENOENT') throw err;
+            return false;
+          });
+        if (!exists) {
+          storagePath = candidatePath;
+          break;
         }
       }
-      if (!isSlotActive) {
-        storagePath = candidatePath;
-        break;
-      }
-    }
-
-    await fs.mkdir(path.dirname(storagePath), { recursive: true });
-
-    return await this.gitMutex.run(repoPath, async () => {
+      if (!storagePath) throw new Error('No free worktree directory available');
+      await fs.mkdir(path.dirname(storagePath), { recursive: true });
       const base = await this.resolveBaseRef(repoPath, baseBranch);
       if (base.isEmpty) {
         throw new Error('Cannot create worktree in an empty repository (no commits found)');
@@ -341,54 +305,7 @@ export class WorkspaceManager {
 
       await this.addWorktree(repoPath, branchName, storagePath, base.ref);
 
-      // 1. Copy env files matching .env*
-      try {
-        const files = await fs.readdir(repoPath);
-        for (const file of files) {
-          if (file.startsWith('.env')) {
-            const src = path.join(repoPath, file);
-            const dest = path.join(storagePath, file);
-            await fs.copyFile(src, dest).catch(() => undefined);
-          }
-        }
-      } catch {
-        // Ignore errors
-      }
-
-      // 2. Read and apply .worktreeinclude if it exists (for custom files/dirs)
-      try {
-        const includePath = path.join(repoPath, '.worktreeinclude');
-        const includeExists = await fs
-          .access(includePath)
-          .then(() => true)
-          .catch(() => false);
-        if (includeExists) {
-          const content = await fs.readFile(includePath, 'utf8');
-          const lines = content
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line && !line.startsWith('#'));
-
-          for (const line of lines) {
-            const src = path.join(repoPath, line);
-            const dest = path.join(storagePath, line);
-            const stat = await fs.stat(src).catch(() => null);
-
-            if (stat) {
-              await fs.mkdir(path.dirname(dest), { recursive: true }).catch(() => undefined);
-              if (stat.isDirectory()) {
-                // Symlink directories to share dependencies or target directories
-                await fs.symlink(src, dest, 'dir').catch(() => undefined);
-              } else {
-                // Copy individual files
-                await fs.copyFile(src, dest).catch(() => undefined);
-              }
-            }
-          }
-        }
-      } catch {
-        // Ignore errors
-      }
+      await this.copyWorkspaceFiles(repoPath, storagePath);
 
       return {
         path: storagePath,
@@ -396,6 +313,126 @@ export class WorkspaceManager {
         branch: branchName,
         baseCommit: base.commit,
       };
+    });
+  }
+
+  private async copyWorkspaceFiles(repoPath: string, storagePath: string): Promise<void> {
+    // 1. Copy env files matching .env*
+    try {
+      const files = await fs.readdir(repoPath);
+      for (const file of files) {
+        if (file.startsWith('.env')) {
+          const src = path.join(repoPath, file);
+          const dest = path.join(storagePath, file);
+          await fs.copyFile(src, dest).catch(() => undefined);
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+
+    // 2. Read and apply .worktreeinclude if it exists (for custom files/dirs)
+    try {
+      const includePath = path.join(repoPath, '.worktreeinclude');
+      const includeExists = await fs
+        .access(includePath)
+        .then(() => true)
+        .catch(() => false);
+      if (includeExists) {
+        const content = await fs.readFile(includePath, 'utf8');
+        const lines = content
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line && !line.startsWith('#'));
+
+        for (const line of lines) {
+          const src = path.join(repoPath, line);
+          const dest = path.join(storagePath, line);
+          const stat = await fs.stat(src).catch(() => null);
+
+          if (stat) {
+            await fs.mkdir(path.dirname(dest), { recursive: true }).catch(() => undefined);
+            if (stat.isDirectory()) {
+              // Symlink directories to share dependencies or target directories
+              await fs.symlink(src, dest, 'dir').catch(() => undefined);
+            } else {
+              // Copy individual files
+              await fs.copyFile(src, dest).catch(() => undefined);
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  }
+
+  async restore(
+    repoPath: string,
+    branch: string,
+    workspacePath: string,
+    baseCommit: string,
+    workdirPrefix = '',
+    allowRecreateBranch = false,
+  ): Promise<void> {
+    const storagePath = workdirPrefix
+      ? path.resolve(
+          workspacePath,
+          ...workdirPrefix
+            .split('/')
+            .filter(Boolean)
+            .map(() => '..'),
+        )
+      : workspacePath;
+    await this.gitMutex.run(repoPath, async () => {
+      const workspaceExists = await fs
+        .stat(workspacePath)
+        .then((s) => s.isDirectory())
+        .catch((err: NodeJS.ErrnoException) => {
+          if (err.code !== 'ENOENT') throw err;
+          return false;
+        });
+      if (workspaceExists) return;
+      const rootExists = await fs
+        .lstat(storagePath)
+        .then(() => true)
+        .catch((err: NodeJS.ErrnoException) => {
+          if (err.code !== 'ENOENT') throw err;
+          return false;
+        });
+      if (rootExists) {
+        throw new Error(
+          `Workspace folder is missing inside an existing worktree: ${workspacePath}`,
+        );
+      }
+      const git = simpleGit(repoPath);
+      const branchExists = (await git.branchLocal()).all.includes(branch);
+      if (!branchExists && !allowRecreateBranch) {
+        throw new Error(
+          `Cannot restore missing worktree: session branch is also missing: ${branch}`,
+        );
+      }
+      if (!branchExists) {
+        // An unused draft can be recreated from its original baseline, never
+        // silently replace a conversation's missing changes with today's HEAD.
+        await git.revparse(['--verify', `${baseCommit}^{commit}`]);
+      }
+      await fs.mkdir(path.dirname(storagePath), { recursive: true });
+      await git.raw(['worktree', 'prune', '--expire', 'now']);
+      await git.raw(
+        branchExists
+          ? ['worktree', 'add', storagePath, branch]
+          : ['worktree', 'add', '-b', branch, storagePath, baseCommit],
+      );
+      await this.copyWorkspaceFiles(repoPath, storagePath);
+      if (
+        !(await fs
+          .stat(workspacePath)
+          .then((s) => s.isDirectory())
+          .catch(() => false))
+      ) {
+        throw new Error(`Restored worktree does not contain the selected folder: ${workspacePath}`);
+      }
     });
   }
 
@@ -504,9 +541,15 @@ export class WorkspaceManager {
     }
   }
 
-  async sync(repoPath: string, activeSessionIds: string[]): Promise<void> {
+  async sync(
+    repoPath: string,
+    activeSessionIds: string[],
+    knownSessionIds: string[],
+  ): Promise<void> {
+    const knownIds = new Set(knownSessionIds.map((id) => this.sanitize(id)));
     const orphans = await this.listOrphans(repoPath, activeSessionIds);
     for (const orphan of orphans) {
+      if (!knownIds.has(orphan.branch.split('/')[1])) continue;
       await this.cleanup(repoPath, orphan.path, orphan.branch);
     }
   }

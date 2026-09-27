@@ -96,6 +96,48 @@ describe('WorkspaceManager Integration Tests', () => {
     expect(info.workdirPrefix).toBe('');
   });
 
+  test('does not reuse a worktree missing from the caller database', async () => {
+    const foreign = await manager.create(repoPath, 'foreign-session', 'shared-slug', 'master');
+    await fs.writeFile(path.join(foreign.path, 'unsaved.txt'), 'keep these changes');
+    const own = await manager.create(repoPath, 'own-session', 'shared-slug', 'master', '', []);
+    expect(own.path).not.toBe(foreign.path);
+    expect(await fs.readFile(path.join(foreign.path, 'unsaved.txt'), 'utf8')).toBe(
+      'keep these changes',
+    );
+    expect((await simpleGit(foreign.path).branch()).current).toBe(foreign.branch);
+  });
+
+  test('reserves different worktree paths for concurrent drafts with the same slug', async () => {
+    const [first, second] = await Promise.all([
+      manager.create(repoPath, 'concurrent-a', 'same-slug', 'master'),
+      manager.create(repoPath, 'concurrent-b', 'same-slug', 'master'),
+    ]);
+    expect(first.path).not.toBe(second.path);
+    expect((await simpleGit(first.path).branch()).current).toBe(first.branch);
+    expect((await simpleGit(second.path).branch()).current).toBe(second.branch);
+  });
+
+  test('startup sync only removes finalized worktrees belonging to its database', async () => {
+    const foreign = await manager.create(repoPath, 'other-database', 'other-database', 'master');
+    const active = await manager.create(repoPath, 'known-active', 'known-active', 'master');
+    const finalized = await manager.create(
+      repoPath,
+      'known-finalized',
+      'known-finalized',
+      'master',
+    );
+    await fs.writeFile(path.join(foreign.path, 'unsaved.txt'), 'keep foreign work');
+
+    await manager.sync(repoPath, ['known-active'], ['known-active', 'known-finalized']);
+    expect((await fs.stat(active.path)).isDirectory()).toBe(true);
+    expect(await fs.readFile(path.join(foreign.path, 'unsaved.txt'), 'utf8')).toBe(
+      'keep foreign work',
+    );
+    await expect(fs.stat(finalized.path)).rejects.toThrow();
+    expect(await manager.listBranches(repoPath)).toContain(foreign.branch);
+    expect(await manager.listBranches(repoPath)).not.toContain(finalized.branch);
+  });
+
   test('should manage workspace lifecycle (acquire, stage, diff, release)', async () => {
     const sessionId = 'test-session-id';
     const taskSlug = 'add-feature';

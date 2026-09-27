@@ -1,4 +1,4 @@
-import { eq, asc, inArray } from 'drizzle-orm';
+import { eq, asc, inArray, and } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
 import type { WorkspaceManager, Workspace as WorkspaceHandle } from './worktree-manager.js';
 import { sessions, projects, sessionEvents } from '../db/schema.js';
@@ -6,6 +6,7 @@ import type { SnapshotService } from './snapshot-service.js';
 import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
 import { NEW_SESSION_TITLE } from '@agentctl/shared';
 import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
 import { simpleGit } from 'simple-git';
 import { DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 
@@ -109,7 +110,13 @@ export class WorktreeWorkspaceAdapter implements WorkspaceHandle {
   }
 }
 
+export class WorkspaceUnavailableError extends Error {
+  readonly statusCode = 409;
+}
+
 export class SessionWorkspace {
+  private readonly availabilityChecks = new Map<string, Promise<boolean>>();
+
   constructor(
     private readonly db: DbClient,
     private readonly workspaceManager: WorkspaceManager,
@@ -234,6 +241,67 @@ export class SessionWorkspace {
       baseCommit,
       baseBranch,
     };
+  }
+
+  /** Repair an absent active workspace without resetting its branch or baseline. */
+  async ensureAvailable(sessionId: string): Promise<boolean> {
+    const pending = this.availabilityChecks.get(sessionId);
+    if (pending) return pending;
+    const check = this.restoreMissingWorkspace(sessionId);
+    this.availabilityChecks.set(sessionId, check);
+    try {
+      return await check;
+    } finally {
+      this.availabilityChecks.delete(sessionId);
+    }
+  }
+
+  private async restoreMissingWorkspace(sessionId: string): Promise<boolean> {
+    const session = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+    if (
+      !session ||
+      session.mode !== 'worktree' ||
+      ['archived', 'merged', 'discarded'].includes(session.status)
+    ) {
+      return false;
+    }
+
+    const exists = await fs
+      .stat(session.worktreePath)
+      .then((s) => s.isDirectory())
+      .catch((err: NodeJS.ErrnoException) => {
+        if (err.code !== 'ENOENT') throw err;
+        return false;
+      });
+    if (exists) return false;
+    if (!session.project.repoRoot) {
+      throw new Error(`Cannot restore workspace: project has no repository: ${sessionId}`);
+    }
+
+    // A running provider retains its old cwd even after the directory is restored.
+    await this.stopSessionFn(sessionId);
+    const messages = await this.db
+      .select({ id: sessionEvents.id })
+      .from(sessionEvents)
+      .where(and(eq(sessionEvents.sessionId, sessionId), eq(sessionEvents.type, 'text')));
+    const hasConversation = messages.length > 0;
+    try {
+      await this.workspaceManager.restore(
+        session.project.repoRoot,
+        session.branch,
+        session.worktreePath,
+        session.baseCommit,
+        session.project.subdir,
+        !hasConversation,
+      );
+    } catch (err) {
+      throw new WorkspaceUnavailableError(err instanceof Error ? err.message : String(err));
+    }
+    this.onEvent?.('workspace:restored', { sessionId, path: session.worktreePath });
+    return true;
   }
 
   /**
@@ -535,20 +603,20 @@ export class SessionWorkspace {
     }
   }
 
-  /**
-   * Iterates through all registered projects and prunes any physical worktrees
-   * on disk that do not have a matching active database session.
-   */
-  async syncOrphans(activeSessionIds: string[]): Promise<void> {
+  /** Only clean finalized sessions owned by this database, once per repository. */
+  async syncOrphans(activeSessionIds: string[], knownSessionIds: string[]): Promise<void> {
     const allProjects = await this.db.query.projects.findMany();
-    for (const project of allProjects) {
-      if (project.repoRoot) {
-        const isRepo = await simpleGit(project.repoRoot)
-          .checkIsRepo()
-          .catch(() => false);
-        if (isRepo) {
-          await this.workspaceManager.sync(project.repoRoot, activeSessionIds);
-        }
+    const repositories = new Set(
+      allProjects
+        .map((project) => project.repoRoot)
+        .filter((root): root is string => root !== null),
+    );
+    for (const repoRoot of repositories) {
+      const isRepo = await simpleGit(repoRoot)
+        .checkIsRepo()
+        .catch(() => false);
+      if (isRepo) {
+        await this.workspaceManager.sync(repoRoot, activeSessionIds, knownSessionIds);
       }
     }
   }

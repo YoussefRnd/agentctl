@@ -88,6 +88,7 @@ export class SessionCommandRouter {
     const providerIdChanged = sessionRecord.selectedProvider !== params.selectedProvider;
     const modelChanged = selection.selectedModel !== sessionRecord.selectedModel;
     const effortChanged = selection.selectedThinkingEffort !== sessionRecord.selectedThinkingEffort;
+    await this.deps.launcher.ensureWorkspaceAvailable(sessionId);
     const activeSession = this.deps.stateMachine.getSession(sessionId);
 
     const persistSelection = async (): Promise<void> => {

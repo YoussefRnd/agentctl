@@ -70,6 +70,10 @@ export class SessionService {
       throw new AppError('Session not found', 404);
     }
 
+    if (session.mode === 'worktree') {
+      await this.sessionManager.ensureWorkspaceAvailable(sessionId);
+    }
+
     if (session.project.repoRoot && session.worktreePath === session.project.path) {
       const currentBranch = await this.worktreeManager
         .getCurrentBranch(session.worktreePath)
