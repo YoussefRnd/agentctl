@@ -5,6 +5,7 @@ import { SessionEngine } from '@agentctl/shared';
 
 import { apiClient, getDesktopCapability } from '@agentctl/api-client';
 import { getApiBaseUrl } from '@/shared/lib/api-base-url';
+import { reconcileOptimisticMessages } from './reconcileOptimisticMessages';
 
 const fetchEvents = async (sessionId: string): Promise<SessionEventRow[]> => {
   return apiClient.fetch<SessionEventRow[]>(`/api/sessions/${sessionId}/events`);
@@ -44,14 +45,14 @@ export function useSessionEvents(sessionId: string | null) {
         queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
           const lastOldId = old.length > 0 ? old[old.length - 1].id : 0;
           const hasOptimistic = old.some((e) => e.id < 0);
-          const hasRealUserMessage = newEvents.some(
+          const realUserMessages = newEvents.filter(
             (evt) => evt.type === 'text' && evt.data.role === 'user',
           );
 
           // Fast path: Pure append of new sequential non-delta events
           const isSimpleAppend =
             !hasOptimistic &&
-            !hasRealUserMessage &&
+            realUserMessages.length === 0 &&
             old.length > 0 &&
             newEvents.every(
               (evt) => !('delta' in (evt as { delta?: string })) && evt.id > lastOldId,
@@ -61,22 +62,9 @@ export function useSessionEvents(sessionId: string | null) {
             return [...old, ...newEvents];
           }
 
-          // Upsert: replace in-place for existing IDs (streaming updates), append for new ones
-          const idToIndex = new Map(old.map((e, i) => [e.id, i]));
-          const result = [...old];
-
-          // Check if any incoming event is a real user message, and remove the temp optimistic event once
-          if (hasRealUserMessage) {
-            const tempIdx = result.findIndex(
-              (e) => e.id < 0 && e.type === 'text' && e.data.role === 'user',
-            );
-            if (tempIdx !== -1) {
-              result.splice(tempIdx, 1);
-              // Rebuild the index mapping because indexes have shifted
-              idToIndex.clear();
-              result.forEach((e, idx) => idToIndex.set(e.id, idx));
-            }
-          }
+          // Upsert: replace in-place for existing IDs (streaming updates), append for new ones.
+          const result = reconcileOptimisticMessages(old, newEvents);
+          const idToIndex = new Map(result.map((event, index) => [event.id, index]));
 
           for (const evt of newEvents) {
             const idx = idToIndex.get(evt.id);

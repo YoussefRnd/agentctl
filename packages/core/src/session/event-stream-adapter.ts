@@ -7,7 +7,7 @@ import { sessionEventToolCallDataSchema, type SessionEventPayload } from '@agent
 
 export interface TurnStart {
   eventId: number;
-  snapshotHash?: string;
+  snapshotPromise: Promise<string | undefined>;
 }
 
 export class EventStreamAdapter {
@@ -89,31 +89,39 @@ export class EventStreamAdapter {
       metadata.promptTokens = promptTokens;
     }
 
-    let snapshotHash: string | undefined;
-    if (this.cwd && this.snapshotService) {
-      try {
-        snapshotHash = await this.snapshotService.track(this.cwd);
-        if (snapshotHash) {
-          metadata.snapshotHash = snapshotHash;
-        }
-      } catch (error) {
-        this.logger.error(error, 'Failed to capture turn-start snapshot');
-      }
-    }
+    const userPayload: SessionEventPayload<'text'> = {
+      content: text,
+      role: 'user',
+      attachments: attachments && attachments.length > 0 ? attachments : undefined,
+    };
 
     const eventId = await this.eventStore.append(
       this.sessionId,
       'text',
-      {
-        content: text,
-        role: 'user',
-        attachments: attachments && attachments.length > 0 ? attachments : undefined,
-      },
+      userPayload,
       null,
       Object.keys(metadata).length > 0 ? metadata : undefined,
     );
     this.currentParentEventId = eventId;
-    return { eventId, snapshotHash };
+
+    const snapshotPromise = (async (): Promise<string | undefined> => {
+      if (!this.cwd || !this.snapshotService) return undefined;
+      try {
+        const hash = await this.snapshotService.track(this.cwd);
+        if (hash) {
+          await this.eventStore.updateSilently(eventId, userPayload, {
+            ...metadata,
+            snapshotHash: hash,
+          });
+        }
+        return hash;
+      } catch (error) {
+        this.logger.error(error, 'Failed to capture turn-start snapshot');
+        return undefined;
+      }
+    })();
+
+    return { eventId, snapshotPromise };
   }
 
   async appendText(

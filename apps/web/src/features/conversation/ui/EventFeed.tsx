@@ -30,6 +30,7 @@ interface EventFeedProps {
   isSessionRunning?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
   onEditSubmit?: (eventId: number, newContent: string) => void;
+  onRetryMessage?: (eventId: number) => void;
 }
 
 function getGroupKey(group: FeedEventGroup): string {
@@ -45,6 +46,7 @@ export function EventFeed({
   isSessionRunning,
   onRewind,
   onEditSubmit,
+  onRetryMessage,
 }: EventFeedProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -60,6 +62,21 @@ export function EventFeed({
   const { sessionData, sessionId, reviewData } = useSession();
   const { streamingEventId } = useSessionStream();
   const isSessionError = sessionData?.session.status === 'error';
+  const lastUserEventId = events.reduce(
+    (max, event) =>
+      event.type === 'text' && event.data.role === 'user' ? Math.max(max, event.id) : max,
+    0,
+  );
+  const latestPromptError = [...events]
+    .reverse()
+    .find(
+      (event) =>
+        event.id > lastUserEventId &&
+        event.type === 'status' &&
+        event.data.status === 'prompt_failed',
+    );
+  const promptErrorMessage =
+    latestPromptError?.type === 'status' ? latestPromptError.data.message : undefined;
   const queryClient = useQueryClient();
 
   const activeProvider = useMemo(() => {
@@ -372,6 +389,7 @@ export function EventFeed({
                     hasGitRepo={hasGitRepo}
                     onRewind={onRewind}
                     onEditSubmit={onEditSubmit}
+                    onRetryMessage={onRetryMessage}
                   />
                 </div>
               </div>
@@ -387,12 +405,13 @@ export function EventFeed({
                       <AgentIcon className="h-4 w-4" />
                     </div>
                     <span className="text-[11px] font-bold tracking-wider text-rose-400 uppercase">
-                      Agent Connection Interrupted
+                      {promptErrorMessage ? 'Agent run failed' : 'Agent Connection Interrupted'}
                     </span>
                   </div>
                   <p className="text-text-muted/90 text-[12px] leading-relaxed">
-                    The agent process exited unexpectedly. Type a message in the input below to
-                    resuscitate the session, or reconnect the stream.
+                    {typeof promptErrorMessage === 'string' && promptErrorMessage
+                      ? promptErrorMessage
+                      : 'The agent process exited unexpectedly. Type a message below to resuscitate the session, or reconnect the stream.'}
                   </p>
                   <div className="mt-1 flex items-center gap-3">
                     <Button

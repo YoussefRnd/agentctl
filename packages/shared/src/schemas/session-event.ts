@@ -5,6 +5,10 @@ export const sessionEventTextDataSchema = z
     content: z.string().optional().default(''),
     text: z.string().optional(),
     role: z.enum(['provider', 'user', 'thought']).optional(),
+    // Local optimistic user events use these fields until a persisted row arrives.
+    deliveryStatus: z.enum(['queued', 'sending', 'accepted', 'failed']).optional(),
+    deliveryError: z.string().optional(),
+    attachmentIds: z.array(z.string()).optional(),
     attachments: z
       .array(
         z.object({

@@ -33,7 +33,7 @@ import { Button, cn, IconButton, LoadingState, Tooltip } from '@agentctl/ui';
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
   const { events, isLoadingEvents, isConnected } = useSessionStream();
-  const { handleSend, handleApprove, handleDeny } = useSessionActions();
+  const { handleSend, handleRetry, handleApprove, handleDeny } = useSessionActions();
   const { switchProvider, isSwitching } = useProviders(sessionId);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -440,6 +440,7 @@ export function MainFeed() {
                 isSessionRunning={sessionData?.session.status === 'running'}
                 onRewind={handleRewindRequest}
                 onEditSubmit={handleEditAndSubmit}
+                onRetryMessage={handleRetry}
               />
             )}
           </main>

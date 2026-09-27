@@ -14,9 +14,11 @@ vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
+const { streamState } = vi.hoisted(() => ({ streamState: { events: [] as SessionEventRow[] } }));
+
 vi.mock('./useSessionEvents', () => ({
   useSessionEvents: () => ({
-    events: [],
+    events: streamState.events,
     isLoading: false,
     isConnected: true,
     streamingEventId: null,
@@ -31,13 +33,13 @@ import { SessionStreamProvider, useSessionStream } from './SessionContext';
 const mockedSendInput = vi.mocked(api.sendInput);
 const mockedToastError = vi.mocked(toast.error);
 
-function Harness() {
+function Harness({ optimisticEventId }: { optimisticEventId?: number }) {
   const { enqueueMessage } = useSessionStream();
   return (
     <button
       type="button"
       onClick={() => {
-        enqueueMessage('hello world');
+        enqueueMessage('hello world', undefined, optimisticEventId);
       }}
     >
       enqueue
@@ -55,7 +57,7 @@ function ghostEvent(content = 'hello world'): SessionEventRow {
   };
 }
 
-function makeSession(status: 'idle' | 'running'): SessionWithCapabilities {
+function makeSession(status: 'idle' | 'running' | 'error'): SessionWithCapabilities {
   return {
     session: {
       id: 'sess-1',
@@ -81,6 +83,8 @@ let root: ReturnType<typeof createRoot>;
 let queryClient: QueryClient;
 
 beforeEach(() => {
+  streamState.events = [];
+  mockedSendInput.mockReset();
   useMessageQueueStore.getState().clearQueue();
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -100,16 +104,20 @@ afterEach(() => {
 });
 
 describe('SessionStreamProvider queued message send', () => {
-  it('toasts an error and removes the ghost message when a queued send fails', async () => {
+  it('marks a queued prompt as failed when the send is rejected', async () => {
     queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
     queryClient.setQueryData(sessionKeys.events('sess-1'), [ghostEvent()]);
-    mockedSendInput.mockRejectedValueOnce(new Error('boom'));
+    mockedSendInput.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce({
+      status: 200,
+      body: { success: true, eventId: 7 },
+      headers: new Headers(),
+    } as never);
 
     act(() => {
       root.render(
         <QueryClientProvider client={queryClient}>
           <SessionStreamProvider sessionId="sess-1">
-            <Harness />
+            <Harness optimisticEventId={-1} />
           </SessionStreamProvider>
         </QueryClientProvider>,
       );
@@ -132,7 +140,83 @@ describe('SessionStreamProvider queued message send', () => {
 
     const remaining =
       queryClient.getQueryData<SessionEventRow[]>(sessionKeys.events('sess-1')) ?? [];
-    expect(remaining.some((e) => e.id < 0)).toBe(false);
+    const failed = remaining.find((event) => event.id === -1);
+    expect(failed?.type === 'text' && failed.data.deliveryStatus).toBe('failed');
+    expect(failed?.type === 'text' && failed.data.deliveryError).toBe('boom');
+
+    act(() => {
+      useMessageQueueStore.getState().enqueueMessage('sess-1', 'later');
+      queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('error'));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockedSendInput).toHaveBeenCalledTimes(1);
+
+    const toastOptions = mockedToastError.mock.calls[0]?.[1] as
+      | {
+          action?: { onClick?: () => void };
+        }
+      | undefined;
+    await act(async () => {
+      toastOptions?.action?.onClick?.();
+    });
+    await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(2));
+    const retried = queryClient
+      .getQueryData<SessionEventRow[]>(sessionKeys.events('sess-1'))
+      ?.find((event) => event.id === -1);
+    expect(retried?.type === 'text' && retried.data.deliveryStatus).toBe('accepted');
+  });
+
+  it('re-enqueues a failed message when retried while the session is running', async () => {
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+    queryClient.setQueryData(sessionKeys.events('sess-1'), [ghostEvent()]);
+    mockedSendInput.mockRejectedValueOnce(new Error('boom'));
+
+    act(() => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SessionStreamProvider sessionId="sess-1">
+            <Harness optimisticEventId={-1} />
+          </SessionStreamProvider>
+        </QueryClientProvider>,
+      );
+    });
+    act(() => {
+      document.querySelector<HTMLButtonElement>('button')?.click();
+    });
+
+    await vi.waitFor(() => {
+      expect(mockedSendInput).toHaveBeenCalledTimes(1);
+    });
+    await vi.waitFor(() => {
+      expect(mockedToastError).toHaveBeenCalled();
+    });
+
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('running'));
+
+    const toastOptions = mockedToastError.mock.calls[0]?.[1] as
+      | {
+          action?: { onClick?: () => void };
+        }
+      | undefined;
+    await act(async () => {
+      toastOptions?.action?.onClick?.();
+    });
+
+    expect(mockedSendInput).toHaveBeenCalledTimes(1);
+
+    const queue = useMessageQueueStore.getState().queuedMessages['sess-1'];
+    expect(queue).toHaveLength(1);
+    expect(queue?.[0]).toMatchObject({
+      text: 'hello world',
+      optimisticEventId: -1,
+    });
+
+    const event = queryClient
+      .getQueryData<SessionEventRow[]>(sessionKeys.events('sess-1'))
+      ?.find((e) => e.id === -1);
+    expect(event?.type === 'text' && event.data.deliveryStatus).toBe('queued');
   });
 
   it('keeps queued prompts in their originating session', () => {
@@ -184,6 +268,43 @@ describe('SessionStreamProvider queued message send', () => {
     await act(async () => {
       queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
     });
+    await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(2));
+    expect(mockedSendInput).toHaveBeenLastCalledWith({
+      params: { id: 'sess-1' },
+      body: { input: 'second' },
+    });
+  });
+
+  it('submits the next queued prompt after a fast turn ends without a visible running state', async () => {
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+    mockedSendInput.mockImplementation(() => new Promise(() => {}));
+    const render = () => (
+      <QueryClientProvider client={queryClient}>
+        <SessionStreamProvider sessionId="sess-1">
+          <Harness />
+        </SessionStreamProvider>
+      </QueryClientProvider>
+    );
+
+    act(() => root.render(render()));
+    act(() => {
+      const queue = useMessageQueueStore.getState();
+      queue.enqueueMessage('sess-1', 'first');
+      queue.enqueueMessage('sess-1', 'second');
+    });
+    await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(1));
+
+    streamState.events = [
+      {
+        id: 20,
+        sessionId: 'sess-1',
+        type: 'status',
+        data: { status: 'turn_end' },
+        createdAt: new Date(),
+      } as SessionEventRow,
+    ];
+    await act(async () => root.render(render()));
+
     await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(2));
     expect(mockedSendInput).toHaveBeenLastCalledWith({
       params: { id: 'sess-1' },

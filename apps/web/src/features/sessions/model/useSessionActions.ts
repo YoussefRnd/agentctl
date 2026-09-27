@@ -1,13 +1,19 @@
 import { useSession, useSessionStream } from './SessionContext';
 import { api, type SidebarProject } from '@agentctl/api-client';
+import {
+  nextOptimisticEventId,
+  sendSessionInput,
+  updateOptimisticDelivery,
+} from './messageDelivery';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { sessionKeys } from '@/shared/lib/queryKeys';
 import type { SessionEventRow, SessionWithCapabilities } from '@agentctl/shared';
 
 export function useSessionActions() {
   const { sessionId, sessionData } = useSession();
-  const { enqueueMessage } = useSessionStream();
+  const { enqueueMessage, retryMessage: handleRetry } = useSessionStream();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -19,7 +25,11 @@ export function useSessionActions() {
 
     if (!text.trim() && (!attachmentIds || attachmentIds.length === 0)) return;
 
-    const tempId = -Date.now();
+    const currentSession =
+      queryClient.getQueryData<SessionWithCapabilities>(sessionKeys.detail(sessionId)) ??
+      sessionData;
+    const isRunning = currentSession?.session.status === 'running';
+    const tempId = nextOptimisticEventId();
     const optimisticEvent: SessionEventRow = {
       id: tempId,
       sessionId: sessionId,
@@ -27,6 +37,8 @@ export function useSessionActions() {
       data: {
         role: 'user',
         content: text,
+        deliveryStatus: isRunning ? 'queued' : 'sending',
+        attachmentIds,
       },
       createdAt: new Date(),
     };
@@ -35,9 +47,8 @@ export function useSessionActions() {
       return [...old, optimisticEvent];
     });
 
-    const isRunning = sessionData?.session.status === 'running';
     if (isRunning) {
-      enqueueMessage(text, attachmentIds);
+      enqueueMessage(text, attachmentIds, tempId);
     } else {
       queryClient.setQueryData<SessionWithCapabilities>(
         ['session', sessionId],
@@ -73,18 +84,12 @@ export function useSessionActions() {
       });
 
       try {
-        await api.sendInput({
-          params: { id: sessionId },
-          body: {
-            input: text,
-            ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
-          },
-        });
+        await sendSessionInput(sessionId, text, attachmentIds);
+        updateOptimisticDelivery(queryClient, sessionId, tempId, 'accepted');
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
-      } catch {
-        queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
-          return old.filter((e) => e.id !== tempId);
-        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Message was not accepted';
+        updateOptimisticDelivery(queryClient, sessionId, tempId, 'failed', message);
         queryClient.setQueryData<SessionWithCapabilities>(
           ['session', sessionId],
           (old: SessionWithCapabilities | undefined) => {
@@ -99,7 +104,14 @@ export function useSessionActions() {
           },
         );
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        toast.error('Failed to send message');
+        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        toast.error('Failed to send message', {
+          description: message,
+          action: {
+            label: 'Retry',
+            onClick: () => handleRetry(tempId),
+          },
+        });
       }
     }
   };
@@ -152,6 +164,7 @@ export function useSessionActions() {
 
   return {
     handleSend,
+    handleRetry,
     handleApprove,
     handleDeny,
     handleCancel,

@@ -32,6 +32,9 @@ interface TextCardProps {
     sizeBytes: number;
   }[];
   eventId?: number;
+  deliveryStatus?: 'queued' | 'sending' | 'accepted' | 'failed';
+  deliveryError?: string;
+  onRetry?: (eventId: number) => void;
   hasGitRepo?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
   onEditSubmit?: (eventId: number, newContent: string) => void;
@@ -78,6 +81,9 @@ export const TextCard = memo(function TextCard({
   isStreaming = false,
   attachments,
   eventId,
+  deliveryStatus,
+  deliveryError,
+  onRetry,
   hasGitRepo,
   onRewind,
   onEditSubmit,
@@ -219,6 +225,19 @@ export const TextCard = memo(function TextCard({
                   </div>
                 )}
 
+                {deliveryStatus === 'failed' && (
+                  <div className="mt-2 flex max-w-full items-center gap-2 text-xs text-rose-400">
+                    <span role="status">
+                      Message not sent{deliveryError ? `: ${deliveryError}` : ''}
+                    </span>
+                    {eventId !== undefined && eventId < 0 && onRetry && (
+                      <Button variant="ghost" size="sm" onClick={() => onRetry(eventId)}>
+                        Retry
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 {/* Quick action bar anchored cleanly below user message bubble */}
                 <div className="pointer-events-none mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
                   <Tooltip content={copied ? 'Copied to clipboard' : 'Copy message'}>
@@ -236,18 +255,20 @@ export const TextCard = memo(function TextCard({
                     </IconButton>
                   </Tooltip>
 
-                  <Tooltip content="Edit prompt">
-                    <IconButton
-                      size="compact"
-                      onClick={handleStartEdit}
-                      className="hover:bg-surface-secondary/80"
-                      aria-label="Edit prompt"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </IconButton>
-                  </Tooltip>
+                  {eventId !== undefined && eventId > 0 && (
+                    <Tooltip content="Edit prompt">
+                      <IconButton
+                        size="compact"
+                        onClick={handleStartEdit}
+                        className="hover:bg-surface-secondary/80"
+                        aria-label="Edit prompt"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
 
-                  {eventId && onRewind && (
+                  {eventId !== undefined && eventId > 0 && onRewind && (
                     <Popover open={showMenu} onOpenChange={setShowMenu}>
                       <PopoverTrigger asChild>
                         <IconButton

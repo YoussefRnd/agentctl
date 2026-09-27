@@ -321,9 +321,36 @@ export class SessionManager {
       persona?: string;
       configId?: string;
       value?: string;
+      onAccepted?: (eventId: number) => void;
     },
   ): Promise<void> {
     return this.commandRouter.handleClientMessage(sessionId, action, payload);
+  }
+
+  /** Resolve after the user message is persisted, while the provider turn continues. */
+  startInput(sessionId: string, input: string, attachmentIds?: string[]): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      let accepted = false;
+      void this.handleClientMessage(sessionId, 'session.input', {
+        input,
+        attachmentIds,
+        onAccepted: (eventId) => {
+          accepted = true;
+          resolve(eventId);
+        },
+      }).then(
+        () => {
+          if (!accepted) reject(new Error('Session did not accept the message'));
+        },
+        (error: unknown) => {
+          if (accepted) {
+            this.logger.error(error, `Prompt failed after acceptance for session ${sessionId}`);
+          } else {
+            reject(error);
+          }
+        },
+      );
+    });
   }
 
   async rewindSession(sessionId: string, eventId: number, mode: 'conversation' | 'files' | 'fork') {

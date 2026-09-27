@@ -13,6 +13,7 @@ interface EventFeedItemProps {
   hasGitRepo?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
   onEditSubmit?: (eventId: number, newContent: string) => void;
+  onRetryMessage?: (eventId: number) => void;
 }
 
 export function EventFeedItem({
@@ -22,6 +23,7 @@ export function EventFeedItem({
   hasGitRepo,
   onRewind,
   onEditSubmit,
+  onRetryMessage,
 }: EventFeedItemProps) {
   if (group.type === 'command') {
     const data = group.event.data as {
@@ -83,6 +85,9 @@ export function EventFeedItem({
         variant="user"
         isStreaming={isStreaming}
         eventId={e.id}
+        deliveryStatus={e.type === 'text' ? e.data.deliveryStatus : undefined}
+        deliveryError={e.type === 'text' ? e.data.deliveryError : undefined}
+        onRetry={onRetryMessage}
         hasGitRepo={hasGitRepo}
         onRewind={onRewind}
         onEditSubmit={onEditSubmit}

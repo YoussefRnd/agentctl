@@ -4,11 +4,17 @@ export interface QueuedMessage {
   id: string;
   text: string;
   attachmentIds?: string[];
+  optimisticEventId?: number;
 }
 
 interface MessageQueueState {
   queuedMessages: Record<string, QueuedMessage[]>;
-  enqueueMessage: (sessionId: string, text: string, attachmentIds?: string[]) => void;
+  enqueueMessage: (
+    sessionId: string,
+    text: string,
+    attachmentIds?: string[],
+    optimisticEventId?: number,
+  ) => void;
   dequeueMessage: (sessionId: string, id: string) => void;
   reorderQueuedMessages: (sessionId: string, newQueue: QueuedMessage[]) => void;
   moveQueuedMessage: (sessionId: string, index: number, direction: 'up' | 'down') => void;
@@ -18,13 +24,13 @@ interface MessageQueueState {
 export const useMessageQueueStore = create<MessageQueueState>((set) => ({
   queuedMessages: {},
 
-  enqueueMessage: (sessionId, text, attachmentIds) => {
+  enqueueMessage: (sessionId, text, attachmentIds, optimisticEventId) => {
     set((state) => ({
       queuedMessages: {
         ...state.queuedMessages,
         [sessionId]: [
           ...(state.queuedMessages[sessionId] ?? []),
-          { id: crypto.randomUUID(), text, attachmentIds },
+          { id: crypto.randomUUID(), text, attachmentIds, optimisticEventId },
         ],
       },
     }));

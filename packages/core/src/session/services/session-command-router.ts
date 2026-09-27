@@ -315,6 +315,7 @@ export class SessionCommandRouter {
       persona?: string;
       configId?: string;
       value?: string;
+      onAccepted?: (eventId: number) => void;
     },
   ) {
     const session = await this.deps.getOrResuscitate(sessionId, { allowArchived: true });
@@ -324,6 +325,7 @@ export class SessionCommandRouter {
         { sessionId },
         'Received message for unknown or non-resuscitatable session',
       );
+      if (action === 'session.input') throw new Error('Session is unavailable');
       return;
     }
 
@@ -398,7 +400,17 @@ export class SessionCommandRouter {
       }
 
       this.deps.clearRewindBackup(sessionId);
-      await session.prompt(payload.input, payload.attachmentIds, historyContext);
+      if (payload.onAccepted) {
+        await session.prompt(
+          payload.input,
+          payload.attachmentIds,
+          historyContext,
+          undefined,
+          payload.onAccepted,
+        );
+      } else {
+        await session.prompt(payload.input, payload.attachmentIds, historyContext);
+      }
       session.markHistoryContextTransferred?.();
     }
   }

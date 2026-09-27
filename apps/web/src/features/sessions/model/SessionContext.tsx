@@ -1,13 +1,4 @@
-import {
-  createContext,
-  use,
-  useMemo,
-  useEffect,
-  useRef,
-  useCallback,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, use, useMemo, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { SessionEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
@@ -133,6 +124,7 @@ export function useSession() {
 // 2. SESSION STREAM CONTEXT
 // ==========================================
 import { useMessageQueueStore, type QueuedMessage } from '@/shared';
+import { sendSessionInput, updateOptimisticDelivery } from './messageDelivery';
 export type { QueuedMessage };
 const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];
 
@@ -144,8 +136,9 @@ interface SessionStreamContextValue {
   planItems: PlanItem[];
   structuredPlan: StructuredPlanItem[];
   queuedMessages: QueuedMessage[];
-  enqueueMessage: (text: string, attachmentIds?: string[]) => void;
+  enqueueMessage: (text: string, attachmentIds?: string[], optimisticEventId?: number) => void;
   dequeueMessage: (id: string) => void;
+  retryMessage: (eventId: number) => void;
   reorderQueuedMessages: (newQueue: QueuedMessage[]) => void;
   moveQueuedMessage: (index: number, direction: 'up' | 'down') => void;
 }
@@ -175,8 +168,8 @@ export function SessionStreamProvider({
   const reorderQueuedMessagesForSession = useMessageQueueStore((s) => s.reorderQueuedMessages);
   const moveQueuedMessageForSession = useMessageQueueStore((s) => s.moveQueuedMessage);
   const enqueueMessage = useCallback(
-    (text: string, attachmentIds?: string[]) =>
-      enqueueQueuedMessage(sessionId, text, attachmentIds),
+    (text: string, attachmentIds?: string[], optimisticEventId?: number) =>
+      enqueueQueuedMessage(sessionId, text, attachmentIds, optimisticEventId),
     [enqueueQueuedMessage, sessionId],
   );
   const dequeueMessage = useCallback(
@@ -193,10 +186,28 @@ export function SessionStreamProvider({
     [moveQueuedMessageForSession, sessionId],
   );
   const awaitingQueuedTurnRef = useRef(false);
-  const [queueRetryTick, setQueueRetryTick] = useState(0);
+  const queuePausedRef = useRef(false);
+  const queuedTurnStartEventIdRef = useRef(0);
+  const latestEventId = useMemo(
+    () => events.reduce((max, event) => Math.max(max, event.id), 0),
+    [events],
+  );
+  const latestTurnEndId = useMemo(
+    () =>
+      events.reduce(
+        (max, event) =>
+          event.type === 'status' && event.data.status === 'turn_end'
+            ? Math.max(max, event.id)
+            : max,
+        0,
+      ),
+    [events],
+  );
 
   useEffect(() => {
     awaitingQueuedTurnRef.current = false;
+    queuePausedRef.current = false;
+    queuedTurnStartEventIdRef.current = 0;
   }, [sessionId]);
 
   const { data: sessionData } = useQuery({
@@ -205,68 +216,134 @@ export function SessionStreamProvider({
     enabled: !!sessionId,
   });
 
-  useEffect(() => {
-    const isIdle = sessionData?.session.status === 'idle';
-    if (!isIdle) {
-      if (sessionData?.session.status && sessionData.session.status !== 'idle') {
-        awaitingQueuedTurnRef.current = false;
+  const retryInput = useCallback(
+    (text: string, attachmentIds?: string[], eventId?: number) => {
+      if (eventId !== undefined) {
+        const event = queryClient
+          .getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId))
+          ?.find((candidate) => candidate.id === eventId);
+        if (event?.type !== 'text' || event.data.deliveryStatus !== 'failed') return;
       }
-      return;
-    }
-    if (awaitingQueuedTurnRef.current || queuedMessages.length === 0) return;
-
-    awaitingQueuedTurnRef.current = true;
-    const nextMessage = queuedMessages[0];
-    queueMicrotask(() => {
-      dequeueMessage(nextMessage.id);
-      void api
-        .sendInput({
-          params: { id: sessionId },
-          body: {
-            input: nextMessage.text,
-            ...(nextMessage.attachmentIds && nextMessage.attachmentIds.length > 0
-              ? { attachmentIds: nextMessage.attachmentIds }
-              : {}),
-          },
-        })
+      const setDelivery = (
+        status: 'queued' | 'sending' | 'accepted' | 'failed',
+        error?: string,
+      ) => {
+        if (eventId !== undefined)
+          updateOptimisticDelivery(queryClient, sessionId, eventId, status, error);
+      };
+      queuePausedRef.current = false;
+      const currentSession = queryClient.getQueryData<SessionWithCapabilities>(
+        sessionKeys.detail(sessionId),
+      );
+      if (currentSession?.session.status === 'running') {
+        awaitingQueuedTurnRef.current = false;
+        setDelivery('queued');
+        enqueueMessage(text, attachmentIds, eventId);
+        return;
+      }
+      awaitingQueuedTurnRef.current = true;
+      const currentEvents =
+        queryClient.getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId)) ?? [];
+      queuedTurnStartEventIdRef.current = currentEvents.reduce(
+        (max, event) => Math.max(max, event.id),
+        0,
+      );
+      setDelivery('sending');
+      queryClient.setQueryData<SessionWithCapabilities>(sessionKeys.detail(sessionId), (old) =>
+        old ? { ...old, session: { ...old.session, status: 'running' } } : old,
+      );
+      void sendSessionInput(sessionId, text, attachmentIds)
         .then(() => {
+          setDelivery('accepted');
           void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
         })
-        .catch((err: unknown) => {
-          awaitingQueuedTurnRef.current = false;
-          setQueueRetryTick((tick) => tick + 1);
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          toast.error('Failed to send queued message', {
-            description: errorMessage,
-            action: {
-              label: 'Re-send',
-              onClick: () => {
-                enqueueMessage(nextMessage.text, nextMessage.attachmentIds);
-              },
-            },
+        .catch((error: unknown) => {
+          queuePausedRef.current = true;
+          const message = error instanceof Error ? error.message : String(error);
+          setDelivery('failed', message);
+          toast.error('Failed to send message', {
+            description: message,
+            action: { label: 'Retry', onClick: () => retryInput(text, attachmentIds, eventId) },
           });
-          const cleaned = (
-            queryClient.getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId)) ?? []
-          ).filter(
-            (e) =>
-              !(
-                e.id < 0 &&
-                e.type === 'text' &&
-                (e.data as { role?: string }).role === 'user' &&
-                (e.data as { content?: string }).content === nextMessage.text
-              ),
-          );
-          queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), cleaned);
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
         });
+    },
+    [queryClient, sessionId, enqueueMessage],
+  );
+
+  const retryMessage = useCallback(
+    (eventId: number) => {
+      const event = queryClient
+        .getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId))
+        ?.find((candidate) => candidate.id === eventId);
+      if (eventId < 0 && event?.type === 'text' && event.data.deliveryStatus === 'failed') {
+        retryInput(event.data.content, event.data.attachmentIds, eventId);
+      }
+    },
+    [queryClient, sessionId, retryInput],
+  );
+
+  useEffect(() => {
+    const isIdle = sessionData?.session.status === 'idle';
+    if (isIdle && latestTurnEndId > queuedTurnStartEventIdRef.current) {
+      awaitingQueuedTurnRef.current = false;
+    }
+    if (!isIdle) {
+      if (sessionData?.session.status === 'running') queuePausedRef.current = false;
+      if (sessionData?.session.status) awaitingQueuedTurnRef.current = false;
+      return;
+    }
+    if (queuePausedRef.current || awaitingQueuedTurnRef.current || queuedMessages.length === 0)
+      return;
+
+    awaitingQueuedTurnRef.current = true;
+    queuedTurnStartEventIdRef.current = latestEventId;
+    const nextMessage = queuedMessages[0];
+    const setDelivery = (status: 'queued' | 'sending' | 'accepted' | 'failed', error?: string) => {
+      if (nextMessage.optimisticEventId !== undefined) {
+        updateOptimisticDelivery(
+          queryClient,
+          sessionId,
+          nextMessage.optimisticEventId,
+          status,
+          error,
+        );
+      }
+    };
+    const markFailed = (error: unknown) => {
+      queuePausedRef.current = true;
+      const message = error instanceof Error ? error.message : String(error);
+      setDelivery('failed', message);
+      toast.error('Failed to send queued message', {
+        description: message,
+        action: {
+          label: 'Retry',
+          onClick: () =>
+            retryInput(nextMessage.text, nextMessage.attachmentIds, nextMessage.optimisticEventId),
+        },
+      });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+    };
+    queueMicrotask(() => {
+      dequeueMessage(nextMessage.id);
+      setDelivery('sending');
+      void sendSessionInput(sessionId, nextMessage.text, nextMessage.attachmentIds)
+        .then(() => {
+          setDelivery('accepted');
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+        })
+        .catch(markFailed);
     });
   }, [
     sessionData?.session.status,
     queuedMessages,
-    queueRetryTick,
+    latestEventId,
+    latestTurnEndId,
     sessionId,
     queryClient,
     dequeueMessage,
     enqueueMessage,
+    retryInput,
   ]);
 
   const prevStatusRef = useRef<string | undefined>(undefined);
@@ -363,6 +440,7 @@ export function SessionStreamProvider({
       queuedMessages,
       enqueueMessage,
       dequeueMessage,
+      retryMessage,
       reorderQueuedMessages,
       moveQueuedMessage,
     }),
@@ -376,6 +454,7 @@ export function SessionStreamProvider({
       queuedMessages,
       enqueueMessage,
       dequeueMessage,
+      retryMessage,
       reorderQueuedMessages,
       moveQueuedMessage,
     ],

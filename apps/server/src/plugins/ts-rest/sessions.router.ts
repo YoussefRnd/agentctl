@@ -577,20 +577,22 @@ export function createSessionsRouter(
     }) => {
       const { id } = params;
       const { input, attachmentIds } = body;
-      void Promise.resolve(
-        fastify.sessionManager.handleClientMessage(id, 'session.input', {
-          input,
-          attachmentIds,
-        }),
-      ).catch((err: unknown) => {
-        fastify.log.error({ err, sessionId: id }, 'sendInput handleClientMessage failed');
-      });
-
-      await Promise.resolve();
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
+      try {
+        const eventId = await fastify.sessionManager.startInput(id, input, attachmentIds);
+        return {
+          status: 200 as const,
+          body: { success: true as const, eventId },
+        };
+      } catch (error) {
+        fastify.log.error({ err: error, sessionId: id }, 'sendInput was not accepted');
+        return {
+          status: 409 as const,
+          body: {
+            success: false as const,
+            message: error instanceof Error ? error.message : 'Session did not accept the message',
+          },
+        };
+      }
     },
   };
 }

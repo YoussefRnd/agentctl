@@ -208,7 +208,8 @@ export const sessionsContract = {
       attachmentIds: z.array(z.string()).optional(),
     }),
     responses: {
-      200: z.object({ success: z.boolean() }),
+      200: z.object({ success: z.literal(true), eventId: z.number() }),
+      409: z.object({ success: z.literal(false), message: z.string() }),
     },
     summary: 'Send user input to session',
   },

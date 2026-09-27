@@ -216,6 +216,7 @@ export class ManagedSession {
     attachmentIds?: string[],
     embeddedContext?: string,
     skillActivation?: SkillActivation,
+    onAccepted?: (eventId: number) => void,
   ): Promise<void> {
     try {
       const sessionRecord = await this.db.query.sessions.findFirst({
@@ -283,24 +284,19 @@ export class ManagedSession {
       }
 
       let promptText = text;
-      let isManualMcp = false;
-      let startSnapshotHash: string | undefined;
       const promptTokens = Math.ceil(text.length / 4);
+      const turn = await this.projector.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+      onAccepted?.(turn.eventId);
+      // Acceptance need not wait for Git, but tools must see a completed baseline.
+      const startSnapshotHash = await turn.snapshotPromise;
 
       if (text.startsWith('/')) {
         try {
           const executed = await this.parseAndExecuteMcpCommand(text);
           if (executed) {
-            isManualMcp = true;
             // Wrap for agent context
             promptText = `[System Notification: The user manually executed the tool "${executed.toolName}" with args: "${executed.args}". Result:\n---\n${executed.result}\n---\nAnalyze this output and answer the user's request.]`;
 
-            // Persist user command
-            ({ snapshotHash: startSnapshotHash } = await this.projector.startTurn(
-              text,
-              resolvedAttachmentsMeta,
-              promptTokens,
-            ));
             // Yield result to user timeline feed
             await this.projector.appendText(
               `\n\n*Manual Tool Execution Result [${executed.toolName}]:*\n\`\`\`json\n${executed.result}\n\`\`\`\n`,
@@ -308,14 +304,7 @@ export class ManagedSession {
             await this.flushAll();
           }
         } catch (err: unknown) {
-          isManualMcp = true;
           const msg = err instanceof Error ? err.message : String(err);
-          // Persist user command
-          ({ snapshotHash: startSnapshotHash } = await this.projector.startTurn(
-            text,
-            resolvedAttachmentsMeta,
-            promptTokens,
-          ));
           // Stream execution error to UI
           await this.projector.appendText(`\n\n*Manual Tool Execution Error:*\n> ${msg}\n`);
           await this.flushAll();
@@ -338,15 +327,6 @@ export class ManagedSession {
           }
           return; // Do not call the model if direct execution failed
         }
-      }
-
-      if (!isManualMcp) {
-        // Persist user message immediately so it shows up in history
-        ({ snapshotHash: startSnapshotHash } = await this.projector.startTurn(
-          text,
-          resolvedAttachmentsMeta,
-          promptTokens,
-        ));
       }
 
       let nativelyLoadsSkills = false;
@@ -391,17 +371,19 @@ export class ManagedSession {
         stopReason: promptResult.stopReason,
       };
 
-      if (snapshotService && this.cwd && startSnapshotHash && snapshotService.getTurnChanges) {
+      if (snapshotService && this.cwd && snapshotService.getTurnChanges) {
         try {
-          const endSnapshotHash = await snapshotService.track(this.cwd);
-          if (endSnapshotHash) {
-            const turnChanges = await snapshotService.getTurnChanges(
-              this.cwd,
-              startSnapshotHash,
-              endSnapshotHash,
-            );
-            if (turnChanges) {
-              turnData.turnChanges = turnChanges;
+          if (startSnapshotHash) {
+            const endSnapshotHash = await snapshotService.track(this.cwd);
+            if (endSnapshotHash) {
+              const turnChanges = await snapshotService.getTurnChanges(
+                this.cwd,
+                startSnapshotHash,
+                endSnapshotHash,
+              );
+              if (turnChanges) {
+                turnData.turnChanges = turnChanges;
+              }
             }
           }
         } catch (e: unknown) {
@@ -486,8 +468,23 @@ export class ManagedSession {
           .where(eq(sessions.id, this.sessionId));
       }
     } catch (error: unknown) {
-      await this.flushAll();
-      await this.handleError(error);
+      const message = error instanceof Error ? error.message : String(error);
+      await this.flushAll().catch((flushError: unknown) => {
+        this.logger.error(flushError, 'Failed to flush events after prompt error');
+      });
+      await this.eventStore
+        .append(
+          this.sessionId,
+          'status',
+          { status: 'prompt_failed', message: message.slice(0, 1000) },
+          null,
+        )
+        .catch((eventError: unknown) => {
+          this.logger.error(eventError, 'Failed to record prompt error');
+        });
+      await this.handleError(error).catch((handleError: unknown) => {
+        this.logger.error(handleError, 'Failed to update session after prompt error');
+      });
       throw error;
     }
   }

@@ -13,6 +13,7 @@ describe('SSE stream & Client actions REST API endpoints', () => {
   let activeRequests: http.ClientRequest[] = [];
   const mockSessionManager = {
     handleClientMessage: vi.fn(),
+    startInput: vi.fn(),
     getOrResuscitate: vi.fn(),
     stopAll: vi.fn(),
   };
@@ -101,8 +102,9 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     });
   });
 
-  test('POST /api/sessions/:id/input calls handleClientMessage input', async () => {
+  test('POST /api/sessions/:id/input acknowledges a persisted input event', async () => {
     const sessionId = '44444444-4444-4444-8444-444444444444';
+    mockSessionManager.startInput.mockResolvedValue(42);
     const response = await app.inject({
       method: 'POST',
       url: `/api/sessions/${sessionId}/input`,
@@ -116,12 +118,27 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual({ success: true });
-    expect(mockSessionManager.handleClientMessage).toHaveBeenCalledWith(
-      sessionId,
-      'session.input',
-      { input: 'hello agent', attachmentIds: ['attachment-1'] },
-    );
+    expect(JSON.parse(response.body)).toEqual({ success: true, eventId: 42 });
+    expect(mockSessionManager.startInput).toHaveBeenCalledWith(sessionId, 'hello agent', [
+      'attachment-1',
+    ]);
+  });
+
+  test('POST /api/sessions/:id/input reports a failed handoff', async () => {
+    const sessionId = '44444444-4444-4444-8444-444444444444';
+    mockSessionManager.startInput.mockRejectedValue(new Error('Session is unavailable'));
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/input`,
+      headers: { authorization: 'Bearer test-secret' },
+      payload: { input: 'hello agent' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(JSON.parse(response.body)).toEqual({
+      success: false,
+      message: 'Session is unavailable',
+    });
   });
 
   test('GET /api/sessions/:id/events/stream resuscitates and streams', async () => {

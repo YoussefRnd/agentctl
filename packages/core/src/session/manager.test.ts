@@ -192,6 +192,40 @@ describe('SessionManager tests', () => {
     },
   };
 
+  test('startInput acknowledges a persisted message before the provider turn ends', async () => {
+    const manager = new SessionManager(
+      mockDb,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
+    const unfinishedTurn = new Promise<void>(() => undefined);
+    vi.spyOn(manager, 'handleClientMessage').mockImplementation((_id, _action, payload) => {
+      queueMicrotask(() => payload.onAccepted?.(42));
+      return unfinishedTurn;
+    });
+
+    await expect(manager.startInput('session-1', 'hello')).resolves.toBe(42);
+  });
+
+  test('startInput rejects before acceptance when session handoff fails', async () => {
+    const manager = new SessionManager(
+      mockDb,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      fakeRuntime,
+    );
+    vi.spyOn(manager, 'handleClientMessage').mockRejectedValue(new Error('Session is unavailable'));
+
+    await expect(manager.startInput('session-1', 'hello')).rejects.toThrow(
+      'Session is unavailable',
+    );
+  });
+
   test('SessionManager startSession creates and initializes a session', async () => {
     const manager = new SessionManager(
       mockDb,
