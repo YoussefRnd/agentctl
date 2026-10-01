@@ -66,7 +66,7 @@ export function StatusPane() {
           </button>
 
           {isPlanOpen && (
-            <div className="border-border/10 border-t px-4 pt-1 pb-4">
+            <div className="border-border/10 border-t px-4 py-4">
               <PlanPanel plan={plan} />
             </div>
           )}
@@ -97,7 +97,7 @@ export function StatusPane() {
           </button>
 
           {isMcpOpen && (
-            <div className="border-border/10 border-t px-4 pt-1 pb-4">
+            <div className="border-border/10 border-t px-4 py-4">
               <McpStatusPanel servers={mcpServers} isLoading={isLoadingMcp} />
             </div>
           )}

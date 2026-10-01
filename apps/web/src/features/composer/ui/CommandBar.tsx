@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSessionStream } from '@/features/sessions';
 import { CommandBarToolbar } from './CommandBarToolbar';
 import { CommandBarFooter } from './WorkspaceStateReviewer';
+import { ApprovalModeSelector } from './SessionController';
 import { useCommandBarState } from '../model/useCommandBarState';
 import { ComposerInput } from './ComposerInput';
 import { QueuedMessagesPillStack } from './QueuedMessagesPillStack';
@@ -87,7 +88,6 @@ export function CommandBar({
           status={{
             isLoadingSession,
             isLoadingProviders,
-            isUpdatingApprovalMode,
           }}
           picker={{
             isOpen: isPickerOpen,
@@ -101,7 +101,6 @@ export function CommandBar({
           handleProviderSelect={handleProviderSelect}
           sessionId={sessionId}
           sessionData={sessionData}
-          setApprovalMode={setApprovalMode}
           setAgentPersona={setAgentPersona}
           handleSetConfigOption={setSessionConfigOption}
           handleSubmit={handleSubmit}
@@ -117,17 +116,23 @@ export function CommandBar({
           }}
         />
       </ComposerInput>
-      {variant !== 'hero' && (
-        <CommandBarFooter
-          isLoadingSession={isLoadingSession}
-          sessionData={sessionData}
-          isSwitchingMode={isSwitchingMode}
-          switchMode={switchMode}
-          isSwitchingBranch={isSwitchingBranch}
-          switchBranch={switchBranch}
-          branches={branches}
-        />
-      )}
+      <CommandBarFooter
+        isLoadingSession={isLoadingSession}
+        sessionData={sessionData}
+        isSwitchingMode={isSwitchingMode}
+        switchMode={switchMode}
+        isSwitchingBranch={isSwitchingBranch}
+        switchBranch={switchBranch}
+        branches={branches}
+        approvalControl={
+          <ApprovalModeSelector
+            isLoading={isLoadingSession}
+            sessionData={sessionData}
+            isUpdating={isUpdatingApprovalMode}
+            setApprovalMode={setApprovalMode}
+          />
+        }
+      />
 
       <ProviderAuthDialog
         isOpen={isAuthModalOpen}

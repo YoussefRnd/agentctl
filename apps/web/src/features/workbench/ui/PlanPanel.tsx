@@ -21,7 +21,7 @@ export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
 
   if (plan.length === 0) {
     return (
-      <div className="border-border/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-4 py-8 text-center">
+      <div className="border-border/20 flex min-h-20 items-center justify-center rounded-lg border border-dashed px-4 text-center">
         <p className="text-text-muted text-xs font-normal">No plan execution steps active</p>
       </div>
     );

@@ -3,7 +3,7 @@ import { useSettingsOverlayStore, type SettingsTab } from '../model/useSettingsO
 import { GeneralSettingsView } from './GeneralSettingsView';
 import { ProvidersSettingsView } from './ProvidersSettingsView';
 import { McpSettings } from './McpSettings';
-import { SlidersHorizontal, Cpu, X } from 'lucide-react';
+import { SlidersHorizontal, Server, X } from 'lucide-react';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@agentctl/ui';
 
 const TABS: {
@@ -13,7 +13,7 @@ const TABS: {
 }[] = [
   { id: 'general', label: 'General', icon: SlidersHorizontal },
   { id: 'providers', label: 'AI Providers', icon: AgentIcon },
-  { id: 'mcp', label: 'MCP Servers', icon: Cpu },
+  { id: 'mcp', label: 'MCP Servers', icon: Server },
 ];
 
 export function SettingsDialog() {
@@ -54,7 +54,7 @@ export function SettingsDialog() {
 
             {/* Nav Tabs */}
             <div
-              className="flex gap-1 overflow-x-auto md:flex-col md:space-y-1 md:overflow-visible"
+              className="-my-1 flex gap-1 overflow-x-auto py-1 md:my-0 md:flex-col md:space-y-1 md:overflow-visible md:py-0"
               role="tablist"
               aria-label="Settings sections"
             >

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMcpServers } from '../api/useMcpServers';
 import { Card, Button } from '@agentctl/ui';
-import { Cpu, Plus } from 'lucide-react';
+import { Server, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   parseArgumentsText,
@@ -191,7 +191,7 @@ export function McpSettings() {
             {mcpServers.length === 0 && !isAddingNew && (
               <Card className="border-border/30 bg-surface/10 hover:border-border/30 flex flex-col items-center justify-center gap-3 rounded-2xl border-dashed p-8 text-center">
                 <div className="bg-surface-secondary/30 border-border/20 flex h-12 w-12 items-center justify-center rounded-full border">
-                  <Cpu className="text-text-muted/40 h-6 w-6" />
+                  <Server className="text-text-muted/40 h-6 w-6" />
                 </div>
                 <div>
                   <h3 className="text-text-main text-sm font-semibold">

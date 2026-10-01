@@ -33,9 +33,11 @@ vi.mock('@/features/projects', () => ({
         {
           id: 'one',
           name: 'One',
+          isGitRepo: true,
           sessions: [{ id: 'old-empty', status: 'idle', hasUserActivity: false }],
         },
-        { id: 'two', name: 'Two', sessions: [] },
+        { id: 'two', name: 'Two', isGitRepo: true, sessions: [] },
+        { id: 'plain', name: 'Plain', isGitRepo: false, sessions: [] },
       ],
     }),
   },
@@ -105,7 +107,7 @@ vi.mock('@/features/settings', async (original) => ({
 }));
 vi.mock('@/features/composer/ui/ComposerInput', () => ({
   ComposerInput: ({ state, children }: { state: ComposerState; children: ReactNode }) => (
-    <div>
+    <div data-testid="composer-box">
       <textarea value={state.input} readOnly />
       <button onClick={() => state.handleInputChange('Draft message')}>Type</button>
       <button
@@ -216,6 +218,41 @@ it('keeps model changes, text, and attachments local and preserves them across f
   expect(mocks.input).not.toHaveBeenCalled();
   expect(mocks.upload).not.toHaveBeenCalled();
 });
+it('places the worktree selector below the composer and uses its selected mode', async () => {
+  const modeSelect = [...container.querySelectorAll('select')].find((select) =>
+    [...select.options].some((option) => option.value === 'worktree'),
+  );
+  expect(modeSelect).toBeDefined();
+  expect(modeSelect?.closest('[data-testid="composer-box"]')).toBeNull();
+
+  const approvalSelect = [...container.querySelectorAll('select')].find((select) =>
+    [...select.options].some((option) => option.value === 'auto_approve'),
+  );
+  expect(approvalSelect?.parentElement).toBe(modeSelect?.parentElement);
+  await act(async () => {
+    approvalSelect!.value = 'auto_approve';
+    approvalSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(useDraftStore.getState().homeDrafts.one.approvalMode).toBe('auto_approve');
+
+  await act(async () => {
+    modeSelect!.value = 'local';
+    modeSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(useDraftStore.getState().homeDrafts.one.mode).toBe('local');
+
+  mocks.create.mockResolvedValue({ id: 'fresh', selectedProvider: 'provider' });
+  mocks.input.mockResolvedValue({ status: 200, body: { eventId: 9 } });
+  await click('Type');
+  await click('Send');
+  expect(mocks.create).toHaveBeenCalledWith(
+    'one',
+    'local',
+    'provider',
+    expect.objectContaining({ approvalMode: 'auto_approve' }),
+  );
+});
+
 it('ignores persisted empty sessions and creates on first Send with the selected model', async () => {
   mocks.create.mockResolvedValue({ id: 'fresh', selectedProvider: 'provider' });
   mocks.input.mockResolvedValue({ status: 200, body: { eventId: 7 } });
@@ -276,6 +313,30 @@ it('opens the workspace selected by a new-session entry point without creating u
     'provider',
     expect.any(Object),
   );
+});
+
+it('uses Local for a non-Git workspace and does not offer Worktree', async () => {
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter key="plain" initialEntries={['/?project=plain']}>
+          <HomeRoute />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ),
+  );
+
+  const modeSelect = [...container.querySelectorAll('select')].find((select) =>
+    [...select.options].some((option) => option.value === 'local'),
+  );
+  expect(modeSelect?.value).toBe('local');
+  expect([...modeSelect!.options].some((option) => option.value === 'worktree')).toBe(false);
+
+  mocks.create.mockResolvedValue({ id: 'fresh', selectedProvider: 'provider' });
+  mocks.input.mockResolvedValue({ status: 200, body: { eventId: 10 } });
+  await click('Type');
+  await click('Send');
+  expect(mocks.create).toHaveBeenCalledWith('plain', 'local', 'provider', expect.any(Object));
 });
 
 it('uses the shared slider with all advertised thinking levels and keeps changes local', async () => {

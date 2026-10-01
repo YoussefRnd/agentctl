@@ -24,7 +24,7 @@ export function McpStatusPanel({
 
   if (mcpServers.length === 0) {
     return (
-      <div className="border-border/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center">
+      <div className="border-border/20 flex min-h-20 items-center justify-center rounded-lg border border-dashed px-4 text-center">
         <p className="text-text-muted text-xs font-normal">No MCP servers configured</p>
       </div>
     );

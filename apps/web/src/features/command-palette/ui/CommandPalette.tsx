@@ -106,7 +106,7 @@ export function CommandPalette() {
 
     // 2. Workspaces
     for (const proj of projects) {
-      const isGit = proj.sessions.some((s) => s.mode === 'worktree');
+      const isGit = proj.isGitRepo;
       list.push({
         id: `project-${proj.id}`,
         category: 'Workspaces',
@@ -118,7 +118,7 @@ export function CommandPalette() {
           if (proj.sessions.length > 0 && proj.sessions[0]) {
             void navigate(`/sessions/${proj.sessions[0].id}`);
           } else {
-            void navigate('/');
+            void navigate(`/?project=${encodeURIComponent(proj.id)}`);
           }
         },
       });

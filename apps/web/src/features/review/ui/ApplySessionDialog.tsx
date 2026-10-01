@@ -8,8 +8,7 @@ import {
   Input,
   Button,
 } from '@agentctl/ui';
-import { CheckIcon } from '@primer/octicons-react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Check } from 'lucide-react';
 
 interface ApplySessionDialogProps {
   open: boolean;
@@ -58,7 +57,7 @@ export function ApplySessionDialog({
         <div className="p-5">
           <DialogHeader className="mb-4">
             <div className="bg-surface-accent text-accent ring-accent/30 mb-3 flex h-8 w-8 items-center justify-center rounded-lg shadow-[0_0_15px_rgba(203,166,247,0.2)] ring-1">
-              <CheckIcon className="h-4 w-4" />
+              <Check className="h-4 w-4" />
             </div>
             <DialogTitle className="text-text-main text-base font-semibold">
               Apply to {baseBranch}
@@ -121,7 +120,7 @@ export function ApplySessionDialog({
             {isSubmitting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <CheckIcon className="h-3.5 w-3.5" />
+              <Check className="h-3.5 w-3.5" />
             )}
             <span>{isSubmitting ? 'Applying...' : 'Apply and finish'}</span>
           </Button>

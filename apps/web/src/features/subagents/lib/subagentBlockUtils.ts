@@ -1,3 +1,4 @@
+import { formatTokenCount } from '@/shared/lib/formatTokenCount';
 import type {
   SessionEventRow,
   SessionEventToolCallData,
@@ -218,8 +219,7 @@ export function formatDuration(
 }
 
 export function formatTokens(count: number): string {
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-  return String(count);
+  return formatTokenCount(count);
 }
 
 function formatShortPath(fullPath?: string): string {

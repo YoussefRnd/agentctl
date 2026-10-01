@@ -21,6 +21,7 @@ import { SidebarSearch } from './SidebarSearch';
 import { SidebarFilterMenu, type SortByOption } from './SidebarFilterMenu';
 import { SidebarFooter } from './SidebarFooter';
 import { useFilteredProjects } from './model/useFilteredProjects';
+import { useProjectExpansionStore } from '@/shared/stores/useProjectExpansionStore';
 
 interface SidebarProps {
   activeSessionId?: string;
@@ -37,7 +38,9 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchTab, setSearchTab] = useState<'workspaces' | 'messages'>('workspaces');
-  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+  const collapsedProjects = useProjectExpansionStore((state) => state.collapsedProjects);
+  const setProjectCollapsed = useProjectExpansionStore((state) => state.setProjectCollapsed);
+  const keepProjectExpanded = useProjectExpansionStore((state) => state.keepProjectExpanded);
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
 
   const isMac =
@@ -179,6 +182,12 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       errorMessage: 'Failed to delete session',
     }).then((result) => {
       if (result) {
+        if (currentActiveSessionId === sessionId) {
+          const project = projects.find((project) =>
+            project.sessions.some((session) => session.id === sessionId),
+          );
+          if (project) keepProjectExpanded(project.id);
+        }
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
         if (currentActiveSessionId === sessionId) {
           void navigate('/');
@@ -234,7 +243,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
 
   const filteredProjects = useFilteredProjects(projects, { searchQuery, showArchived });
   const toggleProject = (id: string, isCollapsed: boolean) => {
-    setCollapsedProjects((prev) => ({ ...prev, [id]: !isCollapsed }));
+    setProjectCollapsed(id, !isCollapsed);
   };
 
   const totalSessionsCount = filteredProjects.reduce((acc, p) => acc + p.sessions.length, 0);

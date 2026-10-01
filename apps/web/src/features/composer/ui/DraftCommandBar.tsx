@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Monitor, Shield } from 'lucide-react';
 import { resolveAgentFeatures, type ThinkingEffort, type SessionEventRow } from '@agentctl/shared';
 import { useProviders, ProviderAuthDialog } from '@/features/providers';
 import { useSettings } from '@/features/settings';
@@ -14,10 +15,12 @@ import { SubmitButton } from './SessionController';
 const EMPTY_EVENTS: SessionEventRow[] = [];
 export function DraftCommandBar({
   projectId,
+  canUseWorktree,
   disabled,
   onSend,
 }: {
   projectId: string;
+  canUseWorktree: boolean;
   disabled?: boolean;
   onSend: (text: string, files: File[], selection: HomeSessionSelection) => Promise<boolean>;
 }) {
@@ -81,7 +84,9 @@ export function DraftCommandBar({
       draft.agentPersona ??
       (typeof modeOption?.currentValue === 'string' ? modeOption.currentValue : personas[0]?.value),
     approvalMode: draft.approvalMode ?? 'review',
-    mode: draft.mode ?? (settings?.defaultToWorktree === false ? 'local' : 'worktree'),
+    mode: canUseWorktree
+      ? (draft.mode ?? (settings?.defaultToWorktree === false ? 'local' : 'worktree'))
+      : 'local',
   };
   const state = useComposerState({
     sessionId: '',
@@ -131,7 +136,7 @@ export function DraftCommandBar({
     <div className="flex w-full flex-col">
       <ComposerInput state={state} variant="hero" disabled={isBusy}>
         <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
-          <div className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto sm:gap-1.5">
+          <div className="no-scrollbar -my-1 flex min-w-0 items-center gap-1 overflow-x-auto py-1 sm:gap-1.5">
             <ProviderPickerTrigger
               isLoading={isLoadingProviders || !!isBusy}
               isOpen={state.isPickerOpen}
@@ -171,27 +176,6 @@ export function DraftCommandBar({
                 options={personas}
               />
             )}
-            <CommandDropdown<'review' | 'auto_approve' | 'yolo'>
-              value={selection.approvalMode ?? 'review'}
-              disabled={isBusy}
-              variant="toolbar"
-              onChange={(approvalMode) => updateDraft(projectId, { approvalMode })}
-              options={[
-                { value: 'review', label: 'Supervised' },
-                { value: 'auto_approve', label: 'Auto Approve' },
-                { value: 'yolo', label: 'Unsupervised' },
-              ]}
-            />
-            <CommandDropdown<'local' | 'worktree'>
-              value={selection.mode}
-              disabled={isBusy}
-              variant="toolbar"
-              onChange={(mode) => updateDraft(projectId, { mode })}
-              options={[
-                { value: 'local', label: 'Local' },
-                { value: 'worktree', label: 'Worktree' },
-              ]}
-            />
           </div>
           <SubmitButton
             canSend={canSend}
@@ -203,6 +187,30 @@ export function DraftCommandBar({
           />
         </div>
       </ComposerInput>
+      <div className="text-text-muted/80 mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 px-2 text-[11px] font-medium">
+        <CommandDropdown<'local' | 'worktree'>
+          value={selection.mode}
+          disabled={isBusy}
+          onChange={(mode) => updateDraft(projectId, { mode })}
+          icon={<Monitor className="h-3.5 w-3.5" />}
+          options={[
+            { value: 'local', label: 'Local' },
+            ...(canUseWorktree ? [{ value: 'worktree' as const, label: 'Worktree' }] : []),
+          ]}
+        />
+        <CommandDropdown<'review' | 'auto_approve' | 'yolo'>
+          value={selection.approvalMode ?? 'review'}
+          disabled={isBusy}
+          title="Approval mode"
+          icon={<Shield className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+          onChange={(approvalMode) => updateDraft(projectId, { approvalMode })}
+          options={[
+            { value: 'review', label: 'Supervised' },
+            { value: 'auto_approve', label: 'Auto Approve' },
+            { value: 'yolo', label: 'Unsupervised' },
+          ]}
+        />
+      </div>
       <ProviderAuthDialog
         provider={activeProvider ?? null}
         isOpen={isAuthOpen}

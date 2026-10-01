@@ -1,4 +1,4 @@
-import { Square, ArrowUp } from 'lucide-react';
+import { Square, ArrowUp, Shield } from 'lucide-react';
 import { Button, cn, Tooltip } from '@agentctl/ui';
 import { CommandDropdown } from './CommandDropdown';
 import { ContextWindowPopover } from './WorkspaceStateReviewer';
@@ -74,7 +74,8 @@ export function ApprovalModeSelector({
     <CommandDropdown
       value={currentMode}
       disabled={isUpdating}
-      variant="toolbar"
+      title="Approval mode"
+      icon={<Shield className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
       onChange={(val) => {
         void setApprovalMode(val);
       }}

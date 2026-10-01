@@ -16,6 +16,7 @@ export interface SidebarProject {
   id: string;
   name: string;
   path: string;
+  isGitRepo: boolean;
   sessions: Pick<
     SessionRow,
     | 'id'

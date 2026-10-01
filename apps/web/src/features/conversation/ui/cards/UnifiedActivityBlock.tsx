@@ -15,6 +15,7 @@ import {
 import { ThinkingSpinner, StreamingDots } from '@/shared';
 import { useSettings } from '@/features/settings';
 import { useSession } from '@/features/sessions';
+import { formatTokenCount } from '@/shared/lib/formatTokenCount';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import type { SessionEventRow, SessionEventToolCallData } from '@agentctl/shared';
 import { isSessionEventText, isSessionEventToolCall } from '@agentctl/shared';
@@ -23,11 +24,6 @@ function formatDuration(durationMs?: number | null): string {
   if (!durationMs || durationMs <= 0) return '';
   if (durationMs < 1000) return `${String(Math.round(durationMs))}ms`;
   return `${(durationMs / 1000).toFixed(1)}s`;
-}
-
-function formatTokens(count: number): string {
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-  return String(count);
 }
 
 function formatShortPath(fullPath?: string): string {
@@ -517,7 +513,7 @@ export function UnifiedActivityBlock({
       parts.push(`${toolCount} action${toolCount > 1 ? 's' : ''}`);
     }
     if (totalTokens > 0) {
-      parts.push(`${formatTokens(totalTokens)} tokens`);
+      parts.push(`${formatTokenCount(totalTokens)} tokens`);
     }
 
     return parts.join(' · ');

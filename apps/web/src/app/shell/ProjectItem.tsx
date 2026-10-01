@@ -223,7 +223,7 @@ export function ProjectItem({
 }: ProjectItemProps) {
   const [showQuickLaunch, setShowQuickLaunch] = useState(false);
   const showSessions = searchQuery ? true : !isCollapsed;
-  const isGit = proj.sessions.some((s) => s.mode === 'worktree');
+  const isGit = proj.isGitRepo;
   const FolderIcon = showSessions ? FolderOpen : Folder;
 
   const runningSessionsCount = proj.sessions.filter((s) => s.status === 'running').length;
@@ -351,7 +351,8 @@ export function ProjectItem({
         }}
         projectId={proj.id}
         projectName={proj.name}
-        defaultMode={isGit ? 'worktree' : 'local'}
+        defaultMode={isGit ? undefined : 'local'}
+        allowWorktree={isGit}
       />
 
       {/* Sessions List with Vertical Hierarchy Guide */}

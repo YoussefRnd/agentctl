@@ -116,3 +116,28 @@ it('prepares a Home draft with the chosen model, effort, and mode without creati
   expect(mocks.closed).toHaveBeenCalledTimes(1);
   expect(mocks.create).not.toHaveBeenCalled();
 });
+
+it('uses Local and hides Worktree for a non-Git project', async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <QuickLaunchSessionDialog
+          open
+          onClose={mocks.closed}
+          projectId="plain"
+          projectName="Plain"
+          defaultMode="worktree"
+          allowWorktree={false}
+        />
+      </MemoryRouter>,
+    ),
+  );
+
+  expect(container.textContent).not.toContain('Worktree (Branch)');
+  await act(async () =>
+    container
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+  expect(useDraftStore.getState().homeDrafts.plain.mode).toBe('local');
+});

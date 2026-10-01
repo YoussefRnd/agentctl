@@ -15,6 +15,7 @@ import {
 } from '@agentctl/api-client';
 import { toast } from 'sonner';
 import { useGitStatus } from '@/features/review';
+import { useProjectExpansionStore } from '@/shared/stores/useProjectExpansionStore';
 import { useSession } from '../model/SessionContext';
 import { projectKeys, sessionKeys } from '@/shared/lib/queryKeys';
 import { formatShortcut } from '@/shared/lib/platform';
@@ -38,6 +39,7 @@ export function SessionHeader({
 }: SessionHeaderProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const keepProjectExpanded = useProjectExpansionStore((state) => state.keepProjectExpanded);
   const { sessionId, sessionData, reviewData } = useSession();
   const { gitStatus } = useGitStatus(sessionId);
 
@@ -142,6 +144,7 @@ export function SessionHeader({
   const handleDelete = async () => {
     try {
       await deleteSession(sessionId);
+      if (currentProjectId) keepProjectExpanded(currentProjectId);
       toast.success('Session deleted');
       void queryClient.invalidateQueries({ queryKey: projectKeys.all });
       setIsDeleting(false);

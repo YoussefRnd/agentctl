@@ -5,13 +5,12 @@ import {
   AgentPersonaSelector,
   AdvancedSettingsPopover,
 } from './ProviderConfigurator';
-import { ApprovalModeSelector, SubmitButton } from './SessionController';
+import { SubmitButton } from './SessionController';
 
 interface CommandBarToolbarProps {
   status: {
     isLoadingSession: boolean;
     isLoadingProviders: boolean;
-    isUpdatingApprovalMode: boolean;
   };
   picker: {
     isOpen: boolean;
@@ -25,7 +24,6 @@ interface CommandBarToolbarProps {
   handleProviderSelect: (id: string, modelId?: string) => void;
   sessionId: string | null;
   sessionData: SessionWithCapabilities | null;
-  setApprovalMode: (approvalMode: 'review' | 'auto_approve' | 'yolo') => Promise<void>;
   setAgentPersona: (persona: string) => Promise<void>;
   handleSetConfigOption: (id: string, value: string) => Promise<void>;
   handleSubmit: () => void;
@@ -50,7 +48,6 @@ export function CommandBarToolbar({
   handleProviderSelect,
   sessionId,
   sessionData,
-  setApprovalMode,
   setAgentPersona,
   handleSetConfigOption,
   handleSubmit,
@@ -60,7 +57,7 @@ export function CommandBarToolbar({
 }: CommandBarToolbarProps) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
-      <div className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto sm:gap-1.5">
+      <div className="no-scrollbar -my-1 flex min-w-0 items-center gap-1 overflow-x-auto py-1 sm:gap-1.5">
         <ProviderPickerTrigger
           isLoading={status.isLoadingSession || status.isLoadingProviders}
           isOpen={picker.isOpen}
@@ -87,15 +84,6 @@ export function CommandBarToolbar({
           sessionData={sessionData}
           isUpdating={isUpdatingAgentPersona}
           setAgentPersona={setAgentPersona}
-        />
-
-        <ApprovalModeSelector
-          isLoading={status.isLoadingSession}
-          sessionData={sessionData}
-          isUpdating={status.isUpdatingApprovalMode}
-          setApprovalMode={async (mode) => {
-            await setApprovalMode(mode);
-          }}
         />
       </div>
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { searchSessionEvents, type SearchResultItem } from '@agentctl/api-client';
 import type { SearchEventType } from '@agentctl/shared';
-import { MessageSquare, Wrench, Brain, Loader2, SearchX, RotateCw } from 'lucide-react';
+import { MessageSquare, Wrench, BrainCircuit, Loader2, SearchX, RotateCw } from 'lucide-react';
 import { AgentIcon, RelativeTime } from '@/shared';
 import { cn } from '@agentctl/ui';
 
@@ -38,7 +38,7 @@ function getEventBadge(type: SearchEventType) {
     case 'thought':
       return {
         label: 'Thought',
-        icon: Brain,
+        icon: BrainCircuit,
         color: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
       };
     case 'agent':

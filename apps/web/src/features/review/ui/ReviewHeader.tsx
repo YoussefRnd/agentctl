@@ -348,7 +348,7 @@ export function ReviewHeader({
         />
 
         {files.length > 0 && onStatusFilterChange && (
-          <div className="flex [scrollbar-width:none] items-center gap-1 overflow-x-auto">
+          <div className="-my-1 flex [scrollbar-width:none] items-center gap-1 overflow-x-auto py-1">
             <button
               type="button"
               onClick={() => onStatusFilterChange('all')}

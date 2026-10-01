@@ -16,6 +16,7 @@ interface CommandDropdownProps<T> {
   align?: 'start' | 'end';
   variant?: 'default' | 'toolbar';
   side?: 'top' | 'right' | 'bottom' | 'left';
+  title?: string;
 }
 
 export function CommandDropdown<T extends string>({
@@ -27,6 +28,7 @@ export function CommandDropdown<T extends string>({
   align = 'start',
   variant = 'default',
   side = 'top',
+  title,
 }: CommandDropdownProps<T>) {
   const activeOption = options.find((opt) => opt.value === value);
 
@@ -52,7 +54,13 @@ export function CommandDropdown<T extends string>({
   return (
     <Dropdown.Root>
       <Dropdown.Trigger asChild>
-        <button type="button" disabled={disabled} className={triggerClass}>
+        <button
+          type="button"
+          disabled={disabled}
+          title={title}
+          aria-label={title ? `${title}: ${activeOption?.label ?? value}` : undefined}
+          className={triggerClass}
+        >
           {icon}
           <span
             className={cn(

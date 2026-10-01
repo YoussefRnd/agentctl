@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Monitor } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent, cn } from '@agentctl/ui';
 import { GitBranchIcon, RepoPullIcon, RepoPushIcon } from '@primer/octicons-react';
@@ -7,6 +7,7 @@ import { useSession } from '@/features/sessions';
 import { useGitStatus } from '@/features/review';
 import type { SessionWithCapabilities } from '@agentctl/shared';
 import { CommandDropdown } from './CommandDropdown';
+import { formatTokenCount } from '@/shared/lib/formatTokenCount';
 
 function formatBranchName(branch: string) {
   if (branch.startsWith('agentctl/')) {
@@ -19,14 +20,6 @@ function formatBranchName(branch: string) {
     }
   }
   return branch;
-}
-
-function formatTokens(tokens: number) {
-  const safe = Math.max(0, tokens);
-  if (safe >= 1000) {
-    return `${(safe / 1000).toFixed(1)}K`;
-  }
-  return safe.toString();
 }
 
 export function ContextWindowPopover({
@@ -119,7 +112,9 @@ export function ContextWindowPopover({
                 isOpen ? 'w-auto overflow-visible opacity-100' : 'w-0 overflow-hidden opacity-0',
               )}
             >
-              {usagePercent !== null ? `${Math.round(usagePercent)}%` : formatTokens(safeTokens)}
+              {usagePercent !== null
+                ? `${Math.round(usagePercent)}%`
+                : formatTokenCount(safeTokens)}
             </span>
           </button>
         </PopoverTrigger>
@@ -132,8 +127,8 @@ export function ContextWindowPopover({
               <div className="text-text-muted mt-0.5 flex items-baseline justify-between text-[11px] font-semibold">
                 <span className="font-mono">
                   {hasCalculatedLimit
-                    ? `${formatTokens(safeTokens)} / ${formatTokens(calculatedLimit)} tokens`
-                    : `${formatTokens(safeTokens)} tokens`}
+                    ? `${formatTokenCount(safeTokens)} / ${formatTokenCount(calculatedLimit)} tokens`
+                    : `${formatTokenCount(safeTokens)} tokens`}
                 </span>
                 <span
                   className={cn(
@@ -192,7 +187,7 @@ export function ContextWindowPopover({
                       History
                     </span>
                     <span className="text-text-main font-mono text-[10.5px] font-bold">
-                      {formatTokens(usageBreakdown.history)}
+                      {formatTokenCount(usageBreakdown.history)}
                     </span>
                   </div>
                 )}
@@ -202,7 +197,7 @@ export function ContextWindowPopover({
                       Knowledge
                     </span>
                     <span className="text-text-main font-mono text-[10.5px] font-bold">
-                      {formatTokens(usageBreakdown.files)}
+                      {formatTokenCount(usageBreakdown.files)}
                     </span>
                   </div>
                 )}
@@ -243,6 +238,7 @@ export function CommandBarFooter({
   isSwitchingBranch,
   switchBranch,
   branches,
+  approvalControl,
 }: {
   isLoadingSession: boolean;
   sessionData: SessionWithCapabilities | null;
@@ -251,6 +247,7 @@ export function CommandBarFooter({
   isSwitchingBranch: boolean;
   switchBranch: (branch: string) => Promise<void>;
   branches: string[];
+  approvalControl: ReactNode;
 }) {
   const { pushChanges, pullChanges, isPushing, isPulling, reviewData } = useSession();
   const { gitStatus } = useGitStatus(sessionData?.session.id ?? '');
@@ -264,14 +261,14 @@ export function CommandBarFooter({
   if (!isLoadingSession && !sessionData?.session) return null;
 
   return (
-    <div className="text-text-muted/80 mt-3 flex items-center justify-between px-2 text-[11px] font-medium">
+    <div className="text-text-muted/80 mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-2 text-[11px] font-medium">
       {isLoadingSession ? (
         <div className="text-text-muted/60 flex items-center gap-1.5 py-1">
           <Monitor className="h-3.5 w-3.5" />
           <span>...</span>
         </div>
       ) : (
-        <div className="flex items-center">
+        <div className="flex items-center gap-4">
           <CommandDropdown
             value={sessionData?.session.mode ?? 'local'}
             disabled={isSwitchingMode}
@@ -286,6 +283,7 @@ export function CommandBarFooter({
                 : []),
             ]}
           />
+          {approvalControl}
         </div>
       )}
 

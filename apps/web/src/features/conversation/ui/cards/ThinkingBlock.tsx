@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { ThinkingSpinner } from '@/shared';
 import { useSettings } from '@/features/settings';
 import { useSession } from '@/features/sessions';
+import { formatTokenCount } from '@/shared/lib/formatTokenCount';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import type { SessionEventRow } from '@agentctl/shared';
 
@@ -10,11 +11,6 @@ interface ThinkingBlockProps {
   events: SessionEventRow[];
   isStreaming?: boolean;
   isActive?: boolean;
-}
-
-function formatTokens(count: number): string {
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-  return String(count);
 }
 
 export function ThinkingBlock({
@@ -56,7 +52,7 @@ export function ThinkingBlock({
         ? `${(totalDurationMs / 1000).toFixed(1)}s`
         : `${String(totalDurationMs)}ms`;
     const parts = [`Thought for ${dur}`];
-    if (totalTokens > 0) parts.push(`${formatTokens(totalTokens)} tokens`);
+    if (totalTokens > 0) parts.push(`${formatTokenCount(totalTokens)} tokens`);
     return parts.join(' · ');
   }, [isCompleted, totalDurationMs, totalTokens]);
 

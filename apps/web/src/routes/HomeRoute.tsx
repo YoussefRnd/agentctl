@@ -90,6 +90,7 @@ export function HomeRoute() {
             <DraftCommandBar
               key={activeProject.id}
               projectId={activeProject.id}
+              canUseWorktree={activeProject.isGitRepo}
               disabled={isStarting}
               onSend={(text, files, selection) =>
                 startSession(activeProject.id, text, files, selection)

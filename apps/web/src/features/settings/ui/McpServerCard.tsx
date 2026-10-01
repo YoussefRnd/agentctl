@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { Card, Button, Switch, Select } from '@agentctl/ui';
-import { Cpu, ChevronDown, Edit2, Trash2 } from 'lucide-react';
+import { Server, ChevronDown, Edit2, Trash2 } from 'lucide-react';
 import type { McpServerData } from '../api/useMcpServers';
 import { useMcpTools } from '../api/useMcpServers';
 import { formatKeyValuesJson, formatArgumentsJson, approvalPolicyOptions } from './McpUtils';
@@ -73,7 +73,7 @@ export function McpServerCard({
       >
         <div className="flex min-w-0 items-center gap-3.5">
           <div className="border-border/30 bg-surface-secondary/40 group-hover:bg-surface-secondary/60 text-text-main flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border p-1.5 transition-colors">
-            <Cpu className="h-4.5 w-4.5" />
+            <Server className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0">
             <h3 className="text-text-main flex items-center gap-2.5 text-[13px] font-black tracking-tighter uppercase">

@@ -87,6 +87,27 @@ describe('ContextWindowPopover', () => {
     expect(content).not.toContain('100.0%');
   });
 
+  it('formats million-token context limits as M', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    roots.push(root);
+    const sessionData = createSessionData({
+      totalTokens: 70400,
+      contextLimit: 1000000,
+    });
+
+    act(() => {
+      root.render(<ContextWindowPopover sessionData={sessionData} isLoading={false} />);
+    });
+    act(() => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain('70.4K / 1M tokens');
+    expect(document.body.textContent).not.toContain('1000.0K');
+  });
+
   it('uses calculated context limit from sessionMetrics if session.contextLimit is 0', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

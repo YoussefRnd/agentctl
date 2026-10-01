@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Loader2, Sparkles, PlusCircle } from 'lucide-react';
+import { Loader2, ArrowRight, PlusCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -90,7 +90,7 @@ export function SwitchAgentModal({
                   : 'text-text-muted hover:text-text-main',
               )}
             >
-              <Sparkles
+              <ArrowRight
                 className={cn(
                   'h-3.5 w-3.5',
                   selectedMode === 'handoff' ? 'text-accent' : 'text-text-muted/60',

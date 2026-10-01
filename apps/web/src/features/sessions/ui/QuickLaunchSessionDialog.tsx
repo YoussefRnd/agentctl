@@ -23,6 +23,7 @@ interface QuickLaunchSessionDialogProps {
   projectId: string;
   projectName: string;
   defaultMode?: SessionMode;
+  allowWorktree?: boolean;
   initialProviderId?: string;
 }
 
@@ -32,6 +33,7 @@ export function QuickLaunchSessionDialog({
   projectId,
   projectName,
   defaultMode,
+  allowWorktree = true,
   initialProviderId,
 }: QuickLaunchSessionDialogProps) {
   const navigate = useNavigate();
@@ -43,8 +45,9 @@ export function QuickLaunchSessionDialog({
     [providers],
   );
 
-  const effectiveDefaultMode: SessionMode =
-    defaultMode ?? (settings?.defaultToWorktree === false ? 'local' : 'worktree');
+  const effectiveDefaultMode: SessionMode = allowWorktree
+    ? (defaultMode ?? (settings?.defaultToWorktree === false ? 'local' : 'worktree'))
+    : 'local';
 
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('default');
@@ -207,7 +210,9 @@ export function QuickLaunchSessionDialog({
             </label>
             <div className="border-border/40 bg-surface/40 flex w-full gap-1 rounded-xl border p-1">
               {[
-                { mode: 'worktree' as const, label: 'Worktree (Branch)' },
+                ...(allowWorktree
+                  ? [{ mode: 'worktree' as const, label: 'Worktree (Branch)' }]
+                  : []),
                 { mode: 'local' as const, label: 'Local (In-place)' },
               ].map(({ mode, label }) => (
                 <button
