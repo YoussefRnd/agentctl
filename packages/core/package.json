@@ -63,9 +63,9 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "1.5.0",
     "@agentctl/shared": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.30.1",
     "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "drizzle-zod": "^0.8.3",
     "simple-git": "^3.36.0",
     "yaml": "^2.9.1",
@@ -74,10 +74,10 @@
   "devDependencies": {
     "@agentctl/tsconfig": "workspace:*",
     "@types/better-sqlite3": "^9.6.0",
-    "@types/node": "^25.9.7",
+    "@types/node": "^25.9.8",
     "@typescript/native": "catalog:",
     "better-sqlite3": "^13.0.3",
-    "drizzle-kit": "^0.31.10",
+    "drizzle-kit": "^0.31.11",
     "typescript": "catalog:"
   }
 }
