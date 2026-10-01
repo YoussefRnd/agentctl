@@ -246,6 +246,18 @@ export class BinaryInstaller {
     );
   }
 
+  isInstalledCommand(providerId: string, command: string): boolean {
+    const base = path.resolve(this.getInstallDir(providerId));
+    const binaryPath = path.resolve(command);
+    if (!binaryPath.startsWith(`${base}${path.sep}`)) return false;
+    try {
+      const stats = fs.statSync(binaryPath);
+      return stats.isFile() && (process.platform === 'win32' || (stats.mode & 0o111) !== 0);
+    } catch {
+      return false;
+    }
+  }
+
   isInstalled(providerId: string, agent?: RegistryAgent, platform = getPlatformKey()): boolean {
     if (agent) {
       const target = agent.distribution.binary?.[platform];

@@ -404,12 +404,13 @@ export class AcpV2AgentDriver implements AgentDriver {
       },
       async updateModel(modelId) {
         if (!this.id || !options.resolvedModelConfigId) return;
-        await connection.agent.request(methods.agent.session.setConfigOption, {
+        const result = await connection.agent.request(methods.agent.session.setConfigOption, {
           sessionId: this.id,
           configId: options.resolvedModelConfigId,
           type: 'id',
           value: modelId,
         });
+        return (this.configOptions = productConfigOptions(result.configOptions));
       },
       async updateConfigOption(configId, value) {
         if (!this.id) return [];
@@ -419,7 +420,7 @@ export class AcpV2AgentDriver implements AgentDriver {
           type: typeof value === 'boolean' ? 'boolean' : 'id',
           value,
         });
-        return productConfigOptions(result.configOptions);
+        return (this.configOptions = productConfigOptions(result.configOptions));
       },
       async setMode(modeId) {
         if (!this.id) return;
@@ -603,6 +604,7 @@ export class AcpV2AgentDriver implements AgentDriver {
       pendingUpdates.delete(handle.id);
 
       const configOptions = productConfigOptions(response.configOptions);
+      if (Array.isArray(response.configOptions)) handle.configOptions = configOptions;
       handle.availableModes = descriptorFromInitialization(initialization, configOptions).modes;
       return handle;
     } catch (error) {

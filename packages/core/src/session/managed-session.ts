@@ -26,6 +26,7 @@ import {
 
 import {
   isDefaultSessionTitle,
+  type AgentConfigOption,
   type ElicitationRequest,
   type ElicitationResponse,
 } from '@agentctl/shared';
@@ -640,36 +641,25 @@ export class ManagedSession {
     await this.markSessionStopped('idle');
   }
 
-  async updateModel(modelId: string): Promise<void> {
-    if (this.isStopped) return;
-    if (typeof this.runtimeHandle.updateModel === 'function') {
-      await this.runtimeHandle.updateModel(modelId);
+  async updateModel(modelId: string): Promise<AgentConfigOption[] | void> {
+    if (this.isStopped || typeof this.runtimeHandle.updateModel !== 'function') return;
+    const configOptions = await this.runtimeHandle.updateModel(modelId);
+    if (configOptions !== undefined) {
+      await this.handleDomainEvent({ type: 'config_option_update', configOptions });
     }
+    return configOptions;
   }
 
-  async updateConfigOption(configId: string, value: string | boolean): Promise<void> {
+  async updateConfigOption(
+    configId: string,
+    value: string | boolean,
+  ): Promise<AgentConfigOption[] | void> {
     if (this.isStopped) return;
     if (typeof this.runtimeHandle.updateConfigOption === 'function') {
       try {
         const configOptions = await this.runtimeHandle.updateConfigOption(configId, value);
-        if (configOptions.length > 0) {
-          await this.db
-            .update(sessions)
-            .set({
-              sessionConfigOptions: JSON.stringify(configOptions),
-              updatedAt: new Date(),
-            })
-            .where(eq(sessions.id, this.sessionId));
-          await this.eventStore.append(
-            this.sessionId,
-            'status',
-            {
-              status: 'config_option_update',
-              configOptions,
-            },
-            null,
-          );
-        }
+        await this.handleDomainEvent({ type: 'config_option_update', configOptions });
+        return configOptions;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         this.logger.error(err, `Failed to update config option ${configId} to ${String(value)}`);

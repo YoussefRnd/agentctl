@@ -160,7 +160,9 @@ let container: HTMLDivElement;
 let client: QueryClient;
 async function click(text: string) {
   await act(async () => {
-    const button = [...container.querySelectorAll('button')].find((b) => b.textContent === text);
+    const button = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === text || b.getAttribute('aria-label') === `Thinking effort: ${text}`,
+    );
     expect(button).toBeDefined();
     button!.click();
   });
@@ -281,8 +283,8 @@ it('uses the shared slider with all advertised thinking levels and keeps changes
   const slider = document.querySelector<HTMLInputElement>(
     'input[aria-label="Thinking effort level"]',
   )!;
-  expect(slider.max).toBe('6');
-  expect(slider.value).toBe('6');
+  expect(slider.max).toBe('5');
+  expect(slider.getAttribute('aria-valuetext')).toBe('Provider default');
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '4');
     slider.dispatchEvent(new Event('input', { bubbles: true }));

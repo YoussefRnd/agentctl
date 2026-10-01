@@ -236,14 +236,15 @@ export class AcpV1AgentDriver implements AgentDriver {
           }
         }
       },
-      async updateModel(modelId: string): Promise<void> {
-        if (this.id && options.resolvedModelConfigId) {
-          await connection.setSessionConfigOption({
-            sessionId: this.id,
-            configId: options.resolvedModelConfigId,
-            value: modelId,
-          });
-        }
+      async updateModel(modelId: string): Promise<AgentConfigOption[] | undefined> {
+        if (!this.id || !options.resolvedModelConfigId) return undefined;
+        const result = await connection.setSessionConfigOption({
+          sessionId: this.id,
+          configId: options.resolvedModelConfigId,
+          value: modelId,
+        });
+        if (!Array.isArray(result.configOptions)) return undefined;
+        return (this.configOptions = extractConfigOptionsFromSessionResult(result));
       },
       async updateConfigOption(
         configId: string,
@@ -257,14 +258,14 @@ export class AcpV1AgentDriver implements AgentDriver {
             type: 'boolean',
             value,
           });
-          return result.configOptions as AgentConfigOption[];
+          return (this.configOptions = extractConfigOptionsFromSessionResult(result));
         }
         const result = await connection.setSessionConfigOption({
           sessionId: this.id,
           configId,
           value,
         });
-        return result.configOptions as AgentConfigOption[];
+        return (this.configOptions = extractConfigOptionsFromSessionResult(result));
       },
       async setMode(modeId: string): Promise<void> {
         if (this.id) {
@@ -506,6 +507,9 @@ export class AcpV1AgentDriver implements AgentDriver {
       }
 
       handle.id = acpSessionId;
+      if (newSessionResult && Array.isArray(newSessionResult.configOptions)) {
+        handle.configOptions = extractConfigOptionsFromSessionResult(newSessionResult);
+      }
 
       if (!handle.availableModes || handle.availableModes.length === 0) {
         const resultModes =
@@ -538,11 +542,14 @@ export class AcpV1AgentDriver implements AgentDriver {
           options.resolvedModelConfigId
         ) {
           try {
-            await connection.setSessionConfigOption({
+            const result = await connection.setSessionConfigOption({
               sessionId: finalSessionId,
               configId: options.resolvedModelConfigId,
               value: options.selectedModel,
             });
+            if (Array.isArray(result.configOptions)) {
+              handle.configOptions = extractConfigOptionsFromSessionResult(result);
+            }
           } catch (configErr) {
             const errorMsg = configErr instanceof Error ? configErr.message : String(configErr);
             this.logger.warn(
@@ -562,14 +569,23 @@ export class AcpV1AgentDriver implements AgentDriver {
         if (
           options.features?.configuration.options &&
           options.selectedThinkingEffort &&
-          options.resolvedThinkingConfigId
+          options.resolvedThinkingConfigId &&
+          (!handle.configOptions ||
+            handle.configOptions.some(
+              (option) =>
+                option.id === options.resolvedThinkingConfigId &&
+                option.options?.some((choice) => choice.value === options.selectedThinkingEffort),
+            ))
         ) {
           try {
-            await connection.setSessionConfigOption({
+            const result = await connection.setSessionConfigOption({
               sessionId: finalSessionId,
               configId: options.resolvedThinkingConfigId,
               value: options.selectedThinkingEffort,
             });
+            if (Array.isArray(result.configOptions)) {
+              handle.configOptions = extractConfigOptionsFromSessionResult(result);
+            }
           } catch (configErr) {
             this.logger.warn(
               configErr,

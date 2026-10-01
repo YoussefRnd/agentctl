@@ -186,3 +186,66 @@ test.each(['error', 'timeout', 'same-id'])(
     expect(connection.unstable_forkSession).toHaveBeenCalledTimes(1);
   },
 );
+test('v1 startup adopts model-specific config options and skips an unavailable effort', async () => {
+  const { connection, runtime } = setup(false);
+  const modelOption = {
+    id: 'model',
+    name: 'Model',
+    type: 'select',
+    currentValue: 'default-model',
+    options: [
+      { value: 'default-model', name: 'Default model' },
+      { value: 'glm', name: 'GLM' },
+    ],
+  };
+  const effortOption = {
+    id: 'effort',
+    name: 'Thinking Effort',
+    category: 'thought_level',
+    type: 'select',
+    currentValue: 'default',
+    options: [
+      { value: 'low', name: 'Low' },
+      { value: 'default', name: 'Default' },
+    ],
+  };
+  connection.newSession.mockResolvedValue({
+    sessionId: 'fresh-agent-id',
+    configOptions: [modelOption, effortOption],
+  });
+  connection.setSessionConfigOption.mockResolvedValueOnce({
+    configOptions: [
+      { ...modelOption, currentValue: 'glm' },
+      { ...effortOption, options: [{ value: 'default', name: 'Default' }] },
+    ],
+  });
+
+  const handle = await runtime.startSession(
+    'agent',
+    [],
+    {
+      providerId: 'provider',
+      cwd: '/tmp',
+      features: {
+        ...EMPTY_AGENT_FEATURES,
+        configuration: { model: true, options: true },
+      },
+      intent: { kind: 'new' },
+      selectedModel: 'glm',
+      selectedThinkingEffort: 'low',
+      resolvedModelConfigId: 'model',
+      resolvedThinkingConfigId: 'effort',
+    },
+    { onUpdate() {}, onRequestPermission: async () => ({ allowed: false }) },
+  );
+
+  expect(connection.setSessionConfigOption).toHaveBeenCalledExactlyOnceWith({
+    sessionId: 'fresh-agent-id',
+    configId: 'model',
+    value: 'glm',
+  });
+  expect(handle.configOptions?.find((option) => option.id === 'effort')?.options).toEqual([
+    { value: 'default', name: 'Default', description: undefined },
+  ]);
+  await handle.close();
+});

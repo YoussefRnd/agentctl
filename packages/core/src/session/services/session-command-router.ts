@@ -92,7 +92,7 @@ export class SessionCommandRouter {
     await this.deps.launcher.ensureWorkspaceAvailable(sessionId);
     const activeSession = this.deps.stateMachine.getSession(sessionId);
 
-    const persistSelection = async (): Promise<void> => {
+    const persistSelection = async (preserveLiveOptions = false): Promise<void> => {
       let preservedLimit = sessionRecord.contextLimit > 0 ? sessionRecord.contextLimit : 0;
       if (preservedLimit === 0 && sessionRecord.sessionMetrics) {
         const metrics = jsonCodecs.unknownRecord(sessionRecord.sessionMetrics);
@@ -109,7 +109,9 @@ export class SessionCommandRouter {
           selectedThinkingEffort: selection.selectedThinkingEffort,
           contextLimit: preservedLimit,
           availableCommands: '[]',
-          sessionConfigOptions: JSON.stringify(newConfigOptions),
+          ...(preserveLiveOptions
+            ? {}
+            : { sessionConfigOptions: JSON.stringify(newConfigOptions) }),
           ...(providerIdChanged
             ? {
                 agentPersona: null,
@@ -156,22 +158,36 @@ export class SessionCommandRouter {
       const needsEffortRestart = effortChanged && !selection.features.configuration.options;
 
       if (!needsModelRestart && !needsEffortRestart) {
-        const thinkingOption = configOptions.find(
-          (opt: { id: string }) =>
-            opt.id === 'thinking' ||
-            opt.id === 'thinking_effort' ||
-            opt.id === 'selectedThinkingEffort',
-        );
+        let liveConfigOptions =
+          jsonCodecs.agentConfigOptionsOrNull(sessionRecord.sessionConfigOptions) ?? configOptions;
+        let thinkingOption: (typeof configOptions)[number] | undefined;
         let modelWasUpdated = false;
         let effortWasUpdated = false;
         try {
           if (modelChanged) {
-            await activeSession.updateModel(selection.selectedModel);
+            const liveOptions = await activeSession.updateModel(selection.selectedModel);
+            if (Array.isArray(liveOptions)) liveConfigOptions = liveOptions;
             modelWasUpdated = true;
           }
           if (effortChanged) {
+            thinkingOption = liveConfigOptions.find(
+              (option) =>
+                option.category === 'thought_level' ||
+                option.id === 'thinking' ||
+                option.id === 'thinking_effort' ||
+                option.id === 'selectedThinkingEffort',
+            );
             if (!thinkingOption) {
               throw new Error('Provider did not advertise a thinking-effort option');
+            }
+            if (
+              !thinkingOption.options?.some(
+                (choice) => choice.value === selection.selectedThinkingEffort,
+              )
+            ) {
+              throw new Error(
+                'Provider did not advertise this thinking effort for the selected model',
+              );
             }
             await activeSession.updateConfigOption(
               thinkingOption.id,
@@ -179,7 +195,8 @@ export class SessionCommandRouter {
             );
             effortWasUpdated = true;
           }
-          await persistSelection();
+          // ManagedSession persists live option updates; keep them when saving legacy selections.
+          await persistSelection(true);
           return activeSession;
         } catch (error) {
           if (effortWasUpdated && thinkingOption) {

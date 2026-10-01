@@ -63,6 +63,23 @@ describe('BinaryInstaller installation checks', () => {
     await fs.rm(home, { recursive: true, force: true });
   });
 
+  it('checks the persisted managed command independently of the catalog version', async () => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-installed-command-'));
+    process.env.AGENTCTL_HOME = home;
+    const installer = new BinaryInstaller();
+    const binaryDir = path.join(installer.getInstallDir('safe-agent'), 'v_previous');
+    const binaryPath = path.join(binaryDir, 'safe-agent');
+    await fs.mkdir(binaryDir, { recursive: true });
+    await fs.writeFile(binaryPath, 'working', { mode: 0o755 });
+    await fs.chmod(binaryPath, 0o755);
+
+    expect(installer.isInstalledCommand('safe-agent', binaryPath)).toBe(true);
+    expect(installer.isInstalledCommand('safe-agent', path.join(home, 'outside'))).toBe(false);
+    await fs.rm(binaryPath);
+    expect(installer.isInstalledCommand('safe-agent', binaryPath)).toBe(false);
+    await fs.rm(home, { recursive: true, force: true });
+  });
+
   it('keeps the previous version when verification of an update fails', async () => {
     const home = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-binary-rollback-'));
     process.env.AGENTCTL_HOME = home;

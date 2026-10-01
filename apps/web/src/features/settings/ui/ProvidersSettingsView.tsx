@@ -74,7 +74,8 @@ export function ProvidersSettingsView() {
           </div>
         </div>
         <p className="text-text-muted mt-1 text-xs">
-          Configure agent providers, authentication keys, and model parameters.
+          Configure agent providers, authentication keys, and model parameters. Installed provider
+          packages update automatically in the background.
         </p>
       </div>
 

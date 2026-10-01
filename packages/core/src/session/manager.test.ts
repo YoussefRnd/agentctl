@@ -12,7 +12,7 @@ import type { ChildProcess } from 'node:child_process';
 import { createDatabase } from '../db/index.js';
 import { projects, sessions, providers } from '../db/schema.js';
 import { SessionEventStore } from './event-store.js';
-import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
+import { EMPTY_AGENT_FEATURES, type AgentConfigOption } from '@agentctl/shared';
 import { WorkspaceManager } from '../git/worktree-manager.js';
 import { GitMutex } from '../git/mutex.js';
 import { simpleGit } from 'simple-git';
@@ -598,6 +598,7 @@ describe('SessionManager tests', () => {
       selectedProvider: 'provider-dynamic',
       selectedModel: 'model-1',
       selectedThinkingEffort: 'medium',
+      sessionConfigOptions: '',
       mode: 'local' as const,
       project: {
         id: 'proj-1',
@@ -631,13 +632,39 @@ describe('SessionManager tests', () => {
       },
     } as unknown as DbClient;
 
+    const initialLiveOptions: AgentConfigOption[] = [
+      {
+        id: 'effort',
+        name: 'Thinking Effort',
+        category: 'thought_level',
+        type: 'select',
+        currentValue: 'medium',
+        options: [{ value: 'medium', name: 'Medium' }],
+      },
+    ];
+    const updatedLiveOptions: AgentConfigOption[] = [
+      {
+        ...initialLiveOptions[0],
+        options: [
+          { value: 'medium', name: 'Medium' },
+          { value: 'high', name: 'High' },
+        ],
+      },
+    ];
+    const liveRuntime: AgentDriver = {
+      ...fakeRuntime,
+      async startSession(...args) {
+        const handle = await fakeRuntime.startSession(...args);
+        return { ...handle, configOptions: initialLiveOptions };
+      },
+    };
     const manager = new SessionManager(
       localDb,
       mockWorkspaceManager,
       registry,
       eventBus,
       noopLogger,
-      fakeRuntime,
+      liveRuntime,
     );
 
     // Initial start to populate the manager's active sessions map
@@ -657,12 +684,18 @@ describe('SessionManager tests', () => {
       },
     );
 
+    expect(JSON.parse(sessionRecordVal.sessionConfigOptions)).toEqual(initialLiveOptions);
+
     let modelUpdated = '';
     let configUpdated: [string, string] | null = null;
 
-    session.updateModel = (modelId: string) => {
+    session.updateModel = async (modelId: string) => {
       modelUpdated = modelId;
-      return Promise.resolve();
+      await session.handleDomainEvent({
+        type: 'config_option_update',
+        configOptions: updatedLiveOptions,
+      });
+      return updatedLiveOptions;
     };
     session.updateConfigOption = (configId: string, value: string) => {
       configUpdated = [configId, value];
@@ -682,6 +715,7 @@ describe('SessionManager tests', () => {
       selectedThinkingEffort: 'medium',
     });
 
+    expect(JSON.parse(sessionRecordVal.sessionConfigOptions)).toEqual(updatedLiveOptions);
     expect(modelUpdated).toBe('model-2');
     expect(configUpdated).toBeNull();
     expect(restarted).toBe(false);
@@ -695,7 +729,8 @@ describe('SessionManager tests', () => {
     });
 
     expect(modelUpdated).toBe('');
-    expect(configUpdated).toEqual(['thinking_effort', 'high']);
+    expect(configUpdated).toEqual(['effort', 'high']);
+    expect(JSON.parse(sessionRecordVal.sessionConfigOptions)).toEqual(updatedLiveOptions);
     expect(restarted).toBe(false);
 
     // 3. Provider changed -> restarts the session
@@ -709,6 +744,56 @@ describe('SessionManager tests', () => {
     expect(restarted).toBe(true);
 
     session.kill();
+  });
+
+  test('retains live config options notified before startup returns', async () => {
+    const db = createDatabase(':memory:');
+    await db.insert(projects).values({ id: 'startup-project', name: 'Startup', path: '/tmp' });
+    await db.insert(sessions).values({
+      id: 'startup-session',
+      projectId: 'startup-project',
+      branch: 'main',
+      worktreePath: '/tmp',
+      taskSlug: 'startup',
+      baseCommit: 'test-commit',
+      agent: 'provider-1',
+      selectedProvider: 'provider-1',
+      mode: 'local',
+    });
+    const liveOptions: AgentConfigOption[] = [
+      {
+        id: 'effort',
+        name: 'Thinking Effort',
+        category: 'thought_level',
+        type: 'select',
+        currentValue: 'default',
+        options: [{ value: 'default', name: 'Default' }],
+      },
+    ];
+    const runtime: AgentDriver = {
+      ...fakeRuntime,
+      async startSession(...args) {
+        await args[3].onUpdate({ type: 'config_option_update', configOptions: liveOptions });
+        return fakeRuntime.startSession(...args);
+      },
+    };
+    const manager = new SessionManager(
+      db,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      runtime,
+    );
+    const session = await manager.startSession('startup-session', '/tmp', 'node', [], {});
+    try {
+      const saved = await db.query.sessions.findFirst({
+        where: (row, { eq }) => eq(row.id, 'startup-session'),
+      });
+      expect(JSON.parse(saved!.sessionConfigOptions)).toEqual(liveOptions);
+    } finally {
+      session.kill();
+    }
   });
 
   test('restores an advertised agent persona on startup without sending approvalMode', async () => {

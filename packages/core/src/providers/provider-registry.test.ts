@@ -1,11 +1,13 @@
 import { test, describe, expect, vi } from 'vitest';
 import os from 'node:os';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { ProviderRegistry } from './provider-registry.js';
 import type { ProviderLauncher } from './registry/provider-launcher.js';
 import type { BinaryInstaller } from './registry/binary-installer.js';
 import { noopLogger } from '../logger.js';
-import type { RegistryAgent } from '@agentctl/shared';
+import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
 import { createDatabase } from '../db/index.js';
 import { providers, registrySnapshots } from '../db/schema.js';
 import { defaultCredentialVault } from '../security/credential-vault.js';
@@ -42,6 +44,252 @@ describe('ProviderRegistry', () => {
     expect(providersList[0].id).toBe('claude-acp');
     expect(providersList[0].installState).toBe('installed_local');
     expect(providersList[0].authState).toBe('authenticated');
+  });
+
+  test('automatic updates target only enabled, installed, app-managed providers and continue after a failure', async () => {
+    const db = createDatabase(':memory:');
+    await db.insert(providers).values([
+      {
+        id: 'managed',
+        name: 'Managed',
+        command: 'managed',
+        installState: 'installed_local',
+        installSource: 'managed',
+        installedVersion: '1.0.0',
+        version: '2.0.0',
+      },
+      {
+        id: 'npx',
+        name: 'Npx',
+        command: 'npx',
+        installState: 'system_available',
+        installSource: 'npx',
+        installedVersion: '1.0.0',
+        version: '2.0.0',
+      },
+      {
+        id: 'uvx',
+        name: 'Uvx',
+        command: 'uvx',
+        installState: 'system_available',
+        installSource: 'uvx',
+        installedVersion: '1.0.0',
+        version: '2.0.0',
+      },
+      {
+        id: 'system',
+        name: 'System',
+        command: 'system',
+        installState: 'system_available',
+        installSource: 'system',
+        installedVersion: '1.0.0',
+        version: '2.0.0',
+      },
+      {
+        id: 'disabled',
+        name: 'Disabled',
+        command: 'disabled',
+        installState: 'installed_local',
+        installSource: 'managed',
+        installedVersion: '1.0.0',
+        version: '2.0.0',
+        enabled: false,
+      },
+      {
+        id: 'current',
+        name: 'Current',
+        command: 'current',
+        installState: 'installed_local',
+        installSource: 'managed',
+        installedVersion: '2.0.0',
+        version: '2.0.0',
+      },
+      {
+        id: 'older-catalog',
+        name: 'Older catalog',
+        command: 'older',
+        installState: 'installed_local',
+        installSource: 'managed',
+        installedVersion: '2.0.0',
+        version: '1.0.0',
+      },
+      {
+        id: 'preview',
+        name: 'Preview',
+        command: 'preview',
+        installState: 'installed_local',
+        installSource: 'managed',
+        installedVersion: '1.0.0',
+        version: '2.0.0-beta.1',
+      },
+      {
+        id: 'absent',
+        name: 'Absent',
+        command: 'absent',
+        installState: 'not_installed',
+        installSource: 'npx',
+        installedVersion: '1.0.0',
+        version: '2.0.0',
+      },
+    ]);
+
+    const registry = new ProviderRegistry(db, noopLogger);
+    const install = vi.spyOn(registry, 'install').mockImplementation(async (id) => {
+      if (id === 'managed') throw new Error('download failed');
+      return { id, updateAvailable: false, installedVersion: '2.0.0' } as ProviderDiscovery;
+    });
+
+    await registry.autoUpdateInstalledProviders();
+
+    expect(install.mock.calls).toEqual([
+      ['managed', { prewarmNpx: true }],
+      ['npx', { prewarmNpx: true }],
+      ['uvx', { prewarmNpx: true }],
+    ]);
+
+    const restartedRegistry = new ProviderRegistry(db, noopLogger);
+    const retry = vi.spyOn(restartedRegistry, 'install').mockResolvedValue({
+      updateAvailable: false,
+      installedVersion: '2.0.0',
+    } as ProviderDiscovery);
+    await restartedRegistry.autoUpdateInstalledProviders();
+    expect(retry.mock.calls.map(([id]) => id)).toEqual(['npx', 'uvx']);
+  });
+
+  test('prunes stale npx caches while preserving the active cache', async () => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-npx-cache-'));
+    const previousHome = process.env.AGENTCTL_HOME;
+    process.env.AGENTCTL_HOME = home;
+    try {
+      const cacheRoot = path.join(home, 'provider-npx-cache');
+      const active = path.join(cacheRoot, `${'a'.repeat(20)}-ABC123`);
+      const stale = path.join(cacheRoot, `${'b'.repeat(20)}-DEF456`);
+      await fs.mkdir(active, { recursive: true });
+      await fs.mkdir(stale, { recursive: true });
+      const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      await fs.utimes(active, old, old);
+      await fs.utimes(stale, old, old);
+      const db = createDatabase(':memory:');
+      await db.insert(providers).values({
+        id: 'cached-agent',
+        name: 'Cached Agent',
+        command: 'npx',
+        installState: 'system_available',
+        installSource: 'npx',
+        installedVersion: '1.0.0',
+        version: '1.0.0',
+        launchEnv: JSON.stringify({ npm_config_cache: active }),
+      });
+
+      await new ProviderRegistry(db, noopLogger).autoUpdateInstalledProviders();
+
+      await expect(fs.stat(active)).resolves.toBeDefined();
+      await expect(fs.stat(stale)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      if (previousHome === undefined) delete process.env.AGENTCTL_HOME;
+      else process.env.AGENTCTL_HOME = previousHome;
+      await fs.rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test('keeps a valid installed managed binary when the catalog advances', async () => {
+    const db = createDatabase(':memory:');
+    const agent: RegistryAgent = {
+      id: 'managed-ready',
+      name: 'Managed Ready',
+      version: '2.0.0',
+      description: '',
+      authors: [],
+      distribution: {
+        binary: {
+          'linux-x86_64': {
+            archive: 'https://example.com/managed-ready-2.tar.gz',
+            cmd: 'managed-ready',
+            env: {},
+          },
+        },
+      },
+    };
+    await db.insert(registrySnapshots).values({
+      data: JSON.stringify({ version: '1', agents: [agent] }),
+      fetchedAt: new Date(),
+    });
+    await db.insert(providers).values({
+      id: agent.id,
+      name: agent.name,
+      command: '/managed/old/managed-ready',
+      installState: 'installed_local',
+      installSource: 'managed',
+      installedVersion: '1.0.0',
+      version: '2.0.0',
+      authState: 'not_required',
+      connectionState: 'ready',
+    });
+
+    const registry = new ProviderRegistry(db, noopLogger);
+    const { installer } = registry as unknown as { installer: BinaryInstaller };
+    const isInstalledCommand = vi.spyOn(installer, 'isInstalledCommand').mockReturnValue(true);
+    const install = vi.spyOn(registry, 'install');
+
+    const provider = await registry.ensureProviderReady(agent.id);
+
+    expect(isInstalledCommand).toHaveBeenCalledWith(agent.id, '/managed/old/managed-ready');
+    expect(install).not.toHaveBeenCalled();
+    expect(provider.installState).toBe('installed_local');
+    expect(registry.getProvider(agent.id)?.toDiscovery().updateAvailable).toBe(true);
+  });
+
+  test('installs the local override when its id also exists in the remote snapshot', async () => {
+    const overrideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-registry-override-'));
+    const previousPath = process.env.AGENTCTL_REGISTRY_PATH;
+    const overridePath = path.join(overrideDir, 'registry.json');
+    const remoteAgent: RegistryAgent = {
+      id: 'overridden-agent',
+      name: 'Remote Agent',
+      version: '1.0.0',
+      description: '',
+      authors: [],
+      distribution: { npx: { package: 'remote-agent', args: [], env: {} } },
+    };
+    const localAgent: RegistryAgent = {
+      ...remoteAgent,
+      name: 'Local Agent',
+      version: '2.0.0',
+      distribution: { npx: { package: 'local-agent', args: [], env: {} } },
+    };
+    try {
+      await fs.writeFile(overridePath, JSON.stringify({ version: 'local', agents: [localAgent] }));
+      process.env.AGENTCTL_REGISTRY_PATH = overridePath;
+      const db = createDatabase(':memory:');
+      await db.insert(registrySnapshots).values({
+        data: JSON.stringify({ version: '1', agents: [remoteAgent] }),
+        fetchedAt: new Date(),
+      });
+      const registry = new ProviderRegistry(db, noopLogger);
+      const { fetcher, launcher } = registry as unknown as {
+        fetcher: { fetch: () => Promise<RegistryAgent[]> };
+        launcher: ProviderLauncher;
+      };
+      vi.spyOn(fetcher, 'fetch').mockResolvedValue([localAgent]);
+      vi.spyOn(launcher, 'isBinaryOnPath').mockResolvedValue(true);
+      vi.spyOn(launcher, 'inspectLaunch').mockResolvedValue({
+        status: 'ready',
+        configOptions: [],
+        authMethods: [],
+        supportsDynamicModel: false,
+        supportsDynamicConfig: false,
+      });
+
+      await registry.sync();
+      const installed = await registry.install(localAgent.id, { prewarmNpx: false });
+
+      expect(installed.launchArgs).toContain('local-agent@2.0.0');
+      expect(installed.launchArgs).not.toContain('remote-agent@1.0.0');
+    } finally {
+      if (previousPath === undefined) delete process.env.AGENTCTL_REGISTRY_PATH;
+      else process.env.AGENTCTL_REGISTRY_PATH = previousPath;
+      await fs.rm(overrideDir, { recursive: true, force: true });
+    }
   });
 
   test('catalog and provider reads do not fetch, sync, probe, or publish state', async () => {
@@ -198,7 +446,7 @@ describe('ProviderRegistry', () => {
       fetchedAt: new Date(),
     });
 
-    const result = await registry.install('npx-agent');
+    const result = await registry.install('npx-agent', { prewarmNpx: false });
 
     expect(result.id).toBe('npx-agent');
     expect(result.installState).toBe('system_available');
@@ -248,7 +496,7 @@ describe('ProviderRegistry', () => {
     });
 
     try {
-      await registry.install(agent.id);
+      await registry.install(agent.id, { prewarmNpx: false });
 
       const stored = db.select().from(providers).where(eq(providers.id, agent.id)).get();
       expect(stored?.customEnv).toBe(JSON.stringify({ API_KEY: secretRef }));
@@ -343,7 +591,7 @@ describe('ProviderRegistry', () => {
       data: JSON.stringify({ version: '1', agents: [agent] }),
       fetchedAt: new Date(),
     });
-    await registry.install('npx-agent');
+    await registry.install('npx-agent', { prewarmNpx: false });
 
     const result = await registry.remove('npx-agent');
 
@@ -387,8 +635,8 @@ describe('ProviderRegistry', () => {
     });
 
     const [a, b] = await Promise.all([
-      registry.install('dup-agent'),
-      registry.install('dup-agent'),
+      registry.install('dup-agent', { prewarmNpx: false }),
+      registry.install('dup-agent', { prewarmNpx: false }),
     ]);
     expect(launcherSpy).toHaveBeenCalledTimes(1);
     expect(a.id).toBe('dup-agent');
@@ -489,7 +737,7 @@ describe('ProviderRegistry', () => {
       supportsDynamicConfig: false,
     });
     try {
-      const res = await registry.install('fb-agent');
+      const res = await registry.install('fb-agent', { prewarmNpx: false });
       expect(res.installState).toBe('system_available');
       expect(res.command).toBe('npx');
     } finally {
@@ -556,7 +804,10 @@ describe('ProviderRegistry', () => {
       supportsDynamicConfig: false,
     });
     try {
-      const spy = vi.spyOn(registry, 'install');
+      const originalInstall = registry.install.bind(registry);
+      const spy = vi
+        .spyOn(registry, 'install')
+        .mockImplementation((id) => originalInstall(id, { prewarmNpx: false }));
       const res = await registry.ensureProviderReady('lazy-agent');
       expect(spy).toHaveBeenCalledWith('lazy-agent');
       expect(res.installState).toBe('system_available');
@@ -591,7 +842,7 @@ describe('ProviderRegistry', () => {
       supportsDynamicConfig: false,
     });
     try {
-      const res = await registry.install('range-agent');
+      const res = await registry.install('range-agent', { prewarmNpx: false });
       expect(res.launchArgs).toEqual(['-y', 'range-pkg@1.2.3', '--x']);
     } finally {
       launcherSpy.mockRestore();
@@ -799,7 +1050,9 @@ describe('ProviderRegistry', () => {
       .spyOn(reg.launcher, 'inspectLaunch')
       .mockRejectedValue(new Error('Process exited with code 127'));
 
-    await expect(registry.install('probe-fail-agent')).resolves.toMatchObject({
+    await expect(
+      registry.install('probe-fail-agent', { prewarmNpx: false }),
+    ).resolves.toMatchObject({
       installState: 'system_available',
       connectionState: 'error',
       authState: 'unknown',
@@ -857,7 +1110,7 @@ describe('ProviderRegistry', () => {
       throw new Error('bad handshake');
     });
 
-    const result = await registry.install(agent.id);
+    const result = await registry.install(agent.id, { prewarmNpx: false });
 
     expect(result).toMatchObject({
       installedVersion: '1.0.0',

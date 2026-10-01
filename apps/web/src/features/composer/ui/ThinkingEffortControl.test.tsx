@@ -48,10 +48,14 @@ it('uses provider labels and records Home selections immediately', () => {
   act(() =>
     root.render(<ThinkingEffortControl option={option} onChange={onChange} debounceMs={0} />),
   );
-  expect(container.querySelector('button')!.textContent).toBe('Default');
+  expect(container.querySelector('button')!.getAttribute('aria-label')).toBe(
+    'Thinking effort: Default',
+  );
   slide('1');
   expect(onChange).toHaveBeenCalledExactlyOnceWith('xhigh');
-  expect(container.querySelector('button')!.textContent).toBe('Extra High');
+  expect(container.querySelector('button')!.getAttribute('aria-label')).toBe(
+    'Thinking effort: Extra High',
+  );
 });
 it('debounces session updates and sends only the latest slider choice', () => {
   act(() => root.render(<ThinkingEffortControl option={option} onChange={onChange} />));
@@ -70,6 +74,78 @@ it('handles one advertised choice without invalid track geometry', () => {
       />,
     ),
   );
-  expect(container.querySelector('input')!.disabled).toBe(true);
+  expect(container.querySelector('input')).toBeNull();
   expect(container.innerHTML).not.toMatch(/NaN|Infinity/);
+});
+it('shows provider default separately from ranked effort levels', () => {
+  act(() =>
+    root.render(<ThinkingEffortControl option={option} onChange={onChange} debounceMs={0} />),
+  );
+  expect(container.querySelector('[aria-pressed="true"]')?.textContent).toBe('Default');
+  expect(container.querySelector('[data-testid="thinking-effort-thumb"]')).toBeNull();
+  expect(container.querySelector('input')?.getAttribute('aria-valuetext')).toBe('Provider default');
+  act(() => container.querySelector('input')!.click());
+  expect(onChange).toHaveBeenCalledExactlyOnceWith('low');
+});
+
+it('orders provider effort levels from faster to smarter even when advertised in reverse', () => {
+  const reversed = {
+    ...option,
+    currentValue: 'high',
+    options: [
+      { value: 'high', name: 'High' },
+      { value: 'medium', name: 'Medium' },
+      { value: 'low', name: 'Low' },
+    ],
+  };
+  act(() =>
+    root.render(<ThinkingEffortControl option={reversed} onChange={onChange} debounceMs={0} />),
+  );
+  expect(container.querySelector('input')?.value).toBe('2');
+  slide('0');
+  expect(onChange).toHaveBeenCalledExactlyOnceWith('low');
+});
+
+it('allows a single explicit level alongside provider default', () => {
+  act(() =>
+    root.render(
+      <ThinkingEffortControl
+        option={{ ...option, options: [option.options![0], option.options![2]] }}
+        onChange={onChange}
+        debounceMs={0}
+      />,
+    ),
+  );
+  const lowButton = Array.from(container.querySelectorAll('button')).find(
+    (button) => button.textContent === 'Low',
+  );
+  expect(lowButton).toBeDefined();
+  act(() => lowButton!.click());
+  expect(onChange).toHaveBeenCalledExactlyOnceWith('low');
+});
+it('restores the advertised value after a rejected update', async () => {
+  const rejectChange = vi.fn().mockRejectedValue(new Error('unsupported for this model'));
+  act(() =>
+    root.render(<ThinkingEffortControl option={option} onChange={rejectChange} debounceMs={0} />),
+  );
+  slide('1');
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(rejectChange).toHaveBeenCalledExactlyOnceWith('xhigh');
+  expect(container.querySelector('button')?.getAttribute('aria-label')).toBe(
+    'Thinking effort: Default',
+  );
+});
+
+it('selects the lowest level by keyboard from provider default', () => {
+  act(() =>
+    root.render(<ThinkingEffortControl option={option} onChange={onChange} debounceMs={0} />),
+  );
+  act(() =>
+    container
+      .querySelector('input')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })),
+  );
+  expect(onChange).toHaveBeenCalledExactlyOnceWith('low');
 });

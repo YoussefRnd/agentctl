@@ -260,6 +260,7 @@ export class SessionStateMachine {
       });
       providerId = sessionRecord?.selectedProvider ?? 'default';
 
+      let startupConfigOptions: AgentSession['configOptions'];
       const runtimeHandle = await this.runtime.startSession(
         command,
         args,
@@ -281,6 +282,8 @@ export class SessionStateMachine {
           onUpdate: async (event) => {
             if (session) {
               await session.handleDomainEvent(event);
+            } else if (event.type === 'config_option_update') {
+              startupConfigOptions = event.configOptions;
             }
           },
           onRequestPermission: async (req) => {
@@ -313,6 +316,14 @@ export class SessionStateMachine {
         this.logger,
         this.mcpGateway,
       );
+
+      const liveConfigOptions = runtimeHandle.configOptions ?? startupConfigOptions;
+      if (liveConfigOptions !== undefined) {
+        await session.handleDomainEvent({
+          type: 'config_option_update',
+          configOptions: liveConfigOptions,
+        });
+      }
 
       if (sessionRecord?.agentPersona) {
         await session.setMode(sessionRecord.agentPersona);

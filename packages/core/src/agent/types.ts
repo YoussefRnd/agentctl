@@ -149,6 +149,8 @@ export interface AgentMcpGateway {
 export interface AgentSession {
   id: string | null;
   history: AgentSessionHistory;
+  /** Options advertised for this live session, after any initial model selection. */
+  configOptions?: AgentConfigOption[];
   closed: Promise<void>;
   onError(handler: (err: Error) => void): void;
   onClose(handler: (detail: { code: number | null; signal: string | null }) => void): void;
@@ -160,7 +162,7 @@ export interface AgentSession {
   authenticate(methodId: string): Promise<void>;
   cancel(): Promise<void>;
   close(): Promise<void>;
-  updateModel?(modelId: string): Promise<void>;
+  updateModel?(modelId: string): Promise<AgentConfigOption[] | void>;
   updateConfigOption?(configId: string, value: string | boolean): Promise<AgentConfigOption[]>;
   setMode?(modeId: string): Promise<void>;
   availableModes?: string[];

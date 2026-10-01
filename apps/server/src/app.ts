@@ -161,18 +161,44 @@ export async function buildApp(deps: AppDependencies = {}) {
 
   await providerRegistry.recoverInterruptedOperations();
 
-  // Sync the catalog and probe installed providers in the background on startup.
-  void providerRegistry
-    .sync()
+  // Refresh the catalog and update installed providers at startup and once per day.
+  let providerUpdateRun: Promise<void> | undefined;
+  const refreshAndUpdateProviders = (): Promise<void> => {
+    if (providerUpdateRun) return providerUpdateRun;
+    const run = (async () => {
+      await providerRegistry.sync();
+      await providerRegistry.autoUpdateInstalledProviders();
+    })();
+    providerUpdateRun = run;
+    void run
+      .finally(() => {
+        if (providerUpdateRun === run) providerUpdateRun = undefined;
+      })
+      .catch(() => undefined);
+    return run;
+  };
+
+  void refreshAndUpdateProviders()
     .then(async () => {
       await providerRegistry.probeAllInstalledProviders();
       eventBus.publishState({ topics: ['providers'] });
     })
     .catch((err: unknown) => {
-      fastify.log.error(err, 'Failed to sync provider registry on startup');
+      fastify.log.error(err, 'Failed to refresh providers on startup');
     });
 
+  const providerUpdateInterval = setInterval(
+    () => {
+      void refreshAndUpdateProviders().catch((err: unknown) => {
+        fastify.log.error(err, 'Failed to refresh providers in the background');
+      });
+    },
+    24 * 60 * 60 * 1000,
+  );
+  providerUpdateInterval.unref();
+
   fastify.addHook('onClose', async () => {
+    clearInterval(providerUpdateInterval);
     await fastify.sessionManager.stopAll();
     providerRegistry.dispose();
     terminalService.closeAll();

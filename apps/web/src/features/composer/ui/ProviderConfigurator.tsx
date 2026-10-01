@@ -169,7 +169,7 @@ export function ThinkingEffortSelector({
   );
   const onChange = useCallback(
     (value: string) => {
-      if (option) void handleSetConfigOption(option.id, value);
+      if (option) return handleSetConfigOption(option.id, value);
     },
     [option, handleSetConfigOption],
   );

@@ -4,6 +4,11 @@ import {
   type AgentConfigOption,
 } from '@agentctl/shared';
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentDriver } from '../agent/types.js';
 import type { AgentRuntimeServices } from '../agent/runtime-services.js';
@@ -17,7 +22,7 @@ import type { DbClient } from '../db/index.js';
 import { jsonCodecs } from '../db/json-codecs.js';
 import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
-import { BinaryInstaller, getPlatformKey } from './registry/binary-installer.js';
+import { BinaryInstaller, getHome, getPlatformKey } from './registry/binary-installer.js';
 import { RegistryFetcher } from './registry/registry-fetcher.js';
 import {
   ProviderLauncher,
@@ -29,7 +34,6 @@ import { ProviderSync } from './registry/provider-sync.js';
 
 import { ProviderOperationCoordinator } from './registry/provider-operation-coordinator.js';
 import { ProviderProbingService } from './registry/provider-probing-service.js';
-import { parseRegistryAgents } from './registry/registry-parser.js';
 import { ProviderAuthCoordinator } from './registry/provider-auth-coordinator.js';
 import { defaultCredentialVault } from '../security/credential-vault.js';
 import type { AgentConnectionManager } from '../acp/types.js';
@@ -40,6 +44,31 @@ import {
 
 export { getPlatformKey };
 export { parseRegistryAgents } from './registry/registry-parser.js';
+
+const execFileAsync = promisify(execFile);
+const AUTO_UPDATE_FAILURE_RETRY_MS = 24 * 60 * 60 * 1000;
+const STALE_NPX_CACHE_MS = 24 * 60 * 60 * 1000;
+
+export interface ProviderInstallOptions {
+  prewarmNpx?: boolean;
+}
+
+// Automatic updates only advance comparable release numbers. Other version formats
+// remain available through the manual Update action.
+function isNewerRelease(candidate: string, installed: string): boolean {
+  const parse = (version: string): number[] | null => {
+    const value = version.replace(/^v/, '');
+    return /^\d+(?:\.\d+)*$/.test(value) ? value.split('.').map(Number) : null;
+  };
+  const next = parse(candidate);
+  const current = parse(installed);
+  if (!next || !current) return false;
+  for (let index = 0; index < Math.max(next.length, current.length); index++) {
+    const difference = (next[index] ?? 0) - (current[index] ?? 0);
+    if (difference !== 0) return difference > 0;
+  }
+  return false;
+}
 
 export class ProviderRegistry {
   private fetcher: RegistryFetcher;
@@ -126,17 +155,8 @@ export class ProviderRegistry {
   }
 
   private getAgent(providerId: string, fallback?: ProviderData): RegistryAgent | undefined {
-    const snapshot = this.fetcher.getSnapshot();
-    if (snapshot) {
-      try {
-        const agent = parseRegistryAgents(snapshot.data).find(
-          (candidate) => candidate.id === providerId,
-        );
-        if (agent) return agent;
-      } catch (error) {
-        this.logger.warn({ error }, 'Ignoring invalid provider registry snapshot');
-      }
-    }
+    const agent = this.fetcher.getCachedAgents()?.find((candidate) => candidate.id === providerId);
+    if (agent) return agent;
     const row = fallback ?? this.store.get(providerId);
     return row ? new Provider(row).toDiscovery().agent : undefined;
   }
@@ -234,11 +254,19 @@ export class ProviderRegistry {
     });
   }
 
-  async install(providerId: string): Promise<ProviderDiscovery> {
-    return this.runProviderOperation(providerId, 'install', () => this.doInstall(providerId));
+  async install(
+    providerId: string,
+    options: ProviderInstallOptions = {},
+  ): Promise<ProviderDiscovery> {
+    return this.runProviderOperation(providerId, 'install', () =>
+      this.doInstall(providerId, { prewarmNpx: true, ...options }),
+    );
   }
 
-  private async doInstall(providerId: string): Promise<ProviderDiscovery> {
+  private async doInstall(
+    providerId: string,
+    options: ProviderInstallOptions,
+  ): Promise<ProviderDiscovery> {
     const agent = this.getAgent(providerId);
     if (!agent) {
       throw new Error(`Agent ${providerId} not found in registry`);
@@ -287,6 +315,7 @@ export class ProviderRegistry {
     let installedVersion: string | null;
     let managedVersionDir: string | undefined;
     let managedVersionDiscarded = false;
+    let candidateNpxCache: string | undefined;
 
     const discardManagedCandidate = async () => {
       if (!managedVersionDir || managedVersionDiscarded) return;
@@ -307,6 +336,31 @@ export class ProviderRegistry {
         .catch((error: unknown) => {
           this.logger.warn({ error, providerId }, 'Failed to discard rejected provider version');
         });
+    };
+
+    const discardNpxCandidate = async () => {
+      if (!candidateNpxCache) return;
+      await fs.rm(candidateNpxCache, { recursive: true, force: true }).catch((error: unknown) => {
+        this.logger.warn({ error, providerId }, 'Failed to discard rejected npx cache');
+      });
+      candidateNpxCache = undefined;
+    };
+
+    const restorePreviousInstall = (installError: string | null): boolean => {
+      if (!hadWorkingInstall || !previous) return false;
+      this.store.update(providerId, {
+        command: previous.command,
+        launchArgs: previous.launchArgs,
+        launchEnv: previous.launchEnv,
+        installState: previous.installState,
+        installStage: null,
+        installSource: previous.installSource,
+        installedVersion: previous.installedVersion,
+        installError,
+        authState: previous.authState === 'needs_auth' ? 'required' : previous.authState,
+        connectionState: previous.connectionState,
+      });
+      return true;
     };
 
     const setStage = (
@@ -381,6 +435,35 @@ export class ProviderRegistry {
         launchEnv = agent.distribution.npx.env;
         installSource = 'npx';
         installedVersion = agent.version;
+        if (options.prewarmNpx) {
+          // Finish npm's cold download before the short ACP handshake probe.
+          // Each attempt gets its own cache, so an interrupted install cannot poison retries.
+          const cacheKey = crypto
+            .createHash('sha256')
+            .update(`${providerId}\0${agent.version}`)
+            .digest('hex')
+            .slice(0, 20);
+          const cacheRoot = path.join(getHome(), 'provider-npx-cache');
+          await fs.mkdir(cacheRoot, { recursive: true });
+          candidateNpxCache = await fs.mkdtemp(path.join(cacheRoot, `${cacheKey}-`));
+          launchEnv = { ...launchEnv, npm_config_cache: candidateNpxCache };
+          const packageSpec = launchArgs[1];
+          if (!packageSpec || !/^[a-zA-Z0-9@/._+~-]+$/.test(packageSpec)) {
+            throw new Error(`Unsafe npx package spec for provider ${providerId}`);
+          }
+          await execFileAsync(
+            process.platform === 'win32' ? 'npm.cmd' : 'npm',
+            ['exec', '--yes', `--package=${packageSpec}`, '--', 'node', '--version'],
+            {
+              cwd: os.tmpdir(),
+              env: { ...process.env, ...launchEnv },
+              signal: controller.signal,
+              timeout: 10 * 60_000,
+              maxBuffer: 1024 * 1024,
+              shell: process.platform === 'win32',
+            },
+          );
+        }
       } else if (desiredSource === 'uvx' && agent.distribution.uvx) {
         const onPath = await this.launcher.isBinaryOnPath('uvx');
         if (!onPath) {
@@ -457,20 +540,10 @@ export class ProviderRegistry {
         }
         const message = probeErr instanceof Error ? probeErr.message : String(probeErr);
         this.logger.warn({ probeErr, providerId }, 'Install probe verification failed for agent');
-        if (hadWorkingInstall && previous) {
+        if (hadWorkingInstall) {
           await discardManagedCandidate();
-          this.store.update(providerId, {
-            command: previous.command,
-            launchArgs: previous.launchArgs,
-            launchEnv: previous.launchEnv,
-            installState: previous.installState,
-            installStage: null,
-            installSource: previous.installSource,
-            installedVersion: previous.installedVersion,
-            installError: `ACP_HANDSHAKE_FAILED: ${message}`,
-            authState: previous.authState === 'needs_auth' ? 'required' : previous.authState,
-            connectionState: previous.connectionState,
-          });
+          await discardNpxCandidate();
+          restorePreviousInstall(`ACP_HANDSHAKE_FAILED: ${message}`);
         } else {
           // The first installation succeeded. Report connection/auth health independently.
           this.store.upsert(providerId, {
@@ -500,6 +573,7 @@ export class ProviderRegistry {
       return new Provider(row).toDiscovery();
     } catch (err) {
       await discardManagedCandidate();
+      await discardNpxCandidate();
       const msg = err instanceof Error ? err.message : String(err);
       const code: ProviderLifecycleErrorCode =
         err instanceof ProviderLifecycleError
@@ -508,24 +582,7 @@ export class ProviderRegistry {
             ? 'INSTALL_CANCELLED'
             : 'ACTIVATION_FAILED';
       if (code === 'INSTALL_CANCELLED') {
-        if (
-          previous &&
-          (previous.installState === 'installed_local' ||
-            previous.installState === 'system_available')
-        ) {
-          this.store.update(providerId, {
-            command: previous.command,
-            launchArgs: previous.launchArgs,
-            launchEnv: previous.launchEnv,
-            installState: previous.installState,
-            installStage: null,
-            installSource: previous.installSource,
-            installedVersion: previous.installedVersion,
-            installError: previous.installError,
-            authState: previous.authState === 'needs_auth' ? 'required' : previous.authState,
-            connectionState: previous.connectionState,
-          });
-        } else {
+        if (!restorePreviousInstall(previous?.installError ?? null)) {
           this.store.setInstallDetails(providerId, {
             state: 'not_installed',
             stage: null,
@@ -538,24 +595,7 @@ export class ProviderRegistry {
         if (!cancelledRow) throw err;
         return new Provider(cancelledRow).toDiscovery();
       }
-      if (
-        previous &&
-        (previous.installState === 'installed_local' ||
-          previous.installState === 'system_available')
-      ) {
-        this.store.update(providerId, {
-          command: previous.command,
-          launchArgs: previous.launchArgs,
-          launchEnv: previous.launchEnv,
-          installState: previous.installState,
-          installStage: null,
-          installSource: previous.installSource,
-          installedVersion: previous.installedVersion,
-          installError: `${code}: ${msg}`,
-          authState: previous.authState === 'needs_auth' ? 'required' : previous.authState,
-          connectionState: previous.connectionState,
-        });
-      } else {
+      if (!restorePreviousInstall(`${code}: ${msg}`)) {
         this.store.setInstallDetails(providerId, {
           state: 'failed',
           stage: null,
@@ -772,20 +812,105 @@ export class ProviderRegistry {
     });
   }
 
+  private async pruneNpxCaches(): Promise<void> {
+    const cacheRoot = path.join(getHome(), 'provider-npx-cache');
+    let entries;
+    try {
+      entries = await fs.readdir(cacheRoot, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.logger.warn({ error }, 'Failed to list provider npx caches');
+      }
+      return;
+    }
+
+    const activeCaches = new Set(
+      this.store
+        .listAll()
+        .filter((row) => row.installSource === 'npx')
+        .map((row) => jsonCodecs.stringRecord(row.launchEnv).npm_config_cache)
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => path.resolve(value)),
+    );
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !/^[a-f0-9]{20}-[a-zA-Z0-9]{6}$/.test(entry.name)) continue;
+      const cacheDir = path.join(cacheRoot, entry.name);
+      if (activeCaches.has(path.resolve(cacheDir))) continue;
+      try {
+        const stats = await fs.stat(cacheDir);
+        if (Date.now() - stats.mtimeMs < STALE_NPX_CACHE_MS) continue;
+        await fs.rm(cacheDir, { recursive: true, force: true });
+      } catch (error) {
+        this.logger.warn({ error, cacheDir }, 'Failed to remove stale provider npx cache');
+      }
+    }
+  }
+
+  async autoUpdateInstalledProviders(): Promise<void> {
+    for (const row of this.store.list()) {
+      if (
+        !row.enabled ||
+        (row.installState !== 'installed_local' && row.installState !== 'system_available') ||
+        (row.installSource !== 'managed' &&
+          row.installSource !== 'npx' &&
+          row.installSource !== 'uvx') ||
+        !row.installedVersion ||
+        !row.version ||
+        !isNewerRelease(row.version, row.installedVersion)
+      ) {
+        continue;
+      }
+
+      const failureKey = `providerAutoUpdateFailure:${row.id}`;
+      const previousFailure = this.store.getSetting(failureKey);
+      if (previousFailure) {
+        try {
+          const failure = JSON.parse(previousFailure) as { version?: string; at?: number };
+          if (
+            failure.version === row.version &&
+            typeof failure.at === 'number' &&
+            Date.now() >= failure.at &&
+            Date.now() - failure.at < AUTO_UPDATE_FAILURE_RETRY_MS
+          ) {
+            continue;
+          }
+        } catch {
+          // Ignore a malformed retry record and attempt the update.
+        }
+      }
+
+      try {
+        const result = await this.install(row.id, { prewarmNpx: true });
+        if (result.updateAvailable) {
+          this.store.updateSetting(
+            failureKey,
+            JSON.stringify({ version: row.version, at: Date.now() }),
+          );
+          this.logger.warn({ providerId: row.id }, 'Automatic provider update failed verification');
+        } else {
+          this.store.deleteSetting(failureKey);
+          this.logger.info(
+            { providerId: row.id, version: result.installedVersion },
+            'Automatically updated provider',
+          );
+        }
+      } catch (error) {
+        this.store.updateSetting(
+          failureKey,
+          JSON.stringify({ version: row.version, at: Date.now() }),
+        );
+        this.logger.warn({ error, providerId: row.id }, 'Automatic provider update failed');
+      }
+    }
+    await this.pruneNpxCaches();
+  }
+
   async probeAllInstalledProviders(): Promise<void> {
     return this.probing.probeAllInstalledProviders((id) => this.refreshProvider(id));
   }
 
   async recoverInterruptedOperations(): Promise<void> {
-    const snapshot = this.fetcher.getSnapshot();
-    let agents: RegistryAgent[] = [];
-    if (snapshot) {
-      try {
-        agents = parseRegistryAgents(snapshot.data);
-      } catch (error) {
-        this.logger.warn({ error }, 'Recovering providers without invalid registry snapshot');
-      }
-    }
+    const agents = this.fetcher.getCachedAgents() ?? [];
     let changed = false;
 
     await this.installer.removeStaleStaging(this.logger).catch((error: unknown) => {
@@ -972,7 +1097,10 @@ export class ProviderRegistry {
 
     const agent = this.getAgent(providerId, row);
 
-    if (row.installState === 'installed_local' && !this.installer.isInstalled(providerId, agent)) {
+    if (
+      row.installState === 'installed_local' &&
+      !this.installer.isInstalledCommand(providerId, row.command)
+    ) {
       this.logger.warn(
         { providerId, command: row.command, version: agent?.version ?? row.version },
         'Managed provider executable is missing; reinstalling',

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { patchSession } from '@agentctl/api-client';
+import { toast } from 'sonner';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 
 export function useSessionConfigState(sessionId: string) {
@@ -54,6 +55,10 @@ export function useSessionConfigState(sessionId: string) {
     mutationFn: ({ configId, value }: { configId: string; value: string }) =>
       patchSession(sessionId, { configId, configValue: value }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+    },
+    onError: (error: Error) => {
+      toast.error('Could not change setting', { description: error.message });
       void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
   });
