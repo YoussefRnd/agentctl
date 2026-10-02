@@ -48,7 +48,9 @@ export function createDatabase(dbPath: string): CoreDatabase {
 
   const sqlite = new DatabaseSync(dbPath);
   sqlite.exec('PRAGMA journal_mode = WAL;');
-  sqlite.exec('PRAGMA foreign_keys = ON;');
+  // SQLite ignores foreign_keys changes inside a transaction. Drizzle wraps
+  // migrations in one, so disable enforcement before any table rebuilds.
+  sqlite.exec('PRAGMA foreign_keys = OFF;');
 
   /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return */
   const adapted = {
@@ -88,24 +90,44 @@ export function createDatabase(dbPath: string): CoreDatabase {
       sqlite.exec(`PRAGMA ${pragmaSql};`);
     },
     transaction(fn: (...args: any[]) => any) {
-      return (...args: any[]) => {
-        sqlite.exec('BEGIN TRANSACTION;');
-        try {
-          const result = fn(...args);
-          sqlite.exec('COMMIT;');
-          return result;
-        } catch (err) {
-          sqlite.exec('ROLLBACK;');
-          throw err;
-        }
-      };
+      const wrap =
+        (behavior: 'DEFERRED' | 'IMMEDIATE' | 'EXCLUSIVE') =>
+        (...args: any[]) => {
+          sqlite.exec(`BEGIN ${behavior} TRANSACTION;`);
+          try {
+            const result = fn(...args);
+            if (result && typeof result.then === 'function')
+              throw new Error('SQLite transactions require a synchronous callback');
+            sqlite.exec('COMMIT;');
+            return result;
+          } catch (err) {
+            sqlite.exec('ROLLBACK;');
+            throw err;
+          }
+        };
+      const deferred = wrap('DEFERRED');
+      return Object.assign(deferred, {
+        deferred,
+        immediate: wrap('IMMEDIATE'),
+        exclusive: wrap('EXCLUSIVE'),
+      });
     },
   };
 
   const db = drizzle(adapted as any, { schema });
   /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return */
 
-  migrate(db, { migrationsFolder: path.join(__dirname, '../../drizzle') });
+  try {
+    migrate(db, { migrationsFolder: path.join(__dirname, '../../drizzle') });
+    const violations = sqlite.prepare('PRAGMA foreign_key_check').all();
+    if (violations.length > 0) {
+      throw new Error(`Database migration left ${violations.length} foreign key violations`);
+    }
+    sqlite.exec('PRAGMA foreign_keys = ON;');
+  } catch (error) {
+    sqlite.close();
+    throw error;
+  }
 
   return db;
 }

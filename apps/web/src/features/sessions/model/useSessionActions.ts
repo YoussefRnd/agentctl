@@ -8,6 +8,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import type { SessionEventRow, SessionWithCapabilities } from '@agentctl/shared';
 
@@ -30,6 +31,7 @@ export function useSessionActions() {
       sessionData;
     const isRunning = currentSession?.session.status === 'running';
     const tempId = nextOptimisticEventId();
+    const clientMessageId = crypto.randomUUID();
     const optimisticEvent: SessionEventRow = {
       id: tempId,
       sessionId: sessionId,
@@ -37,6 +39,7 @@ export function useSessionActions() {
       data: {
         role: 'user',
         content: text,
+        clientMessageId,
         deliveryStatus: isRunning ? 'queued' : 'sending',
         attachmentIds,
       },
@@ -48,8 +51,11 @@ export function useSessionActions() {
     });
 
     if (isRunning) {
-      enqueueMessage(text, attachmentIds, tempId);
+      enqueueMessage(text, attachmentIds, tempId, clientMessageId);
     } else {
+      useMessageQueueStore
+        .getState()
+        .enqueueMessage(sessionId, text, attachmentIds, tempId, clientMessageId, 'sending');
       queryClient.setQueryData<SessionWithCapabilities>(
         ['session', sessionId],
         (old: SessionWithCapabilities | undefined) => {
@@ -84,11 +90,15 @@ export function useSessionActions() {
       });
 
       try {
-        await sendSessionInput(sessionId, text, attachmentIds);
+        await sendSessionInput(sessionId, text, attachmentIds, clientMessageId);
+        useMessageQueueStore.getState().dequeueMessage(sessionId, clientMessageId);
         updateOptimisticDelivery(queryClient, sessionId, tempId, 'accepted');
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Message was not accepted';
+        useMessageQueueStore
+          .getState()
+          .setMessageStatus(sessionId, clientMessageId, 'failed', message);
         updateOptimisticDelivery(queryClient, sessionId, tempId, 'failed', message);
         queryClient.setQueryData<SessionWithCapabilities>(
           ['session', sessionId],

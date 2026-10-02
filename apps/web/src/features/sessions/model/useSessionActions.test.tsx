@@ -121,7 +121,11 @@ it('retries a retained failed message once with its original attachments', async
   expect(mocks.sendInput).toHaveBeenCalledTimes(1);
   expect(mocks.sendInput).toHaveBeenCalledWith({
     params: { id: 's' },
-    body: { input: 'queued prompt', attachmentIds: ['attachment-2'] },
+    body: {
+      input: 'queued prompt',
+      attachmentIds: ['attachment-2'],
+      clientMessageId: expect.any(String),
+    },
   });
   expect(client.getQueryData<SessionEventRow[]>(sessionKeys.events('s'))).toEqual([
     expect.objectContaining({ data: expect.objectContaining({ deliveryStatus: 'accepted' }) }),
@@ -151,7 +155,8 @@ it('keeps the remaining queue paused if a timeline retry fails again', async () 
     setStatus('idle');
   });
   expect(mocks.sendInput).toHaveBeenCalledTimes(2);
-  expect(useMessageQueueStore.getState().queuedMessages.s).toHaveLength(1);
+  expect(useMessageQueueStore.getState().queuedMessages.s).toHaveLength(2);
+  expect(useMessageQueueStore.getState().queuedMessages.s[0].status).toBe('failed');
   expect(client.getQueryData<SessionEventRow[]>(sessionKeys.events('s'))![0]).toMatchObject({
     data: { deliveryStatus: 'failed' },
   });

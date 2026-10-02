@@ -38,11 +38,13 @@ export async function sendSessionInput(
   sessionId: string,
   input: string,
   attachmentIds?: string[],
+  clientMessageId?: string,
 ): Promise<number> {
   const response = await api.sendInput({
     params: { id: sessionId },
     body: {
       input,
+      ...(clientMessageId ? { clientMessageId } : {}),
       ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
     },
   });

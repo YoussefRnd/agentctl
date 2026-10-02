@@ -3,7 +3,8 @@ import { useSessionStream } from '@/features/sessions';
 import { IconButton } from '@agentctl/ui';
 
 export function QueuedMessagesPillStack() {
-  const { queuedMessages, dequeueMessage, moveQueuedMessage } = useSessionStream();
+  const { queuedMessages, dequeueMessage, moveQueuedMessage, retryQueuedMessage } =
+    useSessionStream();
 
   if (queuedMessages.length === 0) return null;
 
@@ -33,6 +34,8 @@ export function QueuedMessagesPillStack() {
               </span>
               <span className="text-text-main truncate font-sans text-[13px]" title={msg.text}>
                 {msg.text}
+                {msg.status === 'sending' && ' · Sending…'}
+                {msg.status === 'failed' && ' · Failed'}
               </span>
               {msg.attachmentIds && msg.attachmentIds.length > 0 && (
                 <span
@@ -45,9 +48,23 @@ export function QueuedMessagesPillStack() {
               )}
             </div>
 
+            {msg.status === 'failed' && (
+              <button
+                type="button"
+                className="text-accent text-xs"
+                title={msg.error}
+                onClick={() => retryQueuedMessage(msg.id)}
+              >
+                Retry
+              </button>
+            )}
             <div className="flex shrink-0 items-center gap-0.5 opacity-80 transition-opacity group-focus-within/pill:opacity-100 group-hover/pill:opacity-100">
               <IconButton
-                disabled={index === 0}
+                disabled={
+                  index === 0 ||
+                  msg.status === 'sending' ||
+                  queuedMessages[index - 1]?.status === 'sending'
+                }
                 onClick={() => {
                   moveQueuedMessage(index, 'up');
                 }}
@@ -59,7 +76,11 @@ export function QueuedMessagesPillStack() {
                 <ChevronUp className="h-3.5 w-3.5" />
               </IconButton>
               <IconButton
-                disabled={index === queuedMessages.length - 1}
+                disabled={
+                  index === queuedMessages.length - 1 ||
+                  msg.status === 'sending' ||
+                  queuedMessages[index + 1]?.status === 'sending'
+                }
                 onClick={() => {
                   moveQueuedMessage(index, 'down');
                 }}
@@ -76,6 +97,7 @@ export function QueuedMessagesPillStack() {
                 }}
                 size="sm"
                 className="ml-0.5 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                disabled={msg.status === 'sending'}
                 title="Cancel prompt"
                 aria-label="Cancel prompt"
               >

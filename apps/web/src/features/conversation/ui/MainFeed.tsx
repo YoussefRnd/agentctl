@@ -25,7 +25,8 @@ import { Button, cn, IconButton, LoadingState, Tooltip } from '@agentctl/ui';
 
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
-  const { events, isLoadingEvents, isConnected } = useSessionStream();
+  const { events, isLoadingEvents, isConnected, historyError, loadOlderHistory } =
+    useSessionStream();
   const { handleSend, handleRetry, handleApprove, handleDeny } = useSessionActions();
   const { switchProvider, isSwitching } = useProviders(sessionId);
   const queryClient = useQueryClient();
@@ -364,6 +365,17 @@ export function MainFeed() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-transparent">
+      {historyError && events.length === 0 && (
+        <div
+          role="alert"
+          className="text-danger flex items-center justify-between gap-2 px-4 py-3 text-sm"
+        >
+          <span>Failed to load conversation: {historyError}</span>
+          <Button size="sm" disabled={isLoadingEvents} onClick={() => void loadOlderHistory()}>
+            Retry
+          </Button>
+        </div>
+      )}
       {sessionData?.session.status === 'archived' && (
         <div className="border-warning/30 bg-warning/5 text-warning flex shrink-0 items-center justify-between border-b px-4 py-2.5 text-xs backdrop-blur-md">
           <span className="tracking-tight">

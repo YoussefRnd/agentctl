@@ -1,7 +1,7 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
 import { sessionEvents, sessionEventDbRowSchema } from '@agentctl/core/db';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, lt, sql } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { SessionEventRow } from '@agentctl/shared';
 import { sessionEventRowSchema, isSessionEventRow } from '@agentctl/shared';
@@ -94,6 +94,55 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
         .orderBy(asc(sessionEvents.id));
 
       return rows.map(parseEventRow);
+    },
+  );
+
+  fastify.withTypeProvider<ZodTypeProvider>().get(
+    '/sessions/:id/events/page',
+    {
+      schema: {
+        params: z.object({ id: z.uuid() }),
+        querystring: z.object({
+          beforeId: z.coerce.number().int().positive().optional(),
+          limit: z.coerce.number().int().min(1).max(500).default(200),
+        }),
+      },
+    },
+    async (request) => {
+      const { id } = request.params;
+      const { beforeId, limit } = request.query;
+      const rows = await fastify.db
+        .select()
+        .from(sessionEvents)
+        .where(
+          and(
+            eq(sessionEvents.sessionId, id),
+            beforeId ? lt(sessionEvents.id, beforeId) : undefined,
+          ),
+        )
+        .orderBy(desc(sessionEvents.id))
+        .limit(limit + 1);
+      const hasMore = rows.length > limit;
+      const page = rows.slice(0, limit).reverse();
+      const cursor = hasMore ? page[0].id : null;
+      // Include the user message anchoring a partial turn, without widening the page.
+      const parentId = page[0]?.parentEventId;
+      if (parentId && !page.some((event) => event.id === parentId)) {
+        const parent = await fastify.db
+          .select()
+          .from(sessionEvents)
+          .where(
+            and(
+              eq(sessionEvents.sessionId, id),
+              eq(sessionEvents.id, parentId),
+              eq(sessionEvents.type, 'text'),
+              sql`json_extract(${sessionEvents.data}, '$.role') = 'user'`,
+            ),
+          )
+          .limit(1);
+        if (parent[0]) page.unshift(parent[0]);
+      }
+      return { events: page.map(parseEventRow), nextBeforeId: cursor };
     },
   );
 

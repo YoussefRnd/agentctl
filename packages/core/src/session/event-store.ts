@@ -100,6 +100,16 @@ export class SessionEventStore {
       .values({
         sessionId,
         type: type as SessionEvent['type'],
+        clientMessageId:
+          type === 'text' &&
+          typeof validatedData === 'object' &&
+          validatedData !== null &&
+          'role' in validatedData &&
+          validatedData.role === 'user' &&
+          'clientMessageId' in validatedData &&
+          typeof validatedData.clientMessageId === 'string'
+            ? validatedData.clientMessageId
+            : null,
         data: JSON.stringify(validatedData),
         parentEventId: parentEventId ?? null,
         metadata: validatedMetadata ? JSON.stringify(validatedMetadata) : null,

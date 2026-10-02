@@ -350,6 +350,7 @@ export class SessionCommandRouter {
       configId?: string;
       value?: string;
       onAccepted?: (eventId: number) => void;
+      clientMessageId?: string;
     },
   ) {
     const session = await this.deps.getOrResuscitate(sessionId, { allowArchived: true });
@@ -441,6 +442,7 @@ export class SessionCommandRouter {
           historyContext,
           undefined,
           payload.onAccepted,
+          payload.clientMessageId,
         );
       } else {
         await session.prompt(payload.input, payload.attachmentIds, historyContext);

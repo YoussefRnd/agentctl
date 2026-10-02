@@ -9,6 +9,14 @@ export function reconcileOptimisticMessages(
   for (const message of incoming) {
     if (message.type !== 'text' || message.data.role !== 'user') continue;
     if (result.some((event) => event.id === message.id)) continue;
+    const idMatchIndex = message.data.clientMessageId
+      ? result.findIndex(
+          (event) =>
+            event.id < 0 &&
+            event.type === 'text' &&
+            event.data.clientMessageId === message.data.clientMessageId,
+        )
+      : -1;
     const activeMatchIndex = result.findIndex(
       (event) =>
         event.id < 0 &&
@@ -33,8 +41,9 @@ export function reconcileOptimisticMessages(
         event.data.deliveryStatus !== 'queued' &&
         event.data.deliveryStatus !== 'failed',
     );
-    const index =
-      activeMatchIndex !== -1
+    const index = message.data.clientMessageId
+      ? idMatchIndex
+      : activeMatchIndex !== -1
         ? activeMatchIndex
         : matchingIndex !== -1
           ? matchingIndex

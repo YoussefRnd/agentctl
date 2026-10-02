@@ -57,6 +57,19 @@ async function createSession(
 }
 
 describe('ManagedSession message delivery', () => {
+  it('rejects unavailable attachments before accepting or invoking the provider', async () => {
+    const prompt = vi.fn<AgentSession['prompt']>(async () => ({ stopReason: 'end_turn' }));
+    const accepted = vi.fn();
+    const { session, db } = await createSession(prompt);
+    await expect(
+      session.prompt('hello', ['missing-attachment'], undefined, undefined, accepted),
+    ).rejects.toThrow('attachment is unavailable');
+    expect(prompt).not.toHaveBeenCalled();
+    expect(accepted).not.toHaveBeenCalled();
+    expect((await db.select().from(sessionEvents)).filter((row) => row.type === 'text')).toEqual(
+      [],
+    );
+  });
   it('acknowledges only after persisting the user message', async () => {
     let finishPrompt!: () => void;
     const { db, session } = await createSession(

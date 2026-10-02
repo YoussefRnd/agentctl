@@ -205,6 +205,7 @@ export const sessionsContract = {
     }),
     body: z.object({
       input: z.string(),
+      clientMessageId: z.uuid().optional(),
       attachmentIds: z.array(z.string()).optional(),
     }),
     responses: {

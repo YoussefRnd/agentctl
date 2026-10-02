@@ -12,7 +12,9 @@ import {
 export const projectRowSchema = createSelectSchema(projects);
 export const sessionRowSchema = createSelectSchema(sessions);
 export const providerRowSchema = createSelectSchema(providers);
-export const sessionEventDbRowSchema = createSelectSchema(sessionEvents);
+export const sessionEventDbRowSchema = createSelectSchema(sessionEvents).omit({
+  clientMessageId: true,
+});
 export const systemSettingRowSchema = createSelectSchema(systemSettings);
 export const mcpServerRowSchema = createSelectSchema(mcpServers);
 

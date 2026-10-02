@@ -104,6 +104,43 @@ afterEach(() => {
 });
 
 describe('SessionStreamProvider queued message send', () => {
+  it('continues with the next queued message when a failed head is cancelled', async () => {
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+    mockedSendInput
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ status: 200, body: { eventId: 7 } } as never);
+    let cancel!: (id: string) => void;
+    function CancelHarness() {
+      cancel = useSessionStream().dequeueMessage;
+      return null;
+    }
+    act(() =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SessionStreamProvider sessionId="sess-1">
+            <CancelHarness />
+          </SessionStreamProvider>
+        </QueryClientProvider>,
+      ),
+    );
+    let failedId!: string;
+    await act(async () => {
+      failedId = useMessageQueueStore.getState().enqueueMessage('sess-1', 'first');
+      useMessageQueueStore.getState().enqueueMessage('sess-1', 'second');
+    });
+    await vi.waitFor(() =>
+      expect(useMessageQueueStore.getState().queuedMessages['sess-1'][0].status).toBe('failed'),
+    );
+    expect(mockedSendInput).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      cancel(failedId);
+    });
+    await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(2));
+    expect(mockedSendInput).toHaveBeenLastCalledWith({
+      params: { id: 'sess-1' },
+      body: { input: 'second', clientMessageId: expect.any(String) },
+    });
+  });
   it('marks a queued prompt as failed when the send is rejected', async () => {
     queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
     queryClient.setQueryData(sessionKeys.events('sess-1'), [ghostEvent()]);
@@ -131,7 +168,7 @@ describe('SessionStreamProvider queued message send', () => {
     });
     expect(mockedSendInput).toHaveBeenCalledWith({
       params: { id: 'sess-1' },
-      body: { input: 'hello world' },
+      body: { input: 'hello world', clientMessageId: expect.any(String) },
     });
 
     await vi.waitFor(() => {
@@ -237,7 +274,11 @@ describe('SessionStreamProvider queued message send', () => {
 
   it('waits for the current turn before submitting the next queued prompt', async () => {
     queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
-    mockedSendInput.mockImplementation(() => new Promise(() => {}));
+    mockedSendInput.mockResolvedValue({
+      status: 200,
+      body: { success: true, eventId: 7 },
+      headers: new Headers(),
+    } as never);
 
     act(() => {
       root.render(
@@ -257,7 +298,7 @@ describe('SessionStreamProvider queued message send', () => {
     await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(1));
     expect(mockedSendInput).toHaveBeenCalledWith({
       params: { id: 'sess-1' },
-      body: { input: 'first' },
+      body: { input: 'first', clientMessageId: expect.any(String) },
     });
     expect(useMessageQueueStore.getState().queuedMessages['sess-1']).toHaveLength(1);
 
@@ -271,13 +312,17 @@ describe('SessionStreamProvider queued message send', () => {
     await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(2));
     expect(mockedSendInput).toHaveBeenLastCalledWith({
       params: { id: 'sess-1' },
-      body: { input: 'second' },
+      body: { input: 'second', clientMessageId: expect.any(String) },
     });
   });
 
   it('submits the next queued prompt after a fast turn ends without a visible running state', async () => {
     queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
-    mockedSendInput.mockImplementation(() => new Promise(() => {}));
+    mockedSendInput.mockResolvedValue({
+      status: 200,
+      body: { success: true, eventId: 7 },
+      headers: new Headers(),
+    } as never);
     const render = () => (
       <QueryClientProvider client={queryClient}>
         <SessionStreamProvider sessionId="sess-1">
@@ -308,7 +353,7 @@ describe('SessionStreamProvider queued message send', () => {
     await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(2));
     expect(mockedSendInput).toHaveBeenLastCalledWith({
       params: { id: 'sess-1' },
-      body: { input: 'second' },
+      body: { input: 'second', clientMessageId: expect.any(String) },
     });
   });
 

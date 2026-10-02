@@ -88,6 +88,19 @@ def main():
                 wpid, status = os.waitpid(pid, os.WNOHANG)
                 if wpid != 0:
                     exit_status = status
+                    # A short-lived child can exit before we forward its final
+                    # output. Drain every buffered chunk before closing the PTY.
+                    while True:
+                        ready, _, _ = select.select([master], [], [], 0)
+                        if master not in ready:
+                            break
+                        try:
+                            data = os.read(master, 4096)
+                            if not data:
+                                break
+                            os.write(1, data)
+                        except OSError:
+                            break
                     break
             except Exception:
                 pass
@@ -273,7 +286,7 @@ export class InteractiveTerminalService extends EventEmitter {
     child.stderr?.on('error', onStreamError);
     controlStream?.on('error', onStreamError);
 
-    child.on('exit', (code, signal) => {
+    child.on('close', (code, signal) => {
       this.logger.info({ sessionId, code, signal }, 'Interactive terminal process exited');
       this.emit(`exit:${sessionId}`, { code, signal });
       if (this.activeTerminals.get(sessionId) === terminalSession) {
@@ -362,7 +375,7 @@ export class InteractiveTerminalService extends EventEmitter {
       this.emit(`data:${sessionId}`, text);
     });
 
-    child.on('exit', (code, signal) => {
+    child.on('close', (code, signal) => {
       this.logger.info({ sessionId, code, signal }, 'Interactive command terminal exited');
       this.emit(`exit:${sessionId}`, { code, signal });
       if (this.activeTerminals.get(sessionId) === terminalSession) {

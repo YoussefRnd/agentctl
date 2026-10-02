@@ -19,6 +19,37 @@ function message(
 }
 
 describe('reconcileOptimisticMessages', () => {
+  it('uses receipt IDs to distinguish identical prompts and recover a lost acknowledgment', () => {
+    const first = {
+      ...message(-1, 'repeat'),
+      data: {
+        role: 'user' as const,
+        content: 'repeat',
+        clientMessageId: 'first',
+        deliveryStatus: 'failed' as const,
+      },
+    } as SessionEventRow;
+    const second = {
+      ...message(-2, 'repeat', 'queued'),
+      data: {
+        role: 'user' as const,
+        content: 'repeat',
+        clientMessageId: 'second',
+        deliveryStatus: 'queued' as const,
+      },
+    } as SessionEventRow;
+    const receipt = {
+      ...message(10, 'repeat'),
+      data: { role: 'user' as const, content: 'repeat', clientMessageId: 'first' },
+    } as SessionEventRow;
+    expect(reconcileOptimisticMessages([first, second], [receipt])).toEqual([receipt, second]);
+    const unrelated = {
+      ...receipt,
+      id: 11,
+      data: { ...receipt.data, clientMessageId: 'third' },
+    } as SessionEventRow;
+    expect(reconcileOptimisticMessages([second], [unrelated])).toEqual([second]);
+  });
   it('replaces each queued prompt with its matching persisted message', () => {
     const existing = [message(-1, 'first', 'sending'), message(-2, 'second', 'queued')];
     const incoming = [message(10, 'first'), message(11, 'second')];

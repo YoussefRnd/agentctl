@@ -116,12 +116,9 @@ export function groupConversationTurns(
     const isHidden =
       e.type === 'status' &&
       typeof statusVal === 'string' &&
-      [
-        'available_commands_update',
-        'config_option_update',
-        'session_info_update',
-        'turn_end',
-      ].includes(statusVal);
+      ['available_commands_update', 'config_option_update', 'session_info_update'].includes(
+        statusVal,
+      );
     if (isHidden) continue;
 
     const isUser = isSessionEventText(e) && e.data.role === 'user';

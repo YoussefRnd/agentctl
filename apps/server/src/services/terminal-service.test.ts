@@ -74,7 +74,8 @@ describe('InteractiveTerminalService', () => {
     });
 
     const exitCode = await new Promise<number | null>((resolve, reject) => {
-      terminal.process.once('exit', resolve);
+      // close waits for stdout to drain; exit can arrive before the final data event.
+      terminal.process.once('close', resolve);
       terminal.process.once('error', reject);
     });
 
@@ -82,4 +83,35 @@ describe('InteractiveTerminalService', () => {
     expect(output).toContain('PTY_OK');
     expect(output).not.toContain('NO_PTY');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'drains buffered PTY output before emitting command exit',
+    async () => {
+      service = new InteractiveTerminalService();
+      const sessionId = 'buffered-output';
+      let output = '';
+      service.on(`data:${sessionId}`, (data: string) => {
+        output += data;
+      });
+      const completed = new Promise<{ code: number | null; output: string }>((resolve, reject) => {
+        service.once(`exit:${sessionId}`, ({ code }: { code: number | null }) =>
+          resolve({ code, output }),
+        );
+        service.once(`error:${sessionId}`, reject);
+      });
+      service.spawnCommandTerminal(
+        sessionId,
+        'python3',
+        [
+          '-c',
+          "import sys; sys.stdout.write('x' * 65536 + 'END'); sys.stdout.flush(); sys.exit(23)",
+        ],
+        {},
+        os.tmpdir(),
+      );
+      const result = await completed;
+      expect(result.code).toBe(23);
+      expect(result.output).toBe('x'.repeat(65536) + 'END');
+    },
+  );
 });

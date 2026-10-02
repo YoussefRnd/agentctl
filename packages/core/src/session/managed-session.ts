@@ -218,6 +218,7 @@ export class ManagedSession {
     embeddedContext?: string,
     skillActivation?: SkillActivation,
     onAccepted?: (eventId: number) => void,
+    clientMessageId?: string,
   ): Promise<void> {
     try {
       const sessionRecord = await this.db.query.sessions.findFirst({
@@ -284,9 +285,21 @@ export class ManagedSession {
         }
       }
 
+      if (resolvedAttachmentsMeta.length !== (attachmentIds?.length ?? 0)) {
+        throw new Error(
+          'An attachment is unavailable. Reattach the files and send the message again.',
+        );
+      }
+
       let promptText = text;
       const promptTokens = Math.ceil(text.length / 4);
-      const turn = await this.projector.startTurn(text, resolvedAttachmentsMeta, promptTokens);
+      const turn = await this.projector.startTurn(
+        text,
+        resolvedAttachmentsMeta,
+        promptTokens,
+        clientMessageId,
+        attachmentIds,
+      );
       onAccepted?.(turn.eventId);
       // Acceptance need not wait for Git, but tools must see a completed baseline.
       const startSnapshotHash = await turn.snapshotPromise;

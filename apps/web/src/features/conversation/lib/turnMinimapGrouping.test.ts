@@ -3,6 +3,56 @@ import type { SessionEventRow } from '@agentctl/shared';
 import { groupConversationTurns, extractTurnSummary } from './turnMinimapGrouping';
 
 describe('turnMinimapGrouping', () => {
+  it('uses captured turn-end statistics for both previous and latest turns', () => {
+    const events: SessionEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's',
+        type: 'text',
+        data: { role: 'user', content: 'First' },
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        sessionId: 's',
+        type: 'status',
+        data: {
+          status: 'turn_end',
+          turnChanges: {
+            files: [{ path: 'first.ts', additions: 3, deletions: 2 }],
+            totalAdditions: 3,
+            totalDeletions: 2,
+          },
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 3,
+        sessionId: 's',
+        type: 'text',
+        data: { role: 'user', content: 'Second' },
+        createdAt: new Date(),
+      },
+      {
+        id: 4,
+        sessionId: 's',
+        type: 'status',
+        data: {
+          status: 'turn_end',
+          turnChanges: {
+            files: [{ path: 'second.ts', additions: 5, deletions: 1 }],
+            totalAdditions: 5,
+            totalDeletions: 1,
+          },
+        },
+        createdAt: new Date(),
+      },
+    ];
+    expect(groupConversationTurns(events).map((turn) => turn.diffStats)).toEqual([
+      { additions: 3, deletions: 2, filesCount: 1 },
+      { additions: 5, deletions: 1, filesCount: 1 },
+    ]);
+  });
   it('groups multiple user prompt events into separate ConversationTurns', () => {
     const events: SessionEventRow[] = [
       {

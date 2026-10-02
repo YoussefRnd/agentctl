@@ -33,8 +33,10 @@ export class SessionProjector {
     text: string,
     attachments?: NonNullable<SessionEventPayload<'text'>['attachments']>,
     promptTokens?: number,
+    clientMessageId?: string,
+    attachmentIds?: string[],
   ): ReturnType<EventStreamAdapter['startTurn']> {
-    return this.adapter.startTurn(text, attachments, promptTokens);
+    return this.adapter.startTurn(text, attachments, promptTokens, clientMessageId, attachmentIds);
   }
 
   async appendText(

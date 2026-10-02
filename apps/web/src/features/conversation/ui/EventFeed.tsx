@@ -1,9 +1,11 @@
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   useRef,
   useState,
   useCallback,
   useMemo,
   useEffect,
+  useLayoutEffect,
   type UIEvent,
   type KeyboardEvent,
   type PointerEvent,
@@ -56,11 +58,16 @@ export function EventFeed({
   const lastScrollTopRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
   const didInitialScrollRef = useRef(false);
-  const groupElementsRef = useRef(new Map<string, HTMLDivElement>());
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
   const [activeTurnIndex, setActiveTurnIndex] = useState<number | null>(null);
   const { sessionData, sessionId, reviewData } = useSession();
-  const { streamingEventId } = useSessionStream();
+  const {
+    streamingEventId,
+    hasMoreHistory,
+    loadOlderHistory,
+    isLoadingOlderHistory,
+    historyError,
+  } = useSessionStream();
   const isSessionError = sessionData?.session.status === 'error';
   const lastUserEventId = events.reduce(
     (max, event) =>
@@ -111,6 +118,47 @@ export function EventFeed({
     [events, streamingEventId, isSessionRunning],
   );
   const hasGroupedEvents = groupedEvents.length > 0;
+  const virtualizer = useVirtualizer({
+    count: groupedEvents.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 200,
+    getItemKey: (index) => getGroupKey(groupedEvents[index]),
+    overscan: 4,
+    paddingStart: hasMoreHistory || historyError ? 40 : 0,
+  });
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
+    !isFollowingOutputRef.current && item.start < (instance.scrollOffset ?? 0);
+  const prependAnchorRef = useRef<{ key: string; offset: number; eventId: number } | null>(null);
+  const loadPrevious = useCallback(async () => {
+    const top = parentRef.current?.scrollTop ?? 0;
+    const anchor = virtualizer.getVirtualItems().find((item) => item.end > top);
+    if (anchor) {
+      const group = groupedEvents[anchor.index];
+      prependAnchorRef.current = {
+        key: String(anchor.key),
+        offset: top - anchor.start,
+        eventId: 'event' in group ? group.event.id : (group.events[0]?.id ?? 0),
+      };
+    }
+    setIsFollowingOutput(false);
+    isFollowingOutputRef.current = false;
+    await loadOlderHistory();
+  }, [virtualizer, groupedEvents, loadOlderHistory]);
+
+  useLayoutEffect(() => {
+    const anchor = prependAnchorRef.current;
+    if (!anchor || isLoadingOlderHistory) return;
+    const index = groupedEvents.findIndex(
+      (group) =>
+        getGroupKey(group) === anchor.key ||
+        ('events' in group && group.events.some((event) => event.id === anchor.eventId)),
+    );
+    if (index !== -1) {
+      const offset = virtualizer.getOffsetForIndex(index, 'start')?.[0];
+      if (offset !== undefined) virtualizer.scrollToOffset(offset + anchor.offset);
+    }
+    prependAnchorRef.current = null;
+  }, [groupedEvents, isLoadingOlderHistory, virtualizer]);
 
   const latestAgentGroupId = useMemo(() => {
     if (groupedEvents.length === 0) return null;
@@ -134,28 +182,21 @@ export function EventFeed({
       const parent = parentRef.current;
       if (!parent || conversationTurns.length === 0) return;
 
-      const parentRect = parent.getBoundingClientRect();
-      const viewportTop = parentRect.top;
-
+      const offset = parent.scrollTop;
+      const item = virtualizer.getVirtualItems().find((item) => item.end > offset + 40);
+      if (!item) return;
+      const group = groupedEvents[item.index];
+      const eventId =
+        'event' in group ? group.event.id : (group.events[0]?.parentEventId ?? group.events[0]?.id);
       let closestIdx = 0;
-      let minDistance = Infinity;
-
-      for (let i = 0; i < conversationTurns.length; i++) {
-        const turn = conversationTurns[i];
-        const el = groupElementsRef.current.get(`user-${String(turn.userEvent.id)}`);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const dist = Math.abs(rect.top - viewportTop - 40);
-          if (rect.top <= viewportTop + parentRect.height && dist < minDistance) {
-            minDistance = dist;
-            closestIdx = i;
-          }
-        }
+      for (let index = 0; index < conversationTurns.length; index++) {
+        if (conversationTurns[index].userEvent.id > (eventId ?? 0)) break;
+        closestIdx = index;
       }
 
       setActiveTurnIndex(closestIdx);
     });
-  }, [conversationTurns]);
+  }, [conversationTurns, groupedEvents, virtualizer]);
 
   useEffect(() => {
     return () => {
@@ -168,12 +209,12 @@ export function EventFeed({
   const handleSelectTurn = useCallback(
     (turn: ConversationTurn) => {
       setFollowingOutput(false);
-      const targetElement = groupElementsRef.current.get(`user-${String(turn.userEvent.id)}`);
-      if (targetElement) {
-        targetElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      }
+      const index = groupedEvents.findIndex(
+        (group) => group.type === 'user' && group.event.id === turn.userEvent.id,
+      );
+      if (index !== -1) virtualizer.scrollToIndex(index, { align: 'start' });
     },
-    [setFollowingOutput],
+    [setFollowingOutput, groupedEvents, virtualizer],
   );
 
   // Reset initial scroll state when switching sessions
@@ -183,23 +224,27 @@ export function EventFeed({
     setIsFollowingOutput(true);
   }, [sessionId]);
 
-  const scrollToBottom = useCallback((force = false) => {
-    if (scrollFrameRef.current != null) {
-      window.cancelAnimationFrame(scrollFrameRef.current);
-    }
-    scrollFrameRef.current = window.requestAnimationFrame(() => {
-      scrollFrameRef.current = null;
-      if (!force && !isFollowingOutputRef.current) return;
-
-      const scrollElement = parentRef.current;
-      if (scrollElement) {
-        const bottom = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
-        if (Math.abs(scrollElement.scrollTop - bottom) > 1) {
-          scrollElement.scrollTop = bottom;
-        }
+  const scrollToBottom = useCallback(
+    (force = false) => {
+      if (scrollFrameRef.current != null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
       }
-    });
-  }, []);
+      scrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollFrameRef.current = null;
+        if (!force && !isFollowingOutputRef.current) return;
+
+        const scrollElement = parentRef.current;
+        if (scrollElement) {
+          virtualizer.scrollToIndex(groupedEvents.length - 1, { align: 'end' });
+          const bottom = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
+          if (Math.abs(scrollElement.scrollTop - bottom) > 1) {
+            scrollElement.scrollTop = bottom;
+          }
+        }
+      });
+    },
+    [virtualizer, groupedEvents.length],
+  );
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
@@ -253,21 +298,30 @@ export function EventFeed({
   useEffect(() => {
     if (targetEventId == null || groupedEvents.length === 0) return;
 
-    const targetGroup = groupedEvents.find((group) => {
+    const targetIndex = groupedEvents.findIndex((group) => {
       if ('event' in group && group.event.id === targetEventId) return true;
       return 'events' in group && group.events.some((event) => event.id === targetEventId);
     });
-    if (!targetGroup) return;
-
-    const targetElement = groupElementsRef.current.get(getGroupKey(targetGroup));
-    if (!targetElement) return;
-
+    if (targetIndex === -1) {
+      if (hasMoreHistory && !isLoadingOlderHistory && !historyError) void loadPrevious();
+      return;
+    }
     didInitialScrollRef.current = true;
     setFollowingOutput(false);
     setHighlightedEventId(targetEventId);
-    targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    virtualizer.scrollToIndex(targetIndex, { align: 'center' });
     onTargetEventHandled?.();
-  }, [targetEventId, groupedEvents, onTargetEventHandled, setFollowingOutput]);
+  }, [
+    targetEventId,
+    groupedEvents,
+    onTargetEventHandled,
+    setFollowingOutput,
+    virtualizer,
+    hasMoreHistory,
+    isLoadingOlderHistory,
+    historyError,
+    loadPrevious,
+  ]);
 
   useEffect(() => {
     if (highlightedEventId == null) return;
@@ -282,7 +336,7 @@ export function EventFeed({
 
   // Initial scroll to bottom on load / session switch
   useEffect(() => {
-    if (targetEventId != null || groupedEvents.length === 0) {
+    if (didInitialScrollRef.current || targetEventId != null || groupedEvents.length === 0) {
       return;
     }
 
@@ -300,7 +354,7 @@ export function EventFeed({
   }, [groupedEvents.length, scrollToBottom, targetEventId, sessionId]);
 
   useEffect(() => {
-    if (!isSessionRunning || !isFollowingOutputRef.current || groupedEvents.length === 0) {
+    if (!isFollowingOutputRef.current || groupedEvents.length === 0) {
       return;
     }
 
@@ -355,8 +409,25 @@ export function EventFeed({
         tabIndex={0}
         className="no-scrollbar h-full w-full flex-grow overflow-y-auto pr-8 sm:pr-10"
       >
-        <div ref={contentRef} className="w-full">
-          {groupedEvents.map((group) => {
+        {(hasMoreHistory || historyError) && (
+          <div className="absolute top-1 left-4 z-10 flex items-center gap-2">
+            <Button size="sm" disabled={isLoadingOlderHistory} onClick={() => void loadPrevious()}>
+              {isLoadingOlderHistory ? 'Loading…' : 'Load earlier messages'}
+            </Button>
+            {historyError && (
+              <span role="alert" className="text-danger text-xs">
+                {historyError}
+              </span>
+            )}
+          </div>
+        )}
+        <div
+          ref={contentRef}
+          className="relative w-full"
+          style={{ height: virtualizer.getTotalSize() }}
+        >
+          {virtualizer.getVirtualItems().map((item) => {
+            const group = groupedEvents[item.index];
             const groupKey = getGroupKey(group);
             const isGroupHighlighted =
               highlightedEventId != null &&
@@ -366,13 +437,15 @@ export function EventFeed({
             return (
               <div
                 key={groupKey}
-                ref={(element) => {
-                  if (element) {
-                    groupElementsRef.current.set(groupKey, element);
-                  } else {
-                    groupElementsRef.current.delete(groupKey);
-                  }
+                data-index={item.index}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${item.start}px)`,
                 }}
+                ref={virtualizer.measureElement}
                 className="w-full"
               >
                 <div
@@ -395,45 +468,45 @@ export function EventFeed({
               </div>
             );
           })}
-
-          {isSessionError && (
-            <div className="mx-auto max-w-[800px] px-3 pt-2 pb-4 sm:px-6">
-              <div className="animate-in fade-in slide-in-from-left-2">
-                <Card status="error" className="flex flex-col gap-3 p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/25 bg-rose-500/8 text-rose-400">
-                      <AgentIcon className="h-4 w-4" />
-                    </div>
-                    <span className="text-[11px] font-bold tracking-wider text-rose-400 uppercase">
-                      {promptErrorMessage ? 'Agent run failed' : 'Agent Connection Interrupted'}
-                    </span>
-                  </div>
-                  <p className="text-text-muted/90 text-[12px] leading-relaxed">
-                    {typeof promptErrorMessage === 'string' && promptErrorMessage
-                      ? promptErrorMessage
-                      : 'The agent process exited unexpectedly. Type a message below to resuscitate the session, or reconnect the stream.'}
-                  </p>
-                  <div className="mt-1 flex items-center gap-3">
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => {
-                        void queryClient.invalidateQueries({
-                          queryKey: ['session', sessionId],
-                        });
-                        void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
-                      }}
-                      className="border border-rose-500/30 bg-rose-500/15 px-3 text-[11px] text-rose-300 hover:bg-rose-500/25"
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      Reconnect Stream
-                    </Button>
-                  </div>
-                </Card>
-              </div>
-            </div>
-          )}
         </div>
+
+        {isSessionError && (
+          <div className="mx-auto max-w-[800px] px-3 pt-2 pb-4 sm:px-6">
+            <div className="animate-in fade-in slide-in-from-left-2">
+              <Card status="error" className="flex flex-col gap-3 p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/25 bg-rose-500/8 text-rose-400">
+                    <AgentIcon className="h-4 w-4" />
+                  </div>
+                  <span className="text-[11px] font-bold tracking-wider text-rose-400 uppercase">
+                    {promptErrorMessage ? 'Agent run failed' : 'Agent Connection Interrupted'}
+                  </span>
+                </div>
+                <p className="text-text-muted/90 text-[12px] leading-relaxed">
+                  {typeof promptErrorMessage === 'string' && promptErrorMessage
+                    ? promptErrorMessage
+                    : 'The agent process exited unexpectedly. Type a message below to resuscitate the session, or reconnect the stream.'}
+                </p>
+                <div className="mt-1 flex items-center gap-3">
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => {
+                      void queryClient.invalidateQueries({
+                        queryKey: ['session', sessionId],
+                      });
+                      void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
+                    }}
+                    className="border border-rose-500/30 bg-rose-500/15 px-3 text-[11px] text-rose-300 hover:bg-rose-500/25"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Reconnect Stream
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
       </div>
 
       {!isFollowingOutput && (

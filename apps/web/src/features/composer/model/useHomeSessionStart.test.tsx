@@ -5,6 +5,7 @@ import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import type { SessionRow } from '@agentctl/shared';
 import { useHomeSessionStart, type HomeSessionSelection } from './useHomeSessionStart';
 import { useDraftStore } from './useDraftStore';
+import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 
 const mocks = vi.hoisted(() => ({
@@ -57,6 +58,7 @@ function deferred<T>() {
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  useMessageQueueStore.getState().clearQueue();
   useDraftStore.setState({ homeDrafts: {}, sessionDrafts: {} });
   mocks.create.mockResolvedValue(session);
   mocks.input.mockResolvedValue({ status: 200, body: { eventId: 42 } });
@@ -109,7 +111,12 @@ describe('Home first Send', () => {
     expect(client.getQueryData(sessionKeys.events('new-session'))).toEqual([
       expect.objectContaining({
         id: 42,
-        data: { role: 'user', content: 'hello', attachmentIds: [] },
+        data: {
+          role: 'user',
+          content: 'hello',
+          attachmentIds: [],
+          clientMessageId: expect.any(String),
+        },
       }),
     ]);
     expect(useDraftStore.getState().homeDrafts.project).toBeUndefined();
@@ -151,7 +158,11 @@ describe('Home first Send', () => {
     ]);
     expect(mocks.input).toHaveBeenCalledExactlyOnceWith({
       params: { id: 'new-session' },
-      body: { input: 'images', attachmentIds: ['att-1', 'att-2'] },
+      body: {
+        input: 'images',
+        attachmentIds: ['att-1', 'att-2'],
+        clientMessageId: expect.any(String),
+      },
     });
   });
   it('reuses the session after input rejection and applies any revised settings', async () => {

@@ -1,5 +1,6 @@
 export * from './schemas/session.js';
 export * from './schemas/session-event.js';
+export * from './schemas/session-event-page.js';
 export * from './schemas/registry.js';
 export * from './schemas/diagnostics.js';
 export * from './schemas/state-change.js';

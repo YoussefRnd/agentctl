@@ -272,7 +272,7 @@ it('ignores persisted empty sessions and creates on first Send with the selected
   );
   expect(mocks.input).toHaveBeenCalledExactlyOnceWith({
     params: { id: 'fresh' },
-    body: { input: 'Draft message' },
+    body: { input: 'Draft message', clientMessageId: expect.any(String) },
   });
 });
 it('keeps the text and attached files visible when startup fails', async () => {

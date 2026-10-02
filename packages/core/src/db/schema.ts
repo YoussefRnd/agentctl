@@ -4,6 +4,7 @@ import {
   integer,
   real,
   index,
+  uniqueIndex,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
@@ -179,11 +180,15 @@ export const sessionEvents = sqliteTable(
       onDelete: 'cascade',
     }),
     type: text('type').$type<SessionEvent['type']>().notNull(),
+    clientMessageId: text('client_message_id'),
     data: text('data').notNull(), // JSON string
     metadata: text('metadata'), // JSON string
     ...eventTimestamps,
   },
-  (table) => [index('session_events_session_id_idx').on(table.sessionId)],
+  (table) => [
+    index('session_events_session_id_idx').on(table.sessionId),
+    uniqueIndex('session_events_client_message_idx').on(table.sessionId, table.clientMessageId),
+  ],
 );
 
 export const projectRelations = relations(projects, ({ many }) => ({

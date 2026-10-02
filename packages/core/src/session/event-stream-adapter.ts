@@ -67,6 +67,8 @@ export class EventStreamAdapter {
     text: string,
     attachments?: NonNullable<SessionEventPayload<'text'>['attachments']>,
     promptTokens?: number,
+    clientMessageId?: string,
+    attachmentIds?: string[],
   ): Promise<TurnStart> {
     this.flushTextDelta();
     this.flushThoughtDelta();
@@ -92,6 +94,8 @@ export class EventStreamAdapter {
     const userPayload: SessionEventPayload<'text'> = {
       content: text,
       role: 'user',
+      clientMessageId,
+      attachmentIds,
       attachments: attachments && attachments.length > 0 ? attachments : undefined,
     };
 

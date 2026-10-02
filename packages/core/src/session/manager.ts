@@ -21,6 +21,7 @@ import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-
 import { SessionLauncher, type CreateSessionParams } from './services/session-launcher.js';
 import { SessionLifecycleService } from './services/session-lifecycle-service.js';
 import { SessionHistoryService } from './services/session-history-service.js';
+import { InputDeliveryService } from './services/input-delivery-service.js';
 import { SessionCommandRouter } from './services/session-command-router.js';
 
 export interface IEventBus {
@@ -36,6 +37,7 @@ export class SessionManager {
   private readonly logger: Logger;
   private readonly runtime: AgentDriver;
 
+  private readonly inputDelivery: InputDeliveryService;
   private readonly eventStore: SessionEventStore;
   private readonly stateMachine: SessionStateMachine;
   private readonly sessionWorkspace: SessionWorkspace;
@@ -56,6 +58,7 @@ export class SessionManager {
     runtimeServices?: AgentRuntimeServices,
   ) {
     this.db = db;
+    this.inputDelivery = new InputDeliveryService(db);
     this.providerRegistry = providerRegistry;
     this.logger = logger;
 
@@ -326,17 +329,35 @@ export class SessionManager {
       configId?: string;
       value?: string;
       onAccepted?: (eventId: number) => void;
+      clientMessageId?: string;
     },
   ): Promise<void> {
     return this.commandRouter.handleClientMessage(sessionId, action, payload);
   }
 
   /** Resolve after the user message is persisted, while the provider turn continues. */
-  startInput(sessionId: string, input: string, attachmentIds?: string[]): Promise<number> {
+  startInput(
+    sessionId: string,
+    input: string,
+    attachmentIds?: string[],
+    clientMessageId?: string,
+  ): Promise<number> {
+    return this.inputDelivery.accept(sessionId, input, attachmentIds, clientMessageId, () =>
+      this.deliverInput(sessionId, input, attachmentIds, clientMessageId),
+    );
+  }
+
+  private deliverInput(
+    sessionId: string,
+    input: string,
+    attachmentIds?: string[],
+    clientMessageId?: string,
+  ): Promise<number> {
     return new Promise<number>((resolve, reject) => {
       let accepted = false;
       void this.handleClientMessage(sessionId, 'session.input', {
         input,
+        clientMessageId,
         attachmentIds,
         onAccepted: (eventId) => {
           accepted = true;

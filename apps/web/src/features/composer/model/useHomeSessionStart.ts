@@ -10,6 +10,7 @@ import {
 import type { SessionMode, SessionEventRow, SessionWithCapabilities } from '@agentctl/shared';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { useDraftStore } from './useDraftStore';
+import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 
 export interface HomeSessionSelection extends InitialSessionSettings {
   providerId: string;
@@ -39,6 +40,8 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
       if (startingRef.current || (!text.trim() && files.length === 0)) return false;
       startingRef.current = true;
       setIsStarting(true);
+      let pendingSessionId: string | undefined;
+      let clientMessageId: string | undefined;
       try {
         const store = useDraftStore.getState();
         let session = store.homeDrafts[projectId]?.session;
@@ -88,6 +91,7 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
           session = updated.body.session;
           store.updateHomeDraft(projectId, { session });
         }
+        pendingSessionId = session.id;
         const attachmentIds: string[] = [];
         for (const file of files) {
           const uploaded = useDraftStore.getState().homeDrafts[projectId]?.uploadedFiles ?? [];
@@ -100,9 +104,31 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
           }
           attachmentIds.push(attachmentId);
         }
+        const queue = useMessageQueueStore.getState();
+        const pending = queue.queuedMessages[session.id]?.[0];
+        if (
+          pending &&
+          (pending.text !== text ||
+            JSON.stringify(pending.attachmentIds ?? []) !== JSON.stringify(attachmentIds))
+        ) {
+          throw new Error('A previous message is pending. Retry or cancel it in the session.');
+        }
+        clientMessageId = pending?.id ?? crypto.randomUUID();
+        queue.enqueueMessage(
+          session.id,
+          text,
+          attachmentIds,
+          undefined,
+          clientMessageId,
+          'sending',
+        );
         const response = await api.sendInput({
           params: { id: session.id },
-          body: { input: text, ...(attachmentIds.length ? { attachmentIds } : {}) },
+          body: {
+            input: text,
+            clientMessageId,
+            ...(attachmentIds.length ? { attachmentIds } : {}),
+          },
         });
         if (response.status !== 200) {
           const body = response.body;
@@ -115,6 +141,7 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
               : 'Session did not accept the message',
           );
         }
+        queue.dequeueMessage(session.id, clientMessageId);
         queryClient.setQueryData<SessionWithCapabilities>(sessionKeys.detail(session.id), {
           session: { ...session, status: 'running' },
           capabilities: [],
@@ -124,7 +151,7 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
             id: response.body.eventId,
             sessionId: session.id,
             type: 'text',
-            data: { role: 'user', content: text, attachmentIds },
+            data: { role: 'user', content: text, attachmentIds, clientMessageId },
             createdAt: new Date(),
           },
         ]);
@@ -133,6 +160,16 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
         if (mountedRef.current) onStarted(session.id);
         return true;
       } catch (err) {
+        if (pendingSessionId && clientMessageId) {
+          useMessageQueueStore
+            .getState()
+            .setMessageStatus(
+              pendingSessionId,
+              clientMessageId,
+              'failed',
+              err instanceof Error ? err.message : String(err),
+            );
+        }
         toast.error('Failed to start session', {
           description: err instanceof Error ? err.message : String(err),
         });

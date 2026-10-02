@@ -9,6 +9,7 @@ export const sessionEventTextDataSchema = z
     deliveryStatus: z.enum(['queued', 'sending', 'accepted', 'failed']).optional(),
     deliveryError: z.string().optional(),
     attachmentIds: z.array(z.string()).optional(),
+    clientMessageId: z.string().optional(),
     attachments: z
       .array(
         z.object({

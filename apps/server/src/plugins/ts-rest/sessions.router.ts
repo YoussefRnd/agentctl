@@ -577,12 +577,17 @@ export function createSessionsRouter(
       body,
     }: {
       params: { id: string };
-      body: { input: string; attachmentIds?: string[] };
+      body: { input: string; attachmentIds?: string[]; clientMessageId?: string };
     }) => {
       const { id } = params;
-      const { input, attachmentIds } = body;
+      const { input, attachmentIds, clientMessageId } = body;
       try {
-        const eventId = await fastify.sessionManager.startInput(id, input, attachmentIds);
+        const eventId = await fastify.sessionManager.startInput(
+          id,
+          input,
+          attachmentIds,
+          ...(clientMessageId ? [clientMessageId] : []),
+        );
         return {
           status: 200 as const,
           body: { success: true as const, eventId },
