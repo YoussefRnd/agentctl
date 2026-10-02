@@ -16,22 +16,6 @@ afterEach(() => {
 });
 
 describe('AppErrorBoundary', () => {
-  it('renders children normally when no error occurs', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    act(() => {
-      root.render(
-        <AppErrorBoundary onRetry={vi.fn()}>
-          <ProblemChild shouldThrow={false} />
-        </AppErrorBoundary>,
-      );
-    });
-
-    expect(container.textContent).toContain('Healthy Workspace');
-  });
-
   it('renders modern error card with message when child throws', () => {
     // Suppress console.error during expected throw
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

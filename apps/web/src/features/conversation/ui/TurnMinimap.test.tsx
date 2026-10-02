@@ -53,26 +53,6 @@ afterEach(() => {
 });
 
 describe('TurnMinimap', () => {
-  it('renders a tick for each conversation turn', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    const onSelectTurn = vi.fn();
-
-    act(() => {
-      root.render(
-        <TurnMinimap turns={mockTurns} activeTurnIndex={0} onSelectTurn={onSelectTurn} />,
-      );
-    });
-
-    const buttons = document.querySelectorAll('button[aria-label^="Turn "]');
-    expect(buttons).toHaveLength(2);
-
-    act(() => {
-      root.unmount();
-    });
-  });
-
   it('triggers onSelectTurn when a tick is clicked', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

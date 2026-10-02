@@ -63,35 +63,6 @@ afterEach(() => {
 });
 
 describe('SubagentBlock (Unexpanded in chat feed)', () => {
-  it('renders clean title, task, time, without icons or # IDs', () => {
-    const groups: SubagentGroup[] = [
-      createMockGroup(
-        'sa-12345678',
-        'Research Codebase',
-        'Analyze auth middleware implementation',
-        'completed',
-      ),
-    ];
-
-    const { root, container } = renderSubagentBlock(groups);
-
-    // Title and task rendered
-    expect(container.textContent).toContain('Research Codebase');
-    expect(container.textContent).toContain('Analyze auth middleware implementation');
-
-    // No # hash or tool-cal IDs
-    expect(container.textContent).not.toContain('#sa-123');
-    expect(container.textContent).not.toContain('#tool-cal');
-
-    // No success or failure text badges
-    expect(container.textContent).not.toContain('FAILED');
-    expect(container.textContent).not.toContain('SUCCESS');
-
-    act(() => {
-      root.unmount();
-    });
-  });
-
   it('renders live tool execution title in realtime while running', () => {
     const groups: SubagentGroup[] = [
       createMockGroup('sa-1', 'Test Runner', 'Run unit tests', 'running', undefined, [

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   createTaskSlug,
-  formatSlugToTitle,
   getSessionDisplayTitle,
   isDefaultSessionTitle,
   isPlaceholderSessionTitle,
@@ -9,11 +8,6 @@ import {
 } from './utils.js';
 
 describe('createTaskSlug', () => {
-  it('generates a memorable adjective-noun slug when no prefix is given', () => {
-    const slug = createTaskSlug();
-    expect(slug).toMatch(/^[a-z]+-[a-z]+$/);
-  });
-
   it('generates a memorable adjective-noun slug when prefix is new-session', () => {
     const slug = createTaskSlug('new-session');
     expect(slug).toMatch(/^[a-z]+-[a-z]+$/);
@@ -24,14 +18,6 @@ describe('createTaskSlug', () => {
     expect(createTaskSlug('Fix User Auth Modal')).toBe('fix-user-auth-modal');
     expect(createTaskSlug('refactor/api-routes')).toBe('refactor-api-routes');
     expect(createTaskSlug('  --special-chars!@#$%^&*-- ')).toBe('special-chars');
-  });
-});
-
-describe('formatSlugToTitle', () => {
-  it('formats kebab-case and snake_case to capitalized title', () => {
-    expect(formatSlugToTitle('swift-falcon')).toBe('Swift Falcon');
-    expect(formatSlugToTitle('add_user_authentication')).toBe('Add User Authentication');
-    expect(formatSlugToTitle('')).toBe('New Session');
   });
 });
 

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import path from 'node:path';
 
-const commonExclude = ['**/node_modules/**', '**/dist/**'];
+const commonExclude = ['**/node_modules/**', '**/dist/**', '**/out/**'];
 const webAlias = {
   '@': path.resolve(import.meta.dirname, 'apps/web/src'),
 };

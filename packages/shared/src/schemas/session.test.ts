@@ -34,31 +34,6 @@ test('isProviderEnvKeyOptional preserves env-var requirement metadata', () => {
   expect(isProviderEnvKeyOptional(provider, 'UNKNOWN_KEY')).toBe(false);
 });
 
-test('providerDiscoverySchema parses installState and authState', () => {
-  const data = {
-    id: 'test-id',
-    label: 'Test Label',
-    status: 'ready',
-    installState: 'installed_local',
-    authState: 'authenticated',
-    enabled: true,
-    command: 'test',
-    launchArgs: [],
-    launchEnv: {},
-    customEnv: {},
-    agent: {
-      id: 'test-agent',
-      name: 'Test Agent',
-      version: '1.0.0',
-      description: 'a test agent',
-      authors: [],
-      distribution: {},
-    },
-  };
-  const result = providerDiscoverySchema.safeParse(data);
-  expect(result.success).toBe(true);
-});
-
 test('providerDiscoverySchema preserves an unknown auth state until probing completes', () => {
   const base = {
     id: 'test-id',

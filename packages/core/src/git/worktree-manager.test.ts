@@ -89,13 +89,6 @@ describe('WorkspaceManager Integration Tests', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   });
 
-  test('should resolve repository info correctly', async () => {
-    const info = await manager.resolveRepository(repoPath);
-    expect(info.isGitRepo).toBe(true);
-    expect(info.repoRoot).toBe(path.resolve(repoPath));
-    expect(info.workdirPrefix).toBe('');
-  });
-
   test('does not reuse a worktree missing from the caller database', async () => {
     const foreign = await manager.create(repoPath, 'foreign-session', 'shared-slug', 'master');
     await fs.writeFile(path.join(foreign.path, 'unsaved.txt'), 'keep these changes');

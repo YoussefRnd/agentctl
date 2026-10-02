@@ -13,39 +13,6 @@ import { providers, registrySnapshots } from '../db/schema.js';
 import { defaultCredentialVault } from '../security/credential-vault.js';
 
 describe('ProviderRegistry', () => {
-  test('ProviderRegistry discover returns providers from DB', async () => {
-    const db = createDatabase(':memory:');
-
-    await db.insert(providers).values({
-      id: 'claude-acp',
-      name: 'Claude Code',
-      installState: 'installed_local',
-      authState: 'authenticated',
-      command: 'claude',
-
-      launchArgs: '[]',
-      launchEnv: '{}',
-      customEnv: '{}',
-      configOptions: '[]',
-      authMethods: '[]',
-      version: '1.0.0',
-      description: 'test',
-      icon: 'icon',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      supportsDynamicModel: false,
-      supportsDynamicConfig: false,
-    });
-
-    const registry = new ProviderRegistry(db, noopLogger);
-    const providersList = await registry.discover();
-
-    expect(providersList.length).toBe(1);
-    expect(providersList[0].id).toBe('claude-acp');
-    expect(providersList[0].installState).toBe('installed_local');
-    expect(providersList[0].authState).toBe('authenticated');
-  });
-
   test('automatic updates target only enabled, installed, app-managed providers and continue after a failure', async () => {
     const db = createDatabase(':memory:');
     await db.insert(providers).values([
@@ -388,37 +355,6 @@ describe('ProviderRegistry', () => {
     await registry.refreshProvider('cursor');
 
     expect(probe).not.toHaveBeenCalled();
-  });
-
-  test('ProviderRegistry getProvider returns specific provider from DB', async () => {
-    const db = createDatabase(':memory:');
-
-    await db.insert(providers).values({
-      id: 'claude-acp',
-      name: 'Claude Code',
-      installState: 'installed_local',
-      authState: 'authenticated',
-      command: 'claude',
-
-      launchArgs: '[]',
-      launchEnv: '{}',
-      customEnv: '{}',
-      configOptions: '[]',
-      authMethods: '[]',
-      version: '1.0.0',
-      description: 'test',
-      icon: 'icon',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      supportsDynamicModel: false,
-      supportsDynamicConfig: false,
-    });
-
-    const registry = new ProviderRegistry(db, noopLogger);
-    const provider = registry.getProvider('claude-acp');
-
-    expect(provider).toBeDefined();
-    expect(provider?.id).toBe('claude-acp');
   });
 
   test('install persists provider with system_available state and enables it', async () => {

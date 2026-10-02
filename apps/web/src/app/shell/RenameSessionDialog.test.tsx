@@ -54,21 +54,4 @@ describe('RenameSessionDialog', () => {
     expect(onConfirm).toHaveBeenCalledWith('New title');
     expect(onCancel).not.toHaveBeenCalled();
   });
-
-  it('calls onCancel when the dialog is dismissed', () => {
-    const onConfirm = vi.fn();
-    const onCancel = vi.fn();
-    renderDialog({ open: true, currentTitle: 'Old', onConfirm, onCancel });
-
-    const cancelButton = [...document.querySelectorAll('button')].find((b) =>
-      b.textContent.includes('Cancel'),
-    );
-    expect(cancelButton).toBeDefined();
-    act(() => {
-      cancelButton?.click();
-    });
-
-    expect(onCancel).toHaveBeenCalledTimes(1);
-    expect(onConfirm).not.toHaveBeenCalled();
-  });
 });

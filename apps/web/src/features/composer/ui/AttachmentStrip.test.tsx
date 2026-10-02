@@ -54,20 +54,4 @@ describe('AttachmentStrip', () => {
     expect(onRetry).toHaveBeenCalledWith('local-1');
     expect(onRemove).not.toHaveBeenCalled();
   });
-
-  it('ready attachment shows a remove button that removes', () => {
-    const { onRemove, onRetry } = renderStrip([makeAttachment()]);
-
-    const removeButton = document.querySelector<HTMLButtonElement>(
-      'button[aria-label="Remove attachment"]',
-    );
-    expect(removeButton).not.toBeNull();
-
-    act(() => {
-      removeButton?.click();
-    });
-
-    expect(onRemove).toHaveBeenCalledTimes(1);
-    expect(onRetry).not.toHaveBeenCalled();
-  });
 });

@@ -66,11 +66,40 @@ The web package enforces feature boundaries with `pnpm --filter @agentctl/web ar
 2. Start a local or worktree-isolated session.
 3. Select a provider, model, thinking level, and approval policy.
 4. Follow the agent's conversation, plan, tool activity, subagents, and terminal processes.
-5. Review the resulting diff and run project checks.
+5. Review the resulting diff.
 6. Commit, push, create a pull request, apply the work, or discard it.
 
 Session events are persisted in SQLite and streamed to clients over SSE. Worktree sessions keep
 concurrent tasks isolated from the primary checkout.
+
+## Git review and recovery
+
+The review loads file summaries first and loads diffs as you expand files. **Uncommitted**
+shows current Git changes; **All edits** compares against the session baseline. Files with
+both staged and unstaged changes expose both actions. Commits require a message and can
+include unstaged changes in the same operation.
+
+The Git menu provides **Fetch remote changes** and **Switch or create branch**. Synchronization
+respects the configured upstream. Creating a branch preserves current edits; switching to an
+existing branch requires a clean workspace and cannot reuse a branch checked out elsewhere.
+Pushing to the base branch is available through an explicit preference in the commit dialog.
+
+Apply requires committed work in isolated worktrees. Discard keeps a recovery copy until the
+session is deleted. Use **Recover discarded changes** in the review panel to resume a retained
+worktree or restore local files and staging. Local recovery refuses to overwrite newer changes.
+Branch switches in isolated sessions reuse the existing checkout. If Git was initialized after
+a local session began, explicitly commit its changes before applying the session.
+
+## Drafts and conversation history
+
+Composer text, project selections, and queued messages survive browser and desktop restarts.
+Failed messages stay in the outbox for an explicit retry. Stable message IDs prevent retries
+from submitting an accepted prompt twice. Unsent browser file selections must be reattached
+after restarting; already uploaded attachments remain usable while their temporary files exist.
+
+Conversations initially load the newest 200 events. Use **Load earlier messages** to retrieve
+older pages. The feed renders visible conversation groups and preserves navigation to turns
+and search results.
 
 ## Configuration
 

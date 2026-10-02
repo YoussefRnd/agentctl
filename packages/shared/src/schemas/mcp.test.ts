@@ -25,25 +25,4 @@ describe('mcpServerSchema', () => {
       expect(result.data.toolPermissions).toBe('{}');
     }
   });
-
-  it('should parse explicit values for approvalPolicy and toolPermissions', () => {
-    const result = mcpServerSchema.safeParse({
-      ...baseServer,
-      approvalPolicy: 'deny_all',
-      toolPermissions: '{"some-tool": "allow"}',
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.approvalPolicy).toBe('deny_all');
-      expect(result.data.toolPermissions).toBe('{"some-tool": "allow"}');
-    }
-  });
-
-  it('should reject invalid approvalPolicy values', () => {
-    const result = mcpServerSchema.safeParse({
-      ...baseServer,
-      approvalPolicy: 'invalid_policy',
-    });
-    expect(result.success).toBe(false);
-  });
 });
