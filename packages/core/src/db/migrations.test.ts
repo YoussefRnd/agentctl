@@ -78,6 +78,7 @@ it('upgrades populated databases from every migration boundary without losing se
         );
         expect(db.select().from(sessions).get()).toMatchObject({
           id: 'session',
+          discardBackup: null,
         });
         expect(
           db.select().from(sessionEvents).get(),

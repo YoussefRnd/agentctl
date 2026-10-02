@@ -65,6 +65,7 @@ export const sessions = sqliteTable('sessions', {
   title: text('title').notNull().default('new session'),
   baseCommit: text('base_commit').notNull(),
   baseBranch: text('base_branch'),
+  discardBackup: text('discard_backup'),
   agent: text('agent').notNull(),
   agentSessionId: text('agent_session_id'),
   selectedProvider: text('selected_provider').notNull(),

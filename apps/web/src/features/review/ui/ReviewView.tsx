@@ -1,3 +1,4 @@
+import { canMutateWorkspace } from '@agentctl/shared';
 import { useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewDialogs } from './ReviewDialogs';
@@ -10,6 +11,16 @@ import { useOpenWorkspaceFile, useSession, useSessionStream } from '@/features/s
 import { extractLatestTurnTouchedFiles, resolveTurnReviewFiles } from '../lib/turnChanges';
 import { useReviewUIStore, type ReviewScope } from '../model/useReviewUIStore';
 import { useGitStatus } from '../model/useGitStatus';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import {
+  api,
+  assertApiStatus,
+  fetchWorkspaceChanges,
+  createWorkspaceBranch,
+  undoDiscardSession,
+} from '@agentctl/api-client';
+import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
+import { sessionKeys } from '@/shared/lib/queryKeys';
 import { toast } from 'sonner';
 
 export function ReviewView() {
@@ -43,7 +54,7 @@ export function ReviewView() {
     refetchReview();
   }, [refetchReview]);
 
-  const files = reviewData.files;
+  const summaryFiles = reviewData.files;
   const sessionStatus = sessionData?.session.status;
 
   const onStage = stageFile;
@@ -53,7 +64,75 @@ export function ReviewView() {
   const onUnstageAll = unstageAll;
   const { state, dispatch, toggleFileCollapse, expandAll, collapseAll } = useReviewViewState();
 
+  const sessionId = sessionData?.session.id ?? '';
+  const queryClient = useQueryClient();
   const reviewScope = useReviewUIStore((s) => s.reviewScope);
+  const capture = reviewData.capture;
+  const fromHash = reviewScope === 'all_edits' ? capture?.sessionTree : capture?.workingTree;
+  const toHash = capture?.currentTree;
+  const detailQueries = useQueries({
+    queries: summaryFiles.map((file) => ({
+      queryKey: sessionKeys.reviewFile(sessionId, file.path, fromHash, toHash),
+      enabled:
+        !!sessionId &&
+        !!capture &&
+        (state.collapsedFiles[file.path] === false || !!state.searchQuery),
+      queryFn: async () => {
+        const response = await api.getSessionReview({
+          params: { id: sessionId },
+          query: {
+            filePath: file.path,
+            fromHash,
+            toHash,
+            // Last Turn filters the live review by touched files. Only Branch
+            // Changes compares their contents against the session baseline.
+            scope: reviewScope === 'all_edits' ? 'session' : 'working',
+          },
+        });
+        assertApiStatus(response, 200, 'Failed to load file diff');
+        return response.body.files[0];
+      },
+      staleTime: Infinity,
+    })),
+  });
+  const files = useMemo(
+    () =>
+      summaryFiles.map((file, index) => ({
+        ...file,
+        additions:
+          reviewScope === 'all_edits' ? (file.sessionAdditions ?? file.additions) : file.additions,
+        deletions:
+          reviewScope === 'all_edits' ? (file.sessionDeletions ?? file.deletions) : file.deletions,
+        diff: detailQueries[index]?.isError
+          ? 'Could not load diff. Refresh the review to retry.'
+          : detailQueries[index]?.data
+            ? detailQueries[index].data!.diff || 'No textual changes in this scope.'
+            : file.diff,
+      })),
+    [summaryFiles, detailQueries, reviewScope],
+  );
+  const invalidateWorkspace = () => invalidateWorkspaceQueries(queryClient, sessionId, 'session');
+  const undoDiscard = useMutation({
+    mutationFn: async () => {
+      await undoDiscardSession(sessionId);
+    },
+    onSuccess: invalidateWorkspace,
+  });
+  const fetchChanges = async () => {
+    await fetchWorkspaceChanges(sessionId);
+    invalidateWorkspace();
+  };
+  const createBranch = async (name: string) => {
+    await createWorkspaceBranch(sessionId, name);
+    invalidateWorkspace();
+  };
+  const safeAction = async (operation: () => Promise<void>) => {
+    try {
+      await operation();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  };
   const selectedTurn = useReviewUIStore((s) => s.reviewTurnSelection);
   const setReviewScope = useReviewUIStore((s) => s.setReviewScope);
   const targetReviewFile = useReviewUIStore((s) => s.targetReviewFile);
@@ -172,21 +251,30 @@ export function ReviewView() {
     }
   }, [allCollapsed, expandAll, collapseAll, parsedFiles]);
 
-  const stagedCount = files.filter((file) => file.state === 'staged').length;
+  const stagedCount = files.filter(
+    (file) => file.hasStagedChanges ?? file.state === 'staged',
+  ).length;
   const uncommittedCount = files.filter((file) => file.state !== 'committed').length;
-  const unstagedCount = uncommittedCount - stagedCount;
+  const unstagedCount = files.filter(
+    (file) => file.hasUnstagedChanges ?? !['staged', 'committed'].includes(file.state),
+  ).length;
   const changeStats = useMemo(() => {
     let additions = 0;
     let deletions = 0;
-    for (const file of files) {
+    for (const file of summaryFiles) {
       if (file.state === 'committed') continue;
+      if (file.additions !== undefined && file.deletions !== undefined) {
+        additions += file.additions;
+        deletions += file.deletions;
+        continue;
+      }
       for (const line of file.diff?.split('\n') ?? []) {
         if (line.startsWith('+') && !line.startsWith('+++')) additions += 1;
         if (line.startsWith('-') && !line.startsWith('---')) deletions += 1;
       }
     }
     return { additions, deletions };
-  }, [files]);
+  }, [summaryFiles]);
   const { gitStatus, isLoading: isLoadingGitStatus } = useGitStatus(sessionData?.session.id ?? '');
   const baseBranch = sessionData?.session.baseBranch ?? 'main';
   const canPush =
@@ -212,10 +300,10 @@ export function ReviewView() {
     <ReviewGitActions
       branch={gitStatus.branch}
       branches={branches}
-      remoteName={gitStatus.remoteName}
       hasBranchChanges={files.length > 0}
       stagedCount={stagedCount}
       unstagedCount={unstagedCount}
+      uncommittedCount={uncommittedCount}
       additions={changeStats.additions}
       deletions={changeStats.deletions}
       aheadCount={gitStatus.aheadCount}
@@ -229,11 +317,14 @@ export function ReviewView() {
         dispatch({ type: 'SET_COMMIT_MESSAGE', payload: value });
       }}
       onSwitchBranch={switchBranch}
-      onCommit={async () => {
-        await onCommitChanges(state.commitMessage.trim());
+      onCommit={async (message, includeUnstaged) => {
+        await onCommitChanges(message, includeUnstaged);
         dispatch({ type: 'SET_COMMIT_MESSAGE', payload: '' });
       }}
-      onStageAll={onStageAll}
+      onFetch={fetchChanges}
+      onCreateBranch={createBranch}
+      lastFetchedAt={gitStatus.lastFetchedAt}
+      workspaceBusy={!canMutateWorkspace(sessionStatus)}
       onPush={async () => {
         await pushChanges();
       }}
@@ -260,10 +351,15 @@ export function ReviewView() {
 
   const hasUnstaged = useMemo(
     () =>
-      files.some((f) => f.state === 'modified' || f.state === 'untracked' || f.state === 'deleted'),
+      files.some(
+        (f) => f.hasUnstagedChanges ?? ['modified', 'untracked', 'deleted'].includes(f.state),
+      ),
     [files],
   );
-  const hasStaged = useMemo(() => files.some((f) => f.state === 'staged'), [files]);
+  const hasStaged = useMemo(
+    () => files.some((f) => f.hasStagedChanges ?? f.state === 'staged'),
+    [files],
+  );
 
   const handleSelectFile = useCallback(
     (filePath: string) => {
@@ -273,7 +369,17 @@ export function ReviewView() {
     [dispatch, setTargetReviewFile],
   );
 
-  if (isClosed) return <ReviewClosedState sessionStatus={sessionStatus} />;
+  if (isClosed)
+    return (
+      <ReviewClosedState
+        sessionStatus={sessionStatus}
+        canRecover={sessionStatus === 'discarded' && !!sessionData?.session.discardBackup}
+        isRecovering={undoDiscard.isPending}
+        onRecover={() => {
+          void safeAction(() => undoDiscard.mutateAsync());
+        }}
+      />
+    );
 
   return (
     <div className="bg-surface/50 relative flex h-full flex-col overflow-hidden">
@@ -283,6 +389,8 @@ export function ReviewView() {
         onScopeChange={handleScopeChange}
         scopeCounts={scopeCounts}
         viewMode={state.viewMode}
+        wrapLines={state.wrapLines}
+        onToggleWrapLines={() => dispatch({ type: 'TOGGLE_WRAP_LINES' })}
         onToggleViewMode={() => {
           dispatch({ type: 'TOGGLE_VIEW_MODE' });
         }}
@@ -296,10 +404,10 @@ export function ReviewView() {
         onSelectFile={handleSelectFile}
         fileStats={fileStats}
         onStageAll={() => {
-          void onStageAll();
+          void safeAction(() => onStageAll());
         }}
         onUnstageAll={() => {
-          void onUnstageAll();
+          void safeAction(() => onUnstageAll());
         }}
         hasUnstaged={hasUnstaged}
         hasStaged={hasStaged}
@@ -326,15 +434,16 @@ export function ReviewView() {
             toggleFileCollapse(p);
           }}
           viewMode={state.viewMode}
+          wrapLines={state.wrapLines}
           fileStats={fileStats}
           onStage={(p) => {
-            void onStage(p);
+            void safeAction(() => onStage(p));
           }}
           onUnstage={(p) => {
-            void onUnstage(p);
+            void safeAction(() => onUnstage(p));
           }}
           onRevert={(p) => {
-            void onRevert(p);
+            void safeAction(() => onRevert(p));
           }}
           onOpenFile={(p) => {
             void openWorkspaceFile(p);

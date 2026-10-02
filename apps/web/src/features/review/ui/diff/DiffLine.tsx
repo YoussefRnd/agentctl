@@ -10,6 +10,7 @@ interface DiffLineProps {
   hideNewLineNumber?: boolean;
   language?: string;
   isSpacer?: boolean;
+  wrapLines?: boolean;
 }
 
 export const DiffLine = memo(function DiffLine({
@@ -20,13 +21,14 @@ export const DiffLine = memo(function DiffLine({
   hideNewLineNumber = false,
   language,
   isSpacer = false,
+  wrapLines = false,
 }: DiffLineProps) {
   const showOld = !hideRemoved && !hideOldLineNumber;
   const showNew = !hideAdded && !hideNewLineNumber;
 
   if (isSpacer || !line) {
     return (
-      <div className="bg-surface-tertiary/10 flex border-l-2 border-transparent font-mono text-[10px] leading-relaxed opacity-30 select-none">
+      <div className="bg-surface-tertiary/10 flex h-full border-l-2 border-transparent font-mono text-[10.5px] leading-relaxed opacity-30 select-none">
         {showOld && (
           <div className="w-7 shrink-0 pr-1.5 text-right font-mono text-[9.5px] tabular-nums">
             &nbsp;
@@ -52,12 +54,12 @@ export const DiffLine = memo(function DiffLine({
   if (hideRemoved && isRemoved) return null;
 
   const bgColor = isAdded
-    ? 'bg-emerald-500/[0.10] hover:bg-emerald-500/[0.16]'
+    ? 'bg-emerald-500/[0.05] hover:bg-emerald-500/[0.09]'
     : isRemoved
-      ? 'bg-rose-500/[0.10] hover:bg-rose-500/[0.16]'
+      ? 'bg-rose-500/[0.05] hover:bg-rose-500/[0.09]'
       : 'hover:bg-surface-secondary/20';
 
-  const textColor = isAdded
+  const symbolColor = isAdded
     ? 'text-emerald-400/95'
     : isRemoved
       ? 'text-rose-400/90'
@@ -89,8 +91,8 @@ export const DiffLine = memo(function DiffLine({
           key={`diff-${String(highlight.start)}-${String(highlight.end)}`}
           className={`${
             isAdded
-              ? 'bg-emerald-500/35 font-semibold text-emerald-300 ring-emerald-500/30'
-              : 'bg-rose-500/35 font-semibold text-rose-300 ring-rose-500/30'
+              ? 'bg-emerald-500/20 font-semibold text-emerald-300 ring-emerald-500/30'
+              : 'bg-rose-500/20 font-semibold text-rose-300 ring-rose-500/30'
           } rounded px-0.5 shadow-xs ring-1`}
         >
           {diffSlice}
@@ -111,7 +113,7 @@ export const DiffLine = memo(function DiffLine({
 
   return (
     <div
-      className={`flex font-mono text-[10.5px] leading-relaxed ${bgColor} group border-l-2 transition-colors duration-150 ${
+      className={`flex h-full font-mono text-[10.5px] leading-relaxed ${bgColor} group border-l-2 transition-colors duration-150 ${
         isAdded ? 'border-emerald-500/70' : isRemoved ? 'border-rose-500/70' : 'border-transparent'
       }`}
     >
@@ -129,11 +131,12 @@ export const DiffLine = memo(function DiffLine({
           {line.newLineNumber ?? ''}
         </div>
       )}
-      <div className={`w-4 shrink-0 text-center font-bold opacity-40 select-none ${textColor}`}>
+      <div className={`w-4 shrink-0 text-center font-bold opacity-70 select-none ${symbolColor}`}>
         {symbol}
       </div>
       <div
-        className={`flex-1 px-1.5 font-mono text-[10.5px] break-all whitespace-pre-wrap ${textColor} selection:bg-accent/30 selection:text-white`}
+        data-diff-content
+        className={`text-text-main/85 flex-1 px-1.5 font-mono text-[10.5px] ${wrapLines ? 'min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap' : 'whitespace-pre'} selection:bg-accent/30 selection:text-white`}
       >
         {renderContent()}
       </div>

@@ -14,12 +14,7 @@ export const exploreResponseSchema = z.object({
   error: z.string().optional(),
 });
 
-export const reviewFileSchema = z.object({
-  path: z.string(),
-  state: z.enum(['untracked', 'staged', 'modified', 'deleted', 'committed', 'conflicted']),
-  diff: z.string().optional(),
-});
-export type ReviewFileItem = z.infer<typeof reviewFileSchema>;
+export { reviewFileSchema, type ReviewFileItem } from '../schemas/review.js';
 
 export const gitPullRequestSchema = z.object({
   number: z.number().int().positive(),
@@ -32,6 +27,7 @@ export const gitPullRequestSchema = z.object({
 export type GitPullRequest = z.infer<typeof gitPullRequestSchema>;
 
 export const gitStatusSchema = z.object({
+  lastFetchedAt: z.string().nullable().optional(),
   isRepo: z.boolean(),
   branch: z.string().nullable(),
   hasPrimaryRemote: z.boolean(),

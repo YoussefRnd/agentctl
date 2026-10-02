@@ -281,6 +281,27 @@
       "when": 1790890306370,
       "tag": "0039_delivery_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1790890436617,
+      "tag": "0040_project_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1790894866580,
+      "tag": "0041_remove_project_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1790898293597,
+      "tag": "0042_recoverable_discard",
+      "breakpoints": true
     }
   ]
 }

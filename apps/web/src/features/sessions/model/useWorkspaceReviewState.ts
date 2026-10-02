@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   api,
+  assertApiStatus,
   stageReviewFile,
   revertReviewFile,
   unstageReviewFile,
@@ -16,22 +17,21 @@ import {
   discardSession,
   patchSession,
 } from '@agentctl/api-client';
+import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
 import { sessionKeys } from '@/shared/lib/queryKeys';
-import type { ReviewFile } from '@/features/review';
-
-interface ReviewResponse {
-  files: ReviewFile[];
-}
+import type { ReviewResponse } from '@agentctl/shared';
+export type { ReviewResponse } from '@agentctl/shared';
 
 const fetchReview = async (sessionId: string): Promise<ReviewResponse> => {
-  const res = await api.getSessionReview({ params: { id: sessionId } });
-  if (res.status !== 200) {
-    throw new Error(`Failed to fetch session review: ${String(res.status)}`);
-  }
+  const res = await api.getSessionReview({
+    params: { id: sessionId },
+    query: { includeDiffs: 'false', scope: 'working' },
+  });
+  assertApiStatus(res, 200, 'Failed to fetch session review');
   return {
+    capture: res.body.capture,
     files: res.body.files.map((file) => ({
-      path: file.path,
-      state: file.state,
+      ...file,
       diff: file.diff ?? '',
     })),
   };
@@ -56,9 +56,7 @@ export function useWorkspaceReviewState(sessionId: string) {
     queryKey: sessionKeys.branches(sessionId),
     queryFn: async () => {
       const res = await api.getSessionBranches({ params: { id: sessionId } });
-      if (res.status !== 200) {
-        throw new Error(`Failed to fetch branches: ${String(res.status)}`);
-      }
+      assertApiStatus(res, 200, 'Failed to fetch branches');
       return res.body;
     },
     enabled: !!sessionId,
@@ -68,10 +66,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const switchBranchMutation = useMutation({
     mutationFn: (branch: string) => patchSession(sessionId, { branch }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.branches(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const switchBranch = useCallback(
@@ -83,9 +78,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const switchModeMutation = useMutation({
     mutationFn: (mode: 'local' | 'worktree') => switchSessionMode(sessionId, mode),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const switchMode = useCallback(
@@ -97,16 +90,12 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const stageMutation = useMutation({
     mutationFn: (filePath: string) => stageReviewFile(sessionId, filePath),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const revertMutation = useMutation({
     mutationFn: (filePath: string) => revertReviewFile(sessionId, filePath),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const stageFile = useCallback(
@@ -125,9 +114,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const unstageMutation = useMutation({
     mutationFn: (filePath: string) => unstageReviewFile(sessionId, filePath),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const unstageFile = useCallback(
@@ -139,9 +126,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const stageAllMutation = useMutation({
     mutationFn: () => stageAllReviewFiles(sessionId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const stageAll = useCallback(async () => {
@@ -150,9 +135,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const unstageAllMutation = useMutation({
     mutationFn: () => unstageAllReviewFiles(sessionId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const unstageAll = useCallback(async () => {
@@ -160,26 +143,21 @@ export function useWorkspaceReviewState(sessionId: string) {
   }, [unstageAllMutation]);
 
   const commitChangesMutation = useMutation({
-    mutationFn: (message: string) => commitWorkspaceChanges(sessionId, message),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.gitStatus(sessionId) });
-    },
+    mutationFn: ({ message, includeUnstaged }: { message: string; includeUnstaged: boolean }) =>
+      commitWorkspaceChanges(sessionId, message, includeUnstaged),
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
   });
 
   const commitChanges = useCallback(
-    async (message: string) => {
-      await commitChangesMutation.mutateAsync(message);
+    async (message: string, includeUnstaged = false) => {
+      await commitChangesMutation.mutateAsync({ message, includeUnstaged });
     },
     [commitChangesMutation],
   );
 
   const pushChangesMutation = useMutation({
     mutationFn: () => pushWorkspaceChanges(sessionId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.gitStatus(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
   });
 
   const pushChanges = useCallback(async () => {
@@ -188,10 +166,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const pullChangesMutation = useMutation({
     mutationFn: () => pullWorkspaceChanges(sessionId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.gitStatus(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
   });
 
   const pullChanges = useCallback(async () => {
@@ -200,10 +175,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const mergeBranchMutation = useMutation({
     mutationFn: (branch: string) => mergeSessionBranch(sessionId, branch),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const mergeBranch = useCallback(
@@ -215,10 +187,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const mergeMutation = useMutation({
     mutationFn: (commitMessage?: string) => mergeSession(sessionId, commitMessage),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const mergeSessionFn = useCallback(
@@ -230,10 +199,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const discardMutation = useMutation({
     mutationFn: () => discardSession(sessionId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const discardSessionFn = useCallback(async () => {

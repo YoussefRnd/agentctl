@@ -1,6 +1,8 @@
+import { canMutateWorkspace } from '@agentctl/shared';
 import { sessions, sessionEvents, projects, type db as defaultDb } from '@agentctl/core/db';
 import { and, eq, sql } from 'drizzle-orm';
 import { AppError } from '../errors/app-error.js';
+import { refreshProjectRepository } from './project-repository.js';
 import type { SessionManager } from '@agentctl/core/session';
 import type { WorktreeManager } from '@agentctl/core/git';
 import type { ProviderRegistry } from '@agentctl/core/providers';
@@ -179,14 +181,13 @@ export class SessionService {
       where: eq(projects.id, session.projectId),
     });
 
-    if (!project?.repoRoot) {
-      return [];
-    }
-
-    return await this.worktreeManager.listBranches(project.repoRoot);
+    if (!project) throw new AppError('Project not found', 404);
+    const resolved = await refreshProjectRepository(this.db, this.worktreeManager, project);
+    if (!resolved.repoRoot) return [];
+    return await this.worktreeManager.listBranches(resolved.repoRoot);
   }
 
-  async checkoutBranch(sessionId: string, branchName: string) {
+  async checkoutBranch(sessionId: string, branchName: string, create = false) {
     const session = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
@@ -196,23 +197,30 @@ export class SessionService {
       throw new AppError('Session not found', 404);
     }
 
-    if (!session.project.repoRoot) {
-      throw new AppError('Project is not a git repository', 400);
+    if (!canMutateWorkspace(session.status)) {
+      throw new AppError('Stop the active turn before changing branches', 400);
     }
-
-    // Always use a git worktree for branch switching, never checkout in-place on
-    // the project directory. This avoids changing source files under a running dev
-    // server (which would trigger a tsx watch restart and crash the app).
-    //
-    // addBranchWorktree recreates the session's worktree via git worktree add --force,
-    // which allows the branch to be checked out even if it's currently active in the
-    // main project directory (commits from either location go to the same branch).
-
+    const project = await refreshProjectRepository(this.db, this.worktreeManager, session.project);
+    if (!project.repoRoot) throw new AppError('Project is not a Git repository', 400);
+    if (create) {
+      await this.worktreeManager.createBranch(project.repoRoot, session.worktreePath, branchName);
+      await this.db.update(sessions).set({ branch: branchName }).where(eq(sessions.id, sessionId));
+      return this.parseSessionRow(
+        await this.db.query.sessions.findFirst({ where: eq(sessions.id, sessionId) }),
+      );
+    }
+    if (!(await this.worktreeManager.isCleanWorkspace(project.repoRoot, session.worktreePath))) {
+      throw new AppError('Commit or stash changes before switching branches', 400);
+    }
+    const activeSession = this.sessionManager.getSession(sessionId);
+    this.sessionManager.stopSession(sessionId);
     const worktree = await this.worktreeManager.addBranchWorktree(
-      session.project.repoRoot,
+      project.repoRoot,
       sessionId,
       branchName,
-      session.project.subdir,
+      project.subdir,
+      undefined,
+      session.mode === 'worktree' ? session.worktreePath : undefined,
     );
 
     // Snapshot the new state
@@ -231,7 +239,6 @@ export class SessionService {
       .where(eq(sessions.id, sessionId));
 
     // Restart session in the worktree if active, so the agent picks up the new path
-    const activeSession = this.sessionManager.getSession(sessionId);
     if (activeSession) {
       const provider = await this.providerRegistry.ensureProviderReady(session.selectedProvider, {
         force: false,

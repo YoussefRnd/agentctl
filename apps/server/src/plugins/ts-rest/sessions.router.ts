@@ -1,3 +1,4 @@
+import { canMutateWorkspace } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
 import { eq } from 'drizzle-orm';
@@ -9,6 +10,7 @@ import {
   createTaskSlug,
 } from '@agentctl/shared';
 import { AppError } from '../../errors/app-error.js';
+import { refreshProjectRepository } from '../../services/project-repository.js';
 
 function publishSessionChange(fastify: FastifyInstance, sessionId: string): void {
   fastify.eventBus.publishState({ topics: ['projects', 'session'], sessionId });
@@ -19,6 +21,21 @@ function publishWorkspaceChange(fastify: FastifyInstance, sessionId: string): vo
     topics: ['projects', 'session', 'workspace'],
     sessionId,
   });
+}
+
+async function getSessionGitContext(fastify: FastifyInstance, id: string, required = true) {
+  const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
+  if (!session) throw new AppError('Session not found', 404);
+  const savedProject = await fastify.db.query.projects.findFirst({
+    where: eq(projects.id, session.projectId),
+  });
+  if (!savedProject) throw new AppError('Project not found', 404);
+  const project = await refreshProjectRepository(fastify.db, fastify.worktreeManager, savedProject);
+  if (project.repoRoot !== savedProject.repoRoot) publishWorkspaceChange(fastify, id);
+  if (required && !canMutateWorkspace(session.status))
+    throw new AppError('Git changes require an idle workspace', 400);
+  if (required && !project.repoRoot) throw new AppError('Project is not a Git repository', 400);
+  return { session, project };
 }
 
 export function createSessionsRouter(
@@ -208,7 +225,7 @@ export function createSessionsRouter(
         body: { success: true },
       };
     },
-    getSessionReview: async ({ params }: { params: { id: string } }) => {
+    getSessionReview: async ({ params, query }) => {
       const { id } = params;
       const session = await fastify.db.query.sessions.findFirst({
         where: eq(sessions.id, id),
@@ -219,21 +236,28 @@ export function createSessionsRouter(
       });
       if (!project) throw new AppError('Project not found', 404);
 
-      if (session.baseCommit === 'none') return { status: 200 as const, body: { files: [] } };
       const snapshotService = fastify.sessionService.getSnapshotService();
-      const files = await snapshotService.getReviewFiles(session.worktreePath, session.baseCommit);
-      return { status: 200 as const, body: { files } };
+      if (query.fromHash && query.toHash && query.filePath) {
+        const files = await snapshotService.getCheckpointDiffFiles(
+          session.worktreePath,
+          query.fromHash,
+          query.toHash,
+          query.filePath,
+        );
+        return { status: 200 as const, body: { files } };
+      }
+      const review = await snapshotService.getReview(session.worktreePath, session.baseCommit, {
+        includeDiffs: query.includeDiffs !== 'false',
+        filePath: query.filePath,
+        scope: query.scope,
+      });
+      return { status: 200 as const, body: review };
     },
     stageFile: async ({ params, body }: { params: { id: string }; body: { filePath: string } }) => {
       const { id } = params;
       const { filePath } = body;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
-      await fastify.worktreeManager.stageFile(project.repoRoot, session.worktreePath, filePath);
+      const { session, project } = await getSessionGitContext(fastify, id);
+      await fastify.worktreeManager.stageFile(project.repoRoot!, session.worktreePath, filePath);
       publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
@@ -246,13 +270,8 @@ export function createSessionsRouter(
     }) => {
       const { id } = params;
       const { filePath } = body;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
-      await fastify.worktreeManager.revertFile(project.repoRoot, session.worktreePath, filePath);
+      const { session, project } = await getSessionGitContext(fastify, id);
+      await fastify.worktreeManager.revertFile(project.repoRoot!, session.worktreePath, filePath);
       publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
@@ -265,37 +284,22 @@ export function createSessionsRouter(
     }) => {
       const { id } = params;
       const { filePath } = body;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
-      await fastify.worktreeManager.unstageFile(project.repoRoot, session.worktreePath, filePath);
+      const { session, project } = await getSessionGitContext(fastify, id);
+      await fastify.worktreeManager.unstageFile(project.repoRoot!, session.worktreePath, filePath);
       publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
     stageAllFiles: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
-      await fastify.worktreeManager.stageAll(project.repoRoot, session.worktreePath);
+      const { session, project } = await getSessionGitContext(fastify, id);
+      await fastify.worktreeManager.stageAll(project.repoRoot!, session.worktreePath);
       publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
     unstageAllFiles: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
-      await fastify.worktreeManager.unstageAll(project.repoRoot, session.worktreePath);
+      const { session, project } = await getSessionGitContext(fastify, id);
+      await fastify.worktreeManager.unstageAll(project.repoRoot!, session.worktreePath);
       publishWorkspaceChange(fastify, id);
       return { status: 200 as const, body: { success: true } };
     },
@@ -304,18 +308,18 @@ export function createSessionsRouter(
       body,
     }: {
       params: { id: string };
-      body: { message: string };
+      body: { message: string; includeUnstaged?: boolean };
     }) => {
       const { id } = params;
       const { message } = body;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
+      const { session, project } = await getSessionGitContext(fastify, id);
       try {
-        await fastify.worktreeManager.commit(project.repoRoot, session.worktreePath, message);
+        await fastify.worktreeManager.commit(
+          project.repoRoot!,
+          session.worktreePath,
+          message,
+          body.includeUnstaged,
+        );
         publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: { success: true } };
       } catch (err) {
@@ -327,14 +331,9 @@ export function createSessionsRouter(
     },
     pushChanges: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
+      const { session, project } = await getSessionGitContext(fastify, id);
       try {
-        const result = await fastify.worktreeManager.push(project.repoRoot, session.worktreePath);
+        const result = await fastify.worktreeManager.push(project.repoRoot!, session.worktreePath);
         publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: result };
       } catch (err) {
@@ -346,14 +345,9 @@ export function createSessionsRouter(
     },
     pullChanges: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
+      const { session, project } = await getSessionGitContext(fastify, id);
       try {
-        const result = await fastify.worktreeManager.pull(project.repoRoot, session.worktreePath);
+        const result = await fastify.worktreeManager.pull(project.repoRoot!, session.worktreePath);
         publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: result };
       } catch (err) {
@@ -363,14 +357,47 @@ export function createSessionsRouter(
         };
       }
     },
+    fetchChanges: async ({ params }) => {
+      const { session, project } = await getSessionGitContext(fastify, params.id);
+      try {
+        const result = await fastify.worktreeManager.fetch(project.repoRoot!, session.worktreePath);
+        publishWorkspaceChange(fastify, params.id);
+        return { status: 200 as const, body: result };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
+    },
+    createSessionBranch: async ({ params, body }) => {
+      try {
+        await fastify.sessionService.checkoutBranch(params.id, body.name, true);
+        publishWorkspaceChange(fastify, params.id);
+        return { status: 200 as const, body: { success: true } };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
+    },
+    undoDiscard: async ({ params }) => {
+      try {
+        await fastify.sessionManager.undoDiscard(params.id);
+        publishWorkspaceChange(fastify, params.id);
+        return { status: 200 as const, body: { success: true } };
+      } catch (err) {
+        return {
+          status: 400 as const,
+          body: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
+    },
     getGitStatus: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) {
+      const { session, project } = await getSessionGitContext(fastify, id, false);
+      if (!project.repoRoot) {
         return {
           status: 200 as const,
           body: {
@@ -395,16 +422,11 @@ export function createSessionsRouter(
     },
     createPullRequest: async ({ params, body }) => {
       const { id } = params;
-      const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project?.repoRoot) throw new AppError('Project repo root not found', 404);
+      const { session, project } = await getSessionGitContext(fastify, id);
 
       try {
         const result = await fastify.worktreeManager.createPullRequest(
-          project.repoRoot,
+          project.repoRoot!,
           session.worktreePath,
           {
             title: body.title,

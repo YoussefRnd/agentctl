@@ -1,3 +1,4 @@
+import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
 import { createContext, use, useMemo, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -5,15 +6,9 @@ import type { SessionEventRow, SessionWithCapabilities, SessionMode } from '@age
 import { api } from '@agentctl/api-client';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { useSessionConfigState } from './useSessionConfigState';
-import { useWorkspaceReviewState } from './useWorkspaceReviewState';
+import { useWorkspaceReviewState, type ReviewResponse } from './useWorkspaceReviewState';
 import { useSessionEvents } from './useSessionEvents';
 import { sendDesktopNotification } from '@/shared/lib/notifications';
-
-import type { ReviewFile } from '@/features/review';
-
-interface ReviewResponse {
-  files: ReviewFile[];
-}
 
 interface PlanItem {
   text: string;
@@ -42,7 +37,7 @@ interface SessionConfigContextValue {
   unstageFile: (filePath: string) => Promise<void>;
   stageAll: () => Promise<void>;
   unstageAll: () => Promise<void>;
-  commitChanges: (message: string) => Promise<void>;
+  commitChanges: (message: string, includeUnstaged?: boolean) => Promise<void>;
   pushChanges: () => Promise<{ success: boolean; output: string }>;
   pullChanges: () => Promise<{ success: boolean; output: string }>;
   mergeBranch: (branch: string) => Promise<void>;
@@ -384,7 +379,7 @@ export function SessionStreamProvider({
       sessionData?.session.status === 'needs_attention' ||
       sessionData?.session.status === 'running'
     ) {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+      invalidateWorkspaceQueries(queryClient, sessionId, 'files');
       void queryClient.invalidateQueries({ queryKey: ['projects'] });
     }
   }, [sessionData?.session.status, sessionId, queryClient]);

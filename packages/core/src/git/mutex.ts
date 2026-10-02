@@ -1,6 +1,3 @@
-import path from 'node:path';
-import fs from 'node:fs/promises';
-
 export interface GitMutexOptions {
   timeoutMs?: number;
   queueTimeoutMs?: number;
@@ -100,9 +97,6 @@ export class GitMutex {
       entry.queueTimeoutTimer = undefined;
     }
 
-    // Try to prune stale lockfile before executing the git task
-    await this.tryPruneStaleLockfile(key);
-
     let signalToPass = entry.controller.signal;
     if (entry.options?.signal) {
       signalToPass = AbortSignal.any([entry.controller.signal, entry.options.signal]);
@@ -120,6 +114,7 @@ export class GitMutex {
     }
 
     try {
+      signalToPass.throwIfAborted();
       const result = await entry.task(signalToPass);
       if ((entry.status as unknown) === 'running') {
         entry.resolve(result);
@@ -138,7 +133,7 @@ export class GitMutex {
         entry.abortListener = undefined;
       }
 
-      if ((entry.status as unknown) === 'running') {
+      {
         const currentQueue = this.queues.get(key);
         if (currentQueue) {
           if (currentQueue[0] === entry) {
@@ -159,6 +154,7 @@ export class GitMutex {
       return;
     }
 
+    const wasRunning = entry.status === 'running';
     entry.status = 'aborted';
 
     if (entry.queueTimeoutTimer) {
@@ -177,6 +173,10 @@ export class GitMutex {
     entry.controller.abort(error);
     entry.reject(error);
 
+    // An aborted subprocess may still be stopping. Keep the repository locked
+    // until the running task settles; only waiting entries can be removed now.
+    if (wasRunning) return;
+
     const queue = this.queues.get(key);
     if (queue) {
       const index = queue.indexOf(entry);
@@ -194,52 +194,5 @@ export class GitMutex {
   isPending(key: string): boolean {
     const queue = this.queues.get(key);
     return queue !== undefined && queue.length > 0;
-  }
-
-  private async tryPruneStaleLockfile(dir: string): Promise<void> {
-    if (!path.isAbsolute(dir)) {
-      return;
-    }
-
-    try {
-      const stats = await fs.stat(dir);
-      if (!stats.isDirectory()) {
-        return;
-      }
-
-      let gitDir = path.join(dir, '.git');
-      const gitStats = await fs.stat(gitDir).catch(() => null);
-
-      if (gitStats) {
-        if (gitStats.isFile()) {
-          const content = await fs.readFile(gitDir, 'utf8');
-          const match = /^gitdir:\s*(.+)$/m.exec(content);
-          if (match) {
-            gitDir = match[1].trim();
-          }
-        }
-      } else {
-        const isGitDir = await fs
-          .stat(path.join(dir, 'config'))
-          .then(() => true)
-          .catch(() => false);
-        if (isGitDir) {
-          gitDir = dir;
-        } else {
-          return;
-        }
-      }
-
-      const lockfile = path.join(gitDir, 'index.lock');
-      const lockStats = await fs.stat(lockfile).catch(() => null);
-      if (lockStats) {
-        const ageMs = Date.now() - lockStats.mtimeMs;
-        if (ageMs > 3 * 60 * 1000) {
-          await fs.rm(lockfile, { force: true });
-        }
-      }
-    } catch {
-      // Ignore errors
-    }
   }
 }

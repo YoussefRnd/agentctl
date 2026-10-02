@@ -12,6 +12,7 @@ export interface ReviewViewState {
   collapsedFiles: Record<string, boolean>;
   collapsedSections: Record<FileState, boolean>;
   viewMode: 'inline' | 'split';
+  wrapLines: boolean;
   searchQuery: string;
   statusFilter: StatusFilter;
 }
@@ -26,6 +27,7 @@ export type ReviewViewAction =
   | { type: 'TOGGLE_SECTION'; section: FileState }
   | { type: 'EXPAND_FILE'; filePath: string }
   | { type: 'TOGGLE_VIEW_MODE' }
+  | { type: 'TOGGLE_WRAP_LINES' }
   | { type: 'SET_SEARCH_QUERY'; payload: string }
   | { type: 'SET_STATUS_FILTER'; payload: StatusFilter }
   | { type: 'COLLAPSE_ALL' }
@@ -76,6 +78,8 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
         ...state,
         viewMode: state.viewMode === 'inline' ? 'split' : 'inline',
       };
+    case 'TOGGLE_WRAP_LINES':
+      return { ...state, wrapLines: !state.wrapLines };
     case 'SET_SEARCH_QUERY':
       return {
         ...state,
@@ -117,6 +121,7 @@ export function useReviewViewState() {
       committed: false,
     },
     viewMode: 'inline',
+    wrapLines: false,
     searchQuery: '',
     statusFilter: 'all',
   });

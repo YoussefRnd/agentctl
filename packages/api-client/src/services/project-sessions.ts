@@ -10,7 +10,7 @@ import {
   type ThinkingEffort,
 } from '@agentctl/shared';
 import { api } from '../api.js';
-import { ApiError } from '../api-error.js';
+import { ApiError, assertApiStatus } from '../api-error.js';
 
 export interface SidebarProject {
   id: string;
@@ -52,16 +52,14 @@ export async function openProjectSession(
       ...(agent ? { agent } : {}),
     },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to open project: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to open project');
   if (!res.body.session) throw new ApiError('Failed to open project session', 500);
   return { ...res.body, session: res.body.session };
 }
 
 export async function openProjectFolder(path: string): Promise<OpenProjectResponse['project']> {
   const res = await api.openProject({ body: { path, startSession: false } });
-  if (res.status !== 200) throw new ApiError('Failed to open folder', res.status);
+  assertApiStatus(res, 200, 'Failed to open folder');
   return res.body.project;
 }
 
@@ -88,9 +86,7 @@ export async function createProjectSession(
       ...(agent ? { agent } : {}),
     },
   });
-  if (res.status !== 201) {
-    throw new ApiError(`Failed to create session: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 201, 'Failed to create session');
   return res.body;
 }
 
@@ -102,9 +98,7 @@ export async function stageReviewFile(
     params: { id: sessionId },
     body: { filePath },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to stage review file: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to stage review file');
   return res.body;
 }
 
@@ -116,9 +110,7 @@ export async function revertReviewFile(
     params: { id: sessionId },
     body: { filePath },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to revert review file: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to revert review file');
   return res.body;
 }
 
@@ -130,9 +122,7 @@ export async function unstageReviewFile(
     params: { id: sessionId },
     body: { filePath },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to unstage review file: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to unstage review file');
   return res.body;
 }
 
@@ -141,9 +131,7 @@ export async function stageAllReviewFiles(sessionId: string): Promise<{ success:
     params: { id: sessionId },
     body: {},
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to stage all review files: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to stage all review files');
   return res.body;
 }
 
@@ -152,26 +140,20 @@ export async function unstageAllReviewFiles(sessionId: string): Promise<{ succes
     params: { id: sessionId },
     body: {},
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to unstage all review files: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to unstage all review files');
   return res.body;
 }
 
 export async function commitWorkspaceChanges(
   sessionId: string,
   message: string,
+  includeUnstaged = false,
 ): Promise<{ success: boolean }> {
   const res = await api.commitChanges({
     params: { id: sessionId },
-    body: { message },
+    body: { message, includeUnstaged },
   });
-  if (res.status === 400) {
-    throw new ApiError(res.body.message, res.status);
-  }
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to commit workspace changes: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to commit workspace changes');
   return res.body;
 }
 
@@ -182,12 +164,7 @@ export async function pushWorkspaceChanges(
     params: { id: sessionId },
     body: {},
   });
-  if (res.status === 400) {
-    throw new ApiError(res.body.message, res.status);
-  }
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to push changes: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to push changes');
   return res.body;
 }
 
@@ -198,12 +175,7 @@ export async function pullWorkspaceChanges(
     params: { id: sessionId },
     body: {},
   });
-  if (res.status === 400) {
-    throw new ApiError(res.body.message, res.status);
-  }
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to pull changes: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to pull changes');
   return res.body;
 }
 
@@ -211,9 +183,7 @@ export async function getGitStatus(sessionId: string): Promise<GitStatus> {
   const res = await api.getGitStatus({
     params: { id: sessionId },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to get Git status: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to get Git status');
   return res.body;
 }
 
@@ -225,12 +195,7 @@ export async function createPullRequest(
     params: { id: sessionId },
     body,
   });
-  if (res.status === 400) {
-    throw new ApiError(res.body.message, res.status);
-  }
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to create pull request: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to create pull request');
   return res.body;
 }
 
@@ -242,9 +207,7 @@ export async function mergeSessionBranch(
     params: { id: sessionId },
     body: { branch },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to merge session branch: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to merge session branch');
   return res.body;
 }
 
@@ -267,9 +230,7 @@ export async function patchSession(
     params: { id: sessionId },
     body: data,
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to update session: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to update session');
   return res.body;
 }
 
@@ -281,9 +242,7 @@ export async function checkMergeBranch(
     params: { id: sessionId },
     query: { branch },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to check merge branch: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to check merge branch');
   return res.body;
 }
 
@@ -301,9 +260,7 @@ export async function spawnParallelAgent(
     params: { id: parentSessionId },
     body: params,
   });
-  if (res.status !== 201) {
-    throw new ApiError(`Failed to spawn background agent: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 201, 'Failed to spawn background agent');
   return res.body;
 }
 
@@ -323,12 +280,7 @@ export async function mergeSession(
     params: { id: sessionId },
     body: { commitMessage },
   });
-  if (res.status === 400) {
-    throw new ApiError(res.body.message, res.status);
-  }
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to merge session: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to merge session');
   return res.body;
 }
 
@@ -337,12 +289,7 @@ export async function discardSession(sessionId: string): Promise<{ success: bool
     params: { id: sessionId },
     body: {},
   });
-  if (res.status === 400) {
-    throw new ApiError(res.body.message, res.status);
-  }
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to discard session: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to discard session');
   return res.body;
 }
 
@@ -351,7 +298,7 @@ export async function deleteProject(projectId: string): Promise<{ success: boole
     params: { id: projectId },
   });
   if (res.status !== 204 && (res.status as number) !== 200) {
-    throw new ApiError(`Failed to delete project: ${String(res.status)}`, res.status);
+    assertApiStatus(res, 204, 'Failed to delete project');
   }
   return { success: true };
 }
@@ -361,7 +308,7 @@ export async function deleteSession(sessionId: string): Promise<{ success: boole
     params: { id: sessionId },
   });
   if (res.status !== 204 && (res.status as number) !== 200) {
-    throw new ApiError(`Failed to delete session: ${String(res.status)}`, res.status);
+    assertApiStatus(res, 204, 'Failed to delete session');
   }
   return { success: true };
 }
@@ -379,9 +326,7 @@ export async function archiveSession(sessionId: string): Promise<{ success: bool
     params: { id: sessionId },
     body: {},
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to archive session: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to archive session');
   return res.body;
 }
 
@@ -390,9 +335,7 @@ export async function restoreSession(sessionId: string): Promise<{ success: bool
     params: { id: sessionId },
     body: {},
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to restore session: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to restore session');
   return res.body;
 }
 
@@ -440,9 +383,7 @@ export async function rewindSession(
     params: { id: sessionId },
     body: { eventId, mode },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to rewind session: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to rewind session');
   return res.body;
 }
 
@@ -451,9 +392,7 @@ export async function undoRewind(sessionId: string): Promise<{ success: boolean 
     params: { id: sessionId },
     body: {},
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to undo rewind: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to undo rewind');
   return res.body;
 }
 
@@ -476,12 +415,7 @@ export async function handoffSession(
       nextSessionFocus,
     },
   });
-  if (res.status === 404 || res.status === 409) {
-    throw new ApiError(res.body.message, res.status);
-  }
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to handoff session: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to handoff session');
   return res.body;
 }
 
@@ -493,9 +427,7 @@ export async function restoreSnapshot(
     params: { id: sessionId },
     body: { snapshotHash },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to restore snapshot: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to restore snapshot');
   return res.body;
 }
 
@@ -509,9 +441,7 @@ export async function previewSnapshotDiff(
   const res = await api.previewSnapshotDiff({
     params: { id: sessionId, eventId },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to preview snapshot: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to preview snapshot');
   return res.body;
 }
 
@@ -533,9 +463,7 @@ export async function sendTerminalInput(
     params: { id: sessionId, terminalId },
     body: { data },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to send terminal input: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to send terminal input');
   return res.body;
 }
 
@@ -548,17 +476,13 @@ export async function openInEditor(
   const res = await api.openInEditor({
     body: { editor, path: targetPath },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to launch editor: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to launch editor');
   return res.body;
 }
 
 export async function getAvailableEditors(): Promise<string[]> {
   const res = await api.getAvailableEditors();
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to get available editors: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to get available editors');
   return res.body;
 }
 
@@ -580,8 +504,29 @@ export async function searchSessionEvents(params: {
       ...(params.limit ? { limit: params.limit } : {}),
     },
   });
-  if (res.status !== 200) {
-    throw new ApiError(`Failed to search events: ${String(res.status)}`, res.status);
-  }
+  assertApiStatus(res, 200, 'Failed to search events');
+  return res.body;
+}
+
+export async function fetchWorkspaceChanges(
+  sessionId: string,
+): Promise<{ success: boolean; output: string }> {
+  const res = await api.fetchChanges({ params: { id: sessionId }, body: {} });
+  assertApiStatus(res, 200, 'Failed to fetch changes');
+  return res.body;
+}
+
+export async function createWorkspaceBranch(
+  sessionId: string,
+  name: string,
+): Promise<{ success: boolean }> {
+  const res = await api.createSessionBranch({ params: { id: sessionId }, body: { name } });
+  assertApiStatus(res, 200, 'Failed to create branch');
+  return res.body;
+}
+
+export async function undoDiscardSession(sessionId: string): Promise<{ success: boolean }> {
+  const res = await api.undoDiscard({ params: { id: sessionId }, body: {} });
+  assertApiStatus(res, 200, 'Failed to undo discard');
   return res.body;
 }

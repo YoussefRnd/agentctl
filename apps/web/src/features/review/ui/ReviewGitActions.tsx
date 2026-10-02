@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Dialog,
@@ -19,15 +19,15 @@ import {
 } from '@primer/octicons-react';
 import { Check, ChevronDown, Loader2 } from 'lucide-react';
 
-type PendingAction = 'commit' | 'commit-push' | 'push' | 'pull' | 'switch' | null;
+type PendingAction = 'commit' | 'commit-push' | 'push' | 'pull' | 'switch' | 'fetch' | null;
 
 interface ReviewGitActionsProps {
   branch: string | null;
   branches: string[];
-  remoteName: string | null;
   hasBranchChanges: boolean;
   stagedCount: number;
   unstagedCount: number;
+  uncommittedCount?: number;
   additions: number;
   deletions: number;
   aheadCount: number;
@@ -39,12 +39,14 @@ interface ReviewGitActionsProps {
   commitMessage: string;
   onCommitMessageChange: (value: string) => void;
   onSwitchBranch: (branch: string) => Promise<void>;
-  onCommit: () => Promise<void>;
-  onStageAll: () => Promise<void>;
+  onCommit: (message: string, includeUnstaged?: boolean) => Promise<void>;
   onPush: () => Promise<void>;
   onPull: () => Promise<void>;
   onOpenPullRequestDialog: () => void;
-  onGenerateSummary?: () => Promise<string>;
+  onFetch?: () => Promise<void>;
+  onCreateBranch?: (name: string) => Promise<void>;
+  lastFetchedAt?: string | null;
+  workspaceBusy?: boolean;
   existingPullRequest?: { number: number; url: string };
   pullRequestBlockedReason?: string;
   onApplySession: () => void;
@@ -54,10 +56,10 @@ interface ReviewGitActionsProps {
 export function ReviewGitActions({
   branch,
   branches,
-  remoteName: _remoteName,
-  hasBranchChanges: _hasBranchChanges,
+  hasBranchChanges,
   stagedCount,
   unstagedCount,
+  uncommittedCount,
   additions,
   deletions,
   aheadCount,
@@ -70,25 +72,38 @@ export function ReviewGitActions({
   onCommitMessageChange,
   onSwitchBranch,
   onCommit,
-  onStageAll,
   onPush,
   onPull,
   onOpenPullRequestDialog,
-  onGenerateSummary,
+  onFetch,
+  onCreateBranch,
+  lastFetchedAt,
+  workspaceBusy = false,
   existingPullRequest,
   pullRequestBlockedReason,
-  onApplySession: _onApplySession,
-  onDiscardChanges: _onDiscardChanges,
+  onApplySession,
+  onDiscardChanges,
 }: ReviewGitActionsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
-  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
+  const [newBranch, setNewBranch] = useState('');
+  const inFlight = useRef(false);
+  const [allowBaseBranchPush, setAllowBaseBranchPush] = useState(() => {
+    try {
+      return localStorage.getItem('agentctl.allowBaseBranchPush') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [includeUnstaged, setIncludeUnstaged] = useState(true);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const includedCount = stagedCount + (includeUnstaged ? unstagedCount : 0);
-  const isBusy = pendingAction !== null;
+  const includedCount = includeUnstaged
+    ? (uncommittedCount ?? stagedCount + unstagedCount)
+    : stagedCount;
+  const isBusy = pendingAction !== null || workspaceBusy;
   const isDiverged = aheadCount > 0 && behindCount > 0;
 
   const run = async (
@@ -96,6 +111,8 @@ export function ReviewGitActions({
     operation: () => Promise<void>,
     closeOnSuccess = true,
   ) => {
+    if (inFlight.current || workspaceBusy) return;
+    inFlight.current = true;
     try {
       setError(null);
       setPendingAction(action);
@@ -106,6 +123,7 @@ export function ReviewGitActions({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      inFlight.current = false;
       setPendingAction(null);
     }
   };
@@ -113,20 +131,9 @@ export function ReviewGitActions({
   const commit = async (pushAfterCommit: boolean) => {
     if (includedCount === 0) return;
     await run(pushAfterCommit ? 'commit-push' : 'commit', async () => {
-      let finalMessage = commitMessage.trim();
-      if (!finalMessage && onGenerateSummary) {
-        finalMessage = await onGenerateSummary();
-        onCommitMessageChange(finalMessage);
-      }
-      if (!finalMessage) {
-        finalMessage = 'feat: update workspace changes';
-        onCommitMessageChange(finalMessage);
-      }
-
-      if (includeUnstaged && unstagedCount > 0) {
-        await onStageAll();
-      }
-      await onCommit();
+      const finalMessage = commitMessage.trim();
+      if (!finalMessage) throw new Error('Enter a commit message');
+      await onCommit(finalMessage, includeUnstaged);
       if (pushAfterCommit) {
         try {
           await onPush();
@@ -199,6 +206,34 @@ export function ReviewGitActions({
               }}
             />
             <ActionRow
+              icon={<GitBranchIcon className="h-4 w-4" />}
+              label="Switch or create branch"
+              disabled={isBusy}
+              onClick={() => {
+                setMenuOpen(false);
+                setError(null);
+                setBranchDialogOpen(true);
+              }}
+            />
+            <ActionRow
+              icon={<RepoPullIcon className="h-4 w-4" />}
+              label={pendingAction === 'fetch' ? 'Fetching…' : 'Fetch remote changes'}
+              disabled={!canPush || !onFetch || isBusy}
+              onClick={() => {
+                if (onFetch) void run('fetch', onFetch, false);
+              }}
+            />
+            <p className="text-text-muted px-2 py-1 text-[10px]">
+              {lastFetchedAt
+                ? `Last fetched ${new Date(lastFetchedAt).toLocaleString()}`
+                : 'Remote information has not been refreshed yet.'}
+            </p>
+            {error && (
+              <p role="alert" className="text-danger px-2 py-1 text-xs">
+                {error}
+              </p>
+            )}
+            <ActionRow
               icon={<GitPullRequestIcon className="h-4 w-4" />}
               label={
                 existingPullRequest
@@ -212,10 +247,105 @@ export function ReviewGitActions({
               title={pullRequestBlockedReason}
               onClick={openPullRequest}
             />
+            <ActionRow
+              icon={<Check className="h-4 w-4" />}
+              label="Apply session changes"
+              disabled={!hasBranchChanges || isLoadingGitStatus || isBusy}
+              onClick={() => {
+                setMenuOpen(false);
+                onApplySession();
+              }}
+            />
+            <ActionRow
+              icon={<RepoPullIcon className="h-4 w-4" />}
+              label="Discard session changes"
+              danger
+              disabled={!hasBranchChanges || isLoadingGitStatus || isBusy}
+              onClick={() => {
+                setMenuOpen(false);
+                onDiscardChanges();
+              }}
+            />
           </PopoverContent>
         </Popover>
       </div>
 
+      <Dialog
+        open={branchDialogOpen}
+        onOpenChange={(open) => {
+          if (!isBusy) {
+            setBranchDialogOpen(open);
+            setError(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Switch or create branch</DialogTitle>
+            <DialogDescription>
+              Switching requires a clean workspace. Creating a branch keeps your current files and
+              changes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <input
+              aria-label="New branch name"
+              value={newBranch}
+              onChange={(event) => setNewBranch(event.target.value)}
+              placeholder="feature/my-change"
+              disabled={isBusy}
+              className="border-border bg-surface-secondary text-text-main min-w-0 flex-1 rounded border px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              disabled={!newBranch.trim() || !onCreateBranch || isBusy}
+              className="bg-accent text-brand-mantle shrink-0 rounded px-3 py-2 text-xs font-medium disabled:opacity-40"
+              onClick={() => {
+                if (onCreateBranch)
+                  void run(
+                    'switch',
+                    async () => {
+                      await onCreateBranch(newBranch.trim());
+                      setNewBranch('');
+                      setBranchDialogOpen(false);
+                    },
+                    false,
+                  );
+              }}
+            >
+              Create branch
+            </button>
+          </div>
+          <div className="max-h-60 overflow-auto">
+            {branches.map((name) => (
+              <button
+                key={name}
+                type="button"
+                disabled={isBusy || name === branch}
+                className="hover:bg-surface-secondary block w-full rounded p-2 text-left text-sm"
+                onClick={() => {
+                  void run(
+                    'switch',
+                    async () => {
+                      await onSwitchBranch(name);
+                      setBranchDialogOpen(false);
+                    },
+                    false,
+                  );
+                }}
+              >
+                {name}
+                {name === branch ? ' (current)' : ''}
+              </button>
+            ))}
+          </div>
+          {error && (
+            <p role="alert" className="text-danger text-xs">
+              {error}
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
       {/* Codex-style Commit Popover Dialog */}
       <Dialog
         open={commitDialogOpen}
@@ -235,50 +365,10 @@ export function ReviewGitActions({
 
             {/* Top row: Branch selector */}
             <div className="flex items-center justify-between">
-              <Popover open={branchMenuOpen} onOpenChange={setBranchMenuOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Current branch"
-                    className="border-border/20 bg-surface-secondary/40 text-text-main hover:bg-surface-secondary/70 inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 font-mono text-xs font-medium transition-colors"
-                  >
-                    <GitBranchIcon className="text-text-muted h-3.5 w-3.5" />
-                    <span className="max-w-44 truncate">{branch ?? 'main'}</span>
-                    <ChevronDown className="text-text-muted/60 h-3 w-3" />
-                  </button>
-                </PopoverTrigger>
-
-                <PopoverContent
-                  align="start"
-                  sideOffset={4}
-                  className="border-border/30 bg-brand-mantle/98 w-56 rounded-xl border p-1 shadow-2xl backdrop-blur-xl"
-                >
-                  <div className="text-text-muted/70 px-2 py-1 text-[10px] font-semibold tracking-wider uppercase">
-                    Commit to
-                  </div>
-                  <div className="max-h-48 space-y-0.5 overflow-y-auto">
-                    {branches.map((b) => (
-                      <button
-                        key={b}
-                        type="button"
-                        onClick={() => {
-                          setBranchMenuOpen(false);
-                          if (b !== branch) {
-                            void run('switch', () => onSwitchBranch(b), false);
-                          }
-                        }}
-                        className="hover:bg-surface-secondary/70 text-text-main flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left font-mono text-xs transition-colors"
-                      >
-                        <span className="flex min-w-0 items-center gap-2 truncate">
-                          <GitBranchIcon className="text-text-muted h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{b}</span>
-                        </span>
-                        {b === branch && <Check className="text-accent h-3.5 w-3.5 shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <span className="text-text-main inline-flex items-center gap-2 font-mono text-xs">
+                <GitBranchIcon />
+                {branch ?? 'No branch'}
+              </span>
 
               <div className="text-text-muted flex items-center gap-1.5 font-mono text-[10px]">
                 {aheadCount > 0 && <span className="text-success">↑{aheadCount}</span>}
@@ -303,7 +393,8 @@ export function ReviewGitActions({
                 disabled={isBusy}
                 rows={3}
                 aria-label="Commit message"
-                placeholder="Message (leave blank to generate)..."
+                aria-required="true"
+                placeholder="Commit message"
                 autoFocus
                 className="border-border/20 bg-surface-secondary/25 text-text-main placeholder:text-text-muted/45 focus:border-accent/45 w-full resize-none rounded-xl border px-3 py-2 text-xs leading-relaxed transition-colors outline-none disabled:opacity-50"
               />
@@ -337,12 +428,33 @@ export function ReviewGitActions({
               </p>
             )}
 
+            {isBaseBranch && canPush && (
+              <label className="text-text-muted flex gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={allowBaseBranchPush}
+                  disabled={isBusy}
+                  onChange={(event) => {
+                    setAllowBaseBranchPush(event.target.checked);
+                    try {
+                      localStorage.setItem(
+                        'agentctl.allowBaseBranchPush',
+                        String(event.target.checked),
+                      );
+                    } catch {
+                      /* Storage can be unavailable. */
+                    }
+                  }}
+                />
+                Allow pushing to the base branch
+              </label>
+            )}
             {/* Stacked Action Options */}
             <div className="border-border/15 space-y-1 border-t pt-2">
               {/* 1. Commit primary action */}
               <button
                 type="button"
-                disabled={includedCount === 0 || isBusy}
+                disabled={includedCount === 0 || !commitMessage.trim() || isBusy}
                 onClick={() => {
                   void commit(false);
                 }}
@@ -364,7 +476,14 @@ export function ReviewGitActions({
               {/* 2. Commit and push action */}
               <button
                 type="button"
-                disabled={includedCount === 0 || !canPush || isBaseBranch || isDiverged || isBusy}
+                disabled={
+                  includedCount === 0 ||
+                  !commitMessage.trim() ||
+                  !canPush ||
+                  (isBaseBranch && !allowBaseBranchPush) ||
+                  isDiverged ||
+                  isBusy
+                }
                 onClick={() => {
                   void commit(true);
                 }}
@@ -384,7 +503,7 @@ export function ReviewGitActions({
               {canPush && (aheadCount > 0 || !hasUpstream) && (
                 <button
                   type="button"
-                  disabled={isBaseBranch || isDiverged || isBusy}
+                  disabled={(isBaseBranch && !allowBaseBranchPush) || isDiverged || isBusy}
                   onClick={() => {
                     void run('push', onPush);
                   }}

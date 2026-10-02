@@ -6,20 +6,15 @@ import {
   Check,
   ChevronDown,
   Menu,
+  WrapText,
 } from 'lucide-react';
 import { Dropdown, SearchBar, Tooltip, cn } from '@agentctl/ui';
 import { useMemo, type ChangeEvent, type ReactNode } from 'react';
 import type { ReviewScope } from '../model/useReviewUIStore';
 import { FileIcon } from '@/shared';
 
-export type FileState =
-  'untracked' | 'staged' | 'modified' | 'deleted' | 'committed' | 'conflicted';
-
-export interface ReviewFile {
-  path: string;
-  state: FileState;
-  diff: string;
-}
+import type { ReviewFile, ReviewFileState as FileState } from '@agentctl/shared';
+export type { ReviewFile, ReviewFileState as FileState } from '@agentctl/shared';
 
 export interface ScopeCounts {
   uncommitted: number;
@@ -42,6 +37,8 @@ export interface ReviewHeaderProps {
   onScopeChange: (scope: ReviewScope) => void;
   scopeCounts: ScopeCounts;
   viewMode: 'inline' | 'split';
+  wrapLines: boolean;
+  onToggleWrapLines: () => void;
   onToggleViewMode: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
@@ -67,6 +64,8 @@ export function ReviewHeader({
   scopeCounts,
   viewMode,
   onToggleViewMode,
+  wrapLines,
+  onToggleWrapLines,
   searchQuery,
   onSearchChange,
   allCollapsed,
@@ -129,8 +128,8 @@ export function ReviewHeader({
 
   return (
     <div className="border-border/20 bg-surface-secondary/20 sticky top-0 z-20 shrink-0 space-y-2 border-b p-2 backdrop-blur-md">
-      {/* Top Toolbar Row: Scope Selector (Left) + Jump to file + View Mode + Stage All + Collapse (Right) */}
-      <div className="flex items-center justify-between gap-1.5">
+      {/* Scope, navigation, display options, and Git actions */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
         {/* Scope Dropdown */}
         <Dropdown.Root>
           <Dropdown.Trigger asChild>
@@ -139,9 +138,6 @@ export function ReviewHeader({
               className="motion-disclosure text-text-main hover:bg-surface/60 border-border/20 data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-xs font-medium"
             >
               <span>{currentOption.label}</span>
-              <span className="text-text-muted/60 font-mono text-[10px] tabular-nums">
-                {currentOption.count}
-              </span>
               <ChevronDown className="text-text-muted/50 h-3.5 w-3.5" />
             </button>
           </Dropdown.Trigger>
@@ -170,7 +166,7 @@ export function ReviewHeader({
           </Dropdown.Portal>
         </Dropdown.Root>
 
-        {/* Right Action Suite: Option A (View Controls -> Divider -> Git Actions) */}
+        {/* Navigation and actions */}
         <div className="flex shrink-0 items-center gap-1.5">
           {/* 1. View & Navigation Controls */}
           {/* Jump to File Picker (3 equal lines icon) */}
@@ -184,7 +180,6 @@ export function ReviewHeader({
                     aria-label="Jump to file"
                   >
                     <Menu className="h-3.5 w-3.5" />
-                    <span className="font-mono text-[10px] tabular-nums">{files.length}</span>
                   </button>
                 </Dropdown.Trigger>
               </Tooltip>
@@ -219,14 +214,16 @@ export function ReviewHeader({
                           >
                             {badge.letter}
                           </span>
-                          <span className="text-text-main truncate font-mono text-xs font-medium">
-                            {fileName}
-                          </span>
-                          {dirPath && (
-                            <span className="text-text-muted/40 truncate font-mono text-[10px]">
-                              {dirPath}/
+                          <span className="flex min-w-0 flex-col" title={file.path}>
+                            <span className="text-text-main truncate font-mono text-xs font-medium">
+                              {fileName}
                             </span>
-                          )}
+                            {dirPath && (
+                              <span className="text-text-muted/50 truncate font-mono text-[10px]">
+                                {dirPath}/
+                              </span>
+                            )}
+                          </span>
                         </div>
 
                         {stats && (stats.additions > 0 || stats.deletions > 0) && (
@@ -247,62 +244,67 @@ export function ReviewHeader({
             </Dropdown.Root>
           )}
 
-          {/* Expand / Collapse All */}
-          {files.length > 0 && (
-            <Tooltip content={allCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}>
+          <Dropdown.Root>
+            <Dropdown.Trigger asChild>
               <button
                 type="button"
-                onClick={onToggleAll}
-                className="border-border/20 bg-surface/50 text-text-muted/70 hover:text-text-main hover:bg-surface-secondary flex h-6.5 w-6.5 cursor-pointer items-center justify-center rounded-md border transition-colors active:scale-[0.95]"
-                aria-label={allCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
+                aria-label="Diff display options"
+                className="motion-disclosure border-border/20 bg-surface/50 text-text-muted hover:text-text-main data-[state=open]:bg-accent/10 flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px]"
               >
-                {allCollapsed ? (
-                  <ChevronsUpDown className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronsDownUp className="h-3.5 w-3.5" />
+                <span>View</span>
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </Dropdown.Trigger>
+            <Dropdown.Portal>
+              <Dropdown.Content align="end" className="min-w-44">
+                {(['inline', 'split'] as const).map((mode) => (
+                  <Dropdown.Item
+                    key={mode}
+                    role="menuitemradio"
+                    aria-checked={viewMode === mode}
+                    onSelect={() => {
+                      if (viewMode !== mode) onToggleViewMode();
+                    }}
+                    className="gap-2"
+                  >
+                    {mode === 'inline' ? (
+                      <Rows className="h-3.5 w-3.5" />
+                    ) : (
+                      <Columns className="h-3.5 w-3.5" />
+                    )}
+                    <span className="flex-1">
+                      {mode === 'inline' ? 'Inline diff' : 'Split diff'}
+                    </span>
+                    {viewMode === mode && <Check className="text-accent h-3.5 w-3.5" />}
+                  </Dropdown.Item>
+                ))}
+                <Dropdown.Separator />
+                <Dropdown.Item
+                  role="menuitemcheckbox"
+                  aria-checked={wrapLines}
+                  onSelect={onToggleWrapLines}
+                  className="gap-2"
+                >
+                  <WrapText className="h-3.5 w-3.5" />
+                  <span className="flex-1">Wrap lines</span>
+                  {wrapLines && <Check className="text-accent h-3.5 w-3.5" />}
+                </Dropdown.Item>
+                {files.length > 0 && (
+                  <>
+                    <Dropdown.Separator />
+                    <Dropdown.Item onSelect={onToggleAll} className="gap-2">
+                      {allCollapsed ? (
+                        <ChevronsUpDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronsDownUp className="h-3.5 w-3.5" />
+                      )}
+                      {allCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
+                    </Dropdown.Item>
+                  </>
                 )}
-              </button>
-            </Tooltip>
-          )}
-
-          {/* Compact View Mode (Inline / Split) */}
-          <div className="border-border/20 bg-surface/50 flex items-center overflow-hidden rounded-md border p-0.5">
-            <Tooltip content="Inline diff view">
-              <button
-                type="button"
-                onClick={() => {
-                  if (viewMode !== 'inline') onToggleViewMode();
-                }}
-                className={`flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded transition-colors ${
-                  viewMode === 'inline'
-                    ? 'bg-surface-accent text-accent shadow-xs'
-                    : 'text-text-muted/60 hover:text-text-main'
-                }`}
-                aria-label="Inline diff view"
-              >
-                <Rows className="h-3.5 w-3.5" />
-              </button>
-            </Tooltip>
-            <Tooltip content="Split side-by-side view">
-              <button
-                type="button"
-                onClick={() => {
-                  if (viewMode !== 'split') onToggleViewMode();
-                }}
-                className={`flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded transition-colors ${
-                  viewMode === 'split'
-                    ? 'bg-surface-accent text-accent shadow-xs'
-                    : 'text-text-muted/60 hover:text-text-main'
-                }`}
-                aria-label="Split side-by-side view"
-              >
-                <Columns className="h-3.5 w-3.5" />
-              </button>
-            </Tooltip>
-          </div>
-
-          {/* Subtle Vertical Divider */}
-          <div className="bg-border/25 mx-0.5 h-3.5 w-px" />
+              </Dropdown.Content>
+            </Dropdown.Portal>
+          </Dropdown.Root>
 
           {/* 2. Git Actions Suite */}
           {/* Stage All / Unstage All pill */}

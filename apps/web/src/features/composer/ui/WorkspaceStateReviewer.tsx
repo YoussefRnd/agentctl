@@ -10,6 +10,7 @@ import { CommandDropdown } from './CommandDropdown';
 import { formatTokenCount } from '@/shared/lib/formatTokenCount';
 
 function formatBranchName(branch: string) {
+  if (branch === 'HEAD') return 'Detached HEAD';
   if (branch.startsWith('agentctl/')) {
     const parts = branch.split('/');
     if (parts.length >= 3) {
@@ -251,6 +252,7 @@ export function CommandBarFooter({
 }) {
   const { pushChanges, pullChanges, isPushing, isPulling, reviewData } = useSession();
   const { gitStatus } = useGitStatus(sessionData?.session.id ?? '');
+  const currentBranch = gitStatus.branch ?? sessionData?.session.branch ?? '';
   const hasUncommittedChanges = reviewData.files.some((file) => file.state !== 'committed');
   const canUseRemote =
     gitStatus.isRepo &&
@@ -370,7 +372,7 @@ export function CommandBarFooter({
           )}
 
           <CommandDropdown
-            value={sessionData?.session.branch ?? ''}
+            value={currentBranch}
             disabled={isSwitchingBranch}
             onChange={(val) => {
               void switchBranch(val);
@@ -382,12 +384,11 @@ export function CommandBarFooter({
                 value: b,
                 label: formatBranchName(b),
               })),
-              ...(sessionData?.session.branch &&
-              (branches.length === 0 || !branches.includes(sessionData.session.branch))
+              ...(currentBranch && !branches.includes(currentBranch)
                 ? [
                     {
-                      value: sessionData.session.branch,
-                      label: formatBranchName(sessionData.session.branch),
+                      value: currentBranch,
+                      label: formatBranchName(currentBranch),
                     },
                   ]
                 : []),

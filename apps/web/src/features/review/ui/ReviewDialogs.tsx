@@ -44,7 +44,7 @@ export function ReviewDialogs({
       <ConfirmationModal
         isOpen={isDiscardModalOpen}
         title="Discard all changes?"
-        message="This will permanently revert all modifications in this workspace. This action cannot be undone."
+        message="Discard this session’s changes and finish the session. A recovery copy will be kept until you delete the session."
         confirmText="Discard Changes"
         cancelText="Cancel"
         type="brand-red"

@@ -1,3 +1,8 @@
+import {
+  reviewResponseSchema,
+  reviewDiffScopeSchema,
+  gitObjectHashSchema,
+} from '../schemas/review.js';
 import { z } from 'zod';
 import {
   createSessionSchema,
@@ -7,7 +12,6 @@ import {
   sessionRowSchema,
 } from '../schemas/session.js';
 import {
-  reviewFileSchema,
   gitStatusSchema,
   createPullRequestBodySchema,
   createPullRequestResultSchema,
@@ -215,15 +219,27 @@ export const sessionsContract = {
     summary: 'Send user input to session',
   },
   getSessionReview: {
+    query: z
+      .object({
+        includeDiffs: z.enum(['true', 'false']).optional(),
+        filePath: z.string().min(1).optional(),
+        scope: reviewDiffScopeSchema.optional(),
+        fromHash: gitObjectHashSchema.optional(),
+        toHash: gitObjectHashSchema.optional(),
+      })
+      .refine(
+        (query) =>
+          (!query.fromHash && !query.toHash) ||
+          (!!query.fromHash && !!query.toHash && !!query.filePath),
+        { message: 'Captured diffs require both hashes and a file path' },
+      ),
     method: 'GET',
     path: '/api/sessions/:id/review',
     pathParams: z.object({
       id: z.uuid(),
     }),
     responses: {
-      200: z.object({
-        files: z.array(reviewFileSchema),
-      }),
+      200: reviewResponseSchema,
     },
     summary: 'Get session review files',
   },
@@ -234,7 +250,7 @@ export const sessionsContract = {
       id: z.uuid(),
     }),
     body: z.object({
-      filePath: z.string(),
+      filePath: z.string().min(1),
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
@@ -248,7 +264,7 @@ export const sessionsContract = {
       id: z.uuid(),
     }),
     body: z.object({
-      filePath: z.string(),
+      filePath: z.string().min(1),
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
@@ -262,7 +278,7 @@ export const sessionsContract = {
       id: z.uuid(),
     }),
     body: z.object({
-      filePath: z.string(),
+      filePath: z.string().min(1),
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
@@ -301,6 +317,7 @@ export const sessionsContract = {
     }),
     body: z.object({
       message: z.string().trim().min(1),
+      includeUnstaged: z.boolean().optional(),
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
@@ -333,6 +350,30 @@ export const sessionsContract = {
       400: z.object({ message: z.string() }),
     },
     summary: 'Pull changes from remote repository',
+  },
+  fetchChanges: {
+    method: 'POST',
+    path: '/api/sessions/:id/git/fetch',
+    pathParams: z.object({ id: z.uuid() }),
+    body: emptyBodySchema,
+    responses: {
+      200: z.object({ success: z.boolean(), output: z.string() }),
+      400: z.object({ message: z.string() }),
+    },
+  },
+  createSessionBranch: {
+    method: 'POST',
+    path: '/api/sessions/:id/git/branches',
+    pathParams: z.object({ id: z.uuid() }),
+    body: z.object({ name: z.string().trim().min(1) }),
+    responses: { 200: z.object({ success: z.boolean() }), 400: z.object({ message: z.string() }) },
+  },
+  undoDiscard: {
+    method: 'POST',
+    path: '/api/sessions/:id/undo-discard',
+    pathParams: z.object({ id: z.uuid() }),
+    body: emptyBodySchema,
+    responses: { 200: z.object({ success: z.boolean() }), 400: z.object({ message: z.string() }) },
   },
   getGitStatus: {
     method: 'GET',

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, memo, useRef } from 'react';
+import { useState, useCallback, useMemo, memo, useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DiffHunk } from '@/shared/lib/diff-parser';
 import { buildSplitRows } from '@/shared/lib/diff-parser';
@@ -7,7 +7,6 @@ import { DiffLine } from './DiffLine';
 import {
   ChevronDown,
   ChevronRight,
-  CheckSquare,
   ExternalLink,
   Copy,
   Check,
@@ -28,95 +27,121 @@ interface DiffBlockProps {
   onOpenFile?: () => void;
   viewMode?: 'inline' | 'split';
   showHeader?: boolean;
+  wrapLines?: boolean;
 }
 
-function VirtualizedInlineHunk({
+function HunkLines({
   hunk,
   language,
   hideOldLineNumber,
   hideNewLineNumber,
+  viewMode,
+  wrapLines,
 }: {
   hunk: DiffHunk;
   language?: string;
-  hideOldLineNumber?: boolean;
-  hideNewLineNumber?: boolean;
+  hideOldLineNumber: boolean;
+  hideNewLineNumber: boolean;
+  viewMode: 'inline' | 'split';
+  wrapLines: boolean;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const virtualizer = useVirtualizer({
-    count: hunk.lines.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 22,
-    overscan: 20,
-  });
-
-  return (
-    <div ref={parentRef} className="custom-scrollbar relative max-h-[600px] overflow-y-auto py-1">
-      <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-        {virtualizer.getVirtualItems().map((virtualItem) => {
-          const line = hunk.lines[virtualItem.index];
-          return (
-            <div
-              key={virtualItem.key}
-              ref={virtualizer.measureElement}
-              data-index={virtualItem.index}
-              className="absolute top-0 left-0 w-full"
-              style={{
-                transform: `translateY(${virtualItem.start}px)`,
-              }}
-            >
-              <DiffLine
-                line={line}
-                language={language}
-                hideOldLineNumber={hideOldLineNumber}
-                hideNewLineNumber={hideNewLineNumber}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
+  const isSplit = viewMode === 'split';
+  const splitRows = useMemo(
+    () => (isSplit ? buildSplitRows(hunk.lines) : []),
+    [hunk.lines, isSplit],
   );
-}
-
-function VirtualizedSplitHunk({
-  splitRows,
-  language,
-}: {
-  splitRows: ReturnType<typeof buildSplitRows>;
-  language?: string;
-}) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const isLarge = hunk.lines.length > 100;
   const virtualizer = useVirtualizer({
-    count: splitRows.length,
+    count: isSplit ? splitRows.length : hunk.lines.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 22,
     overscan: 20,
+    enabled: isLarge,
   });
 
+  // Wrapping and split mode change row heights, including cached offscreen rows.
+  useEffect(() => {
+    virtualizer.measure();
+  }, [virtualizer, wrapLines, viewMode]);
+
+  const longestLine = useMemo(() => {
+    let longest = 0;
+    for (const line of hunk.lines) {
+      let columns = 0;
+      for (const character of line.content) {
+        columns += character === '\t' ? 4 - (columns % 4) : 1;
+      }
+      longest = Math.max(longest, columns);
+    }
+    return longest;
+  }, [hunk.lines]);
+  const gutterWidth = isSplit
+    ? 58
+    : 30 + (hideOldLineNumber ? 0 : 28) + (hideNewLineNumber ? 0 : 28);
+  const columns = isSplit ? 2 : 1;
+  const minWidth = wrapLines
+    ? undefined
+    : `calc(${longestLine * columns}ch + ${gutterWidth * columns}px)`;
+
+  function renderRow(index: number) {
+    if (!isSplit) {
+      return (
+        <DiffLine
+          line={hunk.lines[index]}
+          language={language}
+          hideOldLineNumber={hideOldLineNumber}
+          hideNewLineNumber={hideNewLineNumber}
+          wrapLines={wrapLines}
+        />
+      );
+    }
+    const row = splitRows[index];
+    return (
+      <div data-split-row className="divide-border/10 grid grid-cols-2 divide-x">
+        <DiffLine
+          line={row.left}
+          hideAdded
+          language={language}
+          isSpacer={!row.left}
+          wrapLines={wrapLines}
+        />
+        <DiffLine
+          line={row.right}
+          hideRemoved
+          language={language}
+          isSpacer={!row.right}
+          wrapLines={wrapLines}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div ref={parentRef} className="custom-scrollbar relative max-h-[600px] overflow-y-auto py-1">
-      <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-        {virtualizer.getVirtualItems().map((virtualItem) => {
-          const row = splitRows[virtualItem.index];
-          return (
-            <div
-              key={virtualItem.key}
-              ref={virtualizer.measureElement}
-              data-index={virtualItem.index}
-              className="divide-border/10 absolute top-0 left-0 flex w-full divide-x overflow-x-auto"
-              style={{
-                transform: `translateY(${virtualItem.start}px)`,
-              }}
-            >
-              <div className="min-w-0 flex-1">
-                <DiffLine line={row.left} hideAdded language={language} isSpacer={!row.left} />
+    <div
+      ref={parentRef}
+      data-diff-scroll
+      className={`custom-scrollbar relative overflow-auto py-1 font-mono text-[10.5px] [tab-size:4] ${isLarge ? 'max-h-[600px]' : ''}`}
+    >
+      <div
+        className="relative w-full"
+        style={{ minWidth, height: isLarge ? virtualizer.getTotalSize() : undefined }}
+      >
+        {isLarge
+          ? virtualizer.getVirtualItems().map((virtualItem) => (
+              <div
+                key={virtualItem.key}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
+                className="absolute top-0 left-0 w-full"
+                style={{ transform: `translateY(${virtualItem.start}px)` }}
+              >
+                {renderRow(virtualItem.index)}
               </div>
-              <div className="min-w-0 flex-1">
-                <DiffLine line={row.right} hideRemoved language={language} isSpacer={!row.right} />
-              </div>
-            </div>
-          );
-        })}
+            ))
+          : (isSplit ? splitRows : hunk.lines).map((_, index) => (
+              <div key={index}>{renderRow(index)}</div>
+            ))}
       </div>
     </div>
   );
@@ -132,6 +157,7 @@ export const DiffBlock = memo(function DiffBlock({
   onOpenFile,
   viewMode = 'inline',
   showHeader = true,
+  wrapLines = false,
 }: DiffBlockProps) {
   const language = useMemo(() => getLanguageForPath(path), [path]);
 
@@ -291,9 +317,6 @@ export const DiffBlock = memo(function DiffBlock({
       {!isCollapsed && (
         <div className="divide-border/10 bg-background/20">
           {hunks.map((hunk) => {
-            const splitRows = viewMode === 'split' ? buildSplitRows(hunk.lines) : [];
-            const isLarge = hunk.lines.length > 100;
-
             return (
               <div key={hunk.header} className="group/hunk overflow-hidden">
                 <div className="bg-surface-secondary/10 text-text-muted/30 border-border/10 flex items-center justify-between border-y px-4 py-1.5 font-mono text-[9px] font-black tracking-tight uppercase select-none">
@@ -302,7 +325,7 @@ export const DiffBlock = memo(function DiffBlock({
                       {hunk.header}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/hunk:opacity-100">
+                  <div className="flex items-center gap-1 opacity-60 transition-opacity duration-150 group-hover/hunk:opacity-100 focus-within:opacity-100">
                     <Tooltip content="Quote hunk in chat composer">
                       <button
                         type="button"
@@ -333,74 +356,17 @@ export const DiffBlock = memo(function DiffBlock({
                         <span>Quote</span>
                       </button>
                     </Tooltip>
-
-                    {onStage && (
-                      <Tooltip content="Stage changes">
-                        <button
-                          type="button"
-                          onClick={onStage}
-                          className="bg-accent/10 text-accent hover:bg-accent/20 flex h-5 cursor-pointer items-center gap-1 rounded px-1.5 text-[8px] font-black transition-colors"
-                        >
-                          <CheckSquare className="h-3 w-3" />
-                          <span>Stage</span>
-                        </button>
-                      </Tooltip>
-                    )}
                   </div>
                 </div>
 
-                {isLarge ? (
-                  viewMode === 'inline' ? (
-                    <VirtualizedInlineHunk
-                      hunk={hunk}
-                      language={language}
-                      hideOldLineNumber={!hasOldLineNumbers}
-                      hideNewLineNumber={!hasNewLineNumbers}
-                    />
-                  ) : (
-                    <VirtualizedSplitHunk splitRows={splitRows} language={language} />
-                  )
-                ) : (
-                  <div className="py-1">
-                    {viewMode === 'inline' ? (
-                      hunk.lines.map((line) => (
-                        <DiffLine
-                          key={`${String(line.oldLineNumber ?? '')}-${String(line.newLineNumber ?? '')}-${line.type}-${line.content}`}
-                          line={line}
-                          language={language}
-                          hideOldLineNumber={!hasOldLineNumbers}
-                          hideNewLineNumber={!hasNewLineNumbers}
-                        />
-                      ))
-                    ) : (
-                      /* Horizontally aligned Split View with Spacers */
-                      <div className="divide-border/10 flex divide-x overflow-x-auto">
-                        <div className="min-w-0 flex-1">
-                          {splitRows.map((row, rIdx) => (
-                            <DiffLine
-                              key={`left-${String(rIdx)}-${String(row.left?.oldLineNumber ?? '')}`}
-                              line={row.left}
-                              hideAdded
-                              language={language}
-                              isSpacer={!row.left}
-                            />
-                          ))}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          {splitRows.map((row, rIdx) => (
-                            <DiffLine
-                              key={`right-${String(rIdx)}-${String(row.right?.newLineNumber ?? '')}`}
-                              line={row.right}
-                              hideRemoved
-                              language={language}
-                              isSpacer={!row.right}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <HunkLines
+                  hunk={hunk}
+                  language={language}
+                  hideOldLineNumber={!hasOldLineNumbers}
+                  hideNewLineNumber={!hasNewLineNumbers}
+                  viewMode={viewMode}
+                  wrapLines={wrapLines}
+                />
               </div>
             );
           })}

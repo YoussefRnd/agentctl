@@ -1,3 +1,4 @@
+import { resolveRepositoryContext, type RepositoryContext } from './repository-context.js';
 import type { GitMutex } from './mutex.js';
 import { simpleGit } from 'simple-git';
 import path from 'node:path';
@@ -5,16 +6,16 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { type ReviewFile, parseMultiFileDiff } from './utils.js';
+import type { ReviewFile } from './utils.js';
+import { SnapshotService } from './snapshot-service.js';
+import { resolveWorkspaceFile } from './file-safety.js';
 
 const execFileAsync = promisify(execFile);
 
-export interface RepositoryInfo {
-  selectedPath: string;
-  isGitRepo: boolean;
-  repoRoot: string | null;
-  workdirPrefix: string;
-}
+export type RepositoryInfo = Pick<
+  RepositoryContext,
+  'selectedPath' | 'isGitRepo' | 'repoRoot' | 'workdirPrefix'
+>;
 
 export interface BaseRefInfo {
   ref: string;
@@ -92,6 +93,12 @@ export function parsePorcelainWorktrees(output: string): ListedWorktree[] {
 
 export class WorkspaceManager {
   private baseDir = path.join(os.homedir(), '.agentctl', 'worktrees');
+  private reviewService?: SnapshotService;
+  private readonly prCache = new Map<
+    string,
+    { expiresAt: number; value: ReturnType<WorkspaceManager['detectPullRequest']> }
+  >();
+  private readonly fetchedAt = new Map<string, string>();
 
   constructor(
     private readonly gitMutex: GitMutex,
@@ -104,6 +111,7 @@ export class WorkspaceManager {
 
   public setBaseDir(dir: string): void {
     this.baseDir = dir;
+    this.reviewService = undefined;
   }
 
   private sanitize(input: string): string {
@@ -113,39 +121,18 @@ export class WorkspaceManager {
   // Raw Git helpers encapsulated inside WorkspaceManager
 
   async resolveRepository(selectedPath: string): Promise<RepositoryInfo> {
-    const stats = await fs.stat(selectedPath);
-    if (!stats.isDirectory()) {
-      throw new Error('Selected path is not a directory');
-    }
-
-    const git = simpleGit(selectedPath);
-    const isGitRepo = await git.checkIsRepo().catch(() => false);
-
-    if (!isGitRepo) {
-      return {
-        selectedPath,
-        isGitRepo: false,
-        repoRoot: null,
-        workdirPrefix: '',
-      };
-    }
-
-    const repoRoot = (await git.revparse(['--show-toplevel'])).trim();
-    const rawPrefix = (await git.revparse(['--show-prefix'])).trim();
-    const workdirPrefix = rawPrefix.replace(/\/$/, '');
-
-    return {
-      selectedPath,
-      isGitRepo: true,
+    const {
+      selectedPath: canonicalPath,
+      isGitRepo,
       repoRoot,
       workdirPrefix,
-    };
+    } = await resolveRepositoryContext(selectedPath);
+    return { selectedPath: canonicalPath, isGitRepo, repoRoot, workdirPrefix };
   }
 
   async resolveBaseRef(repoPath: string, preferredRef = 'main'): Promise<BaseRefInfo> {
     const git = simpleGit(repoPath);
-    const branchSummary = await git.branchLocal();
-    const currentBranch = branchSummary.current || 'HEAD';
+    const currentBranch = await this.getCurrentBranch(repoPath);
 
     // If preferredRef is not found in the local repository, fallback to current active branch
     let ref = preferredRef;
@@ -178,8 +165,17 @@ export class WorkspaceManager {
   }
 
   async getCurrentBranch(repoPath: string): Promise<string> {
-    const branchSummary = await simpleGit(repoPath).branchLocal();
-    return branchSummary.current || 'HEAD';
+    const git = simpleGit(repoPath);
+    try {
+      // An unborn branch has a symbolic HEAD but is absent from `git branch`.
+      const branch = (await git.raw(['symbolic-ref', '--quiet', '--short', 'HEAD'])).trim();
+      if (branch) return branch;
+    } catch {
+      // `symbolic-ref --quiet` exits unsuccessfully for a detached checkout.
+    }
+    // Only a valid detached checkout should use the HEAD label.
+    await git.revparse(['--verify', 'HEAD']);
+    return 'HEAD';
   }
 
   async listBranches(repoPath: string): Promise<string[]> {
@@ -454,31 +450,76 @@ export class WorkspaceManager {
     });
   }
 
+  async isCleanWorkspace(repoPath: string, workspacePath: string): Promise<boolean> {
+    return this.gitMutex.run(repoPath, async () =>
+      (await simpleGit(workspacePath).status()).isClean(),
+    );
+  }
+
+  async createBranch(repoPath: string, worktreePath: string, name: string): Promise<void> {
+    await this.gitMutex.run(repoPath, async () => {
+      const git = simpleGit(worktreePath);
+      await git.raw(['check-ref-format', '--branch', name]);
+      await git.raw(['checkout', '-b', name]);
+    });
+  }
+
   async addBranchWorktree(
     repoPath: string,
     sessionId: string,
     branchName: string,
     workdirPrefix = '',
+    startPoint?: string,
+    existingWorktreePath?: string,
   ): Promise<{ path: string; workspacePath: string }> {
     const projectName = this.sanitize(path.basename(repoPath));
     const cleanSessionId = this.sanitize(sessionId);
-    const storagePath = path.join(this.baseDir, projectName, `checkout-${cleanSessionId}`);
+    // Reuse an isolated session's checkout so a branch switch does not orphan
+    // its original directory or discard copied/ignored workspace files.
+    const storagePath = existingWorktreePath
+      ? (await simpleGit(existingWorktreePath).revparse(['--show-toplevel'])).trim()
+      : path.join(this.baseDir, projectName, `checkout-${cleanSessionId}`);
+    if (existingWorktreePath && (await fs.realpath(storagePath)) === (await fs.realpath(repoPath)))
+      throw new Error('Branch switching must use an isolated worktree');
 
     await fs.mkdir(path.dirname(storagePath), { recursive: true });
 
     return await this.gitMutex.run(repoPath, async () => {
-      // Remove existing worktree at this path if any
-      const worktrees = await this.listWorktrees(repoPath);
-      const worktreeExists = worktrees.some((w) => w.path === storagePath);
-      if (worktreeExists) {
-        await this.removeWorktree(repoPath, storagePath);
+      const git = simpleGit(repoPath);
+      await git.raw(['check-ref-format', '--branch', branchName]);
+      const occupied = (await this.listWorktrees(repoPath)).find(
+        (wt) => wt.branch === branchName && wt.path !== storagePath,
+      );
+      if (occupied)
+        throw new Error(
+          'This branch is already checked out. Create a new branch for this workspace.',
+        );
+      const exists = await fs
+        .lstat(storagePath)
+        .then(() => true)
+        .catch(() => false);
+      if (exists) {
+        const current = simpleGit(storagePath);
+        if (!(await current.status()).isClean())
+          throw new Error('Commit or stash changes before switching branches');
+        if ((await current.branchLocal()).current === branchName) {
+          return {
+            path: storagePath,
+            workspacePath: workdirPrefix ? path.join(storagePath, workdirPrefix) : storagePath,
+          };
+        }
+        // Git checkout preserves the directory and rejects unsafe transitions.
+        await current.raw(
+          startPoint ? ['checkout', '-b', branchName, startPoint] : ['checkout', branchName],
+        );
+      } else {
+        await git.raw(
+          startPoint
+            ? ['worktree', 'add', '-b', branchName, storagePath, startPoint]
+            : ['worktree', 'add', storagePath, branchName],
+        );
+        await this.copyWorkspaceFiles(repoPath, storagePath);
       }
-      await fs.rm(storagePath, { recursive: true, force: true }).catch(() => undefined);
-
-      // Use --force so the worktree can be created even if the branch is
-      // currently active in the main project directory. Git allows this —
-      // commits from either location go to the same branch.
-      await simpleGit(repoPath).raw(['worktree', 'add', '--force', storagePath, branchName]);
 
       return {
         path: storagePath,
@@ -554,14 +595,19 @@ export class WorkspaceManager {
     }
   }
 
+  private review(): SnapshotService {
+    return (this.reviewService ??= new SnapshotService(path.join(this.baseDir, '.review-indexes')));
+  }
+
   async getDiff(repoPath: string, worktreePath: string, baseCommit: string): Promise<string> {
-    if (baseCommit === 'none') {
-      return '';
-    }
-    return await this.gitMutex.run(repoPath, async () => {
-      const branchSummary = await simpleGit(worktreePath).branch();
-      const currentBranch = branchSummary.current;
-      return await simpleGit(repoPath).diff([`${baseCommit}...${currentBranch}`]);
+    return this.gitMutex.run(repoPath, async () => {
+      const files = await this.review().getReviewFiles(worktreePath, baseCommit, {
+        scope: 'session',
+      });
+      return files
+        .map((file) => file.diff)
+        .filter(Boolean)
+        .join('\n');
     });
   }
 
@@ -570,107 +616,9 @@ export class WorkspaceManager {
     worktreePath: string,
     baseCommit: string,
   ): Promise<ReviewFile[]> {
-    if (baseCommit === 'none') {
-      return [];
-    }
-    return await this.gitMutex.run(repoPath, async () => {
-      const git = simpleGit(worktreePath);
-      const status = await git.status();
-      const files = new Map<string, ReviewFile>();
-
-      const [stagedDiffsRaw, unstagedDiffsRaw, committedDiffsRaw] = await Promise.all([
-        git.diff(['--cached']).catch(() => ''),
-        git.diff([]).catch(() => ''),
-        git.diff([`${baseCommit}...HEAD`]).catch(() => ''),
-      ]);
-
-      const stagedDiffs = parseMultiFileDiff(stagedDiffsRaw);
-      const unstagedDiffs = parseMultiFileDiff(unstagedDiffsRaw);
-      const committedDiffs = parseMultiFileDiff(committedDiffsRaw);
-      const conflictedSet = new Set(status.conflicted);
-
-      for (const file of status.files) {
-        if (conflictedSet.has(file.path)) {
-          files.set(file.path, {
-            path: file.path,
-            state: 'conflicted',
-            diff:
-              unstagedDiffs.get(file.path) ??
-              stagedDiffs.get(file.path) ??
-              `diff --git a/${file.path} b/${file.path}`,
-          });
-          continue;
-        }
-
-        if (file.index === '?') {
-          const fullPath = path.join(worktreePath, file.path);
-          let content = '';
-          try {
-            content = await fs.readFile(fullPath, 'utf8');
-          } catch {
-            // ignore
-          }
-          const lines = content.split('\n');
-          const header = [
-            `diff --git a/${file.path} b/${file.path}`,
-            `new file mode 100644`,
-            `--- /dev/null`,
-            `+++ b/${file.path}`,
-            `@@ -0,0 +1,${String(lines.length)} @@`,
-          ];
-          const diffLines = lines.map((line) => `+${line}`);
-          const diff = [...header, ...diffLines].join('\n');
-
-          files.set(file.path, {
-            path: file.path,
-            state: 'untracked',
-            diff,
-          });
-          continue;
-        }
-
-        if (file.index !== ' ' && file.index !== '?') {
-          files.set(file.path, {
-            path: file.path,
-            state: 'staged',
-            diff: stagedDiffs.get(file.path) ?? `diff --git a/${file.path} b/${file.path}`,
-          });
-          continue;
-        }
-
-        if (file.working_dir === 'D') {
-          files.set(file.path, {
-            path: file.path,
-            state: 'deleted',
-            diff: unstagedDiffs.get(file.path) ?? `diff --git a/${file.path} b/${file.path}`,
-          });
-          continue;
-        }
-
-        if (file.working_dir === 'M') {
-          files.set(file.path, {
-            path: file.path,
-            state: 'modified',
-            diff: unstagedDiffs.get(file.path) ?? `diff --git a/${file.path} b/${file.path}`,
-          });
-        }
-      }
-
-      const committedFiles = await git
-        .raw(['diff', '--name-only', `${baseCommit}...HEAD`])
-        .catch(() => '');
-      for (const filePath of committedFiles.split('\n').filter(Boolean)) {
-        if (files.has(filePath)) continue;
-
-        files.set(filePath, {
-          path: filePath,
-          state: 'committed',
-          diff: committedDiffs.get(filePath) ?? `diff --git a/${filePath} b/${filePath}`,
-        });
-      }
-
-      return [...files.values()];
-    });
+    return this.gitMutex.run(repoPath, () =>
+      this.review().getReviewFiles(worktreePath, baseCommit, { scope: 'working' }),
+    );
   }
 
   async finalize(
@@ -685,6 +633,15 @@ export class WorkspaceManager {
     await this.gitMutex.run(repoPath, async () => {
       if (action === 'merge') {
         const gitWorktree = simpleGit(worktreePath);
+        const before = await gitWorktree.status();
+        if (before.conflicted.length === 0 && !before.isClean()) {
+          const mergeInProgress = await gitWorktree
+            .raw(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])
+            .then((v) => !!v.trim())
+            .catch(() => false);
+          if (!mergeInProgress)
+            throw new Error('Commit or discard workspace changes before applying the session');
+        }
 
         // Check if there is already a merge in progress (MERGE_HEAD exists)
         let hasMergeHead = false;
@@ -747,12 +704,20 @@ export class WorkspaceManager {
         const originalBranch = await this.getCurrentBranch(repoPath);
 
         // 3. Checkout baseBranch in host and apply the clean merge
+        const hostHead = (await simpleGit(repoPath).revparse(['HEAD'])).trim();
         await simpleGit(repoPath).checkout(baseBranch);
+        const baseHead = (await simpleGit(repoPath).revparse(['HEAD'])).trim();
 
         try {
           await simpleGit(repoPath).merge(['--squash', branchName]);
           try {
-            await simpleGit(repoPath).commit(commitMessage ?? taskSlug);
+            const staged = (await simpleGit(repoPath).diff(['--cached', '--name-only'])).trim();
+            if (staged) {
+              await simpleGit(repoPath).commit(commitMessage ?? taskSlug);
+              if ((await simpleGit(repoPath).revparse(['HEAD'])).trim() === baseHead) {
+                throw new Error('Apply commit failed. Check your commit hooks.');
+              }
+            }
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
             if (
@@ -763,14 +728,18 @@ export class WorkspaceManager {
             }
           }
         } catch (err: unknown) {
-          // Revert host merge state
-          await simpleGit(repoPath)
-            .merge(['--abort'])
-            .catch(() => undefined);
+          // Squash merges do not create MERGE_HEAD. Restore the clean host explicitly.
+          await simpleGit(repoPath).raw(['reset', '--hard', baseHead]);
           if (originalBranch && originalBranch !== baseBranch) {
             await simpleGit(repoPath)
               .checkout(originalBranch)
               .catch(() => undefined);
+          }
+          if (
+            (await this.getCurrentBranch(repoPath)) === originalBranch &&
+            originalBranch !== baseBranch
+          ) {
+            await simpleGit(repoPath).raw(['reset', '--hard', hostHead]);
           }
           throw err;
         }
@@ -781,61 +750,143 @@ export class WorkspaceManager {
         }
       }
 
-      await this.removeWorktreeAndBranch(repoPath, worktreePath, branchName);
+      if (action === 'merge')
+        await this.removeWorktreeAndBranch(repoPath, worktreePath, branchName);
     });
+  }
+
+  async withRepositoryLock<T>(repoPath: string, task: () => Promise<T>): Promise<T> {
+    return this.gitMutex.run(repoPath, task);
   }
 
   async stageFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
-      await simpleGit(worktreePath).raw(['add', filePath]);
+      await resolveWorkspaceFile(worktreePath, filePath);
+      await simpleGit(worktreePath).raw(['--literal-pathspecs', 'add', '--', filePath]);
     });
   }
 
   async revertFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
+      const absPath = await resolveWorkspaceFile(worktreePath, filePath);
       const git = simpleGit(worktreePath);
-      try {
-        await git.raw(['reset', 'HEAD', filePath]);
-      } catch {
-        // Not staged or HEAD has no such file
-      }
-
-      try {
-        await git.raw(['checkout', '--', filePath]);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes('did not match any file') || msg.includes('pathspec')) {
-          // File was newly added and never existed in HEAD -> remove from working directory
-          const absPath = path.resolve(worktreePath, filePath);
-          await fs.rm(absPath, { force: true, recursive: true }).catch(() => {});
-        } else {
-          throw err;
-        }
+      const tracked =
+        (await git.raw(['--literal-pathspecs', 'ls-files', '-z', '--', filePath])).length > 0;
+      const inHead = await git
+        .raw(['--literal-pathspecs', 'ls-tree', '-z', 'HEAD', '--', filePath])
+        .catch(() => '');
+      if (inHead) {
+        await git.raw([
+          '--literal-pathspecs',
+          'restore',
+          '--source=HEAD',
+          '--staged',
+          '--worktree',
+          '--',
+          filePath,
+        ]);
+      } else {
+        if (tracked) await git.raw(['--literal-pathspecs', 'rm', '--cached', '-f', '--', filePath]);
+        const stat = await fs.lstat(absPath).catch(() => null);
+        if (stat?.isDirectory())
+          throw new Error('Discard individual files rather than entire directories');
+        await fs.rm(absPath, { force: true });
       }
     });
   }
 
   async stageAll(repoPath: string, worktreePath: string): Promise<void> {
-    await this.gitMutex.run(repoPath, async () => {
-      await simpleGit(worktreePath).raw(['add', '.']);
-    });
+    await this.gitMutex.run(repoPath, () => simpleGit(worktreePath).raw(['add', '-A', '--', '.']));
   }
 
   async unstageFile(repoPath: string, worktreePath: string, filePath: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
-      await simpleGit(worktreePath).raw(['reset', 'HEAD', filePath]);
+      await resolveWorkspaceFile(worktreePath, filePath);
+      await this.unstagePaths(worktreePath, [filePath]);
     });
+  }
+
+  async unstagePaths(worktreePath: string, paths: string[]): Promise<void> {
+    const git = simpleGit(worktreePath);
+    const hasHead = await git
+      .revparse(['--verify', 'HEAD'])
+      .then(() => true)
+      .catch(() => false);
+    await git.raw(
+      hasHead
+        ? ['--literal-pathspecs', 'reset', 'HEAD', '--', ...paths]
+        : ['--literal-pathspecs', 'rm', '--cached', '-r', '--ignore-unmatch', '--', ...paths],
+    );
   }
 
   async unstageAll(repoPath: string, worktreePath: string): Promise<void> {
+    await this.gitMutex.run(repoPath, () => this.unstagePaths(worktreePath, ['.']));
+  }
+
+  async commit(
+    repoPath: string,
+    worktreePath: string,
+    message: string,
+    includeUnstaged = false,
+  ): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
-      await simpleGit(worktreePath).raw(['reset', 'HEAD']);
+      const git = simpleGit({
+        baseDir: worktreePath,
+        timeout: { block: 120000, stdErr: false, stdOut: false },
+      });
+      if (!message.trim()) throw new Error('A commit message is required');
+      if (includeUnstaged) await git.raw(['add', '-A', '--', '.']);
+      const prefix = (await git.revparse(['--show-prefix'])).trim();
+      const stagedPaths = (await git.raw(['diff', '--cached', '--name-only', '-z', '--no-renames']))
+        .split('\0')
+        .filter(Boolean);
+      if (prefix && stagedPaths.some((filePath) => !filePath.startsWith(prefix))) {
+        throw new Error(
+          'Staged changes outside this project. Unstage them or open the repository root before committing.',
+        );
+      }
+      const before = await git.revparse(['HEAD']).catch(() => '');
+      await git.commit(message);
+      const after = await git.revparse(['HEAD']).catch(() => '');
+      if (after.trim() === before.trim())
+        throw new Error('Git did not create a commit. Check staged changes and commit hooks.');
     });
   }
 
-  async commit(repoPath: string, worktreePath: string, message: string): Promise<void> {
-    await this.gitMutex.run(repoPath, async () => {
-      await simpleGit(worktreePath).commit(message);
+  private async trackingTarget(
+    worktreePath: string,
+  ): Promise<{ branch: string; remote: string; ref: string; configured: boolean }> {
+    const git = simpleGit(worktreePath);
+    const branch = await this.getCurrentBranch(worktreePath);
+    if (!branch || branch === 'HEAD') throw new Error('Check out a branch before synchronizing');
+    const configuredRemote = (
+      await git.raw(['config', '--get', `branch.${branch}.remote`]).catch(() => '')
+    ).trim();
+    const configuredRef = (
+      await git.raw(['config', '--get', `branch.${branch}.merge`]).catch(() => '')
+    ).trim();
+    if (configuredRemote && configuredRef)
+      return { branch, remote: configuredRemote, ref: configuredRef, configured: true };
+    const remotes = await git.getRemotes();
+    const remote = remotes.find((r) => r.name === 'origin') ?? remotes[0];
+    if (!remote) throw new Error('No Git remote is configured for this repository');
+    return { branch, remote: remote.name, ref: `refs/heads/${branch}`, configured: false };
+  }
+
+  async fetch(
+    repoPath: string,
+    worktreePath: string,
+  ): Promise<{ success: boolean; output: string }> {
+    return this.gitMutex.run(repoPath, async () => {
+      const { remote } = await this.trackingTarget(worktreePath);
+      const git = simpleGit({
+        baseDir: worktreePath,
+        timeout: { block: 120000, stdErr: false, stdOut: false },
+      }).env('GIT_TERMINAL_PROMPT', '0');
+      await git.fetch(remote, ['--prune']);
+      this.fetchedAt.set(repoPath, new Date().toISOString());
+      this.prCache.clear();
+      return { success: true, output: `Fetched ${remote}` };
     });
   }
 
@@ -843,25 +894,19 @@ export class WorkspaceManager {
     repoPath: string,
     worktreePath: string,
   ): Promise<{ success: boolean; output: string }> {
-    return await this.gitMutex.run(repoPath, async () => {
-      try {
-        const git = simpleGit(worktreePath);
-        const remotes = await git.getRemotes();
-        if (remotes.length === 0) {
-          throw new Error('No git remotes configured for this repository');
-        }
-        const primaryRemote = remotes.find((remote) => remote.name === 'origin') ?? remotes[0];
-        const branchSummary = await git.branchLocal();
-        const currentBranch = branchSummary.current;
-        if (!currentBranch || currentBranch === 'HEAD') {
-          throw new Error('Cannot push from detached HEAD');
-        }
-        const result = await git.push(['-u', primaryRemote.name, currentBranch]);
-        return { success: true, output: JSON.stringify(result) };
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(`Git push failed: ${message}`);
-      }
+    return this.gitMutex.run(repoPath, async () => {
+      const target = await this.trackingTarget(worktreePath);
+      const git = simpleGit({
+        baseDir: worktreePath,
+        timeout: { block: 120000, stdErr: false, stdOut: false },
+      }).env('GIT_TERMINAL_PROMPT', '0');
+      const result = await git.push([
+        ...(target.configured ? [] : ['--set-upstream']),
+        target.remote,
+        `HEAD:${target.ref}`,
+      ]);
+      this.prCache.clear();
+      return { success: true, output: JSON.stringify(result) };
     });
   }
 
@@ -906,74 +951,31 @@ export class WorkspaceManager {
     repoPath: string,
     worktreePath: string,
   ): Promise<{ success: boolean; output: string }> {
-    return await this.gitMutex.run(repoPath, async () => {
-      try {
-        const git = simpleGit(worktreePath);
-        const remotes = await git.getRemotes();
-        if (remotes.length === 0) {
-          throw new Error('No git remotes configured for this repository');
-        }
-        const primaryRemote = remotes.find((remote) => remote.name === 'origin') ?? remotes[0];
-
-        const branchSummary = await git.branchLocal();
-        const currentBranch = branchSummary.current;
-        if (!currentBranch || currentBranch === 'HEAD') {
-          throw new Error('Cannot pull from detached HEAD');
-        }
-
-        const status = await git.status();
-        if (!status.isClean()) {
-          throw new Error('Cannot pull: worktree has uncommitted changes');
-        }
-
-        const beforeCommit = (await git.revparse(['HEAD'])).trim();
-        const remoteName = primaryRemote.name;
-
-        // Fetch remote updates
-        await git.fetch(remoteName, currentBranch).catch(async () => {
-          await git.fetch();
-        });
-
-        const remoteTrackingRef = `${remoteName}/${currentBranch}`;
-        let targetCommit: string | null = null;
-        try {
-          targetCommit = (await git.revparse([remoteTrackingRef])).trim();
-        } catch {
-          // Tracking ref might not be directly resolveable
-        }
-
-        if (targetCommit) {
-          if (beforeCommit === targetCommit) {
-            return { success: true, output: 'Already up to date.' };
-          }
-
-          const mergeBase = (
-            await git.raw(['merge-base', beforeCommit, targetCommit]).catch(() => '')
-          ).trim();
-          const isAncestor = mergeBase.length > 0 && mergeBase === beforeCommit;
-
-          if (isAncestor) {
-            await git.raw(['merge', '--ff-only', targetCommit]);
-          } else {
-            throw new Error(
-              'Local and remote branches have diverged. Resolve the branch in a terminal before pulling.',
-            );
-          }
-        } else {
-          // Fallback to ff-only pull
-          const pullResult = await git.pull(['--ff-only']);
-          return { success: true, output: JSON.stringify(pullResult) };
-        }
-
-        const afterCommit = (await git.revparse(['HEAD'])).trim();
-        return {
-          success: true,
-          output: `Successfully updated from ${beforeCommit.slice(0, 7)} to ${afterCommit.slice(0, 7)}`,
-        };
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(`Git pull failed: ${message}`);
-      }
+    return this.gitMutex.run(repoPath, async () => {
+      const target = await this.trackingTarget(worktreePath);
+      const git = simpleGit({
+        baseDir: worktreePath,
+        timeout: { block: 120000, stdErr: false, stdOut: false },
+      }).env('GIT_TERMINAL_PROMPT', '0');
+      if (!(await git.status()).isClean())
+        throw new Error('Cannot pull: worktree has uncommitted changes');
+      const before = (await git.revparse(['HEAD'])).trim();
+      await git.fetch(target.remote, target.ref);
+      this.fetchedAt.set(repoPath, new Date().toISOString());
+      const remoteHead = (await git.revparse(['FETCH_HEAD'])).trim();
+      const base = (await git.raw(['merge-base', before, remoteHead]).catch(() => '')).trim();
+      if (remoteHead === before || base === remoteHead)
+        return { success: true, output: 'Already up to date.' };
+      if (base !== before)
+        throw new Error(
+          'Local and remote branches have diverged. Resolve the branch in a terminal before pulling.',
+        );
+      await git.raw(['merge', '--ff-only', remoteHead]);
+      this.prCache.clear();
+      return {
+        success: true,
+        output: `Updated ${before.slice(0, 7)} to ${remoteHead.slice(0, 7)}`,
+      };
     });
   }
 
@@ -1024,6 +1026,7 @@ export class WorkspaceManager {
   async detectPullRequest(
     worktreePath: string,
     branchName?: string,
+    repositoryUrl?: string,
   ): Promise<{
     number: number;
     title: string;
@@ -1033,13 +1036,19 @@ export class WorkspaceManager {
     state: 'open' | 'closed' | 'merged';
   } | null> {
     try {
-      const git = simpleGit(worktreePath);
-      const branch = branchName ?? (await git.branchLocal()).current;
+      const branch = branchName ?? (await this.getCurrentBranch(worktreePath));
       if (!branch) return null;
 
       const { stdout } = await execFileAsync(
         'gh',
-        ['pr', 'view', branch, '--json', 'number,title,url,state,headRefName,baseRefName'],
+        [
+          'pr',
+          'view',
+          branch,
+          ...(repositoryUrl ? ['--repo', repositoryUrl] : []),
+          '--json',
+          'number,title,url,state,headRefName,baseRefName',
+        ],
         { cwd: worktreePath, timeout: 5000 },
       );
       const data = JSON.parse(stdout) as {
@@ -1093,8 +1102,9 @@ export class WorkspaceManager {
       state: 'open' | 'closed' | 'merged';
     } | null;
     error?: string;
+    lastFetchedAt?: string | null;
   }> {
-    return await this.gitMutex.run(repoPath, async () => {
+    const result = await this.gitMutex.run(repoPath, async () => {
       try {
         const git = simpleGit(worktreePath);
         const isRepo = await git.checkIsRepo();
@@ -1113,10 +1123,15 @@ export class WorkspaceManager {
           };
         }
 
-        const branchSummary = await git.branchLocal();
-        const currentBranch = branchSummary.current || null;
+        const currentBranch = await this.getCurrentBranch(worktreePath);
         const remotes = await git.getRemotes(true);
-        const primaryRemote = remotes.find((remote) => remote.name === 'origin') ?? remotes[0];
+        const configuredRemote = (
+          await git.raw(['config', '--get', `branch.${currentBranch}.remote`]).catch(() => '')
+        ).trim();
+        const primaryRemote =
+          remotes.find((remote) => remote.name === configuredRemote) ??
+          remotes.find((remote) => remote.name === 'origin') ??
+          remotes[0];
         const remoteUrl = primaryRemote?.refs.push || primaryRemote?.refs.fetch || '';
         const hasPrimaryRemote = primaryRemote !== undefined;
         const remoteProvider = hasPrimaryRemote
@@ -1149,8 +1164,7 @@ export class WorkspaceManager {
           }
         }
 
-        // Detect active PR
-        const pr = currentBranch ? await this.detectPullRequest(worktreePath, currentBranch) : null;
+        const pr = null;
 
         return {
           isRepo: true,
@@ -1180,6 +1194,29 @@ export class WorkspaceManager {
         };
       }
     });
+    // Network PR lookup runs outside the lock used by local Git mutations.
+    if (result.isRepo && result.branch && result.remoteProvider === 'github') {
+      const git = simpleGit(worktreePath);
+      const remotes = await git.getRemotes(true);
+      const remote = remotes.find((remote) => remote.name === result.remoteName);
+      const repositoryUrl = parseGitHubRemoteUrl(remote?.refs.push || remote?.refs.fetch || '');
+      const key = `${repoPath}:${result.branch}:${repositoryUrl}`;
+      let cached = this.prCache.get(key);
+      if (!cached || cached.expiresAt < Date.now()) {
+        if (this.prCache.size > 100) this.prCache.clear();
+        cached = {
+          expiresAt: Date.now() + 60000,
+          value: this.detectPullRequest(worktreePath, result.branch, repositoryUrl ?? undefined),
+        };
+        this.prCache.set(key, cached);
+      }
+      return {
+        ...result,
+        pr: await cached.value,
+        lastFetchedAt: this.fetchedAt.get(repoPath) ?? null,
+      };
+    }
+    return { ...result, lastFetchedAt: this.fetchedAt.get(repoPath) ?? null };
   }
 
   async createPullRequest(
@@ -1209,9 +1246,11 @@ export class WorkspaceManager {
       }
   > {
     return await this.gitMutex.run(repoPath, async () => {
-      const git = simpleGit(worktreePath);
-      const branchSummary = await git.branchLocal();
-      const head = params.headBranch ?? branchSummary.current;
+      const git = simpleGit({
+        baseDir: worktreePath,
+        timeout: { block: 120000, stdErr: false, stdOut: false },
+      }).env('GIT_TERMINAL_PROMPT', '0');
+      const head = params.headBranch ?? (await this.getCurrentBranch(worktreePath));
       const base = params.baseBranch ?? (await this.getCurrentBranch(repoPath)) ?? 'main';
 
       if (!head || head === 'HEAD') {
@@ -1232,7 +1271,8 @@ export class WorkspaceManager {
       }
 
       const remotes = await git.getRemotes(true);
-      const primaryRemote = remotes.find((remote) => remote.name === 'origin') ?? remotes[0];
+      const target = await this.trackingTarget(worktreePath);
+      const primaryRemote = remotes.find((remote) => remote.name === target.remote);
       if (!primaryRemote) {
         throw new Error('No Git remote is configured for this repository');
       }
@@ -1242,15 +1282,27 @@ export class WorkspaceManager {
         throw new Error('Pull request creation currently supports GitHub remotes only');
       }
 
-      await git.push(['-u', primaryRemote.name, head]);
+      await git.push([primaryRemote.name, `refs/heads/${head}:refs/heads/${head}`]);
+      this.prCache.clear();
 
-      const existingPr = await this.detectPullRequest(worktreePath, head);
+      const existingPr = await this.detectPullRequest(worktreePath, head, repoWebUrl);
       if (existingPr?.state === 'open') {
         return { status: 'already_exists', pr: existingPr };
       }
 
       try {
-        const args = ['pr', 'create', '--title', params.title, '--base', base, '--head', head];
+        const args = [
+          'pr',
+          'create',
+          '--repo',
+          repoWebUrl,
+          '--title',
+          params.title,
+          '--base',
+          base,
+          '--head',
+          head,
+        ];
         if (params.body) {
           args.push('--body', params.body);
         }

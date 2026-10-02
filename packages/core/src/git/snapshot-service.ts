@@ -1,10 +1,13 @@
+import { resolveRepositoryContext } from './repository-context.js';
+import type { ReviewResponse, ReviewDiffScope } from '@agentctl/shared';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import { simpleGit } from 'simple-git';
-import { type ReviewFile } from './utils.js';
+import { type ReviewFile, parseFileStatus } from './utils.js';
 import { GitMutex } from './mutex.js';
+import { resolveWorkspaceFile } from './file-safety.js';
 
 export interface FilePatch {
   path: string;
@@ -27,9 +30,41 @@ export interface RestoreResult {
   restoredFiles: SnapshotFileChange[];
 }
 
+export type { ReviewCapture } from '@agentctl/shared';
+export type SnapshotReview = ReviewResponse;
+
+type ReviewOptions = {
+  includeDiffs?: boolean;
+  filePath?: string;
+  scope?: ReviewDiffScope;
+};
+
+export class SnapshotRestoreError extends Error {
+  constructor(
+    readonly backupHash: string,
+    cause: unknown,
+    readonly rollbackError?: unknown,
+  ) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    const recovery =
+      rollbackError === undefined
+        ? 'The previous files were restored.'
+        : `Rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}. Files may be partially restored.`;
+    super(`Restore failed: ${message}. ${recovery} Recovery snapshot: ${backupHash}`, { cause });
+    this.name = 'SnapshotRestoreError';
+  }
+}
+
+interface TreeEntry {
+  mode: string;
+  size: number;
+}
+
 interface SnapshotContext {
   projectPath: string;
   projectPrefix: string;
+  repositoryRoot: string;
+  userIndexPath: string;
   env: Record<string, string>;
   lockKey: string;
   anchorRef: string;
@@ -39,7 +74,13 @@ export class SnapshotService {
   private baseDir: string;
   private readonly mutex = new GitMutex();
 
-  constructor(baseDir?: string) {
+  private readonly maxDiffBytes: number;
+
+  constructor(baseDir?: string, options: { maxDiffBytes?: number } = {}) {
+    this.maxDiffBytes = options.maxDiffBytes ?? 1024 * 1024;
+    if (!Number.isSafeInteger(this.maxDiffBytes) || this.maxDiffBytes <= 0) {
+      throw new Error('maxDiffBytes must be a positive safe integer');
+    }
     this.baseDir = baseDir ?? path.join(os.homedir(), '.local', 'share', 'agentctl', 'snapshots');
   }
 
@@ -48,33 +89,16 @@ export class SnapshotService {
   }
 
   private async getContext(projectPath: string): Promise<SnapshotContext | null> {
-    const exists = await fs
-      .access(projectPath)
-      .then(() => true)
-      .catch(() => false);
-    if (!exists) {
-      return null;
-    }
-
-    const userGit = simpleGit(projectPath);
-    const isGitRepo = await userGit.checkIsRepo().catch(() => false);
-    if (!isGitRepo) {
-      return null;
-    }
-
-    const canonicalProjectPath = await fs.realpath(projectPath);
-    const repositoryRoot = await fs.realpath((await userGit.revparse(['--show-toplevel'])).trim());
-    const projectPrefix = path
-      .relative(repositoryRoot, canonicalProjectPath)
-      .split(path.sep)
-      .join('/');
-    if (projectPrefix === '..' || projectPrefix.startsWith('../')) {
-      throw new Error('Project path resolves outside its Git worktree');
-    }
-    const gitDir = (await userGit.revparse(['--git-dir'])).trim();
-    const absoluteGitDir = path.isAbsolute(gitDir)
-      ? await fs.realpath(gitDir)
-      : await fs.realpath(path.resolve(projectPath, gitDir));
+    const repository = await resolveRepositoryContext(projectPath).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      },
+    );
+    if (!repository?.isGitRepo) return null;
+    const canonicalProjectPath = repository.selectedPath;
+    const repositoryRoot = repository.repoRoot;
+    const projectPrefix = repository.workdirPrefix;
     const hash = this.projectHash(canonicalProjectPath);
     const indexFile = path.join(this.baseDir, hash, 'index');
     await fs.mkdir(path.dirname(indexFile), { recursive: true });
@@ -82,10 +106,12 @@ export class SnapshotService {
     return {
       projectPath: canonicalProjectPath,
       projectPrefix,
+      repositoryRoot,
+      userIndexPath: repository.indexPath,
       lockKey: canonicalProjectPath,
       anchorRef: `refs/agentctl/snapshots/${hash}`,
       env: {
-        GIT_DIR: absoluteGitDir,
+        GIT_DIR: repository.gitDir,
         GIT_WORK_TREE: canonicalProjectPath,
         GIT_INDEX_FILE: indexFile,
         GIT_AUTHOR_NAME: 'agentctl',
@@ -104,25 +130,48 @@ export class SnapshotService {
     return this.mutex.run(context.lockKey, () => this.trackUnlocked(context));
   }
 
-  private async trackUnlocked(context: SnapshotContext): Promise<string> {
-    const git = simpleGit(context.projectPath).env(context.env);
-    const hasCommits = await git
-      .revparse(['--verify', 'HEAD'])
-      .then(() => true)
-      .catch(() => false);
-    if (hasCommits) {
-      await git.raw(['read-tree', 'HEAD']);
-    } else {
-      await git.raw(['read-tree', '--empty']);
-    }
-
-    await git.raw(['add', '-A']);
-    const treeHash = (await git.raw(['write-tree'])).trim();
+  private async trackUnlocked(context: SnapshotContext, anchor = true): Promise<string> {
+    // Use Git's real worktree scope and index membership for ignore handling.
+    // The private index is refreshed from the user's index, which we never write.
+    const git = simpleGit(context.repositoryRoot).env({
+      ...context.env,
+      GIT_WORK_TREE: context.repositoryRoot,
+    });
+    await fs
+      .copyFile(context.userIndexPath, context.env.GIT_INDEX_FILE)
+      .catch(async (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+        await git.raw(['read-tree', '--empty']);
+      });
+    await git.raw(['--literal-pathspecs', 'add', '-A', '--', context.projectPrefix || '.']);
+    const repositoryTree = await git
+      .raw(['write-tree'])
+      .then((value) => value.trim())
+      .catch(async (error: unknown) => {
+        if (!context.projectPrefix) throw error;
+        // Unmerged entries outside this project cannot affect its snapshot.
+        // Remove only those entries from the private index, leaving the user index untouched.
+        const unmerged = await git.raw(['ls-files', '--unmerged', '-z']);
+        const outside = [
+          ...new Set(
+            unmerged
+              .split('\0')
+              .filter(Boolean)
+              .map((record) => record.slice(record.indexOf('\t') + 1)),
+          ),
+        ].filter((filePath) => !filePath.startsWith(`${context.projectPrefix}/`));
+        if (outside.length === 0) throw error;
+        await git.raw(['update-index', '--force-remove', '--', ...outside]);
+        return (await git.raw(['write-tree'])).trim();
+      });
+    const treeHash = context.projectPrefix
+      ? await this.projectTree(git, context, repositoryTree)
+      : repositoryTree;
     if (!/^[0-9a-f]{40,64}$/i.test(treeHash)) {
       throw new Error('Git returned an invalid snapshot tree hash');
     }
 
-    await this.anchorSnapshot(git, context.anchorRef, treeHash);
+    if (anchor) await this.anchorSnapshot(git, context.anchorRef, treeHash);
     return treeHash;
   }
 
@@ -198,6 +247,7 @@ export class SnapshotService {
     context: SnapshotContext,
     fromHash: string,
     toHash: string,
+    filePath?: string,
   ): Promise<SnapshotComparison> {
     const git = simpleGit(context.projectPath).env(context.env);
     const [fromTree, toTree] = await Promise.all([
@@ -205,8 +255,19 @@ export class SnapshotService {
       this.resolveTreeish(git, context, toHash),
     ]);
 
+    return this.compareTrees(git, fromTree, toTree, filePath);
+  }
+
+  private async compareTrees(
+    git: ReturnType<typeof simpleGit>,
+    fromTree: string,
+    toTree: string,
+    filePath?: string,
+  ): Promise<SnapshotComparison> {
+    if (fromTree === toTree) return { files: [], totalAdditions: 0, totalDeletions: 0 };
     const [statusOutput, numstatOutput] = await Promise.all([
       git.raw([
+        '--literal-pathspecs',
         'diff-tree',
         '-r',
         '--no-commit-id',
@@ -215,8 +276,10 @@ export class SnapshotService {
         '-z',
         fromTree,
         toTree,
+        ...(filePath ? ['--', filePath] : []),
       ]),
       git.raw([
+        '--literal-pathspecs',
         'diff-tree',
         '-r',
         '--no-commit-id',
@@ -225,6 +288,7 @@ export class SnapshotService {
         '-z',
         fromTree,
         toTree,
+        ...(filePath ? ['--', filePath] : []),
       ]),
     ]);
 
@@ -280,8 +344,31 @@ export class SnapshotService {
     if (objectType !== 'commit') {
       throw new Error(`Snapshot ${hash} is a ${objectType}, not a tree or commit`);
     }
-    const revision = context.projectPrefix ? `${hash}:${context.projectPrefix}` : `${hash}^{tree}`;
-    return (await git.raw(['rev-parse', revision])).trim();
+    return this.projectTree(git, context, hash);
+  }
+
+  private async projectTree(
+    git: ReturnType<typeof simpleGit>,
+    context: SnapshotContext,
+    hash: string,
+  ): Promise<string> {
+    if (!context.projectPrefix) return (await git.raw(['rev-parse', `${hash}^{tree}`])).trim();
+    const exists = await git.raw([
+      '--literal-pathspecs',
+      'ls-tree',
+      '-d',
+      '-z',
+      hash,
+      '--',
+      context.projectPrefix,
+    ]);
+    if (exists) return (await git.raw(['rev-parse', `${hash}:${context.projectPrefix}`])).trim();
+    return this.emptyTree(git);
+  }
+
+  private async emptyTree(git: ReturnType<typeof simpleGit>): Promise<string> {
+    await git.raw(['read-tree', '--empty']);
+    return (await git.raw(['write-tree'])).trim();
   }
 
   async getTurnChanges(
@@ -296,40 +383,100 @@ export class SnapshotService {
     projectPath: string,
     fromHash: string,
     toHash: string,
+    filePath?: string,
   ): Promise<ReviewFile[]> {
     const context = await this.getContext(projectPath);
-    if (!context) {
-      return [];
-    }
-
+    if (!context) return [];
+    if (filePath) await resolveWorkspaceFile(context.projectPath, filePath);
     const git = simpleGit(context.projectPath).env(context.env);
-    const [fromTree, toTree] = await Promise.all([
-      this.resolveTreeish(git, context, fromHash),
-      this.resolveTreeish(git, context, toHash),
-    ]);
-    const patches = await this.diffBetween(projectPath, fromHash, toHash);
-    if (patches.length === 0) {
-      return [];
-    }
-
-    const reviewFiles: ReviewFile[] = [];
-    for (const patch of patches) {
-      const fileDiff = await git.diff([fromTree, toTree, '--', patch.path]);
-      const state =
-        patch.status === 'added'
+    const [fromTree, toTree] = await this.mutex.run(context.lockKey, () =>
+      Promise.all([
+        this.resolveTreeish(git, context, fromHash),
+        this.resolveTreeish(git, context, toHash),
+      ]),
+    );
+    // Once tree IDs are resolved, details only read immutable objects and do
+    // not need to hold the capture/restore lock while formatting the patch.
+    const comparison = await this.compareTrees(git, fromTree, toTree, filePath);
+    const files: ReviewFile[] = comparison.files.map((change) => ({
+      ...change,
+      state:
+        change.status === 'added'
           ? 'untracked'
-          : patch.status === 'deleted'
+          : change.status === 'deleted'
             ? 'deleted'
-            : 'modified';
+            : 'modified',
+      diff: '',
+    }));
+    if (filePath && files.length === 0)
+      files.push({ path: filePath, state: 'modified', diff: '', additions: 0, deletions: 0 });
+    await this.fillDiffs(git, fromTree, toTree, files);
+    return files;
+  }
 
-      reviewFiles.push({
-        path: patch.path,
-        state,
-        diff: fileDiff || `diff --git a/${patch.path} b/${patch.path}`,
-      });
+  private async treeEntries(
+    git: ReturnType<typeof simpleGit>,
+    tree: string,
+    paths: string[],
+  ): Promise<Map<string, TreeEntry>> {
+    const entries = new Map<string, TreeEntry>();
+    if (paths.length === 0) return entries;
+    const output = await git.raw([
+      '--literal-pathspecs',
+      'ls-tree',
+      '-r',
+      '-l',
+      '-z',
+      tree,
+      '--',
+      ...paths,
+    ]);
+    for (const record of output.split('\0')) {
+      const tab = record.indexOf('\t');
+      if (tab < 0) continue;
+      const [mode, , , size] = record.slice(0, tab).trim().split(/\s+/);
+      entries.set(record.slice(tab + 1), { mode, size: size === '-' ? 0 : Number(size) });
     }
+    return entries;
+  }
 
-    return reviewFiles;
+  private async fillDiffs(
+    git: ReturnType<typeof simpleGit>,
+    fromTree: string,
+    toTree: string,
+    files: ReviewFile[],
+  ): Promise<void> {
+    const paths = files.map((file) => file.path);
+    const [before, after] = await Promise.all([
+      this.treeEntries(git, fromTree, paths),
+      this.treeEntries(git, toTree, paths),
+    ]);
+    for (const file of files) {
+      if (before.get(file.path)?.mode === '160000' || after.get(file.path)?.mode === '160000') {
+        file.diff = 'Nested repository; review its changes in that repository.';
+      } else if (
+        Math.max(before.get(file.path)?.size ?? 0, after.get(file.path)?.size ?? 0) >
+        this.maxDiffBytes
+      ) {
+        file.diff = 'Diff omitted: exceeds the configured size limit. Open it in the editor.';
+      } else {
+        const diff = await git.raw([
+          '--literal-pathspecs',
+          'diff',
+          '--no-ext-diff',
+          '--no-textconv',
+          '--no-renames',
+          fromTree,
+          toTree,
+          '--',
+          file.path,
+        ]);
+        file.diff =
+          Buffer.byteLength(diff) > this.maxDiffBytes
+            ? 'Diff omitted: exceeds the configured size limit. Open it in the editor.'
+            : diff;
+      }
+    }
   }
 
   async revertFiles(
@@ -369,15 +516,51 @@ export class SnapshotService {
           deletions,
         }));
 
+      await this.validateRestore(context, snapshotTree, backupHash, patches);
       try {
         await this.applySnapshot(context, snapshotTree, patches);
       } catch (error) {
-        await this.rollbackRestore(context, backupHash, patches).catch(() => undefined);
-        throw error;
+        let rollbackError: unknown;
+        try {
+          await this.rollbackRestore(context, backupHash, patches);
+        } catch (failure) {
+          rollbackError = failure;
+        }
+        throw new SnapshotRestoreError(backupHash, error, rollbackError);
       }
 
       return { backupHash, restoredFiles: patches };
     });
+  }
+
+  private async validateRestore(
+    context: SnapshotContext,
+    snapshotTree: string,
+    backupTree: string,
+    patches: FilePatch[],
+  ): Promise<void> {
+    const git = simpleGit(context.projectPath).env(context.env);
+    const paths = patches.map((patch) => patch.path);
+    const trees = await Promise.all([
+      this.treeEntries(git, snapshotTree, paths),
+      this.treeEntries(git, backupTree, paths),
+    ]);
+    // Validate the entire operation before touching any file. A gitlink only
+    // stores a commit ID and cannot back up the nested repository's contents.
+    for (const filePath of paths) {
+      const destination = await resolveWorkspaceFile(context.projectPath, filePath);
+      if (trees.some((tree) => tree.get(filePath)?.mode === '160000')) {
+        throw new Error(
+          `Cannot restore nested repository ${filePath}: its contents are not stored in the snapshot`,
+        );
+      }
+      const stat = await fs.lstat(destination).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
+      if (stat?.isDirectory())
+        throw new Error(`Cannot restore ${filePath}: a directory occupies the file path`);
+    }
   }
 
   private async applySnapshot(
@@ -389,8 +572,7 @@ export class SnapshotService {
     const filesToCheckout: string[] = [];
     for (const patch of patches) {
       if (patch.status === 'added') {
-        await fs.rm(this.resolveProjectFile(context.projectPath, patch.path), {
-          recursive: true,
+        await fs.rm(await resolveWorkspaceFile(context.projectPath, patch.path), {
           force: true,
         });
       } else {
@@ -399,7 +581,9 @@ export class SnapshotService {
     }
 
     if (filesToCheckout.length > 0) {
-      await git.raw(['checkout', snapshotHash, '--', ...filesToCheckout]);
+      for (const filePath of filesToCheckout)
+        await resolveWorkspaceFile(context.projectPath, filePath);
+      await git.raw(['--literal-pathspecs', 'checkout', snapshotHash, '--', ...filesToCheckout]);
     }
   }
 
@@ -412,8 +596,7 @@ export class SnapshotService {
     const filesToCheckout: string[] = [];
     for (const patch of originalPatches) {
       if (patch.status === 'deleted') {
-        await fs.rm(this.resolveProjectFile(context.projectPath, patch.path), {
-          recursive: true,
+        await fs.rm(await resolveWorkspaceFile(context.projectPath, patch.path), {
           force: true,
         });
       } else {
@@ -421,67 +604,102 @@ export class SnapshotService {
       }
     }
     if (filesToCheckout.length > 0) {
-      await git.raw(['checkout', backupHash, '--', ...filesToCheckout]);
+      for (const filePath of filesToCheckout)
+        await resolveWorkspaceFile(context.projectPath, filePath);
+      await git.raw(['--literal-pathspecs', 'checkout', backupHash, '--', ...filesToCheckout]);
     }
   }
 
-  private resolveProjectFile(projectPath: string, filePath: string): string {
-    if (path.isAbsolute(filePath)) {
-      throw new Error(`Snapshot contains an absolute path: ${filePath}`);
-    }
-    const resolved = path.resolve(projectPath, filePath);
-    if (resolved !== projectPath && !resolved.startsWith(`${projectPath}${path.sep}`)) {
-      throw new Error(`Snapshot path escapes the project: ${filePath}`);
-    }
-    return resolved;
+  async getReviewFiles(
+    projectPath: string,
+    initialHash: string,
+    options: ReviewOptions = {},
+  ): Promise<ReviewFile[]> {
+    return (await this.getReview(projectPath, initialHash, options)).files;
   }
 
-  async getReviewFiles(projectPath: string, initialHash: string): Promise<ReviewFile[]> {
-    if (initialHash === 'none') {
-      return [];
-    }
-
+  async getReview(
+    projectPath: string,
+    initialHash: string,
+    options: ReviewOptions = {},
+  ): Promise<SnapshotReview> {
     const context = await this.getContext(projectPath);
-    if (!context) {
-      return [];
-    }
-
+    if (!context) return { files: [] };
     return this.mutex.run(context.lockKey, async () => {
-      const currentHash = await this.trackUnlocked(context);
-      const comparison = await this.compareSnapshotsUnlocked(context, initialHash, currentHash);
-      if (comparison.files.length === 0) {
-        return [];
-      }
-
+      const currentTree = await this.trackUnlocked(context, false);
       const git = simpleGit(context.projectPath).env(context.env);
-      const status = await simpleGit(context.projectPath).status();
-      const initialTree = await this.resolveTreeish(git, context, initialHash);
-      const reviewFiles: ReviewFile[] = [];
-      const conflictedSet = new Set(status.conflicted);
-      const statusByPath = new Map(status.files.map((file) => [file.path, file]));
-
-      for (const patch of comparison.files) {
-        const file = statusByPath.get(patch.path);
-        const state: ReviewFile['state'] = conflictedSet.has(patch.path)
-          ? 'conflicted'
-          : file?.index === '?'
-            ? 'untracked'
-            : file && file.index !== ' '
-              ? 'staged'
-              : file?.working_dir === 'D'
-                ? 'deleted'
-                : file && file.working_dir !== ' '
-                  ? 'modified'
-                  : 'committed';
-        const fileDiff = await git.diff([initialTree, currentHash, '--', patch.path]);
-        reviewFiles.push({
-          path: patch.path,
-          state,
-          diff: fileDiff || `diff --git a/${patch.path} b/${patch.path}`,
+      const userGit = simpleGit(context.projectPath);
+      const hasHead = await userGit
+        .revparse(['--verify', 'HEAD'])
+        .then(() => true)
+        .catch(() => false);
+      const workingTree = hasHead
+        ? await this.resolveTreeish(git, context, 'HEAD')
+        : await this.emptyTree(git);
+      const sessionTree =
+        initialHash === 'none' ? workingTree : await this.resolveTreeish(git, context, initialHash);
+      const [sessionChanges, workingChanges, statusOutput] = await Promise.all([
+        this.compareTrees(git, sessionTree, currentTree),
+        sessionTree === workingTree
+          ? Promise.resolve(null)
+          : this.compareTrees(git, workingTree, currentTree),
+        userGit.raw(['status', '--porcelain=v1', '-z', '--untracked-files=all']),
+      ]);
+      const working = new Map(
+        (workingChanges ?? sessionChanges).files.map((file) => [file.path, file]),
+      );
+      const session = new Map(sessionChanges.files.map((file) => [file.path, file]));
+      const entries = new Map<string, ReviewFile>();
+      for (const change of sessionChanges.files)
+        entries.set(change.path, {
+          path: change.path,
+          state: 'committed',
+          diff: '',
+          hasStagedChanges: false,
+          hasUnstagedChanges: false,
+        });
+      const prefix = context.projectPrefix ? `${context.projectPrefix}/` : '';
+      for (const file of parseFileStatus(statusOutput)) {
+        if (prefix && !file.path.startsWith(prefix)) continue;
+        const filePath = file.path.slice(prefix.length);
+        if (!filePath) continue;
+        const staged = file.index !== ' ' && file.index !== '?';
+        const unstaged = file.working_dir !== ' ';
+        entries.set(filePath, {
+          path: filePath,
+          diff: '',
+          hasStagedChanges: staged,
+          hasUnstagedChanges: unstaged,
+          state: file.conflicted
+            ? 'conflicted'
+            : file.index === '?'
+              ? 'untracked'
+              : unstaged
+                ? file.working_dir === 'D'
+                  ? 'deleted'
+                  : 'modified'
+                : 'staged',
         });
       }
-
-      return reviewFiles;
+      const files = [...entries.values()].filter(
+        (file) => !options.filePath || file.path === options.filePath,
+      );
+      for (const file of files) {
+        const stats = (options.scope === 'working' ? working : session).get(file.path);
+        file.additions = stats?.additions ?? 0;
+        file.deletions = stats?.deletions ?? 0;
+        file.sessionAdditions = session.get(file.path)?.additions ?? 0;
+        file.sessionDeletions = session.get(file.path)?.deletions ?? 0;
+      }
+      if (options.includeDiffs !== false) {
+        await this.fillDiffs(
+          git,
+          options.scope === 'working' ? workingTree : sessionTree,
+          currentTree,
+          files,
+        );
+      }
+      return { files, capture: { currentTree, workingTree, sessionTree } };
     });
   }
 

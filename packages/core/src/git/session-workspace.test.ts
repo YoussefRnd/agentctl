@@ -222,8 +222,8 @@ describe('SessionWorkspace Integration Tests (Mock-Free)', () => {
     });
     expect(archivedRecord?.status).toBe('archived');
 
-    // Verify worktree folder is gone from disk
-    await expect(fs.stat(context.worktreePath)).rejects.toThrow();
+    // Archive retains files and staging so resuming cannot lose uncommitted work.
+    expect((await fs.stat(context.worktreePath)).isDirectory()).toBe(true);
 
     // 5. Activate / Resuscitate Session
     stopSessionCalled = false;

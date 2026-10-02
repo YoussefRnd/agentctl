@@ -5,3 +5,5 @@ export * from './diagnostics.js';
 export * from './state-change.js';
 
 export * from './session-event-page.js';
+
+export * from './review.js';

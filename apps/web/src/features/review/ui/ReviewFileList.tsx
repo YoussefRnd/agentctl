@@ -9,8 +9,9 @@ import {
   Minus,
   Undo2,
   MessageSquarePlus,
+  Ellipsis,
 } from 'lucide-react';
-import { Tooltip, cn } from '@agentctl/ui';
+import { Dropdown, cn } from '@agentctl/ui';
 import { toast } from 'sonner';
 import type { parseDiff } from '@/shared/lib/diff-parser';
 import { FileIcon } from '@/shared';
@@ -56,6 +57,7 @@ export interface ReviewFileListProps {
   collapsedFiles: Record<string, boolean>;
   fileStats: Map<string, { additions: number; deletions: number }>;
   viewMode: 'inline' | 'split';
+  wrapLines?: boolean;
   onToggleSection?: (state: FileState) => void;
   onToggleFile: (path: string) => void;
   onStage?: (path: string) => void;
@@ -76,6 +78,7 @@ export function ReviewFileList({
   collapsedFiles,
   fileStats,
   viewMode,
+  wrapLines = false,
   onToggleFile,
   onStage,
   onUnstage,
@@ -102,6 +105,10 @@ export function ReviewFileList({
         const stats = fileStats.get(file.path) ?? { additions: 0, deletions: 0 };
         const fileName = file.path.split('/').pop() ?? file.path;
         const dirPath = file.path.split('/').slice(0, -1).join('/');
+        const canStage = Boolean(
+          onStage && (file.hasUnstagedChanges ?? !['staged', 'committed'].includes(file.state)),
+        );
+        const canUnstage = Boolean(onUnstage && (file.hasStagedChanges ?? file.state === 'staged'));
         const badge = STATE_BADGE[file.state] ?? STATE_BADGE.modified;
 
         return (
@@ -121,6 +128,9 @@ export function ReviewFileList({
             >
               <button
                 type="button"
+                title={file.path}
+                aria-label={`Toggle diff for ${file.path}`}
+                aria-expanded={!collapsed}
                 onClick={() => {
                   onToggleFile(file.path);
                 }}
@@ -140,103 +150,86 @@ export function ReviewFileList({
                   </span>
                 </div>
 
-                {/* File Name & Path */}
-                <span className="text-text-main truncate font-mono text-xs font-medium">
-                  {fileName}
-                </span>
-                {dirPath && (
-                  <span className="text-text-muted/45 truncate font-mono text-[10px]">
-                    {dirPath}/
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-text-main truncate font-mono text-xs font-medium">
+                    {fileName}
                   </span>
-                )}
+                  {dirPath && (
+                    <span className="text-text-muted/50 truncate font-mono text-[10px]">
+                      {dirPath}/
+                    </span>
+                  )}
+                </span>
               </button>
 
-              {/* Right Zone: Hover Actions + Diff Line Stats + Max-Right Status Letter (VS Code style) */}
               <div className="flex shrink-0 items-center gap-2 pr-3 select-none">
-                {/* Actions: Appear on row hover or when focused within */}
-                <div className="flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover/filerow:opacity-100 focus-within:opacity-100">
-                  {onOpenFile && (
-                    <Tooltip content="Open file in editor">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onOpenFile(file.path);
-                        }}
-                        className="text-text-muted hover:text-text-main flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors hover:bg-white/10 active:scale-[0.95]"
-                        aria-label="Open file in editor"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                      </button>
-                    </Tooltip>
-                  )}
-
-                  {/* Add file context to chat composer */}
-                  <Tooltip content="Add to chat composer">
+                {(canStage || canUnstage) && (
+                  <button
+                    type="button"
+                    aria-label={canStage ? 'Stage file' : 'Unstage file'}
+                    title={`${canStage ? 'Stage' : 'Unstage'} ${file.path}`}
+                    onClick={() => (canStage ? onStage?.(file.path) : onUnstage?.(file.path))}
+                    className="border-accent/20 text-accent hover:bg-accent/15 flex h-6 cursor-pointer items-center gap-1 rounded-md border px-1.5 text-[10px] font-medium transition-colors"
+                  >
+                    {canStage ? <Plus className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                    {canStage ? 'Stage' : 'Unstage'}
+                  </button>
+                )}
+                <Dropdown.Root>
+                  <Dropdown.Trigger asChild>
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        useDraftStore.getState().attachContextToComposer({
-                          id: `file:${file.path}`,
-                          type: 'file',
-                          title: fileName,
-                          subtitle: file.path,
-                          value: file.path,
-                        });
-                        toast.success(`Added @${fileName} to chat`);
-                      }}
-                      className="text-text-muted hover:text-text-main flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors hover:bg-white/10 active:scale-[0.95]"
-                      aria-label="Add to chat composer"
+                      aria-label={`More actions for ${file.path}`}
+                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded-md"
                     >
-                      <MessageSquarePlus className="h-3 w-3" />
+                      <Ellipsis className="h-3.5 w-3.5" />
                     </button>
-                  </Tooltip>
-
-                  {/* Revert / Discard changes (supported across all uncommitted/untracked states) */}
-                  {onRevert && (
-                    <Tooltip content="Discard changes">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onRevert(file.path);
+                  </Dropdown.Trigger>
+                  <Dropdown.Portal>
+                    <Dropdown.Content align="end" className="min-w-44">
+                      {onOpenFile && (
+                        <Dropdown.Item onSelect={() => onOpenFile(file.path)} className="gap-2">
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          Open in editor
+                        </Dropdown.Item>
+                      )}
+                      <Dropdown.Item
+                        className="gap-2"
+                        onSelect={() => {
+                          useDraftStore.getState().attachContextToComposer({
+                            id: `file:${file.path}`,
+                            type: 'file',
+                            title: fileName,
+                            subtitle: file.path,
+                            value: file.path,
+                          });
+                          toast.success(`Added @${fileName} to chat`);
                         }}
-                        className="text-text-muted flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors hover:bg-rose-500/10 hover:text-rose-400 active:scale-[0.95]"
-                        aria-label="Discard changes"
                       >
-                        <Undo2 className="h-3 w-3" />
-                      </button>
-                    </Tooltip>
-                  )}
-
-                  {/* Stage or Unstage */}
-                  {file.state === 'staged' && onUnstage ? (
-                    <Tooltip content="Unstage changes">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onUnstage(file.path);
-                        }}
-                        className="text-text-muted hover:text-accent hover:bg-accent/15 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.95]"
-                        aria-label="Unstage changes"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                    </Tooltip>
-                  ) : onStage ? (
-                    <Tooltip content="Stage changes">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onStage(file.path);
-                        }}
-                        className="text-text-muted hover:text-accent hover:bg-accent/15 flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.95]"
-                        aria-label="Stage changes"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </Tooltip>
-                  ) : null}
-                </div>
+                        <MessageSquarePlus className="h-3.5 w-3.5" />
+                        Add to chat
+                      </Dropdown.Item>
+                      {canStage && canUnstage && (
+                        <Dropdown.Item onSelect={() => onUnstage?.(file.path)} className="gap-2">
+                          <Minus className="h-3.5 w-3.5" />
+                          Unstage file
+                        </Dropdown.Item>
+                      )}
+                      {onRevert && file.state !== 'committed' && (
+                        <>
+                          <Dropdown.Separator />
+                          <Dropdown.Item
+                            onSelect={() => onRevert(file.path)}
+                            className="gap-2 text-rose-400 focus-visible:bg-rose-500/10"
+                          >
+                            <Undo2 className="h-3.5 w-3.5" />
+                            Discard file changes
+                          </Dropdown.Item>
+                        </>
+                      )}
+                    </Dropdown.Content>
+                  </Dropdown.Portal>
+                </Dropdown.Root>
 
                 {/* Diff Line Stats (+N / -N) */}
                 {(stats.additions > 0 || stats.deletions > 0) && (
@@ -266,6 +259,15 @@ export function ReviewFileList({
             {/* Diff content when expanded */}
             {!collapsed && (
               <div className="bg-surface/10">
+                {file.hunks.length === 0 && (
+                  <p className="text-text-muted p-3 text-xs">{file.diff || 'Loading diff…'}</p>
+                )}
+                {file.hasStagedChanges && file.hasUnstagedChanges && (
+                  <p className="text-text-muted p-2 text-xs">
+                    This file has both staged and unstaged changes. Commit includes only the staged
+                    changes unless you include unstaged changes.
+                  </p>
+                )}
                 <DiffBlock
                   path={file.path}
                   hunks={file.hunks}
@@ -273,12 +275,8 @@ export function ReviewFileList({
                   onToggleCollapse={() => {
                     onToggleFile(file.path);
                   }}
-                  onStage={
-                    onStage && file.state !== 'staged' ? () => onStage(file.path) : undefined
-                  }
-                  onRevert={onRevert ? () => onRevert(file.path) : undefined}
-                  onOpenFile={onOpenFile ? () => onOpenFile(file.path) : undefined}
                   viewMode={viewMode}
+                  wrapLines={wrapLines}
                   showHeader={false}
                 />
               </div>

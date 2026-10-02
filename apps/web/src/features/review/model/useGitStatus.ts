@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getGitStatus, createPullRequest } from '@agentctl/api-client';
 import type { CreatePullRequestBody, GitStatus } from '@agentctl/shared';
+import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 
 export function useGitStatus(sessionId: string) {
@@ -21,11 +22,7 @@ export function useGitStatus(sessionId: string) {
 
   const createPullRequestMutation = useMutation({
     mutationFn: (body: CreatePullRequestBody) => createPullRequest(sessionId, body),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.gitStatus(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.branches(sessionId) });
-    },
+    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId),
   });
 
   return {

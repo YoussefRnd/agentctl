@@ -29,12 +29,24 @@ export function ReviewLoadingState() {
   );
 }
 
-export function ReviewClosedState({ sessionStatus }: { sessionStatus?: string }) {
+export function ReviewClosedState({
+  sessionStatus,
+  canRecover,
+  isRecovering,
+  onRecover,
+}: {
+  sessionStatus?: string;
+  canRecover?: boolean;
+  isRecovering?: boolean;
+  onRecover?: () => void;
+}) {
   const outcome =
     sessionStatus === 'merged'
       ? 'All changes were successfully applied to the project.'
       : sessionStatus === 'discarded'
-        ? 'All workspace changes were permanently discarded.'
+        ? canRecover
+          ? 'Session changes were discarded. A recovery copy is available.'
+          : 'Session changes were discarded.'
         : 'This session is archived and its workspace is read-only.';
 
   return (
@@ -52,6 +64,16 @@ export function ReviewClosedState({ sessionStatus }: { sessionStatus?: string })
       <p className="text-text-muted/40 max-w-[260px] text-[10px] leading-relaxed font-bold tracking-widest uppercase">
         {outcome}
       </p>
+      {canRecover && onRecover && (
+        <button
+          type="button"
+          disabled={isRecovering}
+          onClick={onRecover}
+          className="text-accent mt-4 rounded border px-3 py-2 text-sm"
+        >
+          {isRecovering ? 'Recovering…' : 'Recover discarded changes'}
+        </button>
+      )}
     </div>
   );
 }

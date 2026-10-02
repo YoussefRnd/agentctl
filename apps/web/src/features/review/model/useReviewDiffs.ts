@@ -23,7 +23,11 @@ export function useReviewDiffs(
     }
 
     if (statusFilter !== 'all') {
-      list = list.filter((f) => f.state === statusFilter);
+      list = list.filter((f) =>
+        statusFilter === 'staged'
+          ? (f.hasStagedChanges ?? f.state === 'staged')
+          : f.state === statusFilter,
+      );
     }
     return list;
   }, [files, scope, turnFiles, statusFilter]);
@@ -69,7 +73,10 @@ export function useReviewDiffs(
           else if (line.type === 'removed') deletions++;
         });
       });
-      map.set(file.path, { additions, deletions });
+      map.set(file.path, {
+        additions: file.additions ?? additions,
+        deletions: file.deletions ?? deletions,
+      });
     });
     return map;
   }, [parsedFiles]);

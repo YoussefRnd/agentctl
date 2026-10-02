@@ -1,3 +1,4 @@
+import { canMutateWorkspace } from '@agentctl/shared';
 import { eq, asc, inArray, and } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
 import type { WorkspaceManager, Workspace as WorkspaceHandle } from './worktree-manager.js';
@@ -7,6 +8,8 @@ import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
 import { NEW_SESSION_TITLE } from '@agentctl/shared';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
 import { simpleGit } from 'simple-git';
 import { DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 
@@ -198,8 +201,7 @@ export class SessionWorkspace {
       let activeBranch = 'main';
       if (project.repoRoot) {
         try {
-          const baseRefInfo = await this.workspaceManager.resolveBaseRef(project.repoRoot, 'main');
-          activeBranch = baseRefInfo.ref;
+          activeBranch = await this.workspaceManager.getCurrentBranch(project.path);
         } catch {
           // Fallback to main
         }
@@ -338,7 +340,14 @@ export class SessionWorkspace {
     let newBaseCommit = session.baseCommit;
     let newBaseBranch = session.baseBranch;
 
-    if (mode === 'worktree') {
+    if (
+      mode === 'worktree' &&
+      session.status === 'archived' &&
+      session.mode === 'worktree' &&
+      (await fs.stat(session.worktreePath).catch(() => null))?.isDirectory()
+    ) {
+      // Retained archive: keep its branch, baseline, staging, and uncommitted files.
+    } else if (mode === 'worktree') {
       if (!project.repoRoot) {
         throw new Error('Project repo root not set. Cannot establish worktree.');
       }
@@ -366,7 +375,9 @@ export class SessionWorkspace {
     } else {
       // Mode 'local'
       if (session.mode === 'worktree' && project.repoRoot) {
-        // Clean up old worktree if we switched from worktree to local
+        if (!(await this.workspaceManager.isCleanWorkspace(project.repoRoot, session.worktreePath)))
+          throw new Error('Commit or discard changes before switching workspace mode');
+        // Clean up a clean old worktree after a mode switch.
         await this.workspaceManager.removeWorktreeOnly(project.repoRoot, session.worktreePath);
       }
       newWorktreePath = project.path;
@@ -410,9 +421,9 @@ export class SessionWorkspace {
   }
 
   /**
-   * Tears down physical files (deleting worktrees) to reclaim storage,
-   * stops any running agent runtime, and updates the session status in the
-   * database to 'archived'. Event history is preserved.
+   * Stops the agent runtime and archives the session while retaining its
+   * worktree, staging, and event history for resumption. Deleting the session
+   * is the explicit operation that removes its workspace.
    */
   async archive(sessionId: string, options?: { dbTx?: unknown }): Promise<void> {
     const client = (options?.dbTx ?? this.db) as DbClient;
@@ -428,12 +439,6 @@ export class SessionWorkspace {
 
     // 1. Process termination first
     await this.stopSessionFn(sessionId);
-
-    const project = session.project;
-
-    if (session.mode === 'worktree' && project.repoRoot) {
-      await this.workspaceManager.removeWorktreeOnly(project.repoRoot, session.worktreePath);
-    }
 
     await client
       .update(sessions)
@@ -466,6 +471,9 @@ export class SessionWorkspace {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
+    if (!canMutateWorkspace(session.status)) {
+      throw new Error('Stop the active turn before finalizing an idle session');
+    }
     // 1. Process termination first
     await this.stopSessionFn(sessionId);
 
@@ -473,6 +481,12 @@ export class SessionWorkspace {
 
     try {
       if (session.mode === 'worktree') {
+        if (resolution === 'discarded') {
+          await client
+            .update(sessions)
+            .set({ discardBackup: JSON.stringify({ worktree: true }) })
+            .where(eq(sessions.id, sessionId));
+        }
         if (!project.repoRoot) {
           throw new Error('Project repo root not set. Cannot finalize worktree session.');
         }
@@ -488,7 +502,37 @@ export class SessionWorkspace {
       } else {
         // Mode 'local'
         if (resolution === 'discarded') {
-          await this.revertLocalSessionChanges(sessionId, options);
+          await this.workspaceManager.withRepositoryLock(
+            project.repoRoot ?? project.path,
+            async () => {
+              const snapshotHash = await this.getSnapshotService().track(project.path);
+              if (snapshotHash) {
+                const git = simpleGit(project.path);
+                const indexTree = (await git.raw(['write-tree'])).trim();
+                await git.raw([
+                  'update-ref',
+                  `refs/agentctl/discard-index/${sessionId}`,
+                  indexTree,
+                ]);
+                const headCommit = (await git.revparse(['HEAD']).catch(() => '')).trim();
+                await this.revertLocalSessionChanges(sessionId, options);
+                const postSnapshotHash = await this.getSnapshotService().track(project.path);
+                const postIndexTree = (await git.raw(['write-tree'])).trim();
+                await client
+                  .update(sessions)
+                  .set({
+                    discardBackup: JSON.stringify({
+                      snapshotHash,
+                      indexTree,
+                      headCommit,
+                      postSnapshotHash,
+                      postIndexTree,
+                    }),
+                  })
+                  .where(eq(sessions.id, sessionId));
+              }
+            },
+          );
         } else {
           await this.commitLocalSessionChanges(
             sessionId,
@@ -512,6 +556,7 @@ export class SessionWorkspace {
       .update(sessions)
       .set({
         status: resolution === 'merged' ? 'merged' : 'discarded',
+        ...(resolution === 'merged' ? { discardBackup: null } : {}),
         closedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -544,7 +589,14 @@ export class SessionWorkspace {
 
     const project = session.project;
 
+    if (project.repoRoot)
+      await simpleGit(project.repoRoot)
+        .raw(['update-ref', '-d', `refs/agentctl/discard-index/${sessionId}`])
+        .catch(() => undefined);
     if (session.mode === 'worktree' && project.repoRoot) {
+      await this.getSnapshotService()
+        .deleteProjectSnapshots(session.worktreePath)
+        .catch(() => undefined);
       try {
         await this.workspaceManager.cleanup(project.repoRoot, session.worktreePath, session.branch);
       } catch {
@@ -612,6 +664,13 @@ export class SessionWorkspace {
   /** Only clean finalized sessions owned by this database, once per repository. */
   async syncOrphans(activeSessionIds: string[], knownSessionIds: string[]): Promise<void> {
     const allProjects = await this.db.query.projects.findMany();
+    const discarded = await this.db.query.sessions.findMany({
+      where: eq(sessions.status, 'discarded'),
+    });
+    const preservedIds = [
+      ...activeSessionIds,
+      ...discarded.filter((session) => session.discardBackup).map((session) => session.id),
+    ];
     const repositories = new Set(
       allProjects
         .map((project) => project.repoRoot)
@@ -622,7 +681,7 @@ export class SessionWorkspace {
         .checkIsRepo()
         .catch(() => false);
       if (isRepo) {
-        await this.workspaceManager.sync(repoRoot, activeSessionIds, knownSessionIds);
+        await this.workspaceManager.sync(repoRoot, preservedIds, knownSessionIds);
       }
     }
   }
@@ -643,34 +702,113 @@ export class SessionWorkspace {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    if (sessionRecord.project.repoRoot && sessionRecord.baseCommit !== 'none') {
-      const snapshotService = this.getSnapshotService();
-      const patches = await snapshotService.diff(
+    const repository = await this.workspaceManager.resolveRepository(sessionRecord.project.path);
+    if (!repository.isGitRepo || !repository.repoRoot) return;
+    if (
+      sessionRecord.project.repoRoot !== repository.repoRoot ||
+      sessionRecord.project.subdir !== repository.workdirPrefix
+    ) {
+      await client
+        .update(projects)
+        .set({ repoRoot: repository.repoRoot, subdir: repository.workdirPrefix })
+        .where(eq(projects.id, sessionRecord.projectId));
+    }
+    await this.workspaceManager.withRepositoryLock(repository.repoRoot, async () => {
+      const userGit = simpleGit(sessionRecord.project.path);
+      if (sessionRecord.baseCommit === 'none') {
+        // Without a baseline we cannot distinguish session edits from earlier work.
+        // Require an explicit commit rather than silently closing a dirty session.
+        if (!(await userGit.status()).isClean()) {
+          throw new Error(
+            'Git was initialized after this session started. Commit the workspace changes before applying the session.',
+          );
+        }
+        await userGit.revparse(['--verify', 'HEAD']);
+        return;
+      }
+      const patches = await this.getSnapshotService().diff(
         sessionRecord.project.path,
         sessionRecord.baseCommit,
       );
-      if (patches.length > 0) {
-        const git = simpleGit(sessionRecord.project.path);
-
-        const toAdd = patches.filter((p) => p.status !== 'deleted').map((p) => p.path);
-        const toRm = patches.filter((p) => p.status === 'deleted').map((p) => p.path);
-
-        await git.reset();
-
-        if (toAdd.length > 0) {
-          await git.add(toAdd);
-        }
-        if (toRm.length > 0) {
-          await git.rm(toRm).catch(() => undefined);
-        }
-
-        const status = await git.status();
-        const stagedFiles = status.files.filter((f) => f.index !== ' ' && f.index !== '?');
-        if (stagedFiles.length > 0) {
-          await git.commit(message);
-        }
+      if (!patches.length) return;
+      if ((await userGit.status()).conflicted.length)
+        throw new Error('Resolve conflicts before applying');
+      const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-apply-'));
+      try {
+        // A separate index commits selected files and preserves unrelated staging.
+        const git = simpleGit({
+          baseDir: sessionRecord.project.path,
+          timeout: { block: 120000, stdErr: false, stdOut: false },
+        }).env('GIT_INDEX_FILE', path.join(temporary, 'index'));
+        const hasHead = await userGit
+          .revparse(['--verify', 'HEAD'])
+          .then(() => true)
+          .catch(() => false);
+        await git.raw(hasHead ? ['read-tree', 'HEAD'] : ['read-tree', '--empty']);
+        const paths = patches.map((patch) => patch.path);
+        await git.raw(['--literal-pathspecs', 'add', '-A', '--', ...paths]);
+        if (!(await git.diff(['--cached', '--name-only'])).trim()) return;
+        const before = (await userGit.revparse(['HEAD']).catch(() => '')).trim();
+        await git.commit(message);
+        const after = (await userGit.revparse(['HEAD']).catch(() => '')).trim();
+        if (after === before)
+          throw new Error('Git did not create the Apply commit. Check your commit hooks.');
+        await this.workspaceManager.unstagePaths(sessionRecord.project.path, paths);
+      } finally {
+        await fs.rm(temporary, { recursive: true, force: true });
       }
+    });
+  }
+
+  async undoDiscard(sessionId: string): Promise<void> {
+    const session = await this.db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: { project: true },
+    });
+    if (!session || session.status !== 'discarded' || !session.discardBackup)
+      throw new Error('No recoverable discard exists for this session');
+    await this.workspaceManager.withRepositoryLock(
+      session.project.repoRoot ?? session.project.path,
+      async () => {
+        if (session.mode === 'worktree') {
+          if (!(await fs.stat(session.worktreePath).catch(() => null))?.isDirectory())
+            throw new Error('The retained workspace is missing');
+        } else {
+          const backup = JSON.parse(session.discardBackup!) as {
+            snapshotHash: string;
+            indexTree: string;
+            headCommit: string;
+            postSnapshotHash: string;
+            postIndexTree: string;
+          };
+          const git = simpleGit(session.worktreePath);
+          const head = (await git.revparse(['HEAD']).catch(() => '')).trim();
+          const index = (await git.raw(['write-tree'])).trim();
+          const current = await this.getSnapshotService().track(session.worktreePath);
+          if (
+            head !== backup.headCommit ||
+            index !== backup.postIndexTree ||
+            current !== backup.postSnapshotHash
+          ) {
+            throw new Error(
+              'Workspace changed after discard. Preserve those changes before recovering.',
+            );
+          }
+          await this.getSnapshotService().restoreFiles(session.worktreePath, backup.snapshotHash);
+          await git.raw(['read-tree', backup.indexTree]);
+        }
+        await this.db
+          .update(sessions)
+          .set({ status: 'idle', closedAt: null, discardBackup: null })
+          .where(eq(sessions.id, sessionId));
+      },
+    );
+    if (session.project.repoRoot) {
+      await simpleGit(session.worktreePath)
+        .raw(['update-ref', '-d', `refs/agentctl/discard-index/${sessionId}`])
+        .catch(() => undefined);
     }
+    this.onEvent?.('workspace:restored', { sessionId });
   }
 
   private async revertLocalSessionChanges(
@@ -720,5 +858,10 @@ export class SessionWorkspace {
 
     const patches = await snapshotService.diff(projectPath, initialHash);
     await snapshotService.revertFiles(projectPath, initialHash, patches);
+    if (patches.length)
+      await this.workspaceManager.unstagePaths(
+        projectPath,
+        patches.map((patch) => patch.path),
+      );
   }
 }

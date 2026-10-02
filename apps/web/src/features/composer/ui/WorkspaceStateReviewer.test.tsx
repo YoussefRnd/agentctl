@@ -1,17 +1,30 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
-import { ContextWindowPopover } from './WorkspaceStateReviewer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CommandBarFooter, ContextWindowPopover } from './WorkspaceStateReviewer';
 import type { SessionWithCapabilities } from '@agentctl/shared';
 
 const roots: Root[] = [];
+const gitState = vi.hoisted(() => ({
+  isRepo: true,
+  branch: null as string | null,
+  hasPrimaryRemote: false,
+  hasUpstream: false,
+  aheadCount: 0,
+  behindCount: 0,
+}));
+vi.mock('@/features/review', () => ({ useGitStatus: () => ({ gitStatus: gitState }) }));
+vi.mock('@/features/sessions', () => ({
+  useSession: () => ({ reviewData: { files: [] }, isPushing: false, isPulling: false }),
+}));
 
 afterEach(() => {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = '';
+  gitState.branch = null;
 });
 
 function createSessionData(
@@ -53,6 +66,42 @@ function createSessionData(
     capabilities: [],
   };
 }
+
+describe('CommandBarFooter branch label', () => {
+  function renderFooter(savedBranch: string) {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    roots.push(root);
+    act(() => {
+      root.render(
+        <CommandBarFooter
+          isLoadingSession={false}
+          sessionData={createSessionData({ branch: savedBranch })}
+          isSwitchingMode={false}
+          switchMode={vi.fn()}
+          isSwitchingBranch={false}
+          switchBranch={vi.fn()}
+          branches={[]}
+          approvalControl={null}
+        />,
+      );
+    });
+    return container;
+  }
+  it('uses live Git status instead of the stale saved HEAD label', () => {
+    gitState.branch = 'master';
+    expect(renderFooter('HEAD').textContent).toContain('master');
+    expect(document.body.textContent).not.toContain('HEAD');
+  });
+  it('labels a genuine detached checkout clearly', () => {
+    gitState.branch = 'HEAD';
+    expect(renderFooter('main').textContent).toContain('Detached HEAD');
+  });
+  it('keeps the saved branch while Git status is loading', () => {
+    expect(renderFooter('dev').textContent).toContain('dev');
+  });
+});
 
 describe('ContextWindowPopover', () => {
   it('calculates and displays exact tokens and percentage when contextLimit is provided', () => {

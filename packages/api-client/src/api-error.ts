@@ -12,3 +12,21 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
+
+export function assertApiStatus<Status extends number>(
+  response: { status: number; body: unknown },
+  expectedStatus: Status,
+  fallbackMessage: string,
+): asserts response is { status: Status; body: unknown } {
+  if (response.status === expectedStatus) return;
+  const body = response.body;
+  const message =
+    body &&
+    typeof body === 'object' &&
+    'message' in body &&
+    typeof body.message === 'string' &&
+    body.message.trim()
+      ? body.message
+      : `${fallbackMessage}: ${response.status}`;
+  throw new ApiError(message, response.status);
+}

@@ -1,3 +1,4 @@
+import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
 import { useEffect } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { getApiBaseUrl, getDesktopCapability } from '@agentctl/api-client';
@@ -38,18 +39,7 @@ export function applyStateChange(queryClient: QueryClient, event: StateChangeEve
       queryKey: event.sessionId ? sessionKeys.detail(event.sessionId) : sessionKeys.all,
     });
   }
-  if (topics.has('workspace')) {
-    const workspaceKeys = event.sessionId
-      ? [
-          sessionKeys.review(event.sessionId),
-          sessionKeys.branches(event.sessionId),
-          sessionKeys.gitStatus(event.sessionId),
-        ]
-      : [['session-review'], ['session-branches'], ['session-git-status']];
-    for (const queryKey of workspaceKeys) {
-      void queryClient.invalidateQueries({ queryKey });
-    }
-  }
+  if (topics.has('workspace')) invalidateWorkspaceQueries(queryClient, event.sessionId);
   if (topics.has('mcp')) {
     void queryClient.invalidateQueries({ queryKey: mcpKeys.all });
     void queryClient.invalidateQueries({ queryKey: ['mcpTools'] });

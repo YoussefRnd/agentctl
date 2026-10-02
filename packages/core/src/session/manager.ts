@@ -396,6 +396,10 @@ export class SessionManager {
     return this.history.previewSnapshotDiff(sessionId, eventId);
   }
 
+  async undoDiscard(sessionId: string): Promise<void> {
+    await this.sessionWorkspace.undoDiscard(sessionId);
+  }
+
   async restoreSnapshot(sessionId: string, snapshotHash: string): Promise<{ backupHash: string }> {
     return this.history.restoreSnapshot(sessionId, snapshotHash);
   }

@@ -371,6 +371,7 @@ export const sessionRowSchema = sessionSchema.extend({
   id: z.uuid(),
   worktreePath: z.string().min(1),
   agentSessionId: z.string().nullable(),
+  discardBackup: z.string().nullable().optional(),
   status: z.enum([
     'running',
     'needs_attention',
