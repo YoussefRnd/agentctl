@@ -2,6 +2,29 @@ import { describe, it, expect } from 'vitest';
 import { parseDiff, computeWordDiff, buildSplitRows, type DiffLine } from './diff-parser';
 
 describe('diff-parser', () => {
+  it('handles generated lines without an unbounded LCS table and preserves unchanged ends', () => {
+    const prefix = 'shared,'.repeat(5000);
+    const suffix = ',tail'.repeat(5000);
+    const oldLine = `${prefix}before${suffix}`;
+    const newLine = `${prefix}after${suffix}`;
+    const sparse = computeWordDiff(oldLine, newLine);
+    expect(sparse.removedHighlights.map((range) => oldLine.slice(range.start, range.end))).toEqual([
+      'before',
+    ]);
+    expect(sparse.addedHighlights.map((range) => newLine.slice(range.start, range.end))).toEqual([
+      'after',
+    ]);
+    const removed = 'old,'.repeat(5000);
+    const added = 'new,'.repeat(5000);
+    expect(computeWordDiff(`prefix:${removed}:suffix`, `prefix:${added}:suffix`)).toEqual({
+      removedHighlights: [{ start: 7, end: 7 + removed.length - 1 }],
+      addedHighlights: [{ start: 7, end: 7 + added.length - 1 }],
+    });
+    expect(
+      parseDiff(`@@ -1 +1 @@\n-${oldLine}\n+${newLine}`, { highlightWords: false })[0].lines[0]
+        .highlights,
+    ).toBeUndefined();
+  });
   it('computes word-level diff highlights for token changes within a line', () => {
     const oldLine = 'const value = calculateSum(a, b);';
     const newLine = 'const value = calculateTotal(a, b, c);';

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ReviewView } from './ReviewView';
 import { useReviewUIStore, type ReviewScope } from '../model/useReviewUIStore';
+import { mockVirtualViewport } from '@/test-utils/virtualViewport';
 
 const fixture = vi.hoisted(() => {
   const file = {
@@ -71,7 +72,64 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it('expands all without fetching off-screen patches, and cancels requests when scrolling away', async () => {
+  mockVirtualViewport();
+  fixture.session.reviewData.files = Array.from({ length: 200 }, (_, index) => ({
+    ...fixture.file,
+    path: `src/file-${index}.ts`,
+  }));
+  const requests: Array<{ path: string; signal: AbortSignal }> = [];
+  fixture.getSessionReview.mockImplementation(
+    ({
+      query,
+      fetchOptions,
+    }: {
+      query: { filePath: string };
+      fetchOptions: { signal: AbortSignal };
+    }) => {
+      requests.push({ path: query.filePath, signal: fetchOptions.signal });
+      return new Promise(() => {});
+    },
+  );
+  useReviewUIStore.getState().setReviewScope('uncommitted');
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  clients.push(client);
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <ReviewView />
+      </QueryClientProvider>,
+    ),
+  );
+  act(() =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Diff display options"]')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+  );
+  const expand = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+    item.textContent?.includes('Expand all diffs'),
+  );
+  expect(expand).toBeDefined();
+  await act(async () => expand!.click());
+  expect(requests.length).toBeGreaterThan(0);
+  expect(requests.length).toBeLessThan(10);
+  const initial = [...requests];
+  const viewport = container.querySelector<HTMLElement>('[data-review-scroll]')!;
+  await act(async () => viewport.scrollTo({ top: 90000 }));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(initial.every((request) => request.signal.aborted)).toBe(true);
+  expect(requests.slice(initial.length).length).toBeGreaterThan(0);
+  expect(requests.slice(initial.length).length).toBeLessThan(10);
+});
+
 async function renderReview(scope: ReviewScope) {
+  mockVirtualViewport();
   fixture.getSessionReview.mockImplementation(async ({ query }: { query: { scope: string } }) => ({
     status: 200,
     // A resumed session's baseline can already contain these untracked files.

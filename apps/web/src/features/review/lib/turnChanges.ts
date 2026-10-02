@@ -313,7 +313,7 @@ export function isFileModificationToolCall(data: {
  */
 export function getDiffStats(diffText: string): { additions: number; deletions: number } {
   if (!diffText) return { additions: 0, deletions: 0 };
-  const hunks = parseDiff(diffText);
+  const hunks = parseDiff(diffText, { highlightWords: false });
   let additions = 0;
   let deletions = 0;
   for (const hunk of hunks) {
@@ -452,7 +452,10 @@ export function extractTurnChanges(
               ? 'deleted'
               : 'modified';
         if (!hasTurnLocalStats) {
-          const stats = getDiffStats(match.diff);
+          const stats =
+            match.additions !== undefined && match.deletions !== undefined
+              ? { additions: match.additions, deletions: match.deletions }
+              : getDiffStats(match.diff);
           additions = stats.additions;
           deletions = stats.deletions;
         }

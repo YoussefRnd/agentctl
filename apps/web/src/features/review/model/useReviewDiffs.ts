@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { parseDiff } from '@/shared/lib/diff-parser';
 import { matchSorter } from 'match-sorter';
-import type { ReviewFile, FileState } from '../ui/ReviewHeader';
+import type { ReviewFile } from '../ui/ReviewHeader';
 import type { ReviewScope } from './useReviewUIStore';
 import type { StatusFilter } from './useReviewViewState';
 
@@ -11,7 +11,12 @@ export function useReviewDiffs(
   scope: ReviewScope = 'uncommitted',
   turnFiles?: Set<string>,
   statusFilter: StatusFilter = 'all',
+  visibleFiles?: Set<string>,
+  collapsedFiles?: Record<string, boolean>,
 ) {
+  const parsedCache = useRef(
+    new Map<string, { diff: string; hunks: ReturnType<typeof parseDiff> }>(),
+  );
   const activeFiles = useMemo(() => {
     let list = files;
     if (scope === 'all_edits') {
@@ -41,45 +46,45 @@ export function useReviewDiffs(
   }, [activeFiles, searchQuery]);
 
   const parsedFiles = useMemo(() => {
-    return filteredFiles.map((file) => ({
-      ...file,
-      hunks: parseDiff(file.diff),
-    }));
-  }, [filteredFiles]);
-
-  const grouped = useMemo(() => {
-    const initial: Record<FileState, (ReviewFile & { hunks: ReturnType<typeof parseDiff> })[]> = {
-      conflicted: [],
-      untracked: [],
-      staged: [],
-      modified: [],
-      deleted: [],
-      committed: [],
-    };
-    return parsedFiles.reduce((acc, file) => {
-      acc[file.state].push(file);
-      return acc;
-    }, initial);
-  }, [parsedFiles]);
+    const parsed = filteredFiles.map((file) => {
+      if (
+        (visibleFiles && !visibleFiles.has(file.path)) ||
+        (collapsedFiles && collapsedFiles[file.path] !== false)
+      ) {
+        return { ...file, diff: '', hunks: [] };
+      }
+      let cached = parsedCache.current.get(file.path);
+      if (!cached || cached.diff !== file.diff) {
+        cached = { diff: file.diff, hunks: parseDiff(file.diff) };
+        parsedCache.current.set(file.path, cached);
+      }
+      return { ...file, hunks: cached.hunks };
+    });
+    for (const filePath of parsedCache.current.keys()) {
+      if (visibleFiles && !visibleFiles.has(filePath)) parsedCache.current.delete(filePath);
+    }
+    return parsed;
+  }, [filteredFiles, visibleFiles, collapsedFiles]);
 
   const fileStats = useMemo(() => {
     const map = new Map<string, { additions: number; deletions: number }>();
-    parsedFiles.forEach((file) => {
+    filteredFiles.forEach((file) => {
       let additions = 0;
       let deletions = 0;
-      file.hunks.forEach((hunk) => {
-        hunk.lines.forEach((line) => {
-          if (line.type === 'added') additions++;
-          else if (line.type === 'removed') deletions++;
+      if (file.additions === undefined || file.deletions === undefined)
+        parseDiff(file.diff, { highlightWords: false }).forEach((hunk) => {
+          hunk.lines.forEach((line) => {
+            if (line.type === 'added') additions++;
+            else if (line.type === 'removed') deletions++;
+          });
         });
-      });
       map.set(file.path, {
         additions: file.additions ?? additions,
         deletions: file.deletions ?? deletions,
       });
     });
     return map;
-  }, [parsedFiles]);
+  }, [filteredFiles]);
 
-  return { activeFiles, filteredFiles, parsedFiles, grouped, fileStats };
+  return { activeFiles, filteredFiles, parsedFiles, fileStats };
 }

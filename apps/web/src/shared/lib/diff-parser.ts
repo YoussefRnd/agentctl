@@ -23,7 +23,7 @@ export interface SplitDiffRow {
   right: DiffLine | null;
 }
 
-export function parseDiff(diff: string): DiffHunk[] {
+export function parseDiff(diff: string, options: { highlightWords?: boolean } = {}): DiffHunk[] {
   const lines = diff.split('\n');
   const hunks: DiffHunk[] = [];
   let currentHunk: DiffHunk | null = null;
@@ -86,6 +86,7 @@ export function parseDiff(diff: string): DiffHunk[] {
 
   // Apply word-level LCS highlighting for adjacent removed/added blocks
   for (const hunk of hunks) {
+    if (options.highlightWords === false) break;
     let rIdx = 0;
     while (rIdx < hunk.lines.length) {
       if (hunk.lines[rIdx].type === 'removed') {
@@ -127,6 +128,10 @@ interface Token {
   end: number;
 }
 
+// Keep optional word highlighting within a 1 MiB LCS table. Larger edits
+// still show the full patch, with a highlight over the changed middle region.
+const MAX_WORD_DIFF_CELLS = (1024 * 1024) / Uint32Array.BYTES_PER_ELEMENT;
+
 function tokenize(text: string): Token[] {
   const tokens: Token[] = [];
   const regex = /(\w+|\s+|[^\w\s])/g;
@@ -149,34 +154,43 @@ export function computeWordDiff(oldLine: string, newLine: string) {
     return { removedHighlights: [], addedHighlights: [] };
   }
 
-  const oldTokens = tokenize(oldLine);
-  const newTokens = tokenize(newLine);
+  let oldTokens = tokenize(oldLine);
+  let newTokens = tokenize(newLine);
+
+  // Generated lines often have a tiny edit surrounded by thousands of tokens.
+  // Exclude their unchanged ends before allocating the LCS table.
+  let start = 0;
+  while (
+    start < oldTokens.length &&
+    start < newTokens.length &&
+    oldTokens[start].text === newTokens[start].text
+  )
+    start++;
+  let oldEnd = oldTokens.length;
+  let newEnd = newTokens.length;
+  while (
+    oldEnd > start &&
+    newEnd > start &&
+    oldTokens[oldEnd - 1].text === newTokens[newEnd - 1].text
+  ) {
+    oldEnd--;
+    newEnd--;
+  }
+  oldTokens = oldTokens.slice(start, oldEnd);
+  newTokens = newTokens.slice(start, newEnd);
 
   const m = oldTokens.length;
   const n = newTokens.length;
 
-  if (m === 0 && n === 0) {
-    return { removedHighlights: [], addedHighlights: [] };
-  }
-
-  if (m === 0) {
+  if (m === 0 || n === 0 || (m + 1) * (n + 1) > MAX_WORD_DIFF_CELLS) {
     return {
-      removedHighlights: [],
-      addedHighlights: [{ start: 0, end: newLine.length }],
-    };
-  }
-
-  if (n === 0) {
-    return {
-      removedHighlights: [{ start: 0, end: oldLine.length }],
-      addedHighlights: [],
+      removedHighlights: m ? [{ start: oldTokens[0].start, end: oldTokens[m - 1].end }] : [],
+      addedHighlights: n ? [{ start: newTokens[0].start, end: newTokens[n - 1].end }] : [],
     };
   }
 
   // Classic DP table for LCS
-  const dp: number[][] = Array.from({ length: m + 1 }, () =>
-    Array.from<number>({ length: n + 1 }).fill(0),
-  );
+  const dp = Array.from({ length: m + 1 }, () => new Uint32Array(n + 1));
 
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {

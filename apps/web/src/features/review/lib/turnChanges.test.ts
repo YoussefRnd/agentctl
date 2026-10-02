@@ -38,7 +38,7 @@ describe('turnChanges', () => {
     expect(filePathMatches('packages/core/src/feature.ts', 'package.json')).toBe(false);
   });
 
-  it('summarizes file modifications and calculates diff stats from review files', () => {
+  it('summarizes modifications from lazy review statistics and legacy diff text', () => {
     const mockEvents: SessionEventRow[] = [
       {
         id: 1,
@@ -68,7 +68,9 @@ describe('turnChanges', () => {
       {
         path: 'packages/core/src/feature.ts',
         state: 'untracked',
-        diff: 'diff --git a/feature.ts b/feature.ts\n@@ -0,0 +1,5 @@\n+line1\n+line2\n+line3\n+line4\n+line5',
+        diff: '',
+        additions: 5,
+        deletions: 0,
       },
       {
         path: 'package.json',

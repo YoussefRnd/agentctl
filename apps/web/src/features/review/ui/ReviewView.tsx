@@ -1,5 +1,5 @@
 import { canMutateWorkspace } from '@agentctl/shared';
-import { useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewDialogs } from './ReviewDialogs';
 import { useReviewViewState } from '../model/useReviewViewState';
@@ -11,7 +11,13 @@ import { useOpenWorkspaceFile, useSession, useSessionStream } from '@/features/s
 import { extractLatestTurnTouchedFiles, resolveTurnReviewFiles } from '../lib/turnChanges';
 import { useReviewUIStore, type ReviewScope } from '../model/useReviewUIStore';
 import { useGitStatus } from '../model/useGitStatus';
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
+import type { ReviewFileItem } from '@agentctl/shared';
 import {
   api,
   assertApiStatus,
@@ -22,6 +28,10 @@ import {
 import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { toast } from 'sonner';
+
+function combineDetails(results: UseQueryResult<ReviewFileItem | undefined>[]) {
+  return results.map(({ data, isError }) => ({ data, isError }));
+}
 
 export function ReviewView() {
   const openWorkspaceFile = useOpenWorkspaceFile();
@@ -66,20 +76,35 @@ export function ReviewView() {
 
   const sessionId = sessionData?.session.id ?? '';
   const queryClient = useQueryClient();
+  const [visibleFiles, setVisibleFiles] = useState(new Set<string>());
+  const onVisibleExpandedFilesChange = useCallback((paths: string[]) => {
+    setVisibleFiles((previous) =>
+      previous.size === paths.length && paths.every((path) => previous.has(path))
+        ? previous
+        : new Set(paths),
+    );
+  }, []);
   const reviewScope = useReviewUIStore((s) => s.reviewScope);
   const capture = reviewData.capture;
   const fromHash = reviewScope === 'all_edits' ? capture?.sessionTree : capture?.workingTree;
   const toHash = capture?.currentTree;
+  const detailFiles = useMemo(
+    () =>
+      summaryFiles.filter(
+        (file) =>
+          (visibleFiles.has(file.path) && state.collapsedFiles[file.path] === false) ||
+          !!state.searchQuery,
+      ),
+    [summaryFiles, visibleFiles, state.collapsedFiles, state.searchQuery],
+  );
   const detailQueries = useQueries({
-    queries: summaryFiles.map((file) => ({
+    queries: detailFiles.map((file) => ({
       queryKey: sessionKeys.reviewFile(sessionId, file.path, fromHash, toHash),
-      enabled:
-        !!sessionId &&
-        !!capture &&
-        (state.collapsedFiles[file.path] === false || !!state.searchQuery),
-      queryFn: async () => {
+      enabled: !!sessionId && !!capture,
+      queryFn: async ({ signal }) => {
         const response = await api.getSessionReview({
           params: { id: sessionId },
+          fetchOptions: { signal },
           query: {
             filePath: file.path,
             fromHash,
@@ -94,23 +119,26 @@ export function ReviewView() {
       },
       staleTime: Infinity,
     })),
+    combine: combineDetails,
   });
-  const files = useMemo(
-    () =>
-      summaryFiles.map((file, index) => ({
+  const files = useMemo(() => {
+    const details = new Map(detailFiles.map((file, index) => [file.path, detailQueries[index]]));
+    return summaryFiles.map((file) => {
+      const detail = details.get(file.path);
+      return {
         ...file,
         additions:
           reviewScope === 'all_edits' ? (file.sessionAdditions ?? file.additions) : file.additions,
         deletions:
           reviewScope === 'all_edits' ? (file.sessionDeletions ?? file.deletions) : file.deletions,
-        diff: detailQueries[index]?.isError
+        diff: detail?.isError
           ? 'Could not load diff. Refresh the review to retry.'
-          : detailQueries[index]?.data
-            ? detailQueries[index].data!.diff || 'No textual changes in this scope.'
+          : detail?.data
+            ? detail.data.diff || 'No textual changes in this scope.'
             : file.diff,
-      })),
-    [summaryFiles, detailQueries, reviewScope],
-  );
+      };
+    });
+  }, [summaryFiles, detailFiles, detailQueries, reviewScope]);
   const invalidateWorkspace = () => invalidateWorkspaceQueries(queryClient, sessionId, 'session');
   const undoDiscard = useMutation({
     mutationFn: async () => {
@@ -137,10 +165,7 @@ export function ReviewView() {
   const setReviewScope = useReviewUIStore((s) => s.setReviewScope);
   const targetReviewFile = useReviewUIStore((s) => s.targetReviewFile);
   const setTargetReviewFile = useReviewUIStore((s) => s.setTargetReviewFile);
-  const targetFileElementRef = useRef<HTMLDivElement | null>(null);
-  const setTargetFileElement = useCallback((element: HTMLDivElement | null) => {
-    targetFileElementRef.current = element;
-  }, []);
+  const onTargetFileHandled = useCallback(() => setTargetReviewFile(null), [setTargetReviewFile]);
 
   const handleScopeChange = useCallback(
     (newScope: ReviewScope) => {
@@ -177,16 +202,14 @@ export function ReviewView() {
     reviewScope,
     activeTurnFiles,
     state.statusFilter,
+    visibleFiles,
+    state.collapsedFiles,
   );
 
   useLayoutEffect(() => {
-    const targetElement = targetFileElementRef.current;
-    if (!targetReviewFile || !targetElement) return;
-
+    if (!targetReviewFile) return;
     dispatch({ type: 'EXPAND_FILE', filePath: targetReviewFile });
-    targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setTargetReviewFile(null);
-  }, [activeFiles, dispatch, setTargetReviewFile, targetReviewFile]);
+  }, [dispatch, targetReviewFile]);
 
   const activeFileIndexRef = useRef<number>(-1);
 
@@ -449,7 +472,8 @@ export function ReviewView() {
             void openWorkspaceFile(p);
           }}
           targetFilePath={targetReviewFile}
-          targetFileRef={setTargetFileElement}
+          onTargetFileHandled={onTargetFileHandled}
+          onVisibleExpandedFilesChange={onVisibleExpandedFilesChange}
         />
       )}
 

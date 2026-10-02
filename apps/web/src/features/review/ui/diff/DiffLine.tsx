@@ -1,6 +1,17 @@
-import { memo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import type { DiffLine as DiffLineType } from '@/shared/lib/diff-parser';
-import { highlightLine } from '@/shared/lib/code-highlighter';
+import { getDiffHighlight, subscribeDiffHighlight } from '@/shared/lib/diff-highlighter';
+
+function HighlightedText({ text, language }: { text: string; language?: string }) {
+  const fallback = useMemo(() => getDiffHighlight(text, language), [text, language]);
+  const [result, setResult] = useState<{ text: string; language?: string; html: string }>();
+  useEffect(
+    () => subscribeDiffHighlight(text, language, (html) => setResult({ text, language, html })),
+    [text, language],
+  );
+  const html = result?.text === text && result.language === language ? result.html : fallback;
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 interface DiffLineProps {
   line: DiffLineType | null;
@@ -69,8 +80,7 @@ export const DiffLine = memo(function DiffLine({
 
   const renderContent = () => {
     if (!line.highlights || line.highlights.length === 0) {
-      const html = highlightLine(line.content, language);
-      return <span dangerouslySetInnerHTML={{ __html: html }} />;
+      return <HighlightedText text={line.content} language={language} />;
     }
 
     const segments: React.ReactNode[] = [];
@@ -79,9 +89,8 @@ export const DiffLine = memo(function DiffLine({
     line.highlights.forEach((highlight, hIdx) => {
       if (highlight.start > lastIndex) {
         const textSlice = line.content.slice(lastIndex, highlight.start);
-        const html = highlightLine(textSlice, language);
         segments.push(
-          <span key={`seg-${String(hIdx)}-pre`} dangerouslySetInnerHTML={{ __html: html }} />,
+          <HighlightedText key={`seg-${String(hIdx)}-pre`} text={textSlice} language={language} />,
         );
       }
 
@@ -104,8 +113,7 @@ export const DiffLine = memo(function DiffLine({
 
     if (lastIndex < line.content.length) {
       const remainingSlice = line.content.slice(lastIndex);
-      const html = highlightLine(remainingSlice, language);
-      segments.push(<span key="seg-tail" dangerouslySetInnerHTML={{ __html: html }} />);
+      segments.push(<HighlightedText key="seg-tail" text={remainingSlice} language={language} />);
     }
 
     return segments;

@@ -1,8 +1,16 @@
-import { useState, useCallback, useMemo, memo, useRef, useEffect } from 'react';
+import {
+  useState,
+  useCallback,
+  useMemo,
+  memo,
+  useRef,
+  useLayoutEffect,
+  type RefObject,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DiffHunk } from '@/shared/lib/diff-parser';
 import { buildSplitRows } from '@/shared/lib/diff-parser';
-import { getLanguageForPath } from '@/shared/lib/code-highlighter';
+import { getLanguageForPath } from '@/shared/lib/code-highlighter-utils';
 import { DiffLine } from './DiffLine';
 import {
   ChevronDown,
@@ -18,6 +26,8 @@ import { toast } from 'sonner';
 import { useDraftStore } from '@/features/composer';
 
 interface DiffBlockProps {
+  scrollElement: RefObject<HTMLDivElement | null>;
+  scrollOffset: number;
   path: string;
   hunks: DiffHunk[];
   isCollapsed?: boolean;
@@ -30,15 +40,56 @@ interface DiffBlockProps {
   wrapLines?: boolean;
 }
 
-function HunkLines({
-  hunk,
+function HunkHeader({ hunk, path }: { hunk: DiffHunk; path: string }) {
+  return (
+    <div className="group/hunk bg-surface-secondary/10 text-text-muted/30 border-border/10 flex items-center justify-between border-y px-4 py-1.5 font-mono text-[9px] select-none">
+      <span className="text-text-muted/60 font-mono text-[10.5px] font-medium">{hunk.header}</span>
+      <Tooltip content="Quote hunk in chat composer">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            const maxLines = 25;
+            const rawLines = hunk.lines
+              .slice(0, maxLines)
+              .map(
+                (line) =>
+                  `${line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}${line.content}`,
+              );
+            if (hunk.lines.length > maxLines)
+              rawLines.push(`... (${hunk.lines.length - maxLines} more lines)`);
+            useDraftStore
+              .getState()
+              .insertIntoComposer(
+                `@${path} \`${hunk.header}\`:\n\`\`\`diff\n${rawLines.join('\n')}\n\`\`\``,
+              );
+            toast.success('Quoted hunk in chat');
+          }}
+          className="text-text-muted hover:text-text-main flex h-5 cursor-pointer items-center gap-1 rounded px-1.5 text-[8px] font-medium hover:bg-white/10"
+        >
+          <MessageSquareQuote className="h-3 w-3" />
+          <span>Quote</span>
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
+function DiffBody({
+  scrollElement,
+  scrollOffset,
+  hunks,
+  path,
   language,
   hideOldLineNumber,
   hideNewLineNumber,
   viewMode,
   wrapLines,
 }: {
-  hunk: DiffHunk;
+  scrollElement: RefObject<HTMLDivElement | null>;
+  scrollOffset: number;
+  hunks: DiffHunk[];
+  path: string;
   language?: string;
   hideOldLineNumber: boolean;
   hideNewLineNumber: boolean;
@@ -47,35 +98,62 @@ function HunkLines({
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const isSplit = viewMode === 'split';
-  const splitRows = useMemo(
-    () => (isSplit ? buildSplitRows(hunk.lines) : []),
-    [hunk.lines, isSplit],
+  // A file can have hundreds of small hunks. Virtualize their combined rows,
+  // rather than mounting every hunk or creating one scroll observer per hunk.
+  const rows = useMemo(
+    () =>
+      hunks.flatMap((hunk) => [
+        { hunk, line: null, split: null },
+        ...(isSplit
+          ? buildSplitRows(hunk.lines).map((split) => ({ hunk: null, line: null, split }))
+          : hunk.lines.map((line) => ({ hunk: null, line, split: null }))),
+      ]),
+    [hunks, isSplit],
   );
-  const isLarge = hunk.lines.length > 100;
+  const [scrollMargin, setScrollMargin] = useState(scrollOffset);
+  useLayoutEffect(() => {
+    const scroll = scrollElement.current;
+    const body = parentRef.current;
+    if (scroll && body) {
+      setScrollMargin(
+        body.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop,
+      );
+    }
+  }, [scrollElement, scrollOffset, hunks, wrapLines, viewMode]);
   const virtualizer = useVirtualizer({
-    count: isSplit ? splitRows.length : hunk.lines.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 22,
-    overscan: 20,
-    enabled: isLarge,
+    count: rows.length,
+    getScrollElement: () => scrollElement.current,
+    scrollMargin,
+    // A newly mounted file shares an already-scrolled container. Starting its
+    // row virtualizer at zero would reset the entire review pane on mount.
+    initialOffset: () => scrollElement.current?.scrollTop ?? 0,
+    estimateSize: (index) => (rows[index].hunk ? 32 : 18),
+    overscan: 8,
+    enabled: rows.length > 0,
   });
-
-  // Wrapping and split mode change row heights, including cached offscreen rows.
-  useEffect(() => {
+  useLayoutEffect(() => {
     virtualizer.measure();
   }, [virtualizer, wrapLines, viewMode]);
-
   const longestLine = useMemo(() => {
     let longest = 0;
-    for (const line of hunk.lines) {
-      let columns = 0;
-      for (const character of line.content) {
-        columns += character === '\t' ? 4 - (columns % 4) : 1;
+    for (const hunk of hunks)
+      for (const line of hunk.lines) {
+        let columns = 0;
+        let start = 0;
+        for (
+          let tab = line.content.indexOf('\t');
+          tab !== -1;
+          tab = line.content.indexOf('\t', start)
+        ) {
+          columns += tab - start;
+          columns += 4 - (columns % 4);
+          start = tab + 1;
+        }
+        columns += line.content.length - start;
+        longest = Math.max(longest, columns);
       }
-      longest = Math.max(longest, columns);
-    }
     return longest;
-  }, [hunk.lines]);
+  }, [hunks]);
   const gutterWidth = isSplit
     ? 58
     : 30 + (hideOldLineNumber ? 0 : 28) + (hideNewLineNumber ? 0 : 28);
@@ -83,71 +161,64 @@ function HunkLines({
   const minWidth = wrapLines
     ? undefined
     : `calc(${longestLine * columns}ch + ${gutterWidth * columns}px)`;
-
   function renderRow(index: number) {
-    if (!isSplit) {
+    const row = rows[index];
+    if (row.hunk) return <HunkHeader hunk={row.hunk} path={path} />;
+    if (row.line)
       return (
         <DiffLine
-          line={hunk.lines[index]}
+          line={row.line}
           language={language}
           hideOldLineNumber={hideOldLineNumber}
           hideNewLineNumber={hideNewLineNumber}
           wrapLines={wrapLines}
         />
       );
-    }
-    const row = splitRows[index];
     return (
       <div data-split-row className="divide-border/10 grid grid-cols-2 divide-x">
         <DiffLine
-          line={row.left}
+          line={row.split!.left}
           hideAdded
           language={language}
-          isSpacer={!row.left}
+          isSpacer={!row.split!.left}
           wrapLines={wrapLines}
         />
         <DiffLine
-          line={row.right}
+          line={row.split!.right}
           hideRemoved
           language={language}
-          isSpacer={!row.right}
+          isSpacer={!row.split!.right}
           wrapLines={wrapLines}
         />
       </div>
     );
   }
-
   return (
     <div
       ref={parentRef}
       data-diff-scroll
-      className={`custom-scrollbar relative overflow-auto py-1 font-mono text-[10.5px] [tab-size:4] ${isLarge ? 'max-h-[600px]' : ''}`}
+      className="custom-scrollbar relative overflow-x-auto py-1 font-mono text-[10.5px] [tab-size:4]"
     >
-      <div
-        className="relative w-full"
-        style={{ minWidth, height: isLarge ? virtualizer.getTotalSize() : undefined }}
-      >
-        {isLarge
-          ? virtualizer.getVirtualItems().map((virtualItem) => (
-              <div
-                key={virtualItem.key}
-                ref={virtualizer.measureElement}
-                data-index={virtualItem.index}
-                className="absolute top-0 left-0 w-full"
-                style={{ transform: `translateY(${virtualItem.start}px)` }}
-              >
-                {renderRow(virtualItem.index)}
-              </div>
-            ))
-          : (isSplit ? splitRows : hunk.lines).map((_, index) => (
-              <div key={index}>{renderRow(index)}</div>
-            ))}
+      <div className="relative w-full" style={{ minWidth, height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map((item) => (
+          <div
+            key={item.key}
+            ref={virtualizer.measureElement}
+            data-index={item.index}
+            className="absolute top-0 left-0 w-full"
+            style={{ transform: `translateY(${item.start - scrollMargin}px)` }}
+          >
+            {renderRow(item.index)}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 export const DiffBlock = memo(function DiffBlock({
+  scrollElement,
+  scrollOffset,
   path,
   hunks,
   isCollapsed = false,
@@ -200,9 +271,9 @@ export const DiffBlock = memo(function DiffBlock({
   const dirPath = path.substring(0, path.lastIndexOf('/'));
 
   return (
-    <div className="border-border/10 bg-surface-secondary/5 hover:border-border/20 hover:bg-surface-secondary/10 group overflow-hidden rounded-lg border backdrop-blur-md transition-colors duration-300">
+    <div className="border-border/10 bg-surface-secondary/5 hover:border-border/20 hover:bg-surface-secondary/10 group overflow-hidden rounded-lg border transition-colors duration-300">
       {showHeader && (
-        <header className="border-border/10 bg-surface/40 group-hover:bg-surface/50 sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-2.5 backdrop-blur-2xl transition-colors select-none">
+        <header className="border-border/10 bg-surface/40 group-hover:bg-surface/50 sticky top-0 z-10 flex items-center justify-between gap-3 border-b px-4 py-2.5 transition-colors select-none">
           <button
             type="button"
             onClick={onToggleCollapse}
@@ -315,62 +386,17 @@ export const DiffBlock = memo(function DiffBlock({
       )}
 
       {!isCollapsed && (
-        <div className="divide-border/10 bg-background/20">
-          {hunks.map((hunk) => {
-            return (
-              <div key={hunk.header} className="group/hunk overflow-hidden">
-                <div className="bg-surface-secondary/10 text-text-muted/30 border-border/10 flex items-center justify-between border-y px-4 py-1.5 font-mono text-[9px] font-black tracking-tight uppercase select-none">
-                  <div className="flex items-center gap-2">
-                    <span className="text-text-muted/60 font-mono text-[10.5px] font-medium tracking-normal lowercase">
-                      {hunk.header}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-60 transition-opacity duration-150 group-hover/hunk:opacity-100 focus-within:opacity-100">
-                    <Tooltip content="Quote hunk in chat composer">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const maxLines = 25;
-                          const rawLines = hunk.lines.slice(0, maxLines).map((l) => {
-                            const prefix =
-                              l.type === 'added' ? '+' : l.type === 'removed' ? '-' : ' ';
-                            return `${prefix}${l.content}`;
-                          });
-                          if (hunk.lines.length > maxLines) {
-                            rawLines.push(
-                              `... (${String(hunk.lines.length - maxLines)} more lines)`,
-                            );
-                          }
-                          const snippet = rawLines.join('\n');
-                          useDraftStore
-                            .getState()
-                            .insertIntoComposer(
-                              `@${path} \`${hunk.header}\`:\n\`\`\`diff\n${snippet}\n\`\`\``,
-                            );
-                          toast.success('Quoted hunk in chat');
-                        }}
-                        className="text-text-muted hover:text-text-main flex h-5 cursor-pointer items-center gap-1 rounded px-1.5 text-[8px] font-medium transition-colors hover:bg-white/10 active:scale-[0.95]"
-                      >
-                        <MessageSquareQuote className="h-3 w-3" />
-                        <span>Quote</span>
-                      </button>
-                    </Tooltip>
-                  </div>
-                </div>
-
-                <HunkLines
-                  hunk={hunk}
-                  language={language}
-                  hideOldLineNumber={!hasOldLineNumbers}
-                  hideNewLineNumber={!hasNewLineNumbers}
-                  viewMode={viewMode}
-                  wrapLines={wrapLines}
-                />
-              </div>
-            );
-          })}
-        </div>
+        <DiffBody
+          scrollElement={scrollElement}
+          scrollOffset={scrollOffset}
+          path={path}
+          hunks={hunks}
+          language={language}
+          hideOldLineNumber={!hasOldLineNumbers}
+          hideNewLineNumber={!hasNewLineNumbers}
+          viewMode={viewMode}
+          wrapLines={wrapLines}
+        />
       )}
     </div>
   );

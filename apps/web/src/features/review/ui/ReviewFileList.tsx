@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useLayoutEffect } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { DiffBlock } from './diff/DiffBlock';
 import type { ReviewFile, FileState } from './ReviewHeader';
 import {
@@ -70,6 +71,8 @@ export interface ReviewFileListProps {
   isUnstagingAll?: boolean;
   targetFilePath?: string | null;
   targetFileRef?: (element: HTMLDivElement | null) => void;
+  onTargetFileHandled?: () => void;
+  onVisibleExpandedFilesChange?: (paths: string[]) => void;
 }
 
 export function ReviewFileList({
@@ -86,6 +89,8 @@ export function ReviewFileList({
   onOpenFile,
   targetFilePath,
   targetFileRef,
+  onTargetFileHandled,
+  onVisibleExpandedFilesChange,
 }: ReviewFileListProps) {
   // Support both unified files array and legacy groupedFiles
   const allFiles = useMemo(() => {
@@ -96,194 +101,294 @@ export function ReviewFileList({
     return [];
   }, [files, groupedFiles]);
 
+  const parentRef = useRef<HTMLDivElement>(null);
+  const targetRef = useRef<HTMLDivElement | null>(null);
+  const virtualized = allFiles.length > 1;
+  const virtualizer = useVirtualizer({
+    count: allFiles.length,
+    getScrollElement: () => parentRef.current,
+    getItemKey: (index) => {
+      const file = allFiles[index];
+      return `${file.path}:${collapsedFiles[file.path] === false ? 'expanded' : 'collapsed'}`;
+    },
+    estimateSize: (index) => {
+      const file = allFiles[index];
+      const stats = fileStats.get(file.path);
+      return collapsedFiles[file.path] === false
+        ? 84 + ((stats?.additions ?? 0) + (stats?.deletions ?? 0)) * 18
+        : 52;
+    },
+    overscan: 1,
+    enabled: virtualized,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+  const visibleFiles = useMemo(
+    () => (virtualized ? virtualItems.map((item) => allFiles[item.index]) : allFiles),
+    [virtualized, virtualItems, allFiles],
+  );
+  useLayoutEffect(() => {
+    // Measure refs first, then request only expanded files in the current range.
+    // Cached heights for off-screen files remain intact across layout changes.
+    const currentFiles = virtualized
+      ? virtualizer.getVirtualItems().map((item) => allFiles[item.index])
+      : allFiles;
+    onVisibleExpandedFilesChange?.(
+      currentFiles.filter((file) => collapsedFiles[file.path] === false).map((file) => file.path),
+    );
+  }, [
+    visibleFiles,
+    onVisibleExpandedFilesChange,
+    virtualizer,
+    virtualized,
+    allFiles,
+    collapsedFiles,
+  ]);
+  useLayoutEffect(() => {
+    if (!targetFilePath) return;
+    const index = allFiles.findIndex((file) => file.path === targetFilePath);
+    if (index < 0) return;
+    if (virtualized) virtualizer.scrollToIndex(index, { align: 'start' });
+    else targetRef.current?.scrollIntoView?.({ block: 'start' });
+    if (
+      visibleFiles.some((file) => file.path === targetFilePath) &&
+      collapsedFiles[targetFilePath] === false
+    ) {
+      onTargetFileHandled?.();
+    }
+  }, [
+    targetFilePath,
+    allFiles,
+    visibleFiles,
+    collapsedFiles,
+    virtualizer,
+    virtualized,
+    onTargetFileHandled,
+  ]);
+
   if (allFiles.length === 0) return null;
 
   return (
-    <div className="custom-scrollbar flex-1 overflow-y-auto">
-      {allFiles.map((file) => {
-        const collapsed = collapsedFiles[file.path] ?? true;
-        const stats = fileStats.get(file.path) ?? { additions: 0, deletions: 0 };
-        const fileName = file.path.split('/').pop() ?? file.path;
-        const dirPath = file.path.split('/').slice(0, -1).join('/');
-        const canStage = Boolean(
-          onStage && (file.hasUnstagedChanges ?? !['staged', 'committed'].includes(file.state)),
-        );
-        const canUnstage = Boolean(onUnstage && (file.hasStagedChanges ?? file.state === 'staged'));
-        const badge = STATE_BADGE[file.state] ?? STATE_BADGE.modified;
+    <div
+      ref={parentRef}
+      data-review-scroll
+      className="custom-scrollbar min-h-0 flex-1 overflow-y-auto"
+    >
+      <div
+        className="relative w-full"
+        style={{ height: virtualized ? virtualizer.getTotalSize() : undefined }}
+      >
+        {visibleFiles.map((file, visibleIndex) => {
+          const item = virtualized ? virtualItems[visibleIndex] : undefined;
+          const collapsed = collapsedFiles[file.path] ?? true;
+          const stats = fileStats.get(file.path) ?? { additions: 0, deletions: 0 };
+          const fileName = file.path.split('/').pop() ?? file.path;
+          const dirPath = file.path.split('/').slice(0, -1).join('/');
+          const canStage = Boolean(
+            onStage && (file.hasUnstagedChanges ?? !['staged', 'committed'].includes(file.state)),
+          );
+          const canUnstage = Boolean(
+            onUnstage && (file.hasStagedChanges ?? file.state === 'staged'),
+          );
+          const badge = STATE_BADGE[file.state] ?? STATE_BADGE.modified;
 
-        return (
-          <div
-            key={`${file.state}:${file.path}`}
-            ref={file.path === targetFilePath ? targetFileRef : undefined}
-            className="border-border/10 border-b"
-          >
-            {/* Sticky File Header: docks to top while scrolling through diff */}
+          return (
             <div
-              className={cn(
-                'group/filerow border-border/20 bg-surface/95 sticky top-0 z-10 flex w-full items-center justify-between border-b backdrop-blur-md transition-colors',
-                !collapsed
-                  ? 'border-l-accent/80 bg-surface-secondary/40 border-l-2 shadow-xs'
-                  : 'hover:bg-surface-secondary/25',
-              )}
+              key={file.path}
+              data-review-file={file.path}
+              data-index={item?.index}
+              style={{
+                minHeight:
+                  !collapsed && file.hunks.length === 0 && !file.diff
+                    ? 84 + (stats.additions + stats.deletions) * 18
+                    : undefined,
+                ...(item
+                  ? {
+                      position: 'absolute',
+                      top: item.start,
+                      left: 0,
+                      width: '100%',
+                    }
+                  : {}),
+              }}
+              ref={(element) => {
+                if (virtualized) virtualizer.measureElement(element);
+                if (file.path === targetFilePath) {
+                  targetRef.current = element;
+                  targetFileRef?.(element);
+                }
+              }}
+              className="border-border/10 border-b"
             >
-              <button
-                type="button"
-                title={file.path}
-                aria-label={`Toggle diff for ${file.path}`}
-                aria-expanded={!collapsed}
-                onClick={() => {
-                  onToggleFile(file.path);
-                }}
-                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left select-none"
+              {/* Sticky File Header: docks to top while scrolling through diff */}
+              <div
+                className={cn(
+                  'group/filerow border-border/20 bg-surface sticky top-0 z-10 flex w-full items-center justify-between border-b transition-colors',
+                  !collapsed
+                    ? 'border-l-accent/80 bg-surface-secondary border-l-2 shadow-xs'
+                    : 'hover:bg-surface-secondary/25',
+                )}
               >
-                {/* Single Slot: FileIcon at rest, Chevron replaces it on row hover */}
-                <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
-                  <span className="transition-opacity duration-150 group-hover/filerow:opacity-0">
-                    <FileIcon path={file.path} className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="text-text-muted absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover/filerow:opacity-100">
-                    {collapsed ? (
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )}
-                  </span>
-                </div>
-
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-text-main truncate font-mono text-xs font-medium">
-                    {fileName}
-                  </span>
-                  {dirPath && (
-                    <span className="text-text-muted/50 truncate font-mono text-[10px]">
-                      {dirPath}/
-                    </span>
-                  )}
-                </span>
-              </button>
-
-              <div className="flex shrink-0 items-center gap-2 pr-3 select-none">
-                {(canStage || canUnstage) && (
-                  <button
-                    type="button"
-                    aria-label={canStage ? 'Stage file' : 'Unstage file'}
-                    title={`${canStage ? 'Stage' : 'Unstage'} ${file.path}`}
-                    onClick={() => (canStage ? onStage?.(file.path) : onUnstage?.(file.path))}
-                    className="border-accent/20 text-accent hover:bg-accent/15 flex h-6 cursor-pointer items-center gap-1 rounded-md border px-1.5 text-[10px] font-medium transition-colors"
-                  >
-                    {canStage ? <Plus className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-                    {canStage ? 'Stage' : 'Unstage'}
-                  </button>
-                )}
-                <Dropdown.Root>
-                  <Dropdown.Trigger asChild>
-                    <button
-                      type="button"
-                      aria-label={`More actions for ${file.path}`}
-                      className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded-md"
-                    >
-                      <Ellipsis className="h-3.5 w-3.5" />
-                    </button>
-                  </Dropdown.Trigger>
-                  <Dropdown.Portal>
-                    <Dropdown.Content align="end" className="min-w-44">
-                      {onOpenFile && (
-                        <Dropdown.Item onSelect={() => onOpenFile(file.path)} className="gap-2">
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          Open in editor
-                        </Dropdown.Item>
-                      )}
-                      <Dropdown.Item
-                        className="gap-2"
-                        onSelect={() => {
-                          useDraftStore.getState().attachContextToComposer({
-                            id: `file:${file.path}`,
-                            type: 'file',
-                            title: fileName,
-                            subtitle: file.path,
-                            value: file.path,
-                          });
-                          toast.success(`Added @${fileName} to chat`);
-                        }}
-                      >
-                        <MessageSquarePlus className="h-3.5 w-3.5" />
-                        Add to chat
-                      </Dropdown.Item>
-                      {canStage && canUnstage && (
-                        <Dropdown.Item onSelect={() => onUnstage?.(file.path)} className="gap-2">
-                          <Minus className="h-3.5 w-3.5" />
-                          Unstage file
-                        </Dropdown.Item>
-                      )}
-                      {onRevert && file.state !== 'committed' && (
-                        <>
-                          <Dropdown.Separator />
-                          <Dropdown.Item
-                            onSelect={() => onRevert(file.path)}
-                            className="gap-2 text-rose-400 focus-visible:bg-rose-500/10"
-                          >
-                            <Undo2 className="h-3.5 w-3.5" />
-                            Discard file changes
-                          </Dropdown.Item>
-                        </>
-                      )}
-                    </Dropdown.Content>
-                  </Dropdown.Portal>
-                </Dropdown.Root>
-
-                {/* Diff Line Stats (+N / -N) */}
-                {(stats.additions > 0 || stats.deletions > 0) && (
-                  <div className="flex shrink-0 items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums">
-                    {stats.additions > 0 && (
-                      <span className="text-emerald-400">+{stats.additions}</span>
-                    )}
-                    {stats.deletions > 0 && (
-                      <span className="text-rose-400">-{stats.deletions}</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Status Letter: Placed at MAX RIGHT (VS Code Style) */}
-                <span
-                  className={cn(
-                    'w-3.5 shrink-0 text-center font-mono text-xs font-bold select-none',
-                    badge.color,
-                  )}
-                  title={`Status: ${badge.label}`}
-                >
-                  {badge.letter}
-                </span>
-              </div>
-            </div>
-
-            {/* Diff content when expanded */}
-            {!collapsed && (
-              <div className="bg-surface/10">
-                {file.hunks.length === 0 && (
-                  <p className="text-text-muted p-3 text-xs">{file.diff || 'Loading diff…'}</p>
-                )}
-                {file.hasStagedChanges && file.hasUnstagedChanges && (
-                  <p className="text-text-muted p-2 text-xs">
-                    This file has both staged and unstaged changes. Commit includes only the staged
-                    changes unless you include unstaged changes.
-                  </p>
-                )}
-                <DiffBlock
-                  path={file.path}
-                  hunks={file.hunks}
-                  isCollapsed={collapsed}
-                  onToggleCollapse={() => {
+                <button
+                  type="button"
+                  title={file.path}
+                  aria-label={`Toggle diff for ${file.path}`}
+                  aria-expanded={!collapsed}
+                  onClick={() => {
                     onToggleFile(file.path);
                   }}
-                  viewMode={viewMode}
-                  wrapLines={wrapLines}
-                  showHeader={false}
-                />
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left select-none"
+                >
+                  {/* Single Slot: FileIcon at rest, Chevron replaces it on row hover */}
+                  <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+                    <span className="transition-opacity duration-150 group-hover/filerow:opacity-0">
+                      <FileIcon path={file.path} className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="text-text-muted absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover/filerow:opacity-100">
+                      {collapsed ? (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      )}
+                    </span>
+                  </div>
+
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-text-main truncate font-mono text-xs font-medium">
+                      {fileName}
+                    </span>
+                    {dirPath && (
+                      <span className="text-text-muted/50 truncate font-mono text-[10px]">
+                        {dirPath}/
+                      </span>
+                    )}
+                  </span>
+                </button>
+
+                <div className="flex shrink-0 items-center gap-2 pr-3 select-none">
+                  {(canStage || canUnstage) && (
+                    <button
+                      type="button"
+                      aria-label={canStage ? 'Stage file' : 'Unstage file'}
+                      title={`${canStage ? 'Stage' : 'Unstage'} ${file.path}`}
+                      onClick={() => (canStage ? onStage?.(file.path) : onUnstage?.(file.path))}
+                      className="border-accent/20 text-accent hover:bg-accent/15 flex h-6 cursor-pointer items-center gap-1 rounded-md border px-1.5 text-[10px] font-medium transition-colors"
+                    >
+                      {canStage ? <Plus className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                      {canStage ? 'Stage' : 'Unstage'}
+                    </button>
+                  )}
+                  <Dropdown.Root>
+                    <Dropdown.Trigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`More actions for ${file.path}`}
+                        className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded-md"
+                      >
+                        <Ellipsis className="h-3.5 w-3.5" />
+                      </button>
+                    </Dropdown.Trigger>
+                    <Dropdown.Portal>
+                      <Dropdown.Content align="end" className="min-w-44">
+                        {onOpenFile && (
+                          <Dropdown.Item onSelect={() => onOpenFile(file.path)} className="gap-2">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Open in editor
+                          </Dropdown.Item>
+                        )}
+                        <Dropdown.Item
+                          className="gap-2"
+                          onSelect={() => {
+                            useDraftStore.getState().attachContextToComposer({
+                              id: `file:${file.path}`,
+                              type: 'file',
+                              title: fileName,
+                              subtitle: file.path,
+                              value: file.path,
+                            });
+                            toast.success(`Added @${fileName} to chat`);
+                          }}
+                        >
+                          <MessageSquarePlus className="h-3.5 w-3.5" />
+                          Add to chat
+                        </Dropdown.Item>
+                        {canStage && canUnstage && (
+                          <Dropdown.Item onSelect={() => onUnstage?.(file.path)} className="gap-2">
+                            <Minus className="h-3.5 w-3.5" />
+                            Unstage file
+                          </Dropdown.Item>
+                        )}
+                        {onRevert && file.state !== 'committed' && (
+                          <>
+                            <Dropdown.Separator />
+                            <Dropdown.Item
+                              onSelect={() => onRevert(file.path)}
+                              className="gap-2 text-rose-400 focus-visible:bg-rose-500/10"
+                            >
+                              <Undo2 className="h-3.5 w-3.5" />
+                              Discard file changes
+                            </Dropdown.Item>
+                          </>
+                        )}
+                      </Dropdown.Content>
+                    </Dropdown.Portal>
+                  </Dropdown.Root>
+
+                  {/* Diff Line Stats (+N / -N) */}
+                  {(stats.additions > 0 || stats.deletions > 0) && (
+                    <div className="flex shrink-0 items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums">
+                      {stats.additions > 0 && (
+                        <span className="text-emerald-400">+{stats.additions}</span>
+                      )}
+                      {stats.deletions > 0 && (
+                        <span className="text-rose-400">-{stats.deletions}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Status Letter: Placed at MAX RIGHT (VS Code Style) */}
+                  <span
+                    className={cn(
+                      'w-3.5 shrink-0 text-center font-mono text-xs font-bold select-none',
+                      badge.color,
+                    )}
+                    title={`Status: ${badge.label}`}
+                  >
+                    {badge.letter}
+                  </span>
+                </div>
               </div>
-            )}
-          </div>
-        );
-      })}
+
+              {/* Diff content when expanded */}
+              {!collapsed && (
+                <div className="bg-surface/10">
+                  {file.hunks.length === 0 && (
+                    <p className="text-text-muted p-3 text-xs">{file.diff || 'Loading diff…'}</p>
+                  )}
+                  {file.hasStagedChanges && file.hasUnstagedChanges && (
+                    <p className="text-text-muted p-2 text-xs">
+                      This file has both staged and unstaged changes. Commit includes only the
+                      staged changes unless you include unstaged changes.
+                    </p>
+                  )}
+                  <DiffBlock
+                    path={file.path}
+                    hunks={file.hunks}
+                    isCollapsed={collapsed}
+                    onToggleCollapse={() => {
+                      onToggleFile(file.path);
+                    }}
+                    viewMode={viewMode}
+                    wrapLines={wrapLines}
+                    showHeader={false}
+                    scrollElement={parentRef}
+                    scrollOffset={item?.start ?? 0}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
