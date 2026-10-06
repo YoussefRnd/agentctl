@@ -318,6 +318,92 @@ describe('SessionEngine', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(onError).toHaveBeenCalledWith('Failed to parse SSE message');
   });
+
+  it('opts into snapshots and resumes from their high-water mark after older live updates', async () => {
+    const sessionId = '00000000-0000-0000-0000-000000000000';
+    const onHistorySnapshot = vi.fn();
+    engine = new SessionEngine({
+      sessionId,
+      sseUrl: 'http://localhost/stream',
+      onHistorySnapshot,
+      onEventsUpdate,
+      onStatusChange,
+      onStreamingChange,
+      onError,
+    });
+    engine.connect(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock.mock.calls[0][0]).toContain('snapshots=true');
+    const event = {
+      id: 100,
+      sessionId,
+      type: 'text' as const,
+      data: { role: 'provider' as const, content: 'Latest' },
+      createdAt: new Date(),
+    };
+    mockController.enqueue(
+      `id: 100\nevent: session_snapshot\ndata: ${JSON.stringify({ events: [event], nextBeforeId: 100, highWaterId: 100, changeSequence: 900 })}\n\n`,
+    );
+    mockController.enqueue(
+      `id: 2\nevent: session_event\ndata: ${JSON.stringify({ ...event, id: 2, sequence: 901, data: { role: 'provider', content: 'Old streaming update' } })}\n\n`,
+    );
+    await vi.advanceTimersByTimeAsync(16);
+    expect(onHistorySnapshot).toHaveBeenCalledWith({
+      events: [event],
+      nextBeforeId: 100,
+      highWaterId: 100,
+      changeSequence: 900,
+    });
+    expect(onEventsUpdate).toHaveBeenCalled();
+    const replacement = new MockStreamController();
+    fetchMock.mockResolvedValue({ ok: true, status: 200, body: replacement.stream });
+    mockController.close();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining('lastEventId=100'),
+      expect.any(Object),
+    );
+    expect(fetchMock.mock.calls.at(-1)?.[0]).toContain('afterSequence=901');
+    replacement.close();
+  });
+
+  it('does not acknowledge malformed messages or snapshots from another session', async () => {
+    const sessionId = '00000000-0000-0000-0000-000000000000';
+    const onHistorySnapshot = vi.fn();
+    engine = new SessionEngine({
+      sessionId,
+      sseUrl: 'http://localhost/stream',
+      onHistorySnapshot,
+      onEventsUpdate,
+      onStatusChange,
+      onStreamingChange,
+      onError,
+    });
+    engine.connect(5);
+    await vi.advanceTimersByTimeAsync(0);
+    mockController.enqueue('id: 999\nevent: session_event\ndata: {bad}\n\n');
+    const event = {
+      id: 999,
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      type: 'text',
+      data: { content: 'Wrong session' },
+      createdAt: new Date(),
+    };
+    mockController.enqueue(
+      `id: 999\nevent: session_snapshot\ndata: ${JSON.stringify({ events: [event], nextBeforeId: null, highWaterId: 999 })}\n\n`,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onHistorySnapshot).not.toHaveBeenCalled();
+    const replacement = new MockStreamController();
+    fetchMock.mockResolvedValue({ ok: true, status: 200, body: replacement.stream });
+    mockController.close();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining('lastEventId=5'),
+      expect.any(Object),
+    );
+    replacement.close();
+  });
 });
 
 describe('coalesceBufferedEvents', () => {

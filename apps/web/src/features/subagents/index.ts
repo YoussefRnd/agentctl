@@ -4,6 +4,8 @@ export {
   extractSubagentGroups,
   formatDuration,
   isSubagentToolCall,
+  getSubagentGroupKey,
+  isSubagentActive,
   type SubagentGroup,
 } from './lib/subagentBlockUtils.js';
 export { useSubagentStore } from './model/useSubagentStore.js';

@@ -1,15 +1,13 @@
+import { observeAcpStderr } from './stderr.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
-import fs from 'node:fs';
-import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
-import {
-  ClientSideConnection,
-  ndJsonStream,
-  type RequestPermissionResponse,
-} from '@agentclientprotocol/sdk';
+import { client, methods, ndJsonStream } from '@agentclientprotocol/sdk';
+import { agentConnectionFacade } from './client-connection.js';
+import { respondToBrowserAuthentication } from '../protocol/browser-auth.js';
+import type { AgentAuthenticationOptions } from '../../agent/types.js';
 import type { ACPConnectionHandle } from '../types.js';
-import { cleanEnv } from './acp-process-lifecycle.js';
+import { ACP_PROCESS_OPTIONS, ownAcpProcess, cleanEnv } from './acp-process-lifecycle.js';
 
 export { ProcessStreamTransport, cleanEnv } from './acp-process-lifecycle.js';
 
@@ -18,13 +16,19 @@ export function createAgentConnection(
   args: string[],
   env: Record<string, string>,
   spawnImpl: typeof spawn = spawn,
+  authOptions: AgentAuthenticationOptions = {},
 ): ACPConnectionHandle {
-  const child = spawnImpl(command, args, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: cleanEnv(env),
-    cwd: os.tmpdir(),
-  });
+  const child = ownAcpProcess(
+    spawnImpl(command, args, {
+      ...ACP_PROCESS_OPTIONS,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: cleanEnv(env),
+      cwd: os.tmpdir(),
+    }),
+    spawnImpl === spawn,
+  );
 
+  observeAcpStderr(child, cleanEnv(env));
   const stdin = child.stdin as typeof child.stdin | null;
   const stdout = child.stdout as typeof child.stdout | null;
 
@@ -38,37 +42,15 @@ export function createAgentConnection(
     Readable.toWeb(stdout) as ReadableStream<Uint8Array>,
   );
 
-  const connection = new ClientSideConnection(
-    () => ({
-      sessionUpdate() {
-        return Promise.resolve();
-      },
-      requestPermission(request) {
-        void request;
-        return Promise.resolve<RequestPermissionResponse>({
-          outcome: { outcome: 'selected', optionId: 'allow-once' },
-        });
-      },
-      async readTextFile(p: { path: string }) {
-        const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(os.tmpdir(), p.path);
-        if (!fs.existsSync(absPath)) {
-          throw new Error(`File not found: ${absPath}`);
-        }
-        const content = fs.readFileSync(absPath, 'utf8');
-        return Promise.resolve({ content });
-      },
-      async writeTextFile(p: { path: string; content: string }) {
-        const absPath = path.isAbsolute(p.path) ? p.path : path.resolve(os.tmpdir(), p.path);
-        const dir = path.dirname(absPath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(absPath, p.content, 'utf8');
-        return Promise.resolve({});
-      },
-    }),
-    stream,
-  );
+  const app = client({ name: 'agentctl-control' })
+    .onNotification(methods.client.session.update, () => undefined)
+    .onRequest(methods.client.session.requestPermission, () => ({
+      outcome: { outcome: 'cancelled' },
+    }))
+    .onRequest(methods.client.elicitation.create, ({ params, signal }) =>
+      respondToBrowserAuthentication(params, signal, authOptions),
+    );
+  const connection = agentConnectionFacade(app.connect(stream));
 
   return { child, connection };
 }

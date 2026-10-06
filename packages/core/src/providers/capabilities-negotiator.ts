@@ -1,10 +1,17 @@
 import type { Provider } from './provider.js';
-import type { AgentConfigOption, AgentFeatures, ThinkingEffort } from '@agentctl/shared';
+import {
+  DEFAULT_AGENT_MODEL,
+  findAgentConfigOption,
+  type AgentFeatures,
+  type ThinkingEffort,
+} from '@agentctl/shared';
 
 export interface NegotiatedCapabilities {
   selectedModel: string;
+  contextWindow?: number;
   selectedThinkingEffort: ThinkingEffort;
   features: AgentFeatures;
+  modelFallback?: { requested: string; selected: string };
   resolvedThinkingConfigId?: string;
   resolvedModelConfigId?: string;
 }
@@ -21,27 +28,30 @@ export function negotiateCapabilities(
   const discovery = provider.toDiscovery();
   const configOptions = discovery.configOptions ?? [];
 
+  let modelFallback: NegotiatedCapabilities['modelFallback'];
+
   // 1. Validate / Negotiate Model
-  const modelOption = configOptions.find(
-    (opt: AgentConfigOption) => opt.id === 'model' || opt.id === 'selectedModel',
-  );
+  const modelOption = findAgentConfigOption(configOptions, 'model');
   let resolvedModelConfigId: string | undefined = undefined;
   if (modelOption) {
     resolvedModelConfigId = modelOption.id;
-    if (selectedModel !== 'default' && selectedModel !== '') {
+    if (selectedModel !== DEFAULT_AGENT_MODEL && selectedModel !== '') {
       const isModelAvailable =
         modelOption.options?.some((opt: { value: string }) => opt.value === selectedModel) ?? false;
       if (!isModelAvailable && (modelOption.options?.length ?? 0) > 0) {
-        selectedModel = modelOption.options?.[0]?.value ?? defaultSelection.selectedModel;
+        const requested = selectedModel;
+        const advertisedDefault =
+          typeof modelOption.currentValue === 'string' ? modelOption.currentValue : '';
+        selectedModel = modelOption.options?.some((option) => option.value === advertisedDefault)
+          ? advertisedDefault
+          : modelOption.options![0].value;
+        modelFallback = { requested, selected: selectedModel };
       }
     }
   }
 
   // 2. Validate / Negotiate Thinking Effort
-  const thinkingOption = configOptions.find(
-    (opt: AgentConfigOption) =>
-      opt.id === 'thinking' || opt.id === 'thinking_effort' || opt.id === 'selectedThinkingEffort',
-  );
+  const thinkingOption = findAgentConfigOption(configOptions, 'thought_level');
   let resolvedThinkingConfigId: string | undefined = undefined;
   if (thinkingOption) {
     resolvedThinkingConfigId = thinkingOption.id;
@@ -57,6 +67,9 @@ export function negotiateCapabilities(
 
   return {
     selectedModel,
+    contextWindow: modelOption?.options?.find((option) => option.value === selectedModel)
+      ?.contextWindow,
+    modelFallback,
     selectedThinkingEffort,
     features: provider.features,
     resolvedThinkingConfigId,

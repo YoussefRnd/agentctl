@@ -13,6 +13,13 @@ export {
 } from './model/SessionContext.js';
 export type { StructuredPlanItem } from './model/SessionContext.js';
 export { useSessionActions } from './model/useSessionActions.js';
+export { useSessionTurnState } from './model/useSessionTurnState.js';
+export {
+  nextOptimisticEventId,
+  updateOptimisticDelivery,
+  acknowledgeSessionInput,
+} from './model/messageDelivery.js';
+export type { SessionTurnState, SessionTurnPhase } from './model/sessionTurnState.js';
 export { useDoubleEscToStop, ESC_STOP_TOAST_ID } from './model/useDoubleEscToStop.js';
 export { useOpenWorkspaceFile } from './model/useOpenWorkspaceFile.js';
 export { sessionQueries } from './api/sessionQueries.js';

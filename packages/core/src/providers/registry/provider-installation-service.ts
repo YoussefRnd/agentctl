@@ -1,3 +1,4 @@
+import { registryProviderMetadata } from './provider-data.js';
 import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
 import path from 'node:path';
 import os from 'node:os';
@@ -304,24 +305,15 @@ export class ProviderInstallationService {
       }
 
       const candidateValues = {
-        name: agent.name,
-        version: agent.version,
-        description: agent.description,
-        icon: agent.icon ?? null,
-        distribution: JSON.stringify(agent.distribution),
+        ...registryProviderMetadata(agent),
         command,
         launchArgs: JSON.stringify(launchArgs),
         launchEnv: JSON.stringify(launchEnv),
-        configOptions: JSON.stringify(agent.configOptions ?? []),
-        authMethods: JSON.stringify(agent.authMethods ?? []),
         installState,
         installError: null,
         installStage: null,
         installSource,
         installedVersion,
-        supportsDynamicModel: agent.supportsDynamicModel ?? false,
-        supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
-        supportsLogout: agent.supportsLogout ?? false,
       } as const;
 
       setStage('connecting');
@@ -333,8 +325,6 @@ export class ProviderInstallationService {
         const candidateRow: ProviderData = {
           ...rowForProbe,
           ...candidateValues,
-          launchArgs: JSON.stringify(launchArgs),
-          launchEnv: JSON.stringify(launchEnv),
         };
         const candidateLaunch = this.deps.launcher.resolveLaunchFromBase(candidateRow, {
           command,
@@ -488,6 +478,7 @@ export class ProviderInstallationService {
   ): Promise<void> {
     for (const row of this.deps.store.list()) {
       if (
+        row.registryAgentId ||
         !row.enabled ||
         (row.installState !== 'installed_local' && row.installState !== 'system_available') ||
         (row.installSource !== 'managed' &&

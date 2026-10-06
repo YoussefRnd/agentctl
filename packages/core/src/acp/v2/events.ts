@@ -1,5 +1,8 @@
+import { createCompactionProjector } from './compaction.js';
+import { createTerminalProjector } from './terminals.js';
 import type {
   AgentMessage,
+  UserMessage,
   AgentThought,
   AvailableCommandsUpdate,
   ConfigOptionUpdate,
@@ -15,40 +18,34 @@ import type {
   ToolCallContentChunk,
   ToolCallUpdate,
   UsageUpdate,
+  PlanRemoved,
+  CompactionUpdate,
+  CompactionSummaryChunk,
 } from '@agentclientprotocol/sdk/experimental/v2';
 import type { AgentConfigOption } from '@agentctl/shared';
 import type { AgentToolCallContent, AgentUpdate } from '../../agent/types.js';
+import { modelContextMetadata } from '../protocol/model-context.js';
+import { displayAcpContent } from '../protocol/content.js';
+import { projectRetryMetadata } from '../protocol/retry-metadata.js';
+import { toolArgumentsFrom } from '../protocol/tool-call-utils.js';
 
 function textFromContent(content: unknown): string {
   if (!Array.isArray(content)) return '';
-  return content
-    .filter(
-      (block): block is { type: 'text'; text: string } =>
-        typeof block === 'object' &&
-        block !== null &&
-        (block as { type?: unknown }).type === 'text' &&
-        typeof (block as { text?: unknown }).text === 'string',
-    )
-    .map((block) => block.text)
-    .join('');
-}
-
-function textChunk(content: unknown): string | null {
-  if (typeof content !== 'object' || content === null) return null;
-  const block = content as { type?: unknown; text?: unknown };
-  return block.type === 'text' && typeof block.text === 'string' ? block.text : null;
+  return content.map(displayAcpContent).join('');
 }
 
 function projectSelectOptions(option: Extract<SessionConfigOption, { type: 'select' }>) {
   return option.options.flatMap((entry) =>
     'groupId' in entry
       ? entry.options.map((item) => ({
+          ...modelContextMetadata(item),
           value: item.value,
           name: item.name,
           description: item.description ?? undefined,
         }))
       : [
           {
+            ...modelContextMetadata(entry),
             value: entry.value,
             name: entry.name,
             description: entry.description ?? undefined,
@@ -83,29 +80,32 @@ export function projectV2ConfigOption(option: SessionConfigOption): AgentConfigO
 }
 
 /** Converts one ACP v2 update into product-owned updates. */
-export function projectV2SessionUpdate(update: SessionUpdate): AgentUpdate[] {
+export function projectV2SessionUpdate(
+  update: SessionUpdate,
+  projectTerminal = createTerminalProjector(),
+): AgentUpdate[] {
   switch (update.sessionUpdate) {
+    case 'user_message_chunk':
     case 'agent_message_chunk': {
       const value = update as ContentChunk;
-      const text = textChunk(value.content);
-      return text !== null
-        ? [
-            {
-              type: 'text',
-              text,
-              messageId: value.messageId,
-              operation: 'append',
-            },
-          ]
-        : [];
+      const text = displayAcpContent(value.content);
+      return [
+        {
+          type: update.sessionUpdate === 'user_message_chunk' ? 'user_text' : 'text',
+          text,
+          messageId: value.messageId,
+          operation: 'append',
+        },
+      ];
     }
+    case 'user_message':
     case 'agent_message': {
-      const value = update as AgentMessage;
+      const value = update as AgentMessage | UserMessage;
       return value.content === undefined
         ? []
         : [
             {
-              type: 'text',
+              type: update.sessionUpdate === 'user_message' ? 'user_text' : 'text',
               text: textFromContent(value.content),
               messageId: value.messageId,
               operation: 'replace',
@@ -114,17 +114,15 @@ export function projectV2SessionUpdate(update: SessionUpdate): AgentUpdate[] {
     }
     case 'agent_thought_chunk': {
       const value = update as ContentChunk;
-      const text = textChunk(value.content);
-      return text !== null
-        ? [
-            {
-              type: 'thought',
-              text,
-              messageId: value.messageId,
-              operation: 'append',
-            },
-          ]
-        : [];
+      const text = displayAcpContent(value.content);
+      return [
+        {
+          type: 'thought',
+          text,
+          messageId: value.messageId,
+          operation: 'append',
+        },
+      ];
     }
     case 'agent_thought': {
       const value = update as AgentThought;
@@ -146,7 +144,8 @@ export function projectV2SessionUpdate(update: SessionUpdate): AgentUpdate[] {
           type: 'tool_call',
           call: {
             toolCallId: value.toolCallId,
-            name: value.name ?? value.title ?? undefined,
+            name: value.name ?? undefined,
+            arguments: toolArgumentsFrom(value.rawInput),
             title: value.title ?? undefined,
             status: value.status ?? undefined,
             kind: value.kind ?? undefined,
@@ -159,6 +158,24 @@ export function projectV2SessionUpdate(update: SessionUpdate): AgentUpdate[] {
             rawOutput: value.rawOutput,
           },
           contentOperation: 'replace',
+          clearFields: [
+            'name',
+            'title',
+            'status',
+            'kind',
+            'locations',
+            'content',
+            'rawInput',
+            'rawOutput',
+          ]
+            .filter((field) => (value as unknown as Record<string, unknown>)[field] === null)
+            .flatMap((field) =>
+              field === 'rawInput'
+                ? ['rawInput', 'arguments']
+                : field === 'locations' || field === 'kind' || field === 'content'
+                  ? [field, 'effects']
+                  : [field],
+            ),
         },
       ];
     }
@@ -177,67 +194,49 @@ export function projectV2SessionUpdate(update: SessionUpdate): AgentUpdate[] {
     }
     case 'state_update':
       return [{ type: 'status', status: (update as StateUpdate).state }];
-    case 'terminal_update': {
-      const value = update as TerminalUpdate;
-      const events: AgentUpdate[] = [];
-      if (typeof value.command === 'string') {
-        events.push({
-          type: 'terminal_created',
-          terminalId: value.terminalId,
-          command: value.command,
-        });
-      }
-      if (value.output?.data) {
-        events.push({
-          type: 'terminal_output',
-          terminalId: value.terminalId,
-          data: Buffer.from(value.output.data, 'base64').toString('utf8'),
-        });
-      }
-      if (value.exitStatus) {
-        events.push({
-          type: 'terminal_exit',
-          terminalId: value.terminalId,
-          code: value.exitStatus.exitCode ?? null,
-        });
-      }
-      return events;
-    }
-    case 'terminal_output_chunk': {
-      const value = update as TerminalOutputChunk;
-      return [
-        {
-          type: 'terminal_output',
-          terminalId: value.terminalId,
-          data: Buffer.from(value.data, 'base64').toString('utf8'),
-        },
-      ];
-    }
+    case 'terminal_update':
+    case 'terminal_output_chunk':
+      return projectTerminal({
+        ...(update as TerminalUpdate | TerminalOutputChunk),
+        sessionUpdate: update.sessionUpdate,
+      });
     case 'plan_update': {
       const value = update as PlanUpdate;
       const plan = value.plan as PlanItems;
-      return value.plan.type === 'items'
-        ? [
-            {
-              type: 'plan_update',
-              plan: plan.entries.map((entry) => ({
-                name: entry.content,
-                status:
-                  entry.status === 'in_progress' || entry.status === 'completed'
-                    ? entry.status
-                    : 'pending',
-                isCompleted: entry.status === 'completed',
-                priority:
-                  entry.priority === 'high' ||
-                  entry.priority === 'medium' ||
-                  entry.priority === 'low'
-                    ? entry.priority
-                    : undefined,
-              })),
-            },
-          ]
-        : [];
+      if (value.plan.type === 'items') {
+        const items: Extract<AgentUpdate, { type: 'plan_update' }>['plan'] = plan.entries.map(
+          (entry) => ({
+            name: entry.content,
+            status: entry.status,
+            isCompleted: entry.status === 'completed',
+            priority: entry.priority,
+          }),
+        );
+        return [
+          { type: 'plan_update', plan: items, artifact: { id: plan.planId, kind: 'items', items } },
+        ];
+      }
+      const other = value.plan as { planId?: string; type: string; content?: string; uri?: string };
+      return [
+        {
+          type: 'plan_update',
+          plan: [],
+          artifact: {
+            id: other.planId ?? 'agent-plan',
+            kind: other.type === 'markdown' || other.type === 'file' ? other.type : 'unknown',
+            ...(other.type === 'markdown'
+              ? { markdown: (other.content ?? '').slice(0, 65536) }
+              : {}),
+            ...(other.type === 'file' ? { uri: (other.uri ?? '').slice(0, 4096) } : {}),
+            ...(other.type !== 'file' && other.type !== 'markdown'
+              ? { contentType: other.type.slice(0, 128) }
+              : {}),
+          },
+        },
+      ];
     }
+    case 'plan_removed':
+      return [{ type: 'plan_update', plan: [], removedPlanId: (update as PlanRemoved).planId }];
     case 'available_commands_update': {
       const value = update as AvailableCommandsUpdate;
       return [
@@ -272,6 +271,7 @@ export function projectV2SessionUpdate(update: SessionUpdate): AgentUpdate[] {
           type: 'session_info_update',
           title: value.title,
           updatedAt: value.updatedAt,
+          ...projectRetryMetadata(value._meta),
         },
       ];
     }
@@ -291,4 +291,21 @@ export function projectV2SessionUpdate(update: SessionUpdate): AgentUpdate[] {
     default:
       return [];
   }
+}
+
+export function createV2SessionProjector() {
+  const projectTerminal = createTerminalProjector();
+  const compactions = createCompactionProjector();
+  return (update: SessionUpdate) => {
+    if (
+      update.sessionUpdate === 'compaction_update' ||
+      update.sessionUpdate === 'compaction_summary_chunk'
+    )
+      return compactions(
+        update as
+          | (CompactionUpdate & { sessionUpdate: 'compaction_update' })
+          | (CompactionSummaryChunk & { sessionUpdate: 'compaction_summary_chunk' }),
+      );
+    return projectV2SessionUpdate(update, projectTerminal);
+  };
 }

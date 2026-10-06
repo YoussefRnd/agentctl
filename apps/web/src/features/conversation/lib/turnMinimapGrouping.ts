@@ -1,6 +1,7 @@
 import type { SessionEventRow } from '@agentctl/shared';
 import { isSessionEventText, isSessionEventToolCall } from '@agentctl/shared';
 import { extractTurnChanges, type ReviewFile } from '@/features/review';
+import { orderConversationEvents } from './orderConversationEvents';
 
 export interface ConversationTurn {
   id: string;
@@ -110,7 +111,7 @@ export function groupConversationTurns(
     agentEvents: SessionEventRow[];
   } | null = null;
 
-  for (const e of events) {
+  for (const e of orderConversationEvents(events)) {
     // Skip internal system updates
     const statusVal = (e.data as { status?: string } | null)?.status;
     const isHidden =
@@ -121,7 +122,7 @@ export function groupConversationTurns(
       );
     if (isHidden) continue;
 
-    const isUser = isSessionEventText(e) && e.data.role === 'user';
+    const isUser = isSessionEventText(e) && e.data.role === 'user' && !e.metadata?.nativeSessionId;
 
     if (isUser) {
       if (currentTurn) {

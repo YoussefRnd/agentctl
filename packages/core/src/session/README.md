@@ -1,0 +1,105 @@
+# Session architecture
+
+`SessionManager` is the public application facade. ACP wire formats and negotiation remain
+inside `../acp`; this layer uses the provider-independent `AgentSession` contract.
+
+| Directory      | Responsibility                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| `commands/`    | Serialize session mutations, validate attachments, recognize acceptance receipts, and handle commands |
+| `execution/`   | Dispatch accepted messages, execute turns, recover operations and expose queue controls               |
+| `runtime/`     | Own a live provider connection, binding and resource cleanup                                          |
+| `requests/`    | Evaluate permissions, track user input and release request-specific waiters on cancellation           |
+| `persistence/` | Commit conversation rows, metadata, token accounting and change cursors atomically                    |
+| `projection/`  | Merge provider updates into conversation and session read models                                      |
+| `services/`    | Launch sessions and perform workspace, history and lifecycle operations                               |
+
+## Identity and state
+
+A conversation is the application session ID. A message command has a stable client command
+ID and an operation receipt. Each accepted message creates a turn attempt. A runtime binding
+has its own UUID, configured provider/profile ID and provider-native session ID. Reconnecting
+a provider does not change the conversation identity or reuse the old runtime identity.
+
+Connection (`connected`, `closed`, `lost`), turn execution, and attention are independent.
+The existing session status remains available for compatibility. The execution endpoint
+returns the independent dimensions and the accepted queue.
+
+Each execution response also identifies the owning user event and exposes persisted failure
+details (`message`, and provider `code`/`data` when supplied) and turn timings. Diagnostics belong
+to an attempt, so a newly active turn never inherits a previous turn's failure. Conversation
+grouping uses attempt and parent identities to keep output and errors beside their owning
+input even when several inputs were accepted before the active turn completed.
+
+Timings use a monotonic clock. `preparationMs` measures execution start to provider dispatch;
+`acceptanceMs`, `firstOutputMs` and `completionMs` measure elapsed time from that dispatch.
+First output includes text, thoughts, tool calls, delegated activity and terminal output.
+An unobserved phase stays absent: v1 does not report v2 acceptance, and rejected prompts may
+have no output. Timings and structured errors are saved in correlated status rows, while the
+operation retains its failure message. Independent API reads restore them after reconnect.
+
+## Acceptance and execution
+
+1. Validate the session and resolve attachments before accepting a message.
+2. Commit the user row, operation and turn attempt in one SQLite transaction.
+3. Publish only after commit and return the accepted event ID immediately.
+4. Dispatch queued messages in server order, with one active turn per conversation.
+5. Record completion, cancellation or failure separately from acceptance.
+
+Commands use short per-session lanes. A provider turn does not occupy the command lane.
+Approvals and Stop bypass it so they can release the active turn. Configuration, persona,
+history and handoff commands coordinate at the public facade; internal dependencies avoid
+recursively acquiring the same lane. User reconnect, approval-policy changes and workspace commands also pass through the coordinator.
+Archive, delete and finalization suspend dispatch, cancel outstanding messages, close the runtime,
+and wait for the active dispatch to settle before changing the workspace. Failed retirement
+releases the suspension; a successful delete remains closed to acceptance until its row is removed.
+The legacy input entry point acknowledges durable acceptance, just like `startInput`.
+Short configuration RPCs have deadlines. Waiting for
+the final ACP v2 turn notification has no fixed one-minute timeout.
+
+The browser keeps an outbox until the server acknowledges a send. Accepted prompts belong
+to the server and keep executing with the browser closed. Queue reorder, cancellation and
+resume use server commands. Legacy acceptance receipts remain valid across this migration.
+
+## Recovery
+
+The application currently assumes **one owning server process per database**. Startup retires
+its previous runtime bindings. Unsent operations can resume. Operations interrupted while
+running have unknown delivery and block later messages until the user resolves the uncertainty.
+A failed queue can be resumed explicitly. Unknown delivery is never automatically resent:
+ACP cannot guarantee that the provider did not execute a request before the connection broke.
+
+Runtime identity checks prevent callbacks from an old connection from changing a replacement
+runtime's state. Attempt updates also preserve cancellation and unknown outcomes. Provider
+permission choices retain their ACP meaning; this architecture adds no provider-name mapping.
+
+## Read models and reconnect
+
+Conversation rows are mutable read models. `session_event_changes` holds immutable, monotonically
+increasing cursor entries pointing to those rows. It is a change journal, not a full event-sourced
+history of every previous body. Body, metadata, token accounting and cursor changes commit together.
+The journal retains 10,000 entries per session; older clients receive a fresh bounded snapshot.
+
+A snapshot and its cursor are read from the same transaction. Corrections to an older message
+or tool row receive a new cursor, so reconnects can discover them. Legacy row-ID replay remains
+supported. Streaming deltas are transient; persisted full rows and live full snapshots restore
+content after reconnect. Message IDs survive projector recreation; a bounded in-memory cache
+falls back to persisted identity. ACP v2 explicit null clearing remains distinct from omission.
+
+## Runtime responsibilities
+
+`SessionRuntime` owns the connection and its lifecycle. `SessionTurnExecutor` prepares and
+executes one turn, captures usage and finalizes its output. `SessionPermissionController`
+evaluates policy, records grants and coordinates permission choices. Request cancellation
+uses the SDK request signal in both ACP adapters. Request-scoped elicitations are correlated
+with the exact outstanding client request; unsupported or stale scopes are declined.
+Form validation runs before settling a request, so an invalid submission can be corrected.
+Legacy ACP `models` capabilities use `session/set_model`; categorized configuration options
+use `session/set_config_option`. Selection follows the advertised protocol surface without
+provider-name mappings.
+
+## Validation
+
+Regression tests cover transaction rollback, message receipt reuse, ordered and independent
+session dispatch, restart uncertainty, queue mutations, old-message corrections, metadata
+preservation, request cancellation, migration upgrades and SSE catch-up. Use the workspace
+Vitest configuration; localhost and subprocess fixtures require a runtime that permits them.

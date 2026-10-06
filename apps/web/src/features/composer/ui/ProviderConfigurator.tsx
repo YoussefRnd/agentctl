@@ -7,6 +7,8 @@ import { CommandDropdown } from './CommandDropdown';
 import { ThinkingEffortControl } from './ThinkingEffortControl';
 import { ConfigOptionsPanel, useSession } from '@/features/sessions';
 import {
+  findAgentConfigOption,
+  getAgentConfigCategory,
   resolveAgentFeatures,
   type ProviderDiscovery,
   type SessionWithCapabilities,
@@ -41,9 +43,7 @@ export function ProviderPickerTrigger({
 }) {
   const needsAuth = activeProvider?.authState === 'required';
 
-  const modelOption = activeProvider?.configOptions?.find(
-    (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-  );
+  const modelOption = findAgentConfigOption(activeProvider?.configOptions, 'model');
   const currentModelValue = selectedModelId ?? modelOption?.currentValue;
   const matchingModel = modelOption?.options?.find((o) => o.value === currentModelValue);
   const modelLabel =
@@ -76,7 +76,7 @@ export function ProviderPickerTrigger({
         >
           <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
           <span className="max-w-[200px] truncate text-xs font-medium">
-            {providerLabel} · Needs API key
+            {providerLabel} · Needs sign-in
           </span>
         </button>
       ) : (
@@ -161,9 +161,7 @@ export function ThinkingEffortSelector({
   handleSetConfigOption: (id: string, value: string) => Promise<void>;
   isUpdating: boolean;
 }) {
-  const option = sessionData?.session.sessionConfigOptions.find(
-    (item) => item.category === 'thought_level',
-  );
+  const option = findAgentConfigOption(sessionData?.session.sessionConfigOptions, 'thought_level');
   const activeProvider = sessionData?.capabilities.find(
     (item) => item.id === sessionData.session.selectedProvider,
   );
@@ -205,9 +203,7 @@ export function AgentPersonaSelector({
 
   const { agentPersona, availableAgentPersonas } = sessionData.session;
 
-  const modeOption = sessionData.session.sessionConfigOptions.find(
-    (opt) => opt.category === 'mode',
-  );
+  const modeOption = findAgentConfigOption(sessionData.session.sessionConfigOptions, 'mode');
 
   if (!modeOption && availableAgentPersonas.length === 0) return null;
 
@@ -252,11 +248,8 @@ export function AdvancedSettingsPopover({ isLoading }: { isLoading: boolean }) {
   if (!resolveAgentFeatures(activeProvider).configuration.options) return null;
 
   const hasAdditionalConfig = sessionData.session.sessionConfigOptions.some((opt) => {
-    const cat = opt.category ?? 'other';
-    return (
-      !(PRIMARY_CONFIG_CATEGORIES as readonly string[]).includes(cat) &&
-      !(PRIMARY_CONFIG_CATEGORIES as readonly string[]).includes(opt.id)
-    );
+    const cat = getAgentConfigCategory(opt);
+    return !(PRIMARY_CONFIG_CATEGORIES as readonly string[]).includes(cat);
   });
 
   if (!hasAdditionalConfig) return null;

@@ -7,7 +7,7 @@ import {
   type MutationFunctionContext,
 } from '@tanstack/react-query';
 import { providerService } from '@agentctl/api-client';
-import type { SessionWithCapabilities } from '@agentctl/shared';
+import { findAgentConfigOption, type SessionWithCapabilities } from '@agentctl/shared';
 import { providerKeys, sessionKeys } from '../../../shared/lib/queryKeys.js';
 import { useActionDispatcher } from '@/shared/hooks/useActionDispatcher';
 
@@ -68,13 +68,13 @@ export function useProviders(
 
       let selectedModel = modelId;
       if (!selectedModel) {
-        const modelOption = capability?.configOptions?.find(
-          (option) => option.id === 'model' || option.id === 'selectedModel',
-        );
+        const modelOption = findAgentConfigOption(capability?.configOptions, 'model');
         selectedModel =
+          capability?.defaultModel ??
           (typeof modelOption?.currentValue === 'string'
             ? modelOption.currentValue
-            : modelOption?.options?.[0]?.value) ?? 'default';
+            : modelOption?.options?.[0]?.value) ??
+          'default';
       }
 
       void execute(`switch-provider-${providerId}`, () =>

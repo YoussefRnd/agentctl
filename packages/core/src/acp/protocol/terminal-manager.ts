@@ -1,3 +1,11 @@
+import { StringDecoder } from 'node:string_decoder';
+import {
+  ACP_PROCESS_OPTIONS,
+  ownAcpProcess,
+  terminateChildProcess,
+  withTimeout,
+} from '../transport/acp-process-lifecycle.js';
+import { ACP_SESSION_CLOSE_TIMEOUT_MS } from '../transport/limits.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
@@ -28,6 +36,10 @@ export interface TerminalProcess {
   truncated: boolean;
 }
 
+export const MAX_TERMINAL_OUTPUT_BYTES = 1024 * 1024;
+export const MAX_RETAINED_TERMINALS = 32;
+export const MAX_ACTIVE_TERMINALS = 16;
+
 export class TerminalManager extends EventEmitter {
   private terminals = new Map<string, TerminalProcess>();
 
@@ -36,18 +48,27 @@ export class TerminalManager extends EventEmitter {
   }
 
   spawn(options: TerminalOptions): TerminalId {
+    if (
+      this.terminals.size >= MAX_RETAINED_TERMINALS ||
+      [...this.terminals.values()].filter((terminal) => !terminal.hasExited).length >=
+        MAX_ACTIVE_TERMINALS
+    )
+      throw new Error('Terminal limit reached. Release unused terminals before creating more.');
     const terminalId = crypto.randomUUID();
     const cleanEnv: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
       if (value !== undefined) cleanEnv[key] = value;
     }
     if (options.env) Object.assign(cleanEnv, options.env);
-    const child = spawn(options.command, options.args ?? [], {
-      cwd: options.cwd,
-      env: cleanEnv,
-      shell: false,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const child = ownAcpProcess(
+      spawn(options.command, options.args ?? [], {
+        ...ACP_PROCESS_OPTIONS,
+        cwd: options.cwd,
+        env: cleanEnv,
+        shell: false,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }),
+    );
 
     const closed = Promise.withResolvers<{
       exitCode: number | null;
@@ -65,7 +86,7 @@ export class TerminalManager extends EventEmitter {
       closed: closed.promise,
     };
 
-    child.on('exit', (code, signal) => {
+    child.on('close', (code, signal) => {
       termRecord.exitCode = code;
       termRecord.signal = signal;
       termRecord.hasExited = true;
@@ -79,31 +100,36 @@ export class TerminalManager extends EventEmitter {
       closed.resolve({ exitCode: null, signal: null });
     });
 
-    const outputByteLimit = options.outputByteLimit ?? 10 * 1024 * 1024;
+    const outputByteLimit =
+      Number.isSafeInteger(options.outputByteLimit) && options.outputByteLimit! >= 0
+        ? Math.min(options.outputByteLimit!, MAX_TERMINAL_OUTPUT_BYTES)
+        : MAX_TERMINAL_OUTPUT_BYTES;
 
+    let outputBytes = 0;
     const applyOutputLimit = () => {
+      if (outputBytes <= outputByteLimit) return;
       const buf = Buffer.from(termRecord.output, 'utf8');
       if (buf.length > outputByteLimit) {
         let start = buf.length - outputByteLimit;
         while (start < buf.length && (buf[start]! & 0xc0) === 0x80) start += 1;
         termRecord.output = buf.subarray(start).toString('utf8');
+        outputBytes = buf.length - start;
         termRecord.truncated = true;
       }
     };
 
-    child.stdout.on('data', (data: Buffer) => {
-      const text = data.toString();
+    const appendOutput = (text: string) => {
+      if (!text) return;
       termRecord.output += text;
+      outputBytes += Buffer.byteLength(text, 'utf8');
       applyOutputLimit();
       this.emit('output', { terminalId, data: text });
-    });
-
-    child.stderr.on('data', (data: Buffer) => {
-      const text = data.toString();
-      termRecord.output += text;
-      applyOutputLimit();
-      this.emit('output', { terminalId, data: text });
-    });
+    };
+    for (const stream of [child.stdout, child.stderr]) {
+      const decoder = new StringDecoder('utf8');
+      stream.on('data', (data: Buffer) => appendOutput(decoder.write(data)));
+      stream.on('end', () => appendOutput(decoder.end()));
+    }
 
     this.terminals.set(terminalId, termRecord);
 
@@ -113,7 +139,7 @@ export class TerminalManager extends EventEmitter {
   kill(terminalId: string): void {
     const term = this.terminals.get(terminalId);
     if (term && !term.hasExited) {
-      term.child.kill();
+      terminateChildProcess(term.child, this.logger);
     }
   }
 
@@ -128,7 +154,10 @@ export class TerminalManager extends EventEmitter {
         this.logger.warn(`cannot write, terminal ${terminalId} stdin is null`);
         return false;
       }
-      this.logger.info({ terminalId, data }, `writing data to terminal`);
+      this.logger.debug(
+        { terminalId, bytes: Buffer.byteLength(data, 'utf8') },
+        'Writing terminal input',
+      );
       return term.child.stdin.write(data);
     }
     this.logger.warn(`terminal ${terminalId} not found for write`);
@@ -139,7 +168,7 @@ export class TerminalManager extends EventEmitter {
     const term = this.terminals.get(terminalId);
     if (term) {
       if (!term.hasExited) {
-        term.child.kill('SIGKILL');
+        terminateChildProcess(term.child, this.logger, 0, 'SIGKILL');
       }
       this.terminals.delete(terminalId);
     }
@@ -162,17 +191,20 @@ export class TerminalManager extends EventEmitter {
     for (const term of this.terminals.values()) {
       promises.push(term.closed);
       if (!term.hasExited) {
-        term.child.kill('SIGTERM');
+        terminateChildProcess(term.child, this.logger);
       }
     }
 
     if (promises.length > 0) {
-      const timeout = new Promise<void>((resolve) => setTimeout(resolve, 2000));
-      await Promise.race([Promise.all(promises), timeout]);
+      await withTimeout(
+        Promise.all(promises),
+        ACP_SESSION_CLOSE_TIMEOUT_MS,
+        'waiting for terminals to exit',
+      ).catch(() => undefined);
 
       for (const term of this.terminals.values()) {
         if (!term.hasExited) {
-          term.child.kill('SIGKILL');
+          terminateChildProcess(term.child, this.logger, 0, 'SIGKILL');
         }
       }
     }

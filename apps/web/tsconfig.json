@@ -11,7 +11,7 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx"
   },
-  "include": ["src/**/*", "vite-env.d.ts", "vite.config.ts", "vitest.config.ts"],
+  "include": ["src/**/*", "package.json", "vite-env.d.ts", "vite.config.ts", "vitest.config.ts"],
   "references": [
     { "path": "../../packages/shared" },
     { "path": "../../packages/ui" },

@@ -1,3 +1,4 @@
+import { applicationInfo } from '../../config/application-info.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -19,6 +20,7 @@ export { withTimeout };
 
 export const AGENTCTL_CLIENT_CAPABILITIES: ClientCapabilities = {
   terminal: true,
+  subagents: {},
   ...(process.platform === 'win32' ? {} : { auth: { terminal: true } }),
   fs: { readTextFile: true, writeTextFile: true },
   session: { configOptions: { boolean: {} } },
@@ -172,11 +174,19 @@ export function parseAcpCapabilities(agentCapabilities: unknown): AcpParsedCapab
         sessionCapabilities?: Record<string, unknown>;
         loadSession?: boolean;
         promptCapabilities?: { image?: boolean; audio?: boolean; embeddedContext?: boolean };
+        mcpCapabilities?: { http?: boolean; sse?: boolean; acp?: boolean };
       }
     | undefined;
   const caps = agentCapsObj?.sessionCapabilities;
   const supportsResume = Boolean(caps?.resume);
   return {
+    ...(agentCapsObj?.mcpCapabilities
+      ? {
+          supportsMcpHttp: agentCapsObj.mcpCapabilities.http === true,
+          supportsMcpSse: agentCapsObj.mcpCapabilities.sse === true,
+          supportsMcpAcp: agentCapsObj.mcpCapabilities.acp === true,
+        }
+      : {}),
     supportsForkSession: Boolean(caps?.fork),
     supportsResumeSession: supportsResume,
     supportsCloseSession: !!caps?.close,
@@ -194,11 +204,7 @@ export async function initializeAcpConnection(
   connection: Pick<ClientSideConnection, 'initialize'>,
   options: InitializeAcpConnectionOptions = {},
 ) {
-  const clientInfo = options.clientInfo ?? {
-    name: 'agentctl',
-    title: 'Agentctl',
-    version: '1.0.0',
-  };
+  const clientInfo = options.clientInfo ?? applicationInfo();
   const clientCapabilities: ClientCapabilities = options.clientCapabilities ?? {};
 
   const initPromise = connection.initialize({

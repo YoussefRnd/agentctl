@@ -19,11 +19,19 @@ vi.mock('@/features/sessions', () => ({
   }),
   useSessionStream: () => stream,
 }));
-vi.mock('./EventFeedItem', () => ({
-  EventFeedItem: ({ group }: { group: { event: SessionEventRow } }) => (
-    <div data-message={group.event.id}>{String(group.event.data.content)}</div>
-  ),
-}));
+vi.mock('./EventFeedItem', async () => {
+  const { TurnErrorCard } = await import('./cards/TurnErrorCard');
+  return {
+    EventFeedItem: ({ group }: { group: { type: string; event: SessionEventRow } }) =>
+      group.type === 'error' ? (
+        <TurnErrorCard
+          message={group.event.type === 'status' ? String(group.event.data.message) : undefined}
+        />
+      ) : (
+        <div data-message={group.event.id}>{String(group.event.data.content)}</div>
+      ),
+  };
+});
 vi.mock('./TurnMinimap', () => ({ TurnMinimap: () => null }));
 vi.mock('@/shared', () => ({ AgentIcon: () => null }));
 let container: HTMLDivElement;
@@ -96,11 +104,11 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-async function render(targetEventId?: number) {
+async function render(targetEventId?: number, feedEvents: SessionEventRow[] = events) {
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <EventFeed events={events} targetEventId={targetEventId} />
+        <EventFeed events={feedEvents} targetEventId={targetEventId} />
       </QueryClientProvider>,
     ),
   );
@@ -130,4 +138,27 @@ it('requests older history without jumping back to the end of the conversation',
   });
   expect(stream.loadOlderHistory).toHaveBeenCalledOnce();
   expect(viewport.scrollTop).toBe(previousTop);
+});
+
+it('keeps a foreground failure with its original input when another input is queued', async () => {
+  const failed: SessionEventRow[] = [
+    events[0],
+    {
+      id: 2,
+      sessionId: 'session',
+      type: 'status',
+      parentEventId: 1,
+      data: { status: 'prompt_failed', message: 'Provider quota exhausted' },
+      createdAt: new Date(),
+    },
+  ];
+  await render(undefined, failed);
+  expect(container.textContent).toContain('Agent run failed');
+  expect(container.textContent).toContain('Provider quota exhausted');
+  expect(container.textContent).not.toContain('Refresh session');
+  await render(undefined, [failed[0], { ...events[2], id: 3 }, { ...failed[1], id: 4 }]);
+  expect(container.textContent).toContain('Provider quota exhausted');
+  const text = container.textContent!;
+  expect(text.indexOf('Provider quota exhausted')).toBeLessThan(text.indexOf('Message 3'));
+  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
 });

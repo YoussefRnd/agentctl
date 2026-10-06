@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { clearRealpathCache, resolveAllowedPath } from './path-security.js';
+import { resolveAllowedPath } from './path-security.js';
 
 describe('resolveAllowedPath', () => {
   let root: string;
@@ -11,13 +11,11 @@ describe('resolveAllowedPath', () => {
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-path-root-'));
     outside = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-path-outside-'));
-    clearRealpathCache();
   });
 
   afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(outside, { recursive: true, force: true });
-    clearRealpathCache();
   });
 
   test('allows a new file under the workspace', () => {

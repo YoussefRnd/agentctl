@@ -283,4 +283,47 @@ describe('ProviderAuthCoordinator', () => {
     expect(updated.lastVerifiedAt).toBeNull();
     expect(updated.authError).toBeNull();
   });
+  it('waits for matching browser consent and removes expired requests', async () => {
+    let displayed!: () => void;
+    const shown = new Promise<void>((resolve) => {
+      displayed = resolve;
+    });
+    vi.mocked(runtime.authenticateProvider!).mockImplementation(
+      async (_command, _args, _env, _method, options) => {
+        const pending = options!.onBrowserRequest!({
+          id: 'consent',
+          url: 'https://example.com/login',
+          message: 'Sign in',
+        });
+        displayed();
+        expect(await pending).toBe(true);
+      },
+    );
+    const login = coordinator.login('test-agent', 'web_oauth');
+    await shown;
+    expect(coordinator.getAuthInteraction('test-agent')?.url).toBe('https://example.com/login');
+    expect(coordinator.respondAuthInteraction('test-agent', 'wrong', true)).toBe(false);
+    expect(coordinator.respondAuthInteraction('other-profile', 'consent', true)).toBe(false);
+    const interactionId = coordinator.getAuthInteraction('test-agent')!.id;
+    expect(coordinator.respondAuthInteraction('test-agent', interactionId, true)).toBe(true);
+    await login;
+    expect(coordinator.getAuthInteraction('test-agent')).toBeUndefined();
+    expect(coordinator.respondAuthInteraction('test-agent', 'consent', true)).toBe(false);
+  });
+
+  it('stops and invalidates sibling profiles before logout', async () => {
+    store.upsert('work', {
+      name: 'Work',
+      command: 'test-agent',
+      registryAgentId: 'test-agent',
+      authState: 'authenticated',
+    });
+    const stopped = vi.fn(async () => undefined);
+    coordinator.setCredentialChangeHandler(stopped);
+    await coordinator.logout('test-agent');
+    expect(stopped).toHaveBeenCalledWith(expect.arrayContaining(['work', 'test-agent']));
+    expect(connectionManager.closeConnection).toHaveBeenCalledWith('work');
+    expect(store.get('work')?.authState).toBe('unknown');
+    expect(store.get('work')?.lastVerifiedAt).toBeNull();
+  });
 });

@@ -4,4 +4,6 @@ export { EventFeedItem } from './ui/EventFeedItem.js';
 export { TurnMinimap } from './ui/TurnMinimap.js';
 export { UnifiedActivityBlock } from './ui/cards/UnifiedActivityBlock.js';
 export { StreamingMarkdown } from './ui/cards/StreamingMarkdown.js';
+export { AgentTerminals } from './ui/cards/AgentTerminals.js';
 export { NewSessionEmptyState } from './ui/NewSessionEmptyState.js';
+export { SessionMessage } from './ui/cards/SessionMessage.js';

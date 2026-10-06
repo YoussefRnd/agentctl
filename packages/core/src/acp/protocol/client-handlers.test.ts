@@ -58,13 +58,13 @@ describe('createClientHandlers', () => {
     expect(Object.keys(handlers)).toContain('createTerminal');
   });
 
-  test('readTextFile resolves relative to session cwd', async () => {
+  test('readTextFile reads an absolute path within the session cwd', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-handlers-'));
     const file = path.join(dir, 'hello.txt');
     fs.writeFileSync(file, 'line one\nline two\nline three\n');
     const handlers = requiredHandlers(dir);
 
-    const res = await handlers.readTextFile({ sessionId: 's', path: 'hello.txt' });
+    const res = await handlers.readTextFile({ sessionId: 's', path: file });
     expect(res.content).toContain('line one');
   });
 
@@ -213,7 +213,9 @@ describe('createClientHandlers', () => {
 
   test('namespaced bash extension runs through the terminal manager with session cwd', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-handlers-'));
-    const handlers = requiredHandlers(dir);
+    const context = makeContext(dir);
+    context.resolveSession().callbacks.onRequestPermission = async () => ({ allowed: true });
+    const handlers = createClientHandlers(context) as Required<Client>;
 
     const res = await handlers.extMethod('_agentctl.dev/builtin/bash', {
       sessionId: 's',
@@ -233,4 +235,53 @@ describe('createClientHandlers', () => {
       }),
     ).rejects.toThrow('data must be a non-empty string');
   });
+});
+
+test('partial permission requests inherit structured metadata from the same session only', async () => {
+  const requests: unknown[] = [];
+  const first: AgentSessionCallbacks = {
+    onUpdate() {},
+    onRequestPermission: async (request) => {
+      requests.push(request);
+      return { allowed: false };
+    },
+  };
+  const second: AgentSessionCallbacks = {
+    onUpdate() {},
+    onRequestPermission: first.onRequestPermission,
+  };
+  const handlers = createClientHandlers({
+    cwd: '/tmp',
+    logger: noopLogger,
+    terminalManager: new TerminalManager(noopLogger),
+    resolveSession: (params) => ({
+      cwd: '/tmp',
+      callbacks: params?.sessionId === 'first' ? first : second,
+    }),
+  });
+  await handlers.sessionUpdate({
+    sessionId: 'first',
+    update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'shared-id',
+      title: 'Edit file',
+      kind: 'edit',
+      locations: [{ path: '/tmp/file' }],
+      rawInput: { path: '/tmp/file', content: 'new' },
+    },
+  });
+  for (const sessionId of ['first', 'second'])
+    await handlers.requestPermission({
+      sessionId,
+      toolCall: { toolCallId: 'shared-id' },
+      options: [{ optionId: 'reject', name: 'Deny', kind: 'reject_once' }],
+    });
+  expect(requests[0]).toMatchObject({
+    toolCall: {
+      kind: 'edit',
+      locations: [{ path: '/tmp/file' }],
+      arguments: { path: '/tmp/file', content: 'new' },
+    },
+  });
+  expect((requests[1] as { toolCall: { kind?: string } }).toolCall.kind).toBeUndefined();
 });

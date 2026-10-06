@@ -14,7 +14,8 @@ const mocks = vi.hoisted(() => ({
       installState: 'installed_local',
       configOptions: [
         {
-          id: 'model',
+          id: 'preferred_llm',
+          category: 'model',
           options: [
             { value: 'default', name: 'Default' },
             { value: 'custom-model', name: 'Custom Model' },

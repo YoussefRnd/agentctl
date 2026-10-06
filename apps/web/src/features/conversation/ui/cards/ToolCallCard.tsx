@@ -1,3 +1,4 @@
+import { ToolDiffBlock as DiffBlock, ToolLocations as LocationsView } from './ToolOutputContent';
 import { useState, useEffect, useRef, memo, type ReactElement } from 'react';
 import {
   Terminal,
@@ -32,38 +33,6 @@ function getContextSnippet(name: string, args: Record<string, unknown>): string 
   return undefined;
 }
 
-function DiffBlock({ block }: { block: Record<string, unknown> }) {
-  const path = typeof block.path === 'string' ? block.path : 'file';
-  const oldText = typeof block.oldText === 'string' ? block.oldText : null;
-  const newText = typeof block.newText === 'string' ? block.newText : '';
-
-  return (
-    <div className="border-border/15 overflow-hidden rounded-md border bg-black/15">
-      <div className="bg-surface-secondary/40 border-border/15 border-b px-2.5 py-1">
-        <span className="text-text-muted font-mono text-[10px] break-all">{path}</span>
-      </div>
-      <div className="no-scrollbar max-h-60 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed">
-        {oldText && (
-          <div className="whitespace-pre-wrap text-rose-400/80">
-            {oldText
-              .split('\n')
-              .map((line) => `- ${line}`)
-              .join('\n')}
-          </div>
-        )}
-        {newText && (
-          <div className="whitespace-pre-wrap text-emerald-400/80">
-            {newText
-              .split('\n')
-              .map((line) => `+ ${line}`)
-              .join('\n')}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function ContentBlock({ block }: { block: Record<string, unknown> }) {
   const type = block.type;
 
@@ -82,22 +51,6 @@ function ContentBlock({ block }: { block: Record<string, unknown> }) {
   return (
     <div className="text-text-muted/90 max-h-60 overflow-y-auto text-[12px] leading-relaxed whitespace-pre-wrap select-text">
       {text}
-    </div>
-  );
-}
-
-function LocationsView({ locations }: { locations: { path?: string; line?: number }[] }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {locations.map((loc, i) => (
-        <code
-          key={`${loc.path || ''}:${String(loc.line ?? i)}`}
-          className="bg-surface-secondary/70 text-text-main border-border/25 rounded border px-1.5 py-0.5 font-mono text-[10px] break-all select-all"
-        >
-          {loc.path}
-          {typeof loc.line === 'number' ? `:${String(loc.line)}` : ''}
-        </code>
-      ))}
     </div>
   );
 }

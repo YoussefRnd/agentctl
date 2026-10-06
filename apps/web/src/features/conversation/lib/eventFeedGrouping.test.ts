@@ -149,3 +149,14 @@ describe('groupFeedEvents', () => {
     }
   });
 });
+
+it('shows model fallback notices even before the first conversation turn', () => {
+  const event: SessionEventRow = {
+    id: 1,
+    sessionId: 'session',
+    type: 'status',
+    data: { status: 'model_fallback', title: 'Model “old” is unavailable. Using “new”.' },
+    createdAt: new Date(),
+  };
+  expect(groupFeedEvents([event], null)).toEqual([{ type: 'notice', event, isStreaming: false }]);
+});

@@ -14,7 +14,7 @@ import type { SessionEventRow, SessionWithCapabilities } from '@agentctl/shared'
 
 export function useSessionActions() {
   const { sessionId, sessionData } = useSession();
-  const { enqueueMessage, retryMessage: handleRetry } = useSessionStream();
+  const { retryMessage: handleRetry } = useSessionStream();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -40,7 +40,7 @@ export function useSessionActions() {
         role: 'user',
         content: text,
         clientMessageId,
-        deliveryStatus: isRunning ? 'queued' : 'sending',
+        deliveryStatus: 'sending',
         attachmentIds,
       },
       createdAt: new Date(),
@@ -50,26 +50,25 @@ export function useSessionActions() {
       return [...old, optimisticEvent];
     });
 
-    if (isRunning) {
-      enqueueMessage(text, attachmentIds, tempId, clientMessageId);
-    } else {
+    {
       useMessageQueueStore
         .getState()
         .enqueueMessage(sessionId, text, attachmentIds, tempId, clientMessageId, 'sending');
-      queryClient.setQueryData<SessionWithCapabilities>(
-        ['session', sessionId],
-        (old: SessionWithCapabilities | undefined) => {
-          if (!old) return old;
-          return {
-            ...old,
-            session: {
-              ...old.session,
-              status: 'running',
-              updatedAt: new Date(),
-            },
-          };
-        },
-      );
+      if (!isRunning)
+        queryClient.setQueryData<SessionWithCapabilities>(
+          ['session', sessionId],
+          (old: SessionWithCapabilities | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              session: {
+                ...old.session,
+                status: 'running',
+                updatedAt: new Date(),
+              },
+            };
+          },
+        );
 
       // Optimistically update projects query in cache
       queryClient.setQueriesData<SidebarProject[]>({ queryKey: ['projects'] }, (old) => {

@@ -3,10 +3,21 @@ import { useSessionStream } from '@/features/sessions';
 import { IconButton } from '@agentctl/ui';
 
 export function QueuedMessagesPillStack() {
-  const { queuedMessages, dequeueMessage, moveQueuedMessage, retryQueuedMessage } =
-    useSessionStream();
+  const {
+    queuedMessages,
+    dequeueMessage,
+    moveQueuedMessage,
+    retryQueuedMessage,
+    queueAttention,
+    resumeQueue,
+  } = useSessionStream();
+  // The outbox also tracks immediate sends until acknowledgement. Only waiting
+  // and failed messages belong in the queue UI; keep their original move indices.
+  const visibleEntries = queuedMessages
+    .map((message, queueIndex) => ({ message, queueIndex }))
+    .filter(({ message }) => message.status !== 'sending');
 
-  if (queuedMessages.length === 0) return null;
+  if (visibleEntries.length === 0) return null;
 
   return (
     <div className="bg-brand-mantle/95 border-border/30 animate-in fade-in slide-in-from-bottom-2 relative z-20 -mb-px flex w-full flex-col gap-2 rounded-t-xl border-x border-t px-3 py-2.5 shadow-md backdrop-blur-xl sm:px-4">
@@ -14,7 +25,7 @@ export function QueuedMessagesPillStack() {
         <div className="flex items-center gap-2">
           <ListOrdered className="text-accent h-3.5 w-3.5" />
           <span className="text-text-main text-[13px] font-semibold tracking-normal">
-            Queued prompts ({queuedMessages.length})
+            Queued prompts ({visibleEntries.length})
           </span>
         </div>
         <span className="text-text-muted hidden text-[11px] font-medium opacity-70 sm:inline">
@@ -22,8 +33,18 @@ export function QueuedMessagesPillStack() {
         </span>
       </div>
 
+      {queueAttention === 'delivery_uncertain' && (
+        <p className="text-text-muted text-xs">
+          Check the provider before cancelling the uncertain message and resuming.
+        </p>
+      )}
+      {queueAttention === 'error' && (
+        <button type="button" className="text-accent text-xs" onClick={() => void resumeQueue?.()}>
+          Queue paused · Resume
+        </button>
+      )}
       <div className="flex max-h-36 flex-col gap-1.5 overflow-y-auto pr-0.5">
-        {queuedMessages.map((msg, index) => (
+        {visibleEntries.map(({ message: msg, queueIndex }, index) => (
           <div
             key={msg.id}
             className="group/pill border-border/40 bg-surface-secondary/60 hover:bg-surface-secondary hover:border-border/80 flex items-center justify-between gap-3 rounded-lg border px-3 py-1.5 transition-colors"
@@ -34,8 +55,8 @@ export function QueuedMessagesPillStack() {
               </span>
               <span className="text-text-main truncate font-sans text-[13px]" title={msg.text}>
                 {msg.text}
-                {msg.status === 'sending' && ' · Sending…'}
                 {msg.status === 'failed' && ' · Failed'}
+                {msg.status === 'unknown' && ' · Delivery uncertain'}
               </span>
               {msg.attachmentIds && msg.attachmentIds.length > 0 && (
                 <span
@@ -61,12 +82,12 @@ export function QueuedMessagesPillStack() {
             <div className="flex shrink-0 items-center gap-0.5 opacity-80 transition-opacity group-focus-within/pill:opacity-100 group-hover/pill:opacity-100">
               <IconButton
                 disabled={
-                  index === 0 ||
-                  msg.status === 'sending' ||
-                  queuedMessages[index - 1]?.status === 'sending'
+                  queueIndex === 0 ||
+                  msg.status === 'unknown' ||
+                  (!msg.accepted && queuedMessages[queueIndex - 1]?.status === 'sending')
                 }
                 onClick={() => {
-                  moveQueuedMessage(index, 'up');
+                  moveQueuedMessage(queueIndex, 'up');
                 }}
                 size="sm"
                 className="hover:bg-surface-tertiary disabled:opacity-20"
@@ -77,12 +98,12 @@ export function QueuedMessagesPillStack() {
               </IconButton>
               <IconButton
                 disabled={
-                  index === queuedMessages.length - 1 ||
-                  msg.status === 'sending' ||
-                  queuedMessages[index + 1]?.status === 'sending'
+                  queueIndex === queuedMessages.length - 1 ||
+                  msg.status === 'unknown' ||
+                  (!msg.accepted && queuedMessages[queueIndex + 1]?.status === 'sending')
                 }
                 onClick={() => {
-                  moveQueuedMessage(index, 'down');
+                  moveQueuedMessage(queueIndex, 'down');
                 }}
                 size="sm"
                 className="hover:bg-surface-tertiary disabled:opacity-20"
@@ -97,7 +118,6 @@ export function QueuedMessagesPillStack() {
                 }}
                 size="sm"
                 className="ml-0.5 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
-                disabled={msg.status === 'sending'}
                 title="Cancel prompt"
                 aria-label="Cancel prompt"
               >

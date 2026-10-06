@@ -394,3 +394,79 @@ describe('turnChanges', () => {
     });
   });
 });
+
+it('includes every structured file change and rename path when no patch is provided', () => {
+  const events: SessionEventRow[] = [
+    {
+      id: 1,
+      sessionId: 's1',
+      createdAt: new Date(),
+      type: 'tool_call',
+      data: {
+        name: 'edit',
+        content: [
+          {
+            type: 'diff',
+            changes: [
+              { operation: 'add', path: '/new.bin', fileType: 'binary' },
+              { operation: 'delete', path: '/old.link', fileType: 'symlink' },
+              { operation: 'move', oldPath: '/before', path: '/after', fileType: 'directory' },
+              { operation: 'copy', oldPath: '/source', path: '/copy' },
+            ],
+          },
+        ],
+      },
+    },
+  ];
+  expect(extractTurnChanges(events).files).toEqual([
+    { path: 'new.bin', status: 'added', additions: 0, deletions: 0 },
+    { path: 'old.link', status: 'deleted', additions: 0, deletions: 0 },
+    { path: 'before', status: 'deleted', additions: 0, deletions: 0 },
+    { path: 'after', status: 'added', additions: 0, deletions: 0 },
+    { path: 'copy', status: 'added', additions: 0, deletions: 0 },
+  ]);
+  expect([...extractLatestTurnTouchedFiles(events)]).toEqual([
+    'new.bin',
+    'old.link',
+    'before',
+    'after',
+    'copy',
+  ]);
+});
+
+it('uses per-file patch statistics instead of repeating the total across every changed file', () => {
+  const events: SessionEventRow[] = [
+    {
+      id: 1,
+      sessionId: 's',
+      type: 'tool_call',
+      createdAt: new Date(),
+      data: {
+        name: 'edit',
+        content: [
+          {
+            type: 'diff',
+            changes: [
+              { operation: 'modify', path: '/a' },
+              { operation: 'add', path: '/b' },
+              { operation: 'delete', path: '/c' },
+            ],
+            patch: {
+              format: 'git_patch',
+              text: '--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n--- /dev/null\n+++ b/b\n@@ -0,0 +1,2 @@\n+one\n+two\n--- a/c\n+++ /dev/null\n@@ -1 +0,0 @@\n-gone',
+            },
+          },
+        ],
+      },
+    },
+  ];
+  expect(extractTurnChanges(events)).toEqual({
+    files: [
+      { path: 'a', status: 'modified', additions: 1, deletions: 1 },
+      { path: 'b', status: 'added', additions: 2, deletions: 0 },
+      { path: 'c', status: 'deleted', additions: 0, deletions: 1 },
+    ],
+    totalAdditions: 3,
+    totalDeletions: 2,
+  });
+});

@@ -1,3 +1,4 @@
+import { sessionExecutionSchema } from '../schemas/session-execution.js';
 import {
   reviewResponseSchema,
   reviewDiffScopeSchema,
@@ -20,6 +21,47 @@ import {
 const emptyBodySchema = z.record(z.string(), z.unknown()).optional().default({});
 
 export const sessionsContract = {
+  resumeSessionQueue: {
+    method: 'POST',
+    path: '/api/sessions/:id/queue/resume',
+    pathParams: z.object({ id: z.uuid() }),
+    body: emptyBodySchema,
+    responses: {
+      200: z.object({ success: z.literal(true) }),
+      409: z.object({ message: z.string() }),
+    },
+    summary: 'Resume safely queued messages after a failure',
+  },
+  getSessionExecution: {
+    method: 'GET',
+    path: '/api/sessions/:id/execution',
+    pathParams: z.object({ id: z.uuid() }),
+    responses: { 200: sessionExecutionSchema },
+    summary: 'Get execution state and accepted message queue',
+  },
+  changeQueuedMessage: {
+    method: 'POST',
+    path: '/api/sessions/:id/queue/:commandId',
+    pathParams: z.object({ id: z.uuid(), commandId: z.string() }),
+    body: z.object({ action: z.enum(['cancel', 'up', 'down']) }),
+    responses: {
+      200: z.object({ success: z.literal(true) }),
+      409: z.object({ message: z.string() }),
+    },
+    summary: 'Cancel or reorder a message before dispatch',
+  },
+  importNativeSession: {
+    method: 'POST',
+    path: '/api/sessions/import-native',
+    body: z.object({
+      projectId: z.uuid(),
+      providerId: z.string().min(1),
+      nativeSessionId: z.string().min(1),
+      title: z.string().max(500).optional(),
+    }),
+    responses: { 200: z.object({ sessionId: z.uuid() }) },
+    summary: 'Import and load an existing provider session',
+  },
   getSessions: {
     method: 'GET',
     path: '/api/sessions',

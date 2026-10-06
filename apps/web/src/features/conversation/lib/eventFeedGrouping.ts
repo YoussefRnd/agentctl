@@ -1,9 +1,12 @@
 import type { SessionEventRow } from '@agentctl/shared';
 import { isSessionEventText } from '@agentctl/shared';
+import { orderConversationEvents } from './orderConversationEvents';
 
 export type FeedEventGroup =
   | { type: 'user'; event: SessionEventRow; isStreaming: boolean }
   | { type: 'agent'; events: SessionEventRow[]; isStreaming: boolean; id: string }
+  | { type: 'notice'; event: SessionEventRow; isStreaming: boolean }
+  | { type: 'error'; event: SessionEventRow; isStreaming: boolean }
   | { type: 'command'; event: SessionEventRow; isStreaming: boolean }
   | { type: 'elicitation'; event: SessionEventRow; isStreaming: boolean };
 
@@ -20,17 +23,41 @@ export function groupFeedEvents(
     id: string;
   } | null = null;
 
-  for (const e of events) {
+  for (const e of orderConversationEvents(events)) {
+    // Native child transcripts are inspected through the global roster, including background work.
+    if (
+      e.metadata?.nativeSessionId &&
+      e.type !== 'approval_request' &&
+      !(e.type === 'status' && e.data.status === 'elicitation_requested')
+    )
+      continue;
     const isStreaming = e.id === streamingEventId;
     const statusVal = (e.data as { status?: string } | null)?.status;
     const isHiddenSystemEvent =
       e.type === 'status' &&
       typeof statusVal === 'string' &&
-      ['available_commands_update', 'config_option_update', 'session_info_update'].includes(
-        statusVal,
-      );
+      [
+        'available_commands_update',
+        'config_option_update',
+        'session_info_update',
+        'turn_started',
+        'prompt_accepted',
+        'first_output',
+      ].includes(statusVal);
 
     if (isHiddenSystemEvent) {
+      continue;
+    }
+
+    if (e.type === 'status' && statusVal === 'prompt_failed') {
+      currentAgentTurn = null;
+      result.push({ type: 'error', event: e, isStreaming: false });
+      continue;
+    }
+
+    if (e.type === 'status' && (statusVal === 'model_fallback' || statusVal === 'runtime_error')) {
+      currentAgentTurn = null;
+      result.push({ type: 'notice', event: e, isStreaming: false });
       continue;
     }
 
@@ -62,7 +89,7 @@ export function groupFeedEvents(
       continue;
     }
 
-    const isUser = isSessionEventText(e) && e.data.role === 'user';
+    const isUser = isSessionEventText(e) && e.data.role === 'user' && !e.metadata?.nativeSessionId;
 
     if (isUser) {
       currentAgentTurn = null;

@@ -35,7 +35,7 @@ const timestamps = {
     .$onUpdateFn(() => new Date()),
 };
 
-// session_events is append-only - only needs createdAt with DB-level default
+// Conversation rows keep their creation time; changes have a separate sequence.
 const eventTimestamps = {
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
@@ -85,6 +85,7 @@ export const sessions = sqliteTable('sessions', {
   lastHeartbeat: integer('last_heartbeat', { mode: 'timestamp' }),
   closedAt: integer('closed_at', { mode: 'timestamp' }),
   availableCommands: text('available_commands').notNull().default('[]'),
+  planArtifacts: text('plan_artifacts').notNull().default('[]'),
   plan: text('plan').notNull().default('[]'),
   sessionConfigOptions: text('session_config_options').notNull().default('[]'),
   sessionMetrics: text('session_metrics').notNull().default('{}'), // JSON string for breakdown, costs, etc.
@@ -96,8 +97,97 @@ export const sessions = sqliteTable('sessions', {
   ...timestamps,
 });
 
+export const sessionOperations = sqliteTable(
+  'session_operations',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    queuePosition: integer('queue_position').notNull().default(0),
+    commandId: text('command_id').notNull(),
+    kind: text('kind').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    payload: text('payload').notNull(),
+    status: text('status')
+      .$type<'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'>()
+      .notNull(),
+    eventId: integer('event_id'),
+    error: text('error'),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('session_operations_command').on(table.sessionId, table.commandId),
+    index('session_operations_pending').on(table.sessionId, table.status),
+  ],
+);
+
+export const sessionTurnAttempts = sqliteTable(
+  'session_turn_attempts',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    operationId: text('operation_id')
+      .notNull()
+      .references(() => sessionOperations.id, { onDelete: 'cascade' }),
+    runtimeId: text('runtime_id'),
+    providerId: text('provider_id').notNull(),
+    nativeSessionId: text('native_session_id'),
+    status: text('status')
+      .$type<
+        | 'queued'
+        | 'running'
+        | 'waiting'
+        | 'completed'
+        | 'failed'
+        | 'cancelled'
+        | 'interrupted'
+        | 'unknown'
+      >()
+      .notNull(),
+    dispatchedAt: integer('dispatched_at', { mode: 'timestamp' }),
+    startedAt: integer('started_at', { mode: 'timestamp' }),
+    endedAt: integer('ended_at', { mode: 'timestamp' }),
+    ...timestamps,
+  },
+  (table) => [index('session_turn_attempts_session').on(table.sessionId)],
+);
+
+export const sessionRuntimeBindings = sqliteTable('session_runtime_bindings', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id')
+    .notNull()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  providerId: text('provider_id').notNull(),
+  nativeSessionId: text('native_session_id'),
+  connectionState: text('connection_state').$type<'connected' | 'closed' | 'lost'>().notNull(),
+  capabilities: text('capabilities').notNull().default('{}'),
+  ...timestamps,
+});
+
+/** Immutable cursor entries reference the latest conversation row, not duplicated bodies. */
+export const sessionEventChanges = sqliteTable(
+  'session_event_changes',
+  {
+    sequence: integer('sequence').primaryKey({ autoIncrement: true }),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    eventId: integer('event_id').notNull(),
+    ...eventTimestamps,
+  },
+  (table) => [index('session_event_changes_cursor').on(table.sessionId, table.sequence)],
+);
+
 export const providers = sqliteTable('providers', {
   id: text('id').primaryKey(),
+  registryAgentId: text('registry_agent_id'),
+  customModels: text('custom_models').notNull().default('[]'),
+  protocol: text('protocol').$type<'auto' | 'v1' | 'v2'>().notNull().default('auto'),
+  defaultModel: text('default_model'),
+  defaultThinkingEffort: text('default_thinking_effort'),
   name: text('name').notNull(),
   installState: text('install_state').$type<InstallState>().notNull().default('not_installed'),
   installError: text('install_error'),
@@ -242,3 +332,25 @@ export const mcpServers = sqliteTable('mcp_servers', {
   ...timestamps,
   autoApprove: integer('auto_approve', { mode: 'boolean' }).notNull().default(false),
 });
+
+export const nativeSessionImports = sqliteTable(
+  'native_session_imports',
+  {
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id').notNull(),
+    nativeSessionId: text('native_session_id').notNull(),
+    completed: integer('completed', { mode: 'boolean' }).notNull().default(false),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    uniqueIndex('native_session_import_identity').on(
+      table.projectId,
+      table.providerId,
+      table.nativeSessionId,
+    ),
+  ],
+);

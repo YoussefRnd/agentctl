@@ -1,14 +1,16 @@
+import { ChangedFileRow } from './ChangedFileRow';
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { RotateCcw, X, ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
+import { RotateCcw, X, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   RewindConfirmDialog,
   useOpenWorkspaceFile,
   useSession,
   useSessionActions,
   useSessionStream,
+  useSessionTurnState,
   type RewindMode,
 } from '@/features/sessions';
 import { useProviders, SwitchAgentModal } from '@/features/providers';
@@ -16,16 +18,22 @@ import { CommandBar, useDraftStore } from '@/features/composer';
 import { EventFeed } from './EventFeed';
 import { NewSessionEmptyState } from './NewSessionEmptyState';
 import { ApprovalComposerSlot } from './ApprovalComposerSlot';
-import { SubagentChatView, extractSubagentGroups, useSubagentStore } from '@/features/subagents';
+import {
+  SubagentChatView,
+  extractSubagentGroups,
+  getSubagentGroupKey,
+  isSubagentActive,
+  useSubagentStore,
+} from '@/features/subagents';
 import { rewindSession, restoreSession, undoRewind, handoffSession } from '@agentctl/api-client';
-import { FileIcon } from '@/shared';
 import { useReviewUIStore } from '@/features/review';
 import { useWorkbenchStore } from '@/features/workbench';
-import { Button, cn, IconButton, LoadingState, Tooltip } from '@agentctl/ui';
+import { Button, cn, IconButton, LoadingState } from '@agentctl/ui';
 
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
-  const { events, isLoadingEvents, isConnected, historyError, loadOlderHistory } =
+  const turn = useSessionTurnState();
+  const { events, isLoadingEvents, isConnected, historyError, loadOlderHistory, execution } =
     useSessionStream();
   const { handleSend, handleRetry, handleApprove, handleDeny } = useSessionActions();
   const { switchProvider, isSwitching } = useProviders(sessionId);
@@ -307,41 +315,37 @@ export function MainFeed() {
     [sessionId, handleSend, queryClient],
   );
 
-  const lastEvent = events[events.length - 1];
+  const pendingApprovals = events.filter(
+    (event) => event.type === 'approval_request' && event.data.status === 'pending',
+  );
+  const lastEvent = pendingApprovals.at(-1);
   const approval =
     lastEvent?.type === 'approval_request' &&
     (lastEvent.data as { status?: string }).status === 'pending'
       ? { id: lastEvent.id, data: lastEvent.data }
       : undefined;
 
+  const subagentsConnected =
+    isConnected &&
+    (execution
+      ? execution.connection === 'connected'
+      : !['error', 'archived', 'discarded', 'merged'].includes(sessionData?.session.status ?? ''));
+  const parentFocusRef = useRef<HTMLElement | null>(null);
   const activeSubagentId = useSubagentStore((s) => s.activeSubagentId);
+  const activeSubagentSessionId = useSubagentStore((s) => s.activeSessionId);
   const setActiveSubagentId = useSubagentStore((s) => s.setActiveSubagentId);
 
   const subagentGroups = useMemo(() => extractSubagentGroups(events), [events]);
   const liveActiveSubagent = useMemo(() => {
-    if (activeSubagentId) {
+    if (activeSubagentId && activeSubagentSessionId === sessionId) {
       const found = subagentGroups.find(
         (g: import('@/features/subagents').SubagentGroup) =>
-          (g.subagentEvent.data as { subagentId?: string }).subagentId === activeSubagentId,
+          getSubagentGroupKey(g) === activeSubagentId,
       );
       if (found) return found;
     }
     return undefined;
-  }, [subagentGroups, activeSubagentId]);
-
-  if (liveActiveSubagent) {
-    const isSubagentRunning =
-      (liveActiveSubagent.subagentEvent.data as { status?: string }).status === 'running' ||
-      (liveActiveSubagent.subagentEvent.data as { status?: string }).status === 'spawning';
-
-    return (
-      <SubagentChatView
-        group={liveActiveSubagent}
-        onBack={() => setActiveSubagentId(null)}
-        isStreaming={isConnected && isSubagentRunning}
-      />
-    );
-  }
+  }, [subagentGroups, activeSubagentId, activeSubagentSessionId, sessionId]);
 
   if (!sessionId) {
     return (
@@ -364,266 +368,65 @@ export function MainFeed() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-transparent">
-      {historyError && events.length === 0 && (
-        <div
-          role="alert"
-          className="text-danger flex items-center justify-between gap-2 px-4 py-3 text-sm"
-        >
-          <span>Failed to load conversation: {historyError}</span>
-          <Button size="sm" disabled={isLoadingEvents} onClick={() => void loadOlderHistory()}>
-            Retry
-          </Button>
-        </div>
-      )}
-      {sessionData?.session.status === 'archived' && (
-        <div className="border-warning/30 bg-warning/5 text-warning flex shrink-0 items-center justify-between border-b px-4 py-2.5 text-xs backdrop-blur-md">
-          <span className="tracking-tight">
-            This session is archived. Workspace files are cleared from disk.
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void (async () => {
-                try {
-                  await restoreSession(sessionId);
-                  toast.success('Session restored successfully');
-                  void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-                  void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
-                  void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
-                  void queryClient.invalidateQueries({ queryKey: ['projects'] });
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : 'Failed to restore session');
-                }
-              })();
-            }}
-            className="border-warning/40 bg-warning/20 text-warning hover:border-warning/60 hover:bg-warning/30"
+    <div className="relative flex h-full w-full overflow-hidden bg-transparent">
+      {/* Preserve feed measurements and drafts while the child occupies the chat area. */}
+      <div
+        data-parent-conversation
+        aria-hidden={Boolean(liveActiveSubagent)}
+        inert={Boolean(liveActiveSubagent)}
+        onFocusCapture={(event) => {
+          parentFocusRef.current = event.target;
+        }}
+        className={cn(
+          'min-w-0 flex-1 flex-col overflow-hidden',
+          liveActiveSubagent ? 'invisible absolute inset-0 flex' : 'flex',
+        )}
+      >
+        {historyError && events.length === 0 && (
+          <div
+            role="alert"
+            className="text-danger flex items-center justify-between gap-2 px-4 py-3 text-sm"
           >
-            Restore Session
-          </Button>
-        </div>
-      )}
-
-      {!hasUserMessages && !isLoadingEvents && !approval ? (
-        <main className="relative flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-y-auto select-none">
-          <NewSessionEmptyState projectName={sessionData?.session.project?.name ?? 'agentctl'}>
-            <CommandBar
-              variant="hero"
-              onSend={(val, attachmentIds) => {
-                setRewindUndoState(null);
-                void handleSend(val, attachmentIds);
+            <span>Failed to load conversation: {historyError}</span>
+            <Button size="sm" disabled={isLoadingEvents} onClick={() => void loadOlderHistory()}>
+              Retry
+            </Button>
+          </div>
+        )}
+        {sessionData?.session.status === 'archived' && (
+          <div className="border-warning/30 bg-warning/5 text-warning flex shrink-0 items-center justify-between border-b px-4 py-2.5 text-xs backdrop-blur-md">
+            <span className="tracking-tight">
+              This session is archived. Workspace files are cleared from disk.
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await restoreSession(sessionId);
+                    toast.success('Session restored successfully');
+                    void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+                    void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
+                    void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
+                    void queryClient.invalidateQueries({ queryKey: ['projects'] });
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Failed to restore session');
+                  }
+                })();
               }}
-              disabled={!isConnected || isSwitching || isLoadingSession}
-              selectedProviderId={sessionData?.session.selectedProvider}
-              selectedModelId={sessionData?.session.selectedModel}
-              onProviderSelect={handleProviderSelect}
-              initialInput={rewindInput || initialPrompt}
-            />
-          </NewSessionEmptyState>
-        </main>
-      ) : (
-        <>
-          <main className="min-h-0 w-full flex-1 overflow-hidden">
-            {isLoadingEvents ? (
-              <LoadingState message="Loading session..." className="h-full" />
-            ) : (
-              <EventFeed
-                events={events}
-                targetEventId={targetEventId}
-                onTargetEventHandled={handleTargetEventHandled}
-                isConnected={isConnected}
-                hasGitRepo={sessionData?.session.project?.repoRoot != null}
-                isSessionRunning={sessionData?.session.status === 'running'}
-                onRewind={handleRewindRequest}
-                onEditSubmit={handleEditAndSubmit}
-                onRetryMessage={handleRetry}
-              />
-            )}
-          </main>
+              className="border-warning/40 bg-warning/20 text-warning hover:border-warning/60 hover:bg-warning/30"
+            >
+              Restore Session
+            </Button>
+          </div>
+        )}
 
-          <RewindConfirmDialog
-            open={confirmRewind !== null}
-            onOpenChange={(open: boolean) => {
-              if (!open) {
-                setConfirmRewind(null);
-                setRewindError(null);
-              }
-            }}
-            sessionId={sessionId}
-            eventId={confirmRewind?.eventId}
-            mode={confirmRewind?.mode ?? 'conversation'}
-            messageCount={confirmRewind?.messageCount ?? 0}
-            onConfirm={() => {
-              void handleRewindConfirm();
-            }}
-            isLoading={isRewinding}
-            error={rewindError}
-          />
-
-          <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-3 pb-3 sm:px-6 sm:pb-4">
-            {rewindUndoState && !approval && (
-              <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 overflow-hidden rounded-xl border shadow-xs backdrop-blur-md duration-200">
-                <div className="flex items-center justify-between px-3.5 py-2 text-[12px]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        rewindUndoState.restoredFiles &&
-                        rewindUndoState.restoredFiles.length > 0
-                      ) {
-                        setIsDiffExpanded((prev) => !prev);
-                      }
-                    }}
-                    className={cn(
-                      'text-text-muted focus-visible:ring-accent/40 flex min-w-0 items-center gap-2 rounded-md pr-2 text-left outline-none select-none focus-visible:ring-2',
-                      rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
-                        ? 'hover:text-text-main group/undo-header cursor-pointer'
-                        : 'cursor-default',
-                    )}
-                    disabled={
-                      !rewindUndoState.restoredFiles || rewindUndoState.restoredFiles.length === 0
-                    }
-                    aria-expanded={
-                      rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
-                        ? isDiffExpanded
-                        : undefined
-                    }
-                  >
-                    <RotateCcw className="text-text-muted/70 h-3.5 w-3.5 shrink-0" />
-                    <span className="text-text-main font-medium">Rewound conversation</span>
-                    {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className="text-text-muted/70 truncate">
-                          • Reverted {rewindUndoState.restoredFiles.length}{' '}
-                          {rewindUndoState.restoredFiles.length === 1 ? 'file' : 'files'}
-                        </span>
-                        {(totalAdditions > 0 || totalDeletions > 0) && (
-                          <span className="flex items-center gap-1 font-mono text-[11.5px] font-medium">
-                            {totalAdditions > 0 && (
-                              <span className="text-emerald-400">+{totalAdditions}</span>
-                            )}
-                            {totalDeletions > 0 && (
-                              <span className="text-rose-400">-{totalDeletions}</span>
-                            )}
-                          </span>
-                        )}
-                        {isDiffExpanded ? (
-                          <ChevronDown className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
-                        ) : (
-                          <ChevronRight className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
-                        )}
-                      </div>
-                    )}
-                  </button>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleOpenReview}
-                        className="h-7 px-2.5 text-[12px]"
-                        title="Review reverted file changes in Changes tab"
-                      >
-                        Review
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        void handleUndoRewind();
-                      }}
-                      disabled={isUndoing}
-                      className="h-7 px-2.5 text-[12px]"
-                    >
-                      {isUndoing ? 'Undoing...' : 'Undo'}
-                    </Button>
-                    <IconButton
-                      size="sm"
-                      onClick={() => setRewindUndoState(null)}
-                      className="hover:bg-surface-secondary/80"
-                      title="Dismiss"
-                      aria-label="Dismiss rewind summary"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </IconButton>
-                  </div>
-                </div>
-
-                {/* Expanded diff file list */}
-                {isDiffExpanded &&
-                  rewindUndoState.restoredFiles &&
-                  rewindUndoState.restoredFiles.length > 0 && (
-                    <div className="border-border/20 bg-surface-secondary/20 border-t px-2 py-1.5">
-                      {rewindUndoState.restoredFiles.map((file) => {
-                        const fileName = file.path.split('/').pop() ?? file.path;
-                        const dirPath = file.path.includes('/')
-                          ? file.path.substring(0, file.path.lastIndexOf('/'))
-                          : '';
-
-                        return (
-                          <div
-                            key={file.path}
-                            className="hover:bg-surface/50 group/file-row flex items-center rounded-lg transition-colors"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleOpenFileReview(file.path);
-                              }}
-                              className="flex min-w-0 flex-1 cursor-pointer items-center justify-between px-2.5 py-1.5 text-left"
-                            >
-                              <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
-                                <FileIcon path={file.path} className="shrink-0" />
-                                <span className="text-text-main group-hover/file-row:text-accent truncate font-mono text-[12px] font-medium">
-                                  {fileName}
-                                </span>
-                                {dirPath && (
-                                  <span className="text-text-muted/60 truncate font-mono text-[11px]">
-                                    {dirPath}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="ml-3 flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] font-medium">
-                                {file.additions != null && file.additions > 0 && (
-                                  <span className="text-emerald-400">+{file.additions}</span>
-                                )}
-                                {file.deletions != null && file.deletions > 0 && (
-                                  <span className="text-rose-400">-{file.deletions}</span>
-                                )}
-                                {(file.additions == null || file.additions === 0) &&
-                                  (file.deletions == null || file.deletions === 0) && (
-                                    <span className="text-text-muted/60 text-[10px]">
-                                      {file.status}
-                                    </span>
-                                  )}
-                              </div>
-                            </button>
-
-                            <Tooltip content="Open in editor">
-                              <IconButton
-                                size="sm"
-                                onClick={() => {
-                                  void openWorkspaceFile(file.path);
-                                }}
-                                className="hover:bg-surface-tertiary/60 pointer-events-none mr-2 h-6 w-6 opacity-0 transition-[opacity,color,background-color,transform] duration-150 group-focus-within/file-row:pointer-events-auto group-focus-within/file-row:opacity-100 group-hover/file-row:pointer-events-auto group-hover/file-row:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
-                                aria-label={`Open ${fileName} in editor`}
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </IconButton>
-                            </Tooltip>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-              </div>
-            )}
-
-            <ApprovalComposerSlot approval={approval} onApprove={handleApprove} onDeny={handleDeny}>
+        {!hasUserMessages && !isLoadingEvents && !approval ? (
+          <main className="relative flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-y-auto select-none">
+            <NewSessionEmptyState projectName={sessionData?.session.project?.name ?? 'agentctl'}>
               <CommandBar
+                variant="hero"
                 onSend={(val, attachmentIds) => {
                   setRewindUndoState(null);
                   void handleSend(val, attachmentIds);
@@ -634,11 +437,210 @@ export function MainFeed() {
                 onProviderSelect={handleProviderSelect}
                 initialInput={rewindInput || initialPrompt}
               />
-            </ApprovalComposerSlot>
-          </div>
-        </>
-      )}
+            </NewSessionEmptyState>
+          </main>
+        ) : (
+          <>
+            <main className="min-h-0 w-full flex-1 overflow-hidden">
+              {isLoadingEvents ? (
+                <LoadingState message="Loading session..." className="h-full" />
+              ) : (
+                <EventFeed
+                  events={events}
+                  targetEventId={targetEventId}
+                  onTargetEventHandled={handleTargetEventHandled}
+                  isConnected={isConnected}
+                  hasGitRepo={sessionData?.session.project?.repoRoot != null}
+                  isSessionRunning={turn !== null || sessionData?.session.status === 'running'}
+                  onRewind={handleRewindRequest}
+                  onEditSubmit={handleEditAndSubmit}
+                  onRetryMessage={handleRetry}
+                />
+              )}
+            </main>
 
+            <RewindConfirmDialog
+              open={confirmRewind !== null}
+              onOpenChange={(open: boolean) => {
+                if (!open) {
+                  setConfirmRewind(null);
+                  setRewindError(null);
+                }
+              }}
+              sessionId={sessionId}
+              eventId={confirmRewind?.eventId}
+              mode={confirmRewind?.mode ?? 'conversation'}
+              messageCount={confirmRewind?.messageCount ?? 0}
+              onConfirm={() => {
+                void handleRewindConfirm();
+              }}
+              isLoading={isRewinding}
+              error={rewindError}
+            />
+
+            <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-3 pb-3 sm:px-6 sm:pb-4">
+              {rewindUndoState && !approval && (
+                <div className="border-border/40 bg-surface-secondary/50 animate-in fade-in slide-in-from-bottom-2 mb-3 overflow-hidden rounded-xl border shadow-xs backdrop-blur-md duration-200">
+                  <div className="flex items-center justify-between px-3.5 py-2 text-[12px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          rewindUndoState.restoredFiles &&
+                          rewindUndoState.restoredFiles.length > 0
+                        ) {
+                          setIsDiffExpanded((prev) => !prev);
+                        }
+                      }}
+                      className={cn(
+                        'text-text-muted focus-visible:ring-accent/40 flex min-w-0 items-center gap-2 rounded-md pr-2 text-left outline-none select-none focus-visible:ring-2',
+                        rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
+                          ? 'hover:text-text-main group/undo-header cursor-pointer'
+                          : 'cursor-default',
+                      )}
+                      disabled={
+                        !rewindUndoState.restoredFiles || rewindUndoState.restoredFiles.length === 0
+                      }
+                      aria-expanded={
+                        rewindUndoState.restoredFiles && rewindUndoState.restoredFiles.length > 0
+                          ? isDiffExpanded
+                          : undefined
+                      }
+                    >
+                      <RotateCcw className="text-text-muted/70 h-3.5 w-3.5 shrink-0" />
+                      <span className="text-text-main font-medium">Rewound conversation</span>
+                      {rewindUndoState.restoredFiles &&
+                        rewindUndoState.restoredFiles.length > 0 && (
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="text-text-muted/70 truncate">
+                              • Reverted {rewindUndoState.restoredFiles.length}{' '}
+                              {rewindUndoState.restoredFiles.length === 1 ? 'file' : 'files'}
+                            </span>
+                            {(totalAdditions > 0 || totalDeletions > 0) && (
+                              <span className="flex items-center gap-1 font-mono text-[11.5px] font-medium">
+                                {totalAdditions > 0 && (
+                                  <span className="text-emerald-400">+{totalAdditions}</span>
+                                )}
+                                {totalDeletions > 0 && (
+                                  <span className="text-rose-400">-{totalDeletions}</span>
+                                )}
+                              </span>
+                            )}
+                            {isDiffExpanded ? (
+                              <ChevronDown className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
+                            ) : (
+                              <ChevronRight className="text-text-muted/60 group-hover/undo-header:text-text-main h-3.5 w-3.5 transition-colors" />
+                            )}
+                          </div>
+                        )}
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {rewindUndoState.restoredFiles &&
+                        rewindUndoState.restoredFiles.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleOpenReview}
+                            className="h-7 px-2.5 text-[12px]"
+                            title="Review reverted file changes in Changes tab"
+                          >
+                            Review
+                          </Button>
+                        )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          void handleUndoRewind();
+                        }}
+                        disabled={isUndoing}
+                        className="h-7 px-2.5 text-[12px]"
+                      >
+                        {isUndoing ? 'Undoing...' : 'Undo'}
+                      </Button>
+                      <IconButton
+                        size="sm"
+                        onClick={() => setRewindUndoState(null)}
+                        className="hover:bg-surface-secondary/80"
+                        title="Dismiss"
+                        aria-label="Dismiss rewind summary"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </IconButton>
+                    </div>
+                  </div>
+
+                  {/* Expanded diff file list */}
+                  {isDiffExpanded &&
+                    rewindUndoState.restoredFiles &&
+                    rewindUndoState.restoredFiles.length > 0 && (
+                      <div className="border-border/20 bg-surface-secondary/20 border-t px-2 py-1.5">
+                        {rewindUndoState.restoredFiles.map((file) => (
+                          <ChangedFileRow
+                            key={file.path}
+                            file={file}
+                            onReview={handleOpenFileReview}
+                            onOpenEditor={openWorkspaceFile}
+                          />
+                        ))}
+                      </div>
+                    )}
+                </div>
+              )}
+
+              {pendingApprovals.length > 1 && (
+                <p className="text-text-muted mb-2 text-xs" role="status">
+                  {pendingApprovals.length} requests waiting for approval
+                </p>
+              )}
+              <ApprovalComposerSlot
+                approval={approval}
+                onApprove={handleApprove}
+                onDeny={handleDeny}
+              >
+                <CommandBar
+                  onSend={(val, attachmentIds) => {
+                    setRewindUndoState(null);
+                    void handleSend(val, attachmentIds);
+                  }}
+                  disabled={!isConnected || isSwitching || isLoadingSession}
+                  selectedProviderId={sessionData?.session.selectedProvider}
+                  selectedModelId={sessionData?.session.selectedModel}
+                  onProviderSelect={handleProviderSelect}
+                  initialInput={rewindInput || initialPrompt}
+                />
+              </ApprovalComposerSlot>
+            </div>
+          </>
+        )}
+      </div>
+      {liveActiveSubagent && (
+        <SubagentChatView
+          group={liveActiveSubagent}
+          parentTitle={sessionData?.session.title ?? 'Parent conversation'}
+          groups={subagentGroups}
+          onSelect={(group) => setActiveSubagentId(getSubagentGroupKey(group), sessionId)}
+          onBack={() => {
+            setActiveSubagentId(null);
+            requestAnimationFrame(() => parentFocusRef.current?.focus());
+          }}
+          onReviewApproval={() => {
+            setActiveSubagentId(null);
+            requestAnimationFrame(() => {
+              document
+                .querySelector<HTMLElement>(
+                  '[data-parent-conversation] [aria-labelledby="approval-title"]',
+                )
+                ?.focus();
+            });
+          }}
+          isConnected={subagentsConnected}
+          isStreaming={
+            subagentsConnected &&
+            isSubagentActive((liveActiveSubagent.subagentEvent.data as { status: string }).status)
+          }
+        />
+      )}
       {switchAgentTarget && (
         <SwitchAgentModal
           open={Boolean(switchAgentTarget)}

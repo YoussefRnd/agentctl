@@ -1,8 +1,13 @@
+import { createProviderData, providerDataFromRegistry } from './registry/provider-data.js';
 import {
+  findAgentConfigOption,
+  customModelsSchema,
+  type CustomModel,
   type ProviderDiscovery,
   type RegistryAgent,
   type AgentConfigOption,
 } from '@agentctl/shared';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentDriver } from '../agent/types.js';
@@ -123,11 +128,15 @@ export class ProviderRegistry {
   }
 
   private withInstallProgress(discovery: ProviderDiscovery): ProviderDiscovery {
-    return this.installation.withProgress(discovery);
+    return {
+      ...this.installation.withProgress(discovery),
+      authInteraction: this.authCoordinator.getAuthInteraction(discovery.id),
+    };
   }
 
   private getAgent(providerId: string, fallback?: ProviderData): RegistryAgent | undefined {
-    const agent = this.fetcher.getCachedAgents()?.find((candidate) => candidate.id === providerId);
+    const registryId = (fallback ?? this.store.get(providerId))?.registryAgentId ?? providerId;
+    const agent = this.fetcher.getCachedAgents()?.find((candidate) => candidate.id === registryId);
     if (agent) return agent;
     const row = fallback ?? this.store.get(providerId);
     return row ? new Provider(row).toDiscovery().agent : undefined;
@@ -158,7 +167,7 @@ export class ProviderRegistry {
   }
 
   getInstallDir(providerId: string): string {
-    return this.installer.getInstallDir(providerId);
+    return this.installer.getInstallDir(this.store.get(providerId)?.registryAgentId ?? providerId);
   }
 
   async discover(): Promise<ProviderDiscovery[]> {
@@ -183,34 +192,7 @@ export class ProviderRegistry {
       if (row) {
         discovery = new Provider(row).toDiscovery();
       } else {
-        const dist = agent.distribution;
-        const command = dist.npx ? 'npx' : dist.uvx ? 'uvx' : agent.id;
-        const synthetic: ProviderData = {
-          id: agent.id,
-          name: agent.name,
-          command,
-          installState: 'not_installed',
-          installError: null,
-          authState: 'unknown',
-          enabled: true,
-          hidden: false,
-          distribution: JSON.stringify(agent.distribution),
-          launchArgs: '[]',
-          launchEnv: '{}',
-          configOptions: JSON.stringify(agent.configOptions ?? []),
-          authMethods: JSON.stringify(agent.authMethods ?? []),
-          version: agent.version,
-          description: agent.description,
-          icon: agent.icon ?? null,
-          customEnv: '{}',
-          supportsDynamicModel: !!agent.supportsDynamicModel,
-          supportsDynamicConfig: !!agent.supportsDynamicConfig,
-          supportsLogout: !!agent.supportsLogout,
-          nativelyLoadsSkills: false,
-          modes: '[]',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+        const synthetic = providerDataFromRegistry(agent);
         discovery = new Provider(synthetic).toDiscovery();
       }
 
@@ -227,14 +209,23 @@ export class ProviderRegistry {
   }
 
   install(providerId: string, options: ProviderInstallOptions = {}): Promise<ProviderDiscovery> {
+    const registryId = this.store.get(providerId)?.registryAgentId;
+    if (registryId)
+      return this.installation
+        .install(registryId, options)
+        .then(() => this.getProvider(providerId)!.toDiscovery());
     return this.installation.install(providerId, options);
   }
 
   cancelInstall(providerId: string): void {
-    this.installation.cancelInstall(providerId);
+    this.installation.cancelInstall(this.store.get(providerId)?.registryAgentId ?? providerId);
   }
 
   async remove(providerId: string): Promise<ProviderDiscovery> {
+    if (this.store.get(providerId)?.registryAgentId) return this.removeProfile(providerId);
+    if (this.store.listAll().some((row) => row.registryAgentId === providerId && !row.hidden)) {
+      throw new Error('Remove the configured profiles before uninstalling this agent');
+    }
     // Cancellation must happen before queueing; otherwise removal would wait for
     // the operation it is trying to stop.
     this.cancelInstall(providerId);
@@ -276,65 +267,15 @@ export class ProviderRegistry {
       this.setDefaultProvider(nextDefault?.id ?? null);
     }
 
-    const synthetic: ProviderData = agent
-      ? {
-          id: agent.id,
-          name: agent.name,
-          command: agent.distribution.npx ? 'npx' : agent.distribution.uvx ? 'uvx' : agent.id,
-          installState: 'not_installed',
-          installError: null,
-          authState: 'unknown',
-          enabled: true,
-          hidden: false,
-          distribution: JSON.stringify(agent.distribution),
-          launchArgs: '[]',
-          launchEnv: '{}',
-          configOptions: JSON.stringify(agent.configOptions ?? []),
-          authMethods: JSON.stringify(agent.authMethods ?? []),
-          version: agent.version,
-          description: agent.description,
-          icon: agent.icon ?? null,
-          customEnv: '{}',
-          connectionState: 'unknown',
-          authError: null,
-          lastVerifiedAt: null,
-          supportsDynamicModel: !!agent.supportsDynamicModel,
-          supportsDynamicConfig: !!agent.supportsDynamicConfig,
-          supportsLogout: !!agent.supportsLogout,
-          nativelyLoadsSkills: false,
-          modes: '[]',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-      : {
+    const synthetic = agent
+      ? providerDataFromRegistry(agent)
+      : createProviderData({
           id: providerId,
           name: provider.name,
-          command: providerId,
-          installState: 'not_installed',
-          installError: null,
-          authState: 'unknown',
-          connectionState: 'unknown',
-          authError: null,
-          lastVerifiedAt: null,
-          enabled: true,
-          hidden: false,
-          distribution: '{}',
-          launchArgs: '[]',
-          launchEnv: '{}',
-          configOptions: '[]',
-          authMethods: '[]',
           version: provider.version,
           description: provider.description,
           icon: provider.icon,
-          customEnv: '{}',
-          supportsDynamicModel: false,
-          supportsDynamicConfig: false,
-          supportsLogout: false,
-          nativelyLoadsSkills: false,
-          modes: '[]',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+        });
 
     return new Provider(synthetic).toDiscovery();
   }
@@ -518,15 +459,69 @@ export class ProviderRegistry {
     if (changed) this.notifyStateChange();
   }
 
+  async createProfile(providerId: string, name: string): Promise<ProviderDiscovery> {
+    const source = this.store.get(providerId);
+    if (!source) throw new Error('Provider not found');
+    if (!name.trim()) throw new Error('A profile name is required');
+    const id = `profile-${randomUUID()}`;
+    this.store.upsert(id, {
+      ...source,
+      id,
+      registryAgentId: source.registryAgentId ?? providerId,
+      name: name.trim(),
+      customEnv: '{}',
+      authState: 'unknown',
+      connectionState: 'unknown',
+      authError: null,
+      lastVerifiedAt: null,
+      hidden: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    this.notifyStateChange();
+    return this.getProvider(id)!.toDiscovery();
+  }
+
+  async removeProfile(providerId: string): Promise<ProviderDiscovery> {
+    return this.runProviderOperation(providerId, 'remove-profile', async () => {
+      const row = this.store.get(providerId);
+      if (!row?.registryAgentId) throw new Error('Provider is not a named profile');
+      // Keep configuration for saved sessions that still use this profile.
+      this.authCoordinator.cancelLogin(providerId);
+      this.connectionManager.closeConnection(providerId);
+      this.store.update(providerId, { hidden: true });
+      if (this.store.getDefaultProviderId() === providerId)
+        this.store.deleteSetting('defaultProviderId');
+      this.notifyStateChange();
+      return this.getProvider(providerId)!.toDiscovery();
+    });
+  }
+
+  async listNativeSessions(providerId: string, cwd: string, cursor?: string) {
+    const provider = await this.ensureProviderReady(providerId);
+    if (!provider.features.sessions.list || !this.runtime.listSessions)
+      throw new Error('Agent does not support native session listing');
+    const launch = this.launcher.resolveLaunch(
+      this.store.get(providerId)!,
+      this.getAgent(providerId),
+    );
+    return this.runtime.listSessions(launch.command, launch.args, launch.env, { cwd, cursor });
+  }
+
   async setProviderConfig(
     providerId: string,
     updates: {
       customEnv?: Record<string, string>;
+      customModels?: CustomModel[];
       nativelyLoadsSkills?: boolean;
       defaultConfigOptions?: AgentConfigOption[];
+      protocol?: 'auto' | 'v1' | 'v2';
+      defaultModel?: string;
+      defaultThinkingEffort?: string;
     },
   ): Promise<ProviderDiscovery> {
     return this.runProviderOperation(providerId, 'set-config', async () => {
+      if (updates.customModels !== undefined) customModelsSchema.parse(updates.customModels);
       const rowBeforeUpdate = this.store.get(providerId);
       if (!rowBeforeUpdate) throw new Error(`Provider ${providerId} not found`);
 
@@ -557,6 +552,20 @@ export class ProviderRegistry {
         this.store.setDefaultConfigOptions(providerId, updates.defaultConfigOptions);
       }
 
+      this.store.update(providerId, {
+        ...(updates.customModels !== undefined
+          ? { customModels: JSON.stringify(updates.customModels) }
+          : {}),
+        ...(updates.protocol !== undefined ? { protocol: updates.protocol } : {}),
+        ...(updates.defaultModel !== undefined
+          ? { defaultModel: updates.defaultModel || null }
+          : {}),
+        ...(updates.defaultThinkingEffort !== undefined
+          ? { defaultThinkingEffort: updates.defaultThinkingEffort || null }
+          : {}),
+      });
+      if (updates.customEnv !== undefined || updates.protocol !== undefined)
+        this.connectionManager.closeConnection(providerId);
       const agent = this.getAgent(providerId, rowBeforeUpdate);
 
       this.launcher.invalidateProbe(providerId, this.runtime, agent);
@@ -615,6 +624,7 @@ export class ProviderRegistry {
     providerId: string,
     options: { force?: boolean } = {},
   ): Promise<Provider> {
+    await this.authCoordinator.waitForCredentialOperation(providerId);
     let row = this.store.get(providerId);
     if (!row) {
       await this.sync();
@@ -626,7 +636,7 @@ export class ProviderRegistry {
 
     if (
       row.installState === 'installed_local' &&
-      !this.installer.isInstalledCommand(providerId, row.command)
+      !this.installer.isInstalledCommand(row.registryAgentId ?? providerId, row.command)
     ) {
       this.logger.warn(
         { providerId, command: row.command, version: agent?.version ?? row.version },
@@ -654,7 +664,7 @@ export class ProviderRegistry {
 
     if (!options.force && row.authState === 'authenticated' && row.connectionState === 'ready') {
       const opts = jsonCodecs.agentConfigOptions(row.configOptions);
-      const hasModelConfig = opts.some((opt) => opt.id === 'model' || opt.id === 'selectedModel');
+      const hasModelConfig = !!findAgentConfigOption(opts, 'model');
       const recentlyVerified =
         !!row.lastVerifiedAt && Date.now() - row.lastVerifiedAt.getTime() < 5 * 60_000;
       if (hasModelConfig || recentlyVerified) {

@@ -19,6 +19,7 @@ export function isAcpAuthenticationRequired(error: unknown): boolean {
   const code = errorCode(error);
   const message = errorMessage(error);
   return (
+    code === '-32000' ||
     code === 'auth_required' ||
     code === 'needs_auth' ||
     message.includes('authentication required') ||

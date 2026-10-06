@@ -1,5 +1,7 @@
+import { StreamingMarkdown } from '@/features/conversation';
+import { latestPlanArtifacts } from '../libPlanArtifacts';
 import { useMemo } from 'react';
-import { Circle, Loader2, CheckCircle2 } from 'lucide-react';
+import { Circle, Loader2, CheckCircle2, CircleSlash } from 'lucide-react';
 import { useSessionStream, useSession, type StructuredPlanItem } from '@/features/sessions';
 
 export interface PlanPanelProps {
@@ -7,19 +9,23 @@ export interface PlanPanelProps {
 }
 
 export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
-  const { structuredPlan } = useSessionStream();
+  const { structuredPlan, events } = useSessionStream();
   const { sessionData } = useSession();
 
+  const artifacts = latestPlanArtifacts(events, sessionData?.session.planArtifacts);
+  const richPlans = artifacts.filter((artifact) => artifact.kind !== 'items');
   const sessionStatus = sessionData?.session.status;
   const isSessionRunning = sessionStatus === 'running' || sessionStatus === 'needs_attention';
   const sessionPlan = sessionData?.session.plan;
 
   const plan = useMemo(() => {
+    const latest = events.findLast((event) => event.type === 'plan_update');
+    if (latest?.type === 'plan_update') return latest.data.plan as StructuredPlanItem[];
     if (customPlan) return customPlan;
     return structuredPlan.length > 0 ? structuredPlan : (sessionPlan ?? []);
-  }, [customPlan, structuredPlan, sessionPlan]);
+  }, [customPlan, structuredPlan, sessionPlan, events]);
 
-  if (plan.length === 0) {
+  if (plan.length === 0 && richPlans.length === 0) {
     return (
       <div className="border-border/20 flex min-h-20 items-center justify-center rounded-lg border border-dashed px-4 text-center">
         <p className="text-text-muted text-xs font-normal">No plan execution steps active</p>
@@ -29,8 +35,25 @@ export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
 
   return (
     <div className="space-y-2.5">
+      {richPlans.map((artifact) => (
+        <div key={artifact.id} className="border-border/30 rounded-lg border p-3 text-xs">
+          {artifact.kind === 'markdown' ? (
+            <StreamingMarkdown content={artifact.markdown ?? ''} isStreaming={false} />
+          ) : artifact.kind === 'file' ? (
+            <p>
+              Plan file: <span className="font-mono break-all">{artifact.uri}</span>
+            </p>
+          ) : (
+            <p>Agent plan ({artifact.contentType ?? 'unknown format'})</p>
+          )}
+        </div>
+      ))}
       {plan.map((item: StructuredPlanItem) => {
-        const isCompleted = item.status === 'completed' || item.isCompleted;
+        const isCancelled = item.status === 'cancelled';
+        const isUnknown = !['pending', 'in_progress', 'completed', 'cancelled'].includes(
+          item.status,
+        );
+        const isCompleted = !isCancelled && (item.status === 'completed' || item.isCompleted);
         const isInProgress = item.status === 'in_progress' && isSessionRunning;
         const isPaused = item.status === 'in_progress' && !isSessionRunning;
 
@@ -46,7 +69,11 @@ export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
             }`}
           >
             <div className="mt-0.5 shrink-0">
-              {isCompleted ? (
+              {isCancelled ? (
+                <div className="text-text-muted flex h-5 w-5 items-center justify-center">
+                  <CircleSlash aria-hidden className="h-3.5 w-3.5" />
+                </div>
+              ) : isCompleted ? (
                 <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                 </div>
@@ -93,6 +120,11 @@ export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
                   </span>
                 )}
               </div>
+              {(isCancelled || isUnknown) && (
+                <p className="text-text-muted text-xs">
+                  {isCancelled ? 'Cancelled' : `Status: ${item.status}`}
+                </p>
+              )}
               {isInProgress && (
                 <div className="mt-0.5 flex items-center gap-1.5">
                   <span className="bg-accent h-1.5 w-1.5 animate-pulse rounded-full" />

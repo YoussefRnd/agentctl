@@ -6,18 +6,25 @@ import { GlassPanel } from '@agentctl/ui';
 type ApprovalOption = {
   optionId: string;
   label: string;
-  kind?: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+  kind?: string;
   description?: string;
 };
 
-type ToolCall = { name: string; arguments?: Record<string, unknown> };
+type ToolCall = {
+  name: string;
+  kind?: string;
+  locations?: { path?: string }[];
+  arguments?: Record<string, unknown>;
+  rawInput?: unknown;
+};
 
 function isRejectOption(option: ApprovalOption): boolean {
   return (
     option.kind === 'reject_once' ||
     option.kind === 'reject_always' ||
-    /^(deny|reject|no)(?:\b|[_-])/i.test(option.optionId) ||
-    /^(deny|reject|no)\b/i.test(option.label)
+    (!option.kind &&
+      (/^(deny|reject|no)(?:\b|[_-])/i.test(option.optionId) ||
+        /^(deny|reject|no)\b/i.test(option.label)))
   );
 }
 
@@ -25,12 +32,14 @@ function isPersistentAllowOption(option: ApprovalOption): boolean {
   return (
     !isRejectOption(option) &&
     (option.kind === 'allow_always' ||
-      /(?:always|session|forever|permanent)/i.test(option.optionId))
+      (!option.kind && /(?:always|session|forever|permanent)/i.test(option.optionId)))
   );
 }
 
 function getToolTarget(toolCall: ToolCall | undefined): string | null {
   const args = toolCall?.arguments;
+  const paths = toolCall?.locations?.flatMap((location) => (location.path ? [location.path] : []));
+  if (paths?.length) return paths.join('\n');
   if (!args) return null;
   for (const key of ['url', 'uri', 'path', 'filePath', 'command', 'cmd']) {
     const value = args[key];
@@ -61,6 +70,9 @@ export const ApprovalCard = memo(function ApprovalCard({
   const request = data.request as
     | {
         description?: string;
+        subagentId?: string;
+        source?: 'client' | 'provider';
+        subject?: { type?: string; [key: string]: unknown };
         toolCall?: ToolCall;
         options?: ApprovalOption[];
       }
@@ -81,7 +93,21 @@ export const ApprovalCard = memo(function ApprovalCard({
     !!message &&
     message !== 'This action requires your explicit approval before continuing.' &&
     (!target || !message.toLowerCase().includes(target.toLowerCase()));
-  const hasArguments = !!toolCall?.arguments && Object.keys(toolCall.arguments).length > 0;
+  const details = {
+    ...toolCall?.arguments,
+    ...(toolCall?.kind ? { actionKind: toolCall.kind } : {}),
+    ...(toolCall?.locations?.length ? { locations: toolCall.locations } : {}),
+    ...(request?.subject && !['tool_call', 'command'].includes(request.subject.type ?? '')
+      ? { subject: request.subject }
+      : {}),
+    ...(toolCall?.rawInput !== undefined &&
+    (!toolCall.arguments ||
+      typeof toolCall.rawInput !== 'object' ||
+      Array.isArray(toolCall.rawInput))
+      ? { input: toolCall.rawInput }
+      : {}),
+  };
+  const hasArguments = Object.keys(details).length > 0;
   const actionClassName =
     'border-border/45 bg-surface-secondary/20 text-text-main hover:border-accent/40 hover:bg-accent/5 focus-visible:ring-accent/50 flex h-full min-h-10 w-full min-w-0 cursor-pointer items-center justify-center rounded-lg border px-2.5 py-1.5 text-center text-[13px] leading-snug font-medium [overflow-wrap:anywhere] transition-colors focus-visible:outline-none focus-visible:ring-2';
 
@@ -114,12 +140,15 @@ export const ApprovalCard = memo(function ApprovalCard({
         <div className="flex min-w-0 items-start gap-2.5 px-3 py-2.5">
           <ShieldCheck className="text-accent mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 flex-1">
+            {request?.subagentId && (
+              <p className="text-text-muted mb-1 text-xs">Subagent: {request.subagentId}</p>
+            )}
             <div className="flex min-w-0 items-center gap-2">
               <span
                 id="approval-title"
                 className="text-text-main shrink-0 text-[13px] font-semibold"
               >
-                Permission request
+                {request?.source === 'client' ? 'Agentctl operation' : 'Permission request'}
               </span>
               {toolCall && (
                 <span
@@ -155,7 +184,7 @@ export const ApprovalCard = memo(function ApprovalCard({
               Details
             </summary>
             <pre className="border-border/25 bg-background/50 text-text-muted mt-2 max-h-40 min-w-0 overflow-auto rounded-md border p-2.5 font-mono text-[11px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap">
-              {JSON.stringify(toolCall?.arguments, null, 2)}
+              {JSON.stringify(details, null, 2)}
             </pre>
           </details>
         )}

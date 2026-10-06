@@ -1,14 +1,16 @@
-import type {
-  AgentConfigOption,
-  AuthState,
-  AuthMethod,
-  ConnectionState,
-  InstallSource,
-  InstallStage,
-  ProviderDiscovery,
-  ProviderStatus,
-  ThinkingEffort,
-  RegistryAgent,
+import {
+  findAgentConfigOption,
+  withCustomModels,
+  decodeCustomModels,
+  type AgentConfigOption,
+  type AuthState,
+  type ConnectionState,
+  type InstallSource,
+  type InstallStage,
+  type ProviderDiscovery,
+  type ProviderStatus,
+  type ThinkingEffort,
+  type RegistryAgent,
 } from '@agentctl/shared';
 import type { providers } from '../db/schema.js';
 import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
@@ -17,6 +19,11 @@ import { defaultCredentialVault } from '../security/credential-vault.js';
 
 export type ProviderData = Omit<
   typeof providers.$inferSelect,
+  | 'registryAgentId'
+  | 'customModels'
+  | 'protocol'
+  | 'defaultModel'
+  | 'defaultThinkingEffort'
   | 'features'
   | 'capabilitySnapshot'
   | 'authError'
@@ -27,6 +34,11 @@ export type ProviderData = Omit<
   | 'installSource'
   | 'installedVersion'
 > & {
+  customModels?: string;
+  registryAgentId?: string | null;
+  protocol?: 'auto' | 'v1' | 'v2';
+  defaultModel?: string | null;
+  defaultThinkingEffort?: string | null;
   features?: string;
   capabilitySnapshot?: string | null;
   authError?: string | null;
@@ -43,9 +55,6 @@ export interface ProviderLaunchConfig {
   args: string[];
   env: Record<string, string>;
 }
-
-const MODEL_OPTION_IDS = ['model', 'selectedModel'] as const;
-const THINKING_OPTION_IDS = ['thinking', 'thinking_effort', 'selectedThinkingEffort'] as const;
 
 export class Provider {
   constructor(private readonly data: ProviderData) {}
@@ -149,18 +158,14 @@ export class Provider {
     const configOptions = this.parseConfigOptions();
     const features = this.features;
 
-    const hasModelOption = configOptions.some((opt) =>
-      (MODEL_OPTION_IDS as readonly string[]).includes(opt.id),
-    );
-    const hasThinkingOption = configOptions.some((opt) =>
-      (THINKING_OPTION_IDS as readonly string[]).includes(opt.id),
-    );
+    const hasModelOption = !!findAgentConfigOption(configOptions, 'model');
+    const hasThinkingOption = !!findAgentConfigOption(configOptions, 'thought_level');
 
     if (
       !features.configuration.model &&
       hasModelOption &&
       selectedModel &&
-      selectedModel !== 'default' &&
+      selectedModel !== DEFAULT_AGENT_MODEL &&
       !features.configuration.options
     ) {
       extraArgs.push('--model', selectedModel);
@@ -172,10 +177,13 @@ export class Provider {
 
     return {
       command: this.data.command,
-      args: [...this.parseStringArray(this.data.launchArgs), ...extraArgs],
+      args: [...jsonCodecs.stringArray(this.data.launchArgs), ...extraArgs],
       env: {
-        ...this.parseStringRecord(this.data.launchEnv),
-        ...defaultCredentialVault.resolveEnvSync(this.parseStringRecord(this.data.customEnv)),
+        ...jsonCodecs.stringRecord(this.data.launchEnv),
+        ...defaultCredentialVault.resolveEnvSync(jsonCodecs.stringRecord(this.data.customEnv)),
+        ...(this.data.protocol && this.data.protocol !== 'auto'
+          ? { AGENTCTL_ACP_PROTOCOL: this.data.protocol }
+          : {}),
       },
     };
   }
@@ -185,19 +193,18 @@ export class Provider {
     selectedThinkingEffort: ThinkingEffort;
   } {
     const configOptions = this.parseConfigOptions();
-    const modelOption = configOptions.find((opt) =>
-      (MODEL_OPTION_IDS as readonly string[]).includes(opt.id),
-    );
-    const thinkingOption = configOptions.find((opt) =>
-      (THINKING_OPTION_IDS as readonly string[]).includes(opt.id),
-    );
+    const modelOption = findAgentConfigOption(configOptions, 'model');
+    const thinkingOption = findAgentConfigOption(configOptions, 'thought_level');
 
     return {
       selectedModel:
+        this.data.defaultModel ??
         (typeof modelOption?.currentValue === 'string'
           ? modelOption.currentValue
-          : modelOption?.options?.[0]?.value) ?? DEFAULT_AGENT_MODEL,
-      selectedThinkingEffort: (thinkingOption?.currentValue ??
+          : modelOption?.options?.[0]?.value) ??
+        DEFAULT_AGENT_MODEL,
+      selectedThinkingEffort: (this.data.defaultThinkingEffort ??
+        thinkingOption?.currentValue ??
         thinkingOption?.options?.[0]?.value ??
         DEFAULT_THINKING_EFFORT) as ThinkingEffort,
     };
@@ -205,15 +212,15 @@ export class Provider {
 
   private buildAgent(): RegistryAgent {
     return {
-      id: this.data.id,
+      id: this.data.registryAgentId ?? this.data.id,
       name: this.data.name,
       version: this.data.version ?? '',
       description: this.data.description ?? '',
       authors: [],
-      distribution: this.parseDistribution(),
+      distribution: jsonCodecs.registryDistribution(this.data.distribution),
       icon: this.data.icon ?? undefined,
       configOptions: this.parseConfigOptions(),
-      authMethods: this.parseAuthMethods(),
+      authMethods: jsonCodecs.authMethods(this.data.authMethods),
       supportsDynamicModel: this.data.supportsDynamicModel,
       supportsDynamicConfig: this.data.supportsDynamicConfig,
       supportsLogout: this.data.supportsLogout,
@@ -222,7 +229,7 @@ export class Provider {
   }
 
   toDiscovery(): ProviderDiscovery {
-    const rawCustomEnv = this.parseStringRecord(this.data.customEnv);
+    const rawCustomEnv = jsonCodecs.stringRecord(this.data.customEnv);
     const customEnvConfigured: Record<string, boolean> = {};
     const redactedCustomEnv: Record<string, string> = {};
 
@@ -234,13 +241,19 @@ export class Provider {
     return {
       id: this.data.id,
       label: this.data.name,
+      registryAgentId: this.data.registryAgentId ?? this.data.id,
+      isProfile: !!this.data.registryAgentId,
+      protocol: this.data.protocol ?? 'auto',
+      customModels: decodeCustomModels(this.data.customModels),
+      defaultModel: this.data.defaultModel ?? undefined,
+      defaultThinkingEffort: this.data.defaultThinkingEffort ?? undefined,
       command: this.data.command,
-      launchArgs: this.parseStringArray(this.data.launchArgs),
-      launchEnv: this.parseStringRecord(this.data.launchEnv),
+      launchArgs: jsonCodecs.stringArray(this.data.launchArgs),
+      launchEnv: jsonCodecs.stringRecord(this.data.launchEnv),
       customEnv: redactedCustomEnv,
       customEnvConfigured,
       configOptions: this.parseConfigOptions(),
-      authMethods: this.parseAuthMethods(),
+      authMethods: jsonCodecs.authMethods(this.data.authMethods),
       version: this.data.version ?? undefined,
       description: this.data.description ?? undefined,
       icon: this.data.icon ?? undefined,
@@ -271,31 +284,14 @@ export class Provider {
       enabled: this.data.enabled,
       hidden: this.data.hidden,
       agent: this.buildAgent(),
-      modes: this.parseStringArray(this.data.modes),
+      modes: jsonCodecs.stringArray(this.data.modes),
     };
   }
 
-  private parseStringArray(value: string | null | undefined): string[] {
-    return jsonCodecs.stringArray(value);
-  }
-
-  private parseStringRecord(value: string | null | undefined): Record<string, string> {
-    return jsonCodecs.stringRecord(value);
-  }
-
-  private parseConfigOptions(
-    value: string | null | undefined = this.data.configOptions,
-  ): AgentConfigOption[] {
-    return jsonCodecs.agentConfigOptions(value);
-  }
-
-  private parseAuthMethods(value: string | null | undefined = this.data.authMethods): AuthMethod[] {
-    return jsonCodecs.authMethods(value);
-  }
-
-  private parseDistribution(
-    value: string | null | undefined = this.data.distribution,
-  ): RegistryAgent['distribution'] {
-    return jsonCodecs.registryDistribution(value);
+  private parseConfigOptions(): AgentConfigOption[] {
+    return withCustomModels(
+      jsonCodecs.agentConfigOptions(this.data.configOptions),
+      decodeCustomModels(this.data.customModels),
+    );
   }
 }

@@ -1,3 +1,4 @@
+import { readSessionExecutionState } from '@agentctl/core/session';
 import { canMutateWorkspace } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
@@ -42,6 +43,39 @@ export function createSessionsRouter(
   fastify: FastifyInstance,
 ): RouterImplementation<typeof sessionsContract> {
   return {
+    resumeSessionQueue: async ({ params }) => {
+      try {
+        await fastify.sessionManager.resumeSessionQueue(params.id);
+        publishSessionChange(fastify, params.id);
+        return { status: 200 as const, body: { success: true as const } };
+      } catch (error) {
+        return {
+          status: 409 as const,
+          body: { message: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    },
+    getSessionExecution: async ({ params }) => ({
+      status: 200 as const,
+      body: readSessionExecutionState(fastify.db, params.id),
+    }),
+    changeQueuedMessage: async ({ params, body }) => {
+      try {
+        await fastify.sessionManager.changeQueuedMessage(params.id, params.commandId, body.action);
+        publishSessionChange(fastify, params.id);
+        return { status: 200 as const, body: { success: true as const } };
+      } catch (error) {
+        return {
+          status: 409 as const,
+          body: { message: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    },
+    importNativeSession: async ({ body }) => {
+      const result = await fastify.sessionService.importNativeSession(body);
+      publishSessionChange(fastify, result.sessionId);
+      return { status: 200 as const, body: result };
+    },
     getSessions: async () => {
       const allSessions = await fastify.db.select().from(sessions);
       return {

@@ -2,14 +2,17 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { SessionEventRow } from '@agentctl/shared';
+import type { SessionEventRow, SessionEventSnapshot } from '@agentctl/shared';
 import { mergeEventHistory, useSessionEvents } from './useSessionEvents';
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   connect: vi.fn(),
   disconnect: vi.fn(),
-  engines: [] as Array<{ onEventsUpdate: (events: SessionEventRow[]) => void }>,
+  engines: [] as Array<{
+    onEventsUpdate: (events: SessionEventRow[]) => void;
+    onHistorySnapshot: (snapshot: SessionEventSnapshot) => void;
+  }>,
 }));
 vi.mock('@agentctl/api-client', () => ({
   apiClient: { fetch: mocks.fetch },
@@ -119,6 +122,60 @@ it('keeps optimistic messages after sorted persisted history', () => {
   expect(
     mergeEventHistory([event(2), event(1)], [event(3), event(-1), event(-2)]).map((row) => row.id),
   ).toEqual([1, 2, 3, -1, -2]);
+});
+
+it('resets paged history on reconnect while preserving unsent messages and ignoring stale page results', async () => {
+  mocks.fetch.mockResolvedValueOnce({ events: [event(5), event(6)], nextBeforeId: 5 });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  client.setQueryData(
+    ['events', sessionId],
+    [
+      event(5),
+      event(6),
+      {
+        ...event(-1, 'Unsent'),
+        data: { role: 'user', content: 'Unsent', deliveryStatus: 'queued' },
+      },
+    ],
+  );
+  let resolve!: (page: unknown) => void;
+  mocks.fetch.mockReturnValueOnce(
+    new Promise((r) => {
+      resolve = r;
+    }),
+  );
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = hook.loadOlder();
+  });
+  await act(async () => {
+    mocks.engines[0].onHistorySnapshot({
+      events: [event(100), event(101)],
+      nextBeforeId: 100,
+      highWaterId: 101,
+    });
+    mocks.engines[0].onEventsUpdate([event(102)]);
+    resolve({ events: [event(1), event(2)], nextBeforeId: null });
+    await pending;
+  });
+  await settle();
+  expect(hook.events.map((row) => row.id)).toEqual([100, 101, 102, -1]);
+  expect(hook.hasMore).toBe(true);
+  mocks.fetch.mockResolvedValueOnce({ events: [event(99)], nextBeforeId: 99 });
+  await act(async () => {
+    await hook.loadOlder();
+  });
+  expect(mocks.fetch).toHaveBeenLastCalledWith(
+    `/api/sessions/${sessionId}/events/page?limit=200&beforeId=100`,
+  );
+  expect(mocks.connect).toHaveBeenCalledTimes(1);
 });
 
 it('exposes a failed initial page and retries it before starting the live stream', async () => {

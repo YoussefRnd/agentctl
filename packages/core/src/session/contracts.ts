@@ -6,7 +6,7 @@ import type {
 } from '@agentctl/shared';
 import type { SessionEventDbRow } from '../db/zod-schemas.js';
 
-export interface SessionEventStoreLike {
+export interface SessionEventRepositoryLike {
   append<T extends SessionEvent['type']>(
     sessionId: string,
     type: T,
@@ -14,8 +14,21 @@ export interface SessionEventStoreLike {
     parentEventId?: number | null,
     metadata?: SessionEventMetadata | null,
   ): Promise<number>;
+  findMessage?(
+    sessionId: string,
+    role: string,
+    messageId: string,
+    nativeSessionId?: string,
+  ): Promise<
+    { eventId: number; text: string; startedAt: number; parentEventId: number | null } | undefined
+  >;
   getEvent(eventId: number): Promise<{ id: number; type: string; data: unknown } | null>;
-  update(eventId: number, data: unknown, metadata?: SessionEventMetadata | null): Promise<void>;
+  update(
+    eventId: number,
+    data: unknown,
+    metadata?: SessionEventMetadata | null,
+    clearFields?: readonly string[],
+  ): Promise<void>;
   updateSilently(
     eventId: number,
     data: unknown,
@@ -43,6 +56,7 @@ export interface SnapshotServiceLike {
 }
 
 export interface SessionStatusTransitioner {
+  ownsRuntime?(sessionId: string, runtimeId: string): boolean;
   transitionTo(
     sessionId: string,
     targetState: SessionStatus,

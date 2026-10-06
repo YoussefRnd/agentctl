@@ -1,3 +1,4 @@
+import { registryProviderMetadata, providerDataFromRegistry } from './provider-data.js';
 import type { RegistryAgent } from '@agentctl/shared';
 import { getPlatformKey } from './binary-installer.js';
 import type { ProviderLauncher } from './provider-launcher.js';
@@ -32,17 +33,16 @@ export class ProviderSync {
 
       const launchResolved = existing
         ? this.launcher.resolveBaseLaunch(existing, agent)
-        : {
-            command: agent.distribution.npx ? 'npx' : agent.distribution.uvx ? 'uvx' : agent.id,
-            args: [],
-            env: {},
-          };
+        : { command: providerDataFromRegistry(agent).command, args: [], env: {} };
 
-      let configOptions = JSON.stringify(agent.configOptions ?? []);
-      let authMethods = JSON.stringify(agent.authMethods ?? []);
-      let supportsDynamicModel = agent.supportsDynamicModel ?? false;
-      let supportsDynamicConfig = agent.supportsDynamicConfig ?? false;
-      let supportsLogout = agent.supportsLogout ?? false;
+      const metadata = registryProviderMetadata(agent);
+      let {
+        configOptions,
+        authMethods,
+        supportsDynamicModel,
+        supportsDynamicConfig,
+        supportsLogout,
+      } = metadata;
 
       // Installed providers may contain richer capabilities discovered from an
       // ACP handshake. Available/uninstalled providers should mirror the current
@@ -80,11 +80,7 @@ export class ProviderSync {
       }
 
       this.store.upsert(agent.id, {
-        name: agent.name,
-        version: agent.version,
-        distribution: JSON.stringify(agent.distribution),
-        description: agent.description,
-        icon: agent.icon ?? null,
+        ...metadata,
         command: finalCommand,
         launchArgs: JSON.stringify(finalArgs),
         launchEnv: JSON.stringify(launchResolved.env),

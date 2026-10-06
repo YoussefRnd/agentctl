@@ -57,6 +57,8 @@ beforeEach(async () => {
   app.decorate('worktreeManager', manager);
   app.decorate('sessionManager', {
     getSnapshotService: () => snapshots,
+    runWorkspaceCommand: (_id: string, _payload: unknown, execute: () => Promise<unknown>) =>
+      execute(),
     undoDiscard: (id: string) => workspace.undoDiscard(id),
     getSession: () => undefined,
     stopSession: () => {},

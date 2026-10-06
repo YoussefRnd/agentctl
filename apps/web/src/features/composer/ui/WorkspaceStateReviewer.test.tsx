@@ -62,6 +62,7 @@ function createSessionData(
       title: overrides.title ?? 'Test session',
       availableCommands: overrides.availableCommands ?? [],
       plan: overrides.plan ?? [],
+      planArtifacts: overrides.planArtifacts ?? [],
     },
     capabilities: [],
   };

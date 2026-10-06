@@ -8,6 +8,8 @@ import tsRestPlugin from './plugins/ts-rest.js';
 import { eventsRoutes } from './routes/events.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
+import { inArray } from 'drizzle-orm';
+import { sessions } from '@agentctl/core/db';
 import { db as defaultDb } from '@agentctl/core/db';
 import { WorktreeManager, GitMutex } from '@agentctl/core/git';
 import { ProviderRegistry } from '@agentctl/core/providers';
@@ -159,7 +161,16 @@ export async function buildApp(deps: AppDependencies = {}) {
     eventBus.publishState({ topics: ['providers'] });
   });
 
+  providerRegistry.getAuthCoordinator().setCredentialChangeHandler(async (providerIds) => {
+    const affected = await db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(inArray(sessions.selectedProvider, providerIds));
+    await Promise.all(affected.map((session) => sessionManager.stopSessionAndWait(session.id)));
+  });
+
   await providerRegistry.recoverInterruptedOperations();
+  await sessionManager.recoverInterruptedOperations?.();
 
   // Refresh the catalog and update installed providers at startup and once per day.
   let providerUpdateRun: Promise<void> | undefined;

@@ -1,7 +1,8 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../app.js';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
-import type { SessionManager } from '@agentctl/core/session';
+import { ElicitationRegistry, type SessionManager } from '@agentctl/core/session';
+import { ProviderRegistry } from '@agentctl/core/providers';
 import type { FastifyInstance } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';
 import type { SessionEventRow } from '@agentctl/shared';
@@ -15,11 +16,15 @@ describe('SSE stream & Client actions REST API endpoints', () => {
     handleClientMessage: vi.fn(),
     startInput: vi.fn(),
     getOrResuscitate: vi.fn(),
+    getSession: vi.fn(),
     stopAll: vi.fn(),
   };
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.spyOn(ProviderRegistry.prototype, 'sync').mockResolvedValue();
+    vi.spyOn(ProviderRegistry.prototype, 'autoUpdateInstalledProviders').mockResolvedValue();
+    vi.spyOn(ProviderRegistry.prototype, 'recoverInterruptedOperations').mockResolvedValue();
     activeRequests = [];
     db = createDatabase(':memory:');
 
@@ -43,6 +48,57 @@ describe('SSE stream & Client actions REST API endpoints', () => {
       }
     }
     await app.close();
+    vi.restoreAllMocks();
+  });
+
+  test('elicitation responses preserve the decline action', async () => {
+    const respond = vi
+      .spyOn(app.sessionService, 'respondToElicitation')
+      .mockImplementation(() => {});
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const decline = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/elicitations/form/respond`,
+      payload: { action: 'decline' },
+    });
+    expect(decline.statusCode).toBe(200);
+    expect(respond).toHaveBeenCalledWith(sessionId, 'form', {
+      action: 'decline',
+      values: undefined,
+    });
+  });
+
+  test('invalid elicitation responses return 400 and a correction can complete the same form', async () => {
+    const registry = new ElicitationRegistry();
+    const { item, promise } = registry.createElicitation({
+      id: 'form',
+      mode: 'form',
+      message: 'Provide a code',
+      form: {
+        fields: [
+          { id: 'code', label: 'Code', type: 'string', required: true, pattern: '^[A-Z]+$' },
+        ],
+      },
+    });
+    mockSessionManager.getSession.mockReturnValue({
+      respondToElicitation: registry.respondToElicitation.bind(registry),
+    });
+    const url = '/api/sessions/11111111-1111-4111-8111-111111111111/elicitations/form/respond';
+    const invalid = await app.inject({
+      method: 'POST',
+      url,
+      payload: { action: 'submit', values: { code: 'wrong' } },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(item.status).toBe('pending');
+    const valid = await app.inject({
+      method: 'POST',
+      url,
+      payload: { action: 'submit', values: { code: 'VALID' } },
+    });
+    expect(valid.statusCode).toBe(200);
+    expect(await promise).toMatchObject({ action: 'submit', values: { code: 'VALID' } });
+    mockSessionManager.getSession.mockReset();
   });
 
   test('POST /api/sessions/:id/cancel calls handleClientMessage cancel', async () => {
@@ -163,7 +219,10 @@ describe('SSE stream & Client actions REST API endpoints', () => {
       baseCommit: 'none',
     });
 
-    mockSessionManager.getOrResuscitate.mockResolvedValue({ id: sessionId });
+    mockSessionManager.getOrResuscitate.mockResolvedValue({
+      id: sessionId,
+      getLiveEventSnapshots: () => [],
+    });
 
     await app.listen({ port: 0 });
     const address = app.server.address();
@@ -310,7 +369,10 @@ describe('SSE stream & Client actions REST API endpoints', () => {
       data: JSON.stringify({ content: 'second' }),
     });
 
-    mockSessionManager.getOrResuscitate.mockResolvedValue({ id: sessionId });
+    mockSessionManager.getOrResuscitate.mockResolvedValue({
+      id: sessionId,
+      getLiveEventSnapshots: () => [],
+    });
 
     await app.listen({ port: 0 });
     const address = app.server.address();

@@ -1,25 +1,26 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
-import { sessionEvents, sessionEventDbRowSchema } from '@agentctl/core/db';
-import { and, asc, desc, eq, gt, lt, sql } from 'drizzle-orm';
+import { sessionEvents } from '@agentctl/core/db';
+import { and, asc, eq, gt, lte, sql } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { SessionEventRow } from '@agentctl/shared';
-import { sessionEventRowSchema, isSessionEventRow } from '@agentctl/shared';
+import {
+  sessionEventRowSchema,
+  isSessionEventRow,
+  elicitationResponseSchema,
+} from '@agentctl/shared';
 import { AppError } from '../errors/app-error.js';
+import {
+  EVENT_HISTORY_BYTE_BUDGET,
+  EVENT_REPLAY_LIMIT,
+  parseEventRow,
+  readEventPage,
+  readEventReplay,
+  readSessionChangeCatchUp,
+} from './session-event-history.js';
 
-function parseEventRow(rawRow: typeof sessionEvents.$inferSelect): SessionEventRow {
-  const row = sessionEventDbRowSchema.parse(rawRow);
-  const data: unknown = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-  const metadata: unknown = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : undefined;
-  return sessionEventRowSchema.parse({
-    ...row,
-    data,
-    metadata: metadata ?? undefined,
-  });
-}
-
-function formatSSEEvent(event: SessionEventRow): string {
-  return `id: ${String(event.id)}\nevent: session_event\ndata: ${JSON.stringify(event)}\n\n`;
+function formatSSEEvent(event: SessionEventRow, useChangeSequence = false): string {
+  return `id: ${String(useChangeSequence ? (event.sequence ?? event.id) : event.id)}\nevent: session_event\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
 function formatStateChange(event: import('@agentctl/shared').StateChangeEvent): string {
@@ -111,38 +112,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
     async (request) => {
       const { id } = request.params;
       const { beforeId, limit } = request.query;
-      const rows = await fastify.db
-        .select()
-        .from(sessionEvents)
-        .where(
-          and(
-            eq(sessionEvents.sessionId, id),
-            beforeId ? lt(sessionEvents.id, beforeId) : undefined,
-          ),
-        )
-        .orderBy(desc(sessionEvents.id))
-        .limit(limit + 1);
-      const hasMore = rows.length > limit;
-      const page = rows.slice(0, limit).reverse();
-      const cursor = hasMore ? page[0].id : null;
-      // Include the user message anchoring a partial turn, without widening the page.
-      const parentId = page[0]?.parentEventId;
-      if (parentId && !page.some((event) => event.id === parentId)) {
-        const parent = await fastify.db
-          .select()
-          .from(sessionEvents)
-          .where(
-            and(
-              eq(sessionEvents.sessionId, id),
-              eq(sessionEvents.id, parentId),
-              eq(sessionEvents.type, 'text'),
-              sql`json_extract(${sessionEvents.data}, '$.role') = 'user'`,
-            ),
-          )
-          .limit(1);
-        if (parent[0]) page.unshift(parent[0]);
-      }
-      return { events: page.map(parseEventRow), nextBeforeId: cursor };
+      return readEventPage(fastify.db, id, { beforeId, limit });
     },
   );
 
@@ -155,6 +125,9 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
         }),
         querystring: z.object({
           lastEventId: z.string().optional(),
+          snapshots: z.enum(['true']).optional(),
+          changes: z.enum(['true']).optional(),
+          afterSequence: z.coerce.number().int().nonnegative().optional(),
         }),
       },
     },
@@ -185,78 +158,114 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       // Flush headers immediately with an initial heartbeat comment
       reply.raw.write(':\n\n');
 
-      // 4. Last-Event-ID event replay from the database
-      const lastEventIdHeader = request.headers['last-event-id'];
-      const lastEventIdQuery = request.query.lastEventId;
-      const lastEventIdStr =
-        (Array.isArray(lastEventIdHeader) ? lastEventIdHeader[0] : lastEventIdHeader) ??
-        lastEventIdQuery;
-
-      if (lastEventIdStr) {
-        const lastEventId = parseInt(lastEventIdStr, 10);
-        if (!isNaN(lastEventId)) {
-          try {
-            const missedEvents = await fastify.db
-              .select()
-              .from(sessionEvents)
-              .where(and(eq(sessionEvents.sessionId, id), gt(sessionEvents.id, lastEventId)))
-              .orderBy(asc(sessionEvents.id));
-
-            for (const row of missedEvents) {
-              if (reply.raw.destroyed) return;
-              const parsed = parseEventRow(row);
-              reply.raw.write(formatSSEEvent(parsed));
-            }
-          } catch (err: unknown) {
-            fastify.log.error(err, 'Failed to replay missed events');
-            if (!reply.raw.destroyed) {
-              const msg = err instanceof Error ? err.message : String(err);
-              reply.raw.write(`event: error\ndata: ${JSON.stringify({ error: msg })}\n\n`);
-            }
-          }
-        }
-      }
-
-      // 6. Subscribe to live events
+      const useChangeSequence = request.query.changes === 'true';
+      const sendEvent = (event: SessionEventRow) => write(formatSSEEvent(event, useChangeSequence));
+      let catchingUp = true;
+      let pendingBytes = 0;
+      const pending: SessionEventRow[] = [];
+      let closed = false;
+      const write = (frame: string) => {
+        if (closed || reply.raw.destroyed || reply.raw.writableEnded) return;
+        reply.raw.write(frame);
+        // Disconnect a slow reader; its next connection recovers from its cursor.
+        if (reply.raw.writableLength > EVENT_HISTORY_BYTE_BUDGET) reply.raw.end();
+      };
+      // Subscribe before reading the high-water mark so catch-up has no live-event gap.
       const unsubscribe = fastify.eventBus.subscribe(id, (raw) => {
-        if (reply.raw.destroyed) return;
+        if (closed || reply.raw.destroyed || reply.raw.writableEnded) return;
         try {
-          const parsed = parseBusEvent(raw);
-          reply.raw.write(formatSSEEvent(parsed));
+          const event = parseBusEvent(raw);
+          if (catchingUp) {
+            pendingBytes += Buffer.byteLength(JSON.stringify(event));
+            if (pending.length >= EVENT_REPLAY_LIMIT || pendingBytes > EVENT_HISTORY_BYTE_BUDGET) {
+              reply.raw.end();
+              return;
+            }
+            pending.push(event);
+          } else {
+            sendEvent(event);
+          }
         } catch (err: unknown) {
           fastify.log.error(err, 'Failed to write live event to stream');
         }
       });
-
-      // 7. Resync in-flight streaming events after replay: replay rows from
-      //    the DB may lag the live transient stream (silent batched flushes),
-      //    so emit full-content snapshots for events still streaming. Clients
-      //    use these as the base before applying new deltas. Snapshot content
-      //    is >= every chunk published before it (computed at emission), so
-      //    any delta already delivered is folded into the replacement.
-      const snapshots = session.getLiveEventSnapshots();
-      for (const snap of snapshots) {
-        if (reply.raw.destroyed) return;
-        try {
-          const parsed = parseBusEvent(snap);
-          reply.raw.write(formatSSEEvent(parsed));
-        } catch (err: unknown) {
-          fastify.log.error(err, 'Failed to write transient snapshot to stream');
-        }
-      }
-
-      // 8. Keep-alive heartbeat pings
-      const heartbeatInterval = setInterval(() => {
-        if (!reply.raw.destroyed) {
-          reply.raw.write(':\n\n');
-        }
-      }, 15000);
-
-      // 9. Unsubscribe and cleanup when connection closes
-      request.raw.on('close', () => {
+      const heartbeatInterval = setInterval(() => write(':\n\n'), 15000);
+      const cleanup = () => {
+        closed = true;
         clearInterval(heartbeatInterval);
         unsubscribe();
-      });
+      };
+      reply.raw.on('close', cleanup);
+      reply.raw.on('finish', cleanup);
+
+      const lastEventIdHeader = request.headers['last-event-id'];
+      const lastEventIdStr =
+        (Array.isArray(lastEventIdHeader) ? lastEventIdHeader[0] : lastEventIdHeader) ??
+        request.query.lastEventId;
+      const lastEventId = lastEventIdStr === undefined ? undefined : Number(lastEventIdStr);
+      try {
+        if (useChangeSequence) {
+          const result = readSessionChangeCatchUp(fastify.db, id, request.query.afterSequence);
+          if (result.snapshot)
+            write(
+              `id: ${result.snapshot.changeSequence}\nevent: session_snapshot\ndata: ${JSON.stringify(result.snapshot)}\n\n`,
+            );
+          for (const event of result.events) sendEvent(event);
+        } else {
+          const [{ highWaterId }] = await fastify.db
+            .select({ highWaterId: sql<number>`coalesce(max(${sessionEvents.id}), 0)` })
+            .from(sessionEvents)
+            .where(eq(sessionEvents.sessionId, id));
+          if (lastEventId !== undefined && Number.isSafeInteger(lastEventId) && lastEventId >= 0) {
+            if (request.query.snapshots === 'true') {
+              const replay = await readEventReplay(fastify.db, id, lastEventId, highWaterId);
+              if (replay === null) {
+                const page = await readEventPage(fastify.db, id, {
+                  limit: 200,
+                  throughId: highWaterId,
+                });
+                write(
+                  `id: ${highWaterId}\nevent: session_snapshot\ndata: ${JSON.stringify({ ...page, highWaterId })}\n\n`,
+                );
+              } else {
+                for (const event of replay) sendEvent(event);
+              }
+            } else {
+              // Older clients retain full catch-up, but read it in bounded database batches.
+              let cursor = lastEventId;
+              while (!closed && !reply.raw.writableEnded) {
+                const rows = await fastify.db
+                  .select()
+                  .from(sessionEvents)
+                  .where(
+                    and(
+                      eq(sessionEvents.sessionId, id),
+                      gt(sessionEvents.id, cursor),
+                      lte(sessionEvents.id, highWaterId),
+                    ),
+                  )
+                  .orderBy(asc(sessionEvents.id))
+                  .limit(EVENT_REPLAY_LIMIT);
+                if (rows.length === 0) break;
+                for (const row of rows) sendEvent(parseEventRow(row));
+                cursor = rows[rows.length - 1].id;
+              }
+            }
+          }
+        }
+        // Buffered live changes follow persisted replay. Full snapshots then supersede any
+        // transient deltas emitted during catch-up, including updates to older event IDs.
+        for (const event of pending) sendEvent(event);
+        for (const snapshot of session.getLiveEventSnapshots()) sendEvent(parseBusEvent(snapshot));
+        pending.length = 0;
+        catchingUp = false;
+      } catch (err: unknown) {
+        fastify.log.error(err, 'Failed to replay missed events');
+        write(
+          `event: error\ndata: ${JSON.stringify({ error: 'Failed to synchronize session history' })}\n\n`,
+        );
+        reply.raw.end();
+      }
     },
   );
 
@@ -268,10 +277,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
           id: z.uuid(),
           elicitationId: z.string(),
         }),
-        body: z.object({
-          action: z.enum(['submit', 'cancel']),
-          values: z.record(z.string(), z.unknown()).optional(),
-        }),
+        body: elicitationResponseSchema,
       },
     },
     (request) => {

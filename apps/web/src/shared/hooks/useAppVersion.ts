@@ -1,6 +1,7 @@
+import { version as packageVersion } from '../../../package.json';
 import { useEffect, useState } from 'react';
 
-const FALLBACK_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.2.0';
+const FALLBACK_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : packageVersion;
 
 export function useAppVersion(): string {
   const [version, setVersion] = useState<string>(FALLBACK_VERSION);

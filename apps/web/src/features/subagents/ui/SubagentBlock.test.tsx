@@ -5,7 +5,7 @@ import { act } from 'react';
 import { SubagentBlock } from './SubagentBlock';
 import { SubagentChatView } from './SubagentChatView';
 import { useSubagentStore } from '../model/useSubagentStore';
-import type { SubagentGroup } from '../lib/subagentBlockUtils';
+import { getSubagentGroupKey, type SubagentGroup } from '../lib/subagentBlockUtils';
 import type { SessionEventRow } from '@agentctl/shared';
 
 beforeEach(() => {
@@ -84,7 +84,7 @@ describe('SubagentBlock (Unexpanded in chat feed)', () => {
     const { root, container } = renderSubagentBlock(groups);
 
     expect(container.textContent).toContain('Test Runner');
-    expect(container.textContent).toContain('Run unit tests');
+    expect(container.textContent).not.toContain('Run unit tests');
     expect(container.textContent).toContain('pnpm test');
 
     act(() => {
@@ -92,18 +92,19 @@ describe('SubagentBlock (Unexpanded in chat feed)', () => {
     });
   });
 
-  it('activates subagent when clicked to replace main view', () => {
+  it('selects a subagent within its owning session', () => {
     const group = createMockGroup('sa-1', 'Build Specialist', 'Compile packages', 'completed');
     const { root, container } = renderSubagentBlock([group]);
 
-    const card = container.querySelector('[role="button"]');
+    const card = container.querySelector('button');
     expect(card).toBeDefined();
 
     act(() => {
       (card as HTMLElement)?.click();
     });
 
-    expect(useSubagentStore.getState().activeSubagentId).toBe('sa-1');
+    expect(useSubagentStore.getState().activeSubagentId).toBe(getSubagentGroupKey(group));
+    expect(useSubagentStore.getState().activeSessionId).toBe('sess-1');
 
     act(() => {
       root.unmount();
@@ -112,7 +113,7 @@ describe('SubagentBlock (Unexpanded in chat feed)', () => {
 });
 
 describe('SubagentChatView (Expanded subagent view)', () => {
-  it('renders header with back button, task prompt, and response without state badges', () => {
+  it('renders task, explicit status, and one result with a close control', () => {
     const group = createMockGroup(
       'sa-1',
       'Research Codebase',
@@ -138,23 +139,24 @@ describe('SubagentChatView (Expanded subagent view)', () => {
     });
 
     // Top header
-    expect(container.textContent).toContain('Back to session');
+    expect(document.querySelector('[aria-label="Back to parent conversation"]')).not.toBeNull();
+    expect(document.body.textContent).toContain('Completed');
 
-    // What agent told the subagent (Task prompt)
-    expect(container.textContent).toContain('Task prompt');
-    expect(container.textContent).toContain('Find all database models in the project');
+    // The full assignment stays available in a collapsed disclosure.
+    expect(document.body.textContent).toContain('Original assignment');
+    expect(document.body.textContent).toContain('Find all database models in the project');
 
     // Response rendered like main chat
-    expect(container.textContent).toContain('Found 12 database models in src/db/schema.ts');
+    expect(document.body.textContent).toContain('Found 12 database models in src/db/schema.ts');
 
     // No failure/success state badges
-    expect(container.textContent).not.toContain('FAILED');
-    expect(container.textContent).not.toContain('SUCCESS');
+    expect(document.body.textContent).not.toContain('FAILED');
+    expect(document.body.textContent).not.toContain('SUCCESS');
 
     // Clicking back button triggers onBack
-    const backBtn = [...container.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Back to session'),
-    );
+    const backBtn = document.querySelector(
+      '[aria-label="Back to parent conversation"]',
+    ) as HTMLButtonElement;
     expect(backBtn).toBeDefined();
 
     act(() => {

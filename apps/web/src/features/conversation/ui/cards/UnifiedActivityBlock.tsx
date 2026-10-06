@@ -1,3 +1,4 @@
+import { ToolDiffBlock as DiffBlock, ToolLocations as LocationsView } from './ToolOutputContent';
 import { useState, useMemo, memo } from 'react';
 import {
   ChevronRight,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 import { ThinkingSpinner, StreamingDots } from '@/shared';
 import { useSettings } from '@/features/settings';
-import { useSession } from '@/features/sessions';
+import { useSession, useSessionTurnState } from '@/features/sessions';
 import { formatTokenCount } from '@/shared/lib/formatTokenCount';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import type { SessionEventRow, SessionEventToolCallData } from '@agentctl/shared';
@@ -198,54 +199,6 @@ function getCleanOutputText(rawOutput: unknown): string | null {
   return String(rawOutput);
 }
 
-function DiffBlock({ block }: { block: Record<string, unknown> }) {
-  const path = typeof block.path === 'string' ? block.path : 'file';
-  const oldText = typeof block.oldText === 'string' ? block.oldText : null;
-  const newText = typeof block.newText === 'string' ? block.newText : '';
-
-  return (
-    <div className="border-border/15 my-1 overflow-hidden rounded-md border bg-black/40">
-      <div className="bg-surface-secondary/40 border-border/15 flex items-center border-b px-2.5 py-1">
-        <span className="text-text-muted font-mono text-[10px] break-all">{path}</span>
-      </div>
-      <div className="no-scrollbar max-h-52 overflow-y-auto p-2.5 font-mono text-[10.5px] leading-relaxed">
-        {oldText && (
-          <div className="whitespace-pre-wrap text-rose-400/80">
-            {oldText
-              .split('\n')
-              .map((line) => `- ${line}`)
-              .join('\n')}
-          </div>
-        )}
-        {newText && (
-          <div className="whitespace-pre-wrap text-emerald-400/80">
-            {newText
-              .split('\n')
-              .map((line) => `+ ${line}`)
-              .join('\n')}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LocationsView({ locations }: { locations: { path?: string; line?: number }[] }) {
-  return (
-    <div className="my-1 flex flex-wrap items-center gap-1.5">
-      {locations.map((loc, i) => (
-        <code
-          key={`${loc.path || ''}:${String(loc.line ?? i)}`}
-          className="bg-surface-secondary/70 text-text-main border-border/25 rounded border px-1.5 py-0.5 font-mono text-[10px] break-all select-all"
-        >
-          {loc.path}
-          {typeof loc.line === 'number' ? `:${String(loc.line)}` : ''}
-        </code>
-      ))}
-    </div>
-  );
-}
-
 function ToolOutputDetails({ call }: { call: SessionEventToolCallData }) {
   const contentBlocks = Array.isArray(call.content)
     ? (call.content as Record<string, unknown>[])
@@ -270,7 +223,7 @@ function ToolOutputDetails({ call }: { call: SessionEventToolCallData }) {
   return (
     <div className="space-y-1 pt-1 pb-1">
       {diffBlocks.map((b, i) => (
-        <DiffBlock key={i} block={b} />
+        <DiffBlock compact key={i} block={b} />
       ))}
 
       {textBlocks.map((b, i) => {
@@ -311,7 +264,7 @@ function ToolOutputDetails({ call }: { call: SessionEventToolCallData }) {
         </div>
       )}
 
-      {locations.length > 0 && <LocationsView locations={locations} />}
+      {locations.length > 0 && <LocationsView className="my-1" locations={locations} />}
     </div>
   );
 }
@@ -339,10 +292,14 @@ export const ToolStepRow = memo(function ToolStepRow({
   const status = payload.status;
   const isFailed = status === 'failed';
   const isPending = status === 'pending';
+  const unresolved = status === 'unknown' || status === 'interrupted' || status === 'cancelled';
   const durationMs = event.metadata?.durationMs;
   const hasFinishedDuration = durationMs != null && durationMs > 0;
   const isStillInProgress =
-    !isCompleted && !hasFinishedDuration && (isStreaming || status === 'in_progress');
+    !unresolved &&
+    !isCompleted &&
+    !hasFinishedDuration &&
+    (isStreaming || status === 'in_progress');
 
   const info = getToolDisplayInfo(toolName, payload);
   const cleanOutput = getCleanOutputText(payload.rawOutput);
@@ -375,7 +332,15 @@ export const ToolStepRow = memo(function ToolStepRow({
         </span>
 
         <div className="ml-auto flex shrink-0 items-center gap-2 pl-2 text-[10px]">
-          {isStillInProgress ? (
+          {unresolved ? (
+            <span>
+              {status === 'unknown'
+                ? 'Status unknown'
+                : status === 'cancelled'
+                  ? 'Cancelled'
+                  : 'Interrupted'}
+            </span>
+          ) : isStillInProgress ? (
             <StreamingDots className="ml-0" />
           ) : isFailed ? (
             <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
@@ -431,7 +396,8 @@ interface UnifiedActivityBlockProps {
   events: SessionEventRow[];
   isStreaming?: boolean;
   isActive?: boolean;
-  isInitialThinking?: boolean;
+  isWaitingForResponse?: boolean;
+  providerError?: string;
   isResponding?: boolean;
 }
 
@@ -439,23 +405,22 @@ export function UnifiedActivityBlock({
   events,
   isStreaming = false,
   isActive = false,
-  isInitialThinking = false,
+  isWaitingForResponse = false,
+  providerError,
   isResponding = false,
 }: UnifiedActivityBlockProps) {
   const { settings } = useSettings();
   const { sessionData } = useSession();
+  const turn = useSessionTurnState();
   const showThinking = settings?.showThinking ?? false;
 
   const sessionStatus = sessionData?.session.status;
-  const isSessionActive = sessionStatus === 'running' || sessionStatus === 'needs_attention';
+  const isSessionActive =
+    sessionStatus === 'running' || sessionStatus === 'needs_attention' || turn !== null;
   const isCompleted = isResponding || !isActive || !isSessionActive;
 
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
-  const isOpen = userToggled ?? (!isCompleted && showThinking);
-
-  if (events.length === 0 && !isInitialThinking) {
-    return null;
-  }
+  const isOpen = events.length > 0 && (userToggled ?? (!isCompleted && showThinking));
 
   const { totalDurationMs, totalTokens, toolCount, thoughtCount } = useMemo(() => {
     let durMs = 0;
@@ -485,8 +450,9 @@ export function UnifiedActivityBlock({
   }, [events]);
 
   const summaryLabel = useMemo(() => {
+    if (providerError) return 'Provider error';
+    if (isWaitingForResponse) return 'Waiting for response';
     if (!isCompleted) {
-      if (isInitialThinking) return 'Thinking...';
       if (toolCount > 0 && thoughtCount > 0)
         return `Thinking & running ${toolCount} tool${toolCount > 1 ? 's' : ''}`;
       if (toolCount > 0) return `Running ${toolCount} tool${toolCount > 1 ? 's' : ''}`;
@@ -517,27 +483,47 @@ export function UnifiedActivityBlock({
     }
 
     return parts.join(' · ');
-  }, [isCompleted, isInitialThinking, toolCount, thoughtCount, totalDurationMs, totalTokens]);
+  }, [
+    providerError,
+    isCompleted,
+    isWaitingForResponse,
+    toolCount,
+    thoughtCount,
+    totalDurationMs,
+    totalTokens,
+  ]);
 
   const toggle = () => {
-    if (events.length === 0 && !isInitialThinking) return;
+    if (events.length === 0) return;
     setUserToggled(!isOpen);
   };
 
+  if (events.length === 0 && !isWaitingForResponse && !providerError) return null;
+  const Header = events.length > 0 ? 'button' : 'div';
+
   return (
     <div className="w-full py-0.5">
-      <button
-        type="button"
-        aria-expanded={isOpen}
-        onClick={toggle}
-        disabled={events.length === 0 && !isInitialThinking}
+      <Header
+        type={events.length > 0 ? 'button' : undefined}
+        aria-expanded={events.length > 0 ? isOpen : undefined}
+        role={providerError ? 'alert' : isWaitingForResponse ? 'status' : undefined}
+        onClick={events.length > 0 ? toggle : undefined}
         className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex items-center gap-2 text-[15px] font-normal tracking-tight transition-colors outline-none select-none ${
-          events.length > 0 || isInitialThinking ? 'cursor-pointer' : 'cursor-default'
+          events.length > 0 ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
-        <ThinkingSpinner done={isCompleted} className="text-accent text-[15px]" />
-        <span>{summaryLabel}</span>
-        {(events.length > 0 || isInitialThinking) && (
+        {providerError ? (
+          <AlertCircle aria-hidden="true" className="text-danger h-4 w-4 shrink-0" />
+        ) : (
+          <ThinkingSpinner done={isCompleted} className="text-accent text-[15px]" />
+        )}
+        <span className={providerError ? 'text-danger' : undefined}>
+          {summaryLabel}
+          {providerError && (
+            <span className="text-text-muted mt-1 block text-left text-xs">{providerError}</span>
+          )}
+        </span>
+        {events.length > 0 && (
           <ChevronRight
             className={`h-3.5 w-3.5 opacity-60 transition-transform duration-150 group-hover/activity-btn:opacity-100 ${
               isOpen ? 'rotate-90' : ''
@@ -545,7 +531,7 @@ export function UnifiedActivityBlock({
             aria-hidden={true}
           />
         )}
-      </button>
+      </Header>
 
       {isOpen && (
         <div className="animate-in fade-in slide-in-from-top-1 mt-2 mb-1 space-y-2 pl-1 duration-150">

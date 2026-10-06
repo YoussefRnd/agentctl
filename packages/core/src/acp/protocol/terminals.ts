@@ -2,6 +2,7 @@ import type { TerminalManager } from './terminal-manager.js';
 import type { Logger } from '../../logger.js';
 import type { AgentUpdate } from '../../agent/types.js';
 import { resolveAllowedPath } from '../transport/path-security.js';
+import { waitForRequest, throwIfRequestCancelled } from './request-cancellation.js';
 
 export interface CreateTerminalParams {
   command: string;
@@ -45,7 +46,12 @@ export async function handleTerminalCreate(
     env: p.env,
     outputByteLimit: p.outputByteLimit,
   });
-  await onEvent({ type: 'terminal_created', terminalId, command: p.command });
+  try {
+    await onEvent({ type: 'terminal_created', terminalId, command: p.command });
+  } catch (error) {
+    terminalManager.release(terminalId);
+    throw error;
+  }
   return { terminalId };
 }
 
@@ -87,13 +93,14 @@ export async function handleTerminalWaitForExit(
   p: { terminalId: string },
   terminalManager: TerminalManager,
   logger: Logger,
+  signal?: AbortSignal,
 ): Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }> {
   logger.debug(`Terminal wait_for_exit requested for ${p.terminalId}`);
   const term = terminalManager.getTerminal(p.terminalId);
   if (!term) {
     throw new Error(`Terminal not found: ${p.terminalId}`);
   }
-  const res = await term.closed;
+  const res = await waitForRequest(term.closed, signal);
   return {
     exitCode: res.exitCode,
     signal: res.signal as NodeJS.Signals | null,
@@ -129,9 +136,11 @@ export async function handleBuiltinBash(
   sessionCwd: string,
   logger: Logger,
   additionalDirectories: string[] = [],
+  signal?: AbortSignal,
 ): Promise<{ terminalId?: string; output: string; exitCode: number | null }> {
   const resolvedCwd = resolveTerminalCwd(p.cwd, sessionCwd, additionalDirectories);
   logger.debug(`builtin/bash: ${p.command} in ${resolvedCwd} (pty: ${String(p.pty)})`);
+  throwIfRequestCancelled(signal);
   const terminalId = terminalManager.spawn({
     command: p.command,
     args: p.args,
@@ -141,12 +150,13 @@ export async function handleBuiltinBash(
     terminalManager.write(terminalId, p.input);
   }
   if (!p.pty) {
-    const result = await terminalManager.wait(terminalId);
-    const term = terminalManager.getTerminal(terminalId);
-    return {
-      output: term?.output ?? '',
-      exitCode: result?.exitCode ?? null,
-    };
+    try {
+      const result = await waitForRequest(terminalManager.wait(terminalId), signal);
+      const term = terminalManager.getTerminal(terminalId);
+      return { output: term?.output ?? '', exitCode: result?.exitCode ?? null };
+    } finally {
+      terminalManager.release(terminalId);
+    }
   }
   return {
     terminalId,

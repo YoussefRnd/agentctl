@@ -9,15 +9,45 @@ export class ProviderStore {
 
   get(id: string): ProviderData | undefined {
     const rows = this.db.select().from(providers).where(eq(providers.id, id)).all();
-    return rows.length > 0 ? rows[0] : undefined;
+    return rows.length > 0 ? this.withInstallation(rows[0]) : undefined;
   }
 
   list(): ProviderData[] {
-    return this.db.select().from(providers).where(eq(providers.hidden, false)).all();
+    return this.db
+      .select()
+      .from(providers)
+      .where(eq(providers.hidden, false))
+      .all()
+      .map((row) => this.withInstallation(row));
   }
 
   listAll(): ProviderData[] {
     return this.db.select().from(providers).all();
+  }
+
+  private withInstallation(row: typeof providers.$inferSelect): ProviderData {
+    if (!row.registryAgentId) return row;
+    const base = this.db
+      .select()
+      .from(providers)
+      .where(eq(providers.id, row.registryAgentId))
+      .get();
+    if (!base) return row;
+    return {
+      ...row,
+      command: base.command,
+      launchArgs: base.launchArgs,
+      launchEnv: base.launchEnv,
+      distribution: base.distribution,
+      version: base.version,
+      icon: base.icon,
+      description: base.description,
+      installState: base.installState,
+      installStage: base.installStage,
+      installSource: base.installSource,
+      installError: base.installError,
+      installedVersion: base.installedVersion,
+    };
   }
 
   upsert(id: string, values: Partial<typeof providers.$inferInsert>): void {
@@ -122,12 +152,11 @@ export class ProviderStore {
   }
 
   updateSetting(key: string, value: string): void {
-    const existing = this.getSetting(key);
-    if (existing !== undefined) {
-      this.db.update(systemSettings).set({ value }).where(eq(systemSettings.key, key)).run();
-    } else {
-      this.db.insert(systemSettings).values({ key, value }).run();
-    }
+    this.db
+      .insert(systemSettings)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: systemSettings.key, set: { value } })
+      .run();
   }
 
   deleteSetting(key: string): void {

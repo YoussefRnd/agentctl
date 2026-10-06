@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import type { AgentConnectionDiagnostic } from '../agent/diagnostics.js';
-import type { ClientCapabilities, ClientSideConnection } from '@agentclientprotocol/sdk';
+import type { ClientCapabilities } from '@agentclientprotocol/sdk';
+import type { AcpAgentConnection } from './transport/client-connection.js';
 import type {
   AgentDescriptor,
   AgentSessionCallbacks,
@@ -28,7 +29,7 @@ export type {
 
 export interface ACPConnectionHandle {
   child: ChildProcess;
-  connection: ClientSideConnection;
+  connection: AcpAgentConnection;
 }
 
 export interface AgentStreamTransport {
@@ -53,7 +54,7 @@ export interface IConnectionManager {
     generation?: number;
     child: ChildProcess;
     transport: AgentStreamTransport;
-    connection: ClientSideConnection;
+    connection: AcpAgentConnection;
     capabilities: AcpParsedCapabilities;
   }>;
   closeSession(providerId: string, sessionId: string): Promise<void>;
@@ -68,7 +69,7 @@ export interface IConnectionManager {
     },
     providerId: string,
   ): void;
-  unregisterActiveSession?(acpSessionId: string): void;
+  unregisterActiveSession?(acpSessionId: string, providerId: string): void;
 }
 
 /** Complete connection lifecycle required by the application composition root. */
@@ -89,6 +90,9 @@ export interface AcpParsedCapabilities {
   supportsImage: boolean;
   supportsAudio: boolean;
   supportsEmbeddedContext: boolean;
+  supportsMcpHttp?: boolean;
+  supportsMcpSse?: boolean;
+  supportsMcpAcp?: boolean;
 }
 
 export interface InitializeAcpConnectionOptions {

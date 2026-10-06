@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { WorkspaceManager, SessionWorkspace, GitMutex } from '@agentctl/core/git';
 import { execFile } from 'node:child_process';
@@ -6,8 +6,18 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { ProviderRegistry } from '@agentctl/core/providers';
 import { buildApp } from '../app.js';
 import { createDatabase, projects, sessionEvents, sessions } from '@agentctl/core/db';
+
+// Project route fixtures must not download or launch actual registry agents.
+beforeEach(() => {
+  vi.spyOn(ProviderRegistry.prototype, 'sync').mockResolvedValue();
+  vi.spyOn(ProviderRegistry.prototype, 'autoUpdateInstalledProviders').mockResolvedValue();
+  vi.spyOn(ProviderRegistry.prototype, 'probeAllInstalledProviders').mockResolvedValue();
+  vi.spyOn(ProviderRegistry.prototype, 'recoverInterruptedOperations').mockResolvedValue();
+});
+afterEach(() => vi.restoreAllMocks());
 
 describe('Projects routes', () => {
   let app: FastifyInstance;

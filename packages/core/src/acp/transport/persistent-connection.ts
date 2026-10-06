@@ -1,13 +1,15 @@
+import { DEFAULT_AGENT_INITIALIZATION_TIMEOUT_MS } from '../../config/runtime-defaults.js';
+import { observeAcpStderr } from './stderr.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
-import { ClientSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
+import { ndJsonStream } from '@agentclientprotocol/sdk';
 import type { RegistryAgent } from '@agentctl/shared';
 import type { ProviderLauncher } from '../../providers/registry/provider-launcher.js';
 import type { ProviderStore } from '../../providers/registry/provider-store.js';
 import type { RegistryFetcher } from '../../providers/registry/registry-fetcher.js';
 import { parseRegistryAgents } from '../../providers/registry/registry-parser.js';
 import { ProcessStreamTransport, cleanEnv } from './process-transport.js';
-import { createClientHandlers } from '../protocol/client-handlers.js';
+import { connectAcpClient, type AcpAgentConnection } from './client-connection.js';
 import { AcpDebugLog, wrapDebug, formatAcpMessageLog } from './stream-debug.js';
 import { AGENTCTL_CLIENT_CAPABILITIES, initializeAcpConnection } from './capabilities-cache.js';
 import type { AcpParsedCapabilities } from '../types.js';
@@ -21,17 +23,23 @@ import type {
 import type { AgentFeatures } from '../../agent/types.js';
 import { Provider } from '../../providers/provider.js';
 
+import { ACP_PROCESS_OPTIONS, ownAcpProcess, withTimeout } from './acp-process-lifecycle.js';
+import { ACP_SESSION_CLOSE_TIMEOUT_MS } from './limits.js';
+
 const PERSISTENT_CONNECTION_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface PersistentConnection {
   providerId: string;
   generation: number;
-  connection: ClientSideConnection;
+  connection: AcpAgentConnection;
   child: ChildProcess;
   transport: ProcessStreamTransport;
   lastUsed: number;
   idleTimer: NodeJS.Timeout | null;
   sessions: Map<string, { sessionId: string; createdAt: number }>;
+  activeSessions: Map<string, ActiveSession>;
+  terminalToSession: Map<string, string>;
+  terminalCallbacks?: Map<string, AgentSessionCallbacks>;
   debugLog: AcpDebugLog;
   capabilities: AcpParsedCapabilities;
   terminalManager: TerminalManager;
@@ -49,8 +57,6 @@ export class PersistentAgentConnectionManager {
   private pendingConnections = new Map<string, Promise<PersistentConnection>>();
   private pendingTransports = new Map<string, ProcessStreamTransport>();
   private providerEpochs = new Map<string, number>();
-  private activeSessions = new Map<string, ActiveSession>(); // key: acpSessionId
-  private terminalToSession = new Map<string, string>(); // key: terminalId, value: acpSessionId
   private nextGeneration = 1;
 
   constructor(
@@ -62,24 +68,26 @@ export class PersistentAgentConnectionManager {
   ) {}
 
   registerActiveSession(acpSessionId: string, session: ActiveSession, providerId: string) {
-    this.activeSessions.set(acpSessionId, session);
     const conn = this.connections.get(providerId);
     if (conn) {
+      conn.activeSessions.set(acpSessionId, session);
       conn.sessions.set(acpSessionId, { sessionId: acpSessionId, createdAt: Date.now() });
     }
   }
 
-  unregisterActiveSession(acpSessionId: string) {
-    this.activeSessions.delete(acpSessionId);
-    for (const conn of this.connections.values()) {
-      conn.sessions.delete(acpSessionId);
-    }
-    for (const [termId, sessId] of Array.from(this.terminalToSession.entries())) {
+  unregisterActiveSession(acpSessionId: string, providerId: string) {
+    const conn = this.connections.get(providerId);
+    if (conn) this.unregisterConnectionSession(conn, acpSessionId);
+  }
+
+  private unregisterConnectionSession(conn: PersistentConnection, acpSessionId: string) {
+    conn.activeSessions.delete(acpSessionId);
+    conn.sessions.delete(acpSessionId);
+    for (const [termId, sessId] of conn.terminalToSession) {
       if (sessId === acpSessionId) {
-        this.terminalToSession.delete(termId);
-        for (const conn of this.connections.values()) {
-          conn.terminalManager.release(termId);
-        }
+        conn.terminalToSession.delete(termId);
+        conn.terminalCallbacks?.delete(termId);
+        conn.terminalManager.release(termId);
       }
     }
   }
@@ -123,7 +131,9 @@ export class PersistentAgentConnectionManager {
     let registryAgent: RegistryAgent | undefined;
     if (snapshot) {
       try {
-        registryAgent = parseRegistryAgents(snapshot.data).find((a) => a.id === providerId);
+        registryAgent = parseRegistryAgents(snapshot.data).find(
+          (a) => a.id === (this.store.get(providerId)?.registryAgentId ?? providerId),
+        );
       } catch (error) {
         this.logger.warn({ error }, 'Ignoring invalid provider registry snapshot for connection');
       }
@@ -157,20 +167,28 @@ export class PersistentAgentConnectionManager {
       generation,
       path: 'persistent',
     });
-    const activeSessions = this.activeSessions;
-    const terminalToSession = this.terminalToSession;
+    const activeSessions = new Map<string, ActiveSession>();
+    const terminalToSession = new Map<string, string>();
+    const terminalCallbacks = new Map<string, AgentSessionCallbacks>();
     const debugLog = new AcpDebugLog();
-    const child = spawn(launch.command, launch.args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnv(launch.env),
-      cwd: os.tmpdir(),
-    });
+    const child = ownAcpProcess(
+      spawn(launch.command, launch.args, {
+        ...ACP_PROCESS_OPTIONS,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: cleanEnv(launch.env),
+        cwd: os.tmpdir(),
+      }),
+    );
 
+    observeAcpStderr(child, cleanEnv(launch.env));
     const transport = new ProcessStreamTransport(child, this.logger);
     this.pendingTransports.set(providerId, transport);
     const rawStream = ndJsonStream(transport.stdin, transport.stdout);
     const stream = wrapDebug(rawStream, (direction, message) => {
-      debugLog.recordLine(direction === 'send' ? 'outgoing' : 'incoming', JSON.stringify(message));
+      debugLog.recordLine(
+        direction === 'send' ? 'outgoing' : 'incoming',
+        JSON.stringify(formatAcpMessageLog(direction, message)),
+      );
       if (process.env.AGENTCTL_ACP_DEBUG === '1') {
         this.logger.debug(
           formatAcpMessageLog(direction === 'send' ? 'send' : 'recv', message),
@@ -180,13 +198,13 @@ export class PersistentAgentConnectionManager {
     });
 
     child.stderr.on('data', (data: Buffer) => {
-      debugLog.recordLine('stderr', data.toString());
+      debugLog.recordLine('stderr', JSON.stringify({ bytes: data.byteLength }));
     });
 
     const terminalManager = new TerminalManager(this.logger);
 
-    const connection = new ClientSideConnection(() => {
-      const handlers = createClientHandlers({
+    const connection = await connectAcpClient(
+      {
         // Per-request session resolution overrides this default; only used
         // by handlers that never resolve a session (none today).
         cwd: process.cwd(),
@@ -204,24 +222,26 @@ export class PersistentAgentConnectionManager {
           }
           return {
             callbacks: session.callbacks,
+            localSessionId: session.localSessionId,
             cwd: session.options.cwd,
             additionalDirectories: session.options.additionalDirectories,
-            onTerminalCreated: (terminalId) => {
+            onTerminalCreated: (terminalId, owner) => {
               terminalToSession.set(terminalId, session.acpSessionId);
+              terminalCallbacks.set(terminalId, owner);
             },
           };
         },
-      });
-      return handlers;
-    }, stream);
+      },
+      stream,
+    );
 
     terminalManager.on('output', (event) => {
       const { terminalId, data } = event as { terminalId: string; data: string };
       const acpSessionId = terminalToSession.get(terminalId);
       if (acpSessionId) {
-        const session = activeSessions.get(acpSessionId);
-        if (session) {
-          void session.callbacks.onUpdate({ type: 'terminal_output', terminalId, data });
+        const owner = terminalCallbacks.get(terminalId);
+        if (activeSessions.has(acpSessionId) && owner) {
+          void owner.onUpdate({ type: 'terminal_output', terminalId, data });
         }
       }
     });
@@ -230,9 +250,9 @@ export class PersistentAgentConnectionManager {
       const { terminalId, code } = event as { terminalId: string; code: number | null };
       const acpSessionId = terminalToSession.get(terminalId);
       if (acpSessionId) {
-        const session = activeSessions.get(acpSessionId);
-        if (session) {
-          void session.callbacks.onUpdate({ type: 'terminal_exit', terminalId, code });
+        const owner = terminalCallbacks.get(terminalId);
+        if (activeSessions.has(acpSessionId) && owner) {
+          void owner.onUpdate({ type: 'terminal_exit', terminalId, code });
         }
       }
     });
@@ -241,7 +261,7 @@ export class PersistentAgentConnectionManager {
     try {
       acpInitRes = await initializeAcpConnection(connection, {
         transport,
-        timeoutMs: 120_000,
+        timeoutMs: DEFAULT_AGENT_INITIALIZATION_TIMEOUT_MS,
         clientCapabilities: AGENTCTL_CLIENT_CAPABILITIES,
       });
     } catch (error) {
@@ -264,6 +284,9 @@ export class PersistentAgentConnectionManager {
       lastUsed: Date.now(),
       idleTimer: null,
       sessions: new Map(),
+      activeSessions,
+      terminalToSession,
+      terminalCallbacks,
       debugLog,
       capabilities: parsedCapabilities,
       terminalManager,
@@ -317,11 +340,15 @@ export class PersistentAgentConnectionManager {
     if (!conn) return;
 
     conn.sessions.delete(acpSessionId);
-    this.unregisterActiveSession(acpSessionId);
+    this.unregisterConnectionSession(conn, acpSessionId);
 
     if (conn.capabilities.supportsCloseSession) {
       try {
-        await conn.connection.closeSession({ sessionId: acpSessionId });
+        await withTimeout(
+          conn.connection.closeSession({ sessionId: acpSessionId }),
+          ACP_SESSION_CLOSE_TIMEOUT_MS,
+          'closing persistent ACP session',
+        );
       } catch (err) {
         this.logger.warn({ err, acpSessionId }, `Failed to close session on agent`);
       }
@@ -381,7 +408,7 @@ export class PersistentAgentConnectionManager {
 
     const exitReason = String(code ?? signal ?? 'unknown');
     const sessionsToNotify = Array.from(connection.sessions.keys())
-      .map((sessionId) => this.activeSessions.get(sessionId))
+      .map((sessionId) => connection.activeSessions.get(sessionId))
       .filter((session): session is ActiveSession => session !== undefined);
 
     for (const session of sessionsToNotify) {
@@ -397,7 +424,7 @@ export class PersistentAgentConnectionManager {
           'Failed to emit exit status event for session',
         );
       });
-      this.unregisterActiveSession(session.acpSessionId);
+      this.unregisterConnectionSession(connection, session.acpSessionId);
     }
 
     this.closeConnectionIfCurrent(providerId, connection);
@@ -409,6 +436,7 @@ export class PersistentAgentConnectionManager {
       conn.idleTimer = null;
     }
     void conn.terminalManager.dispose();
+    conn.connection.close?.();
     conn.transport.kill();
   }
 

@@ -8,6 +8,7 @@ import {
   withTimeout,
   spawnManagedProcess,
   ProcessStreamTransport,
+  bindSessionProcessEvents,
 } from './acp-process-lifecycle.js';
 import { noopLogger } from '../../logger.js';
 import { AgentDiagnosticsRecorder } from '../../agent/diagnostics.js';
@@ -59,10 +60,43 @@ describe('cleanEnv', () => {
   });
 });
 
+describe('session process event ownership', () => {
+  it('releases one closed session’s listeners while other sessions remain subscribed', () => {
+    const { child, emitter } = createMockChildProcess();
+    const first = bindSessionProcessEvents(child);
+    const second = bindSessionProcessEvents(child);
+    const firstError = vi.fn();
+    const firstClose = vi.fn();
+    const secondError = vi.fn();
+    const secondClose = vi.fn();
+    first.onError(firstError);
+    first.onClose(firstClose);
+    second.onError(secondError);
+    second.onClose(secondClose);
+    first.dispose();
+    expect(emitter.listenerCount('error')).toBe(1);
+    expect(emitter.listenerCount('exit')).toBe(1);
+    const error = new Error('process failed');
+    emitter.emit('error', error);
+    emitter.emit('exit', 1, null);
+    expect(firstError).not.toHaveBeenCalled();
+    expect(firstClose).not.toHaveBeenCalled();
+    expect(secondError).toHaveBeenCalledWith(error);
+    expect(secondClose).toHaveBeenCalledWith({
+      code: 1,
+      signal: null,
+      message: 'Agent process exited with code 1',
+    });
+    second.dispose();
+    expect(emitter.listenerCount('error')).toBe(0);
+    expect(emitter.listenerCount('exit')).toBe(0);
+  });
+});
+
 describe('terminateChildProcess', () => {
   it('does not send signal if process is already killed', () => {
     const { child } = createMockChildProcess();
-    (child as unknown as { killed: boolean }).killed = true;
+    Object.defineProperty(child, 'killed', { value: true });
 
     terminateChildProcess(child, noopLogger);
     expect(child.kill).not.toHaveBeenCalled();
@@ -137,6 +171,8 @@ describe('spawnManagedProcess', () => {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: expect.objectContaining({ FOO: 'bar' }),
       cwd: '/tmp',
+      detached: process.platform !== 'win32',
+      windowsHide: true,
     });
 
     expect(diagnostics.snapshot().events).toContainEqual(

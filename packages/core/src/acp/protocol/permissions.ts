@@ -12,7 +12,7 @@ export function parsePermissionRequest(r: RequestPermissionRequest): AgentPermis
   const parsedArgs =
     toolArgumentsFrom(toolCall.rawInput) ??
     (() => {
-      const primaryPath = toolCall.locations?.[0]?.path ?? toolCall.title ?? undefined;
+      const primaryPath = toolCall.locations?.[0]?.path;
       if (primaryPath) {
         return {
           path: primaryPath,
@@ -25,6 +25,7 @@ export function parsePermissionRequest(r: RequestPermissionRequest): AgentPermis
 
   return {
     permissionId: toolCall.toolCallId,
+    source: 'provider',
     description: toolCall.title ?? undefined,
     options: r.options.map((opt) => ({
       optionId: opt.optionId,
@@ -35,6 +36,12 @@ export function parsePermissionRequest(r: RequestPermissionRequest): AgentPermis
       name: toolNameFrom(toolCall),
       arguments: parsedArgs,
       toolCallId: toolCall.toolCallId,
+      kind: toolCall.kind ?? undefined,
+      locations: toolCall.locations?.map((location) => ({
+        path: location.path,
+        line: location.line ?? undefined,
+      })),
+      rawInput: toolCall.rawInput,
     },
   };
 }
@@ -43,12 +50,13 @@ export function formatPermissionOutcome(
   domainResp: AgentPermissionResponse,
   options: AgentPermissionRequest['options'],
 ): RequestPermissionResponse {
+  if (domainResp.cancelled) return { outcome: { outcome: 'cancelled' } };
   const selectedOptionId =
     domainResp.optionId ??
     (domainResp.allowed
       ? getBestPermissionOption(options)
       : getBestPermissionOption(options, 'reject'));
-  if (selectedOptionId) {
+  if (selectedOptionId && options?.some((option) => option.optionId === selectedOptionId)) {
     return {
       outcome: { outcome: 'selected', optionId: selectedOptionId },
     };

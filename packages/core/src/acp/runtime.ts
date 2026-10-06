@@ -1,3 +1,13 @@
+import { applicationInfo } from '../config/application-info.js';
+import { drainableCallbacks } from './transport/update-drain.js';
+import { withProcessDiagnostics } from './transport/stderr.js';
+import { withCustomModels } from '@agentctl/shared';
+import { guardAcpTurns } from './transport/turn-control.js';
+import { cancellableCallbacks } from './transport/session-requests.js';
+import {
+  ACP_SESSION_CLOSE_TIMEOUT_MS,
+  ACP_SESSION_OPERATION_TIMEOUT_MS,
+} from './transport/limits.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,7 +24,11 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk';
 import { type Logger, noopLogger } from '../logger.js';
-import { createCapabilitySnapshot, type AgentConfigOption } from '@agentctl/shared';
+import {
+  findAgentConfigOption,
+  createCapabilitySnapshot,
+  type AgentConfigOption,
+} from '@agentctl/shared';
 import type { AgentStreamTransport, IConnectionManager, CacheStorage } from './types.js';
 import type {
   AgentDescriptor,
@@ -31,6 +45,8 @@ import {
   ProcessStreamTransport,
   cleanEnv,
   spawnManagedProcess,
+  bindSessionProcessEvents,
+  terminateChildProcess,
 } from './transport/acp-process-lifecycle.js';
 import { createAgentConnection } from './transport/process-transport.js';
 import { wrapDebug, formatAcpMessageLog } from './transport/stream-debug.js';
@@ -43,13 +59,18 @@ import {
   parseAcpCapabilities,
 } from './transport/capabilities-cache.js';
 import { projectConfigOption } from './protocol/events.js';
-import { createClientHandlers } from './protocol/client-handlers.js';
+import { connectAcpClient, type AcpAgentConnection } from './transport/client-connection.js';
 import { TerminalManager } from './protocol/terminal-manager.js';
 import { buildPromptBlocks } from './protocol/prompt.js';
 import { buildBaseSessionParams } from './protocol/session-params.js';
 import { forkProviderSession } from './protocol/session-fork.js';
 import { normalizeAcpUsage } from './protocol/usage.js';
-import { getAgentRequestTimeoutMs } from '../config/runtime-defaults.js';
+import {
+  getAgentRequestTimeoutMs,
+  DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
+  DEFAULT_AGENT_INITIALIZATION_TIMEOUT_MS,
+  DEFAULT_AGENT_MODEL,
+} from '../config/runtime-defaults.js';
 import { authenticateConnection, initializeAuthConnection } from './protocol/auth.js';
 import { isAcpAuthenticationRequired, isAcpSessionNotFound } from './protocol/error-classifier.js';
 import type { AgentDiagnosticsRecorder } from '../agent/diagnostics.js';
@@ -84,13 +105,30 @@ export class AcpV1AgentDriver implements AgentDriver {
     options: AgentSessionOptions,
     callbacks: AgentSessionCallbacks,
   ): Promise<AgentSession> {
+    const requests = cancellableCallbacks(callbacks);
+    const applicationCallbacks = requests.callbacks;
+    const updates = drainableCallbacks({
+      ...applicationCallbacks,
+      onUpdate(event) {
+        if (event.type === 'config_option_update') {
+          event.configOptions = withCustomModels(event.configOptions, options.customModels ?? []);
+          handle.configOptions = event.configOptions;
+        }
+        return applicationCallbacks.onUpdate(event);
+      },
+    });
+    callbacks = updates.callbacks;
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     let child!: ChildProcess;
     let transport!: AgentStreamTransport;
-    let connection!: ClientSideConnection;
+    let connection!: AcpAgentConnection;
     let isPersistent = false;
     let providerId = '';
+    let legacyModelSelection = false;
+    let acpSessionId: string | null =
+      options.intent.kind === 'resume' ? options.intent.sessionId : null;
+    const terminalCallbacks = new Map<string, AgentSessionCallbacks>();
 
     if (this.connectionManager) {
       providerId =
@@ -140,48 +178,70 @@ export class AcpV1AgentDriver implements AgentDriver {
 
       const activeTerminalManager = (terminalManager = new TerminalManager(logger));
 
-      connection = new ClientSideConnection(
-        () =>
-          createClientHandlers({
-            cwd: options.cwd,
-            additionalDirectories: options.additionalDirectories,
-            terminalManager: activeTerminalManager,
-            logger,
-            mcpGateway: options.mcpGateway,
-            resolveSession: () => ({
+      connection = await connectAcpClient(
+        {
+          cwd: options.cwd,
+          additionalDirectories: options.additionalDirectories,
+          terminalManager: activeTerminalManager,
+          logger,
+          mcpGateway: options.mcpGateway,
+          onRootSession: (id) => {
+            acpSessionId = id;
+          },
+          resolveSession: (params) => {
+            if (!params?.sessionId || params.sessionId !== acpSessionId)
+              throw new Error('Unknown ACP root session');
+            return {
+              localSessionId: options.localSessionId,
               callbacks,
               cwd: options.cwd,
               additionalDirectories: options.additionalDirectories,
-            }),
-          }),
+              onTerminalCreated: (id, owner) => {
+                terminalCallbacks.set(id, owner);
+              },
+            };
+          },
+        },
         stream,
-      );
+      ).catch(async (error: unknown) => {
+        transport.kill();
+        await activeTerminalManager.dispose();
+        throw error;
+      });
     }
 
     if (!isPersistent && terminalManager) {
+      void connection.closed
+        .finally(() => {
+          requests.cancel();
+          terminalCallbacks.clear();
+          return terminalManager?.dispose();
+        })
+        .catch(() => undefined);
       terminalManager.on('output', (event) => {
         const { terminalId, data } = event as { terminalId: string; data: string };
-        void callbacks.onUpdate({ type: 'terminal_output', terminalId, data });
+        void terminalCallbacks
+          .get(terminalId)
+          ?.onUpdate({ type: 'terminal_output', terminalId, data });
       });
 
       terminalManager.on('exit', (event) => {
         const { terminalId, code } = event as { terminalId: string; code: number | null };
-        void callbacks.onUpdate({ type: 'terminal_exit', terminalId, code });
+        void terminalCallbacks
+          .get(terminalId)
+          ?.onUpdate({ type: 'terminal_exit', terminalId, code });
       });
     }
 
     let capabilities = parseAcpCapabilities(undefined);
+    const processEvents = bindSessionProcessEvents(child);
 
     const handle: AgentSession = {
       id: null,
       history: 'fresh',
       closed: Promise.race([connection.closed, transport.closed]),
-      onError(handler) {
-        child.on('error', handler);
-      },
-      onClose(handler) {
-        child.once('exit', (code, signal) => handler({ code, signal }));
-      },
+      onError: processEvents.onError,
+      onClose: processEvents.onClose,
       async prompt(
         text: string,
         attachments?: { filePath: string; mimeType: string }[],
@@ -196,17 +256,27 @@ export class AcpV1AgentDriver implements AgentDriver {
           supportsEmbeddedContext: capabilities.supportsEmbeddedContext,
         });
 
-        const response = await connection.prompt({
-          sessionId: this.id ?? '',
-          prompt: promptParts,
-        });
+        const response = await connection
+          .prompt({
+            sessionId: this.id ?? '',
+            prompt: promptParts,
+          })
+          .catch(async (error: unknown) => {
+            await updates.drain().catch(() => undefined);
+            throw withProcessDiagnostics(error, child);
+          });
+        await updates.drain();
         return {
           stopReason: response.stopReason,
           usage: normalizeAcpUsage(response.usage),
         };
       },
       async authenticate(methodId: string): Promise<void> {
-        await (connection.authenticate({ methodId }) as Promise<unknown>);
+        await withTimeout(
+          connection.authenticate({ methodId }),
+          DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
+          'authenticating ACP session',
+        );
       },
       async cancel(): Promise<void> {
         if (this.id) {
@@ -214,6 +284,8 @@ export class AcpV1AgentDriver implements AgentDriver {
         }
       },
       async close(): Promise<void> {
+        requests.cancel();
+        processEvents.dispose();
         if (this.id) {
           if (isPersistent && self.connectionManager) {
             await self.connectionManager.closeSession(providerId, this.id);
@@ -221,7 +293,7 @@ export class AcpV1AgentDriver implements AgentDriver {
             try {
               await withTimeout(
                 connection.closeSession({ sessionId: this.id }),
-                2000,
+                ACP_SESSION_CLOSE_TIMEOUT_MS,
                 'closing ACP session',
               );
             } catch {
@@ -230,6 +302,7 @@ export class AcpV1AgentDriver implements AgentDriver {
           }
         }
         if (!isPersistent) {
+          connection.close?.();
           transport.kill();
           if (terminalManager) {
             await terminalManager.dispose();
@@ -237,14 +310,33 @@ export class AcpV1AgentDriver implements AgentDriver {
         }
       },
       async updateModel(modelId: string): Promise<AgentConfigOption[] | undefined> {
-        if (!this.id || !options.resolvedModelConfigId) return undefined;
-        const result = await connection.setSessionConfigOption({
-          sessionId: this.id,
-          configId: options.resolvedModelConfigId,
-          value: modelId,
-        });
+        const configId =
+          findAgentConfigOption(this.configOptions, 'model')?.id ?? options.resolvedModelConfigId;
+        if (!this.id || !configId) return undefined;
+        if (legacyModelSelection) {
+          await withTimeout(
+            connection.request('session/set_model', { sessionId: this.id, modelId }),
+            getAgentRequestTimeoutMs(),
+            'setting legacy ACP model',
+          );
+          return (this.configOptions = this.configOptions?.map((option) =>
+            option.id === configId ? { ...option, currentValue: modelId } : option,
+          ));
+        }
+        const result = await withTimeout(
+          connection.setSessionConfigOption({
+            sessionId: this.id,
+            configId,
+            value: modelId,
+          }),
+          getAgentRequestTimeoutMs(),
+          'setting ACP model',
+        );
         if (!Array.isArray(result.configOptions)) return undefined;
-        return (this.configOptions = extractConfigOptionsFromSessionResult(result));
+        return (this.configOptions = withCustomModels(
+          extractConfigOptionsFromSessionResult(result),
+          options.customModels ?? [],
+        ));
       },
       async updateConfigOption(
         configId: string,
@@ -252,34 +344,52 @@ export class AcpV1AgentDriver implements AgentDriver {
       ): Promise<AgentConfigOption[]> {
         if (!this.id) return [];
         if (typeof value === 'boolean') {
-          const result = await connection.setSessionConfigOption({
+          const result = await withTimeout(
+            connection.setSessionConfigOption({
+              sessionId: this.id,
+              configId,
+              type: 'boolean',
+              value,
+            }),
+            getAgentRequestTimeoutMs(),
+            'setting ACP configuration',
+          );
+          return (this.configOptions = withCustomModels(
+            extractConfigOptionsFromSessionResult(result),
+            options.customModels ?? [],
+          ));
+        }
+        const result = await withTimeout(
+          connection.setSessionConfigOption({
             sessionId: this.id,
             configId,
-            type: 'boolean',
             value,
-          });
-          return (this.configOptions = extractConfigOptionsFromSessionResult(result));
-        }
-        const result = await connection.setSessionConfigOption({
-          sessionId: this.id,
-          configId,
-          value,
-        });
-        return (this.configOptions = extractConfigOptionsFromSessionResult(result));
+          }),
+          getAgentRequestTimeoutMs(),
+          'setting ACP configuration',
+        );
+        return (this.configOptions = withCustomModels(
+          extractConfigOptionsFromSessionResult(result),
+          options.customModels ?? [],
+        ));
       },
       async setMode(modeId: string): Promise<void> {
         if (this.id) {
-          await connection.setSessionMode({
-            sessionId: this.id,
-            modeId,
-          });
+          await withTimeout(
+            connection.setSessionMode({
+              sessionId: this.id,
+              modeId,
+            }),
+            getAgentRequestTimeoutMs(),
+            'setting ACP mode',
+          );
         }
       },
       async deleteSession(acpSessionId: string): Promise<void> {
         if (capabilities.supportsDeleteSession) {
           await withTimeout(
             connection.deleteSession({ sessionId: acpSessionId }),
-            5000,
+            ACP_SESSION_OPERATION_TIMEOUT_MS,
             'deleting ACP session',
           );
         }
@@ -291,13 +401,17 @@ export class AcpV1AgentDriver implements AgentDriver {
         if (!capabilities.supportsListSessions) return { sessions: [] };
         const result = await withTimeout(
           connection.listSessions(params ?? {}),
-          5000,
+          ACP_SESSION_OPERATION_TIMEOUT_MS,
           'listing ACP sessions',
         );
         return { sessions: result.sessions, nextCursor: result.nextCursor ?? undefined };
       },
       async logout(): Promise<void> {
-        await connection.logout({});
+        await withTimeout(
+          connection.logout({}),
+          ACP_SESSION_OPERATION_TIMEOUT_MS,
+          'logging out of ACP session',
+        );
       },
       writeTerminalInput(terminalId: string, data: string): boolean {
         if (isPersistent && self.connectionManager) {
@@ -306,6 +420,7 @@ export class AcpV1AgentDriver implements AgentDriver {
         return terminalManager ? terminalManager.write(terminalId, data) : false;
       },
     };
+    void handle.closed?.finally(() => processEvents.dispose()).catch(() => undefined);
 
     try {
       if (isPersistent && self.connectionManager) {
@@ -314,8 +429,13 @@ export class AcpV1AgentDriver implements AgentDriver {
       } else {
         const { parsedCapabilities } = await initializeAcpConnection(connection, {
           transport,
-          timeoutMs: 120_000,
-          clientCapabilities: AGENTCTL_CLIENT_CAPABILITIES,
+          timeoutMs: DEFAULT_AGENT_INITIALIZATION_TIMEOUT_MS,
+          clientCapabilities: {
+            ...AGENTCTL_CLIENT_CAPABILITIES,
+            elicitation: callbacks.onRequestElicitation
+              ? AGENTCTL_CLIENT_CAPABILITIES.elicitation
+              : undefined,
+          },
         });
 
         capabilities = parsedCapabilities;
@@ -328,13 +448,15 @@ export class AcpV1AgentDriver implements AgentDriver {
       }
       let newSessionResult:
         NewSessionResponse | ResumeSessionResponse | LoadSessionResponse | null = null;
-      let acpSessionId: string | null = null;
 
       const baseSessionParams = buildBaseSessionParams({
         cwd: options.cwd,
         mcpServers: options.mcpServers,
         additionalDirectories: options.additionalDirectories,
         supportsAdditionalDirectories: capabilities.supportsAdditionalDirectories,
+        supportsMcpHttp: capabilities.supportsMcpHttp,
+        supportsMcpSse: capabilities.supportsMcpSse,
+        supportsMcpAcp: capabilities.supportsMcpAcp,
       });
 
       try {
@@ -377,7 +499,10 @@ export class AcpV1AgentDriver implements AgentDriver {
           }
 
           try {
-            if (capabilities.supportsResumeSession) {
+            if (
+              capabilities.supportsResumeSession &&
+              !(options.intent.requireExisting && capabilities.supportsLoadSession)
+            ) {
               newSessionResult = await withTimeout(
                 connection.resumeSession({
                   sessionId: options.intent.sessionId,
@@ -413,13 +538,14 @@ export class AcpV1AgentDriver implements AgentDriver {
               });
             }
           } catch (resumeErr: unknown) {
+            if (options.intent.kind === 'resume' && options.intent.requireExisting) throw resumeErr;
             if (isAcpSessionNotFound(resumeErr)) {
               this.logger.warn(
                 { sessionId: options.intent.sessionId, err: resumeErr },
                 'Existing ACP session not found on agent process. Falling back to creating a new session.',
               );
               if (isPersistent && acpSessionId && self.connectionManager) {
-                self.connectionManager.unregisterActiveSession?.(acpSessionId);
+                self.connectionManager.unregisterActiveSession?.(acpSessionId, providerId);
               }
               const created = await withTimeout(
                 connection.newSession(baseSessionParams),
@@ -454,6 +580,8 @@ export class AcpV1AgentDriver implements AgentDriver {
             }
           }
         } else {
+          if (options.intent.kind === 'resume' && options.intent.requireExisting)
+            throw new Error('Agent does not support loading this native session');
           if (options.intent.kind === 'fork') {
             this.diagnostics?.record({
               kind: 'fallback_used',
@@ -497,7 +625,7 @@ export class AcpV1AgentDriver implements AgentDriver {
         }
       } catch (err: unknown) {
         if (isPersistent && acpSessionId && self.connectionManager) {
-          self.connectionManager.unregisterActiveSession?.(acpSessionId);
+          self.connectionManager.unregisterActiveSession?.(acpSessionId, providerId);
         }
         const error = err as { code?: string; data?: { configOptions?: AgentConfigOption[] } };
         if (isAcpAuthenticationRequired(error)) {
@@ -507,8 +635,21 @@ export class AcpV1AgentDriver implements AgentDriver {
       }
 
       handle.id = acpSessionId;
-      if (newSessionResult && Array.isArray(newSessionResult.configOptions)) {
-        handle.configOptions = extractConfigOptionsFromSessionResult(newSessionResult);
+      await connection.flushPendingSessionUpdates?.();
+      if (newSessionResult) {
+        const rawSession = newSessionResult as Parameters<
+          typeof extractConfigOptionsFromSessionResult
+        >[0];
+        legacyModelSelection =
+          !!rawSession.models?.availableModels?.length &&
+          !findAgentConfigOption(
+            extractConfigOptionsFromSessionResult({ configOptions: rawSession.configOptions }),
+            'model',
+          );
+        handle.configOptions = withCustomModels(
+          extractConfigOptionsFromSessionResult(newSessionResult),
+          options.customModels ?? [],
+        );
       }
 
       if (!handle.availableModes || handle.availableModes.length === 0) {
@@ -518,78 +659,76 @@ export class AcpV1AgentDriver implements AgentDriver {
         if (resultModes.length > 0) {
           handle.availableModes = resultModes.map((m) => m.id);
         } else {
-          const opts = (newSessionResult as { configOptions?: SessionConfigOption[] } | null)
-            ?.configOptions;
-          if (opts) {
-            const modeOpt = opts.find(
-              (opt): opt is Extract<SessionConfigOption, { type: 'select' }> =>
-                opt.id === 'mode' && opt.type === 'select',
-            );
-            if (modeOpt?.options) {
-              handle.availableModes = modeOpt.options
-                .filter((opt) => typeof (opt as { value?: unknown }).value === 'string')
-                .map((opt) => (opt as { value: string }).value);
-            }
-          }
+          handle.availableModes = findAgentConfigOption(handle.configOptions, 'mode')?.options?.map(
+            (option) => option.value,
+          );
         }
       }
 
       const finalSessionId = handle.id;
       if (finalSessionId) {
+        const modelConfigId =
+          findAgentConfigOption(handle.configOptions, 'model')?.id ?? options.resolvedModelConfigId;
         if (
           options.selectedModel &&
-          options.selectedModel !== 'default' &&
-          options.resolvedModelConfigId
+          options.selectedModel !== DEFAULT_AGENT_MODEL &&
+          modelConfigId
         ) {
           try {
-            const result = await connection.setSessionConfigOption({
-              sessionId: finalSessionId,
-              configId: options.resolvedModelConfigId,
-              value: options.selectedModel,
-            });
-            if (Array.isArray(result.configOptions)) {
-              handle.configOptions = extractConfigOptionsFromSessionResult(result);
-            }
+            await handle.updateModel?.(options.selectedModel);
           } catch (configErr) {
+            if (options.customModels?.some((model) => model.id === options.selectedModel))
+              throw configErr;
             const errorMsg = configErr instanceof Error ? configErr.message : String(configErr);
             this.logger.warn(
               configErr,
-              `Failed to dynamically set model configuration on init (configId: ${options.resolvedModelConfigId})`,
+              `Failed to dynamically set model configuration on init (configId: ${modelConfigId})`,
             );
             void (callbacks.onUpdate as (e: unknown) => Promise<void>)({
               type: 'status',
               status: 'config_option_error',
-              configId: options.resolvedModelConfigId,
+              configId: modelConfigId,
               value: options.selectedModel,
               error: errorMsg,
             });
           }
         }
 
+        const thinkingConfigId =
+          findAgentConfigOption(handle.configOptions, 'thought_level')?.id ??
+          options.resolvedThinkingConfigId;
+
         if (
           options.features?.configuration.options &&
           options.selectedThinkingEffort &&
-          options.resolvedThinkingConfigId &&
+          thinkingConfigId &&
           (!handle.configOptions ||
             handle.configOptions.some(
               (option) =>
-                option.id === options.resolvedThinkingConfigId &&
+                option.id === thinkingConfigId &&
                 option.options?.some((choice) => choice.value === options.selectedThinkingEffort),
             ))
         ) {
           try {
-            const result = await connection.setSessionConfigOption({
-              sessionId: finalSessionId,
-              configId: options.resolvedThinkingConfigId,
-              value: options.selectedThinkingEffort,
-            });
+            const result = await withTimeout(
+              connection.setSessionConfigOption({
+                sessionId: finalSessionId,
+                configId: thinkingConfigId,
+                value: options.selectedThinkingEffort,
+              }),
+              getAgentRequestTimeoutMs(),
+              'setting initial ACP thinking effort',
+            );
             if (Array.isArray(result.configOptions)) {
-              handle.configOptions = extractConfigOptionsFromSessionResult(result);
+              handle.configOptions = withCustomModels(
+                extractConfigOptionsFromSessionResult(result),
+                options.customModels ?? [],
+              );
             }
           } catch (configErr) {
             this.logger.warn(
               configErr,
-              `Failed to dynamically set thinking effort on init (configId: ${options.resolvedThinkingConfigId})`,
+              `Failed to dynamically set thinking effort on init (configId: ${thinkingConfigId})`,
             );
           }
         }
@@ -608,13 +747,14 @@ export class AcpV1AgentDriver implements AgentDriver {
         );
       }
 
+      guardAcpTurns(handle, () => transport.kill(), { requests });
       return handle;
     } catch (err) {
       if (err instanceof AgentAuthenticationRequiredError) {
         throw err;
       }
       await handle.close();
-      throw err;
+      throw withProcessDiagnostics(err, child);
     }
   }
 
@@ -663,7 +803,7 @@ export class AcpV1AgentDriver implements AgentDriver {
         },
         requestPermission() {
           return Promise.resolve({
-            outcome: { outcome: 'selected', optionId: 'allow-once' },
+            outcome: { outcome: 'cancelled' },
           });
         },
       }),
@@ -684,7 +824,7 @@ export class AcpV1AgentDriver implements AgentDriver {
 
           try {
             const initialized = await initializeAcpConnection(connection, {
-              clientInfo: { name: 'agentctl-probe', version: '1.0.0' },
+              clientInfo: applicationInfo('agentctl-probe'),
             });
             const { initResult } = initialized;
             parsedCapabilities = initialized.parsedCapabilities;
@@ -723,9 +863,7 @@ export class AcpV1AgentDriver implements AgentDriver {
             });
 
             configOptions = extractConfigOptionsFromSessionResult(sessionResult);
-            supportsDynamicModel = configOptions.some(
-              (option) => option.id === 'model' || option.id === 'selectedModel',
-            );
+            supportsDynamicModel = !!findAgentConfigOption(configOptions, 'model');
             supportsDynamicConfig = configOptions.length > 0;
             modes = sessionResult.modes?.availableModes.map((mode) => mode.id);
           } catch (err: unknown) {
@@ -791,8 +929,65 @@ export class AcpV1AgentDriver implements AgentDriver {
       );
 
       return result;
+    } catch (error) {
+      throw withProcessDiagnostics(error, transport.child);
     } finally {
       transport.kill();
+    }
+  }
+
+  async listSessions(
+    command: string,
+    args: string[],
+    env: Record<string, string> | undefined,
+    params: { cwd?: string; cursor?: string },
+  ): Promise<{ sessions: unknown[]; nextCursor?: string }> {
+    const managed = spawnManagedProcess({
+      command,
+      args,
+      env,
+      cwd: os.tmpdir(),
+      spawnImpl: this.spawnImpl,
+      logger: this.logger,
+      createTransport: this.createTransport,
+    });
+    const { transport } = managed;
+    const stream = this.wrapDebug(ndJsonStream(transport.stdin, transport.stdout));
+
+    const connectionInstance = new ClientSideConnection(
+      () => ({
+        sessionUpdate() {
+          return Promise.resolve();
+        },
+        requestPermission() {
+          return Promise.resolve({
+            outcome: { outcome: 'cancelled' },
+          });
+        },
+      }),
+      stream,
+    );
+
+    transport.closed.catch(() => undefined);
+
+    try {
+      const { parsedCapabilities } = await initializeAcpConnection(connectionInstance, {
+        clientInfo: applicationInfo('agentctl-list'),
+        timeoutMs: 10_000,
+        clientCapabilities: {},
+      });
+
+      if (!parsedCapabilities.supportsListSessions)
+        throw new Error('Agent does not support native session listing');
+      const result = await withTimeout(
+        connectionInstance.listSessions(params),
+        10_000,
+        'listing native ACP sessions',
+      );
+      return { sessions: result.sessions, nextCursor: result.nextCursor ?? undefined };
+    } finally {
+      transport.kill();
+      await transport.closed.catch(() => undefined);
     }
   }
 
@@ -821,7 +1016,7 @@ export class AcpV1AgentDriver implements AgentDriver {
         },
         requestPermission() {
           return Promise.resolve({
-            outcome: { outcome: 'selected', optionId: 'allow-once' },
+            outcome: { outcome: 'cancelled' },
           });
         },
       }),
@@ -832,7 +1027,7 @@ export class AcpV1AgentDriver implements AgentDriver {
 
     try {
       const { parsedCapabilities } = await initializeAcpConnection(connectionInstance, {
-        clientInfo: { name: 'agentctl-delete', version: '1.0.0' },
+        clientInfo: applicationInfo('agentctl-delete'),
         timeoutMs: 10_000,
         clientCapabilities: {},
       });
@@ -878,14 +1073,15 @@ export class AcpV1AgentDriver implements AgentDriver {
       args,
       cleanEnv(env),
       this.spawnImpl,
+      options,
     );
-    const abort = () => child.kill('SIGTERM');
+    const abort = () => terminateChildProcess(child, this.logger);
     options.signal?.addEventListener('abort', abort, { once: true });
     try {
       if (options.signal?.aborted) throw new Error('Authentication cancelled');
       const initResult = await withTimeout(
         initializeAuthConnection(connection, 'agentctl-login'),
-        options.timeoutMs ?? 120_000,
+        options.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
         'initializing authentication',
       );
       const targetMethod = initResult.authMethods?.find((m) => m.id === methodId);
@@ -899,12 +1095,14 @@ export class AcpV1AgentDriver implements AgentDriver {
       }
       await withTimeout(
         authenticateConnection(connection, methodId),
-        options.timeoutMs ?? 120_000,
+        options.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
         'authenticating provider',
       );
+    } catch (error) {
+      throw withProcessDiagnostics(error, child);
     } finally {
       options.signal?.removeEventListener('abort', abort);
-      child.kill();
+      terminateChildProcess(child, this.logger);
     }
   }
 
@@ -913,12 +1111,6 @@ export class AcpV1AgentDriver implements AgentDriver {
     args: string[],
     env?: Record<string, string>,
   ): Promise<void> {
-    const providerId = this.connectionManager?.getProviderIdByCommand(command);
-    if (providerId && this.connectionManager) {
-      const persistent = await this.connectionManager.getConnection(providerId);
-      await persistent.connection.logout({});
-      return;
-    }
     const { child, connection } = createAgentConnection(
       command,
       args,
@@ -934,7 +1126,7 @@ export class AcpV1AgentDriver implements AgentDriver {
       }
       await connection.logout({});
     } finally {
-      child.kill();
+      terminateChildProcess(child, this.logger);
     }
   }
 
@@ -973,13 +1165,12 @@ export function extractConfigOptionsFromSessionResult(sessionResult: {
     }
   }
 
-  const hasModelOption = configOptions.some(
-    (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-  );
+  const hasModelOption = !!findAgentConfigOption(configOptions, 'model');
   const models = sessionResult.models;
   if (!hasModelOption && models?.availableModels && models.availableModels.length > 0) {
     configOptions.push({
       id: 'model',
+      category: 'model',
       name: 'Model',
       description: 'Select the model to use',
       type: 'select',
@@ -992,11 +1183,12 @@ export function extractConfigOptionsFromSessionResult(sessionResult: {
     });
   }
 
-  const hasModeOption = configOptions.some((opt) => opt.id === 'mode');
+  const hasModeOption = !!findAgentConfigOption(configOptions, 'mode');
   const modesRes = sessionResult.modes;
   if (!hasModeOption && modesRes?.availableModes && modesRes.availableModes.length > 0) {
     configOptions.push({
       id: 'mode',
+      category: 'mode',
       name: 'Mode',
       description: 'Select the tool approval mode',
       type: 'select',

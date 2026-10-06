@@ -2,22 +2,24 @@ import { useState, useMemo } from 'react';
 import { ChevronDown, ListChecks, Server } from 'lucide-react';
 import { PlanPanel } from './PlanPanel';
 import { McpStatusPanel } from './McpStatusPanel';
-import { useSession, useSessionStream } from '@/features/sessions';
+import { useSession, useSessionStream, type StructuredPlanItem } from '@/features/sessions';
 import { useMcpServers } from '@/features/settings';
 
 export function StatusPane() {
   const [isPlanOpen, setIsPlanOpen] = useState(true);
   const [isMcpOpen, setIsMcpOpen] = useState(true);
 
-  const { structuredPlan } = useSessionStream();
+  const { structuredPlan, events } = useSessionStream();
   const { sessionData } = useSession();
   const { mcpServers, isLoading: isLoadingMcp } = useMcpServers();
 
   const sessionPlan = sessionData?.session.plan;
 
   const plan = useMemo(() => {
+    const latest = events.findLast((event) => event.type === 'plan_update');
+    if (latest?.type === 'plan_update') return latest.data.plan as StructuredPlanItem[];
     return structuredPlan.length > 0 ? structuredPlan : (sessionPlan ?? []);
-  }, [structuredPlan, sessionPlan]);
+  }, [structuredPlan, sessionPlan, events]);
 
   const completedSteps = useMemo(() => {
     return plan.filter((item) => item.status === 'completed' || item.isCompleted).length;

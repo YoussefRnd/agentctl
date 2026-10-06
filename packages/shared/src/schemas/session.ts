@@ -1,3 +1,6 @@
+import { THINKING_EFFORTS } from '../agent-defaults.js';
+import { customModelsSchema } from '../custom-models.js';
+import { planArtifactSchema, planItemSchema } from './plan.js';
 import { z } from 'zod';
 import {
   registryAgentSchema,
@@ -13,7 +16,7 @@ export const sessionModeSchema = z.enum(['worktree', 'local']);
 
 export const approvalModeSchema = z.enum(['review', 'auto_approve', 'yolo']);
 
-export const thinkingEffortSchema = z.enum(['low', 'medium', 'high']);
+export const thinkingEffortSchema = z.enum(THINKING_EFFORTS);
 
 export const projectSchema = z.object({
   id: z.uuid(),
@@ -80,6 +83,9 @@ export const providerStatusSchema = z.enum([
 ]);
 
 export const providerCapabilitySchema = z.object({
+  customModels: customModelsSchema.optional(),
+  defaultModel: z.string().optional(),
+  defaultThinkingEffort: z.string().optional(),
   id: z.string(),
   label: z.string(),
   status: providerStatusSchema,
@@ -142,6 +148,13 @@ export const authStateSchema = z.preprocess((val: unknown) => {
 export type AuthState = z.infer<typeof canonicalAuthStateSchema>;
 
 export const providerDiscoverySchema = z.object({
+  customModels: customModelsSchema.optional(),
+  authInteraction: z.object({ id: z.string(), url: z.url(), message: z.string() }).optional(),
+  registryAgentId: z.string().optional(),
+  isProfile: z.boolean().optional(),
+  protocol: z.enum(['auto', 'v1', 'v2']).optional(),
+  defaultModel: z.string().optional(),
+  defaultThinkingEffort: z.string().optional(),
   // Legacy fields (retained to keep the monolith compiling)
   id: z.string(),
   label: z.string(),
@@ -271,6 +284,7 @@ export const urlElicitationSchema = z.object({
 });
 
 export const elicitationRequestSchema = z.object({
+  subagentId: z.string().optional(),
   id: z.string(),
   mode: z.enum(['form', 'url']),
   message: z.string(),
@@ -421,27 +435,29 @@ export const sessionRowSchema = sessionSchema.extend({
       return val ?? [];
     }, z.array(availableCommandSchema))
     .default([]),
-  plan: z
-    .preprocess(
-      (val) => {
-        if (typeof val === 'string') {
-          try {
-            return JSON.parse(val) as unknown;
-          } catch {
-            return [];
-          }
+  planArtifacts: z
+    .preprocess((value) => {
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return [];
         }
-        return val ?? [];
-      },
-      z.array(
-        z.object({
-          name: z.string(),
-          status: z.enum(['pending', 'in_progress', 'completed']),
-          isCompleted: z.boolean(),
-          priority: z.enum(['high', 'medium', 'low']).optional(),
-        }),
-      ),
-    )
+      }
+      return value ?? [];
+    }, z.array(planArtifactSchema))
+    .default([]),
+  plan: z
+    .preprocess((val) => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val) as unknown;
+        } catch {
+          return [];
+        }
+      }
+      return val ?? [];
+    }, z.array(planItemSchema))
     .default([]),
   sessionConfigOptions: z
     .preprocess((val) => {

@@ -1,15 +1,23 @@
+import { planArtifactSchema, planItemSchema } from './plan.js';
+import { fileChangeStatsSchema } from './file-change.js';
 import { z } from 'zod';
 
 export const sessionEventTextDataSchema = z
   .object({
     content: z.string().optional().default(''),
     text: z.string().optional(),
-    role: z.enum(['provider', 'user', 'thought']).optional(),
+    role: z.enum(['provider', 'user', 'thought', 'session']).optional(),
     // Local optimistic user events use these fields until a persisted row arrives.
-    deliveryStatus: z.enum(['queued', 'sending', 'accepted', 'failed']).optional(),
+    deliveryStatus: z
+      .enum(['queued', 'sending', 'accepted', 'failed', 'unknown', 'cancelled'])
+      .optional(),
     deliveryError: z.string().optional(),
     attachmentIds: z.array(z.string()).optional(),
     clientMessageId: z.string().optional(),
+    messageId: z.string().optional(),
+    transcriptSessionId: z.string().optional(),
+    senderSessionId: z.string().optional(),
+    recipientSessionId: z.string().optional(),
     attachments: z
       .array(
         z.object({
@@ -35,10 +43,8 @@ export const sessionEventToolCallDataSchema = z
     arguments: z.record(z.string(), z.unknown()).optional(),
     toolCallId: z.string().optional(),
     title: z.string().optional(),
-    status: z.enum(['pending', 'in_progress', 'completed', 'failed']).optional(),
-    kind: z
-      .enum(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other'])
-      .optional(),
+    status: z.string().optional(),
+    kind: z.string().optional(),
     locations: z
       .array(
         z.object({
@@ -62,6 +68,7 @@ export const sessionEventToolCallDataSchema = z
             path: z.string().optional(),
             oldText: z.string().nullable().optional(),
             newText: z.string().optional(),
+            stats: fileChangeStatsSchema.optional(),
             terminalId: z.string().optional(),
           })
           .loose(),
@@ -77,13 +84,17 @@ export const sessionEventToolCallDataSchema = z
             oldText: z.string().nullable().optional(),
             newText: z.string().optional(),
           }),
-          z.object({ type: z.literal('file_deleted'), path: z.string() }),
+          z.object({
+            type: z.literal('file_deleted'),
+            path: z.string(),
+            stats: fileChangeStatsSchema.optional(),
+          }),
           z.object({ type: z.literal('terminal'), terminalId: z.string() }),
         ]),
       )
       .optional(),
-    rawInput: z.record(z.string(), z.unknown()).optional(),
-    rawOutput: z.record(z.string(), z.unknown()).optional(),
+    rawInput: z.unknown().optional(),
+    rawOutput: z.unknown().optional(),
   })
   .loose();
 
@@ -98,9 +109,25 @@ export const sessionEventApprovalRequestDataSchema = z
 export const sessionEventSubagentUpdateDataSchema = z
   .object({
     subagentId: z.string(),
+    native: z.boolean().optional(),
+    parentSessionId: z.string().optional(),
+    historical: z.boolean().optional(),
+    state: z.object({ state: z.string() }).loose().nullable().optional(),
+    capabilities: z.record(z.string(), z.unknown()).nullable().optional(),
     name: z.string(),
     scope: z.string(),
-    status: z.enum(['spawning', 'running', 'completed', 'failed']),
+    status: z.enum([
+      'spawning',
+      'pending',
+      'running',
+      'waiting',
+      'completed',
+      'failed',
+      'cancelled',
+      'interrupted',
+      'unknown',
+      'idle',
+    ]),
     result: z
       .object({
         summary: z.string().optional(),
@@ -112,14 +139,8 @@ export const sessionEventSubagentUpdateDataSchema = z
 
 export const sessionEventPlanDataSchema = z
   .object({
-    plan: z.array(
-      z.object({
-        name: z.string(),
-        status: z.string(),
-        isCompleted: z.boolean(),
-        priority: z.enum(['high', 'medium', 'low']).optional(),
-      }),
-    ),
+    artifacts: z.array(planArtifactSchema).optional(),
+    plan: z.array(planItemSchema),
   })
   .loose();
 
@@ -140,6 +161,7 @@ export const sessionEventTerminalOutputDataSchema = z
   .object({
     terminalId: z.string(),
     data: z.string(),
+    operation: z.enum(['append', 'replace']).optional(),
   })
   .loose();
 
@@ -152,6 +174,14 @@ export const sessionEventTerminalExitDataSchema = z
 
 export const sessionEventDiffDataSchema = z.record(z.string(), z.unknown());
 export const sessionEventStatusDataSchema = z.record(z.string(), z.unknown());
+
+export const providerRetryStatusSchema = z.object({
+  attempt: z.number().int().min(1),
+  nextRetryAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+  message: z.string().max(512),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+});
+export type ProviderRetryStatus = z.infer<typeof providerRetryStatusSchema>;
 export const sessionEventCompactDataSchema = z.record(z.string(), z.unknown());
 
 export const sessionEventSchema = z.discriminatedUnion('type', [
@@ -253,6 +283,8 @@ export type SessionEventPayload<T extends string> = T extends SessionEventType
 
 export const sessionEventMetadataSchema = z
   .object({
+    nativeSessionId: z.string().optional(),
+    attemptId: z.string().optional(),
     durationMs: z.number().optional(),
     promptTokens: z.number().optional(),
     completionTokens: z.number().optional(),
@@ -267,6 +299,7 @@ export const sessionEventRowSchema = z.intersection(
   sessionEventSchema,
   z.object({
     id: z.number(),
+    sequence: z.number().int().nonnegative().optional(),
     sessionId: z.uuid(),
     parentEventId: z.number().nullable().optional(),
     metadata: sessionEventMetadataSchema.optional(),

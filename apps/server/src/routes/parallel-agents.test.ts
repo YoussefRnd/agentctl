@@ -82,6 +82,7 @@ describe('Parallel Subagents & Swarms API', () => {
         },
       ),
       handleClientMessage: vi.fn().mockResolvedValue(undefined),
+      startInput: vi.fn().mockResolvedValue(42),
       getSession: vi.fn(),
       stopAll: vi.fn().mockResolvedValue(undefined),
     };

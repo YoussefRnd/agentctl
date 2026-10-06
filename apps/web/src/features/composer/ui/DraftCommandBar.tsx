@@ -1,6 +1,17 @@
+import {
+  approvalBehaviorOptions,
+  DEFAULT_AGENT_MODEL,
+  DEFAULT_THINKING_EFFORT,
+  isThinkingEffort,
+} from '@agentctl/shared';
 import { useEffect, useState } from 'react';
 import { Monitor, Shield } from 'lucide-react';
-import { resolveAgentFeatures, type ThinkingEffort, type SessionEventRow } from '@agentctl/shared';
+import {
+  findAgentConfigOption,
+  resolveAgentFeatures,
+  type ThinkingEffort,
+  type SessionEventRow,
+} from '@agentctl/shared';
 import { useProviders, ProviderAuthDialog } from '@/features/providers';
 import { useSettings } from '@/features/settings';
 import { useComposerState } from '../model/useComposerState';
@@ -37,16 +48,15 @@ export function DraftCommandBar({
     ) ??
     installed.find((provider) => provider.status === 'ready') ??
     installed[0];
-  const modelOption = activeProvider?.configOptions?.find(
-    (option) => option.id === 'model' || option.id === 'selectedModel',
-  );
+  const modelOption = findAgentConfigOption(activeProvider?.configOptions, 'model');
   const selectedModel =
     draft.selectedModel ??
+    activeProvider?.defaultModel ??
     (typeof modelOption?.currentValue === 'string'
       ? modelOption.currentValue
       : modelOption?.options?.[0]?.value) ??
-    'default';
-  const modeOption = activeProvider?.configOptions?.find((option) => option.category === 'mode');
+    DEFAULT_AGENT_MODEL;
+  const modeOption = findAgentConfigOption(activeProvider?.configOptions, 'mode');
   const personas =
     modeOption?.options?.map((option) => ({ value: option.value, label: option.name })) ??
     activeProvider?.modes?.map((mode) => ({
@@ -54,22 +64,18 @@ export function DraftCommandBar({
       label: mode.charAt(0).toUpperCase() + mode.slice(1),
     })) ??
     [];
-  const thinkingOption = activeProvider?.configOptions?.find(
-    (option) =>
-      option.category === 'thought_level' ||
-      ['thinking', 'thinking_effort', 'selectedThinkingEffort'].includes(option.id),
-  );
+  const thinkingOption = findAgentConfigOption(activeProvider?.configOptions, 'thought_level');
   const canConfigureThinking = resolveAgentFeatures(activeProvider).configuration.options;
   const thinkingValue =
     draft.thinkingConfig?.value ??
     draft.selectedThinkingEffort ??
+    activeProvider?.defaultThinkingEffort ??
     (typeof thinkingOption?.currentValue === 'string'
       ? thinkingOption.currentValue
       : thinkingOption?.options?.[0]?.value);
-  const selectedThinkingEffort: ThinkingEffort =
-    thinkingValue === 'low' || thinkingValue === 'medium' || thinkingValue === 'high'
-      ? thinkingValue
-      : 'medium';
+  const selectedThinkingEffort: ThinkingEffort = isThinkingEffort(thinkingValue)
+    ? thinkingValue
+    : DEFAULT_THINKING_EFFORT;
   const thinkingConfig =
     canConfigureThinking && thinkingOption && (draft.thinkingConfig || draft.selectedThinkingEffort)
       ? { id: thinkingOption.id, value: thinkingValue! }
@@ -162,8 +168,7 @@ export function DraftCommandBar({
               onChange={(value) =>
                 updateDraft(projectId, {
                   thinkingConfig: { id: thinkingOption!.id, value },
-                  selectedThinkingEffort:
-                    value === 'low' || value === 'medium' || value === 'high' ? value : undefined,
+                  selectedThinkingEffort: isThinkingEffort(value) ? value : undefined,
                 })
               }
             />
@@ -184,9 +189,15 @@ export function DraftCommandBar({
             }}
             sessionData={null}
             isLoading={false}
+            isSubmitting={!!isBusy}
           />
         </div>
       </ComposerInput>
+      {isBusy && (
+        <p role="status" aria-live="polite" className="text-text-muted mt-3 px-2 text-sm">
+          Creating your session… Preparing the workspace and sending your message.
+        </p>
+      )}
       <div className="text-text-muted/80 mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 px-2 text-[11px] font-medium">
         <CommandDropdown<'local' | 'worktree'>
           value={selection.mode}
@@ -201,14 +212,10 @@ export function DraftCommandBar({
         <CommandDropdown<'review' | 'auto_approve' | 'yolo'>
           value={selection.approvalMode ?? 'review'}
           disabled={isBusy}
-          title="Approval mode"
+          title="Approval behavior"
           icon={<Shield className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
           onChange={(approvalMode) => updateDraft(projectId, { approvalMode })}
-          options={[
-            { value: 'review', label: 'Supervised' },
-            { value: 'auto_approve', label: 'Auto Approve' },
-            { value: 'yolo', label: 'Unsupervised' },
-          ]}
+          options={approvalBehaviorOptions}
         />
       </div>
       <ProviderAuthDialog

@@ -1,4 +1,5 @@
-import { Square, ArrowUp, Shield } from 'lucide-react';
+import { approvalBehaviorOptions } from '@agentctl/shared';
+import { Square, ArrowUp, Shield, Loader2 } from 'lucide-react';
 import { Button, cn, Tooltip } from '@agentctl/ui';
 import { CommandDropdown } from './CommandDropdown';
 import { ContextWindowPopover } from './WorkspaceStateReviewer';
@@ -10,21 +11,32 @@ export function SubmitButton({
   isStop,
   sessionData,
   isLoading,
+  isSubmitting = false,
 }: {
   canSend: boolean;
   onSubmit: () => void;
   isStop?: boolean;
   sessionData: SessionWithCapabilities | null;
   isLoading: boolean;
+  isSubmitting?: boolean;
 }) {
-  const show = canSend || Boolean(isStop);
+  const show = canSend || Boolean(isStop) || isSubmitting;
 
   return (
     <div className="flex items-center gap-1.5">
       <ContextWindowPopover sessionData={sessionData} isLoading={isLoading} />
       {show && (
-        <Tooltip content={isStop ? 'Stop agent (Esc twice)' : 'Execute command (Enter)'}>
+        <Tooltip
+          content={
+            isSubmitting
+              ? 'Sending message'
+              : isStop
+                ? 'Stop agent (Esc twice)'
+                : 'Execute command (Enter)'
+          }
+        >
           <Button
+            disabled={isSubmitting}
             size="sm"
             className={cn(
               'group/send flex h-8 w-8 items-center justify-center rounded-full border-none p-0 transition-[color,background-color,box-shadow,opacity,transform] duration-150',
@@ -33,9 +45,13 @@ export function SubmitButton({
                 : 'bg-accent text-brand-crust cursor-pointer shadow-[0_0_20px_rgba(203,166,247,0.25)] hover:opacity-90 active:scale-95',
             )}
             onClick={onSubmit}
-            aria-label={isStop ? 'Stop session' : 'Execute command'}
+            aria-label={
+              isSubmitting ? 'Sending message' : isStop ? 'Stop session' : 'Execute command'
+            }
           >
-            {isStop ? (
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+            ) : isStop ? (
               <Square className="h-3.5 w-3.5 fill-current" />
             ) : (
               <ArrowUp className="h-4 w-4 stroke-[3]" />
@@ -74,16 +90,12 @@ export function ApprovalModeSelector({
     <CommandDropdown
       value={currentMode}
       disabled={isUpdating}
-      title="Approval mode"
+      title="Approval behavior"
       icon={<Shield className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
       onChange={(val) => {
         void setApprovalMode(val);
       }}
-      options={[
-        { value: 'review', label: 'Supervised' },
-        { value: 'auto_approve', label: 'Auto Approve' },
-        { value: 'yolo', label: 'Unsupervised' },
-      ]}
+      options={approvalBehaviorOptions}
     />
   );
 }

@@ -34,6 +34,7 @@ interface CommandBarToolbarProps {
     isUpdatingConfigOption: boolean;
     canSend: boolean;
     isRunning: boolean;
+    isSubmitting?: boolean;
   };
 }
 
@@ -53,7 +54,7 @@ export function CommandBarToolbar({
   handleSubmit,
   onCancel,
   onOpenAuthModal,
-  flags: { isUpdatingAgentPersona, isUpdatingConfigOption, canSend, isRunning },
+  flags: { isUpdatingAgentPersona, isUpdatingConfigOption, canSend, isRunning, isSubmitting },
 }: CommandBarToolbarProps) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
@@ -93,6 +94,7 @@ export function CommandBarToolbar({
           canSend={canSend}
           onSubmit={isRunning && !canSend ? onCancel : handleSubmit}
           isStop={isRunning && !canSend}
+          isSubmitting={isSubmitting && !isRunning}
           sessionData={sessionData}
           isLoading={status.isLoadingSession}
         />

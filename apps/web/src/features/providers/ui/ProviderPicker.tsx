@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Check, RefreshCw } from 'lucide-react';
-import type { ProviderDiscovery } from '@agentctl/shared';
+import { findAgentConfigOption, type ProviderDiscovery } from '@agentctl/shared';
 import { getProviderEnvKeys, validateApiKey } from '@agentctl/shared';
 import { ProviderIcon } from '@/shared';
 import { useProviders } from '../api/useProviders.js';
@@ -82,9 +82,7 @@ export function ProviderPicker({
   const models = useMemo(() => {
     if (!activeProvider) return [];
 
-    const modelOption = activeProvider.configOptions?.find(
-      (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-    );
+    const modelOption = findAgentConfigOption(activeProvider?.configOptions, 'model');
     if (!modelOption?.options) return [];
 
     return modelOption.options.filter(

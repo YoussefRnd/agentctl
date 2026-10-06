@@ -1,3 +1,8 @@
+import {
+  DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
+  DEFAULT_TERMINAL_AUTH_TIMEOUT_MS,
+} from '../../config/runtime-defaults.js';
+import { randomUUID } from 'node:crypto';
 import type { AuthError, AuthMethod, RegistryAgent } from '@agentctl/shared';
 import type { AgentDriver } from '../../agent/types.js';
 import type { ProviderLauncher } from './provider-launcher.js';
@@ -29,6 +34,73 @@ export class ProviderAuthCoordinator {
   private logger: Logger;
   private onStateChange: () => void;
 
+  private browserInteractions = new Map<
+    string,
+    { request: { id: string; url: string; message: string }; resolve: (accepted: boolean) => void }
+  >();
+  private credentialsChanging?: (providerIds: string[]) => Promise<void>;
+
+  setCredentialChangeHandler(handler: (providerIds: string[]) => Promise<void>): void {
+    this.credentialsChanging = handler;
+  }
+  async waitForCredentialOperation(providerId: string): Promise<void> {
+    const key = this.store.get(providerId)?.registryAgentId ?? providerId;
+    await this.activeOperations.get(key)?.catch(() => undefined);
+  }
+  getAuthInteraction(providerId: string) {
+    return this.browserInteractions.get(providerId)?.request;
+  }
+  respondAuthInteraction(providerId: string, id: string, accepted: boolean): boolean {
+    const pending = this.browserInteractions.get(providerId);
+    if (!pending || pending.request.id !== id) return false;
+    this.browserInteractions.delete(providerId);
+    pending.resolve(accepted);
+    this.notify();
+    return true;
+  }
+  private requestBrowser(
+    providerId: string,
+    request: { id: string; url: string; message: string },
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    signal.throwIfAborted();
+    request = { ...request, id: randomUUID() };
+    if (this.browserInteractions.has(providerId))
+      throw new Error('A browser authentication request is already pending');
+    return new Promise<boolean>((resolve) => {
+      const abort = () => this.respondAuthInteraction(providerId, request.id, false);
+      this.browserInteractions.set(providerId, {
+        request,
+        resolve: (accepted) => {
+          signal.removeEventListener('abort', abort);
+          resolve(accepted);
+        },
+      });
+      signal.addEventListener('abort', abort, { once: true });
+      this.notify();
+    });
+  }
+  private async invalidateCredentialPeers(providerId: string): Promise<void> {
+    const row = this.store.get(providerId)!;
+    const agentId = row.registryAgentId ?? row.id;
+    const peers = this.store
+      .listAll()
+      .filter((item) => (item.registryAgentId ?? item.id) === agentId);
+    await this.credentialsChanging?.(peers.map((item) => item.id));
+    for (const peer of peers) {
+      this.connectionManager.closeConnection(peer.id);
+      this.launcher.invalidateProbe(peer.id, this.runtime, this.getRegistryAgent(peer.id));
+      if (peer.id !== providerId)
+        this.store.setAuthDetails(peer.id, {
+          authState: 'unknown',
+          connectionState: 'unknown',
+          authError: null,
+          lastVerifiedAt: null,
+        });
+    }
+    this.notify();
+  }
+
   // Mutex per provider to serialize operations
   private activeOperations = new Map<string, Promise<unknown>>();
   // Active abort controllers per provider
@@ -45,19 +117,20 @@ export class ProviderAuthCoordinator {
   }
 
   private serialize<T>(providerId: string, op: () => Promise<T>): Promise<T> {
-    const prev = this.activeOperations.get(providerId) ?? Promise.resolve();
+    const key = this.store.get(providerId)?.registryAgentId ?? providerId;
+    const prev = this.activeOperations.get(key) ?? Promise.resolve();
     const next = prev
       .catch(() => undefined)
       .then(async () => {
         return op();
       })
       .finally(() => {
-        if (this.activeOperations.get(providerId) === next) {
-          this.activeOperations.delete(providerId);
+        if (this.activeOperations.get(key) === next) {
+          this.activeOperations.delete(key);
         }
       });
 
-    this.activeOperations.set(providerId, next);
+    this.activeOperations.set(key, next);
     return next;
   }
 
@@ -74,7 +147,9 @@ export class ProviderAuthCoordinator {
     if (snapshot) {
       try {
         const agents = parseRegistryAgents(snapshot.data);
-        const found = agents.find((a) => a.id === providerId);
+        const found = agents.find(
+          (a) => a.id === (this.store.get(providerId)?.registryAgentId ?? providerId),
+        );
         if (found) return found;
       } catch (error) {
         this.logger.warn({ error }, 'Ignoring invalid provider registry snapshot during auth');
@@ -133,6 +208,8 @@ export class ProviderAuthCoordinator {
         );
       }
 
+      await this.invalidateCredentialPeers(providerId);
+
       // 3. Mark authenticating
       const abortController = new AbortController();
       this.abortControllers.set(providerId, abortController);
@@ -149,7 +226,7 @@ export class ProviderAuthCoordinator {
       });
       this.notify();
 
-      const timeoutMs = options?.timeoutMs ?? 120_000;
+      const timeoutMs = options?.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS;
 
       try {
         const launch = this.launcher.resolveLaunch(row, agent);
@@ -163,7 +240,12 @@ export class ProviderAuthCoordinator {
           launch.args,
           launch.env,
           methodId,
-          { signal: abortController.signal, timeoutMs },
+          {
+            signal: abortController.signal,
+            timeoutMs,
+            onBrowserRequest: (request) =>
+              this.requestBrowser(providerId, request, abortController.signal),
+          },
         );
         const abortPromise = new Promise<never>((_, reject) => {
           abortController.signal.addEventListener(
@@ -249,6 +331,8 @@ export class ProviderAuthCoordinator {
         );
       }
 
+      await this.invalidateCredentialPeers(providerId);
+
       const abortController = new AbortController();
       this.abortControllers.set(providerId, abortController);
       const externalSignal = options?.signal;
@@ -287,7 +371,7 @@ export class ProviderAuthCoordinator {
             { once: true },
           );
         });
-        const timeoutMs = options?.timeoutMs ?? 10 * 60_000;
+        const timeoutMs = options?.timeoutMs ?? DEFAULT_TERMINAL_AUTH_TIMEOUT_MS;
         let timeout: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
           timeout = setTimeout(() => {
@@ -429,6 +513,8 @@ export class ProviderAuthCoordinator {
   }
 
   cancelLogin(providerId: string): void {
+    const pending = this.browserInteractions.get(providerId);
+    if (pending) this.respondAuthInteraction(providerId, pending.request.id, false);
     const controller = this.abortControllers.get(providerId);
     if (controller) {
       controller.abort(new Error('Authentication cancelled'));
@@ -464,6 +550,8 @@ export class ProviderAuthCoordinator {
       if (!supportsLogout) {
         throw new Error(`Provider ${providerId} does not support logout`);
       }
+
+      await this.invalidateCredentialPeers(providerId);
 
       try {
         const launch = this.launcher.resolveLaunch(row, agent);

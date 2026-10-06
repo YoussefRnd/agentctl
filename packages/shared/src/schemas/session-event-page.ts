@@ -6,3 +6,9 @@ export const sessionEventPageSchema = z.object({
   nextBeforeId: z.number().int().positive().nullable(),
 });
 export type SessionEventPage = z.infer<typeof sessionEventPageSchema>;
+
+export const sessionEventSnapshotSchema = sessionEventPageSchema.extend({
+  highWaterId: z.number().int().nonnegative(),
+  changeSequence: z.number().int().nonnegative().optional(),
+});
+export type SessionEventSnapshot = z.infer<typeof sessionEventSnapshotSchema>;

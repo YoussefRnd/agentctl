@@ -69,21 +69,6 @@ export function EventFeed({
     historyError,
   } = useSessionStream();
   const isSessionError = sessionData?.session.status === 'error';
-  const lastUserEventId = events.reduce(
-    (max, event) =>
-      event.type === 'text' && event.data.role === 'user' ? Math.max(max, event.id) : max,
-    0,
-  );
-  const latestPromptError = [...events]
-    .reverse()
-    .find(
-      (event) =>
-        event.id > lastUserEventId &&
-        event.type === 'status' &&
-        event.data.status === 'prompt_failed',
-    );
-  const promptErrorMessage =
-    latestPromptError?.type === 'status' ? latestPromptError.data.message : undefined;
   const queryClient = useQueryClient();
 
   const activeProvider = useMemo(() => {
@@ -185,16 +170,13 @@ export function EventFeed({
       const offset = parent.scrollTop;
       const item = virtualizer.getVirtualItems().find((item) => item.end > offset + 40);
       if (!item) return;
-      const group = groupedEvents[item.index];
-      const eventId =
-        'event' in group ? group.event.id : (group.events[0]?.parentEventId ?? group.events[0]?.id);
-      let closestIdx = 0;
-      for (let index = 0; index < conversationTurns.length; index++) {
-        if (conversationTurns[index].userEvent.id > (eventId ?? 0)) break;
-        closestIdx = index;
-      }
-
-      setActiveTurnIndex(closestIdx);
+      const input = groupedEvents
+        .slice(0, item.index + 1)
+        .findLast((group) => group.type === 'user');
+      const index = input
+        ? conversationTurns.findIndex((turn) => turn.userEvent.id === input.event.id)
+        : -1;
+      setActiveTurnIndex(index >= 0 ? index : null);
     });
   }, [conversationTurns, groupedEvents, virtualizer]);
 
@@ -456,6 +438,7 @@ export function EventFeed({
                   }`}
                 >
                   <EventFeedItem
+                    isConnected={isConnected}
                     group={group}
                     latestAgentGroupId={latestAgentGroupId}
                     sessionId={sessionData?.session.id}
@@ -479,13 +462,11 @@ export function EventFeed({
                     <AgentIcon className="h-4 w-4" />
                   </div>
                   <span className="text-[11px] font-bold tracking-wider text-rose-400 uppercase">
-                    {promptErrorMessage ? 'Agent run failed' : 'Agent Connection Interrupted'}
+                    Agent connection unavailable
                   </span>
                 </div>
                 <p className="text-text-muted/90 text-[12px] leading-relaxed">
-                  {typeof promptErrorMessage === 'string' && promptErrorMessage
-                    ? promptErrorMessage
-                    : 'The agent process exited unexpectedly. Type a message below to resuscitate the session, or reconnect the stream.'}
+                  The agent connection is unavailable. Refresh the session to see its current state.
                 </p>
                 <div className="mt-1 flex items-center gap-3">
                   <Button
@@ -500,7 +481,7 @@ export function EventFeed({
                     className="border border-rose-500/30 bg-rose-500/15 px-3 text-[11px] text-rose-300 hover:bg-rose-500/25"
                   >
                     <RefreshCw className="h-3 w-3" />
-                    Reconnect Stream
+                    Refresh session
                   </Button>
                 </div>
               </Card>

@@ -1,5 +1,11 @@
 import type { SessionEventRow } from '@agentctl/shared';
-import { isSessionEventToolCall } from '@agentctl/shared';
+import {
+  isSessionEventToolCall,
+  structuredDiffSchema,
+  normalizeFileChanges,
+  fileChangeStatsSchema,
+  type SessionEventToolCallData,
+} from '@agentctl/shared';
 import { parseDiff } from '@/shared/lib/diff-parser';
 import type { ReviewFile } from '../ui/ReviewHeader';
 
@@ -179,8 +185,8 @@ export function isFileModificationToolCall(data: {
   title?: string | null;
   content?: unknown[];
   arguments?: Record<string, unknown>;
-  rawInput?: Record<string, unknown>;
-  rawOutput?: Record<string, unknown>;
+  rawInput?: unknown;
+  rawOutput?: unknown;
   effects?: { type: string; path?: string }[];
 }): boolean {
   if (
@@ -308,6 +314,31 @@ export function isFileModificationToolCall(data: {
   return false;
 }
 
+function fileChangeReports(data: SessionEventToolCallData): SessionEventToolCallData[] {
+  const diffs = (data.content ?? []).flatMap((content) => {
+    if (content.type !== 'diff') return [];
+    const parsed = structuredDiffSchema.safeParse(content);
+    return parsed.success ? [parsed.data] : [];
+  });
+  if (!diffs.length) return [data];
+  return diffs.flatMap((diff) =>
+    normalizeFileChanges(diff).map(({ path, operation, stats }) => ({
+      toolCallId: data.toolCallId,
+      status: data.status,
+      name: operation === 'add' ? 'create' : operation,
+      kind: operation === 'delete' ? 'delete' : 'edit',
+      locations: [{ path }],
+      effects: [
+        {
+          type: operation === 'delete' ? 'file_deleted' : 'file_modified',
+          path,
+          ...(stats ? { stats } : {}),
+        },
+      ],
+    })),
+  );
+}
+
 /**
  * Calculates diff additions and deletions for a given review file.
  */
@@ -331,6 +362,23 @@ function getToolCallStats(data: Record<string, unknown>): {
 } {
   let additions = 0;
   let deletions = 0;
+
+  const reported = Array.isArray(data.effects)
+    ? data.effects.flatMap((effect) => {
+        const stats = fileChangeStatsSchema.safeParse(
+          effect && typeof effect === 'object' ? effect.stats : undefined,
+        );
+        return stats.success ? [stats.data] : [];
+      })
+    : [];
+  if (reported.length)
+    return reported.reduce(
+      (sum, effect) => ({
+        additions: sum.additions + effect.additions,
+        deletions: sum.deletions + effect.deletions,
+      }),
+      { additions: 0, deletions: 0 },
+    );
 
   if (Array.isArray(data.effects)) {
     for (const effect of data.effects as {
@@ -419,70 +467,74 @@ export function extractTurnChanges(
   for (const event of events) {
     if (!isSessionEventToolCall(event)) continue;
 
-    const data = event.data;
-    if (!isFileModificationToolCall(data)) continue;
+    for (const data of fileChangeReports(event.data)) {
+      if (!isFileModificationToolCall(data)) continue;
 
-    const filePath = extractFilePathFromToolCall(data);
-    if (!filePath) continue;
+      const filePath = extractFilePathFromToolCall(data);
+      if (!filePath) continue;
 
-    let { additions, deletions } = getToolCallStats(data);
-    const hasTurnLocalStats = additions > 0 || deletions > 0;
-    let matchedReviewPath = filePath;
-    let status: 'modified' | 'added' | 'deleted' =
-      data.effects?.some((effect) => effect.type === 'file_deleted') ||
-      data.kind === 'delete' ||
-      data.name?.toLowerCase().includes('delete')
-        ? 'deleted'
-        : data.name?.toLowerCase().includes('create')
-          ? 'added'
-          : 'modified';
-
-    // Cross-reference with live review files if provided
-    if (reviewFiles && reviewFiles.length > 0) {
-      const [matchedPath] = resolveTurnReviewFiles(reviewFiles, [filePath]);
-      const match = matchedPath
-        ? reviewFiles.find((reviewFile) => reviewFile.path === matchedPath)
-        : undefined;
-      if (match) {
-        matchedReviewPath = match.path;
-        status =
-          match.state === 'untracked'
+      let { additions, deletions } = getToolCallStats(data);
+      const hasTurnLocalStats =
+        additions > 0 ||
+        deletions > 0 ||
+        data.effects?.some((effect) => 'stats' in effect) === true;
+      let matchedReviewPath = filePath;
+      let status: 'modified' | 'added' | 'deleted' =
+        data.effects?.some((effect) => effect.type === 'file_deleted') ||
+        data.kind === 'delete' ||
+        data.name?.toLowerCase().includes('delete')
+          ? 'deleted'
+          : data.name?.toLowerCase().includes('create')
             ? 'added'
-            : match.state === 'deleted'
-              ? 'deleted'
-              : 'modified';
-        if (!hasTurnLocalStats) {
-          const stats =
-            match.additions !== undefined && match.deletions !== undefined
-              ? { additions: match.additions, deletions: match.deletions }
-              : getDiffStats(match.diff);
-          additions = stats.additions;
-          deletions = stats.deletions;
+            : 'modified';
+
+      // Cross-reference with live review files if provided
+      if (reviewFiles && reviewFiles.length > 0) {
+        const [matchedPath] = resolveTurnReviewFiles(reviewFiles, [filePath]);
+        const match = matchedPath
+          ? reviewFiles.find((reviewFile) => reviewFile.path === matchedPath)
+          : undefined;
+        if (match) {
+          matchedReviewPath = match.path;
+          status =
+            match.state === 'untracked'
+              ? 'added'
+              : match.state === 'deleted'
+                ? 'deleted'
+                : 'modified';
+          if (!hasTurnLocalStats) {
+            const stats =
+              match.additions !== undefined && match.deletions !== undefined
+                ? { additions: match.additions, deletions: match.deletions }
+                : getDiffStats(match.diff);
+            additions = stats.additions;
+            deletions = stats.deletions;
+          }
         }
       }
-    }
 
-    const existing = fileMap.get(matchedReviewPath);
-    if (existing) {
-      if (hasTurnLocalStats && existing.hasTurnLocalStats) {
-        existing.additions += additions;
-        existing.deletions += deletions;
-      } else if (hasTurnLocalStats) {
-        existing.additions = additions;
-        existing.deletions = deletions;
-        existing.hasTurnLocalStats = true;
-      } else if (!existing.hasTurnLocalStats) {
-        existing.additions = Math.max(existing.additions, additions);
-        existing.deletions = Math.max(existing.deletions, deletions);
+      const existing = fileMap.get(matchedReviewPath);
+      if (existing) {
+        if (hasTurnLocalStats && existing.hasTurnLocalStats) {
+          existing.additions += additions;
+          existing.deletions += deletions;
+        } else if (hasTurnLocalStats) {
+          existing.additions = additions;
+          existing.deletions = deletions;
+          existing.hasTurnLocalStats = true;
+        } else if (!existing.hasTurnLocalStats) {
+          existing.additions = Math.max(existing.additions, additions);
+          existing.deletions = Math.max(existing.deletions, deletions);
+        }
+      } else {
+        fileMap.set(matchedReviewPath, {
+          path: matchedReviewPath,
+          additions,
+          deletions,
+          status,
+          hasTurnLocalStats,
+        });
       }
-    } else {
-      fileMap.set(matchedReviewPath, {
-        path: matchedReviewPath,
-        additions,
-        deletions,
-        status,
-        hasTurnLocalStats,
-      });
     }
   }
 
@@ -519,10 +571,10 @@ export function extractLatestTurnTouchedFiles(events: SessionEventRow[]): Set<st
   const turnEvents = lastUserIdx >= 0 ? events.slice(lastUserIdx) : events;
   for (const e of turnEvents) {
     if (isSessionEventToolCall(e)) {
-      if (!isFileModificationToolCall(e.data)) continue;
-      const p = extractFilePathFromToolCall(e.data);
-      if (p) {
-        set.add(p);
+      for (const data of fileChangeReports(e.data)) {
+        if (!isFileModificationToolCall(data)) continue;
+        const path = extractFilePathFromToolCall(data);
+        if (path) set.add(path);
       }
     }
   }

@@ -95,7 +95,7 @@ it('persists the first message before sending and retains its stable ID on failu
   });
   const pending = useMessageQueueStore.getState().queuedMessages[session.id][0];
   expect(pending).toMatchObject({ status: 'failed', error: 'Lost acknowledgment' });
-  expect(mocks.started).not.toHaveBeenCalled();
+  expect(mocks.started).toHaveBeenCalledWith(session.id);
   expect(useDraftStore.getState().homeDrafts[projectId].session?.id).toBe(session.id);
   expect(
     JSON.parse(localStorage.getItem('agentctl-message-outbox')!).state.queuedMessages[session.id][0]

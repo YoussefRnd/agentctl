@@ -11,6 +11,11 @@ import type { SessionMode, SessionEventRow, SessionWithCapabilities } from '@age
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { useDraftStore } from './useDraftStore';
 import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
+import {
+  acknowledgeSessionInput,
+  nextOptimisticEventId,
+  updateOptimisticDelivery,
+} from '@/features/sessions';
 
 export interface HomeSessionSelection extends InitialSessionSettings {
   providerId: string;
@@ -42,6 +47,7 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
       setIsStarting(true);
       let pendingSessionId: string | undefined;
       let clientMessageId: string | undefined;
+      let optimisticEventId: number | undefined;
       try {
         const store = useDraftStore.getState();
         let session = store.homeDrafts[projectId]?.session;
@@ -114,14 +120,40 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
           throw new Error('A previous message is pending. Retry or cancel it in the session.');
         }
         clientMessageId = pending?.id ?? crypto.randomUUID();
+        optimisticEventId = pending?.optimisticEventId ?? nextOptimisticEventId();
         queue.enqueueMessage(
           session.id,
           text,
           attachmentIds,
-          undefined,
+          optimisticEventId,
           clientMessageId,
           'sending',
         );
+        queryClient.setQueryData<SessionWithCapabilities>(
+          sessionKeys.detail(session.id),
+          (old) => old ?? { session, capabilities: [] },
+        );
+        queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(session.id), (old = []) => [
+          ...old.filter(
+            (event) => !(event.type === 'text' && event.data.clientMessageId === clientMessageId),
+          ),
+          {
+            id: optimisticEventId!,
+            sessionId: session.id,
+            type: 'text',
+            data: {
+              role: 'user',
+              content: text,
+              attachmentIds,
+              clientMessageId,
+              deliveryStatus: 'sending',
+            },
+            createdAt: new Date(),
+          },
+        ]);
+        // Open the conversation before awaiting acknowledgment. The durable outbox
+        // and optimistic event preserve the message if the response is lost.
+        if (mountedRef.current) onStarted(session.id);
         const response = await api.sendInput({
           params: { id: session.id },
           body: {
@@ -142,25 +174,20 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
           );
         }
         queue.dequeueMessage(session.id, clientMessageId);
-        queryClient.setQueryData<SessionWithCapabilities>(sessionKeys.detail(session.id), {
-          session: { ...session, status: 'running' },
-          capabilities: [],
-        });
-        queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(session.id), [
-          {
-            id: response.body.eventId,
-            sessionId: session.id,
-            type: 'text',
-            data: { role: 'user', content: text, attachmentIds, clientMessageId },
-            createdAt: new Date(),
-          },
-        ]);
+        acknowledgeSessionInput(queryClient, session.id, clientMessageId, response.body.eventId);
         store.clearHomeDraft(projectId);
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        if (mountedRef.current) onStarted(session.id);
         return true;
       } catch (err) {
         if (pendingSessionId && clientMessageId) {
+          if (optimisticEventId !== undefined)
+            updateOptimisticDelivery(
+              queryClient,
+              pendingSessionId,
+              optimisticEventId,
+              'failed',
+              err instanceof Error ? err.message : String(err),
+            );
           useMessageQueueStore
             .getState()
             .setMessageStatus(

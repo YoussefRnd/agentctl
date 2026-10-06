@@ -1,122 +1,155 @@
-import { describe, test, expect } from 'vitest';
-import { PermissionEngine } from './permission-engine.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, expect, test } from 'vitest';
+import { PermissionEngine, type PermissionPolicy } from './permission-engine.js';
 import type { AgentPermissionRequest } from '../agent/types.js';
 
-describe('PermissionEngine', () => {
-  test('generates rich permission options with sub-patterns', () => {
-    const engine = new PermissionEngine();
-    const options = engine.buildPermissionOptions('terminal', { command: 'git status' });
+let root: string;
+let policy: PermissionPolicy;
+let engine: PermissionEngine;
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-policy-'));
+  policy = { mode: 'auto_approve', cwd: root };
+  engine = new PermissionEngine();
+});
+afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+function edit(paths = [path.join(root, 'file.ts')]): AgentPermissionRequest {
+  return {
+    permissionId: 'edit',
+    source: 'provider',
+    toolCall: {
+      name: 'arbitrary_tool_name',
+      kind: 'edit',
+      locations: paths.map((file) => ({ path: file })),
+      arguments: { path: paths[0], content: 'hello' },
+    },
+    options: [
+      { optionId: 'once', kind: 'allow_once' },
+      { optionId: 'always', kind: 'allow_always' },
+    ],
+  };
+}
+function command(value = 'git', args = ['status']): AgentPermissionRequest {
+  return {
+    permissionId: 'command',
+    source: 'provider',
+    toolCall: { name: 'shell', kind: 'execute', arguments: { command: value, args, cwd: root } },
+    options: [{ optionId: 'once', kind: 'allow_once' }],
+  };
+}
 
-    expect(options.type).toBe('dropdown_with_patterns');
-    if (options.type === 'dropdown_with_patterns') {
-      expect(options.choices).toHaveLength(2);
-      expect(options.patterns[0].pattern).toBe('terminal:git status');
-      expect(options.patterns[1].pattern).toBe('terminal:git *');
-    }
-  });
+test('workspace edits use structured kinds and paths, not provider tool names', () => {
+  expect(engine.evaluate(edit(), policy)).toBe('allow');
+  const misleading = command();
+  misleading.toolCall.name = 'fs/safe';
+  expect(engine.evaluate(misleading, policy)).toBe('ask');
+});
+test.each(['read', 'search', 'execute', 'fetch', 'other', '_future', undefined])(
+  'asks about %s requests in workspace-edit mode',
+  (kind) => {
+    const request = edit();
+    request.toolCall.kind = kind;
+    expect(engine.evaluate(request, policy)).toBe('ask');
+  },
+);
+test('every affected location must be present and within the workspace', () => {
+  expect(engine.evaluate(edit([]), policy)).toBe('ask');
+  expect(engine.evaluate(edit([path.join(root, 'file.ts'), '/outside/file.ts']), policy)).toBe(
+    'ask',
+  );
+  const request = edit();
+  request.toolCall.locations!.push({});
+  expect(engine.evaluate(request, policy)).toBe('ask');
+});
+test('symlink traversal cannot make outside edits appear to be workspace edits', () => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-policy-outside-'));
+  try {
+    fs.mkdirSync(path.join(outside, 'nested'));
+    fs.symlinkSync(path.join(outside, 'nested'), path.join(root, 'link'));
+    expect(engine.evaluate(edit([`${root}/link/../new.ts`]), policy)).toBe('ask');
+    fs.symlinkSync(path.join(outside, 'missing'), path.join(root, 'broken'));
+    expect(engine.evaluate(edit([`${root}/broken/new.ts`]), policy)).toBe('ask');
+  } finally {
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+test('explicit deny wins over automatic approval and remembered choices', () => {
+  const request = edit();
+  engine.recordDecision(request, policy, true, true);
+  expect(engine.evaluate(request, { ...policy, mode: 'yolo', toolPolicy: 'deny' })).toBe('deny');
+});
+test('explicit ask rules still prompt in auto-approve requests mode', () => {
+  expect(engine.evaluate(edit(), { ...policy, mode: 'yolo', toolPolicy: 'always_prompt' })).toBe(
+    'ask',
+  );
+});
+test('an automatic approval never chooses a persistent-only provider option', () => {
+  const request = edit();
+  request.options = [{ optionId: 'opaque', kind: 'allow_always' }];
+  expect(engine.evaluate(request, { ...policy, mode: 'yolo' })).toBe('ask');
+});
+test('remembering an action does not authorize a sibling file or changed content', () => {
+  const request = edit();
+  engine.recordDecision(request, policy, true, true);
+  const review = { ...policy, mode: 'review' as const };
+  expect(engine.evaluate(request, review)).toBe('allow');
+  expect(engine.evaluate(edit([path.join(root, 'sibling.ts')]), review)).toBe('ask');
+  const changed = edit();
+  changed.toolCall.arguments!.content = 'different';
+  expect(engine.evaluate(changed, review)).toBe('ask');
+});
+test('remembering a command does not authorize a command prefix or different environment', () => {
+  engine.recordDecision(command(), policy, true, true);
+  expect(engine.evaluate(command('git', ['push']), { ...policy, mode: 'review' })).toBe('ask');
+  const changed = command();
+  changed.toolCall.arguments!.env = { CONFIG: 'other' };
+  expect(engine.evaluate(changed, { ...policy, mode: 'review' })).toBe('ask');
+});
+test('a native approval covers one exact client operation and clears at turn end', () => {
+  const request = edit();
+  const client = {
+    ...request,
+    source: 'client' as const,
+    toolCall: { ...request.toolCall, name: 'fs/write_text_file' },
+  };
+  const review = { ...policy, mode: 'review' as const };
+  engine.recordDecision(request, policy, true, true);
+  expect(engine.evaluate(client, review)).toBe('allow');
+  expect(engine.evaluate(client, review)).toBe('ask');
+  engine.recordDecision(request, policy, true, false);
+  engine.clearTurn();
+  expect(engine.evaluate(client, review)).toBe('ask');
+});
+test('exact client denies remain effective even in auto-approve requests mode', () => {
+  const request = { ...edit(), source: 'client' as const };
+  engine.recordDecision(request, policy, false, true);
+  expect(engine.evaluate(request, { ...policy, mode: 'yolo' })).toBe('deny');
+});
+test('configured MCP auto-approval applies in workspace-edit mode, not ask-every-time mode', () => {
+  expect(engine.evaluate(command(), { ...policy, toolPolicy: 'auto_approve' })).toBe('allow');
+  expect(
+    engine.evaluate(command(), { ...policy, mode: 'review', toolPolicy: 'auto_approve' }),
+  ).toBe('ask');
+});
 
-  test('auto-approves tool calls matching granted patterns', () => {
-    const engine = new PermissionEngine();
-    expect(engine.isToolCallApproved('terminal', { command: 'git diff' })).toBe(false);
+test('remembered actions distinguish primitive input and extra nested input metadata', () => {
+  const request = edit();
+  request.toolCall.rawInput = 'first edit';
+  engine.recordDecision(request, policy, true, true);
+  const changed = edit();
+  changed.toolCall.rawInput = 'different edit';
+  expect(engine.evaluate(changed, { ...policy, mode: 'review' })).toBe('ask');
+  request.toolCall.rawInput = { arguments: request.toolCall.arguments, operation: 'first' };
+  engine.recordDecision(request, policy, true, true);
+  changed.toolCall.rawInput = { arguments: changed.toolCall.arguments, operation: 'other' };
+  expect(engine.evaluate(changed, { ...policy, mode: 'review' })).toBe('ask');
+});
 
-    engine.grantPattern('terminal:git *');
-    expect(engine.isToolCallApproved('terminal', { command: 'git diff' })).toBe(true);
-    expect(engine.isToolCallApproved('terminal', { command: 'npm start' })).toBe(false);
-  });
-
-  test('expires patterns after maxUses limit', () => {
-    const engine = new PermissionEngine();
-    engine.grantPattern('bash:git status', { maxUses: 2 });
-
-    expect(engine.isToolCallApproved('bash', { command: 'git status' })).toBe(true); // use 1
-    expect(engine.isToolCallApproved('bash', { command: 'git status' })).toBe(true); // use 2
-    expect(engine.isToolCallApproved('bash', { command: 'git status' })).toBe(false); // expired
-  });
-
-  test('does not consume grants when one request target is denied', () => {
-    const engine = new PermissionEngine();
-    engine.grantPattern('tool:/allowed', { maxUses: 1 });
-
-    expect(engine.isToolCallApproved('tool', { path: '/allowed', command: 'denied' })).toBe(false);
-    expect(engine.isToolCallApproved('tool', { path: '/allowed' })).toBe(true);
-  });
-
-  test('counts one approved tool call as one grant use', () => {
-    const engine = new PermissionEngine();
-    engine.grantPattern('tool:*', { maxUses: 1 });
-
-    expect(engine.isToolCallApproved('tool', { path: '/a', command: 'echo ok' })).toBe(true);
-    expect(engine.isToolCallApproved('tool', { path: '/b' })).toBe(false);
-  });
-
-  test('exports and imports state', () => {
-    const engine1 = new PermissionEngine();
-    engine1.grantPattern('read_file:/src/*', { maxUses: 5 });
-
-    const exported = engine1.exportState();
-    expect(exported.grantedPatterns).toHaveLength(1);
-    expect(exported.grantedPatterns[0].pattern).toBe('read_file:/src/*');
-
-    const engine2 = new PermissionEngine();
-    engine2.importState(exported);
-    expect(engine2.isToolCallApproved('read_file', { path: '/src/index.ts' })).toBe(true);
-  });
-
-  test('evaluates domain request and auto-approves when pattern matches', () => {
-    const engine = new PermissionEngine([{ pattern: 'terminal:git status' }]);
-
-    const domainRequest = {
-      permissionId: 't123',
-      toolCall: {
-        toolCallId: 't123',
-        name: 'terminal',
-        arguments: { command: 'git status' },
-      },
-      options: [
-        { optionId: 'allow_once', label: 'Allow Once' },
-        { optionId: 'allow_always', label: 'Allow Always' },
-      ],
-    } satisfies AgentPermissionRequest;
-
-    const evalResult = engine.evaluateRequest(domainRequest);
-    expect(evalResult.autoApproved).toBe(true);
-    expect(evalResult.response).toEqual({ allowed: true, optionId: 'allow_once' });
-  });
-
-  test('evaluates domain request and returns UI options when no pattern matches', () => {
-    const engine = new PermissionEngine();
-
-    const domainRequest = {
-      permissionId: 't456',
-      toolCall: {
-        toolCallId: 't456',
-        name: 'terminal',
-        arguments: { command: 'git commit' },
-      },
-      options: [{ optionId: 'allow_once', label: 'Allow Once' }],
-    } satisfies AgentPermissionRequest;
-
-    const evalResult = engine.evaluateRequest(domainRequest);
-    expect(evalResult.autoApproved).toBe(false);
-    expect(evalResult.uiOptions?.type).toBe('dropdown_with_patterns');
-  });
-
-  test('resolves outcome and grants new pattern on allow_always', () => {
-    const engine = new PermissionEngine();
-
-    const response = engine.resolveOutcome('perm1', 'allow_always', {
-      patterns: ['terminal:git *'],
-    });
-
-    expect(response.optionId).toBe('allow_always');
-    expect(engine.isToolCallApproved('terminal', { command: 'git status' })).toBe(true);
-  });
-
-  test('returns an explicitly selected reject option instead of cancellation', () => {
-    const engine = new PermissionEngine();
-
-    expect(engine.resolveOutcome('perm2', 'reject_once')).toEqual({
-      optionId: 'reject_once',
-    });
-  });
+test('a remembered provider deny also blocks a matching client action', () => {
+  const request = edit();
+  engine.recordDecision(request, policy, false, true);
+  expect(engine.evaluate({ ...request, source: 'client' }, { ...policy, mode: 'yolo' })).toBe(
+    'deny',
+  );
 });

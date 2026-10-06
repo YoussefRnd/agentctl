@@ -1,3 +1,4 @@
+import { observeAcpStderr, withProcessDiagnostics } from './stderr.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import { Readable, Writable } from 'node:stream';
@@ -5,6 +6,60 @@ import type { Logger } from '../../logger.js';
 import { noopLogger } from '../../logger.js';
 import type { AgentDiagnosticsRecorder, AgentDiagnosticAdapter } from '../../agent/diagnostics.js';
 import type { AgentStreamTransport } from '../types.js';
+import type { AgentSession } from '../../agent/types.js';
+
+// Only signal groups created by this app. Never infer ownership from a command name.
+const ownedProcessGroups = new WeakSet<ChildProcess>();
+export function ownAcpProcess<T extends ChildProcess>(child: T, realSpawn = true): T {
+  if (realSpawn && process.platform !== 'win32' && child.pid) {
+    ownedProcessGroups.add(child);
+    child.once('exit', () => {
+      try {
+        process.kill(-child.pid!, 'SIGKILL');
+      } catch {
+        /* Group already exited. */
+      }
+    });
+  }
+  return child;
+}
+
+export const ACP_PROCESS_OPTIONS = { detached: process.platform !== 'win32', windowsHide: true };
+
+/** A persistent process may host many sessions; closed sessions must release their listeners. */
+export function bindSessionProcessEvents(child: ChildProcess) {
+  const errors = new Set<(error: Error) => void>();
+  const exits = new Set<(code: number | null, signal: NodeJS.Signals | null) => void>();
+  return {
+    onError(handler: Parameters<AgentSession['onError']>[0]) {
+      if (errors.has(handler)) return;
+      errors.add(handler);
+      child.on('error', handler);
+    },
+    onClose(handler: Parameters<AgentSession['onClose']>[0]) {
+      const listener = (code: number | null, signal: NodeJS.Signals | null) => {
+        exits.delete(listener);
+        handler({
+          code,
+          signal,
+          message:
+            code !== 0 && code !== null
+              ? withProcessDiagnostics(new Error(`Agent process exited with code ${code}`), child)
+                  .message
+              : undefined,
+        });
+      };
+      exits.add(listener);
+      child.once('exit', listener);
+    },
+    dispose() {
+      for (const listener of errors) child.removeListener('error', listener);
+      for (const listener of exits) child.removeListener('exit', listener);
+      errors.clear();
+      exits.clear();
+    },
+  };
+}
 
 export class ProcessStreamTransport implements AgentStreamTransport {
   public readonly stdin: WritableStream<Uint8Array>;
@@ -26,18 +81,13 @@ export class ProcessStreamTransport implements AgentStreamTransport {
   ) {
     const stdin = child.stdin;
     const stdout = child.stdout;
-    const stderr = child.stderr;
 
     if (!stdin || !stdout) {
       child.kill();
       throw new Error('Spawned process missing stdin/stdout');
     }
 
-    if (stderr) {
-      stderr.on('data', (data: Buffer) => {
-        logger.warn(`Process stderr: ${data.toString()}`);
-      });
-    }
+    observeAcpStderr(child);
 
     this.stdin = Writable.toWeb(stdin) as WritableStream<Uint8Array>;
     this.stdout = Readable.toWeb(stdout) as ReadableStream<Uint8Array>;
@@ -57,8 +107,11 @@ export class ProcessStreamTransport implements AgentStreamTransport {
           resolve();
         } else {
           reject(
-            new Error(
-              `Process exited with code ${String(code)}${signal ? ` and signal ${signal}` : ''}`,
+            withProcessDiagnostics(
+              new Error(
+                `Process exited with code ${String(code)}${signal ? ` and signal ${signal}` : ''}`,
+              ),
+              child,
             ),
           );
         }
@@ -69,7 +122,7 @@ export class ProcessStreamTransport implements AgentStreamTransport {
         if (resolved) return;
         resolved = true;
         this._isClosed = true;
-        reject(err);
+        reject(withProcessDiagnostics(err, child));
       });
     });
   }
@@ -103,8 +156,28 @@ export function terminateChildProcess(
   timeoutMs = 2000,
   signal: NodeJS.Signals | number = 'SIGTERM',
 ): void {
-  if (!child.killed) {
-    child.kill(signal);
+  if (!child.killed && child.exitCode === null && child.signalCode == null) {
+    const signalOwnedTree = (nextSignal: NodeJS.Signals | number) => {
+      if (ownedProcessGroups.has(child) && child.pid) {
+        try {
+          process.kill(-child.pid, nextSignal);
+          return;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH')
+            logger.warn({ error }, 'Failed to signal ACP process group');
+        }
+      }
+      if (process.platform === 'win32' && child.pid) {
+        const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore',
+        });
+        killer.on('error', () => child.kill(nextSignal));
+        return;
+      }
+      child.kill(nextSignal);
+    };
+    signalOwnedTree(signal);
 
     if (signal === 'SIGTERM') {
       setTimeout(() => {
@@ -112,7 +185,7 @@ export function terminateChildProcess(
           logger.warn(
             `Process did not exit on SIGTERM, sending SIGKILL to PID ${String(child.pid)}`,
           );
-          child.kill('SIGKILL');
+          signalOwnedTree('SIGKILL');
         }
       }, timeoutMs).unref();
     }
@@ -183,11 +256,15 @@ export function spawnManagedProcess(options: SpawnManagedProcessOptions): Manage
     });
   }
 
-  const child = spawnImpl(command, args, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: cleanEnv(env),
-    cwd,
-  });
+  const child = ownAcpProcess(
+    spawnImpl(command, args, {
+      ...ACP_PROCESS_OPTIONS,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: cleanEnv(env),
+      cwd,
+    }),
+    spawnImpl === spawn,
+  );
 
   if (diagnostics && adapter) {
     child.once('exit', () => {
@@ -201,6 +278,7 @@ export function spawnManagedProcess(options: SpawnManagedProcessOptions): Manage
     });
   }
 
+  observeAcpStderr(child, cleanEnv(env));
   const transport = createTransport(child, logger);
 
   return {

@@ -165,6 +165,9 @@ export class ProviderLauncher {
         ...proxy,
         ...base.env,
         ...resolvedCustomEnv,
+        ...(provider.protocol && provider.protocol !== 'auto'
+          ? { AGENTCTL_ACP_PROTOCOL: provider.protocol }
+          : {}),
       },
     };
   }

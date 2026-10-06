@@ -5,6 +5,7 @@ import { SessionEngine, sessionEventPageSchema } from '@agentctl/shared';
 
 import { apiClient, getDesktopCapability } from '@agentctl/api-client';
 import { getApiBaseUrl } from '@/shared/lib/api-base-url';
+import { sessionKeys } from '@/shared/lib/queryKeys';
 import { reconcileOptimisticMessages } from './reconcileOptimisticMessages';
 
 export function mergeEventHistory(
@@ -37,6 +38,7 @@ export function useSessionEvents(sessionId: string | null) {
   const loadingOlderRef = useRef(new Set<string>());
   const engineRef = useRef<SessionEngine | null>(null);
   const startedEngineRef = useRef<SessionEngine | null>(null);
+  const historyGeneration = useRef(0);
 
   // 1. Fetch historical data
   const {
@@ -72,16 +74,19 @@ export function useSessionEvents(sessionId: string | null) {
     }
     if (!sessionId || cursor == null || loadingOlderRef.current.has(sessionId)) return;
     loadingOlderRef.current.add(sessionId);
+    const generation = historyGeneration.current;
     setLoadingOlderSessions((sessions) => ({ ...sessions, [sessionId]: true }));
     setHistoryErrors((errors) => ({ ...errors, [sessionId]: null }));
     try {
       const page = await fetchPage(sessionId, cursor);
+      if (generation !== historyGeneration.current) return;
       queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (current = []) =>
         mergeEventHistory(page.events, current),
       );
       queryClient.setQueryData(['events-cursor', sessionId], page.nextBeforeId);
       setPages((pages) => ({ ...pages, [sessionId]: page.nextBeforeId }));
     } catch (error) {
+      if (generation !== historyGeneration.current) return;
       setHistoryErrors((errors) => ({
         ...errors,
         [sessionId]: error instanceof Error ? error.message : String(error),
@@ -103,6 +108,22 @@ export function useSessionEvents(sessionId: string | null) {
       sessionId,
       sseUrl,
       token,
+      onHistorySnapshot: (snapshot) => {
+        historyGeneration.current++;
+        queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) =>
+          mergeEventHistory(
+            snapshot.events,
+            reconcileOptimisticMessages(
+              old.filter((event) => event.id < 0),
+              snapshot.events,
+            ),
+          ),
+        );
+        queryClient.setQueryData(['events-cursor', sessionId], snapshot.nextBeforeId);
+        setPages((pages) => ({ ...pages, [sessionId]: snapshot.nextBeforeId }));
+        setHistoryErrors((errors) => ({ ...errors, [sessionId]: null }));
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      },
       onEventsUpdate: (newEvents) => {
         queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
           const lastOldId = old.length > 0 ? old[old.length - 1].id : 0;

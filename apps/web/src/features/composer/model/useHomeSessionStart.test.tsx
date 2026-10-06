@@ -78,6 +78,32 @@ afterEach(() => {
 });
 
 describe('Home first Send', () => {
+  it('preserves provider updates arriving before acknowledgment even after Home unmounts', async () => {
+    const accepted = deferred<{ status: number; body: { eventId: number } }>();
+    mocks.input.mockReturnValue(accepted.promise);
+    let pending!: Promise<boolean>;
+    await act(async () => {
+      pending = hook.startSession('project', 'hello', [], selection);
+    });
+    const answer = {
+      id: 43,
+      sessionId: session.id,
+      type: 'text' as const,
+      data: { role: 'provider' as const, content: 'hello back' },
+      createdAt: new Date(),
+    };
+    client.setQueryData(sessionKeys.events(session.id), (old: unknown[] = []) => [...old, answer]);
+    act(() => root.unmount());
+    await act(async () => {
+      accepted.resolve({ status: 200, body: { eventId: 42 } });
+      expect(await pending).toBe(true);
+    });
+    expect(client.getQueryData(sessionKeys.events(session.id))).toEqual([
+      expect.objectContaining({ id: 42 }),
+      answer,
+    ]);
+    expect(mocks.started).toHaveBeenCalledTimes(1);
+  });
   it('does nothing on mount or an empty Send', async () => {
     expect(mocks.create).not.toHaveBeenCalled();
     await act(async () =>
@@ -85,7 +111,7 @@ describe('Home first Send', () => {
     );
     expect(mocks.create).not.toHaveBeenCalled();
   });
-  it('creates once with the chosen settings, and navigates only after message acceptance', async () => {
+  it('opens the conversation with its pending message before acceptance without duplicate sends', async () => {
     const accepted = deferred<{ status: number; body: { eventId: number } }>();
     mocks.input.mockReturnValue(accepted.promise);
     let pending!: Promise<boolean>;
@@ -98,7 +124,12 @@ describe('Home first Send', () => {
       approvalMode: 'auto_approve',
       agentPersona: 'build',
     });
-    expect(mocks.started).not.toHaveBeenCalled();
+    expect(mocks.started).toHaveBeenCalledExactlyOnceWith('new-session');
+    expect(client.getQueryData(sessionKeys.events('new-session'))).toEqual([
+      expect.objectContaining({
+        data: expect.objectContaining({ content: 'hello', deliveryStatus: 'sending' }),
+      }),
+    ]);
     await act(async () =>
       expect(await hook.startSession('project', 'hello', [], selection)).toBe(false),
     );
@@ -116,6 +147,7 @@ describe('Home first Send', () => {
           content: 'hello',
           attachmentIds: [],
           clientMessageId: expect.any(String),
+          deliveryStatus: 'accepted',
         },
       }),
     ]);
@@ -170,7 +202,7 @@ describe('Home first Send', () => {
     await act(async () =>
       expect(await hook.startSession('project', 'hello', [], selection)).toBe(false),
     );
-    expect(mocks.started).not.toHaveBeenCalled();
+    expect(mocks.started).toHaveBeenCalledWith('new-session');
     mocks.patch.mockResolvedValue({
       status: 200,
       body: { session: { ...session, selectedModel: 'model-3' } },

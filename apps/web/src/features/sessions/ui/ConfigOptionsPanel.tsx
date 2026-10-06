@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useSession } from '../model/SessionContext';
-import { resolveAgentFeatures, type AgentConfigOption } from '@agentctl/shared';
+import {
+  getAgentConfigCategory,
+  resolveAgentFeatures,
+  type AgentConfigOption,
+} from '@agentctl/shared';
 import { Select, cn } from '@agentctl/ui';
 import { Loader2 } from 'lucide-react';
 
@@ -27,9 +31,8 @@ export function ConfigOptionsPanel({
     const filterSet = new Set(filterCategories);
     const groups: Record<string, AgentConfigOption[]> = {};
     for (const opt of configOptions) {
-      const cat = opt.category ?? 'other';
-      // Filter out if category OR id is in the list
-      if (filterSet.has(cat) || filterSet.has(opt.id)) continue;
+      const cat = getAgentConfigCategory(opt);
+      if (filterSet.has(cat)) continue;
 
       groups[cat] ??= [];
       groups[cat].push(opt);

@@ -1,304 +1,192 @@
-import type {
-  PermissionOption,
-  PermissionOptionChoice,
-  PermissionOptions,
-  PermissionPattern,
-  SelectedPermissionOutcome,
-} from '@agentctl/shared';
-import type { AgentPermissionRequest, AgentPermissionResponse } from '../agent/types.js';
-import { getBestPermissionOption, isPersistentPermissionOption } from './permission-options.js';
+import { createHash } from 'node:crypto';
+import type { ApprovalMode } from '@agentctl/shared';
+import type { AgentPermissionRequest } from '../agent/types.js';
+import { getBestPermissionOption } from './permission-options.js';
+import { resolveAllowedPath } from './path-security.js';
 
-export { getBestPermissionOption, isPersistentPermissionOption } from './permission-options.js';
-
-export interface PatternGrantOptions {
-  maxUses?: number;
-  expiresAt?: number;
+export type PermissionDisposition = 'allow' | 'ask' | 'deny';
+export interface PermissionPolicy {
+  mode: ApprovalMode;
+  cwd: string;
+  additionalDirectories?: string[];
+  toolPolicy?: 'always_prompt' | 'auto_approve' | 'deny';
 }
 
-export interface GrantedPatternData {
-  pattern: string;
-  usesRemaining?: number;
-  expiresAt?: number;
+const MUTATIONS = new Set(['edit', 'delete', 'move']);
+
+function sortedJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) => {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      return Object.fromEntries(
+        Object.entries(item).sort(([left], [right]) => left.localeCompare(right)),
+      );
+    }
+    return item;
+  });
 }
 
-export interface ExportedPermissions {
-  grantedPatterns: GrantedPatternData[];
+function canonicalPaths(
+  request: AgentPermissionRequest,
+  policy: PermissionPolicy,
+): string[] | null {
+  const locations = request.toolCall.locations;
+  if (!locations?.length || locations.some((location) => !location.path)) return null;
+  try {
+    return [
+      ...new Set(
+        locations.map((location) =>
+          resolveAllowedPath(location.path!, policy.cwd, policy.additionalDirectories, true),
+        ),
+      ),
+    ].sort();
+  } catch {
+    return null;
+  }
 }
 
-export interface EvaluationResult {
-  autoApproved: boolean;
-  response?: AgentPermissionResponse;
-  domainRequest?: AgentPermissionRequest;
-  uiOptions?: PermissionOptions;
+/** An exact action identity, never a directory wildcard or command prefix. */
+function actionKey(request: AgentPermissionRequest, policy: PermissionPolicy): string | null {
+  const call = request.toolCall;
+  const args = { ...call.arguments };
+  const kind = call.kind ?? 'other';
+  const raw = call.rawInput;
+  const rawDetails =
+    raw == null
+      ? {}
+      : typeof raw !== 'object' || Array.isArray(raw)
+        ? { rawInput: raw }
+        : 'arguments' in raw
+          ? Object.fromEntries(
+              Object.entries(raw).filter(([field]) => field !== 'name' && field !== 'arguments'),
+            )
+          : {};
+  let identity: unknown;
+  if (MUTATIONS.has(kind)) {
+    const paths = canonicalPaths(request, policy);
+    if (!paths) return null;
+    // Normalize the path aliases already resolved by the structured locations.
+    for (const field of ['path', 'filePath', 'TargetFile', 'AbsolutePath']) {
+      if (typeof args[field] === 'string') {
+        try {
+          args[field] = resolveAllowedPath(
+            args[field],
+            policy.cwd,
+            policy.additionalDirectories,
+            true,
+          );
+        } catch {
+          return null;
+        }
+      }
+    }
+    identity = { kind, paths, args, rawDetails };
+  } else if (kind === 'execute') {
+    if (
+      (typeof args.command !== 'string' || !args.command) &&
+      !(typeof args.terminalId === 'string' && typeof args.input === 'string')
+    )
+      return null;
+    try {
+      args.cwd = resolveAllowedPath(
+        typeof args.cwd === 'string' ? args.cwd : policy.cwd,
+        policy.cwd,
+        policy.additionalDirectories,
+      );
+    } catch {
+      return null;
+    }
+    args.args ??= [];
+    args.env ??= {};
+    identity = { kind, args, rawDetails };
+  } else {
+    // Future subjects and unfamiliar tools stay opaque and cannot authorize
+    // client execution. An explicit persistent choice can match this exact request.
+    if (!request.subject && !Object.keys(args).length) return null;
+    identity = { kind, name: call.name, args, subject: request.subject, rawInput: call.rawInput };
+  }
+  return createHash('sha256')
+    .update(sortedJson({ subagentId: request.subagentId ?? null, action: identity }))
+    .digest('hex');
 }
 
 export class PermissionEngine {
-  private grantedPatterns = new Map<string, GrantedPatternData>();
+  private grants = new Map<string, 'allow' | 'deny'>();
+  private clientReceipts = new Map<string, number>();
 
-  constructor(initialPatterns?: GrantedPatternData[]) {
-    if (initialPatterns) {
-      for (const p of initialPatterns) {
-        this.grantPattern(p.pattern, {
-          maxUses: p.usesRemaining,
-          expiresAt: p.expiresAt,
-        });
+  evaluate(request: AgentPermissionRequest, policy: PermissionPolicy): PermissionDisposition {
+    if (policy.toolPolicy === 'deny') return 'deny';
+    const key = actionKey(request, policy);
+    const source = request.source ?? 'provider';
+    const remembered = key ? this.grants.get(`${source}:${key}`) : undefined;
+    if (
+      key &&
+      ['provider', 'client'].some((origin) => this.grants.get(`${origin}:${key}`) === 'deny')
+    )
+      return 'deny';
+    let disposition: PermissionDisposition = 'ask';
+    if (source === 'client' && key && this.clientReceipts.has(key)) {
+      const remaining = this.clientReceipts.get(key)! - 1;
+      if (remaining > 0) this.clientReceipts.set(key, remaining);
+      else this.clientReceipts.delete(key);
+      disposition = 'allow';
+    } else if (policy.toolPolicy === 'always_prompt') {
+      disposition = 'ask';
+    } else if (remembered === 'allow') {
+      disposition = 'allow';
+    } else if (policy.mode === 'yolo') {
+      disposition = 'allow';
+    } else if (policy.mode === 'auto_approve') {
+      if (policy.toolPolicy === 'auto_approve') disposition = 'allow';
+      else if (MUTATIONS.has(request.toolCall.kind ?? '') && canonicalPaths(request, policy)) {
+        disposition = 'allow';
       }
     }
-  }
-
-  grantPattern(pattern: string, options?: PatternGrantOptions): void {
-    this.grantedPatterns.set(pattern, {
-      pattern,
-      usesRemaining: options?.maxUses,
-      expiresAt: options?.expiresAt,
-    });
-  }
-
-  hasPatternGrant(pattern: string): boolean {
-    const data = this.grantedPatterns.get(pattern);
-    if (!data) return false;
-    if (data.expiresAt && Date.now() > data.expiresAt) {
-      this.grantedPatterns.delete(pattern);
-      return false;
+    // Never turn an automatic decision into the provider's persistent choice.
+    if (
+      disposition === 'allow' &&
+      request.options?.length &&
+      !getBestPermissionOption(request.options)
+    ) {
+      return 'ask';
     }
-    if (data.usesRemaining !== undefined && data.usesRemaining <= 0) {
-      this.grantedPatterns.delete(pattern);
-      return false;
-    }
-    return true;
+    return disposition;
   }
 
-  exportState(): ExportedPermissions {
-    const active: GrantedPatternData[] = [];
-    const now = Date.now();
-    for (const [, data] of this.grantedPatterns.entries()) {
-      if (data.expiresAt && now > data.expiresAt) continue;
-      if (data.usesRemaining !== undefined && data.usesRemaining <= 0) continue;
-      active.push({ ...data });
+  recordDecision(
+    request: AgentPermissionRequest,
+    policy: PermissionPolicy,
+    allowed: boolean,
+    persistent: boolean,
+  ): void {
+    const key = actionKey(request, policy);
+    if (!key) return;
+    const source = request.source ?? 'provider';
+    if (!allowed) this.clientReceipts.delete(key);
+    if (persistent) {
+      this.setBounded(this.grants, `${source}:${key}`, allowed ? 'allow' : 'deny');
     }
-    return { grantedPatterns: active };
-  }
-
-  importState(data: ExportedPermissions): void {
-    if (!Array.isArray(data.grantedPatterns)) return;
-    for (const entry of data.grantedPatterns) {
-      if (typeof entry.pattern === 'string') {
-        this.grantPattern(entry.pattern, {
-          maxUses: entry.usesRemaining,
-          expiresAt: entry.expiresAt,
-        });
-      }
+    // A provider approval authorizes one matching client operation during this
+    // turn. A provider's persistent scope never becomes a blanket client grant.
+    if (
+      allowed &&
+      source === 'provider' &&
+      (MUTATIONS.has(request.toolCall.kind ?? '') || request.toolCall.kind === 'execute')
+    ) {
+      this.setBounded(this.clientReceipts, key, (this.clientReceipts.get(key) ?? 0) + 1);
     }
   }
 
-  isToolCallApproved(toolName: string, args: Record<string, unknown>): boolean {
-    const targets = this.extractTargets(toolName, args);
-    if (targets.length === 0) return false;
-
-    const now = Date.now();
-    for (const [pattern, data] of this.grantedPatterns) {
-      const expired = data.expiresAt !== undefined && now > data.expiresAt;
-      const exhausted = data.usesRemaining !== undefined && data.usesRemaining <= 0;
-      if (expired || exhausted) this.grantedPatterns.delete(pattern);
-    }
-
-    const matchedGrants = new Set<GrantedPatternData>();
-    const allTargetsMatch = targets.every((target) => {
-      for (const [pattern, data] of this.grantedPatterns) {
-        if (this.matchPattern(pattern, toolName, target)) {
-          matchedGrants.add(data);
-          return true;
-        }
-      }
-      return false;
-    });
-
-    if (!allTargetsMatch) return false;
-
-    for (const grant of matchedGrants) {
-      if (grant.usesRemaining === undefined) continue;
-      grant.usesRemaining -= 1;
-      if (grant.usesRemaining <= 0) this.grantedPatterns.delete(grant.pattern);
-    }
-    return true;
+  clearTurn(): void {
+    this.clientReceipts.clear();
   }
 
-  evaluateRequest(domainReq: AgentPermissionRequest): EvaluationResult {
-    const toolName = domainReq.toolCall.name;
-    const toolArgs = domainReq.toolCall.arguments ?? {};
-
-    if (this.isToolCallApproved(toolName, toolArgs)) {
-      const bestOptionId = getBestPermissionOption(domainReq.options);
-      const response: AgentPermissionResponse = {
-        allowed: Boolean(bestOptionId),
-        optionId: bestOptionId,
-      };
-
-      return {
-        autoApproved: true,
-        response,
-        domainRequest: domainReq,
-      };
-    }
-
-    const uiOptions = this.buildPermissionOptions(toolName, toolArgs);
-
-    return {
-      autoApproved: false,
-      domainRequest: domainReq,
-      uiOptions,
-    };
+  clear(): void {
+    this.grants.clear();
+    this.clearTurn();
   }
 
-  buildPermissionOptions(toolName: string, args: Record<string, unknown>): PermissionOptions {
-    const targets = this.extractTargets(toolName, args);
-
-    const allowOnce: PermissionOption = {
-      option_id: 'allow_once',
-      kind: 'allow_once',
-      name: 'Allow Once',
-      description: 'Allow this tool call execution a single time',
-    };
-
-    const allowAlways: PermissionOption = {
-      option_id: 'allow_always',
-      kind: 'allow_always',
-      name: 'Allow Always',
-      description: 'Allow this tool for the remainder of the session',
-    };
-
-    const rejectOnce: PermissionOption = {
-      option_id: 'reject_once',
-      kind: 'reject_once',
-      name: 'Deny',
-      description: 'Reject this tool call execution',
-    };
-
-    if (targets.length === 0) {
-      return {
-        type: 'flat',
-        options: [allowOnce, allowAlways, rejectOnce],
-      };
-    }
-
-    const subPatterns = targets.flatMap((t) => this.generateSubPatterns(toolName, t));
-    const choices: PermissionOptionChoice[] = [
-      {
-        allow: allowOnce,
-        deny: rejectOnce,
-        sub_patterns: [],
-      },
-      {
-        allow: allowAlways,
-        deny: rejectOnce,
-        sub_patterns: subPatterns,
-      },
-    ];
-
-    const patterns: PermissionPattern[] = subPatterns.map((p) => ({
-      pattern: p,
-      display_name: p,
-    }));
-
-    return {
-      type: 'dropdown_with_patterns',
-      choices,
-      patterns,
-      tool_name: toolName,
-    };
-  }
-
-  applyOutcome(outcome: SelectedPermissionOutcome): void {
-    if (isPersistentPermissionOption(outcome.option_id) && outcome.params?.patterns) {
-      for (const p of outcome.params.patterns) {
-        this.grantPattern(p);
-      }
-    }
-  }
-
-  /**
-   * Grants the computed sub-patterns for a domain permission request
-   * (tool name + extracted targets). Used when the user picks a persistent
-   * option on an agent-native option id.
-   */
-  grantForDomainRequest(domainReq: AgentPermissionRequest): void {
-    const toolName = domainReq.toolCall.name;
-    const args = domainReq.toolCall.arguments ?? {};
-    for (const target of this.extractTargets(toolName, args)) {
-      for (const p of this.generateSubPatterns(toolName, target)) {
-        this.grantPattern(p);
-      }
-    }
-  }
-
-  resolveOutcome(
-    _permissionId: string,
-    selectedOptionId: string,
-    outcomeParams?: { patterns?: string[] },
-  ): { optionId: string } {
-    if (isPersistentPermissionOption(selectedOptionId) && outcomeParams?.patterns) {
-      for (const p of outcomeParams.patterns) {
-        this.grantPattern(p);
-      }
-    }
-
-    return { optionId: selectedOptionId };
-  }
-
-  private extractTargets(toolName: string, args: Record<string, unknown>): string[] {
-    const targets: string[] = [];
-    if (typeof args.path === 'string') targets.push(args.path);
-    if (typeof args.filePath === 'string') targets.push(args.filePath);
-    if (typeof args.command === 'string') targets.push(args.command);
-    if (typeof args.cmd === 'string') targets.push(args.cmd);
-    return targets;
-  }
-
-  private generateSubPatterns(toolName: string, target: string): string[] {
-    const patterns: string[] = [`${toolName}:${target}`];
-    if (target.includes('/')) {
-      const parts = target.split('/');
-      if (parts.length > 2) {
-        const dir = parts.slice(0, parts.length - 1).join('/');
-        patterns.push(`${toolName}:${dir}/*`);
-      }
-    }
-    if (target.includes(' ')) {
-      const firstWord = target.split(' ')[0];
-      if (firstWord) {
-        patterns.push(`${toolName}:${firstWord} *`);
-      }
-    }
-    return patterns;
-  }
-
-  private matchPattern(pattern: string, toolName: string, target: string): boolean {
-    const fullTarget = `${toolName}:${target}`;
-    if (pattern === fullTarget) return true;
-
-    if (pattern.includes('*')) {
-      const regexStr =
-        '^' +
-        pattern
-          .split(/(\*\*|\*)/)
-          .map((part) => {
-            if (part === '**') return '.*';
-            if (part === '*') return '.*';
-            return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          })
-          .join('') +
-        '$';
-      try {
-        const regex = new RegExp(regexStr);
-        return regex.test(fullTarget);
-      } catch {
-        if (pattern.endsWith('*')) {
-          const prefix = pattern.slice(0, -1);
-          return fullTarget.startsWith(prefix);
-        }
-      }
-    }
-
-    return false;
+  private setBounded<T>(map: Map<string, T>, key: string, value: T): void {
+    if (!map.has(key) && map.size >= 256) map.delete(map.keys().next().value!);
+    map.set(key, value);
   }
 }

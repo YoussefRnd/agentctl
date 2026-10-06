@@ -1,6 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { test, it, expect, describe, vi } from 'vitest';
 import { SessionManager, resolveAgentSessionId, type IEventBus } from './manager.js';
-import type { ManagedSession } from './managed-session.js';
+import type { SessionRuntime } from './runtime/session-runtime.js';
 import type { DbClient } from '../db/index.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
 import { Provider } from '../providers/provider.js';
@@ -10,8 +11,8 @@ import { PassThrough } from 'node:stream';
 import type { AgentDriver } from '../agent/types.js';
 import type { ChildProcess } from 'node:child_process';
 import { createDatabase } from '../db/index.js';
-import { projects, sessions, providers } from '../db/schema.js';
-import { SessionEventStore } from './event-store.js';
+import { projects, sessions, providers, sessionEvents } from '../db/schema.js';
+import { SessionEventRepository } from './persistence/session-event-repository.js';
 import { EMPTY_AGENT_FEATURES, type AgentConfigOption } from '@agentctl/shared';
 import { WorkspaceManager } from '../git/worktree-manager.js';
 import { GitMutex } from '../git/mutex.js';
@@ -27,7 +28,12 @@ describe('SessionManager tests', () => {
         where: () => {
           const p = Promise.resolve([]);
           return Object.assign(p, {
-            orderBy: () => Promise.resolve([]),
+            orderBy: () =>
+              Object.assign(Promise.resolve([]), {
+                offset: () => ({ limit: () => ({ get: () => undefined }) }),
+              }),
+            get: () => undefined,
+            run: () => undefined,
           });
         },
       }),
@@ -37,14 +43,28 @@ describe('SessionManager tests', () => {
         where: () => {
           const p = Promise.resolve([{ id: 1, selectedProvider: 'provider-1' }]);
           return Object.assign(p, {
-            returning: () => Promise.resolve([{ id: 1, selectedProvider: 'provider-1' }]),
+            returning: () =>
+              Object.assign(Promise.resolve([{ id: 1, selectedProvider: 'provider-1' }]), {
+                get: () => ({
+                  id: 1,
+                  sessionId: 'session-1',
+                  selectedProvider: 'provider-1',
+                  createdAt: new Date(),
+                }),
+              }),
+            run: () => undefined,
           });
         },
       }),
     }),
     insert: () => ({
-      values: () => ({
-        returning: () => Promise.resolve([{ id: 1, createdAt: new Date() }]),
+      values: (value: object) => ({
+        returning: () =>
+          Object.assign(Promise.resolve([{ ...value, id: 1, createdAt: new Date() }]), {
+            get: () => ({ ...value, id: 1, sequence: 1, createdAt: new Date() }),
+          }),
+        run: () => undefined,
+        onConflictDoUpdate: () => Promise.resolve(),
       }),
     }),
     query: {
@@ -80,6 +100,28 @@ describe('SessionManager tests', () => {
       },
     },
   } as unknown as DbClient;
+
+  (
+    mockDb as unknown as { transaction: (callback: (tx: DbClient) => unknown) => unknown }
+  ).transaction = (callback) => callback(mockDb);
+
+  function inputDatabase() {
+    const db = createDatabase(':memory:');
+    db.insert(projects).values({ id: 'project-1', name: 'Project', path: '/tmp/project-1' }).run();
+    db.insert(sessions)
+      .values({
+        id: 'session-1',
+        projectId: 'project-1',
+        agent: 'provider-1',
+        selectedProvider: 'provider-1',
+        worktreePath: '/tmp/project-1',
+        taskSlug: 'task',
+        branch: 'main',
+        baseCommit: 'none',
+      })
+      .run();
+    return db;
+  }
 
   const mockWorkspaceManager = {
     create: () =>
@@ -198,37 +240,46 @@ describe('SessionManager tests', () => {
   };
 
   test('startInput acknowledges a persisted message before the provider turn ends', async () => {
+    const db = inputDatabase();
     const manager = new SessionManager(
-      mockDb,
+      db,
       mockWorkspaceManager,
       mockProviderRegistry,
       eventBus,
       noopLogger,
       fakeRuntime,
     );
-    const unfinishedTurn = new Promise<void>(() => undefined);
-    vi.spyOn(manager, 'handleClientMessage').mockImplementation((_id, _action, payload) => {
-      queueMicrotask(() => payload.onAccepted?.(42));
-      return unfinishedTurn;
+    let finish!: () => void;
+    const turn = new Promise<void>((resolve) => {
+      finish = resolve;
     });
-
-    await expect(manager.startInput('session-1', 'hello')).resolves.toBe(42);
+    const prompt = vi.fn(async () => {
+      await turn;
+    });
+    vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue({
+      requiresHistoryContext: false,
+      bindAttempt: async () => {},
+      prompt,
+    } as unknown as SessionRuntime);
+    const id = await manager.startInput('session-1', 'hello');
+    expect((await db.query.sessionEvents.findFirst())?.id).toBe(id);
+    finish();
+    await manager.waitForSessionOperations('session-1');
+    expect(prompt).toHaveBeenCalledOnce();
   });
 
-  test('startInput rejects before acceptance when session handoff fails', async () => {
+  test('startInput rejects an unavailable session before acceptance', async () => {
+    const db = inputDatabase();
     const manager = new SessionManager(
-      mockDb,
+      db,
       mockWorkspaceManager,
       mockProviderRegistry,
       eventBus,
       noopLogger,
       fakeRuntime,
     );
-    vi.spyOn(manager, 'handleClientMessage').mockRejectedValue(new Error('Session is unavailable'));
-
-    await expect(manager.startInput('session-1', 'hello')).rejects.toThrow(
-      'Session is unavailable',
-    );
+    await expect(manager.startInput('missing', 'hello')).rejects.toThrow('Session is unavailable');
+    expect(await db.query.sessionEvents.findFirst()).toBeUndefined();
   });
 
   test('SessionManager startSession creates and initializes a session', async () => {
@@ -429,7 +480,7 @@ describe('SessionManager tests', () => {
 
   test('SessionManager resuscitates a dead session or a session not in memory on client message input', async () => {
     const manager = new SessionManager(
-      mockDb,
+      inputDatabase(),
       mockWorkspaceManager,
       mockProviderRegistry,
       eventBus,
@@ -438,7 +489,7 @@ describe('SessionManager tests', () => {
     );
 
     // 1. Session is not in memory. Send message, it should resuscitate (load from DB and startSession)
-    expect(manager.getSession('sess-1')).toBeUndefined();
+    expect(manager.getSession('session-1')).toBeUndefined();
 
     let restarted = false;
     // Let's spy on restartSession
@@ -448,10 +499,11 @@ describe('SessionManager tests', () => {
       return originalRestart(id);
     };
 
-    await manager.handleClientMessage('sess-1', 'session.input', { input: 'hello' });
+    await manager.handleClientMessage('session-1', 'session.input', { input: 'hello' });
+    await manager.waitForSessionOperations('session-1');
 
     expect(restarted).toBe(true);
-    const session = manager.getSession('sess-1');
+    const session = manager.getSession('session-1');
     expect(session).toBeDefined();
     expect(session?.isDead).toBe(false);
 
@@ -460,10 +512,11 @@ describe('SessionManager tests', () => {
     expect(session?.isDead).toBe(true);
 
     restarted = false;
-    await manager.handleClientMessage('sess-1', 'session.input', { input: 'hello again' });
+    await manager.handleClientMessage('session-1', 'session.input', { input: 'hello again' });
+    await manager.waitForSessionOperations('session-1');
 
     expect(restarted).toBe(true);
-    const newSession = manager.getSession('sess-1');
+    const newSession = manager.getSession('session-1');
     expect(newSession).toBeDefined();
     expect(newSession?.isDead).toBe(false);
 
@@ -608,6 +661,8 @@ describe('SessionManager tests', () => {
     };
 
     const localDb = {
+      ...mockDb,
+      transaction: (callback: (tx: DbClient) => unknown) => callback(mockDb),
       select: () => mockDb.select(),
       insert: (table: Parameters<typeof mockDb.insert>[0]) => mockDb.insert(table),
       update: () => ({
@@ -618,12 +673,14 @@ describe('SessionManager tests', () => {
               const p = Promise.resolve([sessionRecordVal]);
               return Object.assign(p, {
                 returning: () => Promise.resolve([sessionRecordVal]),
+                run: () => undefined,
               });
             },
           };
         },
       }),
       query: {
+        providers: mockDb.query.providers,
         projects: mockDb.query.projects,
         sessions: {
           findFirst: () => Promise.resolve({ ...sessionRecordVal }),
@@ -846,8 +903,8 @@ describe('SessionManager tests', () => {
   });
 
   test('validates persona before DB mutation and never sends approval policy through ACP setMode', async () => {
-    const update = vi.fn(() => ({
-      set: () => ({ where: () => Promise.resolve() }),
+    const update = vi.fn((_table: unknown) => ({
+      set: () => ({ where: () => Object.assign(Promise.resolve(), { run: () => undefined }) }),
     }));
     const db = Object.assign({}, mockDb, {
       update,
@@ -873,10 +930,10 @@ describe('SessionManager tests', () => {
     await expect(manager.setAgentPersona('session-1', 'architect')).rejects.toThrow(
       'Agent persona is not available',
     );
-    expect(update).not.toHaveBeenCalled();
+    expect(update.mock.calls.every((args) => args[0] !== sessions)).toBe(true);
 
     const setMode = vi.fn();
-    Object.defineProperty(manager, 'stateMachine', {
+    Object.defineProperty(manager, 'runtimeRegistry', {
       value: { getSession: () => ({ isDead: false, setMode }) },
     });
     await manager.updateApprovalMode('session-1', 'yolo');
@@ -898,9 +955,10 @@ describe('SessionManager tests', () => {
     );
   });
 
-  test('prompt concurrency errors propagate to the client-message caller', async () => {
+  test('legacy input accepts durably and exposes asynchronous dispatch failures', async () => {
+    const db = inputDatabase();
     const manager = new SessionManager(
-      mockDb,
+      db,
       mockWorkspaceManager,
       mockProviderRegistry,
       eventBus,
@@ -909,10 +967,13 @@ describe('SessionManager tests', () => {
     );
     const session = await manager.startSession('session-1', '/tmp', 'agent', []);
     session.prompt = () => Promise.reject(new Error('prompt already in progress'));
-
-    await expect(
-      manager.handleClientMessage('session-1', 'session.input', { input: 'second prompt' }),
-    ).rejects.toThrow('prompt already in progress');
+    await manager.handleClientMessage('session-1', 'session.input', { input: 'second prompt' });
+    await manager.waitForSessionOperations('session-1');
+    const row = db.select().from(sessionEvents).get();
+    expect(JSON.parse(row!.data ?? '{}')).toMatchObject({
+      deliveryStatus: 'failed',
+      deliveryError: 'prompt already in progress',
+    });
     session.kill();
   });
 
@@ -926,7 +987,7 @@ describe('SessionManager tests', () => {
       fakeRuntime,
     );
     const getEventWithMetadata = vi.fn(() => Promise.resolve(null));
-    Object.defineProperty(manager, 'eventStore', {
+    Object.defineProperty(manager, 'eventRepository', {
       value: { getEventWithMetadata },
     });
 
@@ -946,7 +1007,7 @@ describe('SessionManager tests', () => {
       fakeRuntime,
     );
     const getEventWithMetadata = vi.fn(() => Promise.resolve(null));
-    Object.defineProperty(manager, 'eventStore', {
+    Object.defineProperty(manager, 'eventRepository', {
       value: { getEventWithMetadata },
     });
     Object.defineProperty(manager, 'db', {
@@ -1029,7 +1090,7 @@ describe('SessionManager tests', () => {
         noopLogger,
         { ...fakeRuntime, startSession },
       );
-      const store = new SessionEventStore(db, eventBus);
+      const store = new SessionEventRepository(db, eventBus);
       const first = await store.append(
         'fork-source',
         'text',
@@ -1062,6 +1123,7 @@ describe('SessionManager tests', () => {
       await manager.handleClientMessage(result.forkSessionId!, 'session.input', {
         input: 'Continue fork',
       });
+      await manager.waitForSessionOperations(result.forkSessionId!);
       expect(prompt.mock.calls[0][0]).toBe('Continue fork');
       const context = prompt.mock.calls[0][2] ?? '';
       if (expected) expect(context).not.toContain('<previous_conversation_context>');
@@ -1079,39 +1141,20 @@ describe('SessionManager tests', () => {
       },
     };
 
-    const localDb = {
-      query: {
-        sessions: {
-          findFirst: () =>
-            Promise.resolve({
-              id: 'session-to-delete',
-              agent: 'provider-1',
-              status: 'idle',
-              selectedProvider: 'provider-1',
-              selectedModel: 'model-1',
-              selectedThinkingEffort: 'medium',
-              agentSessionId: 'agent-session-abc',
-              project: {
-                id: 'project-1',
-                path: '/tmp/project-1',
-              },
-            }),
-        },
-      },
-    } as unknown as DbClient;
-
+    const db = inputDatabase();
+    db.update(sessions)
+      .set({ agentSessionId: 'agent-session-abc' })
+      .where(eq(sessions.id, 'session-1'))
+      .run();
     const manager = new SessionManager(
-      mockDb,
+      db,
       mockWorkspaceManager,
       mockProviderRegistry,
       eventBus,
       noopLogger,
       spyRuntime,
     );
-    // Replace with local db mock
-    Object.defineProperty(manager, 'db', { value: localDb });
-
-    await manager.deleteSession('session-to-delete');
+    await manager.deleteSession('session-1');
     expect(deletedAgentSessionId).toBe('agent-session-abc');
   });
 
@@ -1169,9 +1212,10 @@ describe('SessionManager tests', () => {
     };
 
     const localDb = {
+      ...mockDb,
       update: () => ({
         set: () => ({
-          where: () => Promise.resolve(),
+          where: () => Object.assign(Promise.resolve(), { run: () => undefined }),
         }),
       }),
       query: {
@@ -1190,7 +1234,7 @@ describe('SessionManager tests', () => {
       fakeRuntime,
     );
 
-    manager.restartSession = vi.fn(() => Promise.resolve({} as unknown as ManagedSession));
+    manager.restartSession = vi.fn(() => Promise.resolve({} as unknown as SessionRuntime));
 
     // Should NOT throw an error when selecting provider requiring auth
     await expect(
@@ -1267,6 +1311,7 @@ describe('SessionManager tests', () => {
     };
 
     const localDb = {
+      ...mockDb,
       query: {
         sessions: {
           findFirst: () => Promise.resolve(sessionRecordVal),
@@ -1284,7 +1329,7 @@ describe('SessionManager tests', () => {
     );
 
     const updateConfigOption = vi.fn(() => Promise.resolve());
-    Object.defineProperty(manager, 'stateMachine', {
+    Object.defineProperty(manager, 'runtimeRegistry', {
       value: {
         getSession: () => ({
           isDead: false,
@@ -1346,7 +1391,7 @@ describe('SessionManager tests', () => {
         baseCommit: 'hash',
       });
 
-      const store = new SessionEventStore(db, {
+      const store = new SessionEventRepository(db, {
         publish() {
           /* noop */
         },
@@ -1376,17 +1421,19 @@ describe('SessionManager tests', () => {
 
       vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue({
         prompt: mockPrompt,
-      } as unknown as ManagedSession);
+        bindAttempt: async () => {},
+      } as unknown as SessionRuntime);
 
       await manager.handleClientMessage('sess-history-test', 'session.input', {
         input: 'Add validation',
       });
+      await manager.waitForSessionOperations('sess-history-test');
 
-      expect(mockPrompt).toHaveBeenCalledWith(
+      expect(mockPrompt.mock.calls[0].slice(0, 3)).toEqual([
         'Add validation',
-        undefined,
+        [],
         expect.stringContaining('<previous_conversation_context>'),
-      );
+      ]);
       expect(mockPrompt.mock.calls[0][2]).toContain('[User]: Create login page');
       expect(mockPrompt.mock.calls[0][2]).toContain('[Assistant]: Created login page');
     });
@@ -1412,7 +1459,7 @@ describe('SessionManager tests', () => {
         baseCommit: 'hash',
       });
 
-      const store = new SessionEventStore(db, {
+      const store = new SessionEventRepository(db, {
         publish() {
           /* noop */
         },
@@ -1442,28 +1489,31 @@ describe('SessionManager tests', () => {
 
       const forkSession = {
         prompt: mockPrompt,
+        bindAttempt: async () => {},
         requiresHistoryContext: true,
         markHistoryContextTransferred() {
           this.requiresHistoryContext = false;
         },
       };
       vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(
-        forkSession as unknown as ManagedSession,
+        forkSession as unknown as SessionRuntime,
       );
 
       await manager.handleClientMessage('sess-history-test', 'session.input', {
         input: 'Add validation',
       });
+      await manager.waitForSessionOperations('sess-history-test');
 
-      expect(mockPrompt).toHaveBeenCalledWith(
+      expect(mockPrompt.mock.calls[0].slice(0, 3)).toEqual([
         'Add validation',
-        undefined,
+        [],
         expect.stringContaining('<previous_conversation_context>'),
-      );
+      ]);
       expect(mockPrompt.mock.calls[0][2]).toContain('[User]: Create login page');
       expect(mockPrompt.mock.calls[0][2]).toContain('[Assistant]: Created login page');
       await manager.handleClientMessage('sess-history-test', 'session.input', { input: 'Next' });
-      expect(mockPrompt).toHaveBeenLastCalledWith('Next', undefined, undefined);
+      await manager.waitForSessionOperations('sess-history-test');
+      expect(mockPrompt.mock.calls.at(-1)?.slice(0, 3)).toEqual(['Next', [], undefined]);
     });
 
     it.each([false, true])(
@@ -1489,7 +1539,7 @@ describe('SessionManager tests', () => {
           baseCommit: 'hash',
         });
 
-        const store = new SessionEventStore(db, {
+        const store = new SessionEventRepository(db, {
           publish() {
             /* noop */
           },
@@ -1510,20 +1560,22 @@ describe('SessionManager tests', () => {
 
         const activeSession = {
           prompt: mockPrompt,
+          bindAttempt: async () => {},
           requiresHistoryContext: fresh,
           markHistoryContextTransferred() {
             this.requiresHistoryContext = false;
           },
         };
         vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(
-          activeSession as unknown as ManagedSession,
+          activeSession as unknown as SessionRuntime,
         );
 
         await manager.handleClientMessage('sess-existing-test', 'session.input', {
           input: 'Followup message',
         });
+        await manager.waitForSessionOperations('sess-existing-test');
 
-        expect(mockPrompt).toHaveBeenCalledWith('Followup message', undefined, undefined);
+        expect(mockPrompt.mock.calls[0].slice(0, 3)).toEqual(['Followup message', [], undefined]);
         await store.append(
           'sess-existing-test',
           'text',
@@ -1531,7 +1583,8 @@ describe('SessionManager tests', () => {
           null,
         );
         await manager.handleClientMessage('sess-existing-test', 'session.input', { input: 'Next' });
-        expect(mockPrompt).toHaveBeenLastCalledWith('Next', undefined, undefined);
+        await manager.waitForSessionOperations('sess-existing-test');
+        expect(mockPrompt.mock.calls.at(-1)?.slice(0, 3)).toEqual(['Next', [], undefined]);
       },
     );
   });
@@ -1630,7 +1683,7 @@ describe('SessionManager tests', () => {
       });
       expect(JSON.parse(saved!.availableAgentPersonas)).toEqual(['build', 'plan']);
       expect(runtime.startSession).not.toHaveBeenCalled();
-      const restart = vi.spyOn(manager, 'restartSession').mockResolvedValue({} as ManagedSession);
+      const restart = vi.spyOn(manager, 'restartSession').mockResolvedValue({} as SessionRuntime);
       await manager.updateSessionConfig(sessionId, {
         selectedProvider: 'different-provider',
         selectedModel: 'custom-model',
@@ -1958,7 +2011,7 @@ describe('SessionManager tests', () => {
 
       const startSessionSpy = vi
         .spyOn(manager, 'startSession')
-        .mockResolvedValue({} as ManagedSession);
+        .mockResolvedValue({} as SessionRuntime);
 
       await manager.restartSession('sess-empty');
 
@@ -1998,7 +2051,7 @@ describe('SessionManager tests', () => {
         baseCommit: 'hash',
       });
 
-      const store = new SessionEventStore(db, { publish() {} });
+      const store = new SessionEventRepository(db, { publish() {} });
       await store.append('sess-active', 'text', { text: 'Hello', role: 'user' }, null);
 
       const provider = new Provider({
@@ -2045,7 +2098,7 @@ describe('SessionManager tests', () => {
 
       const startSessionSpy = vi
         .spyOn(manager, 'startSession')
-        .mockResolvedValue({} as ManagedSession);
+        .mockResolvedValue({} as SessionRuntime);
 
       await manager.restartSession('sess-active');
 
@@ -2064,4 +2117,32 @@ describe('SessionManager tests', () => {
       );
     });
   });
+});
+
+it('Stop does not launch a new provider runtime when no runtime is active', async () => {
+  const db = createDatabase(':memory:');
+  db.insert(projects).values({ id: 'p', name: 'Project', path: '/tmp' }).run();
+  db.insert(sessions)
+    .values({
+      id: 's',
+      projectId: 'p',
+      worktreePath: '/tmp',
+      taskSlug: 'task',
+      branch: 'main',
+      baseCommit: 'none',
+      agent: 'provider',
+      selectedProvider: 'provider',
+    })
+    .run();
+  const runtime: AgentDriver = { startSession: vi.fn(), inspectProvider: vi.fn() };
+  const manager = new SessionManager(
+    db,
+    {} as WorkspaceManager,
+    {} as ProviderRegistry,
+    { publish() {} },
+    noopLogger,
+    runtime,
+  );
+  await manager.handleClientMessage('s', 'cancel', {});
+  expect(runtime.startSession).not.toHaveBeenCalled();
 });

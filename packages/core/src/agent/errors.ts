@@ -5,6 +5,7 @@ export type AgentErrorKind =
   | 'authentication_required'
   | 'unsupported'
   | 'invalid_request'
+  | 'prompt_rejected'
   | 'transport_lost'
   | 'agent_failure';
 
@@ -16,6 +17,19 @@ export class AgentError extends Error {
   ) {
     super(message, options);
     this.name = 'AgentError';
+  }
+}
+
+/** A provider explicitly rejected insertion; delivery is known to have failed. */
+export class AgentPromptRejectedError extends AgentError {
+  readonly code: number;
+  readonly data?: unknown;
+
+  constructor(error: { code: number; message: string; data?: unknown }) {
+    super('prompt_rejected', error.message, { cause: error });
+    this.name = 'AgentPromptRejectedError';
+    this.code = error.code;
+    this.data = error.data;
   }
 }
 

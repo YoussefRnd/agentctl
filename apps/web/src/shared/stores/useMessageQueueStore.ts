@@ -7,7 +7,8 @@ export interface QueuedMessage {
   text: string;
   attachmentIds?: string[];
   optimisticEventId?: number;
-  status?: 'queued' | 'sending' | 'failed';
+  status?: 'queued' | 'sending' | 'failed' | 'unknown';
+  accepted?: boolean;
   error?: string;
 }
 

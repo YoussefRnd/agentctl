@@ -1,9 +1,8 @@
 import type { AgentPermissionRequest } from '../agent/types.js';
 
 /**
- * Picks an allow-once or reject-once option from the agent-advertised options.
- * Persistent choices are a fallback and must only be preferred after an
- * explicit user selection.
+ * Automatic decisions only select a once option. Persistent choices require
+ * an explicit user selection; absent a once option, the caller asks or cancels.
  */
 export function getBestPermissionOption(
   options?: AgentPermissionRequest['options'],
@@ -11,24 +10,11 @@ export function getBestPermissionOption(
 ): string | undefined {
   if (!options || options.length === 0) return undefined;
 
-  const preferredKinds =
-    decision === 'allow'
-      ? (['allow_once', 'allow_always'] as const)
-      : (['reject_once', 'reject_always'] as const);
-  for (const kind of preferredKinds) {
-    const byKind = options.find((option) => option.kind === kind);
-    if (byKind) return byKind.optionId;
-  }
-
-  const keywords =
-    decision === 'allow'
-      ? ['allow', 'approve', 'yes', 'grant', 'confirm', 'ok']
-      : ['deny', 'reject', 'block', 'no'];
-  const byLabel = options.find((option) => {
-    const text = `${option.optionId} ${option.label ?? ''}`.toLowerCase();
-    return keywords.some((keyword) => text.includes(keyword));
-  });
-  return byLabel?.optionId;
+  const kind = decision === 'allow' ? 'allow_once' : 'reject_once';
+  return (
+    options.find((option) => option.kind === kind) ??
+    options.find((option) => !option.kind && option.optionId.replaceAll('-', '_') === kind)
+  )?.optionId;
 }
 
 /**

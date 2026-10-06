@@ -1,12 +1,12 @@
 import { eq } from 'drizzle-orm';
-import type { ManagedSession } from '../managed-session.js';
+import type { SessionRuntime } from '../runtime/session-runtime.js';
 import { sessions, projects } from '../../db/schema.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
 import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { AgentDriver } from '../../agent/types.js';
-import type { SessionStateMachine } from '../state-machine.js';
+import type { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
 import type { SessionWorkspace } from '../../git/session-workspace.js';
 import type { SessionLauncher } from './session-launcher.js';
 
@@ -14,7 +14,7 @@ export interface SessionLifecycleDependencies {
   db: DbClient;
   logger: Logger;
   runtime: AgentDriver;
-  stateMachine: SessionStateMachine;
+  runtimeRegistry: SessionRuntimeRegistry;
   sessionWorkspace: SessionWorkspace;
   launcher: SessionLauncher;
   restartSession: SessionLauncher['restartSession'];
@@ -34,7 +34,7 @@ export class SessionLifecycleService {
     await this.deps.sessionWorkspace.syncOrphans(activeIds, knownIds);
   }
 
-  async switchMode(sessionId: string, newMode: SessionMode): Promise<ManagedSession | null> {
+  async switchMode(sessionId: string, newMode: SessionMode): Promise<SessionRuntime | null> {
     const sessionRecord = await this.deps.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
     });
@@ -44,11 +44,11 @@ export class SessionLifecycleService {
     }
 
     if (sessionRecord.mode === newMode) {
-      const active = this.deps.stateMachine.getSession(sessionId);
+      const active = this.deps.runtimeRegistry.getSession(sessionId);
       return active ?? null;
     }
 
-    const wasRunning = this.deps.stateMachine.hasSession(sessionId);
+    const wasRunning = this.deps.runtimeRegistry.hasSession(sessionId);
     await this.deps.sessionWorkspace.activate(sessionId, {
       mode: newMode,
       baseBranch: sessionRecord.branch || 'main',
@@ -62,7 +62,7 @@ export class SessionLifecycleService {
   }
 
   async stopAll(): Promise<void> {
-    await this.deps.stateMachine.stopAll();
+    await this.deps.runtimeRegistry.stopAll();
   }
 
   async deleteSession(sessionId: string): Promise<void> {
@@ -74,7 +74,7 @@ export class SessionLifecycleService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    this.deps.stateMachine.stopSession(sessionId);
+    this.deps.runtimeRegistry.stopSession(sessionId);
 
     if (sessionRecord.agentSessionId) {
       try {
@@ -108,6 +108,7 @@ export class SessionLifecycleService {
 
     await this.deps.sessionWorkspace.teardown(sessionId).catch((err: unknown) => {
       this.deps.logger.error({ err, sessionId }, 'Failed to teardown workspace on deleteSession');
+      throw err;
     });
 
     try {

@@ -1,8 +1,8 @@
+import { getElicitationValidationError } from '@agentctl/shared';
 import { randomUUID } from 'node:crypto';
 import type {
   BooleanPropertySchema,
   CreateElicitationRequest,
-  CreateElicitationResponse,
   ElicitationContentValue,
   ElicitationFormMode,
   ElicitationPropertySchema,
@@ -12,6 +12,7 @@ import type {
   NumberPropertySchema,
   StringPropertySchema,
 } from '@agentclientprotocol/sdk';
+import type { CreateElicitationResponse } from '@agentclientprotocol/sdk/experimental/v2';
 import type {
   ElicitationFormField,
   ElicitationRequest,
@@ -164,57 +165,20 @@ export function projectElicitationRequest(
   };
 }
 
-function isValidFieldValue(field: ElicitationFormField, value: unknown): boolean {
-  if (field.type === 'boolean') return typeof value === 'boolean';
-  if (field.type === 'number' || field.type === 'integer') {
-    return (
-      typeof value === 'number' &&
-      Number.isFinite(value) &&
-      (field.type !== 'integer' || Number.isInteger(value)) &&
-      (field.minimum === undefined || value >= field.minimum) &&
-      (field.maximum === undefined || value <= field.maximum)
-    );
-  }
-  if (field.type === 'multi_select') {
-    return (
-      Array.isArray(value) &&
-      value.every(
-        (entry) =>
-          typeof entry === 'string' &&
-          (field.options?.some((option) => option.value === entry) ?? false),
-      ) &&
-      (field.minItems === undefined || value.length >= field.minItems) &&
-      (field.maxItems === undefined || value.length <= field.maxItems)
-    );
-  }
-  if (typeof value !== 'string') return false;
-  if (field.type === 'select') {
-    return field.options?.some((option) => option.value === value) ?? false;
-  }
-  return (
-    (field.minLength === undefined || value.length >= field.minLength) &&
-    (field.maxLength === undefined || value.length <= field.maxLength)
-  );
-}
-
 export function formatElicitationResponse(
   response: ElicitationResponse,
   request: ElicitationRequest,
-): CreateElicitationResponse {
+): Extract<CreateElicitationResponse, { action: 'accept' | 'decline' | 'cancel' }> {
   if (response.action === 'decline') return { action: 'decline' };
   if (response.action === 'cancel') return { action: 'cancel' };
 
+  const error = getElicitationValidationError(request, response);
+  if (error) throw new Error(error);
   const content: Record<string, ElicitationContentValue> = {};
   for (const field of request.form?.fields ?? []) {
     const value = response.values?.[field.id];
     if (value === undefined || value === null) {
-      if (field.required) {
-        throw new Error(`Missing required elicitation field: ${field.id}`);
-      }
       continue;
-    }
-    if (!isValidFieldValue(field, value)) {
-      throw new Error(`Invalid value for elicitation field: ${field.id}`);
     }
     content[field.id] = value as ElicitationContentValue;
   }

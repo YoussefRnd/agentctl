@@ -2,7 +2,8 @@ import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
 import type { Logger } from '../../logger.js';
 import type { AgentDriver } from '../../agent/types.js';
 import { isAgentAuthenticationRequiredError } from '../../agent/errors.js';
-import type { ProviderData } from '../provider.js';
+import { Provider, type ProviderData } from '../provider.js';
+import { providerDataFromRegistry } from './provider-data.js';
 import type { ProviderStore } from './provider-store.js';
 import type { RegistryFetcher } from './registry-fetcher.js';
 import type { ProviderLauncher } from './provider-launcher.js';
@@ -98,66 +99,19 @@ export class ProviderProbingService {
     _options?: object,
     _existing?: ProviderData,
   ): ProviderDiscovery {
-    const dummyStore: ProviderData = {
-      id: agent.id,
-      name: agent.name,
+    const candidate = providerDataFromRegistry(agent, {
       installState: 'system_available',
       installSource: 'system',
-      installError: null,
-      authState: 'unknown',
-      enabled: true,
-      hidden: false,
-      distribution: '{}',
       command: launch.command,
       launchArgs: JSON.stringify(launch.args),
       launchEnv: JSON.stringify(launch.env),
-      configOptions: '[]',
-      authMethods: '[]',
-      version: agent.version,
-      description: agent.description,
-      icon: agent.icon ?? null,
-      customEnv: '{}',
-      connectionState: 'unknown',
-      authError: null,
-      lastVerifiedAt: null,
-      supportsDynamicModel: agent.supportsDynamicModel ?? false,
-      supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
-      supportsLogout: agent.supportsLogout ?? false,
-      nativelyLoadsSkills: false,
-      modes: '[]',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    const launchResolved = this.launcher.resolveLaunch(dummyStore, agent);
-    const authMethods = agent.authMethods ?? [];
+    });
+    const launchResolved = this.launcher.resolveLaunch(candidate, agent);
     return {
-      id: agent.id,
-      label: agent.name,
+      ...new Provider(candidate).toDiscovery(),
       command: launchResolved.command,
       launchArgs: launchResolved.args,
       launchEnv: launchResolved.env,
-      customEnv: {},
-      customEnvConfigured: {},
-      configOptions: agent.configOptions ?? [],
-      authMethods,
-      version: agent.version,
-      description: agent.description,
-      icon: agent.icon,
-      supportsDynamicModel: agent.supportsDynamicModel ?? false,
-      supportsDynamicConfig: agent.supportsDynamicConfig ?? false,
-      supportsLogout: agent.supportsLogout ?? false,
-      nativelyLoadsSkills: false,
-      installState: 'system_available',
-      installSource: 'system',
-      installedVersion: null,
-      availableVersion: agent.version,
-      updateAvailable: false,
-      connectionState: 'unknown',
-      authState: 'unknown',
-      authError: null,
-      lastVerifiedAt: null,
-      status: 'inactive',
-      enabled: true,
       agent,
     };
   }

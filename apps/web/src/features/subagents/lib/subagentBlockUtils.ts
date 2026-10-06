@@ -1,4 +1,3 @@
-import { formatTokenCount } from '@/shared/lib/formatTokenCount';
 import type {
   SessionEventRow,
   SessionEventToolCallData,
@@ -7,186 +6,485 @@ import type {
 
 export interface SubagentGroup {
   subagentEvent: SessionEventRow;
+  /** Only activity with a reported parent relationship belongs here. */
   childEvents: SessionEventRow[];
+  delegationEvents?: SessionEventRow[];
+  source?: 'tool' | 'reported';
+  startedAt?: Date | string;
+  endedAt?: Date | string;
 }
-
-export type SubagentFilter = 'all' | 'running' | 'completed' | 'failed';
 
 export function formatSubagentTitle(name?: string): string {
-  if (!name) return 'Subagent';
-  const cleaned = name.replace(/[-_]/g, ' ').trim();
-  if (!cleaned) return 'Subagent';
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  const cleaned = name?.replace(/[-_]/g, ' ').trim();
+  return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : 'Subagent';
 }
 
-export function isSubagentToolCall(data: SessionEventToolCallData): boolean {
-  // Protocol-level kind tag
-  if ((data.kind as string) === 'subagent' || (data.kind as string) === 'task') return true;
-
-  // Subagent-specific argument attributes
-  const args = data.arguments;
-  if (
-    args &&
-    (typeof args.subagent_type === 'string' ||
-      typeof args.agent_type === 'string' ||
-      typeof args.subagent === 'string')
-  ) {
-    return true;
+function parseRecord(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
   }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
 
-  // Common tool names used when providers emit tool_calls instead of native subagent_update
-  const name = data.name.toLowerCase();
-  return (
-    name === 'task' ||
-    name === 'subagent' ||
-    name === 'invoke_subagent' ||
-    name.includes('subagent')
-  );
+/** Extract tool arguments from either structured arguments, stringified JSON, or rawInput. */
+export function extractToolArguments(data: SessionEventToolCallData): Record<string, unknown> {
+  const direct = parseRecord(data.arguments);
+  if (direct) {
+    if (typeof direct.arguments === 'string') {
+      const nested = parseRecord(direct.arguments);
+      if (nested) return nested;
+    }
+    if (parseRecord(direct.arguments)) {
+      return direct.arguments as Record<string, unknown>;
+    }
+    return direct;
+  }
+  const raw = parseRecord(data.rawInput);
+  if (raw) {
+    if (typeof raw.arguments === 'string') {
+      const nested = parseRecord(raw.arguments);
+      if (nested) return nested;
+    }
+    if (parseRecord(raw.arguments)) {
+      return raw.arguments as Record<string, unknown>;
+    }
+    const rest = { ...raw };
+    delete rest.name;
+    return rest;
+  }
+  return {};
+}
+
+/** Presentation hint only: never advertises child sessions or control capabilities. */
+export function isSubagentToolCall(data: SessionEventToolCallData): boolean {
+  if (data.kind === 'subagent' || data.kind === 'task') return true;
+  const name = (data.name || '').toLowerCase();
+  const normalizedName = name.replace(/^[a-z0-9_-]+[.:/]/, '').replace(/^(?:mcp|builtin)__/, '');
+  const delegationName =
+    /^(task|tasks|subagent|subagents|invoke_subagents?|start_subagents?|run_subagents?|spawn_agents?|spawn_subagents?|create_subagents?|delegate(?:_task|_agent|_to_agent)?|dispatch_(?:agents?|subagents?)|parallel_agents?|fork_(?:agents?|subagents?))$/;
+  if (delegationName.test(normalizedName)) return true;
+  // ACP has no canonical subagent tool kind. Some agents report kind=other
+  // and put the actual operation name in the required display title.
+  const title = data.title
+    ?.trim()
+    .toLowerCase()
+    .replace(/^(?:run(?:ning)?|call(?:ing)?|exec(?:uting)?)\s+/, '')
+    .replace(/[?!.]+$/, '')
+    .trim();
+  const normalizedTitle = title
+    ? title.replace(/^[a-z0-9_-]+[.:/]/, '').replace(/^(?:mcp|builtin)__/, '')
+    : '';
+  if (normalizedTitle && delegationName.test(normalizedTitle)) return true;
+  if (delegationTasks(data).length > 0) return true;
+  const args = extractToolArguments(data);
+  const hasAgentKey = [
+    'subagent_type',
+    'agent_type',
+    'subagent',
+    'agent',
+    'role',
+    'TypeName',
+    'typeName',
+    'agent_name',
+    'target_agent',
+  ].some((key) => typeof args[key] === 'string' && (args[key] as string).trim() !== '');
+  const hasTaskKey = [
+    'prompt',
+    'Prompt',
+    'task',
+    'description',
+    'instruction',
+    'instructions',
+    'goal',
+    'message',
+    'query',
+    'system_prompt',
+  ].some((key) => typeof args[key] === 'string' && (args[key] as string).trim() !== '');
+  return hasAgentKey && hasTaskKey;
 }
 
 export function getSubagentTitleFromData(data: SessionEventToolCallData): string {
+  const tasks = delegationTasks(data);
+  if (tasks.length > 1) return `Delegate ${tasks.length} tasks`;
   if (data.title) return formatSubagentTitle(data.title);
-  const args = data.arguments;
-  if (args) {
-    if (typeof args.description === 'string' && args.description && args.description.length < 60) {
-      return formatSubagentTitle(args.description);
-    }
-    if (typeof args.title === 'string' && args.title) return formatSubagentTitle(args.title);
-    if (typeof args.Role === 'string' && args.Role) return formatSubagentTitle(args.Role);
-    if (typeof args.TypeName === 'string' && args.TypeName)
-      return formatSubagentTitle(args.TypeName);
-    if (typeof args.subagent_type === 'string' && args.subagent_type)
-      return formatSubagentTitle(args.subagent_type);
-    if (typeof args.name === 'string' && args.name) return formatSubagentTitle(args.name);
+  if (tasks.length === 1 && tasks[0].role) return formatSubagentTitle(tasks[0].role);
+  const args = extractToolArguments(data);
+  for (const key of [
+    'description',
+    'title',
+    'role',
+    'Role',
+    'TypeName',
+    'subagent_type',
+    'agent_type',
+    'agent',
+    'name',
+  ]) {
+    if (typeof args[key] === 'string' && args[key]) return formatSubagentTitle(args[key] as string);
   }
   return formatSubagentTitle(data.name);
 }
 
 export function getSubagentScopeFromData(data: SessionEventToolCallData): string {
-  const args = data.arguments;
-  if (args) {
-    if (typeof args.Prompt === 'string') return args.Prompt;
-    if (typeof args.prompt === 'string') return args.prompt;
-    if (typeof args.task === 'string') return args.task;
-    if (typeof args.description === 'string') return args.description;
-    if (typeof args.command === 'string') return args.command;
+  const args = extractToolArguments(data);
+  for (const key of [
+    'prompt',
+    'Prompt',
+    'task',
+    'description',
+    'instruction',
+    'instructions',
+    'goal',
+    'message',
+    'query',
+    'system_prompt',
+  ]) {
+    if (typeof args[key] === 'string' && (args[key] as string).trim())
+      return (args[key] as string).trim();
   }
-  return data.title || '';
+  const tasks = delegationTasks(data);
+  if (tasks.length === 1) {
+    return tasks[0].role ? `${tasks[0].role}: ${tasks[0].prompt}` : tasks[0].prompt;
+  }
+  if (tasks.length > 1)
+    return tasks
+      .map((task, index) => `${index + 1}. ${task.role ? `${task.role}: ` : ''}${task.prompt}`)
+      .join('\n\n');
+  return '';
 }
 
-export function extractSubagentGroups(events: SessionEventRow[]): SubagentGroup[] {
-  const idToEvent = new Map<number, SessionEventRow>();
-  const idToIndex = new Map<number, number>();
-  for (let i = 0; i < events.length; i++) {
-    idToEvent.set(events[i].id, events[i]);
-    idToIndex.set(events[i].id, i);
+/** A batch is one delegation call, not evidence of independently reported child runs. */
+function delegationTasks(data: SessionEventToolCallData): { role?: string; prompt: string }[] {
+  const args = extractToolArguments(data);
+  let value = args.subagents ?? args.Subagents ?? args.tasks ?? args.agents;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        value = JSON.parse(trimmed);
+      } catch {
+        // ignore
+      }
+    }
   }
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (typeof entry === 'string' && entry.trim()) {
+      return [{ prompt: entry.trim() }];
+    }
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const task = entry as Record<string, unknown>;
+    const prompt =
+      task.prompt ??
+      task.Prompt ??
+      task.task ??
+      task.instruction ??
+      task.instructions ??
+      task.goal ??
+      task.message ??
+      task.description;
+    const role =
+      task.role ??
+      task.Role ??
+      task.TypeName ??
+      task.typeName ??
+      task.agent_type ??
+      task.subagent_type ??
+      task.name ??
+      task.title ??
+      task.type;
+    if (typeof prompt !== 'string' || !prompt.trim()) return [];
+    return [
+      {
+        prompt: prompt.trim(),
+        ...(typeof role === 'string' && role.trim() ? { role: role.trim() } : {}),
+      },
+    ];
+  });
+}
 
-  const toolCallGroups = new Map<string, SessionEventRow[]>();
-  const nativelyEmitted = new Map<string, SessionEventRow[]>();
+function mergeDefined<T extends Record<string, unknown>>(previous: T, next: T): T {
+  const fields = Object.fromEntries(
+    Object.entries(next).filter(
+      ([key, value]) => value !== undefined && !(key === 'name' && value === ''),
+    ),
+  );
+  return { ...previous, ...fields };
+}
 
-  for (const e of events) {
-    if (e.type === 'tool_call') {
-      const tcData = e.data as SessionEventToolCallData;
-      if (tcData.toolCallId && isSubagentToolCall(tcData)) {
-        const group = toolCallGroups.get(tcData.toolCallId);
-        if (group) {
-          group.push(e);
-        } else {
-          toolCallGroups.set(tcData.toolCallId, [e]);
+export function toolResultText(data: SessionEventToolCallData): string {
+  const contentBlocks = data.content ?? [];
+  const textBlocks: string[] = [];
+  for (const block of contentBlocks) {
+    if (!block || typeof block !== 'object') continue;
+    const b = block as Record<string, unknown>;
+    if (typeof b.text === 'string' && b.text) {
+      textBlocks.push(b.text);
+      continue;
+    }
+    if (b.content && typeof b.content === 'object') {
+      const inner = b.content as Record<string, unknown>;
+      if (typeof inner.text === 'string' && inner.text) {
+        textBlocks.push(inner.text);
+        continue;
+      }
+    }
+  }
+  const text = textBlocks.join('\n').trim();
+  if (text) return text;
+  if (typeof data.rawOutput === 'string') return data.rawOutput;
+  if (data.rawOutput !== undefined && data.rawOutput !== null) {
+    if (typeof data.rawOutput === 'object' && !Array.isArray(data.rawOutput)) {
+      const obj = data.rawOutput as Record<string, unknown>;
+      for (const key of ['result', 'output', 'summary', 'message', 'error', 'text']) {
+        if (typeof obj[key] === 'string' && Object.keys(obj).length === 1) {
+          return obj[key];
         }
       }
     }
+    return JSON.stringify(data.rawOutput, null, 2);
+  }
+  return '';
+}
 
-    if (e.type === 'subagent_update') {
-      const data = e.data as { subagentId: string };
-      if (!nativelyEmitted.has(data.subagentId)) {
-        nativelyEmitted.set(data.subagentId, []);
-      }
-    } else if (e.parentEventId != null) {
-      const parentData = idToEvent.get(e.parentEventId);
-      if (parentData && parentData.type === 'subagent_update') {
-        const data = parentData.data as { subagentId: string };
-        const children = nativelyEmitted.get(data.subagentId);
-        if (children) {
-          children.push(e);
-          continue;
-        }
-      }
+function statusFromTool(status?: string): SessionEventSubagentUpdateData['status'] {
+  switch (status) {
+    case 'pending':
+      return 'pending';
+    case 'in_progress':
+      return 'running';
+    case 'completed':
+    case 'failed':
+    case 'cancelled':
+    case 'interrupted':
+      return status;
+    default:
+      return 'unknown';
+  }
+}
+
+export function isSubagentActive(status: string): boolean {
+  return ['pending', 'spawning', 'running', 'waiting'].includes(status);
+}
+
+export function getSubagentGroupKey(group: SubagentGroup): string {
+  const data = group.subagentEvent.data as SessionEventSubagentUpdateData;
+  return JSON.stringify([
+    group.subagentEvent.sessionId,
+    group.source ?? 'reported',
+    data.subagentId,
+  ]);
+}
+
+/** Rebuild the view from persisted events; no separate volatile lifecycle store. */
+export function extractSubagentGroups(events: SessionEventRow[]): SubagentGroup[] {
+  const byId = new Map(events.map((event) => [event.id, event]));
+  const toolRows = new Map<string, SessionEventRow[]>();
+  const reportedRows = new Map<string, SessionEventRow[]>();
+  for (const event of events) {
+    if (event.type === 'tool_call' && event.data.toolCallId) {
+      const key = JSON.stringify([
+        event.sessionId,
+        event.metadata?.nativeSessionId ?? null,
+        event.data.toolCallId,
+      ]);
+      const rows = toolRows.get(key) ?? [];
+      rows.push(event);
+      toolRows.set(key, rows);
+    }
+    if (event.type === 'subagent_update') {
+      const key = JSON.stringify([event.sessionId, event.data.subagentId]);
+      const rows = reportedRows.get(key) ?? [];
+      rows.push(event);
+      reportedRows.set(key, rows);
     }
   }
 
   const groups: SubagentGroup[] = [];
-
-  for (const [, tcEvents] of toolCallGroups) {
-    const first = tcEvents[0];
-    const last = tcEvents[tcEvents.length - 1];
-    const firstData = first.data as SessionEventToolCallData;
-    const lastData = last.data as SessionEventToolCallData;
-
-    const lastTcIndex = idToIndex.get(last.id) ?? -1;
-    let hasFollowingActivity = false;
-    if (lastTcIndex !== -1) {
-      for (let i = lastTcIndex + 1; i < events.length; i++) {
-        const e = events[i];
-        if (e.type === 'tool_call') {
-          const ed = e.data as SessionEventToolCallData;
-          if (ed.toolCallId && toolCallGroups.has(ed.toolCallId)) continue;
-        }
-        hasFollowingActivity = true;
-        break;
-      }
-    }
-
-    const status =
-      lastData.status === 'completed' || lastData.status === 'failed'
-        ? lastData.status
-        : hasFollowingActivity
-          ? 'completed'
-          : 'running';
-
-    groups.push({
+  const rootGroups = new Map<number, SubagentGroup>();
+  const activityOwners = new Map<number, SubagentGroup>();
+  for (const rows of toolRows.values()) {
+    let data = { name: '' } as SessionEventToolCallData;
+    for (const row of rows) data = mergeDefined(data, row.data as SessionEventToolCallData);
+    if (!isSubagentToolCall(data)) continue;
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    const status = statusFromTool(data.status);
+    const result = toolResultText(data);
+    const group: SubagentGroup = {
+      source: 'tool',
       subagentEvent: {
         ...first,
-        type: 'subagent_update' as const,
+        type: 'subagent_update',
         data: {
-          subagentId: `tool-${firstData.toolCallId ?? 'unknown'}`,
-          name: getSubagentTitleFromData(firstData),
-          scope: getSubagentScopeFromData(firstData),
+          subagentId: `tool-${data.toolCallId}`,
+          name: getSubagentTitleFromData(data),
+          scope: getSubagentScopeFromData(data),
           status,
-          result:
-            status === 'completed'
-              ? {
-                  summary:
-                    typeof lastData.rawOutput === 'string' ? lastData.rawOutput : 'Task completed',
-                }
-              : undefined,
+          result: result ? { summary: result } : undefined,
         },
-        parentEventId: undefined,
       },
-      childEvents: tcEvents.slice(1).map((e) => ({
-        ...e,
-        parentEventId: first.id,
-      })),
-    });
+      delegationEvents: [{ ...last, id: first.id, data, type: 'tool_call' }],
+      childEvents: [],
+      startedAt: first.createdAt,
+      endedAt: !isSubagentActive(status) ? eventEnd(last) : undefined,
+    };
+    groups.push(group);
+    for (const row of rows) rootGroups.set(row.id, group);
+  }
+  for (const rows of reportedRows.values()) {
+    let data = rows[0].data as SessionEventSubagentUpdateData;
+    for (const row of rows.slice(1)) {
+      const next = row.data as SessionEventSubagentUpdateData;
+      data = {
+        ...mergeDefined(data, next),
+        result: next.result ? { ...data.result, ...next.result } : data.result,
+      };
+    }
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    const group: SubagentGroup = {
+      source: 'reported',
+      subagentEvent: { ...first, data, type: 'subagent_update' },
+      childEvents: [],
+      startedAt: first.createdAt,
+      endedAt:
+        data.status !== 'unknown' && !isSubagentActive(data.status) ? eventEnd(last) : undefined,
+    };
+    groups.push(group);
+    for (const row of rows) rootGroups.set(row.id, group);
   }
 
-  for (const e of events) {
-    if (e.type !== 'subagent_update') continue;
-    const data = e.data as { subagentId: string };
-    groups.push({
-      subagentEvent: e,
-      childEvents: nativelyEmitted.get(data.subagentId) ?? [],
-    });
+  for (const event of events) {
+    if (rootGroups.has(event.id)) continue;
+    let parentId = event.parentEventId;
+    const visited = new Set<number>();
+    while (parentId != null && !visited.has(parentId)) {
+      visited.add(parentId);
+      const group = rootGroups.get(parentId);
+      if (group && group.subagentEvent.sessionId === event.sessionId) {
+        group.childEvents.push(event);
+        activityOwners.set(event.id, group);
+        break;
+      }
+      parentId = byId.get(parentId)?.parentEventId;
+    }
   }
-
-  return groups;
+  // Permission requests often identify a tool without using its event as parent.
+  for (const event of events) {
+    if (event.type !== 'approval_request' || !event.data.toolCallId) continue;
+    const key = JSON.stringify([
+      event.sessionId,
+      event.metadata?.nativeSessionId ?? null,
+      event.data.toolCallId,
+    ]);
+    const rows = toolRows.get(key);
+    const group = rows ? (rootGroups.get(rows[0].id) ?? activityOwners.get(rows[0].id)) : undefined;
+    if (group && !group.childEvents.some((child) => child.id === event.id))
+      group.childEvents.push(event);
+  }
+  for (const group of groups) group.childEvents.sort((a, b) => a.id - b.id);
+  return sortSubagentGroups(groups);
 }
 
-function toDate(v: Date | string | null | undefined): Date | null {
-  if (!v) return null;
-  if (v instanceof Date) return v;
-  return new Date(v);
+function eventEnd(event: SessionEventRow): Date | string {
+  const start = new Date(event.createdAt).getTime();
+  const duration = event.metadata?.durationMs;
+  return typeof duration === 'number' && duration >= 0
+    ? new Date(start + duration)
+    : event.createdAt;
+}
+
+export function sortSubagentGroups(groups: SubagentGroup[]): SubagentGroup[] {
+  // Keep positions stable when one parallel task changes status.
+  return groups.toSorted(
+    (a, b) =>
+      new Date(a.subagentEvent.createdAt).getTime() -
+        new Date(b.subagentEvent.createdAt).getTime() || a.subagentEvent.id - b.subagentEvent.id,
+  );
+}
+
+export function subagentApprovals(group: SubagentGroup): SessionEventRow[] {
+  return group.childEvents.filter(
+    (event) => event.type === 'approval_request' && event.data.status === 'pending',
+  );
+}
+
+export function subagentDisplayStatus(group: SubagentGroup, isConnected = true): string {
+  const status = (group.subagentEvent.data as SessionEventSubagentUpdateData).status;
+  const data = group.subagentEvent.data as SessionEventSubagentUpdateData;
+  if (data.historical) return 'History';
+  if (subagentApprovals(group).length) return 'Needs approval';
+  if (data.native && !isConnected) return 'Disconnected';
+  if (data.native && status === 'idle') {
+    if (data.state?.stopReason === 'cancelled') return 'Idle · Cancelled';
+    if (data.state?.stopReason === 'error') return 'Idle · Error';
+  }
+  if (!isConnected && isSubagentActive(status)) return 'Disconnected';
+  return (
+    (
+      {
+        spawning: 'Starting',
+        pending: 'Queued',
+        running: 'Running',
+        waiting: 'Waiting',
+        completed: 'Completed',
+        failed: 'Failed',
+        cancelled: 'Cancelled',
+        interrupted: 'Interrupted',
+        unknown: 'Status unknown',
+        idle: 'Idle',
+      } as Record<string, string>
+    )[status] ?? 'Status unknown'
+  );
+}
+
+export function subagentProgress(group: SubagentGroup): string {
+  const data = group.subagentEvent.data as SessionEventSubagentUpdateData;
+  if (!isSubagentActive(data.status)) return data.result?.summary ?? '';
+  const last = [...group.childEvents]
+    .reverse()
+    .find((event) => event.type === 'tool_call' || event.type === 'text');
+  if (last?.type === 'text') return last.data.content;
+  if (last?.type === 'tool_call') {
+    const args = extractToolArguments(last.data);
+    const command = args.command;
+    return last.data.kind === 'execute' && typeof command === 'string'
+      ? command
+      : last.data.title || last.data.name;
+  }
+  const delegation = group.delegationEvents?.at(-1);
+  return delegation?.type === 'tool_call' ? toolResultText(delegation.data) : '';
+}
+
+export function subagentResult(group: SubagentGroup): string {
+  const summary = (group.subagentEvent.data as SessionEventSubagentUpdateData).result?.summary;
+  if (summary) return summary;
+  return [
+    ...new Set(
+      group.childEvents.flatMap((event) =>
+        event.type === 'text' &&
+        (event.data.role === 'provider' || (event.data.role as string) === 'assistant') &&
+        event.data.content
+          ? [event.data.content]
+          : [],
+      ),
+    ),
+  ].join('\n\n');
 }
 
 export function formatDuration(
@@ -194,238 +492,13 @@ export function formatDuration(
   now: Date | null,
   end: Date | string | null,
 ): string {
-  const startDate = toDate(start);
-  if (!startDate) return '--';
-  const finish = toDate(end) ?? now;
-  if (!finish) return '--';
-  const ms = Math.max(0, finish.getTime() - startDate.getTime());
-  const seconds = ms / 1000;
-
-  if (seconds >= 3600) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    return `${String(h)}h ${String(m)}m ${String(s)}s`;
-  }
-  if (seconds >= 60) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${String(m)}m ${String(s)}s`;
-  }
-  if (seconds < 10) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  return `${String(Math.floor(seconds))}s`;
-}
-
-export function formatTokens(count: number): string {
-  return formatTokenCount(count);
-}
-
-function formatShortPath(fullPath?: string): string {
-  if (!fullPath) return '';
-  const parts = fullPath.replace(/\\/g, '/').split('/');
-  if (parts.length <= 2) return fullPath;
-  return parts.slice(-2).join('/');
-}
-
-export function formatToolTitlePeek(childEvents: SessionEventRow[] | null | undefined): string {
-  if (!childEvents || childEvents.length === 0) return '';
-  const last = childEvents[childEvents.length - 1];
-
-  if (last.type === 'tool_call') {
-    const tcData = last.data as SessionEventToolCallData;
-    const toolName = tcData.name;
-    const kind = tcData.kind;
-    const args = tcData.arguments ?? {};
-    const locations = tcData.locations ?? [];
-
-    if (kind === 'execute') {
-      const cmd = (args.CommandLine ?? args.command ?? args.cmd ?? args.input) as
-        string | undefined;
-      return cmd ? cmd : (tcData.title ?? toolName);
-    }
-
-    if (kind === 'edit') {
-      const rawPath = (args.TargetFile ??
-        args.AbsolutePath ??
-        args.path ??
-        args.filePath ??
-        locations[0]?.path) as string | undefined;
-      return rawPath ? `edit ${formatShortPath(rawPath)}` : (tcData.title ?? 'edit file');
-    }
-
-    if (kind === 'read') {
-      const rawPath = (args.AbsolutePath ?? args.path ?? args.filePath ?? locations[0]?.path) as
-        string | undefined;
-      return rawPath ? `read ${formatShortPath(rawPath)}` : (tcData.title ?? 'read file');
-    }
-
-    if (kind === 'search' || kind === 'fetch') {
-      const q = (args.Query ?? args.query ?? args.Pattern ?? args.pattern) as string | undefined;
-      return q ? `rg ${q}` : (tcData.title ?? 'search');
-    }
-
-    const firstStrArg = Object.values(args).find((v): v is string => typeof v === 'string');
-    return tcData.title ?? (firstStrArg ? `${toolName} ${firstStrArg}` : toolName);
-  }
-
-  return '';
-}
-
-export function formatPeek(childEvents: SessionEventRow[] | null | undefined): string {
-  if (!childEvents || childEvents.length === 0) return 'Spawning…';
-  const last = childEvents[childEvents.length - 1];
-
-  if (last.type === 'tool_call') {
-    const tcData = last.data as SessionEventToolCallData;
-    const toolName = tcData.name;
-    const kind = tcData.kind;
-    const args = tcData.arguments ?? {};
-    const locations = tcData.locations ?? [];
-
-    if (kind === 'execute') {
-      const cmd = (args.CommandLine ?? args.command ?? args.cmd ?? args.input) as
-        string | undefined;
-      return cmd ? `Running ${cmd}` : (tcData.title ?? `Execute ${toolName}`);
-    }
-
-    if (kind === 'edit') {
-      const rawPath = (args.TargetFile ??
-        args.AbsolutePath ??
-        args.path ??
-        args.filePath ??
-        locations[0]?.path) as string | undefined;
-      return rawPath ? `Editing ${formatShortPath(rawPath)}` : (tcData.title ?? 'Editing file');
-    }
-
-    if (kind === 'read') {
-      const rawPath = (args.AbsolutePath ?? args.path ?? args.filePath ?? locations[0]?.path) as
-        string | undefined;
-      return rawPath ? `Reading ${formatShortPath(rawPath)}` : (tcData.title ?? 'Reading file');
-    }
-
-    if (kind === 'search' || kind === 'fetch') {
-      const q = (args.Query ?? args.query ?? args.Pattern ?? args.pattern) as string | undefined;
-      return q ? `Searching "${q}"` : (tcData.title ?? 'Searching');
-    }
-
-    const firstStrArg = Object.values(args).find((v): v is string => typeof v === 'string');
-    const peek = tcData.title ?? (firstStrArg ? `${toolName} ${firstStrArg}` : toolName);
-    return peek.length > 80 ? `${peek.slice(0, 77)}…` : peek;
-  }
-
-  if (last.type === 'text' && 'content' in last.data) {
-    const content = (last.data as { content: string }).content;
-    return content.length > 80 ? `${content.slice(0, 77)}…` : content;
-  }
-
-  return 'Spawning…';
-}
-
-export interface DotsResult {
-  filled: boolean;
-  overflow?: number;
-}
-
-export function buildProgressDots(childEvents: SessionEventRow[] | null | undefined): DotsResult[] {
-  if (!childEvents) return [];
-  const tcEvents = childEvents.filter((e) => e.type === 'tool_call');
-  if (tcEvents.length === 0) return [];
-
-  const dots: DotsResult[] = tcEvents.slice(0, 8).map((e) => {
-    const data = e.data as SessionEventToolCallData;
-    return { filled: data.status === 'completed' || data.status === 'failed' };
-  });
-
-  const overflow = tcEvents.length - 8;
-  if (overflow > 0) {
-    dots.push({ filled: false, overflow });
-  }
-
-  return dots;
-}
-
-const STATUS_PRIORITY: Record<string, number> = {
-  running: 0,
-  spawning: 0,
-  failed: 1,
-  completed: 2,
-};
-
-export function sortSubagentGroups(groups: SubagentGroup[]): SubagentGroup[] {
-  return groups.toSorted((a, b) => {
-    const dataA = a.subagentEvent.data as { status: string };
-    const dataB = b.subagentEvent.data as { status: string };
-    const priA = STATUS_PRIORITY[dataA.status] ?? 3;
-    const priB = STATUS_PRIORITY[dataB.status] ?? 3;
-    if (priA !== priB) return priA - priB;
-    const dsA = a.subagentEvent.createdAt;
-    const dsB = b.subagentEvent.createdAt;
-    return new Date(dsB).getTime() - new Date(dsA).getTime();
-  });
-}
-
-export interface SubagentSwarmStats {
-  total: number;
-  running: number;
-  completed: number;
-  failed: number;
-  totalTokens: number;
-  totalTools: number;
-}
-
-export function getSubagentSwarmStats(groups: SubagentGroup[]): SubagentSwarmStats {
-  let running = 0;
-  let completed = 0;
-  let failed = 0;
-  let totalTokens = 0;
-  let totalTools = 0;
-
-  for (const g of groups) {
-    const data = g.subagentEvent.data as SessionEventSubagentUpdateData;
-    if (data.status === 'running' || data.status === 'spawning') {
-      running++;
-    } else if (data.status === 'completed') {
-      completed++;
-    } else if (data.status === 'failed') {
-      failed++;
-    }
-
-    if (data.result?.tokensUsed) {
-      totalTokens += data.result.tokensUsed;
-    }
-
-    for (const ce of g.childEvents) {
-      if (ce.type === 'tool_call') {
-        totalTools++;
-      }
-      if (ce.metadata?.completionTokens) {
-        totalTokens += ce.metadata.completionTokens;
-      }
-    }
-  }
-
-  return {
-    total: groups.length,
-    running,
-    completed,
-    failed,
-    totalTokens,
-    totalTools,
-  };
-}
-
-export function filterSubagentGroups(
-  groups: SubagentGroup[],
-  filter: SubagentFilter,
-): SubagentGroup[] {
-  if (filter === 'all') return groups;
-  return groups.filter((g) => {
-    const data = g.subagentEvent.data as SessionEventSubagentUpdateData;
-    if (filter === 'running') return data.status === 'running' || data.status === 'spawning';
-    if (filter === 'completed') return data.status === 'completed';
-    if (filter === 'failed') return data.status === 'failed';
-    return true;
-  });
+  if (!start || (!end && !now)) return '--';
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end ?? now!).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return '--';
+  const seconds = Math.max(0, Math.floor((endMs - startMs) / 1000));
+  if (seconds >= 3600)
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  if (seconds >= 60) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  return `${seconds}s`;
 }

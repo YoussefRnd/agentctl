@@ -1,3 +1,4 @@
+import { NativeSessionImport } from './NativeSessionImport';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,10 +13,22 @@ import {
   Select,
   type SelectOption,
 } from '@agentctl/ui';
-import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
+import {
+  DEFAULT_AGENT_MODEL,
+  DEFAULT_THINKING_EFFORT,
+  THINKING_EFFORTS,
+  findAgentConfigOption,
+  type SessionMode,
+  type ThinkingEffort,
+} from '@agentctl/shared';
 import { useDraftStore } from '@/features/composer';
 import { useProviders } from '@/features/providers';
 import { useSettings } from '@/features/settings';
+
+const thinkingOptions: SelectOption[] = THINKING_EFFORTS.map((value) => ({
+  value,
+  label: value.charAt(0).toUpperCase() + value.slice(1),
+}));
 
 interface QuickLaunchSessionDialogProps {
   open: boolean;
@@ -50,15 +63,18 @@ export function QuickLaunchSessionDialog({
     : 'local';
 
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
-  const [selectedModel, setSelectedModel] = useState<string>('default');
-  const [selectedThinkingEffort, setSelectedThinkingEffort] = useState<ThinkingEffort>('medium');
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AGENT_MODEL);
+  const [selectedThinkingEffort, setSelectedThinkingEffort] =
+    useState<ThinkingEffort>(DEFAULT_THINKING_EFFORT);
   const [selectedMode, setSelectedMode] = useState<SessionMode>(effectiveDefaultMode);
   const [taskSlug, setTaskSlug] = useState<string>('');
+  const [showNativeSessions, setShowNativeSessions] = useState(false);
 
   // Initialize selection when dialog opens
   useEffect(() => {
     if (open) {
       setTaskSlug('');
+      setShowNativeSessions(false);
       setSelectedMode(effectiveDefaultMode);
 
       const candidateProviderId =
@@ -87,36 +103,32 @@ export function QuickLaunchSessionDialog({
     );
   }, [installedProviders, providers, selectedProviderId]);
 
+  useEffect(() => {
+    setSelectedModel(activeProvider?.defaultModel ?? DEFAULT_AGENT_MODEL);
+    setSelectedThinkingEffort(
+      (activeProvider?.defaultThinkingEffort ?? DEFAULT_THINKING_EFFORT) as ThinkingEffort,
+    );
+  }, [selectedProviderId, activeProvider?.defaultModel, activeProvider?.defaultThinkingEffort]);
+
   // Extract model options for active provider
   const modelOptions = useMemo<SelectOption[]>(() => {
-    if (!activeProvider) return [{ label: 'Default Model', value: 'default' }];
-    const modelConfig = activeProvider.configOptions?.find(
-      (opt) => opt.id === 'model' || opt.id === 'selectedModel',
-    );
+    if (!activeProvider) return [{ label: 'Default Model', value: DEFAULT_AGENT_MODEL }];
+    const modelConfig = findAgentConfigOption(activeProvider?.configOptions, 'model');
     if (modelConfig?.options && modelConfig.options.length > 0) {
       return modelConfig.options.map((opt) => ({
         label: opt.name || opt.value,
         value: opt.value,
       }));
     }
-    return [{ label: 'Default Model', value: 'default' }];
+    return [{ label: 'Default Model', value: DEFAULT_AGENT_MODEL }];
   }, [activeProvider]);
-
-  const thinkingOptions = useMemo<SelectOption[]>(
-    () => [
-      { label: 'Low', value: 'low' },
-      { label: 'Medium', value: 'medium' },
-      { label: 'High', value: 'high' },
-    ],
-    [],
-  );
 
   // Sync selected model when provider changes
   useEffect(() => {
     if (modelOptions.length > 0) {
       const exists = modelOptions.some((m) => m.value === selectedModel);
       if (!exists) {
-        setSelectedModel(modelOptions[0]?.value ?? 'default');
+        setSelectedModel(modelOptions[0]?.value ?? DEFAULT_AGENT_MODEL);
       }
     }
   }, [modelOptions, selectedModel]);
@@ -160,6 +172,29 @@ export function QuickLaunchSessionDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {activeProvider?.features?.sessions?.list && (
+          <div className="mt-4 space-y-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowNativeSessions((value) => !value)}
+            >
+              Import existing agent session
+            </Button>
+            {showNativeSessions && (
+              <NativeSessionImport
+                key={selectedProviderId}
+                providerId={selectedProviderId}
+                projectId={projectId}
+                onImported={(sessionId) => {
+                  onClose();
+                  void navigate(`/sessions/${sessionId}`);
+                }}
+              />
+            )}
+          </div>
+        )}
         <form onSubmit={handleLaunch} className="mt-4 space-y-4">
           {/* Provider Selection */}
           <div className="space-y-1.5">

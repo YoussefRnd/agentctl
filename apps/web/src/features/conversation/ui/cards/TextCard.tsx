@@ -32,7 +32,7 @@ interface TextCardProps {
     sizeBytes: number;
   }[];
   eventId?: number;
-  deliveryStatus?: 'queued' | 'sending' | 'accepted' | 'failed';
+  deliveryStatus?: 'queued' | 'sending' | 'accepted' | 'failed' | 'unknown' | 'cancelled';
   deliveryError?: string;
   onRetry?: (eventId: number) => void;
   hasGitRepo?: boolean;
@@ -225,6 +225,15 @@ export const TextCard = memo(function TextCard({
                   </div>
                 )}
 
+                {['queued', 'unknown', 'cancelled'].includes(deliveryStatus ?? '') && (
+                  <div role="status" className="text-text-muted mt-2 text-xs">
+                    {deliveryStatus === 'queued'
+                      ? 'Queued on the server'
+                      : deliveryStatus === 'cancelled'
+                        ? 'Message cancelled'
+                        : `Delivery uncertain: ${deliveryError ?? 'The connection was interrupted. Check the provider before resending.'}`}
+                  </div>
+                )}
                 {deliveryStatus === 'failed' && (
                   <div className="mt-2 flex max-w-full items-center gap-2 text-xs text-rose-400">
                     <span role="status">

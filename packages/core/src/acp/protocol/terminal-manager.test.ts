@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TerminalManager } from './terminal-manager.js';
+import { noopLogger } from '../../logger.js';
 
 describe('TerminalManager', () => {
   let manager: TerminalManager;
@@ -10,6 +11,22 @@ describe('TerminalManager', () => {
 
   afterEach(async () => {
     await manager.dispose();
+  });
+
+  it('logs input size without logging terminal input contents', () => {
+    const debug = vi.fn();
+    manager = new TerminalManager({ ...noopLogger, debug });
+    const terminalId = manager.spawn({
+      command: process.execPath,
+      args: ['-e', 'process.stdin.resume()'],
+    });
+    const input = 'test-password\n';
+    manager.write(terminalId, input);
+    expect(debug).toHaveBeenCalledWith(
+      { terminalId, bytes: Buffer.byteLength(input) },
+      'Writing terminal input',
+    );
+    expect(JSON.stringify(debug.mock.calls)).not.toContain(input.trim());
   });
 
   it('should spawn a process and emit output', async () => {
@@ -124,4 +141,24 @@ describe('TerminalManager', () => {
       }, 150);
     });
   });
+});
+
+it('decodes partial UTF-8 separately for stdout and stderr and drains output before closing', async () => {
+  const manager = new TerminalManager();
+  try {
+    const id = manager.spawn({
+      command: process.execPath,
+      args: [
+        '-e',
+        'const a=Buffer.from("界"), b=Buffer.from("🙂"); process.stdout.write(a.subarray(0,1)); process.stderr.write(b.subarray(0,2)); setTimeout(()=>{process.stdout.write(a.subarray(1));process.stderr.write(b.subarray(2));},20);',
+      ],
+    });
+    await manager.wait(id);
+    const output = manager.getTerminal(id)!.output;
+    expect(output).toContain('界');
+    expect(output).toContain('🙂');
+    expect(output).not.toContain('�');
+  } finally {
+    await manager.dispose();
+  }
 });

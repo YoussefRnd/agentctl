@@ -1,10 +1,28 @@
-import { RequestError, type Client } from '@agentclientprotocol/sdk';
+import { PermissionMetadataCache } from './permission-metadata.js';
+import { authorizeClientOperation } from './client-authorization.js';
+import { resolveAllowedPath } from '../transport/path-security.js';
+import {
+  RequestError,
+  type Client,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
+  type RequestPermissionRequest,
+  type RequestPermissionResponse,
+  type WriteTextFileRequest,
+  type CreateTerminalRequest,
+  type WaitForTerminalExitRequest,
+} from '@agentclientprotocol/sdk';
+import { throwIfRequestCancelled, waitForRequest } from './request-cancellation.js';
 import type { Logger } from '../../logger.js';
 import type { AgentMcpGateway, AgentSessionCallbacks } from '../../agent/types.js';
 import { parseNotificationToEvents } from './events.js';
 import { parsePermissionRequest, formatPermissionOutcome } from './permissions.js';
 import { formatElicitationResponse, projectElicitationRequest } from './elicitations.js';
-import { handleFsReadTextFile, handleFsWriteTextFile } from './file-system.js';
+import {
+  handleFsReadTextFile,
+  handleFsWriteTextFile,
+  assertAcpAbsolutePath,
+} from './file-system.js';
 import {
   handleTerminalCreate,
   handleTerminalKill,
@@ -21,20 +39,25 @@ import { createExtensionRouter } from './extensions.js';
  * session; the persistent path resolves by sessionId.
  */
 export interface ClientSessionContext {
+  localSessionId?: string;
   callbacks: AgentSessionCallbacks;
   cwd: string;
   additionalDirectories?: string[];
   /** Called after a terminal is spawned so callers can track terminalId -> session. */
-  onTerminalCreated?(terminalId: string): void;
+  onTerminalCreated?(terminalId: string, callbacks: AgentSessionCallbacks): void;
 }
 
 export interface ClientHandlerContext {
+  onRootSession?(sessionId: string): void;
   cwd: string;
   additionalDirectories?: string[];
   terminalManager: TerminalManager;
   logger: Logger;
   mcpGateway?: AgentMcpGateway;
-  resolveSession(params?: { sessionId?: string }): ClientSessionContext;
+  resolveSession(params?: {
+    sessionId?: string;
+    requestId?: string | number;
+  }): ClientSessionContext;
 }
 
 /** Runs a sync handler and surfaces sync throws as rejections. */
@@ -53,14 +76,68 @@ function toPromise<T>(fn: () => T): Promise<T> {
  * the `Client` interface (camelCase: readTextFile, createTerminal, ...).
  * Extensions are explicitly routed below; unknown methods fail with methodNotFound.
  */
-export function createClientHandlers(ctx: ClientHandlerContext): Client {
+export type SignalAwareClientHandlers = Omit<
+  Client,
+  | 'requestPermission'
+  | 'createElicitation'
+  | 'writeTextFile'
+  | 'createTerminal'
+  | 'waitForTerminalExit'
+  | 'extMethod'
+> & {
+  writeTextFile(params: WriteTextFileRequest, signal?: AbortSignal): Promise<Record<string, never>>;
+  createTerminal(
+    params: CreateTerminalRequest,
+    signal?: AbortSignal,
+  ): Promise<{ terminalId: string }>;
+  waitForTerminalExit(
+    params: WaitForTerminalExitRequest,
+    signal?: AbortSignal,
+  ): ReturnType<typeof handleTerminalWaitForExit>;
+  extMethod(
+    method: string,
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<Record<string, unknown>>;
+  requestPermission(
+    params: RequestPermissionRequest,
+    signal?: AbortSignal,
+  ): Promise<RequestPermissionResponse>;
+  createElicitation(
+    params: CreateElicitationRequest,
+    signal?: AbortSignal,
+  ): Promise<CreateElicitationResponse>;
+};
+
+export function createClientHandlers(ctx: ClientHandlerContext): SignalAwareClientHandlers {
   const { terminalManager, logger, mcpGateway } = ctx;
   const pendingUrlElicitations = new Map<string, ClientSessionContext>();
+  const terminalOwners = new Map<string, AgentSessionCallbacks>();
+  const metadata = new WeakMap<AgentSessionCallbacks, PermissionMetadataCache>();
+  const permissionMetadata = (session: ClientSessionContext) => {
+    let cache = metadata.get(session.callbacks);
+    if (!cache) {
+      cache = new PermissionMetadataCache();
+      metadata.set(session.callbacks, cache);
+    }
+    return cache;
+  };
+  const assertTerminalOwner = (session: ClientSessionContext, terminalId: string) => {
+    if (terminalOwners.get(terminalId) !== session.callbacks) {
+      throw RequestError.invalidParams(undefined, 'Terminal does not belong to this session');
+    }
+  };
+  const registerTerminal = (session: ClientSessionContext, terminalId: string) => {
+    terminalOwners.set(terminalId, session.callbacks);
+    session.onTerminalCreated?.(terminalId, session.callbacks);
+  };
   const extensionRouter = createExtensionRouter({
     terminalManager,
     logger,
     mcpGateway,
     resolveSession: ctx.resolveSession,
+    assertTerminalOwner,
+    registerTerminal,
     async publishStatus(sessionId, status) {
       const session = ctx.resolveSession({ sessionId });
       await session.callbacks.onUpdate({ type: 'status', status });
@@ -71,6 +148,12 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
     async sessionUpdate(n) {
       try {
         const session = ctx.resolveSession(n);
+        if (
+          n.update.sessionUpdate === 'tool_call' ||
+          n.update.sessionUpdate === 'tool_call_update'
+        ) {
+          permissionMetadata(session).remember(n.update);
+        }
         for (const event of parseNotificationToEvents(n)) {
           await session.callbacks.onUpdate(event);
         }
@@ -98,10 +181,20 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       }
     },
 
-    async requestPermission(r) {
+    async requestPermission(r, signal) {
+      if (signal?.aborted) return { outcome: { outcome: 'cancelled' } };
+      if (!r.options.length) return { outcome: { outcome: 'cancelled' } };
       const session = ctx.resolveSession(r);
-      const domainReq = parsePermissionRequest(r);
-      const domainResp = await session.callbacks.onRequestPermission(domainReq);
+      const domainReq = parsePermissionRequest({
+        ...r,
+        toolCall: permissionMetadata(session).merge(r.toolCall),
+      });
+      const domainResp = await waitForRequest(
+        session.callbacks.onRequestPermission(domainReq, signal),
+        signal,
+        () => ({ allowed: false, cancelled: true }),
+      );
+      if (signal?.aborted) return { outcome: { outcome: 'cancelled' } };
       return formatPermissionOutcome(domainResp, domainReq.options);
     },
 
@@ -111,11 +204,25 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
         { path: p.path, line: p.line ?? undefined, limit: p.limit ?? undefined },
         session.cwd,
         session.additionalDirectories,
+        session.localSessionId,
       );
     },
 
-    async writeTextFile(p) {
+    async writeTextFile(p, signal) {
+      assertAcpAbsolutePath(p.path);
       const session = ctx.resolveSession(p);
+      const target = resolveAllowedPath(p.path, session.cwd, session.additionalDirectories, true);
+      await authorizeClientOperation(
+        session,
+        {
+          name: 'fs/write_text_file',
+          kind: 'edit',
+          arguments: { path: target, content: p.content },
+          locations: [{ path: target }],
+        },
+        `Write ${target}`,
+        signal,
+      );
       return handleFsWriteTextFile(
         { path: p.path, content: p.content },
         session.cwd,
@@ -123,12 +230,28 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       );
     },
 
-    async createTerminal(p) {
+    async createTerminal(p, signal) {
+      if (p.cwd !== undefined && p.cwd !== null) assertAcpAbsolutePath(p.cwd);
       const session = ctx.resolveSession(p);
       const env: Record<string, string> = {};
       if (p.env) {
         for (const v of p.env) env[v.name] = v.value;
       }
+      const cwd = resolveAllowedPath(
+        p.cwd ?? session.cwd,
+        session.cwd,
+        session.additionalDirectories,
+      );
+      await authorizeClientOperation(
+        session,
+        {
+          name: 'terminal/create',
+          kind: 'execute',
+          arguments: { command: p.command, args: p.args ?? [], cwd, env },
+        },
+        `Run ${p.command}`,
+        signal,
+      );
       const res = await handleTerminalCreate(
         {
           command: p.command,
@@ -143,53 +266,63 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
         session.callbacks.onUpdate,
         session.additionalDirectories,
       );
-      session.onTerminalCreated?.(res.terminalId);
+      registerTerminal(session, res.terminalId);
       return res;
     },
 
     terminalOutput(p) {
       return toPromise(() => {
-        ctx.resolveSession(p);
+        assertTerminalOwner(ctx.resolveSession(p), p.terminalId);
         return handleTerminalOutput(p, terminalManager, logger);
       });
     },
 
     releaseTerminal(p) {
       return toPromise(() => {
-        ctx.resolveSession(p);
-        return handleTerminalRelease(p, terminalManager, logger);
+        assertTerminalOwner(ctx.resolveSession(p), p.terminalId);
+        const result = handleTerminalRelease(p, terminalManager, logger);
+        terminalOwners.delete(p.terminalId);
+        return result;
       });
     },
 
-    waitForTerminalExit(p) {
-      ctx.resolveSession(p);
-      return handleTerminalWaitForExit(p, terminalManager, logger);
+    waitForTerminalExit(p, signal) {
+      assertTerminalOwner(ctx.resolveSession(p), p.terminalId);
+      return handleTerminalWaitForExit(p, terminalManager, logger, signal);
     },
 
     killTerminal(p) {
       return toPromise(() => {
-        ctx.resolveSession(p);
+        assertTerminalOwner(ctx.resolveSession(p), p.terminalId);
         return handleTerminalKill(p, terminalManager, logger);
       });
     },
 
-    async createElicitation(p) {
+    async createElicitation(p, signal) {
+      if (signal?.aborted) return { action: 'cancel' };
       const request = projectElicitationRequest(p);
       if (!request) return { action: 'decline' };
 
       let session: ClientSessionContext;
       try {
-        session = ctx.resolveSession(
-          request.sessionId ? { sessionId: request.sessionId } : undefined,
-        );
+        session = ctx.resolveSession({
+          sessionId: request.sessionId,
+          requestId: request.requestId,
+        });
       } catch (err) {
         logger.debug({ err, mode: p.mode }, 'Declining ACP elicitation without a session context');
         return { action: 'decline' };
       }
 
-      if (!session.callbacks.onRequestElicitation) return { action: 'decline' };
+      if (!session.callbacks.onRequestElicitation)
+        throw RequestError.invalidParams(undefined, 'Elicitation mode is not supported');
 
-      const response = await session.callbacks.onRequestElicitation(request);
+      const response = await waitForRequest(
+        session.callbacks.onRequestElicitation(request, signal),
+        signal,
+        () => ({ action: 'cancel' as const }),
+      );
+      if (signal?.aborted) return { action: 'cancel' };
       const result = formatElicitationResponse(response, request);
       if (p.mode === 'url' && result.action === 'accept') {
         pendingUrlElicitations.set(request.id, session);
@@ -204,18 +337,19 @@ export function createClientHandlers(ctx: ClientHandlerContext): Client {
       await session.callbacks.onElicitationCompleted?.(n.elicitationId);
     },
 
-    async extMethod(method, params) {
-      logger.debug({ method, params }, 'ACP extension method');
+    async extMethod(method, params, signal) {
+      throwIfRequestCancelled(signal);
+      logger.debug({ method }, 'ACP extension method');
       if (typeof method !== 'string') {
         throw RequestError.invalidRequest(undefined, 'Extension method name must be a string');
       }
-      return (await extensionRouter.request(method, params)) as Record<string, unknown>;
+      return (await extensionRouter.request(method, params, signal)) as Record<string, unknown>;
     },
 
     async extNotification(method, rawParams) {
       try {
         if (typeof method !== 'string' || !method.startsWith('_')) return;
-        logger.debug({ method, params: rawParams }, 'ACP extension notification');
+        logger.debug({ method }, 'ACP extension notification');
         await extensionRouter.notify(method, rawParams);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

@@ -1,11 +1,13 @@
-import type { ManagedSession } from './managed-session.js';
+import { eq } from 'drizzle-orm';
+import { projects } from '../db/schema.js';
+import type { SessionRuntime } from './runtime/session-runtime.js';
 import type { DbClient } from '../db/index.js';
 import type { AgentDriver, AgentSessionIntent } from '../agent/types.js';
 import type { AgentRuntimeServices } from '../agent/runtime-services.js';
 import { createDefaultAgentDriver } from '../default-agent-driver.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
-import { SessionEventStore } from './event-store.js';
+import { SessionEventRepository } from './persistence/session-event-repository.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import { SessionWorkspace } from '../git/session-workspace.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
@@ -15,14 +17,14 @@ import {
   type SessionMode,
   type ThinkingEffort,
 } from '@agentctl/shared';
-import { SessionStateMachine } from './state-machine.js';
+import { SessionRuntimeRegistry } from './runtime/session-runtime-registry.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
 import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 import { SessionLauncher, type CreateSessionParams } from './services/session-launcher.js';
 import { SessionLifecycleService } from './services/session-lifecycle-service.js';
 import { SessionHistoryService } from './services/session-history-service.js';
-import { InputDeliveryService } from './services/input-delivery-service.js';
-import { SessionCommandRouter } from './services/session-command-router.js';
+import { SessionOperationWorker } from './execution/session-operation-worker.js';
+import { SessionCommandHandler } from './commands/session-command-handler.js';
 
 export interface IEventBus {
   publish(event: unknown): void;
@@ -37,15 +39,15 @@ export class SessionManager {
   private readonly logger: Logger;
   private readonly runtime: AgentDriver;
 
-  private readonly inputDelivery: InputDeliveryService;
-  private readonly eventStore: SessionEventStore;
-  private readonly stateMachine: SessionStateMachine;
+  private readonly operationWorker: SessionOperationWorker;
+  private readonly eventRepository: SessionEventRepository;
+  private readonly runtimeRegistry: SessionRuntimeRegistry;
   private readonly sessionWorkspace: SessionWorkspace;
 
   private readonly launcher: SessionLauncher;
   private readonly lifecycle: SessionLifecycleService;
   private readonly history: SessionHistoryService;
-  private readonly commandRouter: SessionCommandRouter;
+  private readonly commandHandler: SessionCommandHandler;
 
   constructor(
     db: DbClient,
@@ -58,7 +60,6 @@ export class SessionManager {
     runtimeServices?: AgentRuntimeServices,
   ) {
     this.db = db;
-    this.inputDelivery = new InputDeliveryService(db);
     this.providerRegistry = providerRegistry;
     this.logger = logger;
 
@@ -74,12 +75,12 @@ export class SessionManager {
       }
     }
 
-    this.eventStore = new SessionEventStore(db, eventBus);
-    this.stateMachine = new SessionStateMachine(
+    this.eventRepository = new SessionEventRepository(db, eventBus);
+    this.runtimeRegistry = new SessionRuntimeRegistry(
       db,
       workspaceManager,
       providerRegistry,
-      this.eventStore,
+      this.eventRepository,
       logger,
       this.runtime,
       mcpGateway,
@@ -88,21 +89,24 @@ export class SessionManager {
       db,
       workspaceManager,
       (sessionId) => {
-        this.stateMachine.stopSession(sessionId);
+        this.runtimeRegistry.stopSession(sessionId);
       },
-      () => this.stateMachine.getSnapshotService(),
+      () => this.runtimeRegistry.getSnapshotService(),
     );
 
     const manager = () => this;
     this.launcher = new SessionLauncher({
+      get eventRepository() {
+        return manager().eventRepository;
+      },
       get db() {
         return manager().db;
       },
       get logger() {
         return manager().logger;
       },
-      get stateMachine() {
-        return manager().stateMachine;
+      get runtimeRegistry() {
+        return manager().runtimeRegistry;
       },
       get sessionWorkspace() {
         return manager().sessionWorkspace;
@@ -120,8 +124,8 @@ export class SessionManager {
       get logger() {
         return manager().logger;
       },
-      get stateMachine() {
-        return manager().stateMachine;
+      get runtimeRegistry() {
+        return manager().runtimeRegistry;
       },
       get sessionWorkspace() {
         return manager().sessionWorkspace;
@@ -139,48 +143,74 @@ export class SessionManager {
       get logger() {
         return manager().logger;
       },
-      get stateMachine() {
-        return manager().stateMachine;
+      get runtimeRegistry() {
+        return manager().runtimeRegistry;
       },
       get sessionWorkspace() {
         return manager().sessionWorkspace;
       },
-      get eventStore() {
-        return manager().eventStore;
+      get eventRepository() {
+        return manager().eventRepository;
       },
       launcher: this.launcher,
       startSession: (...args) => manager().startSession(...args),
       restartSession: (...args) => manager().restartSession(...args),
       createForkSession: (...args) => manager().createForkSession(...args),
       updateSessionConfig: (sessionId, params, options) =>
-        manager().updateSessionConfig(sessionId, params, options),
+        manager().commandHandler.updateSessionConfig(sessionId, params, options),
     });
-    this.commandRouter = new SessionCommandRouter({
+    this.commandHandler = new SessionCommandHandler({
       get db() {
         return manager().db;
       },
       get logger() {
         return manager().logger;
       },
-      get stateMachine() {
-        return manager().stateMachine;
+      get runtimeRegistry() {
+        return manager().runtimeRegistry;
       },
       get providerRegistry() {
         return manager().providerRegistry;
       },
-      get eventStore() {
-        return manager().eventStore;
+      get eventRepository() {
+        return manager().eventRepository;
       },
       launcher: this.launcher,
       restartSession: (...args) => manager().restartSession(...args),
       getOrResuscitate: (...args) => manager().getOrResuscitate(...args),
-      switchMode: (...args) => manager().switchMode(...args),
-      rewindSession: (...args) => manager().rewindSession(...args),
+      switchMode: (...args) => manager().lifecycle.switchMode(...args),
+      rewindSession: (...args) => manager().history.rewindSession(...args),
       clearRewindBackup: (...args) => manager().history.clearRewindBackup(...args),
     });
+    this.operationWorker = new SessionOperationWorker(
+      db,
+      this.eventRepository,
+      async (sessionId, message) => {
+        await this.commandHandler.handleClientMessage(sessionId, 'session.input', {
+          input: message.text,
+          attachmentIds: message.attachmentIds,
+          acceptedEventId: message.eventId,
+          attemptId: message.attemptId,
+        });
+      },
+      logger,
+    );
   }
 
-  // --- Delegated Facade Methods ---
+  private async executeMutation<T>(
+    sessionId: string,
+    kind: string,
+    payload: unknown,
+    execute: () => Promise<T>,
+  ): Promise<T> {
+    let result!: T;
+    await this.operationWorker.runCommand(sessionId, kind, payload, async () => {
+      result = await execute();
+    });
+    return result;
+  }
+
+  // Public commands coordinate here; internal handlers call their dependencies directly.
 
   async ensureWorkspaceAvailable(sessionId: string): Promise<boolean> {
     return this.launcher.ensureWorkspaceAvailable(sessionId);
@@ -191,7 +221,7 @@ export class SessionManager {
   }
 
   writeTerminalInput(sessionId: string, terminalId: string, data: string): boolean {
-    return this.commandRouter.writeTerminalInput(sessionId, terminalId, data);
+    return this.commandHandler.writeTerminalInput(sessionId, terminalId, data);
   }
 
   async createSession(params: CreateSessionParams): Promise<{ sessionId: string }> {
@@ -210,7 +240,7 @@ export class SessionManager {
     resolvedThinkingConfigId?: string,
     intent: AgentSessionIntent = { kind: 'new' },
     resolvedModelConfigId?: string,
-  ): Promise<ManagedSession> {
+  ): Promise<SessionRuntime> {
     return this.launcher.startSession(
       sessionId,
       worktreePath,
@@ -228,44 +258,78 @@ export class SessionManager {
 
   async restartSession(
     sessionId: string,
-    options: { resumeExisting?: boolean } = {},
-  ): Promise<ManagedSession> {
+    options: { resumeExisting?: boolean; nativeImport?: boolean } = {},
+  ): Promise<SessionRuntime> {
     return this.launcher.restartSession(sessionId, options);
+  }
+
+  /** User-requested reconnect; runtime helpers use restartSession inside their existing command. */
+  reconnectSession(sessionId: string): Promise<SessionRuntime> {
+    return this.executeMutation(sessionId, 'session.reconnect', {}, () =>
+      this.restartSession(sessionId),
+    );
+  }
+
+  runWorkspaceCommand<T>(
+    sessionId: string,
+    payload: unknown,
+    execute: () => Promise<T>,
+  ): Promise<T> {
+    return this.executeMutation(sessionId, 'session.workspace', payload, execute);
   }
 
   async getOrResuscitate(
     sessionId: string,
     options?: { allowArchived?: boolean },
-  ): Promise<ManagedSession | null> {
+  ): Promise<SessionRuntime | null> {
     return this.launcher.getOrResuscitate(sessionId, options);
   }
 
-  async switchMode(sessionId: string, newMode: SessionMode): Promise<ManagedSession | null> {
-    return this.lifecycle.switchMode(sessionId, newMode);
+  async switchMode(sessionId: string, newMode: SessionMode): Promise<SessionRuntime | null> {
+    return this.executeMutation(sessionId, 'session.mode', { newMode }, () =>
+      this.lifecycle.switchMode(sessionId, newMode),
+    );
   }
 
-  getSession(sessionId: string): ManagedSession | undefined {
-    return this.stateMachine.getSession(sessionId);
+  getSession(sessionId: string): SessionRuntime | undefined {
+    return this.runtimeRegistry.getSession(sessionId);
   }
 
   getSnapshotService() {
-    return this.stateMachine.getSnapshotService();
+    return this.runtimeRegistry.getSnapshotService();
+  }
+
+  stopSessionAndWait(sessionId: string): Promise<void> {
+    return this.runtimeRegistry.stopSessionAndWait(sessionId);
   }
 
   stopSession(sessionId: string): void {
-    this.stateMachine.stopSession(sessionId);
+    this.runtimeRegistry.stopSession(sessionId);
   }
 
   async stopAll(): Promise<void> {
+    this.operationWorker.stop();
     return this.lifecycle.stopAll();
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    return this.lifecycle.deleteSession(sessionId);
+    return this.operationWorker.retireSession(
+      sessionId,
+      'session.delete',
+      {},
+      () => this.runtimeRegistry.stopSessionAndWait(sessionId),
+      () => this.lifecycle.deleteSession(sessionId),
+    );
   }
 
   async archiveSession(sessionId: string): Promise<void> {
-    return this.lifecycle.archiveSession(sessionId);
+    return this.operationWorker.retireSession(
+      sessionId,
+      'session.archive',
+      {},
+      () => this.runtimeRegistry.stopSessionAndWait(sessionId),
+      () => this.lifecycle.archiveSession(sessionId),
+    );
   }
 
   async finalizeSession(
@@ -273,10 +337,22 @@ export class SessionManager {
     action: 'merge' | 'discard',
     commitMessage?: string,
   ): Promise<void> {
-    return this.lifecycle.finalizeSession(sessionId, action, commitMessage);
+    return this.operationWorker.retireSession(
+      sessionId,
+      'session.finalize',
+      { action, commitMessage },
+      () => this.runtimeRegistry.stopSessionAndWait(sessionId),
+      () => this.lifecycle.finalizeSession(sessionId, action, commitMessage),
+    );
   }
 
   async deleteProject(projectId: string): Promise<void> {
+    const project = await this.db.query.projects.findFirst({
+      where: eq(projects.id, projectId),
+      with: { sessions: true },
+    });
+    if (!project) throw new Error(`Project not found: ${projectId}`);
+    for (const session of project.sessions) await this.deleteSession(session.id);
     return this.lifecycle.deleteProject(projectId);
   }
 
@@ -288,8 +364,10 @@ export class SessionManager {
       selectedThinkingEffort: ThinkingEffort;
     },
     options: { forceNewAgentSession?: boolean } = {},
-  ): Promise<ManagedSession | null> {
-    return this.commandRouter.updateSessionConfig(sessionId, params, options);
+  ): Promise<SessionRuntime | null> {
+    return this.executeMutation(sessionId, 'session.configuration', { params, options }, () =>
+      this.commandHandler.updateSessionConfig(sessionId, params, options),
+    );
   }
 
   async setConfigOption(
@@ -297,15 +375,24 @@ export class SessionManager {
     configId: string,
     value: string | boolean,
   ): Promise<void> {
-    return this.commandRouter.setConfigOption(sessionId, configId, value);
+    return this.executeMutation(
+      sessionId,
+      'session.configuration_option',
+      { configId, value },
+      () => this.commandHandler.setConfigOption(sessionId, configId, value),
+    );
   }
 
   async setAgentPersona(sessionId: string, persona: string): Promise<void> {
-    return this.commandRouter.setAgentPersona(sessionId, persona);
+    return this.executeMutation(sessionId, 'session.persona', { persona }, () =>
+      this.commandHandler.setAgentPersona(sessionId, persona),
+    );
   }
 
   async updateApprovalMode(sessionId: string, approvalMode: string): Promise<void> {
-    return this.commandRouter.updateApprovalMode(sessionId, approvalMode);
+    return this.executeMutation(sessionId, 'session.approval_policy', { approvalMode }, () =>
+      this.commandHandler.updateApprovalMode(sessionId, approvalMode),
+    );
   }
 
   async handleClientMessage(
@@ -330,9 +417,32 @@ export class SessionManager {
       value?: string;
       onAccepted?: (eventId: number) => void;
       clientMessageId?: string;
+      acceptedEventId?: number;
+      attemptId?: string;
     },
   ): Promise<void> {
-    return this.commandRouter.handleClientMessage(sessionId, action, payload);
+    if (action === 'cancel') {
+      await Promise.all([
+        this.commandHandler.handleClientMessage(sessionId, action, payload),
+        this.operationWorker.cancelPending(sessionId),
+      ]);
+      return;
+    }
+    if (action === 'session.input') {
+      const eventId = await this.startInput(
+        sessionId,
+        payload.input ?? '',
+        payload.attachmentIds,
+        payload.clientMessageId,
+      );
+      payload.onAccepted?.(eventId);
+      return;
+    }
+    if (action === 'approve' || action === 'deny')
+      return this.commandHandler.handleClientMessage(sessionId, action, payload);
+    return this.operationWorker.runCommand(sessionId, action, payload, () =>
+      this.commandHandler.handleClientMessage(sessionId, action, payload),
+    );
   }
 
   /** Resolve after the user message is persisted, while the provider turn continues. */
@@ -342,44 +452,37 @@ export class SessionManager {
     attachmentIds?: string[],
     clientMessageId?: string,
   ): Promise<number> {
-    return this.inputDelivery.accept(sessionId, input, attachmentIds, clientMessageId, () =>
-      this.deliverInput(sessionId, input, attachmentIds, clientMessageId),
-    );
+    return this.operationWorker.acceptMessage(sessionId, input, attachmentIds, clientMessageId);
   }
 
-  private deliverInput(
+  resumeSessionQueue(sessionId: string): Promise<void> {
+    return this.operationWorker.resumeQueue(sessionId);
+  }
+
+  changeQueuedMessage(
     sessionId: string,
-    input: string,
-    attachmentIds?: string[],
-    clientMessageId?: string,
-  ): Promise<number> {
-    return new Promise<number>((resolve, reject) => {
-      let accepted = false;
-      void this.handleClientMessage(sessionId, 'session.input', {
-        input,
-        clientMessageId,
-        attachmentIds,
-        onAccepted: (eventId) => {
-          accepted = true;
-          resolve(eventId);
-        },
-      }).then(
-        () => {
-          if (!accepted) reject(new Error('Session did not accept the message'));
-        },
-        (error: unknown) => {
-          if (accepted) {
-            this.logger.error(error, `Prompt failed after acceptance for session ${sessionId}`);
-          } else {
-            reject(error);
-          }
-        },
-      );
-    });
+    commandId: string,
+    action: 'cancel' | 'up' | 'down',
+  ): Promise<void> {
+    return this.operationWorker.changeQueuedMessage(sessionId, commandId, action);
+  }
+
+  async recoverInterruptedOperations(): Promise<void> {
+    await this.operationWorker.recover();
+  }
+
+  async cancelQueuedMessages(sessionId: string): Promise<void> {
+    await this.operationWorker.cancelPending(sessionId);
+  }
+
+  async waitForSessionOperations(sessionId: string): Promise<void> {
+    await this.operationWorker.idle(sessionId);
   }
 
   async rewindSession(sessionId: string, eventId: number, mode: 'conversation' | 'files' | 'fork') {
-    return this.history.rewindSession(sessionId, eventId, mode);
+    return this.executeMutation(sessionId, 'session.rewind', { eventId, mode }, () =>
+      this.history.rewindSession(sessionId, eventId, mode),
+    );
   }
 
   createForkSession(
@@ -389,7 +492,9 @@ export class SessionManager {
   }
 
   async undoRewind(sessionId: string): Promise<void> {
-    return this.history.undoRewind(sessionId);
+    return this.executeMutation(sessionId, 'session.undo_rewind', {}, () =>
+      this.history.undoRewind(sessionId),
+    );
   }
 
   async previewSnapshotDiff(sessionId: string, eventId: number) {
@@ -401,7 +506,9 @@ export class SessionManager {
   }
 
   async restoreSnapshot(sessionId: string, snapshotHash: string): Promise<{ backupHash: string }> {
-    return this.history.restoreSnapshot(sessionId, snapshotHash);
+    return this.executeMutation(sessionId, 'session.restore_snapshot', { snapshotHash }, () =>
+      this.history.restoreSnapshot(sessionId, snapshotHash),
+    );
   }
 
   async handoffSession(
@@ -410,10 +517,15 @@ export class SessionManager {
     targetModel?: string,
     nextSessionFocus?: string,
   ) {
-    return this.history.handoffSession(sessionId, targetProvider, targetModel, nextSessionFocus);
+    return this.executeMutation(
+      sessionId,
+      'session.handoff',
+      { targetProvider, targetModel, nextSessionFocus },
+      () => this.history.handoffSession(sessionId, targetProvider, targetModel, nextSessionFocus),
+    );
   }
 
-  getEventStore(): SessionEventStore {
-    return this.eventStore;
+  getEventRepository(): SessionEventRepository {
+    return this.eventRepository;
   }
 }

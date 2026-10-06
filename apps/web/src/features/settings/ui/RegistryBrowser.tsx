@@ -98,7 +98,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
     }
   };
 
-  const filtered = api.registry
+  const filtered = [...api.registry, ...api.providers.filter((provider) => provider.isProfile)]
     .filter((p) => matchesQuery(p) && matchesStatus(p))
     .sort((a, b) => queryScore(b) - queryScore(a));
 

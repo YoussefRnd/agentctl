@@ -3,6 +3,7 @@ import { useProviders } from '@/features/providers';
 import { useSettings } from '../api/useSettings';
 import { Button } from '@agentctl/ui';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
+import { ProviderProfilesPanel } from './ProviderProfilesPanel';
 import { RegistryBrowser } from './RegistryBrowser';
 import { providerService } from '@agentctl/api-client';
 import { toast } from 'sonner';
@@ -79,6 +80,7 @@ export function ProvidersSettingsView() {
         </p>
       </div>
 
+      <ProviderProfilesPanel providers={providersApi.providers} />
       <RegistryBrowser settings={settings} api={providersApi} />
     </div>
   );

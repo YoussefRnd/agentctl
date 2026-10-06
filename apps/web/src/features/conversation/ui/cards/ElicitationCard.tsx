@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import type { ElicitationItem, ElicitationResponse } from '@agentctl/shared';
+import {
+  getElicitationValidationError,
+  type ElicitationItem,
+  type ElicitationResponse,
+} from '@agentctl/shared';
 import { Card, CardHeader, CardContent, CardFooter, Button, Input, Select } from '@agentctl/ui';
 
 export interface ElicitationCardProps {
   elicitation: ElicitationItem;
-  onRespond?: (elicitationId: string, response: ElicitationResponse) => void;
+  onRespond?: (elicitationId: string, response: ElicitationResponse) => void | Promise<void>;
   disabled?: boolean;
 }
 
@@ -16,6 +20,9 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
   const { request, status } = elicitation;
   const isForm = request.mode === 'form';
   const isUrl = request.mode === 'url';
+  const [submitting, setSubmitting] = useState(false);
+  const [responseError, setResponseError] = useState<string>();
+  const unavailable = disabled || submitting;
 
   const [formValues, setFormValues] = useState<Record<string, unknown>>(() => {
     const initial: Record<string, unknown> = {};
@@ -35,21 +42,26 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
     return initial;
   });
 
+  const submissionValues = Object.fromEntries(
+    Object.entries(formValues).filter(([id, value]) => {
+      const field = request.form?.fields.find((field) => field.id === id);
+      return field?.required || (value !== '' && !(Array.isArray(value) && value.length === 0));
+    }),
+  );
+  const validationError = getElicitationValidationError(request, {
+    action: 'submit',
+    values: submissionValues,
+  });
   const isPending = status === 'pending';
   const isFormValid =
     !isForm ||
-    (request.form?.fields.every((field) => {
-      const value = formValues[field.id];
-      if (Array.isArray(value)) {
-        return (
-          (!field.required || value.length > 0) &&
-          (field.minItems === undefined || value.length >= field.minItems) &&
-          (field.maxItems === undefined || value.length <= field.maxItems)
-        );
-      }
-      return !field.required || (value !== undefined && value !== null && value !== '');
-    }) ??
-      false);
+    (!validationError &&
+      (request.form?.fields.every((field) => {
+        const value = formValues[field.id];
+        if (Array.isArray(value)) return !field.required || value.length > 0;
+        return !field.required || (value !== undefined && value !== null && value !== '');
+      }) ??
+        false));
 
   const cardStatus =
     status === 'completed'
@@ -65,33 +77,36 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
     }));
   };
 
-  const handleSubmit = (e?: React.SyntheticEvent) => {
-    e?.preventDefault();
-    if (!isPending || !onRespond || disabled) return;
-    onRespond(elicitation.id, {
-      action: 'submit',
-      values: isForm ? formValues : undefined,
-    });
+  const respond = async (response: ElicitationResponse) => {
+    if (!isPending || !onRespond || unavailable) return;
+    setSubmitting(true);
+    setResponseError(undefined);
+    try {
+      await onRespond(elicitation.id, response);
+    } catch (error) {
+      setResponseError(
+        error instanceof Error ? error.message : 'Could not submit the response. Try again.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
+  const handleSubmit = (event?: React.SyntheticEvent) => {
+    event?.preventDefault();
+    if (!isFormValid) return;
+    void respond({ action: 'submit', values: isForm ? submissionValues : undefined });
+  };
   const handleCancel = () => {
-    if (!isPending || !onRespond || disabled) return;
-    onRespond(elicitation.id, {
-      action: 'cancel',
-    });
+    void respond({ action: 'cancel' });
   };
-
   const handleDecline = () => {
-    if (!isPending || !onRespond || disabled) return;
-    onRespond(elicitation.id, {
-      action: 'decline',
-    });
+    void respond({ action: 'decline' });
   };
-
   const handleOpenUrl = () => {
-    if (!isPending || !onRespond || disabled || !request.url) return;
+    if (!isPending || !onRespond || unavailable || !request.url) return;
     window.open(request.url.url, '_blank', 'noopener,noreferrer');
-    onRespond(elicitation.id, { action: 'submit' });
+    void respond({ action: 'submit' });
   };
 
   return (
@@ -102,6 +117,9 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
             {isForm ? 'Form Request' : 'External Authorization'}
           </span>
           <span className="text-text-muted font-mono text-xs">ID: {elicitation.id}</span>
+          {request.subagentId && (
+            <span className="text-text-muted text-xs">Subagent: {request.subagentId}</span>
+          )}
         </div>
         <span
           className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase ${
@@ -155,7 +173,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                           ? (formValues[field.id] as string)
                           : ''
                       }
-                      disabled={!isPending || disabled}
+                      disabled={!isPending || unavailable}
                       onChange={(val) => {
                         handleInputChange(field.id, val);
                       }}
@@ -183,7 +201,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                               checked={selected.includes(option.value)}
                               disabled={
                                 !isPending ||
-                                disabled ||
+                                unavailable ||
                                 (!selected.includes(option.value) &&
                                   field.maxItems !== undefined &&
                                   selected.length >= field.maxItems)
@@ -213,7 +231,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                       <input
                         type="checkbox"
                         checked={Boolean(formValues[field.id])}
-                        disabled={!isPending || disabled}
+                        disabled={!isPending || unavailable}
                         onChange={(e) => {
                           handleInputChange(field.id, e.target.checked);
                         }}
@@ -224,14 +242,20 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                   ) : (
                     <Input
                       id={`elicitation-${field.id}`}
-                      type={field.type === 'number' || field.type === 'integer' ? 'number' : 'text'}
+                      type={
+                        field.type === 'number' || field.type === 'integer'
+                          ? 'number'
+                          : field.format === 'email'
+                            ? 'email'
+                            : 'text'
+                      }
                       value={
                         typeof formValues[field.id] === 'string' ||
                         typeof formValues[field.id] === 'number'
                           ? String(formValues[field.id])
                           : ''
                       }
-                      disabled={!isPending || disabled}
+                      disabled={!isPending || unavailable}
                       required={field.required}
                       min={field.minimum}
                       max={field.maximum}
@@ -279,14 +303,19 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
             </div>
           </div>
         )}
+        {responseError && (
+          <p role="alert" className="text-xs text-rose-400">
+            {responseError}
+          </p>
+        )}
       </CardContent>
 
       {isPending && (
         <CardFooter className="flex items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={handleCancel} disabled={disabled}>
+          <Button variant="ghost" size="sm" onClick={handleCancel} disabled={unavailable}>
             Cancel
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleDecline} disabled={disabled}>
+          <Button variant="ghost" size="sm" onClick={handleDecline} disabled={unavailable}>
             Decline
           </Button>
           <Button
@@ -295,7 +324,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
             type={isForm ? 'submit' : 'button'}
             form={isForm ? `elicitation-form-${elicitation.id}` : undefined}
             onClick={isForm ? undefined : handleOpenUrl}
-            disabled={disabled || !isFormValid}
+            disabled={unavailable || !isFormValid}
           >
             {isForm ? 'Submit' : 'Open URL'}
           </Button>

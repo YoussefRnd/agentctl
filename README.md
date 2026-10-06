@@ -97,9 +97,68 @@ Failed messages stay in the outbox for an explicit retry. Stable message IDs pre
 from submitting an accepted prompt twice. Unsent browser file selections must be reattached
 after restarting; already uploaded attachments remain usable while their temporary files exist.
 
-Conversations initially load the newest 200 events. Use **Load earlier messages** to retrieve
-older pages. The feed renders visible conversation groups and preserves navigation to turns
-and search results.
+Conversations initially load up to 200 recent events within a 1 MiB payload target. Large
+reconnect gaps refresh this recent window; use **Load earlier messages** to retrieve older pages.
+Individual oversized events remain intact so pagination can always advance. The feed renders
+visible conversation groups and preserves navigation to turns and search results.
+
+Reported delegated tasks appear as cards with status, progress, and result previews. Use the
+task overview to find active tasks, pending approvals, or previous tasks. Open a card to inspect
+its details beside the conversation on desktop or in a full-screen panel on smaller screens.
+Only explicitly linked child activity is attributed to a task; providers that report just a
+delegation and result cannot supply a full child conversation. An unfinished call shows an
+unknown status when its turn ends, and later provider updates can resolve it. Pending approvals
+remain available in the parent chat while inspecting tasks.
+
+Provider settings support named profiles with independent encrypted environment configuration,
+model defaults, thinking defaults, and protocol overrides. Profiles share the registry agent's
+installation and updates. Agents that store login credentials globally need their own supported
+account-directory environment setting for separate accounts. Add custom model IDs in the Provider
+Profiles panel when an agent accepts models missing from its advertised list; an optional context
+window helps size handoffs. The agent must support selecting the supplied ID.
+
+The approval selector controls how agentctl answers ACP requests:
+**Ask every time**, **Auto-approve workspace edits**, or **Auto-approve requests**.
+Workspace-edit approval requires a recognized file-change kind and every reported location
+inside the workspace. Commands and incomplete or unfamiliar requests ask for approval.
+Configured MCP tool rules apply too; explicit deny and ask rules override automatic approval.
+Client file writes, terminal creation/input, and executable extensions also pass through this
+policy before agentctl performs them. File access remains confined to allowed roots in every mode;
+a terminal working directory restriction does not sandbox the command itself.
+
+Automatic approvals select an advertised allow-once choice. Persistent provider choices retain
+their original labels and scope; agentctl remembers only the exact request, without generating
+directory wildcards or command prefixes. A provider approval can cover one matching client
+operation in the current turn. Client-specific remembered choices last for the running session
+and distinguish file content, command arguments, supplied environment, and terminal input.
+These settings do not change the provider's own permissions or sandbox, and ACP cannot force
+providers to request approval for every action they execute internally.
+
+Browser sign-in requests show an Open/Copy link and wait for Continue before the agent proceeds.
+Signing in or out stops running sessions for profiles of the same agent and invalidates their
+authentication status, since ACP does not describe whether those profiles share credentials.
+
+ACP v2 plans support checklists, Markdown, file references, and removal. Context compaction appears
+as an activity with its progress and summary. Agent terminals show command, bounded output, and
+exit status. Stop waits up to five seconds for cancellation; an unresponsive runtime is terminated.
+Process failures include a bounded stderr excerpt with known credentials redacted.
+
+The new-session dialog can list and import native sessions when the agent advertises listing and
+loading capabilities. Imports are scoped to the project and profile, retain replayed conversation
+roles, and reuse the existing local session on repeated imports.
+
+ACP adapters default to stable v1. Opt into draft v2 in provider settings or with
+`AGENTCTL_ACP_PROTOCOL=v2`. Set `AGENTCTL_ACP_V2_ENABLED=true` to enable automatic v2 negotiation
+with v1 fallback for initialization incompatibility. Authentication, launch, and session errors
+remain visible. Set `AGENTCTL_ACP_PROTOCOL=v1` to force v1. Unavailable model selections produce
+a visible conversation notice identifying the fallback model.
+
+Handoff context keeps whole messages within a conservative UTF-8 byte budget, reserves 60% of
+an advertised model window for instructions, tools, the next prompt, and output, and caps embedded
+context at 32 KiB. Without a known window, it uses a 32,000-token estimate. Original and latest
+messages take priority; omitted history remains available in a private temporary document for ten
+minutes. Providers can expose per-model capacity through `contextWindow` in registry options or
+`_meta.contextWindow` in ACP model choices.
 
 ## Configuration
 
@@ -169,3 +228,6 @@ pnpm build
 ```
 
 Commit messages follow the Conventional Commits format and use lowercase subjects.
+
+The session command, runtime, execution and persistence boundaries are described in
+[Session architecture](packages/core/src/session/README.md).

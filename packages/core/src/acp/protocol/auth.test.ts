@@ -4,6 +4,14 @@ import { PROTOCOL_VERSION, type ClientSideConnection } from '@agentclientprotoco
 import { AGENTCTL_CLIENT_CAPABILITIES } from '../transport/capabilities-cache.js';
 
 describe('ACP Protocol Auth Conformance', () => {
+  it('rejects a different protocol version on auth connections', async () => {
+    const connection = {
+      initialize: vi.fn().mockResolvedValue({ protocolVersion: PROTOCOL_VERSION + 1 }),
+    } as unknown as ClientSideConnection;
+    await expect(initializeAuthConnection(connection, 'test')).rejects.toThrow(
+      'Unsupported ACP protocol version',
+    );
+  });
   it('advertises auth.terminal capability in default client capabilities', () => {
     expect(AGENTCTL_CLIENT_CAPABILITIES.auth).toEqual({ terminal: true });
   });
@@ -26,8 +34,8 @@ describe('ACP Protocol Auth Conformance', () => {
 
     expect(mockInitialize).toHaveBeenCalledWith({
       protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: { auth: { terminal: true } },
-      clientInfo: { name: 'test-agent', title: 'Agentctl', version: '1.0.0' },
+      clientCapabilities: { auth: { terminal: true }, elicitation: { url: {} } },
+      clientInfo: { name: 'test-agent', title: 'Agentctl', version: expect.any(String) },
     });
     expect(res.authMethods).toHaveLength(2);
   });

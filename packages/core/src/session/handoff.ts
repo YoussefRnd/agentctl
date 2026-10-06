@@ -1,3 +1,5 @@
+import { registerContextFile } from './context-files.js';
+import { contextByteBudget, selectContextEntries } from './context-budget.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -18,6 +20,8 @@ export interface HandoffOptions {
   nextSessionFocus?: string;
   maxRecentTurns?: number;
   maxEventId?: number;
+  contextWindow?: number;
+  maxBytes?: number;
 }
 
 export type HandoffSource = 'skill' | 'generated';
@@ -129,7 +133,10 @@ export async function findAgentGeneratedHandoff(
   for (const text of responseTexts) {
     for (const candidate of extractMarkdownPaths(text)) {
       const result = await readSecureHandoffFile(candidate);
-      if (result) return { ...result, sourceSessionId };
+      if (result) {
+        registerContextFile(sourceSessionId, result.filePath);
+        return { ...result, sourceSessionId };
+      }
     }
   }
 
@@ -330,7 +337,7 @@ export async function generateHandoffDocument(
     }
   }
 
-  const recentTurns = conversationEntries.slice(-maxTurns);
+  const recentTurns = conversationEntries;
   const referencedFiles = extractReferencedFiles(eligibleEvents);
   const workspaceState = await collectWorkspaceState(sessionRecord?.worktreePath);
 
@@ -350,10 +357,55 @@ export async function generateHandoffDocument(
 
   await removeStaleHandoffFiles();
   await fs.writeFile(filePath, content, { encoding: 'utf8', mode: 0o600 });
+  registerContextFile(sessionId, filePath);
 
+  const budget = options.maxBytes ?? contextByteBudget(options.contextWindow);
+  const reference = `Full persisted context: ${filePath}. Read this file if omitted details are needed.`;
+  const metadata = formatHandoffDocument({
+    sessionId,
+    sourceProvider,
+    targetProvider,
+    sessionTitle: sessionTitle ?? undefined,
+    nextSessionFocus: options.nextSessionFocus,
+    recentTurns: [],
+    referencedFiles,
+    workspaceState,
+  });
+  const selected = selectContextEntries(
+    conversationEntries,
+    Math.max(0, budget - Buffer.byteLength(metadata) - Buffer.byteLength(reference) - 256),
+    maxTurns,
+  );
+  let boundedContent = formatHandoffDocument({
+    sessionId,
+    sourceProvider,
+    targetProvider,
+    sessionTitle: sessionTitle ?? undefined,
+    nextSessionFocus: options.nextSessionFocus,
+    recentTurns: selected,
+    referencedFiles,
+    workspaceState,
+  });
+  if (selected.length < conversationEntries.length)
+    boundedContent += `\n${conversationEntries.length - selected.length} messages omitted to fit the context budget. ${reference}\n`;
+  if (Buffer.byteLength(boundedContent) > budget) {
+    const minimal = `# Handoff from ${sourceProvider} to ${targetProvider}\n${reference}\n`;
+    const compact = selectContextEntries(
+      conversationEntries,
+      Math.max(0, budget - Buffer.byteLength(minimal) - 128),
+      maxTurns,
+    );
+    boundedContent =
+      minimal +
+      compact.map((entry) => `[${entry.role}]: ${redactSensitiveText(entry.text)}`).join('\n\n');
+  }
+  if (Buffer.byteLength(boundedContent) > budget) {
+    await fs.unlink(filePath).catch(() => undefined);
+    throw new Error('The context budget is too small to include a handoff reference');
+  }
   return {
     filePath,
-    content,
+    content: boundedContent,
     sourceSessionId: sessionId,
     source: 'generated',
   };

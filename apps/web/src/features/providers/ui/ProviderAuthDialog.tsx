@@ -1,3 +1,4 @@
+import { BrowserAuthInteraction } from './BrowserAuthInteraction';
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Key,
@@ -199,27 +200,37 @@ function ProviderAuthDialogBody({
         />
       )}
 
-      {/* 3. Authenticating (Agent Method) State */}
-      {provider.authState === 'authenticating' && !activeTerminalMethod && (
-        <div className="border-border/40 bg-surface/30 flex flex-col items-center justify-center gap-3 rounded-xl border p-6 text-center">
-          <Loader2 className="text-accent h-6 w-6 animate-spin" />
-          <div className="space-y-1">
-            <p className="text-text-main text-xs font-semibold">
-              Waiting for agent authentication...
-            </p>
-            <p className="text-text-muted text-[11px]">
-              Complete the prompt in your browser or agent window if prompted.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="border-border/50 text-text-muted hover:text-text-main hover:bg-surface-secondary mt-2 flex h-7 items-center rounded-lg border px-3 text-xs"
-          >
-            Cancel
-          </button>
-        </div>
+      {provider.authInteraction && (
+        <BrowserAuthInteraction
+          key={provider.authInteraction.id}
+          providerId={provider.id}
+          request={provider.authInteraction}
+        />
       )}
+
+      {/* 3. Authenticating (Agent Method) State */}
+      {provider.authState === 'authenticating' &&
+        !activeTerminalMethod &&
+        !provider.authInteraction && (
+          <div className="border-border/40 bg-surface/30 flex flex-col items-center justify-center gap-3 rounded-xl border p-6 text-center">
+            <Loader2 className="text-accent h-6 w-6 animate-spin" />
+            <div className="space-y-1">
+              <p className="text-text-main text-xs font-semibold">
+                Waiting for agent authentication...
+              </p>
+              <p className="text-text-muted text-[11px]">
+                Complete the prompt in your browser or agent window if prompted.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="border-border/50 text-text-muted hover:text-text-main hover:bg-surface-secondary mt-2 flex h-7 items-center rounded-lg border px-3 text-xs"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
 
       {/* 4. Error State */}
       {isError && !isAuthenticating && !isVerifying && (

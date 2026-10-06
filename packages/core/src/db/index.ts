@@ -9,30 +9,12 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import dotenv from 'dotenv';
+import { loadWorkspaceEnv } from '../config/workspace.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function findWorkspaceRoot(startDir: string): string {
-  let current = startDir;
-  while (current !== path.parse(current).root) {
-    if (
-      fs.existsSync(path.join(current, 'pnpm-workspace.yaml')) ||
-      fs.existsSync(path.join(current, '.git'))
-    ) {
-      return current;
-    }
-    current = path.dirname(current);
-  }
-  return startDir;
-}
-
-const workspaceRoot = findWorkspaceRoot(process.cwd());
-const envPath = path.join(workspaceRoot, '.env');
-if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-}
+const workspaceRoot = loadWorkspaceEnv();
 
 export type CoreDatabase = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 

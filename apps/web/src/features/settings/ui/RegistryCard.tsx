@@ -75,7 +75,7 @@ export function RegistryCard({
   isInstalling: isInstallingProp,
   isRemoving,
 }: RegistryCardProps) {
-  const name = provider.agent?.name ?? provider.label;
+  const name = provider.isProfile ? provider.label : (provider.agent?.name ?? provider.label);
   const providerId = provider.agent?.id ?? provider.id;
   const isInstalled =
     provider.installState === 'installed_local' || provider.installState === 'system_available';

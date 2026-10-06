@@ -1,7 +1,6 @@
+import { ChangedFileRow } from '../ChangedFileRow';
 import { memo, useState } from 'react';
-import { ChevronRight, ChevronDown, ExternalLink } from 'lucide-react';
-import { FileIcon } from '@/shared';
-import { Tooltip } from '@agentctl/ui';
+import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useOpenWorkspaceFile } from '@/features/sessions';
 import { useReviewUIStore, type TurnChangesSummary } from '@/features/review';
 import { useWorkbenchStore } from '@/features/workbench';
@@ -108,62 +107,16 @@ export const TurnChangesCard = memo(function TurnChangesCard({
       {/* Expanded File List */}
       {isExpanded && (
         <div className="border-border/20 bg-surface-secondary/15 border-t px-2 py-1.5">
-          {summary.files.map((file) => {
-            const fileName = file.path.split('/').pop() ?? file.path;
-            const dirPath = file.path.includes('/')
-              ? file.path.substring(0, file.path.lastIndexOf('/'))
-              : '';
-
-            return (
-              <div
-                key={file.path}
-                className="hover:bg-surface/50 group/file-row flex items-center rounded-lg transition-colors"
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleOpenFileReview(file.path);
-                  }}
-                  className="flex min-w-0 flex-1 cursor-pointer items-center justify-between px-2.5 py-1.5 text-left"
-                >
-                  <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
-                    <FileIcon path={file.path} className="shrink-0" />
-                    <span className="text-text-main group-hover/file-row:text-accent truncate font-mono text-[12px] font-medium">
-                      {fileName}
-                    </span>
-                    {dirPath && (
-                      <span className="text-text-muted/60 truncate font-mono text-[11px]">
-                        {dirPath}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="ml-3 flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] font-medium">
-                    {file.additions > 0 && (
-                      <span className="text-emerald-400">+{file.additions}</span>
-                    )}
-                    {file.deletions > 0 && <span className="text-rose-400">-{file.deletions}</span>}
-                    {file.additions === 0 && file.deletions === 0 && (
-                      <span className="text-text-muted/60 text-[10px]">modified</span>
-                    )}
-                  </div>
-                </button>
-
-                <Tooltip content="Open in editor">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void openWorkspaceFile(file.path);
-                    }}
-                    className="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,color,background-color] duration-150 group-hover/file-row:opacity-100 focus-visible:opacity-100 active:scale-[0.97]"
-                    aria-label={`Open ${fileName} in editor`}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                  </button>
-                </Tooltip>
-              </div>
-            );
-          })}
+          {summary.files.map((file) => (
+            <ChangedFileRow
+              key={file.path}
+              file={file}
+              onReview={handleOpenFileReview}
+              onOpenEditor={openWorkspaceFile}
+              emptyStatus="modified"
+              editorButtonClassName="text-text-muted/40 hover:text-text-main hover:bg-surface-tertiary/60 mr-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded opacity-0 transition-[opacity,color,background-color] duration-150 group-hover/file-row:opacity-100 focus-visible:opacity-100 active:scale-[0.97]"
+            />
+          ))}
         </div>
       )}
     </div>

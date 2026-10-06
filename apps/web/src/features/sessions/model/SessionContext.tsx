@@ -1,8 +1,14 @@
+import { useAcceptedMessageQueue } from './useAcceptedMessageQueue';
 import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
 import { createContext, use, useMemo, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { SessionEventRow, SessionWithCapabilities, SessionMode } from '@agentctl/shared';
+import type {
+  PlanItem as AgentPlanItem,
+  SessionEventRow,
+  SessionWithCapabilities,
+  SessionMode,
+} from '@agentctl/shared';
 import { api } from '@agentctl/api-client';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { useSessionConfigState } from './useSessionConfigState';
@@ -15,12 +21,7 @@ interface PlanItem {
   completed: boolean;
 }
 
-export interface StructuredPlanItem {
-  name: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  isCompleted: boolean;
-  priority?: 'high' | 'medium' | 'low';
-}
+export type StructuredPlanItem = AgentPlanItem;
 
 // ==========================================
 // 1. SESSION CONFIG CONTEXT
@@ -125,6 +126,7 @@ export type { QueuedMessage };
 const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];
 
 interface SessionStreamContextValue {
+  execution?: import('@agentctl/shared').SessionExecution;
   events: SessionEventRow[];
   isLoadingEvents: boolean;
   isConnected: boolean;
@@ -136,6 +138,8 @@ interface SessionStreamContextValue {
   planItems: PlanItem[];
   structuredPlan: StructuredPlanItem[];
   queuedMessages: QueuedMessage[];
+  queueAttention?: 'none' | 'approval' | 'delivery_uncertain' | 'error';
+  resumeQueue?: () => Promise<void>;
   enqueueMessage: (
     text: string,
     attachmentIds?: string[],
@@ -170,8 +174,18 @@ export function SessionStreamProvider({
     historyError,
   } = useSessionEvents(sessionId);
 
+  const acceptedQueue = useAcceptedMessageQueue(sessionId);
   const queuedMessages = useMessageQueueStore(
     (s) => s.queuedMessages[sessionId] ?? EMPTY_QUEUED_MESSAGES,
+  );
+  const displayQueue = useMemo(
+    () => [
+      ...acceptedQueue.queuedMessages,
+      ...queuedMessages.filter(
+        (message) => !acceptedQueue.queuedMessages.some((accepted) => accepted.id === message.id),
+      ),
+    ],
+    [acceptedQueue.queuedMessages, queuedMessages],
   );
   const enqueueQueuedMessage = useMessageQueueStore((s) => s.enqueueMessage);
   const dequeueQueuedMessage = useMessageQueueStore((s) => s.dequeueMessage);
@@ -183,17 +197,29 @@ export function SessionStreamProvider({
     [enqueueQueuedMessage, sessionId],
   );
   const dequeueMessage = useCallback(
-    (id: string) => dequeueQueuedMessage(sessionId, id),
-    [dequeueQueuedMessage, sessionId],
+    (id: string) => {
+      if (acceptedQueue.queuedMessages.some((message) => message.id === id))
+        void acceptedQueue.changeMessage(id, 'cancel');
+      else dequeueQueuedMessage(sessionId, id);
+    },
+    [dequeueQueuedMessage, sessionId, acceptedQueue],
   );
   const reorderQueuedMessages = useCallback(
     (newQueue: QueuedMessage[]) => reorderQueuedMessagesForSession(sessionId, newQueue),
     [reorderQueuedMessagesForSession, sessionId],
   );
   const moveQueuedMessage = useCallback(
-    (index: number, direction: 'up' | 'down') =>
-      moveQueuedMessageForSession(sessionId, index, direction),
-    [moveQueuedMessageForSession, sessionId],
+    (index: number, direction: 'up' | 'down') => {
+      const message = displayQueue[index];
+      if (message?.accepted) void acceptedQueue.changeMessage(message.id, direction);
+      else
+        moveQueuedMessageForSession(
+          sessionId,
+          queuedMessages.findIndex((item) => item.id === message?.id),
+          direction,
+        );
+    },
+    [moveQueuedMessageForSession, sessionId, acceptedQueue, displayQueue, queuedMessages],
   );
   const currentSessionRef = useRef(sessionId);
   currentSessionRef.current = sessionId;
@@ -441,7 +467,10 @@ export function SessionStreamProvider({
       historyError,
       planItems,
       structuredPlan,
-      queuedMessages,
+      queuedMessages: displayQueue,
+      execution: acceptedQueue.execution,
+      queueAttention: acceptedQueue.execution?.attention,
+      resumeQueue: acceptedQueue.resume,
       enqueueMessage,
       dequeueMessage,
       retryMessage,
@@ -460,7 +489,9 @@ export function SessionStreamProvider({
       historyError,
       planItems,
       structuredPlan,
-      queuedMessages,
+      displayQueue,
+      acceptedQueue.execution,
+      acceptedQueue.resume,
       enqueueMessage,
       dequeueMessage,
       retryMessage,

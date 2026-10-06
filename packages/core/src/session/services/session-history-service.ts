@@ -1,3 +1,4 @@
+import { contextByteBudget } from '../context-budget.js';
 import { eq, asc, desc } from 'drizzle-orm';
 import { sessions, sessionEvents } from '../../db/schema.js';
 import type { SessionEventDbRow } from '../../db/zod-schemas.js';
@@ -12,11 +13,11 @@ import { resolveAgentSessionId } from '../agent-session-id.js';
 import { sessionEventCodecs } from '../../db/json-codecs.js';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
-import type { SessionEventStore } from '../event-store.js';
-import type { SessionStateMachine } from '../state-machine.js';
+import type { SessionEventRepository } from '../persistence/session-event-repository.js';
+import type { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
 import type { SessionWorkspace } from '../../git/session-workspace.js';
 import type { SessionLauncher } from './session-launcher.js';
-import type { ManagedSession } from '../managed-session.js';
+import type { SessionRuntime } from '../runtime/session-runtime.js';
 
 export interface RewindBackup {
   undoSnapshotHash?: string;
@@ -33,8 +34,8 @@ export interface RewindBackup {
 export interface SessionHistoryDependencies {
   db: DbClient;
   logger: Logger;
-  eventStore: SessionEventStore;
-  stateMachine: SessionStateMachine;
+  eventRepository: SessionEventRepository;
+  runtimeRegistry: SessionRuntimeRegistry;
   sessionWorkspace: SessionWorkspace;
   launcher: SessionLauncher;
   startSession: SessionLauncher['startSession'];
@@ -48,7 +49,7 @@ export interface SessionHistoryDependencies {
       selectedThinkingEffort: ThinkingEffort;
     },
     options?: { forceNewAgentSession?: boolean },
-  ): Promise<ManagedSession | null>;
+  ): Promise<SessionRuntime | null>;
 }
 
 export class SessionHistoryService {
@@ -100,7 +101,7 @@ export class SessionHistoryService {
     for (const evt of eventsToCopy) {
       const parsedData = sessionEventCodecs.parseData(evt.type, evt.data);
       const parsedMetadata = sessionEventCodecs.parseMetadata(evt.metadata);
-      await this.deps.eventStore.append(
+      await this.deps.eventRepository.append(
         forkSessionId,
         evt.type as SessionEvent['type'],
         parsedData,
@@ -136,7 +137,7 @@ export class SessionHistoryService {
         .update(sessions)
         .set({ status: 'error', updatedAt: new Date() })
         .where(eq(sessions.id, forkSessionId));
-      await this.deps.eventStore.append(forkSessionId, 'status', {
+      await this.deps.eventRepository.append(forkSessionId, 'status', {
         status: 'error',
         title: error instanceof Error ? error.message : 'Failed to start forked session',
       });
@@ -191,7 +192,8 @@ export class SessionHistoryService {
     let handoffResult: HandoffResult | null = null;
     try {
       const sourceSession =
-        this.deps.stateMachine.getSession(sessionId) ?? (await this.deps.restartSession(sessionId));
+        this.deps.runtimeRegistry.getSession(sessionId) ??
+        (await this.deps.restartSession(sessionId));
       const focusParts = [`Continue this work with ${resolvedProviderId}.`];
       if (nextSessionFocus?.trim()) {
         focusParts.push(nextSessionFocus.trim());
@@ -218,9 +220,25 @@ export class SessionHistoryService {
       this.deps.logger.warn(error, 'The source agent could not produce a handoff document');
     }
 
+    if (
+      handoffResult &&
+      Buffer.byteLength(handoffResult.content) > contextByteBudget(selection.contextWindow)
+    ) {
+      const original = handoffResult;
+      const skillReference = `Source agent's handoff document: ${original.filePath}\n\n`;
+      handoffResult = await generateHandoffDocument(this.deps.db, sessionId, resolvedProviderId, {
+        nextSessionFocus,
+        maxEventId: latestEventId,
+        maxBytes: contextByteBudget(selection.contextWindow) - Buffer.byteLength(skillReference),
+      });
+      // The full skill document remains retrievable without clipping its contents.
+      handoffResult.content = skillReference + handoffResult.content;
+      scheduleHandoffCleanup(original.filePath);
+    }
     handoffResult ??= await generateHandoffDocument(this.deps.db, sessionId, resolvedProviderId, {
       nextSessionFocus,
       maxEventId: latestEventId,
+      contextWindow: selection.contextWindow,
     });
 
     const sessionBeforeSwitch = await this.deps.db.query.sessions.findFirst({
@@ -256,7 +274,7 @@ export class SessionHistoryService {
         throw new Error(`Failed to start target provider: ${resolvedProviderId}`);
       }
 
-      await this.deps.eventStore.append(
+      await this.deps.eventRepository.append(
         sessionId,
         'status',
         {
@@ -269,7 +287,7 @@ export class SessionHistoryService {
       );
       await targetSession.prompt(initialPrompt, undefined, handoffResult.content);
     } catch (error) {
-      await this.deps.stateMachine.stopSessionAndWait(sessionId).catch(() => undefined);
+      await this.deps.runtimeRegistry.stopSessionAndWait(sessionId).catch(() => undefined);
       await this.deps
         .updateSessionConfig(sessionId, sourceSelection)
         .catch((rollbackError: unknown) => {
@@ -316,7 +334,7 @@ export class SessionHistoryService {
 
     if (sessionRecord.status === 'running') {
       if (mode !== 'fork') {
-        this.deps.stateMachine.stopSession(sessionId);
+        this.deps.runtimeRegistry.stopSession(sessionId);
         await this.deps.db
           .update(sessions)
           .set({ status: 'idle', updatedAt: new Date() })
@@ -328,7 +346,7 @@ export class SessionHistoryService {
     let restoredFiles:
       Array<{ path: string; status: 'added' | 'modified' | 'deleted' }> | undefined;
     if (mode !== 'fork') {
-      const event = await this.deps.eventStore.getEventWithMetadata(sessionId, eventId);
+      const event = await this.deps.eventRepository.getEventWithMetadata(sessionId, eventId);
       if (!event) {
         throw new Error(`Event not found: ${String(eventId)}`);
       }
@@ -342,7 +360,7 @@ export class SessionHistoryService {
           );
         }
 
-        const snapshotService = this.deps.stateMachine.getSnapshotService();
+        const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
         const projectPath =
           sessionRecord.mode === 'worktree'
             ? sessionRecord.worktreePath
@@ -363,7 +381,7 @@ export class SessionHistoryService {
 
       const eventsToCopy = events.filter((e) => e.id <= eventId);
 
-      const activeSource = this.deps.stateMachine.getSession(sessionId);
+      const activeSource = this.deps.runtimeRegistry.getSession(sessionId);
       const canForkCurrentContext =
         sessionRecord.status === 'idle' &&
         eventsToCopy.length === events.length &&
@@ -384,14 +402,17 @@ export class SessionHistoryService {
       return { forkSessionId };
     }
 
-    const deletedEvents = await this.deps.eventStore.backupAndDeleteEventsAfter(sessionId, eventId);
+    const deletedEvents = await this.deps.eventRepository.backupAndDeleteEventsAfter(
+      sessionId,
+      eventId,
+    );
     this.rewindBackups.set(sessionId, {
       undoSnapshotHash,
       deletedEvents,
       eventId,
       restoredFiles,
     });
-    this.deps.stateMachine.stopSession(sessionId);
+    this.deps.runtimeRegistry.stopSession(sessionId);
 
     void this.deps.restartSession(sessionId).catch((err: unknown) => {
       this.deps.logger.error({ err, sessionId }, 'Failed to restart session after rewind');
@@ -415,7 +436,7 @@ export class SessionHistoryService {
     }
 
     if (backup.undoSnapshotHash) {
-      const snapshotService = this.deps.stateMachine.getSnapshotService();
+      const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
       const projectPath =
         sessionRecord.mode === 'worktree' && sessionRecord.worktreePath
           ? sessionRecord.worktreePath
@@ -425,11 +446,11 @@ export class SessionHistoryService {
     }
 
     if (backup.deletedEvents && backup.deletedEvents.length > 0) {
-      await this.deps.eventStore.restoreEvents(sessionId, backup.deletedEvents);
+      await this.deps.eventRepository.restoreEvents(sessionId, backup.deletedEvents);
     }
 
     this.rewindBackups.delete(sessionId);
-    this.deps.stateMachine.stopSession(sessionId);
+    this.deps.runtimeRegistry.stopSession(sessionId);
 
     void this.deps.restartSession(sessionId).catch((err: unknown) => {
       this.deps.logger.error({ err, sessionId }, 'Failed to restart session after undo rewind');
@@ -451,7 +472,7 @@ export class SessionHistoryService {
       throw new Error('Session not found');
     }
 
-    const event = await this.deps.eventStore.getEventWithMetadata(sessionId, eventId);
+    const event = await this.deps.eventRepository.getEventWithMetadata(sessionId, eventId);
     if (!event) {
       throw new Error(`Event not found: ${String(eventId)}`);
     }
@@ -462,7 +483,7 @@ export class SessionHistoryService {
       return { hasSnapshot: false, files: [] };
     }
 
-    const snapshotService = this.deps.stateMachine.getSnapshotService();
+    const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
     const projectPath =
       sessionRecord.mode === 'worktree' ? sessionRecord.worktreePath : sessionRecord.project.path;
 
@@ -484,7 +505,7 @@ export class SessionHistoryService {
     if (!sessionRecord) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    const snapshotService = this.deps.stateMachine.getSnapshotService();
+    const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
     const projectPath =
       sessionRecord.mode === 'worktree' && sessionRecord.worktreePath
         ? sessionRecord.worktreePath

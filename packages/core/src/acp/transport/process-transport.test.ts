@@ -1,10 +1,62 @@
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
-import { PROTOCOL_VERSION, type SessionNotification } from '@agentclientprotocol/sdk';
+import {
+  agent,
+  methods,
+  ndJsonStream,
+  PROTOCOL_VERSION,
+  type SessionNotification,
+} from '@agentclientprotocol/sdk';
+import { Readable, Writable } from 'node:stream';
 import { cleanEnv, createAgentConnection, type CacheStorage } from '../index.js';
 import type { AgentDescriptor, AgentUpdate } from '../../agent/types.js';
+
+test('control connections cancel permissions and reject unadvertised client operations', async () => {
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const child = { stdin, stdout, stderr: null, kill: () => true } as unknown as ChildProcess;
+  const handle = createAgentConnection('agent', [], {}, (() => child) as typeof spawnFn);
+  const peer = agent().connect(
+    ndJsonStream(
+      Writable.toWeb(stdout) as WritableStream<Uint8Array>,
+      Readable.toWeb(stdin) as ReadableStream<Uint8Array>,
+    ),
+  );
+  try {
+    await expect(
+      peer.client.request(methods.client.session.requestPermission, {
+        sessionId: 's',
+        toolCall: { toolCallId: 't', title: 'Run' },
+        options: [{ optionId: 'provider-choice', name: 'Allow', kind: 'allow_once' }],
+      }),
+    ).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+    await expect(
+      peer.client.request(methods.client.fs.readTextFile, { sessionId: 's', path: '/tmp/nope' }),
+    ).rejects.toMatchObject({ code: -32601 });
+    await expect(
+      peer.client.request(methods.client.fs.writeTextFile, {
+        sessionId: 's',
+        path: '/tmp/nope',
+        content: 'no',
+      }),
+    ).rejects.toMatchObject({ code: -32601 });
+    await expect(
+      peer.client.request(methods.client.elicitation.create, {
+        sessionId: 's',
+        mode: 'form',
+        message: 'Unsupported',
+        requestedSchema: { type: 'object', properties: {} },
+      }),
+    ).rejects.toMatchObject({ code: -32602 });
+  } finally {
+    peer.close();
+    handle.connection.close?.();
+    stdin.destroy();
+    stdout.destroy();
+  }
+});
 
 test('cleanEnv overlays values and strips npm config variables', () => {
   const previousUserAgent = process.env.npm_config_user_agent;
@@ -206,7 +258,7 @@ test('parseNotificationToEvents parses tool_call rawInput as direct arguments ob
   assert.equal(events.length, 1);
   const event = events[0] as Extract<AgentUpdate, { type: 'tool_call' }>;
   assert.equal(event.type, 'tool_call');
-  assert.equal(event.call.name, 'run_shell_command');
+  assert.equal(event.call.name, 'Running command');
   assert.deepEqual(event.call.arguments, { command: 'echo hello' });
 });
 

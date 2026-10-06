@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import type { ContentBlock } from '@agentclientprotocol/sdk';
+import type { ContentBlock as V2ContentBlock } from '@agentclientprotocol/sdk/experimental/v2';
 
 export interface PromptBuildParams {
   text: string;
@@ -10,8 +11,11 @@ export interface PromptBuildParams {
   supportsEmbeddedContext?: boolean;
 }
 
-export async function buildPromptBlocks(params: PromptBuildParams): Promise<ContentBlock[]> {
-  const promptParts: ContentBlock[] = [];
+type PromptBlock = Extract<ContentBlock, { type: 'text' | 'resource' | 'image' | 'audio' }> &
+  Extract<V2ContentBlock, { type: 'text' | 'resource' | 'image' | 'audio' }>;
+
+export async function buildPromptBlocks(params: PromptBuildParams): Promise<PromptBlock[]> {
+  const promptParts: PromptBlock[] = [];
 
   if (params.embeddedContext) {
     if (params.supportsEmbeddedContext) {

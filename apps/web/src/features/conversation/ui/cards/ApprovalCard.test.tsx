@@ -140,3 +140,19 @@ describe('ApprovalCard', () => {
     });
   });
 });
+
+it('preserves an unfamiliar subject and the original persistent-choice label', () => {
+  const { root, container } = renderApprovalCard(
+    approvalData({
+      request: {
+        subject: { type: '_future', resource: 'private-resource' },
+        toolCall: { name: 'Future action', kind: 'other' },
+        options: [{ optionId: 'opaque', kind: 'allow_always', label: 'Allow for this project' }],
+      },
+    }),
+  );
+  expect(container.textContent).toContain('private-resource');
+  expect(container.textContent).toContain('Allow for this project');
+  expect(container.textContent).not.toContain('Allow for this session');
+  act(() => root.unmount());
+});

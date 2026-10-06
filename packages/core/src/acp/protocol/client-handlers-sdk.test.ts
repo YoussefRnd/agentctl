@@ -2,13 +2,8 @@ import { test, describe, expect, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {
-  AgentSideConnection,
-  ClientSideConnection,
-  ndJsonStream,
-  type Agent,
-} from '@agentclientprotocol/sdk';
-import { createClientHandlers } from './client-handlers.js';
+import { AgentSideConnection, ndJsonStream, type Agent } from '@agentclientprotocol/sdk';
+import { connectAcpClient } from '../transport/client-connection.js';
 import { TerminalManager } from './terminal-manager.js';
 import { noopLogger } from '../../logger.js';
 import type { AgentSessionCallbacks } from '../../agent/types.js';
@@ -20,7 +15,7 @@ import type { ElicitationRequest } from '@agentctl/shared';
  * never dispatches -- every call silently fell through to the generic
  * fallback and agents received `{}`.
  *
- * This test wires the real SDK pair (AgentSideConnection + ClientSideConnection
+ * This test wires the real SDK pair (AgentSideConnection + the production client app
  * over TransformStreams) so a request truly traverses JSON-RPC dispatch.
  * If a handler key stops matching the SDK dispatch table, the assertion fails.
  */
@@ -44,17 +39,17 @@ async function makePair(cwd: string) {
     },
   } as unknown as AgentSessionCallbacks;
 
-  const client = createClientHandlers({
+  const context = {
     cwd: process.cwd(),
     terminalManager: new TerminalManager(noopLogger),
     logger: noopLogger,
     resolveSession: () => ({ callbacks, cwd }),
-  });
+  };
 
   const fakeAgent = {} as unknown as Agent;
 
-  new ClientSideConnection(
-    () => client,
+  await connectAcpClient(
+    context,
     // Node's TransformStream<Uint8Array> readable side is typed `any`;
     // runtime chunk type verified by the passing dispatch tests below.
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument

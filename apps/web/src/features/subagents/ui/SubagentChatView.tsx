@@ -1,144 +1,308 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Clock } from 'lucide-react';
-import { StreamingMarkdown, UnifiedActivityBlock } from '@/features/conversation';
-import { formatDuration, type SubagentGroup } from '../lib/subagentBlockUtils';
-import type {
-  SessionEventSubagentUpdateData,
-  SessionEventRow,
-  SessionEventToolCallData,
-} from '@agentctl/shared';
+import { useEffect, useId, useMemo, useRef } from 'react';
+import { ArrowLeft, ChevronRight } from 'lucide-react';
+import {
+  StreamingMarkdown,
+  UnifiedActivityBlock,
+  AgentTerminals,
+  SessionMessage,
+} from '@/features/conversation';
+import {
+  formatSubagentTitle,
+  getSubagentGroupKey,
+  isSubagentActive,
+  subagentDisplayStatus,
+  subagentResult,
+  subagentApprovals,
+  type SubagentGroup,
+} from '../lib/subagentBlockUtils';
+import { SubagentElapsed } from './SubagentElapsed';
+import { SubagentStatus } from './SubagentStatus';
+import { SubagentDisclosure } from './SubagentDisclosure';
+import type { SessionEventRow, SessionEventSubagentUpdateData } from '@agentctl/shared';
 
 interface SubagentChatViewProps {
   group: SubagentGroup;
+  groups?: SubagentGroup[];
+  parentTitle?: string;
+  onSelect?: (group: SubagentGroup) => void;
   onBack: () => void;
   isStreaming?: boolean;
+  isConnected?: boolean;
+  onReviewApproval?: () => void;
 }
 
-export function SubagentChatView({ group, onBack, isStreaming = false }: SubagentChatViewProps) {
-  const [now, setNow] = useState<Date>(() => new Date());
+// Keep each run of tools/thoughts together without moving it past the next response.
+function transcriptEntries(events: SessionEventRow[]): SessionEventRow[][] {
+  const entries: SessionEventRow[][] = [];
+  let activity: SessionEventRow[] = [];
+  for (const event of events) {
+    if (
+      event.type === 'tool_call' ||
+      event.type === 'approval_request' ||
+      (event.type === 'text' && event.data.role === 'thought')
+    ) {
+      activity.push(event);
+    } else if (event.type === 'text') {
+      if (activity.length) entries.push(activity);
+      activity = [];
+      entries.push([event]);
+    }
+  }
+  if (activity.length) entries.push(activity);
+  return entries;
+}
+
+/** A read-only child conversation: control and approval stay with the parent. */
+export function SubagentChatView({
+  group,
+  groups,
+  parentTitle = 'Parent conversation',
+  onSelect,
+  onBack,
+  isStreaming = false,
+  isConnected = true,
+  onReviewApproval,
+}: SubagentChatViewProps) {
+  const backRef = useRef<HTMLButtonElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const followingRef = useRef(true);
+  const selectorId = useId();
+  const key = getSubagentGroupKey(group);
+  useEffect(() => {
+    backRef.current?.focus();
+  }, []);
 
   const data = group.subagentEvent.data as SessionEventSubagentUpdateData;
-  const childEvents = group.childEvents;
-  const isRunning = data.status === 'running' || data.status === 'spawning';
-
+  const active = !data.historical && isSubagentActive(data.status) && isConnected;
   useEffect(() => {
-    if (!isRunning) return;
-    const id = setInterval(() => {
-      setNow(new Date());
-    }, 250);
-    return () => clearInterval(id);
-  }, [isRunning]);
-
-  // Handle escape key to go back
+    followingRef.current = true;
+  }, [key]);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onBack();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBack]);
-
-  const startDate =
-    childEvents.length > 0 ? childEvents[0].createdAt : group.subagentEvent.createdAt;
-  const endDate =
-    !isRunning && childEvents.length > 0 ? childEvents[childEvents.length - 1].createdAt : null;
-  const duration = formatDuration(startDate, now, endDate);
-
-  // Extract thoughts, tool calls, and text response from childEvents
-  const { activityEvents, responseText } = useMemo(() => {
-    const activities: SessionEventRow[] = [];
-    let text = data.result?.summary ?? '';
-
-    for (const e of childEvents) {
-      if (
-        (e.type === 'text' && (e.data as { role?: string }).role === 'thought') ||
-        e.type === 'tool_call' ||
-        e.type === 'approval_request'
-      ) {
-        activities.push(e);
-      } else if (
-        e.type === 'text' &&
-        ((e.data as { role?: string }).role === 'provider' ||
-          (e.data as { role?: string }).role === 'assistant')
-      ) {
-        const content = (e.data as { content?: string }).content;
-        if (content) {
-          text = text ? `${text}\n${content}` : content;
-        }
-      }
-    }
-
-    if (!text && childEvents.length > 0) {
-      const lastChild = childEvents[childEvents.length - 1];
-      if (lastChild.type === 'tool_call') {
-        const tc = lastChild.data as SessionEventToolCallData;
-        if (typeof tc.rawOutput === 'string' && tc.rawOutput) {
-          text = tc.rawOutput;
-        }
-      }
-    }
-
-    return { activityEvents: activities, responseText: text };
-  }, [childEvents, data.result?.summary]);
+    const transcript = transcriptRef.current;
+    const content = contentRef.current;
+    if (!transcript || !content || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (active && followingRef.current) transcript.scrollTop = transcript.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [key, active]);
+  const response = subagentResult(group);
+  const entries = useMemo(() => transcriptEntries(group.childEvents), [group.childEvents]);
+  const transcriptResponse = group.childEvents
+    .filter(
+      (event) =>
+        event.type === 'text' &&
+        (event.data.role === 'provider' || (event.data.role as string) === 'assistant'),
+    )
+    .map((event) => (event.data as { content: string }).content)
+    .filter(Boolean);
+  const showResult =
+    response &&
+    response !== [...new Set(transcriptResponse)].join('\n\n') &&
+    !transcriptResponse.includes(response);
+  const hasChildActivity =
+    entries.length > 0 || group.childEvents.some((event) => event.type.startsWith('terminal_'));
+  const error = data.native && data.state?.stopReason === 'error' ? data.state.error : null;
+  const errorMessage =
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+      ? error.message
+      : null;
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-transparent">
-      {/* Top Header Bar with Back Button */}
-      <header className="border-border/20 bg-surface-secondary/20 flex shrink-0 items-center justify-between border-b px-6 py-3 backdrop-blur-md">
-        <div className="flex items-center">
+    <section
+      aria-label="Subagent conversation"
+      className="bg-surface flex h-full min-w-0 flex-1 flex-col overflow-hidden"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !event.defaultPrevented) {
+          event.preventDefault();
+          onBack();
+        }
+      }}
+    >
+      <header className="border-border/40 flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-3 sm:px-5">
+        <nav
+          aria-label="Conversation breadcrumb"
+          className="flex min-w-0 flex-1 items-center gap-2 text-xs"
+        >
           <button
+            ref={backRef}
             type="button"
             onClick={onBack}
-            className="text-text-muted hover:text-text-main hover:bg-surface-secondary/60 flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors"
+            aria-label="Back to parent conversation"
+            className="text-text-muted hover:text-text-main focus-visible:ring-accent/50 flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 focus-visible:ring-2 focus-visible:outline-none"
           >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to session</span>
+            <ArrowLeft aria-hidden className="h-3.5 w-3.5 shrink-0" />
+            <span className="max-w-40 truncate">{parentTitle}</span>
           </button>
-        </div>
-
-        <div className="text-text-muted/60 flex items-center gap-1.5 font-mono text-xs tabular-nums">
-          <Clock className="h-3.5 w-3.5" />
-          <span>{duration}</span>
-        </div>
+          <ChevronRight aria-hidden className="text-text-muted/50 h-3 w-3 shrink-0" />
+          <span className="text-text-main truncate" aria-current="page">
+            {formatSubagentTitle(data.name)}
+          </span>
+        </nav>
+        {groups && groups.length > 1 && onSelect && (
+          <>
+            <label htmlFor={selectorId} className="sr-only">
+              Switch task
+            </label>
+            <select
+              id={selectorId}
+              value={key}
+              onChange={(event) => {
+                const next = groups.find(
+                  (item) => getSubagentGroupKey(item) === event.target.value,
+                );
+                if (next) onSelect(next);
+              }}
+              className="bg-surface-secondary/50 text-text-muted focus-visible:ring-accent/50 max-w-[min(15rem,100%)] min-w-0 rounded-md px-2 py-1.5 text-xs focus-visible:ring-2 focus-visible:outline-none"
+            >
+              {groups.map((item) => (
+                <option key={getSubagentGroupKey(item)} value={getSubagentGroupKey(item)}>
+                  {formatSubagentTitle(
+                    (item.subagentEvent.data as SessionEventSubagentUpdateData).name,
+                  )}{' '}
+                  · {subagentDisplayStatus(item, isConnected)}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
       </header>
-
-      {/* Main Conversation Feed (no chat box) */}
-      <main className="min-h-0 flex-1 [scrollbar-width:thin] overflow-y-auto px-6 py-6">
-        <div className="mx-auto max-w-[800px] space-y-6">
-          {/* What the parent agent told the subagent (rendered like user prompt in main chat) */}
+      <div
+        key={key}
+        ref={transcriptRef}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          followingRef.current =
+            element.scrollTop + element.clientHeight >= element.scrollHeight - 40;
+        }}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+        tabIndex={0}
+        aria-label="Subagent transcript"
+      >
+        <div
+          ref={contentRef}
+          className="mx-auto w-full max-w-[800px] space-y-6 px-4 py-7 [overflow-wrap:anywhere] sm:px-8"
+        >
+          <div>
+            <p className="text-text-muted mb-2 text-xs">Subagent</p>
+            <h2 className="text-text-main text-lg font-semibold">
+              {formatSubagentTitle(data.name)}
+            </h2>
+            <div className="mt-2 flex flex-wrap items-center gap-3" role="status">
+              <SubagentStatus group={group} isConnected={isConnected} />
+              <SubagentElapsed group={group} isConnected={isConnected} />
+            </div>
+          </div>
           {data.scope && (
-            <div className="flex justify-end">
-              <div className="border-border bg-surface-secondary text-text-main max-w-[85%] rounded-2xl border px-4 py-3 text-[14px] leading-relaxed shadow-sm sm:max-w-[75%]">
-                <div className="text-text-muted/50 mb-1 text-[10px] font-bold tracking-wider uppercase select-none">
-                  Task prompt
-                </div>
-                <div className="whitespace-pre-wrap">{data.scope}</div>
-              </div>
+            <SubagentDisclosure title="Original assignment" label="Task prompt">
+              <p className="text-text-muted text-sm leading-relaxed whitespace-pre-wrap">
+                {data.scope}
+              </p>
+            </SubagentDisclosure>
+          )}
+          {subagentApprovals(group).length > 0 && (
+            <div
+              className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-400"
+              role="status"
+            >
+              <p>This task needs approval to continue.</p>
+              <button
+                type="button"
+                onClick={onReviewApproval ?? onBack}
+                className="mt-2 rounded-md border border-amber-500/40 px-3 py-1.5 focus-visible:outline focus-visible:outline-2"
+              >
+                Review approval in chat
+              </button>
             </div>
           )}
-
-          {/* Subagent's Response and Activity (rendered like main chat) */}
-          <div className="space-y-4">
-            {(activityEvents.length > 0 || isRunning) && (
+          {entries.map((events, index) => {
+            const first = events[0];
+            const streaming = isStreaming && active && index === entries.length - 1;
+            if (first.type === 'text' && first.data.role === 'session')
+              return <SessionMessage key={first.id} data={first.data} />;
+            if (first.type === 'text' && first.data.role !== 'thought') {
+              return (
+                <section
+                  key={first.id}
+                  aria-label={first.data.role === 'user' ? 'Child message' : 'Subagent response'}
+                  className="text-text-main prose prose-invert max-w-none text-sm leading-relaxed [&_pre]:max-w-full [&_pre]:overflow-x-auto"
+                >
+                  <StreamingMarkdown content={first.data.content} isStreaming={streaming} />
+                </section>
+              );
+            }
+            return (
               <UnifiedActivityBlock
-                events={activityEvents}
-                isStreaming={isStreaming && isRunning}
-                isActive={isRunning}
-                isInitialThinking={activityEvents.length === 0 && isRunning}
+                key={first.id}
+                events={events}
+                isStreaming={streaming}
+                isActive={active && index === entries.length - 1}
               />
+            );
+          })}
+          <AgentTerminals events={group.childEvents} />
+          {errorMessage &&
+            errorMessage !== response &&
+            !transcriptResponse.includes(errorMessage) && (
+              <p role="alert" className="text-sm text-rose-400">
+                {errorMessage}
+              </p>
             )}
-
-            {responseText && (
-              <div className="prose prose-invert prose-pre:bg-surface-secondary/50 prose-pre:border prose-pre:border-border prose-pre:rounded-md text-text-main/90 selection:bg-accent/30 max-w-none text-[15px] leading-7 tracking-normal">
-                <StreamingMarkdown content={responseText} isStreaming={isStreaming && isRunning} />
-              </div>
-            )}
-          </div>
+          {(showResult || transcriptResponse.length === 0) && (
+            <section aria-label="Result">
+              <h3 className="text-text-muted mb-3 text-xs font-medium">
+                {active
+                  ? 'Latest response'
+                  : data.status === 'failed'
+                    ? 'Error / result'
+                    : 'Result'}
+              </h3>
+              {response ? (
+                <div className="text-text-main prose prose-invert max-w-none text-sm leading-relaxed [&_pre]:max-w-full [&_pre]:overflow-x-auto">
+                  <StreamingMarkdown content={response} isStreaming={isStreaming && active} />
+                </div>
+              ) : (
+                <p className="text-text-muted text-sm">
+                  {active ? 'Waiting for a reported response…' : 'No result was reported.'}
+                </p>
+              )}
+            </section>
+          )}
+          {!hasChildActivity && (
+            <SubagentDisclosure
+              title="Reported activity"
+              initiallyOpen={active && !response}
+              hint="Details unavailable"
+            >
+              <p className="text-text-muted mb-3 text-xs">
+                No child activity was reported. Only the delegation record is available.
+              </p>
+              {!!group.delegationEvents?.length && (
+                <UnifiedActivityBlock
+                  events={group.delegationEvents}
+                  isStreaming={isStreaming && active}
+                  isActive={active}
+                />
+              )}
+            </SubagentDisclosure>
+          )}
         </div>
-      </main>
-    </div>
+      </div>
+      <footer className="border-border/30 text-text-muted flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs sm:px-6">
+        <span>Read-only · Continue this task in the parent conversation.</span>
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-text-main hover:text-accent focus-visible:ring-accent/50 rounded-md px-2 py-1 focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Back to parent
+        </button>
+      </footer>
+    </section>
   );
 }

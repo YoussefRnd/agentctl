@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createDatabase } from '../db/index.js';
-import { SessionEventStore } from './event-store.js';
+import { SessionEventRepository } from './persistence/session-event-repository.js';
 import { projects, sessions } from '../db/schema.js';
 import {
   redactSensitiveText,
@@ -128,7 +128,7 @@ describe('handoff logic', () => {
     });
 
     it('generates a file in temp directory with conversation content', async () => {
-      const store = new SessionEventStore(db, { publish() {} });
+      const store = new SessionEventRepository(db, { publish() {} });
       await store.append(
         'sess-handoff',
         'text',
@@ -152,4 +152,38 @@ describe('handoff logic', () => {
       await fs.unlink(result.filePath).catch(() => {});
     });
   });
+});
+
+it('budgets intact messages and leaves oversized content available in the full document', async () => {
+  const db = createDatabase(':memory:');
+  db.insert(projects).values({ id: 'project-budget', name: 'Budget', path: '/tmp' }).run();
+  db.insert(sessions)
+    .values({
+      id: 'session-budget',
+      projectId: 'project-budget',
+      branch: 'main',
+      worktreePath: '/tmp',
+      taskSlug: 'budget',
+      baseCommit: 'none',
+      agent: 'source',
+      selectedProvider: 'source',
+    })
+    .run();
+  const store = new SessionEventRepository(db, { publish() {} });
+  await store.append('session-budget', 'text', { role: 'user', content: 'original goal' });
+  await store.append('session-budget', 'text', { role: 'provider', content: '🚀'.repeat(5_000) });
+  await store.append('session-budget', 'text', { role: 'user', content: 'latest request' });
+  await store.append('session-budget', 'text', { role: 'provider', content: 'latest response' });
+  const result = await generateHandoffDocument(db, 'session-budget', 'target', { maxBytes: 2_500 });
+  try {
+    expect(Buffer.byteLength(result.content)).toBeLessThanOrEqual(2_500);
+    expect(result.content).toContain('original goal');
+    expect(result.content).toContain('latest request');
+    expect(result.content).toContain('latest response');
+    expect(result.content).not.toContain('🚀');
+    expect(result.content).toContain(result.filePath);
+    expect(await fs.readFile(result.filePath, 'utf8')).toContain('🚀'.repeat(5_000));
+  } finally {
+    await fs.unlink(result.filePath);
+  }
 });

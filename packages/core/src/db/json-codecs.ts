@@ -124,6 +124,7 @@ const persistedAgentConfigOptionSchema = z
           value: z.string(),
           name: z.string().optional(),
           description: z.string().optional(),
+          contextWindow: z.number().int().positive().optional(),
         }),
       )
       .optional(),
@@ -139,6 +140,7 @@ const persistedAgentConfigOptionSchema = z
       value: entry.value,
       name: entry.name ?? entry.value,
       description: entry.description,
+      contextWindow: entry.contextWindow,
     })),
   }));
 

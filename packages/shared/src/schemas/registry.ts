@@ -23,6 +23,7 @@ export const agentConfigOptionSchema = z.object({
       z.object({
         value: z.string(),
         name: z.string(),
+        contextWindow: z.number().int().positive().optional(),
         description: z.string().optional(),
       }),
     )

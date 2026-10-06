@@ -1,3 +1,4 @@
+import { applicationInfo } from '../config/application-info.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -41,15 +42,9 @@ export class McpGateway {
       this.connectionErrors.delete(server.id);
       try {
         let transport: Transport;
-        const client = new Client(
-          {
-            name: 'agentctl-client-gateway',
-            version: '1.0.0',
-          },
-          {
-            capabilities: {},
-          },
-        );
+        const client = new Client(applicationInfo('agentctl-client-gateway'), {
+          capabilities: {},
+        });
 
         if (server.type === 'local') {
           if (!server.command) {
@@ -171,10 +166,9 @@ export class McpGateway {
         const transport = new StreamableHTTPClientTransport(new URL(server.url), {
           requestInit: { headers },
         });
-        const statelessClient = new Client(
-          { name: 'agentctl-client-gateway', version: '1.0.0' },
-          { capabilities: {} },
-        );
+        const statelessClient = new Client(applicationInfo('agentctl-client-gateway'), {
+          capabilities: {},
+        });
 
         try {
           await statelessClient.connect(transport);

@@ -1,23 +1,22 @@
-import {
-  PROTOCOL_VERSION,
-  type ClientSideConnection,
-  type ClientCapabilities,
-} from '@agentclientprotocol/sdk';
+import { applicationInfo } from '../../config/application-info.js';
+import type { AcpAgentConnection } from '../transport/client-connection.js';
+import type { ClientCapabilities } from '@agentclientprotocol/sdk';
+import { initializeAcpConnection } from '../transport/capabilities-cache.js';
 
-export function initializeAuthConnection(
-  connection: ClientSideConnection,
+export async function initializeAuthConnection(
+  connection: AcpAgentConnection,
   name: string,
   capabilities: ClientCapabilities = process.platform === 'win32'
-    ? {}
-    : { auth: { terminal: true } },
+    ? { elicitation: { url: {} } }
+    : { auth: { terminal: true }, elicitation: { url: {} } },
 ) {
-  return connection.initialize({
-    protocolVersion: PROTOCOL_VERSION,
+  const { initResult } = await initializeAcpConnection(connection, {
     clientCapabilities: capabilities,
-    clientInfo: { name, title: 'Agentctl', version: '1.0.0' },
+    clientInfo: applicationInfo(name),
   });
+  return initResult;
 }
 
-export function authenticateConnection(connection: ClientSideConnection, methodId: string) {
+export function authenticateConnection(connection: AcpAgentConnection, methodId: string) {
   return connection.authenticate({ methodId });
 }

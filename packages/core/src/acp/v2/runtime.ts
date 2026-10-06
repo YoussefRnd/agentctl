@@ -1,3 +1,26 @@
+import { applicationInfo } from '../../config/application-info.js';
+import { AcpSubagentSessions, isSubagentNotification } from '../protocol/subagent-sessions.js';
+import { withSessionSetupTracking } from '../transport/subagent-stream.js';
+import { AcpRequestScopes, SESSION_REQUEST_METHODS } from '../protocol/request-scopes.js';
+import { wrapDebug } from '../transport/stream-debug.js';
+import { AcpUpdateQueue } from '../transport/update-drain.js';
+import { projectElicitationRequest, formatElicitationResponse } from '../protocol/elicitations.js';
+import { PermissionMetadataCache } from '../protocol/permission-metadata.js';
+import { toolArgumentsFrom } from '../protocol/tool-call-utils.js';
+import { getBestPermissionOption } from '../../security/permission-options.js';
+import { withProcessDiagnostics } from '../transport/stderr.js';
+import { withCustomModels } from '@agentctl/shared';
+import { respondToBrowserAuthentication } from '../protocol/browser-auth.js';
+import { waitForRequest } from '../protocol/request-cancellation.js';
+import { assertAcpSessionPaths } from '../protocol/session-params.js';
+import { guardAcpTurns } from '../transport/turn-control.js';
+import { cancellableCallbacks } from '../transport/session-requests.js';
+import {
+  ACP_MAX_PENDING_UPDATES,
+  ACP_SESSION_CLOSE_TIMEOUT_MS,
+  ACP_SESSION_OPERATION_TIMEOUT_MS,
+} from '../transport/limits.js';
+import { negotiateV2 } from '../protocol/negotiation.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import {
@@ -7,14 +30,19 @@ import {
   PROTOCOL_VERSION,
   type AgentCapabilities,
   type ClientConnection,
-  type ContentBlock,
   type InitializeResponse,
   type NewSessionRequest,
+  type NewSessionResponse,
   type RequestPermissionRequest,
   type SessionConfigOption,
   type UpdateSessionNotification,
+  RequestError,
 } from '@agentclientprotocol/sdk/experimental/v2';
-import { createCapabilitySnapshot, type AgentConfigOption } from '@agentctl/shared';
+import {
+  findAgentConfigOption,
+  createCapabilitySnapshot,
+  type AgentConfigOption,
+} from '@agentctl/shared';
 import type {
   AgentDescriptor,
   AgentAuthenticationOptions,
@@ -25,17 +53,32 @@ import type {
   AgentSessionCallbacks,
   AgentSessionOptions,
   AgentStopReason,
+  AgentPromptResult,
+  AgentUpdate,
   AgentUsage,
 } from '../../agent/types.js';
-import { AgentAuthenticationRequiredError, AgentError } from '../../agent/errors.js';
+import {
+  AgentAuthenticationRequiredError,
+  AgentError,
+  AgentPromptRejectedError,
+} from '../../agent/errors.js';
 import { type Logger, noopLogger } from '../../logger.js';
 import type { AgentStreamTransport } from '../types.js';
-import { ProcessStreamTransport, spawnManagedProcess } from '../transport/acp-process-lifecycle.js';
+import {
+  ProcessStreamTransport,
+  spawnManagedProcess,
+  bindSessionProcessEvents,
+} from '../transport/acp-process-lifecycle.js';
 import { buildPromptBlocks } from '../protocol/prompt.js';
 import { normalizeAcpUsage } from '../protocol/usage.js';
-import { getAgentRequestTimeoutMs } from '../../config/runtime-defaults.js';
+import {
+  getAgentRequestTimeoutMs,
+  DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
+  DEFAULT_AGENT_MODEL,
+} from '../../config/runtime-defaults.js';
 import { withTimeout } from '../transport/capabilities-cache.js';
-import { projectV2ConfigOption, projectV2SessionUpdate } from './events.js';
+import { projectV2ConfigOption, createV2SessionProjector } from './events.js';
+import { withV2StateErrors } from './state-error-compatibility.js';
 import {
   isAcpAuthenticationRequired,
   isAcpMethodNotFound,
@@ -46,11 +89,12 @@ import type { AgentDiagnosticsRecorder } from '../../agent/diagnostics.js';
 interface TurnStop {
   stopReason: AgentStopReason;
   usage?: AgentUsage;
+  error?: AgentPromptResult['error'];
 }
 
 interface ActiveCallbacks {
   callbacks: AgentSessionCallbacks;
-  stops: TurnStop[];
+  pendingInsertion?: Extract<AgentUpdate, { type: 'user_text' }>[];
   waiters: Array<{ resolve(value: TurnStop): void; reject(error: unknown): void }>;
 }
 
@@ -93,13 +137,10 @@ function descriptorFromInitialization(
       description: method.description ?? null,
     };
   });
-  const modes = configOptions
-    .filter((option) => option.category === 'mode' || option.id === 'mode')
-    .flatMap((option) => option.options?.map((entry) => entry.value) ?? []);
+  const modes =
+    findAgentConfigOption(configOptions, 'mode')?.options?.map((entry) => entry.value) ?? [];
   const capabilities = advertised(initialization.capabilities);
-  const supportsDynamicModel = configOptions.some(
-    (option) => option.category === 'model' || option.id === 'model',
-  );
+  const supportsDynamicModel = !!findAgentConfigOption(configOptions, 'model');
   const supportsDynamicConfig = configOptions.length > 0;
   const supportsLogout = authMethods.length > 0;
   const descriptor: AgentDescriptor = {
@@ -133,21 +174,34 @@ function descriptorFromInitialization(
   return descriptor;
 }
 
-function toPermissionRequest(
+export function toPermissionRequest(
   request: RequestPermissionRequest,
   permissionId: string,
 ): AgentPermissionRequest {
+  const options = request.options.map((option) => ({
+    optionId: option.optionId,
+    label: option.name,
+    kind: option.kind,
+  }));
   const subject = request.subject;
+  const common = {
+    permissionId,
+    source: 'provider' as const,
+    subject,
+    description: request.description ?? request.title,
+    options,
+  };
   if (subject?.type === 'tool_call' && 'toolCall' in subject) {
     const call = subject.toolCall as {
       name?: unknown;
       title?: unknown;
       rawInput?: unknown;
       toolCallId?: unknown;
+      kind?: unknown;
+      locations?: { path: string; line?: number | null }[] | null;
     };
     return {
-      permissionId,
-      description: request.description ?? request.title,
+      ...common,
       toolCall: {
         name:
           typeof call.name === 'string'
@@ -155,54 +209,38 @@ function toPermissionRequest(
             : typeof call.title === 'string'
               ? call.title
               : request.title,
-        arguments:
-          call.rawInput && typeof call.rawInput === 'object' && !Array.isArray(call.rawInput)
-            ? (call.rawInput as Record<string, unknown>)
-            : undefined,
+        arguments: toolArgumentsFrom(call.rawInput),
+        rawInput: call.rawInput,
+        kind: typeof call.kind === 'string' ? call.kind : undefined,
+        locations: call.locations?.map((location) => ({
+          path: location.path,
+          line: location.line ?? undefined,
+        })),
         toolCallId: typeof call.toolCallId === 'string' ? call.toolCallId : undefined,
       },
-      options: request.options.map((option) => ({
-        optionId: option.optionId,
-        label: option.name,
-        kind:
-          option.kind === 'allow_once' ||
-          option.kind === 'allow_always' ||
-          option.kind === 'reject_once' ||
-          option.kind === 'reject_always'
-            ? option.kind
-            : undefined,
-      })),
     };
   }
-  const command =
-    subject?.type === 'command' && 'command' in subject && typeof subject.command === 'string'
-      ? subject.command
-      : request.title;
-  return {
-    permissionId,
-    description: request.description ?? request.title,
-    toolCall: {
-      name: 'command',
-      arguments: { command },
-      toolCallId:
-        subject?.type === 'command' && 'toolCallId' in subject
-          ? typeof subject.toolCallId === 'string'
+  if (
+    subject?.type === 'command' &&
+    'command' in subject &&
+    'cwd' in subject &&
+    typeof subject.command === 'string' &&
+    typeof subject.cwd === 'string'
+  ) {
+    return {
+      ...common,
+      toolCall: {
+        name: 'command',
+        kind: 'execute',
+        arguments: { command: subject.command, cwd: subject.cwd },
+        toolCallId:
+          'toolCallId' in subject && typeof subject.toolCallId === 'string'
             ? subject.toolCallId
-            : undefined
-          : undefined,
-    },
-    options: request.options.map((option) => ({
-      optionId: option.optionId,
-      label: option.name,
-      kind:
-        option.kind === 'allow_once' ||
-        option.kind === 'allow_always' ||
-        option.kind === 'reject_once' ||
-        option.kind === 'reject_always'
-          ? option.kind
-          : undefined,
-    })),
-  };
+            : undefined,
+      },
+    };
+  }
+  return { ...common, toolCall: { name: request.title, kind: 'other' } };
 }
 
 function advertised(capabilities: AgentCapabilities | undefined): {
@@ -240,13 +278,15 @@ function supportedMcpServers(
 ): NewSessionRequest['mcpServers'] {
   return options.mcpServers
     ?.filter((server) => {
-      if (server.type === 'http' || server.type === 'sse') return capabilities.mcpHttp;
+      if (server.type === 'http') return capabilities.mcpHttp;
+      if (server.type === 'sse') return false;
       if (server.type === 'acp') return capabilities.mcpAcp;
       return capabilities.mcpStdio;
     })
-    .map((server) =>
-      server.type === 'sse' ? { ...server, type: 'http' as const } : server,
-    ) as NewSessionRequest['mcpServers'];
+    .map((server) => ({
+      ...server,
+      type: server.type ?? 'stdio',
+    })) as NewSessionRequest['mcpServers'];
 }
 
 export class AcpV2AgentDriver implements AgentDriver {
@@ -266,6 +306,8 @@ export class AcpV2AgentDriver implements AgentDriver {
     options: AgentSessionOptions,
     callbacks: AgentSessionCallbacks,
   ): Promise<AgentSession> {
+    const requests = cancellableCallbacks(callbacks);
+    callbacks = requests.callbacks;
     const managed = spawnManagedProcess({
       command,
       args,
@@ -279,109 +321,298 @@ export class AcpV2AgentDriver implements AgentDriver {
       createTransport: this.createTransport,
     });
     const { child, transport } = managed;
+    const processEvents = bindSessionProcessEvents(child);
     const sessions = new Map<string, ActiveCallbacks>();
-    const pendingUpdates = new Map<string, UpdateSessionNotification[]>();
+    const projectors = new Map<string, ReturnType<typeof createV2SessionProjector>>();
+    const permissionMetadata = new Map<string, PermissionMetadataCache>();
+    const pendingUpdates: Array<{
+      notification: UpdateSessionNotification;
+      historical: boolean;
+    }> = [];
+    const subagents = new AcpSubagentSessions<ActiveCallbacks>((id) => {
+      const active = sessions.get(id);
+      if (!active) throw new Error('Unknown ACP root session');
+      return active;
+    });
+    const activeSession = (id: string) => {
+      try {
+        return subagents.resolve(id);
+      } catch {
+        return undefined;
+      }
+    };
+    let settingUpSession = true;
     let permissionSequence = 0;
 
-    const routeUpdate = async (notification: UpdateSessionNotification): Promise<void> => {
-      const active = sessions.get(notification.sessionId);
+    const routeUpdate = async (
+      notification: UpdateSessionNotification,
+      historical = false,
+    ): Promise<void> => {
+      const active = activeSession(notification.sessionId);
       if (!active) {
-        const queued = pendingUpdates.get(notification.sessionId) ?? [];
-        queued.push(notification);
-        pendingUpdates.set(notification.sessionId, queued);
+        if (!settingUpSession) return;
+        if (pendingUpdates.length >= ACP_MAX_PENDING_UPDATES)
+          throw new AgentError('agent_failure', 'Too many ACP updates before session setup');
+        pendingUpdates.push({ notification, historical });
         return;
       }
-      for (const event of projectV2SessionUpdate(notification.update)) {
-        await active.callbacks.onUpdate(event);
+      if (isSubagentNotification(notification)) {
+        await subagents.update(notification, historical);
+        return;
       }
-      if (notification.update.sessionUpdate === 'state_update') {
-        const state = notification.update as {
-          state: string;
-          stopReason?: string;
-          usage?: unknown;
-        };
-        if (state.state === 'idle') {
-          const stop = {
-            stopReason: state.stopReason ?? 'end_turn',
-            usage: normalizeAcpUsage(state.usage),
+      const ordinary = notification as UpdateSessionNotification;
+      const childSession = subagents.isChild(notification.sessionId);
+      if (childSession && ordinary.update.sessionUpdate === 'state_update') {
+        const { sessionUpdate: _, ...state } = ordinary.update;
+        if (typeof state.state === 'string')
+          await subagents.state(
+            notification.sessionId,
+            { ...state, state: state.state },
+            historical,
+          );
+        return;
+      }
+      if (ordinary.update.sessionUpdate === 'tool_call_update') {
+        let cache = permissionMetadata.get(notification.sessionId);
+        if (!cache) {
+          cache = new PermissionMetadataCache();
+          permissionMetadata.set(notification.sessionId, cache);
+        }
+        cache.remember(ordinary.update);
+      }
+      let projector = projectors.get(notification.sessionId);
+      if (!projector) {
+        projector = createV2SessionProjector();
+        projectors.set(notification.sessionId, projector);
+      }
+      try {
+        for (const event of projector(ordinary.update)) {
+          if (!childSession && event.type === 'config_option_update') {
+            event.configOptions = withCustomModels(event.configOptions, options.customModels ?? []);
+            handle.configOptions = event.configOptions;
+          }
+          if (!childSession && event.type === 'user_text' && active.pendingInsertion) {
+            if (active.pendingInsertion.length >= ACP_MAX_PENDING_UPDATES)
+              throw new AgentError(
+                'agent_failure',
+                'Too many ACP user updates before prompt acceptance',
+              );
+            active.pendingInsertion.push(event);
+          } else await active.callbacks.onUpdate(event);
+        }
+      } finally {
+        if (notification.update.sessionUpdate === 'state_update') {
+          const state = notification.update as {
+            state: string;
+            stopReason?: string;
+            usage?: unknown;
+            error?: AgentPromptResult['error'];
           };
-          const waiter = active.waiters.shift();
-          if (waiter) waiter.resolve(stop);
-          else active.stops.push(stop);
+          if (state.state === 'idle') {
+            const waiter = active.waiters.shift();
+            if (waiter) {
+              if (!state.stopReason)
+                waiter.reject(
+                  new AgentError(
+                    'agent_failure',
+                    'ACP v2 foreground work ended without a stop reason',
+                  ),
+                );
+              else
+                waiter.resolve({
+                  stopReason: state.stopReason,
+                  usage: normalizeAcpUsage(state.usage),
+                  ...(state.stopReason === 'error' && state.error ? { error: state.error } : {}),
+                });
+            }
+          }
         }
       }
     };
 
     const app = client({ name: 'agentctl' });
-    app.onNotification(methods.client.session.update, ({ params }) => routeUpdate(params));
-    app.onRequest(methods.client.session.requestPermission, async ({ params }) => {
-      const active = sessions.get(params.sessionId);
+    const updates = new AcpUpdateQueue();
+    app.onNotification(methods.client.session.update, ({ params }) => {
+      const historical = adapted.isHistorical(subagents.rootSessionId(params.sessionId));
+      const notification = stateErrors.restore(params);
+      return updates.enqueue(() => routeUpdate(notification, historical));
+    });
+    app.onRequest(methods.client.session.requestPermission, async ({ params, signal }) => {
+      await updates.settled();
+      if (signal.aborted) return { outcome: { outcome: 'cancelled' as const } };
+      const active = activeSession(params.sessionId);
       if (!active) return { outcome: { outcome: 'cancelled' as const } };
       const permissionId = `${params.sessionId}:${String(++permissionSequence)}`;
-      const request = toPermissionRequest(params, permissionId);
-      const response = await active.callbacks.onRequestPermission(request);
-      const option = response.optionId
-        ? params.options.find((entry) => entry.optionId === response.optionId)
-        : params.options.find((entry) =>
-            response.allowed ? entry.kind.startsWith('allow') : entry.kind.startsWith('reject'),
-          );
+      const subject = params.subject;
+      const cache = permissionMetadata.get(params.sessionId);
+      const enriched =
+        subject?.type === 'tool_call' && 'toolCall' in subject && cache
+          ? {
+              ...params,
+              subject: {
+                ...subject,
+                toolCall: cache.merge(subject.toolCall as { toolCallId: string }),
+              },
+            }
+          : params;
+      const request = toPermissionRequest(enriched, permissionId);
+      request.subject = params.subject;
+      const response = await waitForRequest(
+        active.callbacks.onRequestPermission(request, signal),
+        signal,
+        () => ({ allowed: false, cancelled: true }),
+      );
+      if (signal.aborted || response.cancelled)
+        return { outcome: { outcome: 'cancelled' as const } };
+      const optionId =
+        response.optionId ??
+        getBestPermissionOption(request.options, response.allowed ? 'allow' : 'reject');
+      const option = params.options.find((entry) => entry.optionId === optionId);
       return option
         ? { outcome: { outcome: 'selected' as const, optionId: option.optionId } }
         : { outcome: { outcome: 'cancelled' as const } };
     });
 
-    const connection = app.connect(ndJsonStream(transport.stdin, transport.stdout));
+    const requestScopes = new AcpRequestScopes<AgentSessionCallbacks>((method, params) => {
+      if (!SESSION_REQUEST_METHODS.has(method)) return undefined;
+      return typeof params.sessionId === 'string'
+        ? activeSession(params.sessionId)?.callbacks
+        : callbacks;
+    });
+    const pendingUrlElicitations = new Map<string, AgentSessionCallbacks>();
+    app.onRequest(methods.client.elicitation.create, async ({ params, signal }) => {
+      if (!callbacks.onRequestElicitation)
+        throw RequestError.invalidParams(undefined, 'Elicitation mode is not supported');
+      await updates.settled();
+      const request = projectElicitationRequest(params);
+      if (!request) return { action: 'decline' as const };
+      if (signal.aborted) return { action: 'cancel' as const };
+      const target = request.sessionId
+        ? activeSession(request.sessionId)?.callbacks
+        : request.requestId !== undefined
+          ? requestScopes.get(request.requestId)
+          : undefined;
+      if (!target?.onRequestElicitation) return { action: 'decline' as const };
+      const response = await waitForRequest(
+        target.onRequestElicitation(request, signal),
+        signal,
+        () => ({ action: 'cancel' as const }),
+      );
+      if (signal.aborted) return { action: 'cancel' as const };
+      const result = formatElicitationResponse(response, request);
+      if (request.mode === 'url' && result.action === 'accept') {
+        pendingUrlElicitations.set(request.id, target);
+      }
+      return result;
+    });
+    app.onNotification(methods.client.elicitation.complete, async ({ params }) => {
+      const target = pendingUrlElicitations.get(params.elicitationId);
+      pendingUrlElicitations.delete(params.elicitationId);
+      await target?.onElicitationCompleted?.(params.elicitationId);
+    });
+
+    const rawStream = ndJsonStream(transport.stdin, transport.stdout);
+    const adapted = withSessionSetupTracking(rawStream, {
+      onError: (error) => this.logger.warn(error, 'Invalid ACP subagent update'),
+    });
+    const stateErrors = withV2StateErrors(
+      wrapDebug(adapted, (direction, frame) => requestScopes.observe(direction, frame)),
+    );
+    const connection = app.connect(stateErrors);
     let capabilities = advertised(undefined);
     let closed = false;
     const closedPromise = Promise.race([connection.closed, transport.closed]);
+    const rejectTurns = (error: unknown) => {
+      for (const active of sessions.values()) {
+        for (const waiter of active.waiters.splice(0)) waiter.reject(error);
+      }
+    };
+    const releaseSession = (error: unknown) => {
+      processEvents.dispose();
+      requests.cancel();
+      rejectTurns(error);
+      pendingUrlElicitations.clear();
+      pendingUpdates.length = 0;
+      requestScopes.clear();
+      subagents.clear();
+      sessions.clear();
+      projectors.clear();
+      permissionMetadata.clear();
+    };
+    void closedPromise.then(
+      () =>
+        releaseSession(
+          new AgentError('transport_lost', 'ACP connection closed before the turn completed'),
+        ),
+      (error: unknown) => releaseSession(withProcessDiagnostics(error, child)),
+    );
     const handle: AgentSession = {
       id: null,
       history: 'fresh',
       closed: closedPromise,
-      onError(handler) {
-        child.on('error', handler);
-      },
-      onClose(handler) {
-        child.once('exit', (code, signal) => handler({ code, signal }));
-      },
+      onError: processEvents.onError,
+      onClose: processEvents.onClose,
       async prompt(text, attachments, embeddedContext) {
         if (!this.id) throw new AgentError('invalid_request', 'Agent session has no ID');
         const active = sessions.get(this.id);
         if (!active) throw new AgentError('transport_lost', 'Agent session is not active');
-        active.stops.length = 0;
-        const blocks = (await buildPromptBlocks({
+        const blocks = await buildPromptBlocks({
           text,
           attachments,
           embeddedContext,
           supportsImage: capabilities.image,
           supportsAudio: capabilities.audio,
           supportsEmbeddedContext: capabilities.embeddedContext,
-        })) as ContentBlock[];
+        });
         const stopPromise = new Promise<TurnStop>((resolve, reject) => {
           active.waiters.push({ resolve, reject });
         });
+        void stopPromise.catch(() => undefined);
+        active.pendingInsertion = [];
+        let inserted = false;
         try {
-          await withTimeout(
-            connection.agent.request(methods.agent.session.prompt, {
-              sessionId: this.id,
-              prompt: blocks,
-            }),
-            getAgentRequestTimeoutMs(),
-            'sending ACP v2 prompt',
-          );
-          return await withTimeout(
-            stopPromise,
-            getAgentRequestTimeoutMs(),
-            'waiting for ACP v2 turn',
-          );
+          const accepted = await connection.agent.request(methods.agent.session.prompt, {
+            sessionId: this.id,
+            prompt: blocks,
+          });
+          inserted = true;
+          await updates.enqueue(async () => {
+            await active.callbacks.onUpdate({
+              type: 'user_message_accepted',
+              messageId: accepted.messageId,
+            });
+            for (const event of active.pendingInsertion ?? [])
+              await active.callbacks.onUpdate(event);
+            active.pendingInsertion = undefined;
+          });
+          const stop = await stopPromise;
+          await updates.drain();
+          return { ...stop, userMessageId: accepted.messageId };
         } catch (error) {
+          // An unconfirmed insertion must not attach observed messages to local input.
+          const buffered = active.pendingInsertion ?? [];
+          active.pendingInsertion = undefined;
+          await updates
+            .enqueue(async () => {
+              if (!inserted) await active.callbacks.onUpdate({ type: 'user_message_unconfirmed' });
+              for (const event of buffered) await active.callbacks.onUpdate(event);
+            })
+            .catch(() => undefined);
           const waiter = active.waiters.shift();
           waiter?.reject(error);
-          throw error;
+          await updates.drain().catch(() => undefined);
+          const failure = withProcessDiagnostics(error, child);
+          if (!inserted && !connection.signal.aborted && error instanceof RequestError)
+            throw new AgentPromptRejectedError(error);
+          throw failure;
         }
       },
       async authenticate(methodId) {
-        await connection.agent.request(methods.agent.auth.login, { methodId });
+        await withTimeout(
+          connection.agent.request(methods.agent.auth.login, { methodId }),
+          DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
+          'authenticating ACP session',
+        );
       },
       async cancel() {
         if (this.id) {
@@ -391,82 +622,108 @@ export class AcpV2AgentDriver implements AgentDriver {
       async close() {
         if (closed) return;
         closed = true;
+        processEvents.dispose();
+        requests.cancel();
+        rejectTurns(
+          new AgentError('transport_lost', 'ACP session closed before the turn completed'),
+        );
         if (this.id && capabilities.sessions) {
           try {
-            await connection.agent.request(methods.agent.session.close, { sessionId: this.id });
+            await withTimeout(
+              connection.agent.request(methods.agent.session.close, { sessionId: this.id }),
+              ACP_SESSION_CLOSE_TIMEOUT_MS,
+              'closing ACP session',
+            );
           } catch {
             // Process shutdown remains authoritative.
           }
           sessions.delete(this.id);
+          projectors.delete(this.id);
         }
         connection.close();
         transport.kill();
       },
       async updateModel(modelId) {
-        if (!this.id || !options.resolvedModelConfigId) return;
-        const result = await connection.agent.request(methods.agent.session.setConfigOption, {
-          sessionId: this.id,
-          configId: options.resolvedModelConfigId,
-          type: 'id',
-          value: modelId,
-        });
-        return (this.configOptions = productConfigOptions(result.configOptions));
+        const configId =
+          findAgentConfigOption(this.configOptions, 'model')?.id ?? options.resolvedModelConfigId;
+        if (!this.id || !configId) return;
+        const result = await withTimeout(
+          connection.agent.request(methods.agent.session.setConfigOption, {
+            sessionId: this.id,
+            configId,
+            type: 'id',
+            value: modelId,
+          }),
+          getAgentRequestTimeoutMs(),
+          'setting ACP model',
+        );
+        return (this.configOptions = withCustomModels(
+          productConfigOptions(result.configOptions),
+          options.customModels ?? [],
+        ));
       },
       async updateConfigOption(configId, value) {
         if (!this.id) return [];
-        const result = await connection.agent.request(methods.agent.session.setConfigOption, {
-          sessionId: this.id,
-          configId,
-          type: typeof value === 'boolean' ? 'boolean' : 'id',
-          value,
-        });
-        return (this.configOptions = productConfigOptions(result.configOptions));
+        const result = await withTimeout(
+          connection.agent.request(methods.agent.session.setConfigOption, {
+            sessionId: this.id,
+            configId,
+            ...(typeof value === 'boolean'
+              ? { type: 'boolean' as const, value }
+              : { type: 'id' as const, value }),
+          }),
+          getAgentRequestTimeoutMs(),
+          'setting ACP configuration',
+        );
+        return (this.configOptions = withCustomModels(
+          productConfigOptions(result.configOptions),
+          options.customModels ?? [],
+        ));
       },
       async setMode(modeId) {
-        if (!this.id) return;
-        await connection.agent.request(methods.agent.session.setConfigOption, {
-          sessionId: this.id,
-          configId: 'mode',
-          type: 'id',
-          value: modeId,
-        });
+        const mode = findAgentConfigOption(this.configOptions, 'mode');
+        if (!mode) throw new AgentError('unsupported', 'Agent did not advertise a mode option');
+        await this.updateConfigOption?.(mode.id, modeId);
       },
       async deleteSession(sessionId) {
         if (capabilities.delete) {
-          await connection.agent.request(methods.agent.session.delete, { sessionId });
+          await withTimeout(
+            connection.agent.request(methods.agent.session.delete, { sessionId }),
+            ACP_SESSION_OPERATION_TIMEOUT_MS,
+            'deleting ACP session',
+          );
         }
       },
       async listSessions(params) {
         if (!capabilities.sessions) return { sessions: [] };
-        const result = await connection.agent.request(methods.agent.session.list, params ?? {});
+        const result = await withTimeout(
+          connection.agent.request(methods.agent.session.list, params ?? {}),
+          ACP_SESSION_OPERATION_TIMEOUT_MS,
+          'listing ACP sessions',
+        );
         return { sessions: result.sessions, nextCursor: result.nextCursor ?? undefined };
       },
       async logout() {
-        await connection.agent.request(methods.agent.auth.logout, {});
+        await withTimeout(
+          connection.agent.request(methods.agent.auth.logout, {}),
+          ACP_SESSION_OPERATION_TIMEOUT_MS,
+          'logging out of ACP session',
+        );
       },
     };
 
-    void closedPromise.then(
-      () => {
-        const error = new AgentError('transport_lost', 'ACP v2 connection closed');
-        for (const active of sessions.values()) {
-          for (const waiter of active.waiters.splice(0)) waiter.reject(error);
-        }
-      },
-      (error: unknown) => {
-        for (const active of sessions.values()) {
-          for (const waiter of active.waiters.splice(0)) waiter.reject(error);
-        }
-      },
-    );
-
     try {
       const initialization = await withTimeout(
-        connection.agent.request(methods.agent.initialize, {
-          protocolVersion: PROTOCOL_VERSION,
-          info: { name: 'agentctl', version: '1.0.0' },
-          capabilities: process.platform === 'win32' ? {} : { auth: { terminal: {} } },
-        }),
+        negotiateV2(
+          connection.agent.request(methods.agent.initialize, {
+            protocolVersion: PROTOCOL_VERSION,
+            info: applicationInfo('agentctl'),
+            capabilities: {
+              ...(process.platform === 'win32' ? {} : { auth: { terminal: {} } }),
+              ...(callbacks.onRequestElicitation ? { elicitation: { form: {}, url: {} } } : {}),
+            },
+          }),
+        ),
         getAgentRequestTimeoutMs(),
         'initializing ACP v2 connection',
       );
@@ -487,6 +744,10 @@ export class AcpV2AgentDriver implements AgentDriver {
         throw new AgentError('unsupported', 'Agent does not advertise ACP v2 session support');
       }
 
+      assertAcpSessionPaths(
+        options.cwd,
+        capabilities.additionalDirectories ? options.additionalDirectories : undefined,
+      );
       const request: NewSessionRequest = {
         cwd: options.cwd,
         additionalDirectories: capabilities.additionalDirectories
@@ -494,7 +755,7 @@ export class AcpV2AgentDriver implements AgentDriver {
           : undefined,
         mcpServers: supportedMcpServers(options, capabilities),
       };
-      let response: { sessionId?: string; configOptions?: SessionConfigOption[] };
+      let response: NewSessionResponse;
       if (options.intent.kind === 'fork' && capabilities.fork) {
         try {
           response = await withTimeout(
@@ -543,7 +804,7 @@ export class AcpV2AgentDriver implements AgentDriver {
             getAgentRequestTimeoutMs(),
             'resuming ACP v2 session',
           );
-          response = { sessionId: options.intent.sessionId, configOptions: resumed.configOptions };
+          response = { ...resumed, sessionId: options.intent.sessionId };
           handle.history = 'restored';
           this.diagnostics?.record({
             kind: 'session_started',
@@ -553,6 +814,7 @@ export class AcpV2AgentDriver implements AgentDriver {
             path: 'provider_resume',
           });
         } catch (error) {
+          if (options.intent.kind === 'resume' && options.intent.requireExisting) throw error;
           if (!isAcpSessionNotFound(error)) throw error;
           this.diagnostics?.record({
             kind: 'fallback_used',
@@ -597,15 +859,48 @@ export class AcpV2AgentDriver implements AgentDriver {
 
       handle.id = response.sessionId ?? null;
       if (!handle.id) throw new AgentError('agent_failure', 'ACP v2 agent returned no session ID');
-      const active: ActiveCallbacks = { callbacks, stops: [], waiters: [] };
+      await updates.drain();
+      const active: ActiveCallbacks = { callbacks, waiters: [] };
       sessions.set(handle.id, active);
-      for (const notification of pendingUpdates.get(handle.id) ?? [])
-        await routeUpdate(notification);
-      pendingUpdates.delete(handle.id);
+      for (const pending of pendingUpdates.splice(0))
+        await routeUpdate(pending.notification, pending.historical);
+      settingUpSession = false;
+      if (response.availableCommands !== undefined) {
+        for (const event of createV2SessionProjector()({
+          sessionUpdate: 'available_commands_update',
+          availableCommands: response.availableCommands,
+        }))
+          await callbacks.onUpdate(event);
+      }
 
-      const configOptions = productConfigOptions(response.configOptions);
-      if (Array.isArray(response.configOptions)) handle.configOptions = configOptions;
-      handle.availableModes = descriptorFromInitialization(initialization, configOptions).modes;
+      const configOptions = withCustomModels(
+        productConfigOptions(response.configOptions),
+        options.customModels ?? [],
+      );
+      if (Array.isArray(response.configOptions) || options.customModels?.length)
+        handle.configOptions = configOptions;
+      if (options.selectedModel && options.selectedModel !== DEFAULT_AGENT_MODEL) {
+        await handle.updateModel?.(options.selectedModel);
+      }
+      const thinkingOption = findAgentConfigOption(handle.configOptions, 'thought_level');
+      if (
+        options.selectedThinkingEffort &&
+        thinkingOption?.options?.some((option) => option.value === options.selectedThinkingEffort)
+      ) {
+        await handle.updateConfigOption?.(thinkingOption.id, options.selectedThinkingEffort);
+      }
+      handle.availableModes = descriptorFromInitialization(
+        initialization,
+        handle.configOptions ?? configOptions,
+      ).modes;
+      guardAcpTurns(
+        handle,
+        () => {
+          connection.close();
+          transport.kill();
+        },
+        { requests },
+      );
       return handle;
     } catch (error) {
       if (isAcpAuthenticationRequired(error)) {
@@ -618,7 +913,7 @@ export class AcpV2AgentDriver implements AgentDriver {
         throw new AgentAuthenticationRequiredError(handle, configOptions);
       }
       await handle.close();
-      throw error;
+      throw withProcessDiagnostics(error, child);
     }
   }
 
@@ -628,74 +923,67 @@ export class AcpV2AgentDriver implements AgentDriver {
     env?: Record<string, string>,
     options?: AgentInspectionOptions,
   ): Promise<AgentDescriptor> {
-    const managed = spawnManagedProcess({
+    let initialization: InitializeResponse | undefined;
+    try {
+      return await this.withControlConnection(
+        command,
+        args,
+        env,
+        'agentctl-probe',
+        async (connection, response) => {
+          initialization = response;
+          let configOptions: AgentConfigOption[] = [];
+          if (advertised(response.capabilities).sessions) {
+            const created = await withTimeout(
+              connection.agent.request(methods.agent.session.new, {
+                cwd: os.tmpdir(),
+                mcpServers: [],
+              }),
+              getAgentRequestTimeoutMs(),
+              'opening provider probe session',
+            );
+            configOptions = productConfigOptions(created.configOptions);
+            await connection.agent
+              .request(methods.agent.session.close, { sessionId: created.sessionId })
+              .catch(() => undefined);
+          }
+          return descriptorFromInitialization(response, configOptions, options);
+        },
+        { timeoutMs: getAgentRequestTimeoutMs(), browserAuth: false },
+      );
+    } catch (error) {
+      if (!isAcpAuthenticationRequired(error)) throw error;
+      return initialization
+        ? { ...descriptorFromInitialization(initialization, [], options), status: 'needs_auth' }
+        : {
+            status: 'needs_auth',
+            configOptions: [],
+            authMethods: [],
+            supportsDynamicModel: false,
+            supportsDynamicConfig: false,
+            supportsLogout: false,
+          };
+    }
+  }
+
+  async listSessions(
+    command: string,
+    args: string[],
+    env: Record<string, string> | undefined,
+    params: { cwd?: string; cursor?: string },
+  ) {
+    return this.withControlConnection(
       command,
       args,
       env,
-      cwd: os.tmpdir(),
-      spawnImpl: this.spawnImpl,
-      logger: this.logger,
-      createTransport: this.createTransport,
-    });
-    const { transport } = managed;
-    const app = client({ name: 'agentctl-probe' });
-    app.onNotification(methods.client.session.update, () => undefined);
-    app.onRequest(methods.client.session.requestPermission, () => ({
-      outcome: { outcome: 'cancelled' },
-    }));
-    const connection: ClientConnection = app.connect(
-      ndJsonStream(transport.stdin, transport.stdout),
+      'agentctl-list',
+      async (connection, initialization) => {
+        if (!advertised(initialization.capabilities).sessions)
+          throw new Error('Agent does not support native session listing');
+        const page = await connection.agent.request(methods.agent.session.list, params);
+        return { sessions: page.sessions, nextCursor: page.nextCursor ?? undefined };
+      },
     );
-    let initialization: InitializeResponse | undefined;
-    try {
-      initialization = await withTimeout(
-        connection.agent.request(methods.agent.initialize, {
-          protocolVersion: PROTOCOL_VERSION,
-          info: { name: 'agentctl-probe', version: '1.0.0' },
-          capabilities: process.platform === 'win32' ? {} : { auth: { terminal: {} } },
-        }),
-        getAgentRequestTimeoutMs(),
-        'initializing provider probe',
-      );
-      const capabilities = advertised(initialization.capabilities);
-      let configOptions: AgentConfigOption[] = [];
-      if (capabilities.sessions) {
-        const created = await withTimeout(
-          connection.agent.request(methods.agent.session.new, {
-            cwd: os.tmpdir(),
-            mcpServers: [],
-          }),
-          getAgentRequestTimeoutMs(),
-          'opening provider probe session',
-        );
-        configOptions = productConfigOptions(created.configOptions);
-        await connection.agent
-          .request(methods.agent.session.close, { sessionId: created.sessionId })
-          .catch(() => undefined);
-      }
-      return descriptorFromInitialization(initialization, configOptions, options);
-    } catch (error) {
-      if (isAcpAuthenticationRequired(error)) {
-        if (initialization) {
-          return {
-            ...descriptorFromInitialization(initialization, [], options),
-            status: 'needs_auth',
-          };
-        }
-        return {
-          status: 'needs_auth',
-          configOptions: [],
-          authMethods: [],
-          supportsDynamicModel: false,
-          supportsDynamicConfig: false,
-          supportsLogout: false,
-        };
-      }
-      throw error;
-    } finally {
-      connection.close();
-      transport.kill();
-    }
   }
 
   async deleteSession(
@@ -770,14 +1058,14 @@ export class AcpV2AgentDriver implements AgentDriver {
     );
   }
 
-  private async withControlConnection(
+  private async withControlConnection<T>(
     command: string,
     args: string[],
     env: Record<string, string> | undefined,
     name: string,
-    operation: (connection: ClientConnection, initialization: InitializeResponse) => Promise<void>,
-    options: AgentAuthenticationOptions = {},
-  ): Promise<void> {
+    operation: (connection: ClientConnection, initialization: InitializeResponse) => Promise<T>,
+    options: AgentAuthenticationOptions & { browserAuth?: boolean } = {},
+  ): Promise<T> {
     const managed = spawnManagedProcess({
       command,
       args,
@@ -788,6 +1076,8 @@ export class AcpV2AgentDriver implements AgentDriver {
       createTransport: this.createTransport,
     });
     const { transport } = managed;
+    // Control connections are intentionally killed after their operation finishes.
+    void transport.closed.catch(() => undefined);
     const abort = () => transport.kill('SIGTERM');
     options.signal?.addEventListener('abort', abort, { once: true });
     const app = client({ name });
@@ -795,23 +1085,35 @@ export class AcpV2AgentDriver implements AgentDriver {
     app.onRequest(methods.client.session.requestPermission, () => ({
       outcome: { outcome: 'cancelled' },
     }));
+    const browserAuth = options.browserAuth !== false;
+    if (browserAuth)
+      app.onRequest(methods.client.elicitation.create, ({ params, signal }) =>
+        respondToBrowserAuthentication(params, signal, options),
+      );
     const connection = app.connect(ndJsonStream(transport.stdin, transport.stdout));
     try {
       if (options.signal?.aborted) throw new Error('Authentication cancelled');
       const initialization = await withTimeout(
-        connection.agent.request(methods.agent.initialize, {
-          protocolVersion: PROTOCOL_VERSION,
-          info: { name, version: '1.0.0' },
-          capabilities: process.platform === 'win32' ? {} : { auth: { terminal: {} } },
-        }),
-        options.timeoutMs ?? 120_000,
+        negotiateV2(
+          connection.agent.request(methods.agent.initialize, {
+            protocolVersion: PROTOCOL_VERSION,
+            info: applicationInfo(name),
+            capabilities: {
+              ...(process.platform === 'win32' ? {} : { auth: { terminal: {} } }),
+              ...(browserAuth ? { elicitation: { url: {} } } : {}),
+            },
+          }),
+        ),
+        options.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
         'initializing provider control connection',
       );
-      await withTimeout(
+      return await withTimeout(
         operation(connection, initialization),
-        options.timeoutMs ?? 120_000,
+        options.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
         'performing provider control operation',
       );
+    } catch (error) {
+      throw withProcessDiagnostics(error, managed.child);
     } finally {
       options.signal?.removeEventListener('abort', abort);
       connection.close();

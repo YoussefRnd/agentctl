@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument */
 import { describe, it, expect, vi } from 'vitest';
 import { PersistentAgentConnectionManager } from '../acp/transport/persistent-connection.js';
+import type { AgentSessionCallbacks } from '../agent/types.js';
 
 describe('PersistentAgentConnectionManager Process Exit', () => {
   it('shares one in-flight connection creation between concurrent callers', async () => {
@@ -67,30 +68,36 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
     const mgr = new PersistentAgentConnectionManager({} as any, {} as any, {} as any);
     const ownedUpdate = vi.fn().mockResolvedValue(undefined);
     const unrelatedUpdate = vi.fn().mockResolvedValue(undefined);
-    (mgr as any).activeSessions.set('owned', {
+    const owned = {
       acpSessionId: 'owned',
       callbacks: { onUpdate: ownedUpdate },
-    });
-    (mgr as any).activeSessions.set('unrelated', {
+    };
+    const unrelated = {
       acpSessionId: 'unrelated',
       callbacks: { onUpdate: unrelatedUpdate },
-    });
+    };
     const exiting = {
       generation: 1,
+      connection: { close: vi.fn() },
       sessions: new Map([['owned', { sessionId: 'owned', createdAt: Date.now() }]]),
+      activeSessions: new Map([['owned', owned]]),
+      terminalToSession: new Map(),
       transport: { kill: vi.fn() },
       terminalManager: { dispose: vi.fn().mockResolvedValue(undefined), release: vi.fn() },
       idleTimer: null,
     };
     (mgr as any).connections.set('provider-1', exiting);
+    const other = { activeSessions: new Map([['unrelated', unrelated]]) };
+    (mgr as any).connections.set('provider-2', other);
 
     (mgr as any).handleConnectionExit('provider-1', exiting, 1, null);
     await Promise.resolve();
 
     expect(ownedUpdate).toHaveBeenCalledOnce();
+    expect(exiting.connection.close).toHaveBeenCalledOnce();
     expect(unrelatedUpdate).not.toHaveBeenCalled();
-    expect((mgr as any).activeSessions.has('owned')).toBe(false);
-    expect((mgr as any).activeSessions.has('unrelated')).toBe(true);
+    expect(exiting.activeSessions.has('owned')).toBe(false);
+    expect(other.activeSessions.has('unrelated')).toBe(true);
   });
 
   it('unregisters active session and releases terminals cleanly', () => {
@@ -105,7 +112,6 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
     };
 
     const mgr = new PersistentAgentConnectionManager({} as any, {} as any, {} as any);
-    mgr.registerActiveSession('sess-2', mockSession, 'provider-2');
 
     const mockTerminalManager = {
       dispose: vi.fn().mockResolvedValue(undefined),
@@ -114,19 +120,65 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
 
     const mockConn = {
       sessions: new Map([['sess-2', { sessionId: 'sess-2', createdAt: Date.now() }]]),
+      activeSessions: new Map(),
+      terminalToSession: new Map([['term-123', 'sess-2']]),
       terminalManager: mockTerminalManager,
       transport: { kill: vi.fn() },
       idleTimer: null,
     };
 
     (mgr as any).connections.set('provider-2', mockConn);
-    (mgr as any).terminalToSession.set('term-123', 'sess-2');
+    mgr.registerActiveSession('sess-2', mockSession, 'provider-2');
 
-    mgr.unregisterActiveSession('sess-2');
+    mgr.unregisterActiveSession('sess-2', 'provider-2');
 
-    expect((mgr as any).activeSessions.has('sess-2')).toBe(false);
-    expect((mgr as any).terminalToSession.has('term-123')).toBe(false);
+    expect(mockConn.activeSessions.has('sess-2')).toBe(false);
+    expect(mockConn.terminalToSession.has('term-123')).toBe(false);
     expect(mockTerminalManager.release).toHaveBeenCalledWith('term-123');
     expect(mockConn.sessions.has('sess-2')).toBe(false);
+  });
+
+  it('isolates identical native session IDs across providers and replacement connections', async () => {
+    const mgr = new PersistentAgentConnectionManager({} as any, {} as any, {} as any);
+    const makeConnection = () => ({
+      generation: 1,
+      sessions: new Map(),
+      activeSessions: new Map(),
+      terminalToSession: new Map(),
+      transport: { kill: vi.fn() },
+      terminalManager: { dispose: vi.fn().mockResolvedValue(undefined), release: vi.fn() },
+      idleTimer: null,
+    });
+    const first = makeConnection();
+    const second = makeConnection();
+    (mgr as any).connections.set('first', first);
+    (mgr as any).connections.set('second', second);
+    const session = (onUpdate: AgentSessionCallbacks['onUpdate']) => ({
+      acpSessionId: 'same',
+      localSessionId: 'local',
+      options: {} as any,
+      callbacks: { onUpdate, onRequestPermission: async () => ({ allowed: false }) },
+    });
+    const firstUpdate = vi.fn();
+    const secondUpdate = vi.fn();
+    mgr.registerActiveSession('same', session(firstUpdate), 'first');
+    mgr.registerActiveSession('same', session(secondUpdate), 'second');
+    mgr.unregisterActiveSession('same', 'first');
+    expect(second.activeSessions.get('same')?.callbacks.onUpdate).toBe(secondUpdate);
+    expect(second.sessions.has('same')).toBe(true);
+
+    mgr.registerActiveSession('same', session(firstUpdate), 'first');
+    const replacement = makeConnection();
+    (mgr as any).connections.set('first', replacement);
+    const replacementUpdate = vi.fn();
+    mgr.registerActiveSession('same', session(replacementUpdate), 'first');
+    (mgr as any).handleConnectionExit('first', first, 1, null);
+    await Promise.resolve();
+    expect(firstUpdate).toHaveBeenCalledOnce();
+    expect(secondUpdate).not.toHaveBeenCalled();
+    expect(replacementUpdate).not.toHaveBeenCalled();
+    expect(replacement.activeSessions.has('same')).toBe(true);
+    expect(second.activeSessions.has('same')).toBe(true);
+    expect(replacement.transport.kill).not.toHaveBeenCalled();
   });
 });

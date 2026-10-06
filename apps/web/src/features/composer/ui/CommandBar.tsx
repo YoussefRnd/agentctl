@@ -70,7 +70,7 @@ export function CommandBar({
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const { queuedMessages } = useSessionStream();
-  const hasQueuedMessages = queuedMessages.length > 0;
+  const hasQueuedMessages = queuedMessages.some((message) => message.status !== 'sending');
 
   return (
     <div className="flex w-full flex-col">
@@ -113,6 +113,7 @@ export function CommandBar({
             isUpdatingConfigOption,
             canSend,
             isRunning,
+            isSubmitting: state.isSubmitting,
           }}
         />
       </ComposerInput>

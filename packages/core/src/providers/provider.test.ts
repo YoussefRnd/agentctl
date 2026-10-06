@@ -4,11 +4,58 @@ import { resolveNpxPackageSpec } from './registry/provider-launcher.js';
 import type { providers } from '../db/schema.js';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import { defaultCredentialVault } from '../security/credential-vault.js';
+import { negotiateCapabilities } from './capabilities-negotiator.js';
+
+test('negotiates and defaults categorized model and reasoning options with opaque IDs', () => {
+  const provider = new Provider(
+    row({
+      configOptions: JSON.stringify([
+        {
+          id: 'preferred_llm',
+          category: 'model',
+          name: 'Model',
+          type: 'select',
+          currentValue: 'second',
+          options: [
+            { value: 'first', name: 'First' },
+            { value: 'second', name: 'Second' },
+          ],
+        },
+        {
+          id: 'reasoning_budget',
+          category: 'thought_level',
+          name: 'Reasoning',
+          type: 'select',
+          currentValue: 'high',
+          options: [
+            { value: 'low', name: 'Low' },
+            { value: 'high', name: 'High' },
+          ],
+        },
+      ]),
+    }),
+  );
+  expect(provider.resolveDefaultSelection()).toEqual({
+    selectedModel: 'second',
+    selectedThinkingEffort: 'high',
+  });
+  expect(negotiateCapabilities(provider, 'first', 'low')).toMatchObject({
+    selectedModel: 'first',
+    selectedThinkingEffort: 'low',
+    resolvedModelConfigId: 'preferred_llm',
+    resolvedThinkingConfigId: 'reasoning_budget',
+  });
+});
 
 function row(
   overrides: Partial<(typeof providers)['$inferSelect']>,
 ): (typeof providers)['$inferSelect'] {
   return {
+    customModels: '[]',
+    registryAgentId: null,
+    protocol: 'auto',
+    defaultModel: null,
+    defaultThinkingEffort: null,
     id: 'claude-acp',
     name: 'Claude',
     installState: 'not_installed',

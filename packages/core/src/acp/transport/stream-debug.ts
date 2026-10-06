@@ -1,24 +1,26 @@
-import type { AnyMessage, Stream } from '@agentclientprotocol/sdk';
-
 export class AcpDebugLog {
   private logs: { timestamp: Date; type: 'incoming' | 'outgoing' | 'stderr'; line: string }[] = [];
 
   recordLine(type: 'incoming' | 'outgoing' | 'stderr', line: string): void {
-    this.logs.push({ timestamp: new Date(), type, line });
+    this.logs.push({ timestamp: new Date(), type, line: line.slice(0, 2048) });
+    if (this.logs.length > 250) this.logs.splice(0, this.logs.length - 250);
   }
 
   getLogs() {
-    return this.logs;
+    return [...this.logs];
   }
 }
 
 export type DebugSink = (direction: 'send' | 'recv', message: unknown) => void;
 
-export function wrapDebug(stream: Stream, sink: DebugSink): Stream {
+export function wrapDebug<T>(
+  stream: { readable: ReadableStream<T>; writable: WritableStream<T> },
+  sink: DebugSink,
+): { readable: ReadableStream<T>; writable: WritableStream<T> } {
   const { readable, writable } = stream;
 
   const reader = readable.getReader();
-  const loggedReadable = new ReadableStream<AnyMessage>({
+  const loggedReadable = new ReadableStream<T>({
     async pull(controller) {
       const { value, done } = await reader.read();
       if (done) {
@@ -34,7 +36,7 @@ export function wrapDebug(stream: Stream, sink: DebugSink): Stream {
   });
 
   const writer = writable.getWriter();
-  const loggedWritable = new WritableStream<AnyMessage>({
+  const loggedWritable = new WritableStream<T>({
     async write(chunk) {
       sink('send', chunk);
       await writer.write(chunk);

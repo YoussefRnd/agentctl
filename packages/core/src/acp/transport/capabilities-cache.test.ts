@@ -104,3 +104,15 @@ describe('FileCacheStorage', () => {
     expect(k1).not.toBe(k3);
   });
 });
+
+test('v1 rejects every unnegotiated protocol version even with a v1-shaped response', async () => {
+  const { initializeAcpConnection } = await import('./capabilities-cache.js');
+  const { vi } = await import('vitest');
+  const { PROTOCOL_VERSION } = await import('@agentclientprotocol/sdk');
+  const initialize = vi
+    .fn()
+    .mockResolvedValue({ protocolVersion: PROTOCOL_VERSION + 1, agentCapabilities: {} });
+  await expect(initializeAcpConnection({ initialize })).rejects.toThrow(
+    'Unsupported ACP protocol version',
+  );
+});

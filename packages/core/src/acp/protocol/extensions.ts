@@ -1,12 +1,16 @@
+import {
+  authorizeClientOperation,
+  type ClientAuthorizationContext,
+} from './client-authorization.js';
+import { resolveAllowedPath } from '../transport/path-security.js';
 import { RequestError } from '@agentclientprotocol/sdk';
 import type { Logger } from '../../logger.js';
-import type { AgentMcpGateway } from '../../agent/types.js';
+import type { AgentMcpGateway, AgentSessionCallbacks } from '../../agent/types.js';
 import { handleBuiltinBash, handleTerminalWrite } from './terminals.js';
 import type { TerminalManager } from './terminal-manager.js';
 
-export interface ExtensionSessionContext {
-  cwd: string;
-  additionalDirectories?: string[];
+export interface ExtensionSessionContext extends ClientAuthorizationContext {
+  onTerminalCreated?(terminalId: string, callbacks: AgentSessionCallbacks): void;
 }
 
 export interface ExtensionRouterContext {
@@ -15,10 +19,12 @@ export interface ExtensionRouterContext {
   mcpGateway?: AgentMcpGateway;
   resolveSession(params?: { sessionId?: string }): ExtensionSessionContext;
   publishStatus(sessionId: string, status: string): Promise<void> | void;
+  assertTerminalOwner(session: ExtensionSessionContext, terminalId: string): void;
+  registerTerminal(session: ExtensionSessionContext, terminalId: string): void;
 }
 
 type ExtensionParams = Record<string, unknown>;
-type ExtensionRequestHandler = (params: ExtensionParams) => Promise<unknown>;
+type ExtensionRequestHandler = (params: ExtensionParams, signal?: AbortSignal) => Promise<unknown>;
 type ExtensionNotificationHandler = (params: ExtensionParams) => Promise<void>;
 
 function paramsRecord(value: unknown): ExtensionParams {
@@ -63,42 +69,72 @@ function optionalStringArray(params: ExtensionParams, key: string): string[] | u
  * Parsing and protocol method names terminate here.
  */
 export function createExtensionRouter(ctx: ExtensionRouterContext): {
-  request(method: string, rawParams: unknown): Promise<unknown>;
+  request(method: string, rawParams: unknown, signal?: AbortSignal): Promise<unknown>;
   notify(method: string, rawParams: unknown): Promise<void>;
 } {
   const requestRoutes = new Map<string, ExtensionRequestHandler>([
     [
       '_agentctl.dev/builtin/bash',
-      async (params) => {
+      async (params, signal) => {
         const session = ctx.resolveSession({
           sessionId: optionalString(params, 'sessionId'),
         });
-        return handleBuiltinBash(
+        const command = requiredString(params, 'command');
+        const args = optionalStringArray(params, 'args');
+        const input = optionalString(params, 'input');
+        const requestedCwd = optionalString(params, 'cwd');
+        const cwd = resolveAllowedPath(
+          requestedCwd ?? session.cwd,
+          session.cwd,
+          session.additionalDirectories,
+        );
+        await authorizeClientOperation(
+          session,
           {
-            command: optionalString(params, 'command') ?? '',
-            args: optionalStringArray(params, 'args'),
+            name: 'builtin/bash',
+            kind: 'execute',
+            arguments: { command, args: args ?? [], cwd, env: {}, ...(input ? { input } : {}) },
+          },
+          `Run ${command}`,
+          signal,
+        );
+        const result = await handleBuiltinBash(
+          {
+            command,
+            args,
+            input,
+            cwd: requestedCwd,
             pty: typeof params.pty === 'boolean' ? params.pty : undefined,
-            input: optionalString(params, 'input'),
-            cwd: optionalString(params, 'cwd'),
           },
           ctx.terminalManager,
           session.cwd,
           ctx.logger,
           session.additionalDirectories,
+          signal,
         );
+        if (result.terminalId) ctx.registerTerminal(session, result.terminalId);
+        return result;
       },
     ],
     [
       '_agentctl.dev/terminal/write',
-      async (params) =>
-        handleTerminalWrite(
+      async (params, signal) => {
+        const terminalId = requiredString(params, 'terminalId');
+        const data = requiredString(params, 'data');
+        const session = ctx.resolveSession({ sessionId: optionalString(params, 'sessionId') });
+        ctx.assertTerminalOwner(session, terminalId);
+        await authorizeClientOperation(
+          session,
           {
-            terminalId: requiredString(params, 'terminalId'),
-            data: requiredString(params, 'data'),
+            name: 'terminal/write',
+            kind: 'execute',
+            arguments: { terminalId, input: data, cwd: session.cwd },
           },
-          ctx.terminalManager,
-          ctx.logger,
-        ),
+          'Send input to the running terminal',
+          signal,
+        );
+        return handleTerminalWrite({ terminalId, data }, ctx.terminalManager, ctx.logger);
+      },
     ],
   ]);
 
@@ -115,11 +151,11 @@ export function createExtensionRouter(ctx: ExtensionRouterContext): {
   ]);
 
   return {
-    async request(method, rawParams) {
+    async request(method, rawParams, signal) {
       if (!method.startsWith('_')) throw RequestError.methodNotFound(method);
       const params = paramsRecord(rawParams);
       const handler = requestRoutes.get(method);
-      if (handler) return handler(params);
+      if (handler) return handler(params, signal);
 
       const mcpPrefix = '_agentctl.dev/mcp/';
       if (ctx.mcpGateway && method.startsWith(mcpPrefix)) {
@@ -129,8 +165,20 @@ export function createExtensionRouter(ctx: ExtensionRouterContext): {
         if (!serverId || !toolName) {
           throw RequestError.invalidParams(undefined, `Invalid MCP extension method: ${method}`);
         }
+        const session = ctx.resolveSession({ sessionId: optionalString(params, 'sessionId') });
+        const { sessionId: _sessionId, ...args } = params;
+        await authorizeClientOperation(
+          session,
+          {
+            name: qualifiedToolName,
+            kind: 'other',
+            arguments: args,
+          },
+          `Call MCP tool ${qualifiedToolName}`,
+          signal,
+        );
         ctx.logger.info({ serverId, toolName }, 'Routing ACP extension to MCP gateway');
-        return ctx.mcpGateway.callTool(serverId, toolName, params);
+        return ctx.mcpGateway.callTool(serverId, toolName, args);
       }
 
       throw RequestError.methodNotFound(method);

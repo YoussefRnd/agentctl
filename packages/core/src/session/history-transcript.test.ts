@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createDatabase } from '../db/index.js';
-import { SessionEventStore } from './event-store.js';
+import { SessionEventRepository } from './persistence/session-event-repository.js';
 import { projects, sessions } from '../db/schema.js';
 import { buildConversationHistoryTranscript } from './history-transcript.js';
 import type { DbClient } from '../db/index.js';
@@ -49,7 +49,7 @@ describe('buildConversationHistoryTranscript', () => {
       baseCommit: 'hash',
     });
 
-    const store = new SessionEventStore(db, {
+    const store = new SessionEventRepository(db, {
       publish() {
         /* noop */
       },
@@ -79,7 +79,7 @@ describe('buildConversationHistoryTranscript', () => {
     expect(transcript).toContain('</previous_conversation_context>');
   });
 
-  it('respects maxTurns sliding window cap', async () => {
+  it('respects maxTurns while retaining the original request', async () => {
     await db.insert(sessions).values({
       id: 'sess-long',
       projectId: 'proj-1',
@@ -93,7 +93,7 @@ describe('buildConversationHistoryTranscript', () => {
       baseCommit: 'hash',
     });
 
-    const store = new SessionEventStore(db, {
+    const store = new SessionEventRepository(db, {
       publish() {
         /* noop */
       },
@@ -115,7 +115,8 @@ describe('buildConversationHistoryTranscript', () => {
 
     const transcript = await buildConversationHistoryTranscript(db, 'sess-long', { maxTurns: 4 });
 
-    expect(transcript).toContain('[User]: User message 14');
+    expect(transcript).toContain('[User]: User message 1');
+    expect(transcript).not.toContain('[User]: User message 14');
     expect(transcript).toContain('[User]: User message 15');
     expect(transcript).not.toContain('[User]: User message 10');
   });

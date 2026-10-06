@@ -5,6 +5,7 @@ import { Dropdown, cn } from '@agentctl/ui';
 interface DropdownOption<T> {
   value: T;
   label: string;
+  description?: string;
 }
 
 interface CommandDropdownProps<T> {
@@ -92,7 +93,14 @@ export function CommandDropdown<T extends string>({
                 onChange(opt.value);
               }}
             >
-              <span>{opt.label}</span>
+              <span className={opt.description ? 'max-w-[280px]' : undefined}>
+                <span className="block">{opt.label}</span>
+                {opt.description && (
+                  <span className="text-text-muted mt-1 block text-[11px] leading-relaxed">
+                    {opt.description}
+                  </span>
+                )}
+              </span>
               {opt.value === value && <Check className="h-3 w-3 shrink-0" />}
             </Dropdown.Item>
           ))}

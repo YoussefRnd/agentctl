@@ -1,7 +1,8 @@
 import { eq, desc, and } from 'drizzle-orm';
-import type { ManagedSession } from '../managed-session.js';
-import { sessions, sessionEvents } from '../../db/schema.js';
+import type { SessionRuntime } from '../runtime/session-runtime.js';
+import { sessions, sessionEvents, nativeSessionImports } from '../../db/schema.js';
 import {
+  findAgentConfigOption,
   EMPTY_AGENT_FEATURES,
   createTaskSlug,
   type AgentConfigOption,
@@ -12,10 +13,11 @@ import {
 import { negotiateCapabilities } from '../../providers/capabilities-negotiator.js';
 import type { AgentSessionIntent } from '../../agent/types.js';
 import { resolveAgentSessionId } from '../agent-session-id.js';
+import type { SessionEventRepository } from '../persistence/session-event-repository.js';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
-import type { SessionStateMachine } from '../state-machine.js';
+import type { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
 import type { SessionWorkspace } from '../../git/session-workspace.js';
 
 const DEFAULT_AGENT_MODEL = '';
@@ -34,31 +36,43 @@ export interface CreateSessionParams {
 
 export interface SessionLauncherDependencies {
   db: DbClient;
+  eventRepository: SessionEventRepository;
   logger: Logger;
   providerRegistry: ProviderRegistry;
-  stateMachine: SessionStateMachine;
+  runtimeRegistry: SessionRuntimeRegistry;
   sessionWorkspace: SessionWorkspace;
   startSession: SessionLauncher['startSession'];
   restartSession: SessionLauncher['restartSession'];
 }
 
 export class SessionLauncher {
+  private readonly pendingResuscitations = new Map<string, Promise<SessionRuntime>>();
   constructor(private readonly deps: SessionLauncherDependencies) {}
+
+  async reportModelFallback(
+    sessionId: string,
+    selection: ReturnType<typeof negotiateCapabilities>,
+  ) {
+    if (!selection.modelFallback) return;
+    const { requested, selected } = selection.modelFallback;
+    await this.deps.eventRepository.append(sessionId, 'status', {
+      status: 'model_fallback',
+      title: `Model “${requested}” is unavailable. Using “${selected}”.`,
+    });
+  }
 
   buildInitialConfigOptions(
     providerConfigOptions: AgentConfigOption[],
     selectedModel: string,
     selectedThinkingEffort: ThinkingEffort,
   ): AgentConfigOption[] {
+    const modelOption = findAgentConfigOption(providerConfigOptions, 'model');
+    const thinkingOption = findAgentConfigOption(providerConfigOptions, 'thought_level');
     return providerConfigOptions.map((opt) => {
-      if (opt.id === 'model' || opt.id === 'selectedModel') {
+      if (opt === modelOption) {
         return { ...opt, currentValue: selectedModel };
       }
-      if (
-        opt.id === 'thinking' ||
-        opt.id === 'thinking_effort' ||
-        opt.id === 'selectedThinkingEffort'
-      ) {
+      if (opt === thinkingOption) {
         return { ...opt, currentValue: selectedThinkingEffort };
       }
       return opt;
@@ -252,6 +266,7 @@ export class SessionLauncher {
       availableAgentPersonas,
     });
 
+    await this.reportModelFallback(context.sessionId, selection);
     return { sessionId: context.sessionId };
   }
 
@@ -267,9 +282,9 @@ export class SessionLauncher {
     resolvedThinkingConfigId?: string,
     intent: AgentSessionIntent = { kind: 'new' },
     resolvedModelConfigId?: string,
-  ): Promise<ManagedSession> {
+  ): Promise<SessionRuntime> {
     await this.ensureWorkspaceAvailable(sessionId);
-    return this.deps.stateMachine.startSession(
+    return this.deps.runtimeRegistry.startSession(
       sessionId,
       worktreePath,
       command,
@@ -290,10 +305,18 @@ export class SessionLauncher {
 
   async restartSession(
     sessionId: string,
-    options: { resumeExisting?: boolean } = {},
-  ): Promise<ManagedSession> {
+    options: { resumeExisting?: boolean; nativeImport?: boolean } = {},
+  ): Promise<SessionRuntime> {
+    const pendingImport = await this.deps.db.query.nativeSessionImports?.findFirst({
+      where: and(
+        eq(nativeSessionImports.sessionId, sessionId),
+        eq(nativeSessionImports.completed, false),
+      ),
+    });
+    if (pendingImport && !options.nativeImport)
+      throw new Error('Finish importing this native session before starting it');
     this.deps.logger.info({ sessionId }, 'Restarting session');
-    this.deps.stateMachine.stopSession(sessionId);
+    this.deps.runtimeRegistry.stopSession(sessionId);
 
     await this.deps.db
       .update(sessions)
@@ -319,9 +342,13 @@ export class SessionLauncher {
       .update(sessions)
       .set({
         sessionConfigOptions: JSON.stringify(configOptions),
+        selectedModel: selection.selectedModel,
+        selectedThinkingEffort: selection.selectedThinkingEffort,
         updatedAt: new Date(),
       })
       .where(eq(sessions.id, sessionId));
+
+    await this.reportModelFallback(sessionId, selection);
 
     let workspacePath =
       sessionRecord.mode === 'worktree' ? sessionRecord.worktreePath : sessionRecord.project.path;
@@ -345,7 +372,7 @@ export class SessionLauncher {
     }
 
     const resolvedAgentSessionId =
-      hasUserMessages && options.resumeExisting !== false
+      (hasUserMessages || options.nativeImport) && options.resumeExisting !== false
         ? resolveAgentSessionId(
             sessionRecord.agentSessionId,
             sessionRecord.selectedProvider,
@@ -364,7 +391,11 @@ export class SessionLauncher {
       selection.features,
       selection.resolvedThinkingConfigId,
       resolvedAgentSessionId
-        ? { kind: 'resume', sessionId: resolvedAgentSessionId }
+        ? {
+            kind: 'resume',
+            sessionId: resolvedAgentSessionId,
+            ...(options.nativeImport ? { requireExisting: true } : {}),
+          }
         : { kind: 'new' },
       selection.resolvedModelConfigId,
     );
@@ -373,9 +404,16 @@ export class SessionLauncher {
   async getOrResuscitate(
     sessionId: string,
     options?: { allowArchived?: boolean },
-  ): Promise<ManagedSession | null> {
+  ): Promise<SessionRuntime | null> {
+    const pendingImport = await this.deps.db.query.nativeSessionImports?.findFirst({
+      where: and(
+        eq(nativeSessionImports.sessionId, sessionId),
+        eq(nativeSessionImports.completed, false),
+      ),
+    });
+    if (pendingImport) return null;
     await this.ensureWorkspaceAvailable(sessionId);
-    const session = this.deps.stateMachine.getSession(sessionId);
+    const session = this.deps.runtimeRegistry.getSession(sessionId);
     if (session && !session.isDead) {
       return session;
     }
@@ -401,6 +439,17 @@ export class SessionLauncher {
     }
 
     this.deps.logger.info({ sessionId }, 'Resuscitating session runtime');
-    return this.deps.restartSession(sessionId);
+    const pending = this.pendingResuscitations.get(sessionId);
+    if (pending) return pending;
+    const current = this.deps.runtimeRegistry.getSession(sessionId);
+    if (current && !current.isDead) return current;
+    const restart = this.deps.restartSession(sessionId);
+    this.pendingResuscitations.set(sessionId, restart);
+    try {
+      return await restart;
+    } finally {
+      if (this.pendingResuscitations.get(sessionId) === restart)
+        this.pendingResuscitations.delete(sessionId);
+    }
   }
 }

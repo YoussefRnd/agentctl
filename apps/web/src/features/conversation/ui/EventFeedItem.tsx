@@ -2,6 +2,7 @@ import { CommandResultCard } from './cards/CommandResultCard';
 import { ElicitationCard } from './cards/ElicitationCard';
 import { AgentResponse } from './cards/AgentResponse';
 import { TextCard } from './cards/TextCard';
+import { TurnErrorCard } from './cards/TurnErrorCard';
 import type { FeedEventGroup } from '../lib/eventFeedGrouping';
 import type { ElicitationItem } from '@agentctl/shared';
 import type { RewindMode } from '@/features/sessions';
@@ -11,6 +12,7 @@ interface EventFeedItemProps {
   latestAgentGroupId: string | null;
   sessionId?: string;
   hasGitRepo?: boolean;
+  isConnected?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
   onEditSubmit?: (eventId: number, newContent: string) => void;
   onRetryMessage?: (eventId: number) => void;
@@ -21,10 +23,27 @@ export function EventFeedItem({
   latestAgentGroupId,
   sessionId,
   hasGitRepo,
+  isConnected,
   onRewind,
   onEditSubmit,
   onRetryMessage,
 }: EventFeedItemProps) {
+  if (group.type === 'error') {
+    const message = group.event.type === 'status' ? group.event.data.message : undefined;
+    return <TurnErrorCard message={typeof message === 'string' ? message : undefined} />;
+  }
+  if (group.type === 'notice') {
+    const data = group.event.data as { title?: string };
+    return (
+      <p
+        role="status"
+        className="my-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300"
+      >
+        {data.title}
+      </p>
+    );
+  }
+
   if (group.type === 'command') {
     const data = group.event.data as {
       command?: string;
@@ -52,13 +71,24 @@ export function EventFeedItem({
       <div className="my-2 [contain-intrinsic-size:auto_100px] [content-visibility:auto]">
         <ElicitationCard
           elicitation={data.elicitation}
-          onRespond={(id, resp) => {
+          onRespond={async (id, resp) => {
             if (!sessionId) return;
-            void fetch(`/api/sessions/${sessionId}/elicitations/${id}/respond`, {
+            const response = await fetch(`/api/sessions/${sessionId}/elicitations/${id}/respond`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(resp),
             });
+            if (!response.ok) {
+              const data: unknown = await response.json().catch(() => null);
+              const message =
+                data &&
+                typeof data === 'object' &&
+                'message' in data &&
+                typeof data.message === 'string'
+                  ? data.message
+                  : 'Could not submit the response. Try again.';
+              throw new Error(message);
+            }
           }}
         />
       </div>
@@ -72,6 +102,7 @@ export function EventFeedItem({
           events={group.events}
           isStreaming={group.isStreaming}
           isActive={group.id === latestAgentGroupId}
+          isConnected={isConnected}
         />
       </div>
     );
