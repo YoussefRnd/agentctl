@@ -356,7 +356,7 @@ export function ReviewGitActions({
           }
         }}
       >
-        <DialogContent className="max-w-sm overflow-hidden rounded-2xl p-0 shadow-2xl">
+        <DialogContent className="max-w-sm overflow-hidden p-0 shadow-2xl">
           <div className="space-y-3 p-4">
             <DialogHeader className="sr-only">
               <DialogTitle>Commit changes</DialogTitle>

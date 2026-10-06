@@ -69,9 +69,11 @@ export function NativeSessionImport({
         <p className="text-xs">No native sessions found.</p>
       )}
       {rows.map((row) => (
-        <div key={row.sessionId} className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-xs">{row.title || row.sessionId}</p>
+        <div key={row.sessionId} className="flex min-w-0 items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p title={row.title || row.sessionId} className="truncate text-xs">
+              {row.title || row.sessionId}
+            </p>
             {row.updatedAt && <p className="text-text-muted text-xs">{row.updatedAt}</p>}
           </div>
           <Button

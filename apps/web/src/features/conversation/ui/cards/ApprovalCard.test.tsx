@@ -45,6 +45,39 @@ afterEach(() => {
 });
 
 describe('ApprovalCard', () => {
+  it('keeps arrow keys available to the focused details scroller', () => {
+    const { root, container } = renderApprovalCard(approvalData());
+    const details = container.querySelector('pre')!;
+    expect(details.tabIndex).toBe(0);
+    details.focus();
+    const event = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => details.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(details);
+    act(() => root.unmount());
+  });
+
+  it('gives simultaneous requests distinct accessible titles', () => {
+    const first = renderApprovalCard(approvalData());
+    const second = renderApprovalCard(approvalData({ message: 'Another request' }));
+    const firstTitle = first.container
+      .querySelector('[aria-labelledby]')!
+      .getAttribute('aria-labelledby')!;
+    const secondTitle = second.container
+      .querySelector('[aria-labelledby]')!
+      .getAttribute('aria-labelledby')!;
+    expect(firstTitle).not.toBe(secondTitle);
+    expect(document.getElementById(firstTitle)?.textContent).toBeTruthy();
+    expect(document.getElementById(secondTitle)?.textContent).toBeTruthy();
+    act(() => {
+      first.root.unmount();
+      second.root.unmount();
+    });
+  });
   it('does not steal focus to the Approve button on mount', () => {
     const { root } = renderApprovalCard(approvalData());
 

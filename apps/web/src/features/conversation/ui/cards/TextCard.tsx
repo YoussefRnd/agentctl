@@ -15,6 +15,7 @@ import {
   Tooltip,
 } from '@agentctl/ui';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
+import { MarkdownTable } from './MarkdownTable';
 import { formatShortcut } from '@/shared/lib/platform';
 import { parseUserMessageContent } from '../../lib/userMessageParser';
 import { ContextAttachmentChip } from './ContextAttachmentChip';
@@ -127,8 +128,8 @@ export const TextCard = memo(function TextCard({
 
   if (variant === 'user') {
     return (
-      <div data-font-ctx="chat" className="group/card flex justify-end py-2">
-        <div className="flex max-w-[85%] flex-col items-end gap-1.5 sm:max-w-[75%]">
+      <div data-font-ctx="chat" className="group/card flex min-w-0 justify-end py-2">
+        <div className="flex max-w-[85%] min-w-0 flex-col items-end gap-1.5 sm:max-w-[75%]">
           {attachments && attachments.length > 0 && (
             <div className="flex flex-wrap justify-end gap-2">
               {attachments.map((att) => (
@@ -145,9 +146,9 @@ export const TextCard = memo(function TextCard({
               ))}
             </div>
           )}
-          <div className="group/bubble relative flex w-full flex-col items-end">
+          <div className="group/bubble relative flex w-full min-w-0 flex-col items-end">
             {isEditing ? (
-              <div className="border-border/70 bg-surface/90 focus-within:border-accent/50 focus-within:ring-accent/20 w-full min-w-[280px] rounded-2xl border p-3 shadow-lg backdrop-blur-md transition-colors focus-within:ring-1 sm:min-w-[380px]">
+              <div className="border-border/70 bg-surface/90 focus-within:border-accent/50 focus-within:ring-accent/20 w-full min-w-0 rounded-lg border p-3 shadow-lg backdrop-blur-md transition-colors focus-within:ring-1">
                 <textarea
                   ref={autoFocusTextarea}
                   value={draftContent}
@@ -170,11 +171,11 @@ export const TextCard = memo(function TextCard({
                   className="text-text-main placeholder:text-text-muted/40 max-h-[360px] w-full resize-none bg-transparent leading-relaxed outline-none"
                   placeholder="Edit your prompt..."
                 />
-                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/5 pt-2">
+                <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-2">
                   <span className="text-text-muted/40 hidden text-[11px] select-none sm:inline">
                     Esc to cancel • {formatShortcut('Enter')} to submit
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -197,12 +198,13 @@ export const TextCard = memo(function TextCard({
             ) : (
               <>
                 {parsed.prompt ? (
-                  <Card className="text-text-main relative px-4 py-3 leading-relaxed shadow-sm">
+                  <Card className="text-text-main relative max-w-full px-4 py-3 leading-relaxed shadow-sm">
                     <div className="prose prose-invert prose-sm max-w-none leading-relaxed break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
                           pre: MarkdownCodeBlock,
+                          table: MarkdownTable,
                           p({ children }) {
                             return (
                               <p className="mb-1.5 last:mb-0">{renderTextWithMentions(children)}</p>
@@ -235,8 +237,8 @@ export const TextCard = memo(function TextCard({
                   </div>
                 )}
                 {deliveryStatus === 'failed' && (
-                  <div className="mt-2 flex max-w-full items-center gap-2 text-xs text-rose-400">
-                    <span role="status">
+                  <div className="mt-2 flex max-w-full flex-wrap items-center gap-2 text-xs text-rose-400">
+                    <span role="status" className="min-w-0 [overflow-wrap:anywhere]">
                       Message not sent{deliveryError ? `: ${deliveryError}` : ''}
                     </span>
                     {eventId !== undefined && eventId < 0 && onRetry && (
@@ -371,7 +373,7 @@ export const TextCard = memo(function TextCard({
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}
-            components={{ pre: MarkdownCodeBlock }}
+            components={{ pre: MarkdownCodeBlock, table: MarkdownTable }}
           >
             {content}
           </ReactMarkdown>

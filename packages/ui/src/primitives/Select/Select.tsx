@@ -42,7 +42,7 @@ export function Select({
   const selectedOption = options.find((opt) => opt.value === value);
 
   return (
-    <div className={cn('relative w-full', className)}>
+    <div className={cn('relative w-full min-w-0', className)}>
       {/* Select menus must form their own modal interaction layer so their
           portaled content remains interactive inside dialogs. */}
       <Dropdown.Root modal>
@@ -52,23 +52,24 @@ export function Select({
             type="button"
             disabled={disabled}
             aria-label={ariaLabel}
+            title={selectedOption?.label}
             className={cn(
-              'motion-disclosure border-border/30 bg-surface/40 hover:bg-surface/60 text-text-main focus:border-accent/30 focus:ring-accent/20 data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 group relative flex h-8 w-full cursor-pointer items-center justify-between rounded-full border pr-8 pl-3 text-[11px] font-medium outline-none select-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-40',
+              'motion-disclosure border-border/30 bg-surface/40 hover:bg-surface/60 text-text-main focus:border-accent/30 focus:ring-accent/20 data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 control-default group relative flex w-full min-w-0 cursor-pointer items-center justify-between border pr-8 outline-none select-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-40',
               triggerClassName,
             )}
           >
-            <span className="flex items-center gap-2 truncate">
+            <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden [&>svg]:shrink-0">
               {selectedOption ? (
                 <>
                   {selectedOption.element ?? (
                     <>
                       {selectedOption.icon}
-                      <span>{selectedOption.label}</span>
+                      <span className="truncate">{selectedOption.label}</span>
                     </>
                   )}
                 </>
               ) : (
-                <span className="text-text-muted/50">{placeholder}</span>
+                <span className="text-text-muted/50 truncate">{placeholder}</span>
               )}
             </span>
             <ChevronDown className="text-text-muted pointer-events-none absolute right-2.5 h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180" />
@@ -78,7 +79,7 @@ export function Select({
           <Dropdown.Content
             align={align}
             side={side}
-            className={cn('max-h-60 overflow-y-auto', contentClassName)}
+            className={cn('max-h-60 min-w-0 overflow-y-auto', contentClassName)}
             style={{
               width: 'var(--radix-dropdown-menu-trigger-width)',
               minWidth: 'var(--radix-dropdown-menu-trigger-width)',
@@ -99,11 +100,11 @@ export function Select({
                     onChange(opt.value);
                   }}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
+                  <span className="flex min-w-0 flex-1 items-center gap-2 [&>svg]:shrink-0">
                     {opt.element ?? (
                       <>
                         {opt.icon}
-                        <span>{opt.label}</span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">{opt.label}</span>
                       </>
                     )}
                   </span>

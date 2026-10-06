@@ -59,7 +59,7 @@ export function GeneralSettingsView() {
         </h3>
         <Card className="divide-border/30 divide-y overflow-hidden px-5 py-2">
           {/* Theme Mode Segmented Control */}
-          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div>
               <p className="text-text-main text-[13px] font-semibold">Theme Mode</p>
               <p className="text-text-muted mt-0.5 text-[11px]">
@@ -71,7 +71,7 @@ export function GeneralSettingsView() {
               </p>
             </div>
             <div
-              className="border-border/40 bg-surface/40 flex shrink-0 gap-1 rounded-xl border p-1"
+              className="border-border/40 bg-surface/40 flex max-w-full flex-wrap gap-1 rounded-lg border p-1"
               role="group"
               aria-label="Theme mode"
             >
@@ -85,7 +85,7 @@ export function GeneralSettingsView() {
                   type="button"
                   aria-pressed={themeMode === mode}
                   onClick={() => setThemeMode(mode)}
-                  className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  className={`flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                     themeMode === mode
                       ? 'bg-accent text-brand-crust shadow-sm'
                       : 'text-text-muted hover:text-text-main hover:bg-surface/60'
@@ -100,7 +100,7 @@ export function GeneralSettingsView() {
 
           {/* Light Theme Select */}
           {(themeMode === 'light' || themeMode === 'system') && (
-            <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div>
                 <p className="text-text-main text-[13px] font-semibold">Light Theme</p>
                 <p className="text-text-muted mt-0.5 text-[11px]">
@@ -113,7 +113,7 @@ export function GeneralSettingsView() {
 
           {/* Dark Theme Select */}
           {(themeMode === 'dark' || themeMode === 'system') && (
-            <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div>
                 <p className="text-text-main text-[13px] font-semibold">Dark Theme</p>
                 <p className="text-text-muted mt-0.5 text-[11px]">
@@ -133,14 +133,14 @@ export function GeneralSettingsView() {
         </h3>
         <Card className="divide-border/30 divide-y overflow-hidden px-5 py-2">
           {/* Default Provider */}
-          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div>
               <p className="text-text-main text-[13px] font-semibold">Default Agent Provider</p>
               <p className="text-text-muted mt-0.5 text-[11px]">
                 Fallback provider pre-selected when creating new sessions
               </p>
             </div>
-            <div className="w-52">
+            <div className="w-52 max-w-full">
               <Select
                 value={settings?.defaultProviderId ?? ''}
                 onChange={(value) => {
@@ -160,7 +160,7 @@ export function GeneralSettingsView() {
           </div>
 
           {/* Show Thinking */}
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between gap-3 py-3">
             <div>
               <p className="text-text-main text-[13px] font-semibold">Auto-Expand Thinking</p>
               <p className="text-text-muted mt-0.5 text-[11px]">
@@ -184,7 +184,7 @@ export function GeneralSettingsView() {
           Workspace Defaults
         </h3>
         <Card className="divide-border/30 divide-y overflow-hidden px-5 py-2">
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between gap-3 py-3">
             <div>
               <p className="text-text-main text-[13px] font-semibold">
                 Use Git Worktrees by Default
@@ -227,7 +227,7 @@ export function GeneralSettingsView() {
         </h3>
         <Card className="divide-border/30 divide-y overflow-hidden px-5 py-2">
           {/* Master Notifications Switch */}
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between gap-3 py-3">
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-text-main text-[13px] font-semibold">Desktop Notifications</p>
@@ -267,7 +267,7 @@ export function GeneralSettingsView() {
           </div>
 
           {/* Turn Completion */}
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between gap-3 py-3">
             <div>
               <p className="text-text-main text-[13px] font-semibold">Notify on Turn Completion</p>
               <p className="text-text-muted mt-0.5 text-[11px]">
@@ -283,7 +283,7 @@ export function GeneralSettingsView() {
           </div>
 
           {/* Attention Required */}
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between gap-3 py-3">
             <div>
               <p className="text-text-main text-[13px] font-semibold">
                 Notify on Review & Approval Needed

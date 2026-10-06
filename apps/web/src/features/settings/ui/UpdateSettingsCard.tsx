@@ -13,7 +13,7 @@ export function UpdateSettingsCard() {
 
   return (
     <Card className="hover:border-accent/20 flex flex-col gap-3 px-5 py-4">
-      <div className="flex flex-row items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-text-main text-[13px] font-bold tracking-tight">Updates</p>
           <p className="text-text-muted mt-0.5 text-[11px] leading-normal opacity-85">
@@ -32,8 +32,8 @@ export function UpdateSettingsCard() {
       </div>
 
       {updatable && (
-        <div className="bg-accent/10 flex items-center justify-between rounded-lg px-3 py-2">
-          <span className="text-accent text-[12px] font-medium">
+        <div className="bg-accent/10 flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2">
+          <span className="text-accent min-w-0 text-[12px] font-medium [overflow-wrap:anywhere]">
             {state.status === 'downloading'
               ? `Downloading… ${Math.round(state.percent).toString()}%`
               : state.status === 'downloaded'

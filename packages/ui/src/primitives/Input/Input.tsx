@@ -31,7 +31,7 @@ export const Input = memo(function Input({
     <input
       ref={ref}
       className={cn(
-        'text-role-control border-border bg-surface/40 placeholder:text-text-muted/40 focus:border-accent/40 focus:ring-accent/10 border transition-colors outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-40',
+        'text-role-control border-border bg-surface/40 placeholder:text-text-muted/40 focus:border-accent/40 focus:ring-accent/10 max-w-full min-w-0 border transition-colors outline-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-40',
         sizes[sizeVariant],
         isError && 'border-danger focus:border-danger focus:ring-danger/20',
         className,

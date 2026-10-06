@@ -60,6 +60,15 @@ provider.
 
 The web package enforces feature boundaries with `pnpm --filter @agentctl/web architecture:check`.
 
+## UI development
+
+Open `http://localhost:5173/_dev/ui` while the web development server is running to inspect
+shared components and real conversation/settings fixtures. The gallery works without the API
+server. Its panel-width, font-size, theme, streaming, and drop-overlay controls are temporary;
+fixture actions never send prompts or save application settings.
+
+Use the [UI consistency checklist](docs/ui-consistency.md) when polishing layouts and controls.
+
 ## Core workflow
 
 1. Add a project directory.

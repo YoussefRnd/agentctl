@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useEffect, useCallback, useState } from 'react';
+import { type ReactNode, useEffect, useCallback, useState } from 'react';
 import {
   Group,
   Panel,
@@ -45,16 +45,23 @@ export function AppShell({
     storage: localStorage,
   });
 
-  const isInitialResize = useRef(true);
+  const [isDesktop, setIsDesktop] = useState(
+    () => window.matchMedia('(min-width: 1024px)').matches,
+  );
   const [uncontrolledMobileSidebarOpen, setUncontrolledMobileSidebarOpen] = useState(false);
   const mobileSidebarOpen = isMobileSidebarOpen ?? uncontrolledMobileSidebarOpen;
 
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
   const handleAsideResize = useCallback(
-    (size: PanelSize) => {
-      if (isInitialResize.current) {
-        isInitialResize.current = false;
-        return;
-      }
+    (size: PanelSize, _id: string | number | undefined, previousSize: PanelSize | undefined) => {
+      if (previousSize === undefined) return;
       if (size.asPercentage < 1) {
         onCloseAside?.();
       } else {
@@ -127,7 +134,7 @@ export function AppShell({
     } else if (!isAsideOpen && !panel.isCollapsed()) {
       panel.collapse();
     }
-  }, [isAsideOpen, asidePanelRef]);
+  }, [isAsideOpen, isDesktop, asidePanelRef]);
 
   useEffect(() => {
     if (!mobileSidebarOpen) return;
@@ -148,13 +155,17 @@ export function AppShell({
       <TitleBar nav={nav} onToggleSidebar={sidebar ? handleToggleSidebar : undefined} />
 
       <div className="relative z-10 min-h-0 w-full flex-1 overflow-hidden p-2 sm:p-3">
-        {isAsideMaximized && aside ? (
+        {(isAsideMaximized || (!isDesktop && isAsideOpen)) && aside ? (
           <div className="bg-background border-border/20 absolute inset-3 z-30 flex flex-col overflow-hidden rounded-lg border shadow-2xl backdrop-blur-xl">
             {aside}
           </div>
         ) : (
-          <Group defaultLayout={defaultLayout} onLayoutChanged={onLayoutChanged}>
-            {sidebar && (
+          <Group
+            key={isDesktop ? 'desktop' : 'mobile'}
+            defaultLayout={isDesktop ? defaultLayout : undefined}
+            onLayoutChanged={isDesktop ? onLayoutChanged : undefined}
+          >
+            {sidebar && isDesktop && (
               <Panel
                 id="sidebar"
                 panelRef={sidebarPanelRef}
@@ -174,7 +185,7 @@ export function AppShell({
               </Panel>
             )}
 
-            {sidebar && (
+            {sidebar && isDesktop && (
               <Separator className="group after:bg-border/35 hover:after:bg-accent/60 data-[resize-handle-active]:after:bg-accent hidden w-3 shrink-0 cursor-col-resize items-center justify-center after:h-8 after:w-px after:rounded-full after:transition-[height,background-color] after:duration-150 hover:after:h-12 data-[resize-handle-active]:after:h-12 lg:flex" />
             )}
 
@@ -184,12 +195,14 @@ export function AppShell({
                   className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
                   intensity="high"
                 >
-                  <div className="relative flex flex-1 flex-col overflow-hidden">{children}</div>
+                  <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    {children}
+                  </div>
                 </GlassPanel>
               </main>
             </Panel>
 
-            {aside && (
+            {aside && isDesktop && (
               <>
                 <Separator className="group after:bg-border/35 hover:after:bg-accent/60 data-[resize-handle-active]:after:bg-accent flex w-3 shrink-0 cursor-col-resize items-center justify-center after:h-8 after:w-px after:rounded-full after:transition-[height,background-color] after:duration-150 hover:after:h-12 data-[resize-handle-active]:after:h-12" />
                 <Panel
@@ -202,7 +215,13 @@ export function AppShell({
                   collapsedSize="0%"
                   onResize={handleAsideResize}
                 >
-                  {aside}
+                  <div
+                    className="h-full min-h-0 min-w-0"
+                    inert={!isAsideOpen}
+                    aria-hidden={!isAsideOpen}
+                  >
+                    {aside}
+                  </div>
                 </Panel>
               </>
             )}
@@ -237,15 +256,6 @@ export function AppShell({
           </>
         )}
       </div>
-
-      {aside && onCloseAside && isAsideOpen && (
-        <button
-          type="button"
-          aria-label="Close aside panel"
-          className="pointer-events-auto fixed inset-0 z-20 border-none bg-black/10 outline-none lg:hidden"
-          onClick={onCloseAside}
-        />
-      )}
 
       <UpdateToast />
     </div>

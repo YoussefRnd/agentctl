@@ -122,7 +122,7 @@ const AgentResponseComponent = function AgentResponse({
   }
 
   return (
-    <div data-font-ctx="chat" className="group/agent relative flex flex-col gap-2 py-3">
+    <div data-font-ctx="chat" className="group/agent relative flex min-w-0 flex-col gap-2 py-3">
       {directedMessages.map(
         (event) => event.type === 'text' && <SessionMessage key={event.id} data={event.data} />,
       )}

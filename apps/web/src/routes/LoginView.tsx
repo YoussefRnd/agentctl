@@ -47,7 +47,7 @@ export function LoginView() {
 
   return (
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <GlassPanel className="animate-in fade-in zoom-in w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+      <GlassPanel className="animate-in fade-in zoom-in w-full max-w-sm rounded-xl p-6 shadow-2xl">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="bg-accent/15 text-accent mb-3 flex h-11 w-11 items-center justify-center rounded-xl">
             <KeyRound className="h-5 w-5" />

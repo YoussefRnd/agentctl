@@ -91,11 +91,11 @@ export function TerminalTabsSidebar({ sessionId }: { sessionId: string }) {
   return (
     <aside
       data-font-ctx="terminal-sidebar"
-      className="border-border/20 bg-surface/40 flex h-full w-48 shrink-0 flex-col border-l backdrop-blur-md select-none"
+      className="border-border/20 bg-surface/40 hidden h-full w-48 shrink-0 flex-col border-l backdrop-blur-md select-none @[360px]/terminal:flex"
       aria-label="Terminal tabs"
     >
       {/* Sidebar Header */}
-      <div className="border-border/15 flex h-8 shrink-0 items-center justify-between border-b px-2.5">
+      <div className="border-border/15 flex shrink-0 flex-wrap items-center justify-between gap-1 border-b px-2.5 py-1">
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted/60 text-[10px] font-semibold tracking-wider uppercase">
             Terminals

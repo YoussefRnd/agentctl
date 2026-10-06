@@ -66,7 +66,7 @@ export function RewindConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md overflow-hidden rounded-2xl p-0">
+      <DialogContent className="max-w-md overflow-hidden p-0">
         <div className="p-5">
           <DialogHeader className="mb-4">
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">

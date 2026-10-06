@@ -110,9 +110,9 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
   };
 
   return (
-    <Card status={cardStatus} className="my-3 shadow-lg backdrop-blur-md">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div className="flex items-center gap-2">
+    <Card status={cardStatus} className="my-3 [overflow-wrap:anywhere] shadow-lg backdrop-blur-md">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="bg-accent/20 text-accent rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase">
             {isForm ? 'Form Request' : 'External Authorization'}
           </span>
@@ -157,7 +157,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                 <div key={field.id} className="flex flex-col gap-1">
                   {field.type !== 'boolean' && (
                     <label
-                      htmlFor={`elicitation-${field.id}`}
+                      htmlFor={`elicitation-${elicitation.id}-${field.id}`}
                       className="text-text-muted text-[11px] font-semibold"
                     >
                       {field.label}
@@ -167,7 +167,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
 
                   {field.type === 'select' ? (
                     <Select
-                      id={`elicitation-${field.id}`}
+                      id={`elicitation-${elicitation.id}-${field.id}`}
                       value={
                         typeof formValues[field.id] === 'string'
                           ? (formValues[field.id] as string)
@@ -241,7 +241,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
                     </label>
                   ) : (
                     <Input
-                      id={`elicitation-${field.id}`}
+                      id={`elicitation-${elicitation.id}-${field.id}`}
                       type={
                         field.type === 'number' || field.type === 'integer'
                           ? 'number'
@@ -311,7 +311,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
       </CardContent>
 
       {isPending && (
-        <CardFooter className="flex items-center justify-end gap-2">
+        <CardFooter className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={handleCancel} disabled={unavailable}>
             Cancel
           </Button>

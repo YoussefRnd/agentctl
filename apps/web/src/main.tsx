@@ -8,7 +8,6 @@ import {
 import { AppProviders } from './app/AppProviders.js';
 import { App } from './app/App.js';
 import './index.css';
-import 'highlight.js/styles/github-dark.css';
 import { initApiBaseUrl } from './shared/lib/api-base-url.js';
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
@@ -16,6 +15,17 @@ const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 const rootElement = document.getElementById('root');
 if (rootElement) {
   async function bootstrap(element: HTMLElement) {
+    // The development gallery must work even when the local server is offline.
+    if (import.meta.env.DEV && window.location.pathname === '/_dev/ui') {
+      const { UiGalleryRoute } = await import('./routes/UiGalleryRoute.js');
+      ReactDOM.createRoot(element).render(
+        <React.StrictMode>
+          <UiGalleryRoute />
+        </React.StrictMode>,
+      );
+      return;
+    }
+
     const pairingToken = extractPairingTokenFromUrl();
     const baseUrl = await initApiBaseUrl();
     setApiBaseUrl(baseUrl);

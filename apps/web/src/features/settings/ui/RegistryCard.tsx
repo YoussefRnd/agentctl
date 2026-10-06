@@ -152,10 +152,10 @@ export function RegistryCard({
   }
 
   return (
-    <Card className="border-border/25 bg-surface-secondary/5 hover:border-border/40 flex flex-col gap-2 rounded-xl border p-3.5 transition-colors [&::before]:hidden">
-      <div className="flex min-w-0 items-start gap-3">
+    <Card className="border-border/25 bg-surface-secondary/5 hover:border-border/40 flex flex-col gap-2 rounded-lg border p-3.5 transition-colors [&::before]:hidden">
+      <div className="flex min-w-0 flex-wrap items-start gap-3">
         <ProviderIcon provider={provider} size="sm" className="mt-0.5 shrink-0" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-32 [overflow-wrap:anywhere]">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
             <h3 className="text-text-main truncate text-[13px] font-semibold" title={providerId}>
               {name}
@@ -256,7 +256,7 @@ export function RegistryCard({
 
       {downloadProgress && (
         <div className="space-y-1.5">
-          <div className="text-text-muted flex items-center justify-between gap-2 text-[10.5px]">
+          <div className="text-text-muted flex flex-wrap items-center justify-between gap-2 text-[10.5px]">
             <span>
               {downloadPercent === null ? 'Downloading' : `Downloading ${downloadPercent}%`}
             </span>
@@ -282,16 +282,16 @@ export function RegistryCard({
       )}
 
       {hasInstallError && (
-        <details className="group rounded-lg border border-amber-500/20 bg-amber-500/8 px-2.5 py-1.5 text-[11px] text-amber-200">
+        <details className="group border-warning/20 bg-warning/8 text-warning rounded-lg border px-2.5 py-1.5 text-[11px]">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <AlertTriangle className="text-warning h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0 flex-1 truncate" title={errorText}>
               {isInstalled ? 'Update failed' : 'Install failed'}
               {errorText ? `: ${errorText}` : ''}
             </span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
           </summary>
-          <p className="mt-1.5 pl-5 font-mono text-[10.5px] break-words text-amber-200/80">
+          <p className="text-warning/90 mt-1.5 pl-5 font-mono text-[10.5px] [overflow-wrap:anywhere]">
             {provider.installError}
             {isInstalled && currentVersion ? ` · v${currentVersion} remains active` : ''}
           </p>
@@ -299,13 +299,13 @@ export function RegistryCard({
       )}
 
       {!hasInstallError && hasConnectionError && (
-        <details className="group rounded-lg border border-amber-500/20 bg-amber-500/8 px-2.5 py-1.5 text-[11px] text-amber-200">
+        <details className="group border-warning/20 bg-warning/8 text-warning rounded-lg border px-2.5 py-1.5 text-[11px]">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <AlertTriangle className="text-warning h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0 flex-1 truncate">Connection failed</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
           </summary>
-          <p className="mt-1.5 pl-5 font-mono text-[10.5px] break-words text-amber-200/80">
+          <p className="text-warning/90 mt-1.5 pl-5 font-mono text-[10.5px] [overflow-wrap:anywhere]">
             {provider.authError?.message ?? 'The provider did not complete the ACP handshake.'}
           </p>
         </details>

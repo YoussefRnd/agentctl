@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Folder, Code2, Loader2, CornerDownLeft } from 'lucide-react';
-import { cn } from '@agentctl/ui';
+import { cn, PopoverContent } from '@agentctl/ui';
 import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem, ContextItemType } from '@agentctl/api-client';
 import { FileIcon } from '@/shared';
@@ -57,9 +57,18 @@ export function ContextDropdown({
   if (!isOpen) return null;
 
   return (
-    <div className="border-border/30 bg-brand-mantle/95 motion-floating animate-in fade-in-0 slide-in-from-bottom-2 absolute bottom-full left-0 z-50 mb-2.5 flex max-h-80 w-full flex-col overflow-hidden rounded-xl border p-1 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl duration-150">
+    <PopoverContent
+      role="region"
+      aria-label="Context suggestions"
+      side="top"
+      align="start"
+      sideOffset={10}
+      onOpenAutoFocus={(event) => event.preventDefault()}
+      onCloseAutoFocus={(event) => event.preventDefault()}
+      className="border-border/30 bg-brand-mantle/95 flex max-h-[min(20rem,var(--radix-popover-content-available-height))] w-(--radix-popover-trigger-width) flex-col overflow-hidden rounded-lg border p-1 shadow-2xl"
+    >
       {/* Header with Segmented Filter Pills */}
-      <div className="border-border/20 flex items-center justify-between border-b px-2.5 py-1.5">
+      <div className="border-border/20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-2.5 py-1.5">
         <div className="flex items-center gap-1.5">
           <span className="bg-accent/15 text-accent flex h-4.5 w-4.5 items-center justify-center rounded font-mono text-[11px] font-bold">
             @
@@ -90,7 +99,7 @@ export function ContextDropdown({
       </div>
 
       {/* Items List */}
-      <div className="custom-scrollbar flex max-h-64 flex-col gap-0.5 overflow-y-auto p-1">
+      <div className="custom-scrollbar flex max-h-64 min-h-0 flex-col gap-0.5 overflow-y-auto p-1">
         {isLoading && items.length === 0 ? (
           <div className="text-text-muted flex items-center justify-center gap-2 py-8 text-xs font-medium">
             <Loader2 className="text-accent h-4 w-4 animate-spin" />
@@ -112,7 +121,7 @@ export function ContextDropdown({
                 type="button"
                 onClick={() => onSelectItem(item)}
                 className={cn(
-                  'group/item flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 select-none',
+                  'group/item flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors duration-150 select-none',
                   isActive
                     ? 'bg-accent/15 text-text-main shadow-xs'
                     : 'text-text-muted hover:text-text-main hover:bg-white/5',
@@ -158,7 +167,7 @@ export function ContextDropdown({
       </div>
 
       {/* Keyboard navigation helper footer */}
-      <div className="border-border/15 bg-surface-secondary/20 text-text-muted/50 flex items-center justify-between border-t px-2.5 py-1.5 text-[10px]">
+      <div className="border-border/15 bg-surface-secondary/20 text-text-muted/50 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-2.5 py-1.5 text-[10px]">
         <span className="truncate">Attach file, folder, or git diff</span>
         <div className="flex items-center gap-2 font-mono text-[9px]">
           <span className="flex items-center gap-1">
@@ -181,6 +190,6 @@ export function ContextDropdown({
           </span>
         </div>
       </div>
-    </div>
+    </PopoverContent>
   );
 }

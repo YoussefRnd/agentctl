@@ -110,24 +110,24 @@ export function ThinkingEffortControl({
           disabled={disabled || isUpdating}
           aria-label={`Thinking effort: ${activeOptionName}`}
           className={cn(
-            'motion-disclosure group flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium',
+            'motion-disclosure group flex h-8 max-w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium',
             'border-border/25 bg-surface-secondary/35 text-text-muted hover:border-border/50 hover:bg-surface-secondary/70 hover:text-text-main focus-visible:ring-accent/50 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-transparent focus-visible:outline-none',
             'disabled:pointer-events-none disabled:opacity-40',
             isOpen ? 'bg-accent/20 text-accent border-accent/50' : '',
           )}
         >
-          <span className="grid text-center text-xs font-medium">
+          <span className="grid min-w-0 overflow-hidden text-center text-xs font-medium">
             {/* Reserve the widest label so changing effort does not move the popover anchor. */}
             {options.map((item) => (
               <span
                 key={item.value}
                 aria-hidden="true"
-                className="invisible col-start-1 row-start-1 whitespace-nowrap"
+                className="invisible col-start-1 row-start-1 truncate"
               >
                 {item.name}
               </span>
             ))}
-            <span className="col-start-1 row-start-1 whitespace-nowrap">{activeOptionName}</span>
+            <span className="col-start-1 row-start-1 truncate">{activeOptionName}</span>
           </span>
           <ChevronUp
             className={cn(
@@ -141,11 +141,11 @@ export function ThinkingEffortControl({
         side="top"
         align="center"
         sideOffset={8}
-        className="border-border/50 bg-brand-mantle/95 flex w-[280px] flex-col gap-4 rounded-xl border p-4 shadow-2xl backdrop-blur-xl"
+        className="border-border/50 bg-brand-mantle/95 flex w-[280px] flex-col gap-4 rounded-lg border p-4 shadow-2xl backdrop-blur-xl"
       >
         <div className="flex flex-col gap-3">
           {/* Header */}
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-text-main shrink-0 text-xs font-bold tracking-tight">
               Thinking Effort
             </span>

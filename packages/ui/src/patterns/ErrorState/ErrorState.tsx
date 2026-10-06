@@ -30,7 +30,11 @@ export function ErrorState({
         <AlertCircle className="h-5 w-5" />
       </div>
       <h3 className="text-role-title text-text-main">{title}</h3>
-      {message && <p className="text-role-body text-text-muted/80 mt-1 max-w-sm">{message}</p>}
+      {message && (
+        <p className="text-role-body text-text-muted/80 mt-1 max-w-sm min-w-0 [overflow-wrap:anywhere]">
+          {message}
+        </p>
+      )}
       {onRetry && (
         <div className="mt-4">
           <Button variant="outline" size="compact" onClick={onRetry}>

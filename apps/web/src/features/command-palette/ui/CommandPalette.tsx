@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { Dialog, DialogContent, DialogTitle } from '@agentctl/ui';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getSessionDisplayTitle } from '@agentctl/shared';
@@ -49,20 +50,18 @@ export function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const { data: projects = [] } = useQuery({
     ...projectQueries.all(),
     enabled: isOpen,
   });
 
-  // Focus search input when palette opens
+  // Reset the search when palette opens.
   useEffect(() => {
     if (isOpen) {
       setQuery('');
       setSelectedIndex(0);
-      requestAnimationFrame(() => {
-        inputRef.current?.focus();
-      });
     }
   }, [isOpen]);
 
@@ -290,29 +289,40 @@ export function CommandPalette() {
   ];
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Command Palette"
-      className="z-popover fixed inset-0 flex items-start justify-center bg-black/60 p-4 pt-[14vh] backdrop-blur-md"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) closePalette();
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) closePalette();
       }}
     >
-      <div
-        className="border-border/60 bg-surface-elevated/95 liquid-glass flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border shadow-2xl"
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        className="border-border/60 bg-surface-elevated/95 flex max-w-xl flex-col gap-0 overflow-hidden border p-0"
         onKeyDown={handleKeyDown}
+        onOpenAutoFocus={(event) => {
+          previousFocusRef.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          event.preventDefault();
+          inputRef.current?.focus();
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          previousFocusRef.current?.focus();
+        }}
       >
+        <DialogTitle className="sr-only">Command Palette</DialogTitle>
         {/* Search Header */}
-        <div className="border-border/40 bg-surface/50 flex items-center gap-3 border-b px-4 py-3">
+        <div className="border-border/40 bg-surface/50 flex shrink-0 items-center gap-3 border-b px-4 py-3">
           <Search className="text-text-muted h-4 w-4 shrink-0" />
           <input
             ref={inputRef}
             type="text"
+            aria-label="Search commands"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Type a command or search sessions, workspaces..."
-            className="text-text-main placeholder:text-text-muted/50 flex-1 bg-transparent text-sm font-medium outline-none"
+            className="text-text-main placeholder:text-text-muted/50 min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
           />
           <kbd className="border-border/40 bg-surface-secondary/60 text-text-muted rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold">
             ESC
@@ -320,7 +330,10 @@ export function CommandPalette() {
         </div>
 
         {/* Results List */}
-        <div ref={listRef} className="divide-border/10 max-h-[55vh] divide-y overflow-y-auto p-2">
+        <div
+          ref={listRef}
+          className="divide-border/10 max-h-[55vh] min-h-0 flex-1 divide-y overflow-y-auto p-2"
+        >
           {filteredItems.length === 0 ? (
             <div className="text-text-muted py-10 text-center text-xs">
               No matching commands or sessions found
@@ -347,8 +360,9 @@ export function CommandPalette() {
                           type="button"
                           data-index={itemIndex}
                           onMouseEnter={() => setSelectedIndex(itemIndex)}
+                          onFocus={() => setSelectedIndex(itemIndex)}
                           onClick={item.onSelect}
-                          className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
+                          className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 text-left transition-colors ${
                             isSelected
                               ? 'bg-accent/15 text-text-main shadow-xs'
                               : 'text-text-muted hover:text-text-main hover:bg-surface/50'
@@ -366,7 +380,7 @@ export function CommandPalette() {
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
                                 <span
                                   className={`truncate text-xs font-semibold ${isSelected ? 'text-text-main' : ''}`}
                                 >
@@ -374,7 +388,7 @@ export function CommandPalette() {
                                 </span>
                                 {item.badge && (
                                   <span
-                                    className={`py-0.2 inline-flex items-center gap-1 rounded-full px-1.5 font-mono text-[9px] font-bold ${
+                                    className={`py-0.2 inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 font-mono text-[9px] font-bold ${
                                       item.badgeType === 'running'
                                         ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20'
                                         : item.badgeType === 'needs_attention'
@@ -411,7 +425,7 @@ export function CommandPalette() {
         </div>
 
         {/* Footer info bar */}
-        <div className="border-border/30 bg-surface/30 text-text-muted/70 flex items-center justify-between border-t px-3.5 py-2 text-[10.5px]">
+        <div className="border-border/30 bg-surface/30 text-text-muted/70 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-3.5 py-2 text-[10.5px]">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1 font-medium">
               <kbd className="border-border/40 bg-surface-secondary/70 rounded px-1 font-mono text-[9px]">
@@ -431,7 +445,7 @@ export function CommandPalette() {
           </div>
           <span className="font-mono text-[9.5px]">agentctl palette</span>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

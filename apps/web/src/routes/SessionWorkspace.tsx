@@ -41,6 +41,13 @@ export function SessionWorkspace() {
   });
 
   useEffect(() => {
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      setWorkbenchOpen(false);
+      setMaximized(false);
+    }
+  }, [setWorkbenchOpen, setMaximized]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isMaximized) {
         e.preventDefault();
@@ -59,9 +66,6 @@ export function SessionWorkspace() {
   const headerElement = useMemo(
     () => (
       <SessionHeader
-        onOpenMobileSidebar={() => {
-          setMobileSidebarOpen(true);
-        }}
         onToggleWorkbench={toggleWorkbench}
         isWorkbenchOpen={isWorkbenchOpen}
         onSelectWorkbenchTab={setWorkbenchTab}

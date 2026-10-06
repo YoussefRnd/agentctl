@@ -20,14 +20,24 @@ export function useProviders(
   const queryClient = useQueryClient();
   const { execute } = useActionDispatcher();
 
-  const { data: providers = [], isLoading: isLoadingProviders } = useQuery({
+  const {
+    data: providers = [],
+    isLoading: isLoadingProviders,
+    error: providersError,
+    refetch: retryProviders,
+  } = useQuery({
     queryKey: providerKeys.all,
     queryFn: () => providerService.getProviders(),
     staleTime: 2_000,
     refetchOnWindowFocus: true,
   });
 
-  const { data: registry = [], isLoading: isLoadingRegistry } = useQuery({
+  const {
+    data: registry = [],
+    isLoading: isLoadingRegistry,
+    error: registryError,
+    refetch: retryRegistry,
+  } = useQuery({
     queryKey: providerKeys.registry,
     queryFn: () => providerService.getRegistry(),
     enabled: includeRegistry,
@@ -260,8 +270,12 @@ export function useProviders(
   return {
     providers,
     isLoadingProviders,
+    providersError,
+    retryProviders,
     registry,
     isLoadingRegistry,
+    registryError,
+    retryRegistry,
     switchProvider,
     login,
     isLoggingIn: loginMutation.isPending,

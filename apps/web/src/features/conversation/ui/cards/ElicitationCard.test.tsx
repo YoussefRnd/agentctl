@@ -5,6 +5,41 @@ import type { ElicitationFormField, ElicitationItem } from '@agentctl/shared';
 import { ElicitationCard, type ElicitationCardProps } from './ElicitationCard';
 
 let root: Root | undefined;
+it('links each field label to its own request when field names repeat', () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root!.render(
+      <>
+        {['first', 'second'].map((id) => (
+          <ElicitationCard
+            key={id}
+            elicitation={{
+              id,
+              status: 'pending',
+              createdAt: new Date().toISOString(),
+              request: {
+                id,
+                mode: 'form',
+                message: id,
+                form: {
+                  fields: [{ id: 'name', label: 'Name', type: 'string', required: false }],
+                },
+              },
+            }}
+            onRespond={() => undefined}
+          />
+        ))}
+      </>,
+    ),
+  );
+  const inputs = [...container.querySelectorAll('input')];
+  const labels = [...container.querySelectorAll('label')];
+  expect(inputs).toHaveLength(2);
+  expect(inputs[0].id).not.toBe(inputs[1].id);
+  expect(labels.map((label) => label.control)).toEqual(inputs);
+});
 afterEach(() => {
   if (root) act(() => root!.unmount());
   root = undefined;

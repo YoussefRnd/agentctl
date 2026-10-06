@@ -36,16 +36,16 @@
     &::before {
       content: '';
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 1px;
+      inset: 0;
+      border-radius: inherit;
       background: linear-gradient(
         90deg,
         transparent,
         color-mix(in srgb, var(--color-accent), transparent 70%),
         transparent
       );
+      background-size: 100% 1px;
+      background-repeat: no-repeat;
       pointer-events: none;
     }
   }
@@ -74,16 +74,16 @@
     &::before {
       content: '';
       position: absolute;
-      top: 0;
-      right: 0;
-      left: 0;
-      height: 1px;
+      inset: 0;
+      border-radius: inherit;
       background: linear-gradient(
         90deg,
         transparent,
         color-mix(in srgb, var(--color-accent), transparent 70%),
         transparent
       );
+      background-size: 100% 1px;
+      background-repeat: no-repeat;
       pointer-events: none;
     }
   }

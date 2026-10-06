@@ -111,7 +111,7 @@ export function McpSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center justify-between gap-4 pr-10">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-text-main text-lg leading-8 font-bold">MCP Servers</h2>
           {!showForm && (
             <Button
@@ -152,7 +152,7 @@ export function McpSettings() {
         {isLoading ? (
           <div className="animate-pulse space-y-3">
             {[1, 2].map((i) => (
-              <div key={i} className="h-20 rounded-xl border border-white/5 bg-white/5" />
+              <div key={i} className="h-20 rounded-lg border border-white/5 bg-white/5" />
             ))}
           </div>
         ) : (
@@ -189,7 +189,7 @@ export function McpSettings() {
             ))}
 
             {mcpServers.length === 0 && !isAddingNew && (
-              <Card className="border-border/30 bg-surface/10 hover:border-border/30 flex flex-col items-center justify-center gap-3 rounded-2xl border-dashed p-8 text-center">
+              <Card className="border-border/30 bg-surface/10 hover:border-border/30 flex flex-col items-center justify-center gap-3 border-dashed p-8 text-center">
                 <div className="bg-surface-secondary/30 border-border/20 flex h-12 w-12 items-center justify-center rounded-full border">
                   <Server className="text-text-muted/40 h-6 w-6" />
                 </div>

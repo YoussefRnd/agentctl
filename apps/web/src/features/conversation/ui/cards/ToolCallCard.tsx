@@ -1,4 +1,8 @@
-import { ToolDiffBlock as DiffBlock, ToolLocations as LocationsView } from './ToolOutputContent';
+import {
+  ToolDiffBlock as DiffBlock,
+  ToolLocations as LocationsView,
+  ToolOutput,
+} from './ToolOutputContent';
 import { useState, useEffect, useRef, memo, type ReactElement } from 'react';
 import {
   Terminal,
@@ -49,7 +53,12 @@ function ContentBlock({ block }: { block: Record<string, unknown> }) {
   if (text.length === 0) return null;
 
   return (
-    <div className="text-text-muted/90 max-h-60 overflow-y-auto text-[12px] leading-relaxed whitespace-pre-wrap select-text">
+    <div
+      role="region"
+      aria-label="Tool response"
+      tabIndex={0}
+      className="text-text-muted/90 focus-visible:ring-accent/40 max-h-60 min-w-0 overflow-y-auto text-[12px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap select-text focus-visible:ring-2 focus-visible:outline-none"
+    >
       {text}
     </div>
   );
@@ -67,13 +76,11 @@ function RawOutputView({ rawOutput }: { rawOutput: unknown }) {
   if (text.length === 0) return null;
 
   return (
-    <div className="border-border/15 overflow-hidden rounded-md border bg-black/15">
+    <div className="bg-surface-secondary/30 border-border/15 overflow-hidden rounded-md border">
       <div className="bg-surface-secondary/40 text-text-muted border-border/15 border-b px-2.5 py-1 text-[9px] font-bold tracking-wider uppercase">
         Output
       </div>
-      <pre className="no-scrollbar max-h-60 overflow-y-auto p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
-        {text}
-      </pre>
+      <ToolOutput>{text}</ToolOutput>
     </div>
   );
 }

@@ -1,4 +1,8 @@
-import { ToolDiffBlock as DiffBlock, ToolLocations as LocationsView } from './ToolOutputContent';
+import {
+  ToolDiffBlock as DiffBlock,
+  ToolLocations as LocationsView,
+  ToolOutput,
+} from './ToolOutputContent';
 import { useState, useMemo, memo } from 'react';
 import {
   ChevronRight,
@@ -231,13 +235,37 @@ function ToolOutputDetails({ call }: { call: SessionEventToolCallData }) {
         const text = typeof inner?.text === 'string' ? inner.text : '';
         if (!text.trim()) return null;
         return (
-          <div
+          <ToolOutput
             key={i}
-            className="group/code border-border/25 text-text-main/90 no-scrollbar relative max-h-56 overflow-y-auto rounded-md border bg-black/40 p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text"
+            className="max-h-56"
+            action={
+              <button
+                type="button"
+                onClick={() => handleCopy(text)}
+                className="bg-surface-secondary/70 hover:bg-surface-secondary border-border/20 text-text-muted hover:text-text-main focus-visible:ring-accent/40 rounded-md border p-1 opacity-0 transition-opacity group-focus-within/output:opacity-100 group-hover/output:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
+                title="Copy output"
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-emerald-400" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </button>
+            }
           >
+            {text}
+          </ToolOutput>
+        );
+      })}
+
+      {fallbackText && (
+        <ToolOutput
+          className="max-h-56"
+          action={
             <button
-              onClick={() => handleCopy(text)}
-              className="bg-surface-secondary/70 hover:bg-surface-secondary border-border/20 text-text-muted hover:text-text-main absolute top-1.5 right-1.5 rounded border p-1 opacity-0 transition-opacity group-hover/code:opacity-100"
+              type="button"
+              onClick={() => handleCopy(fallbackText)}
+              className="bg-surface-secondary/70 hover:bg-surface-secondary border-border/20 text-text-muted hover:text-text-main focus-visible:ring-accent/40 rounded-md border p-1 opacity-0 transition-opacity group-focus-within/output:opacity-100 group-hover/output:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
               title="Copy output"
             >
               {copied ? (
@@ -246,22 +274,10 @@ function ToolOutputDetails({ call }: { call: SessionEventToolCallData }) {
                 <Copy className="h-3 w-3" />
               )}
             </button>
-            {text}
-          </div>
-        );
-      })}
-
-      {fallbackText && (
-        <div className="group/code border-border/25 text-text-main/90 no-scrollbar relative max-h-56 overflow-y-auto rounded-md border bg-black/40 p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">
-          <button
-            onClick={() => handleCopy(fallbackText)}
-            className="bg-surface-secondary/70 hover:bg-surface-secondary border-border/20 text-text-muted hover:text-text-main absolute top-1.5 right-1.5 rounded border p-1 opacity-0 transition-opacity group-hover/code:opacity-100"
-            title="Copy output"
-          >
-            {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-          </button>
+          }
+        >
           {fallbackText}
-        </div>
+        </ToolOutput>
       )}
 
       {locations.length > 0 && <LocationsView className="my-1" locations={locations} />}
@@ -508,7 +524,7 @@ export function UnifiedActivityBlock({
         aria-expanded={events.length > 0 ? isOpen : undefined}
         role={providerError ? 'alert' : isWaitingForResponse ? 'status' : undefined}
         onClick={events.length > 0 ? toggle : undefined}
-        className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex items-center gap-2 text-[15px] font-normal tracking-tight transition-colors outline-none select-none ${
+        className={`text-text-muted/80 hover:text-text-main group/activity-btn inline-flex max-w-full items-center gap-2 text-[15px] font-normal tracking-tight transition-colors outline-none select-none ${
           events.length > 0 ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
@@ -517,7 +533,9 @@ export function UnifiedActivityBlock({
         ) : (
           <ThinkingSpinner done={isCompleted} className="text-accent text-[15px]" />
         )}
-        <span className={providerError ? 'text-danger' : undefined}>
+        <span
+          className={`min-w-0 text-left [overflow-wrap:anywhere] ${providerError ? 'text-danger' : ''}`}
+        >
           {summaryLabel}
           {providerError && (
             <span className="text-text-muted mt-1 block text-left text-xs">{providerError}</span>

@@ -24,7 +24,7 @@ export function McpServerForm({
   };
 
   return (
-    <Card className="border-accent/20 bg-accent/5 space-y-5 rounded-2xl border p-5">
+    <Card className="border-accent/20 bg-accent/5 space-y-5 border p-5">
       <div className="border-border/10 flex items-center justify-between border-b pb-3">
         <h3 className="text-text-main flex items-center gap-2 text-xs font-bold tracking-tight">
           <Settings className="text-accent h-3.5 w-3.5" />
@@ -33,7 +33,8 @@ export function McpServerForm({
         <Button
           variant="ghost"
           onClick={onCancel}
-          className="hover:bg-surface-secondary/40 h-7 w-7 cursor-pointer rounded-full p-0"
+          aria-label="Cancel server form"
+          className="hover:bg-surface-secondary/40 h-7 w-7 cursor-pointer rounded-md p-0"
         >
           <X className="text-text-muted h-4 w-4" />
         </Button>
@@ -51,13 +52,13 @@ export function McpServerForm({
             onChange={(e) => {
               set('name', e.target.value);
             }}
-            className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-xl border text-xs"
+            className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-md border text-xs"
           />
         </div>
 
         <div className="space-y-1">
           <span className="text-text-muted label-3xs block opacity-70">Server Type</span>
-          <div className="border-border/30 bg-surface/40 flex w-fit gap-1 rounded-xl border p-1">
+          <div className="border-border/30 bg-surface/40 flex w-fit max-w-full flex-wrap gap-1 rounded-lg border p-1">
             {(['local', 'remote'] as const).map((type) => (
               <button
                 key={type}
@@ -65,7 +66,7 @@ export function McpServerForm({
                 onClick={() => {
                   set('type', type);
                 }}
-                className={`cursor-pointer rounded-lg px-4 py-1 text-center text-xs font-semibold transition-colors ${
+                className={`min-w-0 cursor-pointer rounded-md px-3 py-1 text-center text-xs font-semibold transition-colors ${
                   formState.type === type
                     ? 'bg-accent text-brand-crust shadow-sm'
                     : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/40'
@@ -90,7 +91,7 @@ export function McpServerForm({
                 onChange={(e) => {
                   set('command', e.target.value);
                 }}
-                className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-xl border font-mono text-xs"
+                className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-md border font-mono text-xs"
               />
             </div>
 
@@ -105,7 +106,7 @@ export function McpServerForm({
                 onChange={(e) => {
                   set('args', e.target.value);
                 }}
-                className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-xl border font-mono text-xs"
+                className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-md border font-mono text-xs"
               />
             </div>
 
@@ -120,7 +121,7 @@ export function McpServerForm({
                 onChange={(e) => {
                   set('env', e.target.value);
                 }}
-                className="bg-surface-secondary/30 border-border/40 focus:border-accent/40 max-h-[120px] min-h-[60px] w-full rounded-xl border p-3 font-mono text-xs focus:outline-none"
+                className="bg-surface-secondary/30 border-border/40 focus:border-accent/40 max-h-[120px] min-h-[60px] w-full resize-y rounded-md border p-3 font-mono text-xs focus:outline-none"
               />
             </div>
           </>
@@ -137,7 +138,7 @@ export function McpServerForm({
                 onChange={(e) => {
                   set('url', e.target.value);
                 }}
-                className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-xl border font-mono text-xs"
+                className="bg-surface-secondary/35 border-border/55 focus:border-accent/40 h-9 w-full rounded-md border font-mono text-xs"
               />
             </div>
 
@@ -152,15 +153,15 @@ export function McpServerForm({
                 onChange={(e) => {
                   set('headers', e.target.value);
                 }}
-                className="bg-surface-secondary/30 border-border/40 focus:border-accent/40 max-h-[120px] min-h-[60px] w-full rounded-xl border p-3 font-mono text-xs focus:outline-none"
+                className="bg-surface-secondary/30 border-border/40 focus:border-accent/40 max-h-[120px] min-h-[60px] w-full resize-y rounded-md border p-3 font-mono text-xs focus:outline-none"
               />
             </div>
           </>
         )}
       </div>
 
-      <div className="border-border/10 flex items-center justify-between border-t pt-4">
-        <div className="flex items-center gap-3 select-none">
+      <div className="border-border/10 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 select-none">
           <label
             htmlFor="mcp-form-approval-policy"
             className="text-text-muted text-xs font-semibold"
@@ -168,16 +169,17 @@ export function McpServerForm({
             Approval Policy
           </label>
           <Select
+            id="mcp-form-approval-policy"
             value={formState.approvalPolicy}
             onChange={(val) => {
               set('approvalPolicy', val as McpFormState['approvalPolicy']);
             }}
             options={approvalPolicyOptions}
-            className="w-48"
+            className="w-48 max-w-full"
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button
             variant="ghost"
             onClick={onCancel}

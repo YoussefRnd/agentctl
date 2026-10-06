@@ -8,3 +8,7 @@ export {
   type SettingsOverlayState,
   type SettingsTab,
 } from './model/useSettingsOverlayStore.js';
+export { McpServerForm } from './ui/McpServerForm.js';
+export { McpServerCard } from './ui/McpServerCard.js';
+export { FontSettingsPanel } from './ui/FontSettingsPanel.js';
+export { initialFormState } from './ui/McpUtils.js';

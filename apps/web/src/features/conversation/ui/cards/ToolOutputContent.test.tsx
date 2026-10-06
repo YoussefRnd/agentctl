@@ -1,6 +1,20 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test } from 'vitest';
-import { ToolDiffBlock } from './ToolOutputContent';
+import { ToolDiffBlock, ToolOutput } from './ToolOutputContent';
+
+test('keeps output keyboard accessible and actions outside the scrolling text', () => {
+  const container = document.createElement('div');
+  container.innerHTML = renderToStaticMarkup(
+    <ToolOutput action={<button type="button">Copy</button>}>
+      {'  preserved\n    indentation'}
+    </ToolOutput>,
+  );
+  const output = container.querySelector('[role="region"]')!;
+  expect(output.getAttribute('aria-label')).toBe('Tool output');
+  expect(output.getAttribute('tabindex')).toBe('0');
+  expect(output.textContent).toBe('  preserved\n    indentation');
+  expect(output.contains(container.querySelector('button'))).toBe(false);
+});
 
 test('renders the structured change list and supplied patch safely', () => {
   const markup = renderToStaticMarkup(

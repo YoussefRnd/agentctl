@@ -32,7 +32,7 @@ export function SettingsDialog() {
     >
       <DialogContent
         showCloseButton={false}
-        className="text-text-main border-border/30 bg-brand-mantle h-[620px] max-h-[90vh] max-w-4xl gap-0 overflow-hidden rounded-2xl border p-0 sm:max-w-4xl md:flex md:flex-row"
+        className="text-text-main border-border/30 bg-brand-mantle flex h-[620px] max-h-[90vh] max-w-4xl flex-col gap-0 overflow-hidden border p-0 sm:max-w-4xl md:flex md:flex-row"
       >
         {/* Left Sub-Nav Sidebar */}
         <div className="border-border/30 bg-surface/20 flex w-full shrink-0 flex-col justify-between border-b p-3 md:w-56 md:border-r md:border-b-0 md:p-4">
@@ -54,7 +54,7 @@ export function SettingsDialog() {
 
             {/* Nav Tabs */}
             <div
-              className="-my-1 flex gap-1 overflow-x-auto py-1 md:my-0 md:flex-col md:space-y-1 md:overflow-visible md:py-0"
+              className="-my-1 flex min-w-0 gap-1 overflow-x-auto py-1 md:my-0 md:flex-col md:space-y-1 md:overflow-visible md:py-0"
               role="tablist"
               aria-label="Settings sections"
             >
@@ -68,7 +68,7 @@ export function SettingsDialog() {
                     aria-selected={isActive}
                     tabIndex={isActive ? 0 : -1}
                     onClick={() => setSettingsTab(id)}
-                    className={`flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+                    className={`focus-visible:ring-accent/40 flex shrink-0 cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:outline-none ${
                       isActive
                         ? 'bg-accent/15 text-accent border-accent/30 border shadow-sm'
                         : 'text-text-muted hover:text-text-main hover:bg-surface/50 border border-transparent'
@@ -92,9 +92,9 @@ export function SettingsDialog() {
         </div>
 
         {/* Right Content Area */}
-        <div className="bg-background relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="bg-background relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {/* Scrollable Content Body */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
             {settingsTab === 'general' && <GeneralSettingsView />}
             {settingsTab === 'providers' && <ProvidersSettingsView />}
             {settingsTab === 'mcp' && <McpSettings />}

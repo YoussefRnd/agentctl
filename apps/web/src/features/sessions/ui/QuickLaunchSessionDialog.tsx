@@ -210,7 +210,7 @@ export function QuickLaunchSessionDialog({
           </div>
 
           {/* Model & Thinking Effort */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label className="text-text-muted text-[11px] font-bold tracking-wider uppercase">
                 Model
@@ -243,7 +243,7 @@ export function QuickLaunchSessionDialog({
             <label className="text-text-muted text-[11px] font-bold tracking-wider uppercase">
               Workspace Mode
             </label>
-            <div className="border-border/40 bg-surface/40 flex w-full gap-1 rounded-xl border p-1">
+            <div className="border-border/40 bg-surface/40 flex w-full gap-1 rounded-lg border p-1">
               {[
                 ...(allowWorktree
                   ? [{ mode: 'worktree' as const, label: 'Worktree (Branch)' }]
@@ -256,7 +256,7 @@ export function QuickLaunchSessionDialog({
                   onClick={() => {
                     setSelectedMode(mode);
                   }}
-                  className={`flex flex-1 cursor-pointer items-center justify-center rounded-lg py-1.5 text-xs font-semibold transition-colors ${
+                  className={`flex flex-1 cursor-pointer items-center justify-center rounded-md py-1.5 text-xs font-semibold transition-colors ${
                     selectedMode === mode
                       ? 'bg-accent text-brand-crust shadow-sm'
                       : 'text-text-muted hover:text-text-main hover:bg-surface/60'
@@ -280,7 +280,7 @@ export function QuickLaunchSessionDialog({
               onChange={(e) => {
                 setTaskSlug(e.target.value);
               }}
-              className="border-border/50 bg-surface/40 focus:border-accent/30 focus:ring-accent/20 placeholder:text-text-muted/40 h-9 w-full rounded-xl px-3 font-mono text-xs transition-colors"
+              className="border-border/50 bg-surface/40 focus:border-accent/30 focus:ring-accent/20 placeholder:text-text-muted/40 h-9 w-full min-w-0 rounded-md px-3 font-mono text-xs transition-colors"
             />
           </div>
 

@@ -22,6 +22,7 @@ function PopoverContent({
   sideOffset = 4,
   surface = 'glass',
   motion = 'floating',
+  collisionPadding = 16,
   ...props
 }: PopoverContentProps) {
   return (
@@ -30,11 +31,12 @@ function PopoverContent({
         data-slot="popover-content"
         align={align}
         sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
         className={cn(
-          'z-popover w-64 origin-(--radix-popover-content-transform-origin) outline-hidden',
+          'z-popover max-h-(--radix-popover-content-available-height) w-64 max-w-[calc(100vw-2rem)] min-w-0 origin-(--radix-popover-content-transform-origin) overflow-y-auto [overflow-wrap:anywhere] outline-hidden',
           motion === 'floating' &&
             'motion-floating data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0',
-          surface === 'glass' && 'liquid-glass rounded-md p-2 shadow-2xl',
+          surface === 'glass' && 'liquid-glass rounded-lg p-2 shadow-2xl',
           className,
         )}
         {...props}
@@ -55,9 +57,9 @@ function PopoverHeader({ className, ...props }: React.ComponentProps<'div'>) {
 
 function PopoverTitle({ className, ...props }: React.ComponentProps<'h2'>) {
   return (
-    <div
+    <h2
       data-slot="popover-title"
-      className={cn('text-role-eyebrow text-white', className)}
+      className={cn('text-role-eyebrow text-text-main', className)}
       {...props}
     />
   );

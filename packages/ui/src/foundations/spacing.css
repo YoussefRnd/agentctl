@@ -1,5 +1,6 @@
 @theme {
-  /* Radius Scale */
+  /* Radius roles: sm for inset details, md for controls, lg for cards/panels,
+   * xl for dialogs/composers. Reserve full rounding for pills and status dots. */
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;

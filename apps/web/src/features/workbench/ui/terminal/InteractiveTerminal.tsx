@@ -1,7 +1,7 @@
 import { useRef, useCallback, Fragment, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { Plus, Columns2, Rows2, PanelRight } from 'lucide-react';
-import { Tooltip } from '@agentctl/ui';
+import { Dropdown, Tooltip } from '@agentctl/ui';
 import { useSession } from '@/features/sessions';
 import { useSettings } from '@/features/settings';
 import { TerminalPane, type TerminalPaneHandle } from './TerminalPane';
@@ -43,6 +43,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     const storedWorkspace = useTerminalTabsStore((s) => s.workspaces[resolvedSessionId]);
     const ensureWorkspace = useTerminalTabsStore((s) => s.ensureWorkspace);
     const addTab = useTerminalTabsStore((s) => s.addTab);
+    const setActiveTab = useTerminalTabsStore((s) => s.setActiveTab);
     const splitTab = useTerminalTabsStore((s) => s.splitTab);
     const closePane = useTerminalTabsStore((s) => s.closePane);
     const setActivePane = useTerminalTabsStore((s) => s.setActivePane);
@@ -197,68 +198,98 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     return (
       <div
         data-font-ctx="terminal"
-        className="relative flex h-full min-w-0 flex-1 overflow-hidden bg-[#11111b]"
+        className="@container/terminal relative flex h-full min-w-0 flex-1 overflow-hidden bg-[#11111b]"
       >
         {/* Main Terminal Canvas Stage */}
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#11111b]">
-          {/* Floating Minimal Action Capsule when Sidebar is Hidden */}
-          {!isSidebarOpen && (
-            <div className="border-border/30 bg-surface/85 absolute top-2 right-2 z-20 flex items-center gap-0.5 rounded-md border p-0.5 opacity-60 shadow-md backdrop-blur-md transition-opacity hover:opacity-100">
-              <Tooltip content="New Terminal">
+          {/* Narrow panes keep the canvas usable and expose tabs through a menu. */}
+          <div
+            className={`border-border/30 bg-surface/85 absolute top-2 right-2 z-20 flex items-center gap-0.5 rounded-md border p-0.5 opacity-60 shadow-md backdrop-blur-md transition-opacity focus-within:opacity-100 hover:opacity-100 ${isSidebarOpen ? '@[360px]/terminal:hidden' : ''}`}
+          >
+            <Tooltip content="New Terminal">
+              <button
+                type="button"
+                onClick={() => addTab(resolvedSessionId)}
+                className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
+                aria-label="New terminal"
+              >
+                <Plus className="icon-inline" />
+              </button>
+            </Tooltip>
+
+            <Tooltip content="Split Terminal">
+              <button
+                type="button"
+                onClick={handleSplit}
+                className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
+                aria-label="Split terminal"
+              >
+                <Columns2 className="icon-inline" />
+              </button>
+            </Tooltip>
+
+            {isSplit && (
+              <Tooltip
+                content={`Switch to ${activeTab.splitOrientation === 'horizontal' ? 'Vertical (Top/Bottom)' : 'Horizontal (Side-by-side)'} Split`}
+              >
                 <button
                   type="button"
-                  onClick={() => addTab(resolvedSessionId)}
+                  onClick={handleToggleOrientation}
                   className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
-                  aria-label="New terminal"
+                  aria-label="Toggle split orientation"
                 >
-                  <Plus className="icon-inline" />
+                  {activeTab.splitOrientation === 'horizontal' ? (
+                    <Rows2 className="icon-inline" />
+                  ) : (
+                    <Columns2 className="icon-inline" />
+                  )}
                 </button>
               </Tooltip>
+            )}
 
-              <Tooltip content="Split Terminal">
-                <button
-                  type="button"
-                  onClick={handleSplit}
-                  className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
-                  aria-label="Split terminal"
-                >
-                  <Columns2 className="icon-inline" />
-                </button>
-              </Tooltip>
+            <div className="bg-border/40 mx-0.5 h-3 w-px" />
 
-              {isSplit && (
-                <Tooltip
-                  content={`Switch to ${activeTab.splitOrientation === 'horizontal' ? 'Vertical (Top/Bottom)' : 'Horizontal (Side-by-side)'} Split`}
-                >
+            <div className="@[360px]/terminal:hidden">
+              <Dropdown.Root>
+                <Dropdown.Trigger asChild>
                   <button
                     type="button"
-                    onClick={handleToggleOrientation}
-                    className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
-                    aria-label="Toggle split orientation"
+                    aria-label="Choose terminal"
+                    className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded"
                   >
-                    {activeTab.splitOrientation === 'horizontal' ? (
-                      <Rows2 className="icon-inline" />
-                    ) : (
-                      <Columns2 className="icon-inline" />
-                    )}
+                    <PanelRight className="icon-inline" />
                   </button>
-                </Tooltip>
-              )}
-
-              <div className="bg-border/40 mx-0.5 h-3 w-px" />
-
-              <Tooltip content="Show Terminal Tabs">
+                </Dropdown.Trigger>
+                <Dropdown.Portal>
+                  <Dropdown.Content align="end">
+                    {tabs.map((terminal) => (
+                      <Dropdown.Item
+                        key={terminal.id}
+                        onSelect={() => setActiveTab(resolvedSessionId, terminal.id)}
+                      >
+                        <span className="max-w-48 truncate">{terminal.name}</span>
+                        {terminal.id === activeTab.id && (
+                          <span className="text-text-muted ml-2">Current</span>
+                        )}
+                      </Dropdown.Item>
+                    ))}
+                  </Dropdown.Content>
+                </Dropdown.Portal>
+              </Dropdown.Root>
+            </div>
+            <div className="hidden @[360px]/terminal:block">
+              <Tooltip content={isSidebarOpen ? 'Hide Terminal Tabs' : 'Show Terminal Tabs'}>
                 <button
                   type="button"
                   onClick={() => toggleSidebar(resolvedSessionId)}
                   className="motion-disclosure text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-5.5 w-5.5 items-center justify-center rounded transition-colors"
-                  aria-label="Show terminal tabs"
+                  aria-label={isSidebarOpen ? 'Hide terminal tabs' : 'Show terminal tabs'}
                 >
                   <PanelRight className="icon-inline" />
                 </button>
               </Tooltip>
             </div>
-          )}
+          </div>
 
           {/* Terminal Panes - Always rendered within Group/Panel to preserve terminal lifecycle on split */}
           <Group orientation={activeTab.splitOrientation} className="h-full w-full">

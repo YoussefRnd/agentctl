@@ -1,4 +1,6 @@
 import { apiClient } from '../api-client.js';
+import { ApiError } from '../api-error.js';
+import { providersContract } from '@agentctl/shared';
 import type { AgentDiagnosticsSnapshot, ProviderDiscovery, CustomModel } from '@agentctl/shared';
 
 export interface NativeSessionSummary {
@@ -11,6 +13,15 @@ export interface NativeSessionSummary {
 export interface NativeSessionPage {
   sessions: NativeSessionSummary[];
   nextCursor?: string;
+}
+
+async function fetchProviderList(path: string): Promise<ProviderDiscovery[]> {
+  const response = await apiClient.fetch<unknown>(path);
+  const parsed = providersContract.getProviders.responses[200].safeParse(response);
+  if (!parsed.success) {
+    throw new ApiError('Invalid agent list. Check the API server connection and try again.', 200);
+  }
+  return parsed.data;
 }
 
 export const providerService = {
@@ -45,11 +56,11 @@ export const providerService = {
     return apiClient.fetch<AgentDiagnosticsSnapshot>('/api/diagnostics/transport');
   },
   getProviders(): Promise<ProviderDiscovery[]> {
-    return apiClient.fetch<ProviderDiscovery[]>('/api/providers');
+    return fetchProviderList('/api/providers');
   },
 
   getRegistry(): Promise<ProviderDiscovery[]> {
-    return apiClient.fetch<ProviderDiscovery[]>('/api/registry');
+    return fetchProviderList('/api/registry');
   },
 
   updateSessionProvider(sessionId: string, providerId: string, modelId?: string) {

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Menu, PanelRight, Pencil, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
+import { PanelRight, Pencil, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
 import { Dropdown, Tooltip } from '@agentctl/ui';
 import { getSessionDisplayTitle } from '@agentctl/shared';
 import { DiffIcon, RepoForkedIcon, GitPullRequestIcon } from '@primer/octicons-react';
@@ -25,14 +25,12 @@ import { SessionHeaderDialogs } from './SessionHeaderDialogs';
 import type { WorkbenchTab } from '@/features/workbench';
 
 interface SessionHeaderProps {
-  onOpenMobileSidebar: () => void;
   onToggleWorkbench: () => void;
   isWorkbenchOpen: boolean;
   onSelectWorkbenchTab?: (tab: WorkbenchTab) => void;
 }
 
 export function SessionHeader({
-  onOpenMobileSidebar,
   onToggleWorkbench,
   isWorkbenchOpen,
   onSelectWorkbenchTab,
@@ -163,19 +161,9 @@ export function SessionHeader({
 
   return (
     <div className="flex h-full w-full min-w-0 items-center justify-between gap-3">
-      {/* Mobile Toggle on Small Screens */}
-      <button
-        type="button"
-        className="text-text-muted hover:text-text-main hover:bg-surface -ml-1 flex h-7 w-7 items-center justify-center rounded-md transition-colors lg:hidden"
-        onClick={onOpenMobileSidebar}
-        aria-label="Open Sidebar"
-      >
-        <Menu className="h-4 w-4" />
-      </button>
-
       {/* Center Zone: Prominent Command & Session Bar */}
-      <div className="flex min-w-0 flex-1 items-center justify-center px-2">
-        <div className="border-border/35 bg-surface-secondary/40 hover:border-border/60 hover:bg-surface-secondary/70 inline-flex h-7 max-w-[380px] items-center gap-1.5 rounded-full border px-2 shadow-xs backdrop-blur-md transition-[border-color,background-color] duration-150">
+      <div className="flex min-w-0 flex-1 items-center justify-center sm:px-2">
+        <div className="border-border/35 bg-surface-secondary/40 hover:border-border/60 hover:bg-surface-secondary/70 inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-full border px-2 shadow-xs backdrop-blur-md transition-[border-color,background-color] duration-150 sm:max-w-[380px]">
           {/* Status Indicator Dot */}
           <Tooltip content={`Status: ${statusConfig.label}`}>
             <div
@@ -209,7 +197,7 @@ export function SessionHeader({
             <Dropdown.Trigger asChild>
               <button
                 type="button"
-                className="motion-disclosure text-text-muted/60 hover:text-text-main data-[state=open]:bg-accent/10 data-[state=open]:text-accent flex h-5 w-5 cursor-pointer items-center justify-center rounded-full hover:bg-white/10"
+                className="motion-disclosure text-text-muted/60 hover:text-text-main data-[state=open]:bg-accent/10 data-[state=open]:text-accent flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-full hover:bg-white/10"
                 aria-label="Session options"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
@@ -294,10 +282,12 @@ export function SessionHeader({
             onClick={handleOpenChanges}
             className="border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors active:scale-[0.97]"
             title="View modified files in review"
+            aria-label={`${changesCount} ${changesCount === 1 ? 'change' : 'changes'}`}
           >
             <DiffIcon className="h-3.5 w-3.5" />
             <span>
-              {changesCount} {changesCount === 1 ? 'change' : 'changes'}
+              {changesCount}{' '}
+              <span className="hidden sm:inline">{changesCount === 1 ? 'change' : 'changes'}</span>
             </span>
           </button>
         )}

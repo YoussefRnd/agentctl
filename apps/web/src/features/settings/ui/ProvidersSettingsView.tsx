@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useProviders } from '@/features/providers';
 import { useSettings } from '../api/useSettings';
-import { Button } from '@agentctl/ui';
+import { Button, ErrorState } from '@agentctl/ui';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 import { ProviderProfilesPanel } from './ProviderProfilesPanel';
 import { RegistryBrowser } from './RegistryBrowser';
@@ -38,9 +38,9 @@ export function ProvidersSettingsView() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-text-main text-lg leading-8 font-bold">AI Providers</h2>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -80,6 +80,20 @@ export function ProvidersSettingsView() {
         </p>
       </div>
 
+      {providersApi.providersError && (
+        <ErrorState
+          title="Could not load agents"
+          message={providersApi.providersError.message}
+          onRetry={() => void providersApi.retryProviders()}
+        />
+      )}
+      {providersApi.registryError && (
+        <ErrorState
+          title="Could not load agent catalog"
+          message={providersApi.registryError.message}
+          onRetry={() => void providersApi.retryRegistry()}
+        />
+      )}
       <ProviderProfilesPanel providers={providersApi.providers} />
       <RegistryBrowser settings={settings} api={providersApi} />
     </div>

@@ -3,12 +3,14 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
+import { MarkdownTable } from './MarkdownTable';
 import { splitStreamingContent, type StreamingContentSegment } from './streamingMarkdownUtils';
 
 export type { StreamingContentSegment };
 
 const REMARK_PLUGINS = [remarkGfm];
 const REHYPE_PLUGINS = [rehypeHighlight];
+const MARKDOWN_COMPONENTS = { pre: MarkdownCodeBlock, table: MarkdownTable };
 
 interface StreamingMarkdownProps {
   content: string;
@@ -151,7 +153,7 @@ const StaticBlock = memo(
       return <MarkdownCodeBlock>{segment.value}</MarkdownCodeBlock>;
     }
     return (
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={{ pre: MarkdownCodeBlock }}>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS}>
         {segment.value}
       </ReactMarkdown>
     );
@@ -229,7 +231,7 @@ export const StreamingMarkdown = memo(function StreamingMarkdown({
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}
       rehypePlugins={REHYPE_PLUGINS}
-      components={{ pre: MarkdownCodeBlock }}
+      components={MARKDOWN_COMPONENTS}
     >
       {content}
     </ReactMarkdown>

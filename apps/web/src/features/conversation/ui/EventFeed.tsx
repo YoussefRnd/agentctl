@@ -431,7 +431,7 @@ export function EventFeed({
                 className="w-full"
               >
                 <div
-                  className={`mx-auto max-w-[800px] rounded-xl px-3 py-2.5 transition-[background-color,box-shadow] duration-200 sm:rounded-2xl sm:px-6 sm:py-3 ${
+                  className={`mx-auto max-w-[800px] rounded-lg px-3 py-2.5 transition-[background-color,box-shadow] duration-200 sm:px-6 sm:py-3 ${
                     isGroupHighlighted
                       ? 'bg-accent/10 ring-accent shadow-accent/10 shadow-lg ring-2'
                       : ''

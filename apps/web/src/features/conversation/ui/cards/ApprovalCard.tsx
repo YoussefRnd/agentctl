@@ -1,4 +1,4 @@
-import { useEffect, useRef, memo } from 'react';
+import { useEffect, useRef, useId, memo } from 'react';
 import { ChevronDown, ShieldCheck } from 'lucide-react';
 import type { SessionEventApprovalRequestData } from '@agentctl/shared';
 import { GlassPanel } from '@agentctl/ui';
@@ -60,6 +60,7 @@ export const ApprovalCard = memo(function ApprovalCard({
   onDeny: (eventId: number) => void;
 }) {
   const approveButtonRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
   const denyButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -114,7 +115,7 @@ export const ApprovalCard = memo(function ApprovalCard({
   return (
     <div
       role="region"
-      aria-labelledby="approval-title"
+      aria-labelledby={titleId}
       aria-live="polite"
       tabIndex={-1}
       onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -122,6 +123,7 @@ export const ApprovalCard = memo(function ApprovalCard({
           e.preventDefault();
           onDeny(eventId);
         }
+        if ((e.target as HTMLElement).closest('pre')) return;
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
           denyButtonRef.current?.focus();
@@ -135,7 +137,7 @@ export const ApprovalCard = memo(function ApprovalCard({
     >
       <GlassPanel
         intensity="high"
-        className="border-border/40 flex w-full min-w-0 flex-col gap-0 overflow-hidden rounded-xl border shadow-lg"
+        className="border-border/40 flex w-full min-w-0 flex-col gap-0 overflow-hidden rounded-lg border [overflow-wrap:anywhere] shadow-lg"
       >
         <div className="flex min-w-0 items-start gap-2.5 px-3 py-2.5">
           <ShieldCheck className="text-accent mt-0.5 h-4 w-4 shrink-0" />
@@ -143,11 +145,8 @@ export const ApprovalCard = memo(function ApprovalCard({
             {request?.subagentId && (
               <p className="text-text-muted mb-1 text-xs">Subagent: {request.subagentId}</p>
             )}
-            <div className="flex min-w-0 items-center gap-2">
-              <span
-                id="approval-title"
-                className="text-text-main shrink-0 text-[13px] font-semibold"
-              >
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span id={titleId} className="text-text-main min-w-0 text-[13px] font-semibold">
                 {request?.source === 'client' ? 'Agentctl operation' : 'Permission request'}
               </span>
               {toolCall && (
@@ -183,7 +182,12 @@ export const ApprovalCard = memo(function ApprovalCard({
               <ChevronDown className="h-3 w-3 -rotate-90 transition-transform group-open:rotate-0" />
               Details
             </summary>
-            <pre className="border-border/25 bg-background/50 text-text-muted mt-2 max-h-40 min-w-0 overflow-auto rounded-md border p-2.5 font-mono text-[11px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap">
+            <pre
+              role="region"
+              aria-label="Approval details"
+              tabIndex={0}
+              className="border-border/25 bg-background/50 text-text-muted focus-visible:ring-accent/40 mt-2 max-h-40 min-w-0 overflow-auto rounded-md border p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+            >
               {JSON.stringify(details, null, 2)}
             </pre>
           </details>

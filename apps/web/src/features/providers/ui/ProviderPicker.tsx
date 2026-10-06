@@ -165,7 +165,7 @@ export function ProviderPicker({
   };
 
   return (
-    <div className="text-text-main flex w-full overflow-hidden">
+    <div className="text-text-main flex w-full min-w-0 overflow-hidden [overflow-wrap:anywhere]">
       <ProviderSidebar
         providers={providers}
         internalProviderId={internalProviderId}
@@ -175,14 +175,14 @@ export function ProviderPicker({
 
       <div className="flex min-w-0 flex-1 flex-col bg-transparent">
         <div className="border-border/20 flex items-center gap-2 border-b p-2">
-          <div className="relative flex-1">
+          <div className="relative min-w-0 flex-1">
             <Search className="text-text-muted absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2" />
             <input
               ref={inputRef}
               type="text"
               aria-label="Filter models"
               placeholder="Filter models..."
-              className="border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border pr-3 pl-9 font-sans text-[11px] transition-colors duration-200 outline-none focus:ring-1"
+              className="border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full min-w-0 rounded-md border pr-3 pl-9 font-sans text-[11px] transition-colors duration-200 outline-none focus:ring-1"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -258,7 +258,7 @@ export function ProviderPicker({
                   onClick={() => {
                     onSelect(activeProvider.id, model.value);
                   }}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors ${
+                  className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left transition-colors ${
                     isSelected
                       ? 'bg-accent/15 text-accent'
                       : 'text-text-muted hover:bg-text-main/5 hover:text-text-main'
@@ -452,7 +452,7 @@ function ProviderSetupPanel({
               const errorMsg = getKeyError(key);
               return (
                 <div key={key} className="space-y-1">
-                  <div className="flex items-baseline justify-between">
+                  <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-1">
                     <label htmlFor={key} className="text-text-muted font-mono text-xs">
                       {key}
                     </label>
@@ -476,7 +476,7 @@ function ProviderSetupPanel({
                         },
                       });
                     }}
-                    className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full rounded-lg border px-2.5 font-mono text-xs transition-colors duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
+                    className={`border-border/30 bg-surface/40 text-text-main placeholder:text-text-muted/30 focus:border-accent/40 focus:ring-accent/40 h-8 w-full min-w-0 rounded-md border px-2.5 font-mono text-xs transition-colors duration-200 outline-none focus:ring-1 ${errorMsg ? 'border-danger/40 focus:border-danger/60 focus:ring-danger/40' : ''}`}
                   />
                 </div>
               );

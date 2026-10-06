@@ -37,11 +37,14 @@ export const CommandResultCard = memo(function CommandResultCard({
           status={isError ? 'error' : isPending ? 'pending' : 'default'}
           className="flex-1 flex-row items-center justify-between px-3 py-2"
         >
-          <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <Terminal className="text-text-muted/60 h-3.5 w-3.5 shrink-0" />
             <div className="flex min-w-0 flex-col">
               <div className="flex items-center gap-2">
-                <span className="text-text-main/90 font-mono text-[11.5px] font-semibold tracking-tight">
+                <span
+                  title={command}
+                  className="text-text-main/90 min-w-0 truncate font-mono text-[11.5px] font-semibold tracking-tight"
+                >
                   /{command}
                 </span>
                 {isError && <AlertCircle className="h-3.5 w-3.5 text-rose-400" />}
@@ -79,7 +82,7 @@ export const CommandResultCard = memo(function CommandResultCard({
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               <span className="text-text-muted text-[10px] font-bold tracking-widest uppercase">
                 Status
               </span>

@@ -99,6 +99,22 @@ describe('StreamingMarkdown', () => {
     });
   });
 
+  it.each([false, true])(
+    'keeps table semantics and links in a focusable region (streaming: %s)',
+    (isStreaming) => {
+      const { container, root } = render(
+        '| File | Status |\n| --- | --- |\n| [composer.tsx](https://example.com/file) | Ready |\n\nNext paragraph',
+        isStreaming,
+      );
+      const region = container.querySelector('[role="region"][aria-label="Scrollable table"]');
+      expect(region?.getAttribute('tabindex')).toBe('0');
+      expect(region?.querySelectorAll('th')).toHaveLength(2);
+      expect(region?.querySelector('td a')?.getAttribute('href')).toBe('https://example.com/file');
+      expect(region?.textContent).toContain('Ready');
+      act(() => root.unmount());
+    },
+  );
+
   it('keeps completed content formatted while removing the active caret immediately', () => {
     const { container, root } = render('**finished**', true);
     act(() => {

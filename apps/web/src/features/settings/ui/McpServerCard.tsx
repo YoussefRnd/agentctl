@@ -63,21 +63,21 @@ export function McpServerCard({
   })();
 
   return (
-    <Card className="group border-border/20 hover:border-accent/20 overflow-hidden rounded-2xl border transition-colors">
-      <button
-        type="button"
-        onClick={onToggleExpand}
-        aria-expanded={isExpanded}
-        aria-controls={`mcp-server-content-${server.id}`}
-        className="flex w-full cursor-pointer items-center justify-between border-none bg-transparent p-4 text-left select-none"
-      >
-        <div className="flex min-w-0 items-center gap-3.5">
+    <Card className="group border-border/20 hover:border-accent/20 overflow-hidden border transition-colors">
+      <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3 p-4">
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-expanded={isExpanded}
+          aria-controls={`mcp-server-content-${server.id}`}
+          className="focus-visible:ring-accent/40 flex min-w-0 flex-1 basis-48 cursor-pointer items-center gap-3.5 rounded-md border-none bg-transparent text-left select-none focus-visible:ring-2 focus-visible:outline-none"
+        >
           <div className="border-border/30 bg-surface-secondary/40 group-hover:bg-surface-secondary/60 text-text-main flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border p-1.5 transition-colors">
             <Server className="h-4.5 w-4.5" />
           </div>
-          <div className="min-w-0">
-            <h3 className="text-text-main flex items-center gap-2.5 text-[13px] font-black tracking-tighter uppercase">
-              {server.name}
+          <div className="min-w-0 flex-1">
+            <h3 className="text-role-title text-text-main flex min-w-0 flex-wrap items-center gap-2">
+              <span className="min-w-0 [overflow-wrap:anywhere]">{server.name}</span>
               {statusBadge}
             </h3>
 
@@ -86,7 +86,7 @@ export function McpServerCard({
                 {serverTools.slice(0, 3).map((t) => (
                   <span
                     key={t.name}
-                    className="bg-surface-secondary/50 text-text-muted border-border/10 rounded border px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-tight"
+                    className="bg-surface-secondary/50 text-text-muted border-border/10 max-w-full min-w-0 rounded border px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-tight [overflow-wrap:anywhere]"
                   >
                     {t.name.split('__')[1] ?? t.name}
                   </span>
@@ -104,35 +104,41 @@ export function McpServerCard({
               </div>
             )}
           </div>
-        </div>
+        </button>
 
-        <div
-          className="flex items-center gap-3"
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          <Switch checked={server.enabled} onCheckedChange={onToggleEnabled} />
-          <ChevronDown
-            className={`text-text-muted h-3.5 w-3.5 transition-transform duration-300 ${
-              isExpanded ? 'text-text-main rotate-180' : ''
-            }`}
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          <Switch
+            checked={server.enabled}
+            onCheckedChange={onToggleEnabled}
+            aria-label={`Enable ${server.name}`}
           />
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${server.name}`}
+            aria-expanded={isExpanded}
+            aria-controls={`mcp-server-content-${server.id}`}
+            className="focus-visible:ring-accent/40 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <ChevronDown
+              className={`text-text-muted h-3.5 w-3.5 transition-transform duration-300 ${
+                isExpanded ? 'text-text-main rotate-180' : ''
+              }`}
+            />
+          </button>
         </div>
-      </button>
+      </div>
 
       {isExpanded && (
         <div
           id={`mcp-server-content-${server.id}`}
           className="animate-in fade-in slide-in-from-top-1 border-border/10 bg-surface-secondary/5 space-y-4 border-t p-4"
         >
-          <div className="border-border/55 bg-surface-secondary/20 flex flex-col gap-3 rounded-xl border p-4 select-none">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-text-main text-[11px] font-black tracking-widest uppercase">
-                  DEFAULT_APPROVAL_POLICY
-                </p>
-                <p className="text-text-muted mt-0.5 text-[9.5px] font-bold tracking-tight uppercase opacity-65">
+          <div className="border-border/55 bg-surface-secondary/20 flex flex-col gap-3 rounded-lg border p-4 select-none">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 basis-48">
+                <p className="text-role-label text-text-main">Approval policy</p>
+                <p className="text-role-caption text-text-muted mt-1 leading-relaxed">
                   Default action for new or unconfigured tools from this server in auto-approve
                   mode.
                 </p>
@@ -141,16 +147,16 @@ export function McpServerCard({
                 value={server.approvalPolicy}
                 onChange={onUpdatePolicy}
                 options={approvalPolicyOptions}
-                className="w-48"
+                className="w-48 max-w-full"
               />
             </div>
           </div>
 
           <div className="space-y-1">
             <strong className="text-text-muted label-3xs opacity-45">
-              {server.type === 'remote' ? 'URL' : 'COMMAND'}
+              {server.type === 'remote' ? 'URL' : 'Command'}
             </strong>
-            <pre className="text-text-main bg-surface-secondary/30 border-border/25 overflow-x-auto rounded-xl border p-2.5 font-mono text-[10px] whitespace-pre-wrap">
+            <pre className="text-text-main bg-surface-secondary/30 border-border/25 overflow-x-auto rounded-md border p-2.5 font-mono text-[10px] whitespace-pre-wrap">
               {server.type === 'remote'
                 ? server.url
                 : `${server.command ?? ''} ${parsedArgs.join(' ')}`}
@@ -160,9 +166,9 @@ export function McpServerCard({
           <div className="border-border/5 grid gap-4 border-t pt-3.5 text-[11px] sm:grid-cols-2">
             <div className="space-y-1">
               <strong className="text-text-muted label-3xs opacity-45">
-                {server.type === 'remote' ? 'HEADERS' : 'ENVIRONMENT VARIABLES'}
+                {server.type === 'remote' ? 'Headers' : 'Environment variables'}
               </strong>
-              <pre className="text-text-main bg-surface-secondary/30 border-border/25 overflow-x-auto rounded-xl border p-2.5 font-mono text-[10px] whitespace-pre-wrap">
+              <pre className="text-text-main bg-surface-secondary/30 border-border/25 overflow-x-auto rounded-md border p-2.5 font-mono text-[10px] whitespace-pre-wrap">
                 {server.type === 'remote'
                   ? formatKeyValuesJson(server.headers) || 'None'
                   : formatKeyValuesJson(server.launchEnv) || 'None'}
@@ -170,8 +176,8 @@ export function McpServerCard({
             </div>
             {server.type === 'local' && (
               <div className="space-y-1">
-                <strong className="text-text-muted label-3xs opacity-45">ARGUMENTS</strong>
-                <pre className="text-text-main bg-surface-secondary/30 border-border/25 overflow-x-auto rounded-xl border p-2.5 font-mono text-[10px] whitespace-pre-wrap">
+                <strong className="text-text-muted label-3xs opacity-45">Arguments</strong>
+                <pre className="text-text-main bg-surface-secondary/30 border-border/25 overflow-x-auto rounded-md border p-2.5 font-mono text-[10px] whitespace-pre-wrap">
                   {formatArgumentsJson(server.launchArgs) || 'None'}
                 </pre>
               </div>
@@ -181,7 +187,7 @@ export function McpServerCard({
           {server.enabled && serverTools.length > 0 && (
             <div className="border-border/5 space-y-3 border-t pt-4">
               <strong className="text-text-muted label-3xs opacity-45">
-                DISCOVERED TOOLS & PERMISSIONS ({serverTools.length})
+                Tools & permissions ({serverTools.length})
               </strong>
               <div className="space-y-2">
                 {serverTools.map((t) => (
@@ -197,25 +203,25 @@ export function McpServerCard({
             </div>
           )}
 
-          <div className="border-border/5 flex items-center justify-end gap-2 border-t pt-3.5">
+          <div className="border-border/5 flex flex-wrap items-center justify-end gap-2 border-t pt-3.5">
             <Button
               variant="ghost"
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit();
               }}
-              className="border-border/20 hover:bg-surface-secondary/40 text-text-muted hover:text-text-main flex h-8 items-center gap-1.5 border px-3 text-[10px] font-bold tracking-widest uppercase"
+              className="border-border/20 hover:bg-surface-secondary/40 text-text-muted hover:text-text-main flex h-8 items-center gap-1.5 border px-3 text-xs"
             >
               <Edit2 className="h-3.5 w-3.5" />
-              EDIT_SERVER
+              Edit server
             </Button>
             <Button
               variant="ghost"
               onClick={onDelete}
-              className="text-text-muted flex h-8 items-center gap-1.5 border border-red-500/20 px-3 text-[10px] font-bold tracking-widest uppercase hover:bg-red-500/10 hover:text-rose-400"
+              className="text-text-muted flex h-8 items-center gap-1.5 border border-red-500/20 px-3 text-xs hover:bg-red-500/10 hover:text-rose-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              DELETE_SERVER
+              Delete server
             </Button>
           </div>
         </div>

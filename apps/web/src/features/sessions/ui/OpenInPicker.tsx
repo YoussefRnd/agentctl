@@ -104,6 +104,7 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
       <Tooltip content={`Open in ${activeOption.label}`}>
         <button
           type="button"
+          aria-label={`Open in ${activeOption.label}`}
           onClick={() => {
             void handleLaunch(activeOption.id);
           }}
@@ -114,7 +115,7 @@ export function OpenInPicker({ targetPath }: OpenInPickerProps) {
           ) : (
             <EditorBrandIcon editorId={activeOption.id} className="h-3.5 w-3.5 shrink-0" />
           )}
-          <span className="truncate">Open in {activeOption.label}</span>
+          <span className="hidden truncate sm:inline">Open in {activeOption.label}</span>
         </button>
       </Tooltip>
 

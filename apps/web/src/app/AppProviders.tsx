@@ -43,9 +43,11 @@ export function AppProviders({ children }: AppProvidersProps) {
           unstyled: true,
           classNames: {
             toast:
-              'bg-brand-mantle/95 text-text-main pointer-events-auto flex w-auto min-w-[260px] max-w-[400px] items-center gap-3 rounded-xl border border-border/40 p-3 shadow-2xl animate-in fade-in slide-in-from-right-5',
-            title: 'text-[12px] font-bold tracking-wide text-white',
-            description: 'text-[11px] font-medium text-text-muted opacity-80',
+              'bg-brand-mantle/95 text-text-main pointer-events-auto flex w-auto min-w-0 max-w-[min(400px,calc(100vw-2rem))] items-center gap-3 rounded-lg border border-border/40 p-3 shadow-2xl animate-in fade-in slide-in-from-right-5',
+            title:
+              'min-w-0 text-[12px] font-bold tracking-wide text-text-main [overflow-wrap:anywhere]',
+            description:
+              'min-w-0 text-[11px] font-medium text-text-muted opacity-80 [overflow-wrap:anywhere]',
             actionButton: 'terminal-button',
             cancelButton:
               'text-text-muted hover:text-white px-2 py-1 text-[10px] font-bold uppercase transition-colors',

@@ -53,7 +53,7 @@ export function ApplySessionDialog({
         }
       }}
     >
-      <DialogContent className="max-w-md overflow-hidden rounded-2xl p-0">
+      <DialogContent className="max-w-md overflow-hidden p-0">
         <div className="p-5">
           <DialogHeader className="mb-4">
             <div className="bg-surface-accent text-accent ring-accent/30 mb-3 flex h-8 w-8 items-center justify-center rounded-lg shadow-[0_0_15px_rgba(203,166,247,0.2)] ring-1">

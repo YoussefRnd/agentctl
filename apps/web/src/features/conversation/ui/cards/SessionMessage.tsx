@@ -52,7 +52,11 @@ export function SessionMessage({ data }: { data: SessionEventTextData }) {
           'Session message'
         )}
       </p>
-      {data.content && <StreamingMarkdown content={data.content} />}
+      {data.content && (
+        <div className="prose prose-invert max-w-none text-sm">
+          <StreamingMarkdown content={data.content} />
+        </div>
+      )}
     </section>
   );
 }

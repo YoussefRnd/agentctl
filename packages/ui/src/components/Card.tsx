@@ -27,7 +27,7 @@ export const Card = ({
   return (
     <div
       className={cn(
-        'relative flex flex-col overflow-hidden rounded-lg border transition-colors duration-200',
+        'relative flex min-w-0 flex-col overflow-hidden rounded-lg border transition-colors duration-200',
         intensity === 'high' && 'liquid-glass bg-surface/40 backdrop-blur-[32px]',
         STATUS_CLASSES[status],
         className,
@@ -42,7 +42,12 @@ export const CardHeader = ({
   children,
   className = '',
 }: Omit<CardProps, 'status' | 'intensity'>) => (
-  <div className={cn('border-border bg-surface-secondary/50 border-b px-3 py-2', className)}>
+  <div
+    className={cn(
+      'border-border bg-surface-secondary/50 min-w-0 border-b px-3 py-2 [overflow-wrap:anywhere]',
+      className,
+    )}
+  >
     {children}
   </div>
 );
@@ -51,7 +56,7 @@ export const CardContent = ({
   children,
   className = '',
 }: Omit<CardProps, 'status' | 'intensity'>) => (
-  <div className={cn('p-3.5', className)}>{children}</div>
+  <div className={cn('min-w-0 p-3.5 [overflow-wrap:anywhere]', className)}>{children}</div>
 );
 
 export const CardFooter = ({

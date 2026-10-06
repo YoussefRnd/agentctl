@@ -68,11 +68,13 @@ export function McpStatusPanel({
             className="border-border/10 bg-surface-secondary/10 hover:bg-surface-secondary/20 flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors"
           >
             <div className="shrink-0">{indicator}</div>
-            <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2">
-              <span className="text-text-main truncate font-mono text-xs font-medium">
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-2 [overflow-wrap:anywhere]">
+              <span className="text-text-main max-w-full min-w-0 font-mono text-xs font-medium">
                 {server.name}
               </span>
-              <span className={`truncate font-mono text-xs ${statusClass}`}>{statusLabel}</span>
+              <span className={`max-w-full min-w-0 font-mono text-xs ${statusClass}`}>
+                {statusLabel}
+              </span>
             </div>
           </div>
         );

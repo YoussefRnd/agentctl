@@ -93,12 +93,12 @@ export function Workbench({
   const changesCount = reviewData.files.filter((f) => f.state !== 'committed').length;
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       <GlassPanel
         intensity="high"
         className="h-full overflow-hidden rounded-lg border-none shadow-2xl"
       >
-        <div className="flex h-full min-w-0 flex-col">
+        <div className="flex h-full min-h-0 min-w-0 flex-col">
           {/* Unified Workbench Top Header: Tabs | [+] | Maximize */}
           <div className="border-border/20 bg-surface-secondary/15 flex h-9 shrink-0 items-center justify-between gap-1.5 border-b px-2">
             {/* Left: Tab Strip */}
@@ -329,8 +329,8 @@ export function Workbench({
           {/* Tab Content */}
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {tabs.length === 0 ? (
-              <div className="bg-surface/20 flex h-full flex-col items-center justify-center p-8 text-center">
-                <div className="border-border/30 bg-surface/50 max-w-sm rounded-2xl border p-6 backdrop-blur-md">
+              <div className="bg-surface/20 flex h-full min-w-0 flex-col items-center justify-center overflow-y-auto p-4 text-center">
+                <div className="border-border/30 bg-surface/50 max-w-sm min-w-0 rounded-lg border p-6 backdrop-blur-md">
                   <div className="border-border/20 bg-surface-secondary/40 text-text-muted mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl border">
                     <Layout className="h-5 w-5" />
                   </div>

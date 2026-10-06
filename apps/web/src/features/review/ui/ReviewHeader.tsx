@@ -167,7 +167,7 @@ export function ReviewHeader({
         </Dropdown.Root>
 
         {/* Navigation and actions */}
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {/* 1. View & Navigation Controls */}
           {/* Jump to File Picker (3 equal lines icon) */}
           {files.length > 0 && onSelectFile && (

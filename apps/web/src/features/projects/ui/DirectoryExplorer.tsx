@@ -80,7 +80,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
   }, []);
 
   return (
-    <GlassPanel className="animate-in fade-in zoom-in-95 w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl">
+    <GlassPanel className="animate-in fade-in zoom-in-95 w-full max-w-xl overflow-hidden rounded-xl shadow-2xl">
       <div className="border-border/40 bg-surface-secondary/20 flex items-center justify-between border-b px-4 py-3">
         <div className="text-text-muted flex items-center gap-2 truncate text-xs">
           <Folder className="h-4 w-4" />

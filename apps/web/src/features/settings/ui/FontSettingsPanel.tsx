@@ -37,11 +37,11 @@ export function FontSettingsPanel({ fontConfig, onUpdate }: FontSettingsPanelPro
             key={key}
             data-font-ctx={key}
             className={cn(
-              'flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-4',
+              'flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4',
               i < contextDefs.length - 1 && 'border-border/30 border-b',
             )}
           >
-            <div className="w-44 shrink-0">
+            <div className="w-44 max-w-full shrink-0">
               <div className="flex items-center gap-1">
                 <span className="text-text-main text-[12px] font-bold">{label}</span>
                 <button

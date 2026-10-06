@@ -21,11 +21,14 @@ export function MarkdownCodeBlock({
   };
 
   return (
-    <div className="group/code relative my-3">
+    <div className="group/code relative my-3 max-w-full min-w-0">
       <pre
         ref={preRef}
+        tabIndex={0}
+        role="region"
+        aria-label="Code block"
         {...props}
-        className={`overflow-x-auto p-4 font-mono text-[12px] leading-relaxed ${className ?? ''}`}
+        className={`focus-visible:ring-accent/40 max-w-full overflow-x-auto p-4 font-mono text-[12px] leading-relaxed focus-visible:ring-2 focus-visible:outline-none ${className ?? ''}`}
       >
         {children}
       </pre>

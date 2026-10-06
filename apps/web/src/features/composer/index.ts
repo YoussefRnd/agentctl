@@ -1,4 +1,5 @@
 export { CommandBar } from './ui/CommandBar.js';
+export { CommandInputComposer } from './ui/CommandInputComposer.js';
 export { CommandBarToolbar } from './ui/CommandBarToolbar.js';
 export { AttachmentStrip } from './ui/AttachmentStrip.js';
 export { useCommandBarState } from './model/useCommandBarState.js';

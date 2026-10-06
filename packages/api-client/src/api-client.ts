@@ -1,5 +1,17 @@
 import { ApiError } from './api-error.js';
 
+async function readJsonResponse(response: Response): Promise<unknown> {
+  if (response.status === 204) return null;
+  try {
+    return await response.json();
+  } catch {
+    throw new ApiError(
+      'Invalid JSON response. Check the API server connection and try again.',
+      response.status,
+    );
+  }
+}
+
 let apiBaseUrl = '';
 
 export function setApiBaseUrl(url: string) {
@@ -109,14 +121,7 @@ export const apiClient = {
         throw new ApiError(detail, response.status);
       }
 
-      let data: unknown = null;
-      if (response.status !== 204) {
-        try {
-          data = (await response.json()) as unknown;
-        } catch {
-          // Empty or non-JSON body
-        }
-      }
+      const data = await readJsonResponse(response);
       return data as T;
     } catch (error) {
       if (error instanceof ApiError) throw error;
@@ -179,14 +184,7 @@ export const apiClient = {
         throw new ApiError(detail, response.status);
       }
 
-      let data: unknown = null;
-      if (response.status !== 204) {
-        try {
-          data = (await response.json()) as unknown;
-        } catch {
-          // Empty or non-JSON body
-        }
-      }
+      const data = await readJsonResponse(response);
       return {
         status: response.status,
         body: data,

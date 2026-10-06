@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus, FileUp, CornerDownLeft } from 'lucide-react';
-import { cn, IconButton } from '@agentctl/ui';
+import { cn, IconButton, Popover, PopoverAnchor, PopoverContent } from '@agentctl/ui';
 import { AttachmentStrip } from './AttachmentStrip';
 import { ContextDropdown } from './ContextDropdown';
 import { ContextChipStrip } from './ContextChipStrip';
@@ -31,9 +31,18 @@ function SlashCommandsDropdown({
 }: SlashCommandsDropdownProps) {
   if (!showSlashMenu || filteredCommands.length === 0) return null;
   return (
-    <div className="border-border/30 bg-brand-mantle/95 absolute bottom-full left-0 z-50 mb-2.5 flex max-h-76 w-full flex-col overflow-hidden rounded-xl border p-1 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
+    <PopoverContent
+      role="region"
+      aria-label="Slash commands"
+      side="top"
+      align="start"
+      sideOffset={10}
+      onOpenAutoFocus={(event) => event.preventDefault()}
+      onCloseAutoFocus={(event) => event.preventDefault()}
+      className="border-border/30 bg-brand-mantle/95 flex max-h-[min(19rem,var(--radix-popover-content-available-height))] w-(--radix-popover-trigger-width) flex-col overflow-hidden rounded-lg border p-1 shadow-2xl"
+    >
       {/* Header */}
-      <div className="border-border/20 flex items-center justify-between border-b px-2.5 py-2">
+      <div className="border-border/20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-2.5 py-2">
         <div className="flex items-center gap-1.5">
           <span className="bg-accent/15 text-accent flex h-4.5 w-4.5 items-center justify-center rounded font-mono text-[11px] font-bold">
             /
@@ -46,7 +55,7 @@ function SlashCommandsDropdown({
       </div>
 
       {/* Commands List */}
-      <div className="custom-scrollbar flex max-h-60 flex-col gap-0.5 overflow-y-auto p-1">
+      <div className="custom-scrollbar flex max-h-60 min-h-0 flex-col gap-0.5 overflow-y-auto p-1">
         {filteredCommands.map((cmd, index) => {
           const isActive = index === activeCommandIndex;
           return (
@@ -60,7 +69,7 @@ function SlashCommandsDropdown({
                 onSelectCommand(cmd);
               }}
               className={cn(
-                'group/item flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 select-none',
+                'group/item flex w-full min-w-0 cursor-pointer flex-wrap items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors duration-150 select-none',
                 isActive
                   ? 'bg-accent/15 text-text-main shadow-xs'
                   : 'text-text-muted hover:text-text-main hover:bg-white/5',
@@ -77,10 +86,10 @@ function SlashCommandsDropdown({
                 /
               </div>
 
-              <div className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 <span
                   className={cn(
-                    'shrink-0 font-mono text-xs font-semibold',
+                    'max-w-full min-w-0 truncate font-mono text-xs font-semibold',
                     isActive ? 'text-accent' : 'text-text-main',
                   )}
                 >
@@ -93,9 +102,9 @@ function SlashCommandsDropdown({
                 )}
               </div>
 
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 {cmd.input?.hint && (
-                  <span className="border-border/30 bg-surface-secondary/60 text-text-muted/70 rounded border px-1.5 py-0.5 font-mono text-[9px]">
+                  <span className="border-border/30 bg-surface-secondary/60 text-text-muted/70 max-w-full rounded border px-1.5 py-0.5 font-mono text-[9px] [overflow-wrap:anywhere]">
                     {cmd.input.hint}
                   </span>
                 )}
@@ -121,7 +130,7 @@ function SlashCommandsDropdown({
       </div>
 
       {/* Keyboard navigation helper footer */}
-      <div className="border-border/15 bg-surface-secondary/20 text-text-muted/50 flex items-center justify-between border-t px-2.5 py-1.5 text-[10px]">
+      <div className="border-border/15 bg-surface-secondary/20 text-text-muted/50 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-2.5 py-1.5 text-[10px]">
         <span className="truncate">Execute shortcut or skill</span>
         <div className="flex items-center gap-2 font-mono text-[9px]">
           <span className="flex items-center gap-1">
@@ -144,7 +153,7 @@ function SlashCommandsDropdown({
           </span>
         </div>
       </div>
-    </div>
+    </PopoverContent>
   );
 }
 
@@ -280,7 +289,7 @@ export function CommandInputComposer({
   };
 
   return (
-    <>
+    <Popover open={showSlashMenu || (contextAutocomplete?.isOpen ?? false)}>
       <SlashCommandsDropdown
         showSlashMenu={showSlashMenu}
         filteredCommands={filteredCommands}
@@ -303,188 +312,192 @@ export function CommandInputComposer({
 
       <CommandInputHint showSlashMenu={showSlashMenu} matchingCommand={matchingCommand} />
 
-      <div
-        data-font-ctx="buffer"
-        className={cn(
-          variant === 'hero'
-            ? 'border-border/40 bg-surface-secondary/50 relative flex flex-col overflow-visible rounded-2xl border shadow-2xl ring-1 ring-white/5 backdrop-blur-2xl transition-[border-color,background-color,box-shadow,opacity] duration-200 ease-out'
-            : 'bg-brand-mantle border-border/30 relative flex flex-col overflow-visible rounded-xl border transition-colors duration-200',
-          hasQueuedMessages && 'rounded-t-none border-t-0',
-          disabled ? 'opacity-55' : 'opacity-100',
-          isDraggingOver
-            ? 'border-accent/60 ring-accent/30 bg-accent/[0.02] ring-1'
-            : isFocused
-              ? variant === 'hero'
-                ? 'border-accent/60 ring-accent/30 shadow-[0_12px_40px_rgba(203,166,247,0.18)] ring-2'
-                : 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'
-              : variant === 'hero'
-                ? 'hover:border-border/70'
-                : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
-        )}
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (e.dataTransfer) {
-            e.dataTransfer.dropEffect = 'copy';
-          }
-        }}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {/* Visual drop overlay when dragging files or folders over the composer */}
-        {isDraggingOver && (
-          <div className="border-accent/40 bg-accent/[0.04] ring-accent/20 pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border border-dashed ring-1 backdrop-blur-[2px] transition-[border-color,background-color,opacity] duration-150 ease-out">
-            <div className="text-accent flex items-center gap-2 text-xs font-medium tracking-tight">
-              <FileUp className="h-4 w-4" />
-              <span>Drop files or folders to attach</span>
-            </div>
-          </div>
-        )}
-
-        {isUnauthenticated ? (
-          authPanelContent
-        ) : (
-          <>
-            {/* Context chips for @ file/git attachments */}
-            {contextAutocomplete && contextAutocomplete.attachedContexts.length > 0 && (
-              <ContextChipStrip
-                contexts={contextAutocomplete.attachedContexts}
-                onRemove={contextAutocomplete.removeAttachedContext}
-              />
-            )}
-
-            {/* Input row */}
-            <div className="flex w-full items-start gap-2 px-3 pt-3 pb-3 sm:gap-3 sm:px-5 sm:pt-4 sm:pb-4">
-              <IconButton
-                disabled={disabled}
-                onClick={handleAttachClick}
-                size="compact"
-                className="hover:text-accent hover:bg-accent/10 mt-[3px] shrink-0 rounded-full"
-                title={supportsImageAttachments ? 'Attach image or file' : 'Attach file as context'}
-                aria-label="Attach files"
-              >
-                <Plus className="h-4 w-4" />
-              </IconButton>
-              <div className="min-w-0 flex-1">
-                <textarea
-                  ref={textareaRef}
-                  rows={1}
-                  value={input}
-                  onChange={(e) => {
-                    handleInputChange(e.target.value);
-                  }}
-                  onKeyDown={(e) => {
-                    if (contextAutocomplete?.isOpen) {
-                      const handled = contextAutocomplete.handleKeyDown(e);
-                      if (handled) return;
-                    }
-
-                    if (showSlashMenu && filteredCommands.length > 0) {
-                      if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        const nextIndex = (activeCommandIndex + 1) % filteredCommands.length;
-                        setActiveCommandIndex(nextIndex);
-                        commandRefs.current[nextIndex]?.scrollIntoView({
-                          block: 'nearest',
-                        });
-                      } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        const prevIndex =
-                          (activeCommandIndex - 1 + filteredCommands.length) %
-                          filteredCommands.length;
-                        setActiveCommandIndex(prevIndex);
-                        commandRefs.current[prevIndex]?.scrollIntoView({
-                          block: 'nearest',
-                        });
-                      } else if (e.key === 'Enter' || e.key === 'Tab') {
-                        const selected = filteredCommands[activeCommandIndex];
-                        const completedText = '/' + selected.name + (selected.input ? ' ' : '');
-
-                        if (input === completedText) {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSubmit();
-                          }
-                        } else {
-                          e.preventDefault();
-                          handleInputChange(completedText);
-                        }
-                      } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        handleInputChange(input.replace('/', ''));
-                      }
-                    } else {
-                      if (e.key === 'ArrowUp') {
-                        if (handleHistoryUp?.()) {
-                          e.preventDefault();
-                          return;
-                        }
-                      } else if (e.key === 'ArrowDown') {
-                        if (handleHistoryDown?.()) {
-                          e.preventDefault();
-                          return;
-                        }
-                      }
-
-                      if (e.key === 'Backspace' && input === '') {
-                        if (
-                          contextAutocomplete &&
-                          contextAutocomplete.attachedContexts.length > 0
-                        ) {
-                          e.preventDefault();
-                          const last =
-                            contextAutocomplete.attachedContexts[
-                              contextAutocomplete.attachedContexts.length - 1
-                            ];
-                          if (last) {
-                            contextAutocomplete.removeAttachedContext(last.id);
-                          }
-                          return;
-                        }
-                      }
-
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSubmit();
-                      }
-                    }
-                  }}
-                  onFocus={() => {
-                    setIsFocused(true);
-                  }}
-                  onBlur={() => {
-                    setIsFocused(false);
-                  }}
-                  onPaste={handlePaste}
-                  placeholder={getPlaceholder()}
-                  aria-label="Command input"
-                  className="placeholder:text-text-muted/40 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full resize-none border-none bg-transparent p-0 pt-[3px] font-sans text-[15px] leading-relaxed outline-none focus:ring-0 focus:outline-none"
-                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                  disabled={disabled}
-                />
+      <PopoverAnchor asChild>
+        <div
+          data-font-ctx="buffer"
+          className={cn(
+            variant === 'hero'
+              ? 'border-border/40 bg-surface-secondary/50 relative flex min-w-0 flex-col overflow-visible rounded-xl border shadow-2xl ring-1 ring-white/5 backdrop-blur-2xl transition-[border-color,background-color,box-shadow,opacity] duration-200 ease-out'
+              : 'bg-brand-mantle border-border/30 relative flex min-w-0 flex-col overflow-visible rounded-xl border transition-colors duration-200',
+            hasQueuedMessages && 'rounded-t-none border-t-0',
+            disabled ? 'opacity-55' : 'opacity-100',
+            isDraggingOver
+              ? 'border-accent/60 ring-accent/30 bg-accent/[0.02] ring-1'
+              : isFocused
+                ? variant === 'hero'
+                  ? 'border-accent/60 ring-accent/30 shadow-[0_12px_40px_rgba(203,166,247,0.18)] ring-2'
+                  : 'border-accent/50 ring-accent/30 shadow-[0_8px_32px_rgba(203,166,247,0.15)] ring-1'
+                : variant === 'hero'
+                  ? 'hover:border-border/70'
+                  : 'border-border/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]',
+          )}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (e.dataTransfer) {
+              e.dataTransfer.dropEffect = 'copy';
+            }
+          }}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Visual drop overlay when dragging files or folders over the composer */}
+          {isDraggingOver && (
+            <div className="border-accent/40 bg-accent/[0.04] ring-accent/20 pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] border border-dashed ring-1 backdrop-blur-[2px] transition-[border-color,background-color,opacity] duration-150 ease-out">
+              <div className="text-accent flex min-w-0 items-center gap-2 px-3 text-center text-xs font-medium tracking-tight">
+                <FileUp className="h-4 w-4" />
+                <span>Drop files or folders to attach</span>
               </div>
             </div>
+          )}
 
-            {/* Attachment strip — only visible when there are files */}
-            {attachments.length > 0 && (
-              <>
-                <div className="bg-border/20 mx-3 h-px sm:mx-5" />
-                <AttachmentStrip
-                  attachments={attachments}
-                  onRemove={removeAttachment}
-                  onRetry={retryAttachment}
+          {isUnauthenticated ? (
+            authPanelContent
+          ) : (
+            <>
+              {/* Context chips for @ file/git attachments */}
+              {contextAutocomplete && contextAutocomplete.attachedContexts.length > 0 && (
+                <ContextChipStrip
+                  contexts={contextAutocomplete.attachedContexts}
+                  onRemove={contextAutocomplete.removeAttachedContext}
                 />
-              </>
-            )}
-          </>
-        )}
+              )}
 
-        {/* Hairline separator anchors toolbar below input */}
-        <div className="bg-border/20 mx-3 h-px sm:mx-5" />
+              {/* Input row */}
+              <div className="flex w-full items-start gap-2 px-3 pt-3 pb-3 sm:gap-3 sm:px-5 sm:pt-4 sm:pb-4">
+                <IconButton
+                  disabled={disabled}
+                  onClick={handleAttachClick}
+                  size="compact"
+                  className="hover:text-accent hover:bg-accent/10 mt-[3px] shrink-0 rounded-full"
+                  title={
+                    supportsImageAttachments ? 'Attach image or file' : 'Attach file as context'
+                  }
+                  aria-label="Attach files"
+                >
+                  <Plus className="h-4 w-4" />
+                </IconButton>
+                <div className="min-w-0 flex-1">
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={input}
+                    onChange={(e) => {
+                      handleInputChange(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (contextAutocomplete?.isOpen) {
+                        const handled = contextAutocomplete.handleKeyDown(e);
+                        if (handled) return;
+                      }
 
-        {/* Render children/toolbar here */}
-        {children}
-      </div>
-    </>
+                      if (showSlashMenu && filteredCommands.length > 0) {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          const nextIndex = (activeCommandIndex + 1) % filteredCommands.length;
+                          setActiveCommandIndex(nextIndex);
+                          commandRefs.current[nextIndex]?.scrollIntoView({
+                            block: 'nearest',
+                          });
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          const prevIndex =
+                            (activeCommandIndex - 1 + filteredCommands.length) %
+                            filteredCommands.length;
+                          setActiveCommandIndex(prevIndex);
+                          commandRefs.current[prevIndex]?.scrollIntoView({
+                            block: 'nearest',
+                          });
+                        } else if (e.key === 'Enter' || e.key === 'Tab') {
+                          const selected = filteredCommands[activeCommandIndex];
+                          const completedText = '/' + selected.name + (selected.input ? ' ' : '');
+
+                          if (input === completedText) {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSubmit();
+                            }
+                          } else {
+                            e.preventDefault();
+                            handleInputChange(completedText);
+                          }
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          handleInputChange(input.replace('/', ''));
+                        }
+                      } else {
+                        if (e.key === 'ArrowUp') {
+                          if (handleHistoryUp?.()) {
+                            e.preventDefault();
+                            return;
+                          }
+                        } else if (e.key === 'ArrowDown') {
+                          if (handleHistoryDown?.()) {
+                            e.preventDefault();
+                            return;
+                          }
+                        }
+
+                        if (e.key === 'Backspace' && input === '') {
+                          if (
+                            contextAutocomplete &&
+                            contextAutocomplete.attachedContexts.length > 0
+                          ) {
+                            e.preventDefault();
+                            const last =
+                              contextAutocomplete.attachedContexts[
+                                contextAutocomplete.attachedContexts.length - 1
+                              ];
+                            if (last) {
+                              contextAutocomplete.removeAttachedContext(last.id);
+                            }
+                            return;
+                          }
+                        }
+
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSubmit();
+                        }
+                      }
+                    }}
+                    onFocus={() => {
+                      setIsFocused(true);
+                    }}
+                    onBlur={() => {
+                      setIsFocused(false);
+                    }}
+                    onPaste={handlePaste}
+                    placeholder={getPlaceholder()}
+                    aria-label="Command input"
+                    className="placeholder:text-text-muted/40 selection:bg-accent/30 selection:text-text-main text-text-main max-h-60 w-full min-w-0 resize-none border-none bg-transparent p-0 pt-[3px] font-sans text-[15px] leading-relaxed [overflow-wrap:anywhere] outline-none focus:ring-0 focus:outline-none"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                    disabled={disabled}
+                  />
+                </div>
+              </div>
+
+              {/* Attachment strip — only visible when there are files */}
+              {attachments.length > 0 && (
+                <>
+                  <div className="bg-border/20 mx-3 h-px sm:mx-5" />
+                  <AttachmentStrip
+                    attachments={attachments}
+                    onRemove={removeAttachment}
+                    onRetry={retryAttachment}
+                  />
+                </>
+              )}
+            </>
+          )}
+
+          {/* Hairline separator anchors toolbar below input */}
+          <div className="bg-border/20 mx-3 h-px sm:mx-5" />
+
+          {/* Render children/toolbar here */}
+          {children}
+        </div>
+      </PopoverAnchor>
+    </Popover>
   );
 }

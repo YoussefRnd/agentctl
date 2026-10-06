@@ -58,7 +58,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     if (this.state.hasError) {
       return (
         <div className="bg-brand-base/80 flex min-h-screen w-full items-center justify-center p-6">
-          <div className="liquid-glass border-border/40 w-full max-w-md rounded-2xl border p-6 text-center shadow-2xl backdrop-blur-xl">
+          <div className="liquid-glass border-border/40 w-full max-w-md rounded-xl border p-6 text-center shadow-2xl backdrop-blur-xl">
             {/* Warning Icon Badge */}
             <div className="bg-danger/10 text-danger border-danger/20 mx-auto mb-3.5 flex h-11 w-11 items-center justify-center rounded-full border shadow-sm">
               <AlertTriangle className="icon-prominent" />

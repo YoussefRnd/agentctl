@@ -25,17 +25,17 @@ export function SplitPanel({
   return (
     <div
       className={cn(
-        'flex h-full w-full overflow-hidden',
+        'flex h-full min-h-0 w-full min-w-0 overflow-hidden',
         isHorizontal ? 'flex-row' : 'flex-col',
         className,
       )}
     >
-      <div className={cn('min-w-0 flex-1 overflow-auto', primaryClassName)}>{primary}</div>
+      <div className={cn('min-h-0 min-w-0 flex-1 overflow-auto', primaryClassName)}>{primary}</div>
       {isSecondaryOpen && (
         <div
           className={cn(
-            'border-border/40 shrink-0 overflow-auto',
-            isHorizontal ? 'border-l' : 'border-t',
+            'border-border/40 min-h-0 min-w-0 shrink-0 overflow-auto',
+            isHorizontal ? 'max-w-full border-l' : 'max-h-full border-t',
             secondaryClassName,
           )}
         >

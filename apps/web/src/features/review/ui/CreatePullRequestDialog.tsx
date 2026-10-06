@@ -78,7 +78,7 @@ export function CreatePullRequestDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg overflow-hidden rounded-2xl p-0">
+      <DialogContent className="max-w-lg overflow-hidden p-0">
         <div className="p-6">
           <DialogHeader className="mb-4">
             <div className="bg-surface-accent text-accent ring-accent/30 mb-3 flex h-9 w-9 items-center justify-center rounded-xl shadow-[0_0_15px_rgba(203,166,247,0.2)] ring-1">

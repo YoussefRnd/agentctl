@@ -1,5 +1,36 @@
 import { structuredDiffSchema } from '@agentctl/shared';
 import { cn } from '@agentctl/ui';
+import type { ReactNode } from 'react';
+
+export function ToolOutput({
+  children,
+  label = 'Tool output',
+  action,
+  className,
+}: {
+  children: ReactNode;
+  label?: string;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className="group/output border-border/25 bg-surface-secondary/30 relative max-w-full min-w-0 overflow-hidden rounded-md border">
+      {action && <div className="absolute top-1.5 right-1.5 z-10">{action}</div>}
+      <pre
+        role="region"
+        aria-label={label}
+        tabIndex={0}
+        className={cn(
+          'custom-scrollbar text-text-main/90 focus-visible:ring-accent/40 max-h-60 max-w-full min-w-0 overflow-auto p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre select-text focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset',
+          action && 'pr-10',
+          className,
+        )}
+      >
+        {children}
+      </pre>
+    </div>
+  );
+}
 
 export function ToolLocations({
   locations,
@@ -38,7 +69,8 @@ export function ToolDiffBlock({
         aria-label="File changes"
         className={cn(
           'border-border/15 overflow-hidden rounded-md border',
-          compact ? 'my-1 bg-black/40' : 'bg-black/15',
+          'bg-surface-secondary/30',
+          compact && 'my-1',
         )}
       >
         <ul className="border-border/15 bg-surface-secondary/40 divide-border/15 divide-y border-b">
@@ -57,9 +89,11 @@ export function ToolDiffBlock({
         </ul>
         {patch?.format === 'git_patch' ? (
           <pre
+            role="region"
             aria-label="Diff patch"
+            tabIndex={0}
             className={cn(
-              'overflow-auto p-2.5 font-mono leading-relaxed',
+              'custom-scrollbar focus-visible:ring-accent/40 max-w-full overflow-auto p-2.5 font-mono leading-relaxed focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset',
               compact ? 'max-h-52 text-[10.5px]' : 'max-h-60 text-[11px]',
             )}
           >
@@ -69,9 +103,9 @@ export function ToolDiffBlock({
                 className={cn(
                   'block',
                   line.startsWith('+')
-                    ? 'text-emerald-400/80'
+                    ? 'text-success'
                     : line.startsWith('-')
-                      ? 'text-rose-400/80'
+                      ? 'text-danger'
                       : 'text-text-muted',
                 )}
               >
@@ -96,7 +130,8 @@ export function ToolDiffBlock({
     <div
       className={cn(
         'border-border/15 overflow-hidden rounded-md border',
-        compact ? 'my-1 bg-black/40' : 'bg-black/15',
+        'bg-surface-secondary/30',
+        compact && 'my-1',
       )}
     >
       <div
@@ -107,29 +142,24 @@ export function ToolDiffBlock({
       >
         <span className="text-text-muted font-mono text-[10px] break-all">{path}</span>
       </div>
-      <div
-        className={cn(
-          'no-scrollbar overflow-y-auto font-mono leading-relaxed',
-          compact ? 'max-h-52 p-2.5 text-[10.5px]' : 'max-h-60 p-2 text-[11px]',
-        )}
-      >
+      <ToolOutput label="Diff patch" className={compact ? 'max-h-52 text-[10.5px]' : undefined}>
         {oldText && (
-          <div className="whitespace-pre-wrap text-rose-400/80">
+          <span className="text-danger block">
             {oldText
               .split('\n')
               .map((line) => `- ${line}`)
               .join('\n')}
-          </div>
+          </span>
         )}
         {newText && (
-          <div className="whitespace-pre-wrap text-emerald-400/80">
+          <span className="text-success block">
             {newText
               .split('\n')
               .map((line) => `+ ${line}`)
               .join('\n')}
-          </div>
+          </span>
         )}
-      </div>
+      </ToolOutput>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   Button,
   Switch,
   Select,
+  ErrorState,
 } from '@agentctl/ui';
 import { ChecklistItem } from './SetupWizardChecklistItem';
 import { SetupWizardProviderRow } from './SetupWizardProviderRow';
@@ -21,12 +22,20 @@ import { SetupWizardProviderRow } from './SetupWizardProviderRow';
 export function SetupWizard() {
   const { showWizard, markDone } = useSetupWizard();
   const { settings, updateSettings } = useSettings();
-  const { providers, isLoadingProviders, updateProviderConfigAsync, isUpdatingConfig } =
-    useProviders(null);
+  const {
+    providers,
+    isLoadingProviders,
+    providersError,
+    retryProviders,
+    updateProviderConfigAsync,
+    isUpdatingConfig,
+  } = useProviders(null);
   const [localCustomEnvs, setLocalCustomEnvs] = useState<
     Record<string, Record<string, string> | undefined>
   >({});
   const [authDeferred, setAuthDeferred] = useState(false);
+
+  if (!showWizard) return null;
 
   const hasAnyInvalidProvider = providers.some((provider) => {
     if (provider.installState === 'not_installed') return false;
@@ -45,8 +54,6 @@ export function SetupWizard() {
       return !authDeferred;
     });
   });
-
-  if (!showWizard) return null;
 
   const enabledProviders = providers.filter((p) => p.installState !== 'not_installed');
   const registryOk = !settings?.registrySyncError && providers.length > 0;
@@ -94,7 +101,7 @@ export function SetupWizard() {
         }
       }}
     >
-      <DialogContent showCloseButton={true} className="max-w-lg rounded-2xl p-6 shadow-2xl">
+      <DialogContent showCloseButton={true} className="max-w-lg p-6 shadow-2xl">
         <DialogHeader className="text-center sm:text-center">
           <DialogTitle className="text-text-main text-lg font-semibold">
             Initial setup: AI pipeline
@@ -116,7 +123,7 @@ export function SetupWizard() {
           </div>
         )}
 
-        <div className="bg-surface-secondary/15 border-border/10 space-y-3 rounded-2xl border p-4">
+        <div className="bg-surface-secondary/15 border-border/10 space-y-3 rounded-lg border p-4">
           <h3 className="text-text-main text-xs font-semibold opacity-90">Readiness checklist</h3>
           <ul className="space-y-2.5">
             <ChecklistItem
@@ -169,7 +176,14 @@ export function SetupWizard() {
         )}
 
         <div className="custom-scrollbar max-h-[220px] flex-1 space-y-2 overflow-y-auto py-1 pr-1">
-          {isLoadingProviders ? (
+          {providersError ? (
+            <ErrorState
+              title="Could not load agents"
+              message={providersError.message}
+              onRetry={() => void retryProviders()}
+              className="p-3"
+            />
+          ) : isLoadingProviders ? (
             <div className="animate-pulse space-y-1.5">
               {[1, 2].map((i) => (
                 <div

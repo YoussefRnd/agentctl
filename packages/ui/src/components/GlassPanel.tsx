@@ -18,7 +18,7 @@ export const GlassPanel = memo(function GlassPanel({
     <div
       style={style}
       className={cn(
-        'liquid-glass flex flex-col rounded-lg',
+        'liquid-glass flex min-h-0 min-w-0 flex-col rounded-lg',
         intensity === 'high' && 'bg-surface/40 backdrop-blur-[32px]',
         className,
       )}

@@ -119,7 +119,7 @@ export function ContextWindowPopover({
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" side="top" className="w-[320px] rounded-xl p-4 shadow-2xl">
+        <PopoverContent align="end" side="top" className="w-[320px] rounded-lg p-4 shadow-2xl">
           <div className="flex flex-col gap-3 font-sans text-xs">
             <div className="flex flex-col gap-1">
               <span className="text-text-muted/45 text-[9px] font-bold tracking-[0.2em] uppercase">

@@ -38,7 +38,9 @@ export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
       {richPlans.map((artifact) => (
         <div key={artifact.id} className="border-border/30 rounded-lg border p-3 text-xs">
           {artifact.kind === 'markdown' ? (
-            <StreamingMarkdown content={artifact.markdown ?? ''} isStreaming={false} />
+            <div className="prose max-w-none">
+              <StreamingMarkdown content={artifact.markdown ?? ''} isStreaming={false} />
+            </div>
           ) : artifact.kind === 'file' ? (
             <p>
               Plan file: <span className="font-mono break-all">{artifact.uri}</span>
@@ -92,9 +94,9 @@ export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
               )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                 <span
-                  className={`text-xs leading-relaxed font-medium transition-colors ${
+                  className={`min-w-0 flex-1 text-xs leading-relaxed font-medium [overflow-wrap:anywhere] transition-colors ${
                     isCompleted
                       ? 'text-text-muted line-through'
                       : isInProgress

@@ -12,7 +12,7 @@ export function ThemeSelect({ themes, value, onChange }: ThemeSelectProps) {
     value: t.id,
     label: t.name,
     element: (
-      <div className="flex items-center">
+      <div className="flex max-w-full min-w-0 items-center">
         <span className="mr-2 flex shrink-0 gap-0.5">
           <span
             className="h-3 w-3 rounded-full border border-white/10"
@@ -42,7 +42,7 @@ export function ThemeSelect({ themes, value, onChange }: ThemeSelectProps) {
       onChange={onChange}
       options={options}
       placeholder="Select theme"
-      className="w-52"
+      className="w-52 max-w-full"
     />
   );
 }

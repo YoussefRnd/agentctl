@@ -41,7 +41,7 @@ export function SessionHeaderTitle({
           ref={inputRef}
           type="text"
           aria-label="Edit session title"
-          className="bg-surface/80 border-accent/40 text-text-main focus:border-accent w-36 rounded-md border px-2 py-0.5 text-xs font-semibold shadow-xs outline-none"
+          className="bg-surface/80 border-accent/40 text-text-main focus:border-accent max-w-36 min-w-0 flex-1 rounded-md border px-2 py-0.5 text-xs font-semibold shadow-xs outline-none"
           value={editTitleValue}
           onChange={(e) => {
             setEditTitleValue(e.target.value);

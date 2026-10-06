@@ -63,7 +63,7 @@ export function SwitchAgentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-border/40 bg-surface max-w-sm overflow-hidden rounded-2xl border p-0 shadow-2xl">
+      <DialogContent className="border-border/40 bg-surface max-w-sm overflow-hidden border p-0 shadow-2xl">
         <div className="p-5">
           {/* Header */}
           <DialogHeader className="mb-4 text-left">
