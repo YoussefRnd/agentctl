@@ -50,6 +50,8 @@ jobs:
             apps/desktop/release/AgentCtl-*.AppImage
             apps/desktop/release/latest*.yml
           name: Release ${{ github.ref_name }}
+          body_path: docs/releases/${{ github.ref_name }}.md
+          fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
         env:
