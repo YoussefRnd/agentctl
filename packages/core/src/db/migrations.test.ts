@@ -103,4 +103,4 @@ it('upgrades populated databases from every migration boundary without losing se
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);

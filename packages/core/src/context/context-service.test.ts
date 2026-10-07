@@ -16,6 +16,8 @@ describe('ContextService', () => {
     // Initialize git repo and test files
     const git = simpleGit(testDir);
     await git.init();
+    await git.addConfig('user.name', 'Test');
+    await git.addConfig('user.email', 'test@example.com');
     await fs.mkdir(path.join(testDir, 'src'), { recursive: true });
     await fs.writeFile(path.join(testDir, 'src', 'index.ts'), 'export const hello = "world";\n');
     await fs.writeFile(path.join(testDir, 'README.md'), '# Test Repo\n');
