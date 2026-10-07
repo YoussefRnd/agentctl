@@ -1,13 +1,14 @@
 import { SessionMessage } from './SessionMessage';
 import { AgentTerminals } from './AgentTerminals';
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useEffect } from 'react';
+import { paintPromptPerformance } from '@/shared/lib/promptPerformance';
 import { SubagentBlock, extractSubagentGroups } from '@/features/subagents';
 import { UnifiedActivityBlock } from './UnifiedActivityBlock';
 import { StreamingMarkdown } from './StreamingMarkdown';
 import { TurnChangesCard } from './TurnChangesCard';
 import { extractTurnChanges } from '@/features/review';
 import { getAgentStreamPhase } from '../../lib/agentStreamPhase';
-import { useSession, useSessionTurnState, useSessionStream } from '@/features/sessions';
+import { useSession, useSessionTurnState, useSessionExecution } from '@/features/sessions';
 import type { SessionEventRow } from '@agentctl/shared';
 import { isSessionEventText, isSessionEventToolCall } from '@agentctl/shared';
 
@@ -25,9 +26,9 @@ const AgentResponseComponent = function AgentResponse({
   isActive = false,
   isConnected = true,
 }: AgentResponseProps) {
-  const { reviewData, sessionData } = useSession();
+  const { reviewData, sessionData, sessionId } = useSession();
   const turn = useSessionTurnState();
-  const { execution } = useSessionStream();
+  const execution = useSessionExecution();
   const subagentsConnected =
     isConnected &&
     (execution
@@ -80,6 +81,11 @@ const AgentResponseComponent = function AgentResponse({
         turnChanges: changes,
       };
     }, [events, reviewFiles]);
+
+  useEffect(() => {
+    if (responseEvent?.type === 'text' && responseEvent.data.content.length > 0)
+      paintPromptPerformance(sessionId, responseEvent.id);
+  }, [sessionId, responseEvent]);
 
   const sessionStatus = sessionData?.session.status;
   const isSessionActive = sessionStatus === 'running' || sessionStatus === 'needs_attention';

@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+
+// Resolve from the web workspace, which owns the Markdown dependencies.
+const entityDecoder = createRequire(path.resolve(__dirname, '../web/package.json')).resolve(
+  'decode-named-character-reference',
+);
 
 function copyDrizzlePlugin() {
   return {
@@ -18,7 +24,7 @@ function copyDrizzlePlugin() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   main: {
     plugins: [externalizeDepsPlugin(), copyDrizzlePlugin()],
     build: {
@@ -79,10 +85,21 @@ export default defineConfig({
       },
     },
     plugins: [react({}), tailwindcss()],
+    worker: {
+      plugins: () => [
+        {
+          name: 'worker-entity-decoder',
+          enforce: 'pre',
+          resolveId: (source) =>
+            source === 'decode-named-character-reference' ? entityDecoder : null,
+        },
+      ],
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '../web/src'),
+        ...(command === 'serve' ? { 'decode-named-character-reference': entityDecoder } : {}),
       },
     },
   },
-});
+}));

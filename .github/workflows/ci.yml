@@ -44,3 +44,59 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Check the built desktop Markdown worker
+        run: node apps/web/scripts/performance-browser.mjs "$GITHUB_WORKSPACE/performance-results/desktop-worker.json" --production --worker-smoke
+        env:
+          AGENTCTL_PERF_DIST: ${{ github.workspace }}/apps/desktop/out/renderer
+
+      - name: Upload desktop worker diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-worker-${{ github.sha }}
+          path: performance-results/desktop-worker*
+          retention-days: 14
+          if-no-files-found: warn
+
+  performance:
+    name: Web performance safeguards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify installed Chrome
+        run: google-chrome --version
+
+      - name: Build production web app and workspace dependencies
+        run: pnpm exec turbo build --filter=@agentctl/web...
+
+      - name: Build profiling fixtures
+        run: pnpm --filter @agentctl/web perf:build
+
+      - name: Check performance budgets and collect timing trends
+        run: pnpm --filter @agentctl/web perf:check "$GITHUB_WORKSPACE/performance-results/ci"
+
+      - name: Upload performance reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-performance-${{ github.sha }}
+          path: performance-results/ci/
+          retention-days: 14
+          if-no-files-found: warn

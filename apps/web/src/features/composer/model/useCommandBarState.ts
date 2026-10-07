@@ -1,7 +1,7 @@
 import {
   useSession,
   useSessionActions,
-  useSessionStream,
+  useSessionPromptEvents,
   useSessionTurnState,
 } from '@/features/sessions';
 import { useProviders } from '@/features/providers';
@@ -19,7 +19,7 @@ export function useCommandBarState(
   const session = useSession();
   const turn = useSessionTurnState();
   const { handleCancel } = useSessionActions();
-  const { events } = useSessionStream();
+  const events = useSessionPromptEvents();
   const { providers, isLoadingProviders, switchProvider } = useProviders(session.sessionId);
   const state = useComposerState({
     onSend,

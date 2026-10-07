@@ -1,4 +1,4 @@
-import { useSession, useSessionStream } from './SessionContext';
+import { useSession, useSessionQueue } from './SessionContext';
 import { api, type SidebarProject } from '@agentctl/api-client';
 import {
   nextOptimisticEventId,
@@ -11,10 +11,15 @@ import { toast } from 'sonner';
 import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import type { SessionEventRow, SessionWithCapabilities } from '@agentctl/shared';
+import {
+  acceptPromptPerformance,
+  beginPromptPerformance,
+  cancelPromptPerformance,
+} from '@/shared/lib/promptPerformance';
 
 export function useSessionActions() {
   const { sessionId, sessionData } = useSession();
-  const { retryMessage: handleRetry } = useSessionStream();
+  const { retryMessage: handleRetry } = useSessionQueue();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -32,6 +37,7 @@ export function useSessionActions() {
     const isRunning = currentSession?.session.status === 'running';
     const tempId = nextOptimisticEventId();
     const clientMessageId = crypto.randomUUID();
+    if (!isRunning) beginPromptPerformance(sessionId, clientMessageId);
     const optimisticEvent: SessionEventRow = {
       id: tempId,
       sessionId: sessionId,
@@ -89,11 +95,13 @@ export function useSessionActions() {
       });
 
       try {
-        await sendSessionInput(sessionId, text, attachmentIds, clientMessageId);
+        const acceptedId = await sendSessionInput(sessionId, text, attachmentIds, clientMessageId);
+        if (!isRunning) acceptPromptPerformance(sessionId, acceptedId, clientMessageId);
         useMessageQueueStore.getState().dequeueMessage(sessionId, clientMessageId);
         updateOptimisticDelivery(queryClient, sessionId, tempId, 'accepted');
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
       } catch (error) {
+        if (!isRunning) cancelPromptPerformance(sessionId);
         const message = error instanceof Error ? error.message : 'Message was not accepted';
         useMessageQueueStore
           .getState()

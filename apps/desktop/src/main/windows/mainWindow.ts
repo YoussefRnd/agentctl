@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import path from 'node:path';
+import { reportDesktopPerformance } from '../performance';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -22,6 +23,7 @@ export function handleDeepLink(url: string): void {
 }
 
 export function createMainWindow(): BrowserWindow {
+  const windowStartedAt = performance.now();
   const isMac = process.platform === 'darwin';
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -45,10 +47,20 @@ export function createMainWindow(): BrowserWindow {
     },
   });
 
+  mainWindow.once('ready-to-show', () => {
+    reportDesktopPerformance('desktop-window-create-to-ready', windowStartedAt);
+    reportDesktopPerformance('desktop-process-to-window-ready');
+  });
+
   if (process.env.ELECTRON_RENDERER_URL) {
-    void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+    const rendererUrl = new URL(process.env.ELECTRON_RENDERER_URL);
+    if (process.env.AGENTCTL_PERF === '1') rendererUrl.searchParams.set('perf', '1');
+    void mainWindow.loadURL(rendererUrl.toString());
   } else {
-    void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    void mainWindow.loadFile(
+      path.join(__dirname, '../renderer/index.html'),
+      process.env.AGENTCTL_PERF === '1' ? { query: { perf: '1' } } : undefined,
+    );
   }
 
   mainWindow.on('closed', () => {

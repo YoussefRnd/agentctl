@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSessionStream } from '@/features/sessions';
+import { useSessionQueue } from '@/features/sessions';
 import { CommandBarToolbar } from './CommandBarToolbar';
 import { CommandBarFooter } from './WorkspaceStateReviewer';
 import { ApprovalModeSelector } from './SessionController';
@@ -69,7 +69,7 @@ export function CommandBar({
   } = state;
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const { queuedMessages } = useSessionStream();
+  const { queuedMessages } = useSessionQueue();
   const hasQueuedMessages = queuedMessages.some((message) => message.status !== 'sending');
 
   return (

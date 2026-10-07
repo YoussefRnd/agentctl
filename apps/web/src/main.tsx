@@ -9,8 +9,41 @@ import { AppProviders } from './app/AppProviders.js';
 import { App } from './app/App.js';
 import './index.css';
 import { initApiBaseUrl } from './shared/lib/api-base-url.js';
+import { journeyPerformance } from './shared/lib/performanceRecorder.js';
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
+
+if (journeyPerformance.enabled) {
+  // Navigation timing starts before module download, unlike a mark inside bootstrap.
+  journeyPerformance.begin('launch-to-typeable', '', 0);
+  let navigationScope: string | undefined;
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (
+        event instanceof MouseEvent &&
+        (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      )
+        return;
+      const link = event.target instanceof Element ? event.target.closest('a') : null;
+      if (!link || link.target === '_blank' || link.hasAttribute('download')) return;
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+      const path = isElectron ? destination.hash.slice(1).split('?')[0] : destination.pathname;
+      const sessionId = /^\/sessions\/([^/]+)$/.exec(path)?.[1];
+      const currentPath = isElectron
+        ? window.location.hash.slice(1).split('?')[0]
+        : window.location.pathname;
+      if (path !== currentPath) {
+        if (navigationScope)
+          journeyPerformance.cancel('session-click-to-feed-painted', navigationScope);
+        navigationScope = sessionId;
+        if (sessionId) journeyPerformance.begin('session-click-to-feed-painted', sessionId);
+      }
+    },
+    true,
+  );
+}
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

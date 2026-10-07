@@ -1,7 +1,7 @@
-import { Suspense, lazy, useEffect } from 'react';
+import { useEffect } from 'react';
 import { FontZoomIndicator, FontConfigApplier, ShortcutsDialog } from './shell/index.js';
 import {
-  SettingsDialog,
+  SettingsOverlays,
   useSettings,
   useSettingsOverlayStore,
 } from '../features/settings/index.js';
@@ -9,12 +9,6 @@ import { CommandPalette, useCommandPaletteStore } from '../features/command-pale
 import { useShellStore } from './shell/index.js';
 import { AppRouter } from './AppRouter.js';
 import { useServerStateSync } from './useServerStateSync.js';
-
-const SetupWizard = lazy(() =>
-  import('../features/settings/index.js').then((m) => ({
-    default: m.SetupWizard,
-  })),
-);
 
 export function App() {
   useServerStateSync();
@@ -68,10 +62,7 @@ export function App() {
       <ShortcutsDialog />
       <FontConfigApplier fontConfig={settings?.fontConfig} />
       <FontZoomIndicator />
-      <SettingsDialog />
-      <Suspense fallback={null}>
-        <SetupWizard />
-      </Suspense>
+      <SettingsOverlays />
       <AppRouter />
     </>
   );

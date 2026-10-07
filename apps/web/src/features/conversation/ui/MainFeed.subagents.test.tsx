@@ -42,6 +42,7 @@ vi.mock('@/features/sessions', () => ({
   }),
   useOpenWorkspaceFile: () => vi.fn(),
   useSessionTurnState: () => null,
+  useSessionExecution: () => undefined,
   RewindConfirmDialog: () => null,
 }));
 vi.mock('@/features/providers', () => ({

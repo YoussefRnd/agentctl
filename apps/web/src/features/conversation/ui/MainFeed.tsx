@@ -1,5 +1,6 @@
 import { ChangedFileRow } from './ChangedFileRow';
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { afterPaint, journeyPerformance } from '@/shared/lib/performanceRecorder';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -42,6 +43,17 @@ export function MainFeed() {
     loadOlderHistory,
     execution,
   } = useSessionStream();
+  useEffect(() => {
+    if (
+      !journeyPerformance.enabled ||
+      isLoadingEvents ||
+      isLoadingSession ||
+      historyError ||
+      !sessionData
+    )
+      return;
+    return afterPaint(() => journeyPerformance.finish('session-click-to-feed-painted', sessionId));
+  }, [sessionId, isLoadingEvents, isLoadingSession, historyError, sessionData]);
   const { handleSend, handleRetry, handleApprove, handleDeny } = useSessionActions();
   const { switchProvider, isSwitching } = useProviders(sessionId);
   const queryClient = useQueryClient();

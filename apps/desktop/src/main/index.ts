@@ -5,16 +5,20 @@ import { createMainWindow } from './windows/mainWindow';
 import { createTray } from './tray/trayManager';
 import { startServer } from './server/serverManager';
 import { setupAutoUpdater, registerUpdateIpc } from './updates/updateManager';
+import { reportDesktopPerformance } from './performance';
 
 // Register IPC handlers early so the renderer can query window controls upon connect
 registerIpcHandlers();
 
 if (initAppLifecycle()) {
   void app.whenReady().then(async () => {
+    reportDesktopPerformance('desktop-process-to-app-ready');
     setupApplicationMenu();
 
     try {
+      const serverStartedAt = performance.now();
       const serverPort = await startServer();
+      reportDesktopPerformance('desktop-server-start-to-ready', serverStartedAt);
       process.stdout.write(`Server started on port ${serverPort.toString()}\n`);
     } catch (err) {
       process.stderr.write(`Failed to start server: ${String(err)}\n`);

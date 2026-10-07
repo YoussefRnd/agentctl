@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { afterPaint, journeyPerformance } from '@/shared/lib/performanceRecorder';
 import { Plus, FileUp, CornerDownLeft } from 'lucide-react';
 import { cn, IconButton, Popover, PopoverAnchor, PopoverContent } from '@agentctl/ui';
 import { AttachmentStrip } from './AttachmentStrip';
@@ -279,6 +280,11 @@ export function CommandInputComposer({
     isUnauthenticated = false,
     isDraggingOver = false,
   } = flags;
+  useEffect(() => {
+    if (!journeyPerformance.enabled || disabled || isUnauthenticated || !textareaRef.current)
+      return;
+    return afterPaint(() => journeyPerformance.finish('launch-to-typeable'));
+  }, [disabled, isUnauthenticated, textareaRef]);
   const getPlaceholder = () => {
     if (disabled) return disabledReason ?? 'Connecting to session...';
     if (status === 'running') return 'Type a message to queue...';

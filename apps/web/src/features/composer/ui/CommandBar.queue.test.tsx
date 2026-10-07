@@ -10,7 +10,7 @@ const stream = vi.hoisted(() => ({
   moveQueuedMessage: vi.fn(),
   retryQueuedMessage: vi.fn(),
 }));
-vi.mock('@/features/sessions', () => ({ useSessionStream: () => stream }));
+vi.mock('@/features/sessions', () => ({ useSessionQueue: () => stream }));
 vi.mock('../model/useCommandBarState', () => ({ useCommandBarState: () => ({}) }));
 vi.mock('./ComposerInput', () => ({
   ComposerInput: ({ hasQueuedMessages }: { hasQueuedMessages: boolean }) => (

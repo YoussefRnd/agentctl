@@ -6,6 +6,7 @@ import { SessionEngine } from '@agentctl/shared';
 import { getDesktopCapability } from '@agentctl/api-client';
 import { getApiBaseUrl } from '@/shared/lib/api-base-url';
 import { sessionKeys } from '@/shared/lib/queryKeys';
+import { observePromptPerformance, cancelPromptPerformance } from '@/shared/lib/promptPerformance';
 import { reconcileOptimisticMessages } from './reconcileOptimisticMessages';
 
 import { useSessionHistory, mergeEventHistory } from './useSessionHistory';
@@ -32,6 +33,7 @@ export function useSessionEvents(sessionId: string | null) {
       sseUrl,
       token,
       onHistorySnapshot: (snapshot) => {
+        observePromptPerformance(sessionId, snapshot.events);
         void queryClient.invalidateQueries({ queryKey: sessionKeys.turnIndex(sessionId) });
         resetWindow(sessionId, snapshot);
         queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) =>
@@ -46,6 +48,7 @@ export function useSessionEvents(sessionId: string | null) {
         void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       },
       onEventsUpdate: (newEvents) => {
+        observePromptPerformance(sessionId, newEvents);
         queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
           const lastOldId = old.length > 0 ? old[old.length - 1].id : 0;
           const hasOptimistic = old.some((e) => e.id < 0);
@@ -130,6 +133,7 @@ export function useSessionEvents(sessionId: string | null) {
     engineRef.current = engine;
 
     return () => {
+      cancelPromptPerformance(sessionId);
       engine.disconnect();
       if (startedEngineRef.current === engine) startedEngineRef.current = null;
       if (engineRef.current === engine) engineRef.current = null;

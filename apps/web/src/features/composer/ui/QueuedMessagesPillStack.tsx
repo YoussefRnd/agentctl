@@ -1,5 +1,5 @@
 import { ListOrdered, ChevronUp, ChevronDown, X, Paperclip } from 'lucide-react';
-import { useSessionStream } from '@/features/sessions';
+import { useSessionQueue } from '@/features/sessions';
 import { IconButton } from '@agentctl/ui';
 
 export function QueuedMessagesPillStack() {
@@ -10,7 +10,7 @@ export function QueuedMessagesPillStack() {
     retryQueuedMessage,
     queueAttention,
     resumeQueue,
-  } = useSessionStream();
+  } = useSessionQueue();
   // The outbox also tracks immediate sends until acknowledgement. Only waiting
   // and failed messages belong in the queue UI; keep their original move indices.
   const visibleEntries = queuedMessages

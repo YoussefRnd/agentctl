@@ -69,6 +69,9 @@ fixture actions never send prompts or save application settings.
 
 Use the [UI consistency checklist](docs/ui-consistency.md) when polishing layouts and controls.
 
+See [Performance measurements](docs/performance.md) for the isolated browser lab, initial baseline,
+opt-in web/desktop journey timings, and the local/CI performance safeguards (`perf:check`).
+
 ## Core workflow
 
 1. Add a project directory.

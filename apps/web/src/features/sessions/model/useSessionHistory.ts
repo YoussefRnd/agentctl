@@ -1,3 +1,4 @@
+import { initialHistoryOptions, INITIAL_HISTORY_FRESH_MS } from '../api/sessionNavigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -84,7 +85,18 @@ export function useSessionHistory(sessionId: string | null) {
     queryKey: ['events', sessionId],
     queryFn: async () => {
       if (!sessionId) return [];
-      const page = await fetchPage(sessionId);
+      // Intent cache is only for the first load. Explicit refetches (for example
+      // after rewind) must read fresh history rather than replay a prefetched page.
+      const intent = client.getQueryState(initialHistoryOptions(sessionId).queryKey);
+      const hasIntent =
+        intent &&
+        (intent.fetchStatus === 'fetching' ||
+          (intent.status === 'success' &&
+            Date.now() - intent.dataUpdatedAt < INITIAL_HISTORY_FRESH_MS));
+      const page =
+        client.getQueryData(['events', sessionId]) === undefined && hasIntent
+          ? await client.fetchQuery(initialHistoryOptions(sessionId))
+          : await fetchPage(sessionId);
       resetWindow(sessionId, page);
       return page.events;
     },

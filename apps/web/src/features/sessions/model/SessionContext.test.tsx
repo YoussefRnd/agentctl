@@ -28,7 +28,13 @@ vi.mock('./useSessionEvents', () => ({
 
 import { api } from '@agentctl/api-client';
 import { toast } from 'sonner';
-import { SessionStreamProvider, useSessionStream } from './SessionContext';
+import {
+  SessionStreamProvider,
+  useSessionStream,
+  useSessionQueue,
+  useSessionPromptEvents,
+  useSessionResponseState,
+} from './SessionContext';
 
 const mockedSendInput = vi.mocked(api.sendInput);
 const mockedToastError = vi.mocked(toast.error);
@@ -47,7 +53,7 @@ function Harness({ optimisticEventId }: { optimisticEventId?: number }) {
   );
 }
 
-function ghostEvent(content = 'hello world'): SessionEventRow {
+function ghostEvent(content = 'hello world'): Extract<SessionEventRow, { type: 'text' }> {
   return {
     id: -1,
     sessionId: 'sess-1',
@@ -383,4 +389,126 @@ describe('SessionStreamProvider queued message send', () => {
     });
     expect(mockedToastError).not.toHaveBeenCalled();
   });
+});
+
+it('isolates queue, prompt, and progress subscribers from provider text while retaining semantic updates', async () => {
+  queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('running'));
+  const user = {
+    ...ghostEvent('first'),
+    id: 1,
+    data: { role: 'user' as const, content: 'first', deliveryStatus: 'accepted' as const },
+  };
+  let reply: SessionEventRow = {
+    ...ghostEvent('reply'),
+    id: 2,
+    data: { role: 'provider', content: 'reply' },
+  };
+  streamState.events = [user, reply];
+  const counts = { queue: 0, prompts: 0, turn: 0, stream: 0 };
+  let promptEvents: SessionEventRow[] = [];
+  let turn: ReturnType<typeof useSessionResponseState>['turn'] = null;
+  function Queue() {
+    useSessionQueue();
+    counts.queue++;
+    return null;
+  }
+  function Prompts() {
+    promptEvents = useSessionPromptEvents();
+    counts.prompts++;
+    return null;
+  }
+  function Turn() {
+    turn = useSessionResponseState().turn;
+    counts.turn++;
+    return null;
+  }
+  function Stream() {
+    useSessionStream();
+    counts.stream++;
+    return null;
+  }
+  const children = (
+    <>
+      <Queue />
+      <Prompts />
+      <Turn />
+      <Stream />
+    </>
+  );
+  const render = () =>
+    act(() =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SessionStreamProvider sessionId="sess-1">{children}</SessionStreamProvider>
+        </QueryClientProvider>,
+      ),
+    );
+  render();
+  const before = { ...counts },
+    initialPrompts = promptEvents,
+    initialTurn = turn;
+  for (let index = 0; index < 5; index++) {
+    reply = { ...reply, data: { role: 'provider', content: `reply ${index}` } };
+    streamState.events = [user, reply];
+    render();
+  }
+  expect(counts.queue).toBe(before.queue);
+  expect(counts.prompts).toBe(before.prompts);
+  expect(counts.turn).toBe(before.turn);
+  expect(counts.stream).toBeGreaterThan(before.stream);
+  expect(promptEvents).toBe(initialPrompts);
+  expect(turn).toBe(initialTurn);
+  act(() => useMessageQueueStore.getState().enqueueMessage('sess-1', 'queued'));
+  expect(counts.queue).toBeGreaterThan(before.queue);
+  expect(counts.turn).toBe(before.turn);
+  streamState.events = [
+    ...streamState.events,
+    { ...ghostEvent(), id: 3, type: 'status', data: { status: 'turn_end' } } as SessionEventRow,
+  ];
+  render();
+  expect(turn).toBeNull();
+  expect(counts.turn).toBeGreaterThan(before.turn);
+  streamState.events = [{ ...user, data: { ...user.data, content: 'edited' } }, reply];
+  render();
+  expect(promptEvents[0].data.content).toBe('edited');
+  expect(promptEvents).not.toBe(initialPrompts);
+  function currentTurn(): ReturnType<typeof useSessionResponseState>['turn'] {
+    return turn;
+  }
+  const retry = {
+    attempt: 1,
+    nextRetryAt: '2026-10-07T12:00:00Z',
+    message: 'Retrying',
+    httpStatus: 504,
+  };
+  const retryEvent = {
+    ...ghostEvent(),
+    id: 4,
+    type: 'status' as const,
+    data: { status: 'session_info_update', retry },
+  };
+  streamState.events = [...streamState.events, retryEvent];
+  render();
+  expect(currentTurn()?.phase).toBe('retrying');
+  streamState.events = [
+    ...streamState.events.slice(0, -1),
+    {
+      ...retryEvent,
+      data: { ...retryEvent.data, retry: { ...retry, attempt: 2, message: 'Retry again' } },
+    },
+  ];
+  render();
+  expect(currentTurn()?.retry?.attempt).toBe(2);
+  expect(currentTurn()?.retry?.message).toBe('Retry again');
+  streamState.events = [
+    ...streamState.events.slice(0, -1),
+    { ...retryEvent, data: { status: 'session_info_update', retry: null } },
+  ];
+  render();
+  expect(currentTurn()?.phase).toBe('active');
+  await act(async () => {
+    queryClient.setQueryData(['session-execution', 'sess-1'], { queue: [], attention: 'approval' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+  expect(currentTurn()?.phase).toBe('approval');
 });

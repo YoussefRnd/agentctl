@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { SessionEventRow, SessionEventSnapshot } from '@agentctl/shared';
+import { initialHistoryOptions } from '../api/sessionNavigation';
 import { mergeEventHistory, useSessionEvents } from './useSessionEvents';
 
 const mocks = vi.hoisted(() => ({
@@ -29,7 +30,7 @@ vi.mock('@agentctl/shared', async (original) => ({
   },
 }));
 const sessionId = '11111111-1111-4111-8111-111111111111';
-function event(id: number, content = String(id)): SessionEventRow {
+function event(id: number, content = String(id)): Extract<SessionEventRow, { type: 'text' }> {
   return { id, sessionId, type: 'text', data: { role: 'user', content }, createdAt: new Date() };
 }
 let root: ReturnType<typeof createRoot>;
@@ -344,4 +345,86 @@ it('retains the owning input when restoring a latest page with an earlier turn a
   await settle();
   await act(async () => hook.returnToLatest());
   expect(hook.visibleEvents.map((row) => row.id)).toEqual([1, 900, 901]);
+});
+
+it('initializes an intent-prefetched page without losing its older cursor or turn anchors', async () => {
+  const reply: SessionEventRow = {
+    ...event(900),
+    parentEventId: 1,
+    data: { role: 'provider', content: 'reply' },
+  };
+  client.setQueryData(initialHistoryOptions(sessionId).queryKey, {
+    events: [event(1), reply],
+    nextBeforeId: 900,
+  });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  expect(mocks.fetch).not.toHaveBeenCalled();
+  expect(hook.visibleEvents.map((row) => row.id)).toEqual([1, 900]);
+  expect(hook.hasOlder).toBe(true);
+  expect(mocks.connect).toHaveBeenCalledWith(900);
+  mocks.fetch.mockResolvedValueOnce({ events: [event(500)], nextBeforeId: 500 });
+  await act(async () => hook.loadOlder());
+  expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith(
+    `/api/sessions/${sessionId}/events/page?limit=200&beforeId=900`,
+    { signal: expect.any(AbortSignal) },
+  );
+});
+
+it('fetches fresh history on an explicit refetch even while the intent page is still fresh', async () => {
+  client.setQueryData(initialHistoryOptions(sessionId).queryKey, {
+    events: [event(5), event(6)],
+    nextBeforeId: 5,
+  });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  mocks.fetch.mockResolvedValueOnce({ events: [event(5, 'rewound')], nextBeforeId: null });
+  await act(async () => {
+    await hook.refetch();
+  });
+  expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith(
+    `/api/sessions/${sessionId}/events/page?limit=200`,
+  );
+  expect(hook.events.map((row) => row.id)).toEqual([5]);
+  expect(hook.events[0].data).toMatchObject({ content: 'rewound' });
+  expect(hook.hasOlder).toBe(false);
+});
+
+it('shares a pending intent fetch when opening a session immediately', async () => {
+  let finish!: (page: unknown) => void;
+  mocks.fetch.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const prefetch = client.prefetchQuery(initialHistoryOptions(sessionId));
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  expect(hook.isLoading).toBe(true);
+  await act(async () => {
+    finish({ events: [event(500)], nextBeforeId: 500 });
+    await prefetch;
+  });
+  await settle();
+  expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  expect(hook.events.map((row) => row.id)).toEqual([500]);
+  expect(hook.hasOlder).toBe(true);
+  expect(mocks.connect).toHaveBeenCalledWith(500);
 });

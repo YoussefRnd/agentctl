@@ -1,6 +1,15 @@
 import { useAcceptedMessageQueue } from './useAcceptedMessageQueue';
 import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
-import { createContext, use, useMemo, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import {
+  createContext,
+  use,
+  useMemo,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  type ReactNode,
+} from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type {
@@ -9,11 +18,12 @@ import type {
   SessionWithCapabilities,
   SessionMode,
 } from '@agentctl/shared';
-import { api } from '@agentctl/api-client';
+import { sessionDetailOptions } from '../api/sessionNavigation';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { useSessionConfigState } from './useSessionConfigState';
 import { useWorkspaceReviewState, type ReviewResponse } from './useWorkspaceReviewState';
 import { useSessionEvents } from './useSessionEvents';
+import { getSessionTurnState, type SessionTurnState } from './sessionTurnState';
 import { sendDesktopNotification } from '@/shared/lib/notifications';
 
 interface PlanItem {
@@ -70,14 +80,6 @@ interface SessionConfigContextValue {
 
 const SessionConfigContext = createContext<SessionConfigContextValue | null>(null);
 
-const fetchSession = async (sessionId: string): Promise<SessionWithCapabilities> => {
-  const res = await api.getSessionById({ params: { id: sessionId } });
-  if (res.status !== 200) {
-    throw new Error(`Failed to fetch session: ${String(res.status)}`);
-  }
-  return res.body;
-};
-
 export function SessionConfigProvider({
   sessionId,
   children,
@@ -86,9 +88,7 @@ export function SessionConfigProvider({
   children: ReactNode;
 }) {
   const { data: sessionData = null, isLoading: isLoadingSession } = useQuery({
-    queryKey: sessionKeys.detail(sessionId),
-    queryFn: () => fetchSession(sessionId),
-    enabled: !!sessionId,
+    ...sessionDetailOptions(sessionId),
   });
 
   const configState = useSessionConfigState(sessionId);
@@ -163,6 +163,24 @@ interface SessionStreamContextValue {
 }
 
 const SessionStreamContext = createContext<SessionStreamContextValue | null>(null);
+type SessionQueueValue = Pick<
+  SessionStreamContextValue,
+  | 'queuedMessages'
+  | 'queueAttention'
+  | 'resumeQueue'
+  | 'enqueueMessage'
+  | 'dequeueMessage'
+  | 'retryMessage'
+  | 'retryQueuedMessage'
+  | 'reorderQueuedMessages'
+  | 'moveQueuedMessage'
+>;
+const SessionQueueContext = createContext<SessionQueueValue | null>(null);
+const SessionResponseContext = createContext<{
+  execution: SessionStreamContextValue['execution'];
+  turn: SessionTurnState | null;
+} | null>(null);
+const SessionPromptContext = createContext<SessionEventRow[] | null>(null);
 
 export function SessionStreamProvider({
   sessionId,
@@ -265,9 +283,7 @@ export function SessionStreamProvider({
   }, [sessionId]);
 
   const { data: sessionData } = useQuery({
-    queryKey: sessionKeys.detail(sessionId),
-    queryFn: () => fetchSession(sessionId),
-    enabled: !!sessionId,
+    ...sessionDetailOptions(sessionId),
   });
 
   const retryQueuedMessage = useCallback(
@@ -537,7 +553,79 @@ export function SessionStreamProvider({
     ],
   );
 
-  return <SessionStreamContext.Provider value={value}>{children}</SessionStreamContext.Provider>;
+  // Derive progress once per update. Text content alone cannot change these
+  // fields, so historical cards and progress consumers retain their context.
+  const previousTurn = useRef<SessionTurnState | null>(null);
+  const turn = useMemo(() => {
+    const next = getSessionTurnState(events, sessionData?.session.status, acceptedQueue.execution);
+    const previous = previousTurn.current;
+    if (
+      next &&
+      previous &&
+      next.phase === previous.phase &&
+      next.canCancel === previous.canCancel &&
+      next.startedAt.getTime() === previous.startedAt.getTime() &&
+      next.retry?.attempt === previous.retry?.attempt &&
+      next.retry?.nextRetryAt === previous.retry?.nextRetryAt &&
+      next.retry?.message === previous.retry?.message &&
+      next.retry?.httpStatus === previous.retry?.httpStatus
+    )
+      return previous;
+    return next;
+  }, [events, sessionData?.session.status, acceptedQueue.execution]);
+  useLayoutEffect(() => {
+    previousTurn.current = turn;
+  }, [turn]);
+  const responseValue = useMemo(
+    () => ({ execution: acceptedQueue.execution, turn }),
+    [acceptedQueue.execution, turn],
+  );
+  const queueValue = useMemo<SessionQueueValue>(
+    () => ({
+      queuedMessages: displayQueue,
+      queueAttention: acceptedQueue.execution?.attention,
+      resumeQueue: acceptedQueue.resume,
+      enqueueMessage,
+      dequeueMessage,
+      retryMessage,
+      retryQueuedMessage,
+      reorderQueuedMessages,
+      moveQueuedMessage,
+    }),
+    [
+      displayQueue,
+      acceptedQueue.execution?.attention,
+      acceptedQueue.resume,
+      enqueueMessage,
+      dequeueMessage,
+      retryMessage,
+      retryQueuedMessage,
+      reorderQueuedMessages,
+      moveQueuedMessage,
+    ],
+  );
+  const previousPrompts = useRef<SessionEventRow[]>([]);
+  const prompts = useMemo(() => {
+    const next = events.filter((event) => event.type === 'text' && event.data.role === 'user');
+    const previous = previousPrompts.current;
+    return next.length === previous.length &&
+      next.every((event, index) => event === previous[index])
+      ? previous
+      : next;
+  }, [events]);
+  useLayoutEffect(() => {
+    previousPrompts.current = prompts;
+  }, [prompts]);
+
+  return (
+    <SessionStreamContext.Provider value={value}>
+      <SessionQueueContext.Provider value={queueValue}>
+        <SessionResponseContext.Provider value={responseValue}>
+          <SessionPromptContext.Provider value={prompts}>{children}</SessionPromptContext.Provider>
+        </SessionResponseContext.Provider>
+      </SessionQueueContext.Provider>
+    </SessionStreamContext.Provider>
+  );
 }
 
 export function useSessionStream() {
@@ -546,4 +634,24 @@ export function useSessionStream() {
     throw new Error('useSessionStream must be used within a SessionStreamProvider');
   }
   return context;
+}
+
+export function useSessionQueue() {
+  const value = use(SessionQueueContext);
+  if (!value) throw new Error('useSessionQueue must be used within a SessionStreamProvider');
+  return value;
+}
+export function useSessionResponseState() {
+  const value = use(SessionResponseContext);
+  if (!value)
+    throw new Error('useSessionResponseState must be used within a SessionStreamProvider');
+  return value;
+}
+export function useSessionExecution() {
+  return useSessionResponseState().execution;
+}
+export function useSessionPromptEvents() {
+  const value = use(SessionPromptContext);
+  if (!value) throw new Error('useSessionPromptEvents must be used within a SessionStreamProvider');
+  return value;
 }

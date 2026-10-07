@@ -13,12 +13,11 @@ import {
   ToolDiffBlock,
 } from '@/features/conversation';
 import { CommandInputComposer } from '@/features/composer';
-import {
-  McpServerForm,
-  McpServerCard,
-  FontSettingsPanel,
-  initialFormState,
-} from '@/features/settings';
+// Gallery-only screens stay outside the eager settings feature entry.
+import { McpServerForm } from '../features/settings/ui/McpServerForm';
+import { McpServerCard } from '../features/settings/ui/McpServerCard';
+import { FontSettingsPanel } from '../features/settings/ui/FontSettingsPanel';
+import { initialFormState } from '../features/settings/ui/McpUtils';
 import {
   Button,
   Card,

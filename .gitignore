@@ -5,6 +5,8 @@
 .claude/
 node_modules
 dist
+dist-performance
+performance-results
 .turbo
 *.db
 *.db-wal

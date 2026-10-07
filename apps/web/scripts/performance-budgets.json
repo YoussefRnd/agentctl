@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "fixtureVersion": 1,
+  "repetitions": 3,
+  "startupJavaScriptBytes": 1750000,
+  "streamSubscriberCommits": { "queue": 0, "turn": 0, "prompts": 1 },
+  "baseline": {
+    "date": "2026-10-07",
+    "startupJavaScriptBytes": 1606191,
+    "beforeStartupJavaScriptBytes": 2013667,
+    "rationale": "About 9% byte headroom over milestone 4, below the prior eager startup. Stream limits preserve milestone 3. Wall-clock timings are trends only. See docs/performance.md."
+  }
+}

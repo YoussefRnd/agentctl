@@ -82,3 +82,27 @@ describe('TurnMinimap', () => {
     });
   });
 });
+
+it('selects the latest full turn and handler when unchanged previews skip rendering', () => {
+  const container = document.createElement('div'),
+    root = createRoot(container);
+  const oldHandler = vi.fn(),
+    currentHandler = vi.fn();
+  act(() =>
+    root.render(<TurnMinimap turns={mockTurns} activeTurnIndex={null} onSelectTurn={oldHandler} />),
+  );
+  const latest = { ...mockTurns[0], agentEvents: [mockTurns[1].userEvent] };
+  act(() =>
+    root.render(
+      <TurnMinimap
+        turns={[latest, mockTurns[1]]}
+        activeTurnIndex={null}
+        onSelectTurn={currentHandler}
+      />,
+    ),
+  );
+  act(() => (container.querySelector('button') as HTMLButtonElement).click());
+  expect(oldHandler).not.toHaveBeenCalled();
+  expect(currentHandler).toHaveBeenCalledExactlyOnceWith(latest);
+  act(() => root.unmount());
+});

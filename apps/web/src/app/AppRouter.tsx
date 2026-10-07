@@ -3,7 +3,10 @@ import { Routes, Route } from 'react-router-dom';
 import { HomeRoute } from '../routes/HomeRoute.js';
 import { LoginRoute } from '../routes/LoginRoute.js';
 import { SettingsRoute } from '../routes/SettingsRoute.js';
-import { UiGalleryRoute } from '../routes/UiGalleryRoute.js';
+// Keep the development gallery out of the production module graph.
+const UiGalleryRoute = import.meta.env.DEV
+  ? lazy(() => import('../routes/UiGalleryRoute.js').then((m) => ({ default: m.UiGalleryRoute })))
+  : () => null;
 import { Spinner } from '@agentctl/ui';
 
 const SessionRoute = lazy(() =>

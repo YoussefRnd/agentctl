@@ -4,12 +4,16 @@ import tailwindcss from '@tailwindcss/vite';
 
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+// Its browser export uses document.createElement; workers need the pure entity map.
+const entityDecoder = fileURLToPath(import.meta.resolve('decode-named-character-reference'));
 
 const packageJson = JSON.parse(
   fs.readFileSync(path.resolve(import.meta.dirname, './package.json'), 'utf-8'),
 ) as { version: string };
 
-export default defineConfig({
+export default defineConfig(({ mode, command }) => ({
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
@@ -18,11 +22,28 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
+      // Development workers share the browser dependency optimizer.
+      ...(command === 'serve' ? { 'decode-named-character-reference': entityDecoder } : {}),
+      ...(mode === 'performance' ? { 'react-dom/client': 'react-dom/profiling' } : {}),
     },
   },
+  worker: {
+    plugins: () => [
+      {
+        name: 'worker-entity-decoder',
+        enforce: 'pre',
+        resolveId: (source) =>
+          source === 'decode-named-character-reference' ? entityDecoder : null,
+      },
+    ],
+  },
   build: {
+    ...(mode === 'performance' ? { outDir: 'dist-performance' } : {}),
     chunkSizeWarningLimit: 600,
     rollupOptions: {
+      ...(mode === 'performance'
+        ? { input: path.resolve(import.meta.dirname, 'performance.html') }
+        : {}),
       output: {
         manualChunks(id) {
           if (id.includes('node_modules/@xterm/')) return 'vendor-terminal';
@@ -70,4 +91,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

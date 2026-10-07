@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({ turn: null as SessionTurnState | null }));
 vi.mock('@/features/sessions', () => ({
   useSession: () => ({ sessionData: { session: { status: 'idle' } }, reviewData: null }),
   useSessionTurnState: () => state.turn,
-  useSessionStream: () => ({}),
+  useSessionExecution: () => undefined,
 }));
 vi.mock('@/features/settings', () => ({
   useSettings: () => ({ settings: { showThinking: false } }),

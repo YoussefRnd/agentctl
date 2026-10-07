@@ -10,6 +10,9 @@ export {
   SessionStreamProvider,
   useSession,
   useSessionStream,
+  useSessionQueue,
+  useSessionExecution,
+  useSessionPromptEvents,
 } from './model/SessionContext.js';
 export type { StructuredPlanItem } from './model/SessionContext.js';
 export { useSessionActions } from './model/useSessionActions.js';
@@ -24,3 +27,5 @@ export { useDoubleEscToStop, ESC_STOP_TOAST_ID } from './model/useDoubleEscToSto
 export { useOpenWorkspaceFile } from './model/useOpenWorkspaceFile.js';
 export { sessionQueries } from './api/sessionQueries.js';
 export { useSessionTurnIndex } from './model/useSessionTurnIndex.js';
+
+export { prefetchSessionNavigation } from './api/sessionNavigation.js';

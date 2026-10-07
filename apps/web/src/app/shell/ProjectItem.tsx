@@ -16,7 +16,8 @@ import type { SidebarProject } from '@agentctl/api-client';
 import { Dropdown, Tooltip } from '@agentctl/ui';
 import { RepoForkedIcon } from '@primer/octicons-react';
 import { RelativeTime } from '@/shared';
-import { QuickLaunchSessionDialog } from '@/features/sessions';
+import { QuickLaunchSessionDialog, prefetchSessionNavigation } from '@/features/sessions';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ConfirmConfig {
   isOpen: boolean;
@@ -65,6 +66,10 @@ function SessionRow({
   onDelete,
 }: SessionRowProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const prefetch = () => {
+    if (!isActive) void prefetchSessionNavigation(queryClient, s.id);
+  };
   const sessionTitle = getSessionDisplayTitle(s);
   const activityTime = s.lastActivityAt;
 
@@ -72,6 +77,8 @@ function SessionRow({
     <div className="group/session relative flex items-center">
       <Link
         to={`/sessions/${s.id}`}
+        onMouseEnter={prefetch}
+        onFocus={prefetch}
         aria-current={isActive ? 'page' : undefined}
         className={`focus-visible:ring-accent/40 flex min-h-8 w-full min-w-0 items-center justify-between rounded-lg px-2 py-1.5 text-[12px] transition-[background-color,color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:outline-none ${
           isActive

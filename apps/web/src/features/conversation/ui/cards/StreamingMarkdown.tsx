@@ -1,30 +1,27 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, startTransition, useCallback, useEffect, useRef, useState } from 'react';
+import type { Root } from 'hast';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 import { MarkdownTable } from './MarkdownTable';
 import { splitStreamingContent, type StreamingContentSegment } from './streamingMarkdownUtils';
+import { GraphemeRevealBuffer } from '../../lib/graphemeRevealBuffer';
+import { subscribeMarkdown } from '../../lib/markdownWorker';
+import { PreparedMarkdown } from './PreparedMarkdown';
+
+export { splitGraphemes } from '../../lib/graphemeRevealBuffer';
 
 export type { StreamingContentSegment };
 
 const REMARK_PLUGINS = [remarkGfm];
 const REHYPE_PLUGINS = [rehypeHighlight];
 const MARKDOWN_COMPONENTS = { pre: MarkdownCodeBlock, table: MarkdownTable };
+const WORKER_THRESHOLD = 8192;
 
 interface StreamingMarkdownProps {
   content: string;
   isStreaming?: boolean;
-}
-
-const graphemeSegmenter =
-  typeof Intl.Segmenter === 'function'
-    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-    : null;
-
-export function splitGraphemes(value: string): string[] {
-  if (!graphemeSegmenter) return Array.from(value);
-  return Array.from(graphemeSegmenter.segment(value), ({ segment }) => segment);
 }
 
 export function getAdaptiveRevealRate(observedRate: number, backlog: number): number {
@@ -34,91 +31,69 @@ export function getAdaptiveRevealRate(observedRate: number, backlog: number): nu
 
 export function useSmoothedText(target: string, isStreaming: boolean): string {
   const [displayed, setDisplayed] = useState(target);
-  const displayedRef = useRef(target);
-  const targetRef = useRef(target);
+  const [buffer] = useState(() => new GraphemeRevealBuffer(target));
   const frameRef = useRef<number | null>(null);
   const previousFrameRef = useRef<number | null>(null);
   const observedRateRef = useRef(72);
-  const previousTargetRef = useRef({
-    length: splitGraphemes(target).length,
-    time: performance.now(),
-  });
+  const previousSampleTimeRef = useRef(performance.now());
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(
     () =>
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
   );
 
-  const advance = useCallback((frameTime: number) => {
-    frameRef.current = null;
-    const current = displayedRef.current;
-    const latestTarget = targetRef.current;
+  const advance = useCallback(
+    (frameTime: number) => {
+      frameRef.current = null;
+      if (buffer.backlog === 0) {
+        previousFrameRef.current = null;
+        return;
+      }
 
-    if (current === latestTarget) {
-      previousFrameRef.current = null;
-      return;
-    }
+      const elapsed = previousFrameRef.current === null ? 16 : frameTime - previousFrameRef.current;
+      previousFrameRef.current = frameTime;
 
-    // A replaced or truncated event should never leak text from the previous value.
-    if (!latestTarget.startsWith(current)) {
-      displayedRef.current = latestTarget;
-      setDisplayed(latestTarget);
-      previousFrameRef.current = null;
-      return;
-    }
+      // Match the provider's measured cadence, with extra pressure only while a backlog exists.
+      const charactersPerSecond = getAdaptiveRevealRate(observedRateRef.current, buffer.backlog);
+      const step = Math.max(1, Math.floor((charactersPerSecond * Math.max(8, elapsed)) / 1000));
+      setDisplayed(buffer.reveal(step));
 
-    const remaining = splitGraphemes(latestTarget.slice(current.length));
-    const elapsed = previousFrameRef.current === null ? 16 : frameTime - previousFrameRef.current;
-    previousFrameRef.current = frameTime;
-
-    // Match the provider's measured cadence, with extra pressure only while a backlog exists.
-    const charactersPerSecond = getAdaptiveRevealRate(observedRateRef.current, remaining.length);
-    const step = Math.max(1, Math.floor((charactersPerSecond * Math.max(8, elapsed)) / 1000));
-    const next = current + remaining.slice(0, step).join('');
-
-    displayedRef.current = next;
-    setDisplayed(next);
-
-    if (next !== latestTarget) {
-      frameRef.current = requestAnimationFrame(advance);
-    } else {
-      previousFrameRef.current = null;
-    }
-  }, []);
+      if (buffer.backlog > 0) {
+        frameRef.current = requestAnimationFrame(advance);
+      } else {
+        previousFrameRef.current = null;
+      }
+    },
+    [buffer],
+  );
 
   useEffect(() => {
-    targetRef.current = target;
-    const targetLength = splitGraphemes(target).length;
+    const { growth, replaced } = buffer.update(target);
     const sampleTime = performance.now();
-    const previousTarget = previousTargetRef.current;
-    const growth = targetLength - previousTarget.length;
-    const elapsed = sampleTime - previousTarget.time;
+    const elapsed = sampleTime - previousSampleTimeRef.current;
 
     if (growth > 0 && elapsed > 8) {
       const sampleRate = (growth * 1000) / elapsed;
       observedRateRef.current = observedRateRef.current * 0.7 + sampleRate * 0.3;
     }
-    previousTargetRef.current = { length: targetLength, time: sampleTime };
+    previousSampleTimeRef.current = sampleTime;
 
     if (!isStreaming || prefersReducedMotion) {
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
       previousFrameRef.current = null;
-      displayedRef.current = target;
-      setDisplayed(target);
+      setDisplayed(buffer.finish());
       return;
     }
 
-    if (!target.startsWith(displayedRef.current)) {
-      displayedRef.current = target;
-      setDisplayed(target);
-      return;
-    }
+    if (replaced) previousFrameRef.current = null;
+    // Extending the last already-visible grapheme is immediate and atomic.
+    setDisplayed(buffer.displayed);
 
-    if (displayedRef.current !== target && frameRef.current === null) {
+    if (buffer.backlog > 0 && frameRef.current === null) {
       frameRef.current = requestAnimationFrame(advance);
     }
-  }, [advance, isStreaming, prefersReducedMotion, target]);
+  }, [advance, buffer, isStreaming, prefersReducedMotion, target]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
@@ -206,34 +181,54 @@ export const StreamingMarkdown = memo(function StreamingMarkdown({
   content,
   isStreaming = false,
 }: StreamingMarkdownProps) {
-  const [isEnhanced, setIsEnhanced] = useState(() => !isStreaming);
+  const [prepared, setPrepared] = useState<{ content: string; tree: Root | null } | null>(null);
+  // The measured benefit is in code-heavy enhancement. Plain-text completion
+  // avoids worker startup and structured-clone overhead.
+  const useWorker =
+    content.length >= WORKER_THRESHOLD &&
+    (content.includes('```') || content.includes('~~~')) &&
+    typeof Worker !== 'undefined';
 
   useEffect(() => {
-    if (isStreaming) {
-      setIsEnhanced(false);
-      return;
-    }
-    if (isEnhanced) return;
+    if (isStreaming || !useWorker) return;
+    let cancelled = false;
+    const unsubscribe = subscribeMarkdown(content, (tree) => {
+      if (!cancelled) startTransition(() => setPrepared({ content, tree }));
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [content, isStreaming, useWorker]);
 
-    if (typeof window.requestIdleCallback === 'function') {
-      const idleId = window.requestIdleCallback(() => setIsEnhanced(true), { timeout: 500 });
-      return () => window.cancelIdleCallback(idleId);
-    }
-
-    const timer = window.setTimeout(() => setIsEnhanced(true), 0);
-    return () => window.clearTimeout(timer);
-  }, [isEnhanced, isStreaming]);
-
-  if (isStreaming || !isEnhanced) {
-    return <ProgressiveMarkdownBody content={content} isStreaming={isStreaming} />;
+  const resolved = prepared?.content === content ? prepared : null;
+  const pending = !isStreaming && useWorker && !resolved;
+  let body;
+  if (isStreaming || pending) {
+    // Keep the same progressive component mounted during worker preparation.
+    body = <ProgressiveMarkdownBody content={content} isStreaming={isStreaming} />;
+  } else if (resolved?.tree) {
+    body = <PreparedMarkdown tree={resolved.tree} components={MARKDOWN_COMPONENTS} />;
+  } else {
+    body = (
+      <ReactMarkdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        components={MARKDOWN_COMPONENTS}
+      >
+        {content}
+      </ReactMarkdown>
+    );
   }
   return (
-    <ReactMarkdown
-      remarkPlugins={REMARK_PLUGINS}
-      rehypePlugins={REHYPE_PLUGINS}
-      components={MARKDOWN_COMPONENTS}
+    <div
+      className="[&>:first-child]:mt-0 [&>:last-child]:mb-0"
+      data-markdown-state={isStreaming ? 'streaming' : pending ? 'preparing' : 'complete'}
+      data-markdown-source={
+        isStreaming || pending ? 'progressive' : resolved?.tree ? 'worker' : 'synchronous'
+      }
     >
-      {content}
-    </ReactMarkdown>
+      {body}
+    </div>
   );
 });
