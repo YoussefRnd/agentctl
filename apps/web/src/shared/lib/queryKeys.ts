@@ -12,6 +12,7 @@ export const sessionKeys = {
   allGitStatuses: ['session-git-status'] as const,
   gitStatus: (sessionId: string) => ['session-git-status', sessionId] as const,
   events: (sessionId: string) => ['events', sessionId] as const,
+  turnIndex: (sessionId: string) => ['events', sessionId, 'turn-index'] as const,
 };
 
 export const providerKeys = {

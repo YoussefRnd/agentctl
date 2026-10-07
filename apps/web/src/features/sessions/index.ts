@@ -23,3 +23,4 @@ export type { SessionTurnState, SessionTurnPhase } from './model/sessionTurnStat
 export { useDoubleEscToStop, ESC_STOP_TOAST_ID } from './model/useDoubleEscToStop.js';
 export { useOpenWorkspaceFile } from './model/useOpenWorkspaceFile.js';
 export { sessionQueries } from './api/sessionQueries.js';
+export { useSessionTurnIndex } from './model/useSessionTurnIndex.js';

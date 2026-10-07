@@ -1,101 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { SessionEventRow } from '@agentctl/shared';
-import { SessionEngine, sessionEventPageSchema } from '@agentctl/shared';
+import { SessionEngine } from '@agentctl/shared';
 
-import { apiClient, getDesktopCapability } from '@agentctl/api-client';
+import { getDesktopCapability } from '@agentctl/api-client';
 import { getApiBaseUrl } from '@/shared/lib/api-base-url';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { reconcileOptimisticMessages } from './reconcileOptimisticMessages';
 
-export function mergeEventHistory(
-  older: SessionEventRow[],
-  current: SessionEventRow[],
-): SessionEventRow[] {
-  const byId = new Map(older.map((event) => [event.id, event]));
-  for (const event of current) byId.set(event.id, event);
-  return [...byId.values()]
-    .filter((event) => event.id >= 0)
-    .sort((a, b) => a.id - b.id)
-    .concat([...byId.values()].filter((event) => event.id < 0));
-}
-
-const fetchPage = async (sessionId: string, beforeId?: number) => {
-  const query = new URLSearchParams({ limit: '200' });
-  if (beforeId !== undefined) query.set('beforeId', String(beforeId));
-  return sessionEventPageSchema.parse(
-    await apiClient.fetch(`/api/sessions/${sessionId}/events/page?${query}`),
-  );
-};
+import { useSessionHistory, mergeEventHistory } from './useSessionHistory';
+export { mergeEventHistory } from './useSessionHistory';
 
 export function useSessionEvents(sessionId: string | null) {
   const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const [streamingEventId, setStreamingEventId] = useState<number | null>(null);
-  const [pages, setPages] = useState<Record<string, number | null>>({});
-  const [loadingOlderSessions, setLoadingOlderSessions] = useState<Record<string, boolean>>({});
-  const [historyErrors, setHistoryErrors] = useState<Record<string, string | null>>({});
-  const loadingOlderRef = useRef(new Set<string>());
   const engineRef = useRef<SessionEngine | null>(null);
   const startedEngineRef = useRef<SessionEngine | null>(null);
-  const historyGeneration = useRef(0);
-
-  // 1. Fetch historical data
-  const {
-    data: history = [],
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: ['events', sessionId],
-    queryFn: async () => {
-      if (!sessionId) return [];
-      const page = await fetchPage(sessionId);
-      queryClient.setQueryData(['events-cursor', sessionId], page.nextBeforeId);
-      setPages((pages) => ({ ...pages, [sessionId]: page.nextBeforeId }));
-      return page.events;
-    },
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    enabled: !!sessionId,
-  });
-
-  const historyError = error?.message ?? (sessionId ? (historyErrors[sessionId] ?? null) : null);
-  const cursor = sessionId
-    ? pages[sessionId] !== undefined
-      ? pages[sessionId]
-      : queryClient.getQueryData<number | null>(['events-cursor', sessionId])
-    : null;
-  const loadOlder = useCallback(async () => {
-    if (error) {
-      await refetch();
-      return;
-    }
-    if (!sessionId || cursor == null || loadingOlderRef.current.has(sessionId)) return;
-    loadingOlderRef.current.add(sessionId);
-    const generation = historyGeneration.current;
-    setLoadingOlderSessions((sessions) => ({ ...sessions, [sessionId]: true }));
-    setHistoryErrors((errors) => ({ ...errors, [sessionId]: null }));
-    try {
-      const page = await fetchPage(sessionId, cursor);
-      if (generation !== historyGeneration.current) return;
-      queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (current = []) =>
-        mergeEventHistory(page.events, current),
-      );
-      queryClient.setQueryData(['events-cursor', sessionId], page.nextBeforeId);
-      setPages((pages) => ({ ...pages, [sessionId]: page.nextBeforeId }));
-    } catch (error) {
-      if (generation !== historyGeneration.current) return;
-      setHistoryErrors((errors) => ({
-        ...errors,
-        [sessionId]: error instanceof Error ? error.message : String(error),
-      }));
-    } finally {
-      loadingOlderRef.current.delete(sessionId);
-      setLoadingOlderSessions((sessions) => ({ ...sessions, [sessionId]: false }));
-    }
-  }, [sessionId, cursor, queryClient, error, refetch]);
+  const historyState = useSessionHistory(sessionId);
+  const { events: history, isLoading, error, resetWindow, trimLiveHistory } = historyState;
 
   // 2. Setup SessionEngine
   useEffect(() => {
@@ -109,7 +32,8 @@ export function useSessionEvents(sessionId: string | null) {
       sseUrl,
       token,
       onHistorySnapshot: (snapshot) => {
-        historyGeneration.current++;
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.turnIndex(sessionId) });
+        resetWindow(sessionId, snapshot);
         queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) =>
           mergeEventHistory(
             snapshot.events,
@@ -119,9 +43,6 @@ export function useSessionEvents(sessionId: string | null) {
             ),
           ),
         );
-        queryClient.setQueryData(['events-cursor', sessionId], snapshot.nextBeforeId);
-        setPages((pages) => ({ ...pages, [sessionId]: snapshot.nextBeforeId }));
-        setHistoryErrors((errors) => ({ ...errors, [sessionId]: null }));
         void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       },
       onEventsUpdate: (newEvents) => {
@@ -142,7 +63,7 @@ export function useSessionEvents(sessionId: string | null) {
             );
 
           if (isSimpleAppend) {
-            return [...old, ...newEvents];
+            return trimLiveHistory([...old, ...newEvents]);
           }
 
           // Upsert: replace in-place for existing IDs (streaming updates), append for new ones.
@@ -195,7 +116,7 @@ export function useSessionEvents(sessionId: string | null) {
               result.push(materialized); // append new
             }
           }
-          return mergeEventHistory([], result);
+          return trimLiveHistory(mergeEventHistory([], result));
         });
       },
       onStatusChange: (status) => {
@@ -213,7 +134,7 @@ export function useSessionEvents(sessionId: string | null) {
       if (startedEngineRef.current === engine) startedEngineRef.current = null;
       if (engineRef.current === engine) engineRef.current = null;
     };
-  }, [sessionId, queryClient]);
+  }, [sessionId, queryClient, resetWindow, trimLiveHistory]);
 
   // 3. Connect to SessionEngine once history is loaded
   useEffect(() => {
@@ -232,15 +153,8 @@ export function useSessionEvents(sessionId: string | null) {
   }, [isLoading, error, sessionId, history]);
 
   return {
-    events: history,
-    isLoading,
-    error,
-    refetch,
+    ...historyState,
     isConnected,
     streamingEventId,
-    hasMore: cursor != null,
-    loadOlder,
-    isLoadingOlder: !!(sessionId && loadingOlderSessions[sessionId]),
-    historyError,
   };
 }

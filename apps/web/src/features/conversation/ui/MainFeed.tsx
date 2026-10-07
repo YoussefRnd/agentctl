@@ -33,8 +33,15 @@ import { Button, cn, IconButton, LoadingState } from '@agentctl/ui';
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
   const turn = useSessionTurnState();
-  const { events, isLoadingEvents, isConnected, historyError, loadOlderHistory, execution } =
-    useSessionStream();
+  const {
+    events,
+    visibleEvents,
+    isLoadingEvents,
+    isConnected,
+    historyError,
+    loadOlderHistory,
+    execution,
+  } = useSessionStream();
   const { handleSend, handleRetry, handleApprove, handleDeny } = useSessionActions();
   const { switchProvider, isSwitching } = useProviders(sessionId);
   const queryClient = useQueryClient();
@@ -446,7 +453,7 @@ export function MainFeed() {
                 <LoadingState message="Loading session..." className="h-full" />
               ) : (
                 <EventFeed
-                  events={events}
+                  events={visibleEvents ?? events}
                   targetEventId={targetEventId}
                   onTargetEventHandled={handleTargetEventHandled}
                   isConnected={isConnected}

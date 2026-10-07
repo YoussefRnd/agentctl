@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, sql } from 'drizzle-orm';
 import {
   sessionEvents,
   sessionEventChanges,
@@ -89,6 +89,65 @@ export function readEventPage(
     }
   }
   return { events: page, nextBeforeId };
+}
+
+/** Read forward from a targeted turn instead of walking every preceding page. */
+export function readEventWindow(
+  db: Pick<DbClient, 'select'>,
+  sessionId: string,
+  options: { aroundId?: number; afterId?: number; limit: number },
+): SessionEventPage | undefined {
+  const start = options.aroundId ?? options.afterId;
+  if (start === undefined) return undefined;
+  if (options.aroundId !== undefined) {
+    const target = db
+      .select({ id: sessionEvents.id })
+      .from(sessionEvents)
+      .where(and(eq(sessionEvents.sessionId, sessionId), eq(sessionEvents.id, start)))
+      .get();
+    if (!target) return undefined;
+  }
+  const candidates = db
+    .select({ id: sessionEvents.id, payloadBytes })
+    .from(sessionEvents)
+    .where(
+      and(
+        eq(sessionEvents.sessionId, sessionId),
+        options.aroundId !== undefined ? gte(sessionEvents.id, start) : gt(sessionEvents.id, start),
+      ),
+    )
+    .orderBy(asc(sessionEvents.id))
+    .limit(options.limit + 1)
+    .all();
+  const ids: number[] = [];
+  let bytes = 0;
+  for (const candidate of candidates) {
+    if (
+      ids.length === options.limit ||
+      (ids.length > 0 && bytes + candidate.payloadBytes > EVENT_HISTORY_BYTE_BUDGET)
+    )
+      break;
+    ids.push(candidate.id);
+    bytes += candidate.payloadBytes;
+  }
+  if (!ids.length) return { events: [], nextBeforeId: null, nextAfterId: null };
+  const rows = db
+    .select()
+    .from(sessionEvents)
+    .where(and(eq(sessionEvents.sessionId, sessionId), inArray(sessionEvents.id, ids)))
+    .orderBy(asc(sessionEvents.id))
+    .all();
+  const older = db
+    .select({ id: sessionEvents.id })
+    .from(sessionEvents)
+    .where(and(eq(sessionEvents.sessionId, sessionId), lt(sessionEvents.id, ids[0])))
+    .limit(1)
+    .get();
+  return {
+    events: rows.map(parseEventRow),
+    nextBeforeId: older ? ids[0] : null,
+    nextAfterId: candidates.length > ids.length ? ids[ids.length - 1] : null,
+  };
 }
 
 /** A small replay or a snapshot decision, made without reading large payload bodies. */

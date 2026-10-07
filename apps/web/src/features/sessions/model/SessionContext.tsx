@@ -128,10 +128,19 @@ const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];
 interface SessionStreamContextValue {
   execution?: import('@agentctl/shared').SessionExecution;
   events: SessionEventRow[];
+  visibleEvents: SessionEventRow[];
+  historyRevision: number;
   isLoadingEvents: boolean;
   isConnected: boolean;
   streamingEventId: number | null;
   hasMoreHistory: boolean;
+  hasOlderHistory: boolean;
+  hasNewerHistory: boolean;
+  loadNewerHistory: () => Promise<void>;
+  loadEventHistory: (eventId: number) => Promise<void>;
+  retryHistory: () => Promise<void>;
+  returnToLatestHistory: () => void;
+  isLoadingNewerHistory: boolean;
   loadOlderHistory: () => Promise<void>;
   isLoadingOlderHistory: boolean;
   historyError: string | null;
@@ -165,6 +174,15 @@ export function SessionStreamProvider({
   const queryClient = useQueryClient();
   const {
     events,
+    visibleEvents,
+    historyRevision,
+    hasOlder: hasOlderHistory,
+    hasNewer: hasNewerHistory,
+    loadNewer: loadNewerHistory,
+    loadEvent: loadEventHistory,
+    retryHistory,
+    returnToLatest: returnToLatestHistory,
+    isLoadingNewer: isLoadingNewerHistory,
     isLoading: isLoadingEvents,
     isConnected,
     streamingEventId,
@@ -458,6 +476,15 @@ export function SessionStreamProvider({
   const value = useMemo(
     () => ({
       events,
+      visibleEvents,
+      historyRevision,
+      hasOlderHistory,
+      hasNewerHistory,
+      loadNewerHistory,
+      loadEventHistory,
+      retryHistory,
+      returnToLatestHistory,
+      isLoadingNewerHistory,
       isLoadingEvents,
       isConnected,
       streamingEventId,
@@ -480,6 +507,15 @@ export function SessionStreamProvider({
     }),
     [
       events,
+      visibleEvents,
+      historyRevision,
+      hasOlderHistory,
+      hasNewerHistory,
+      loadNewerHistory,
+      loadEventHistory,
+      retryHistory,
+      returnToLatestHistory,
+      isLoadingNewerHistory,
       isLoadingEvents,
       isConnected,
       streamingEventId,

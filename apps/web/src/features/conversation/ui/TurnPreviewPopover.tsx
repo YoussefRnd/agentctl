@@ -14,7 +14,7 @@ export const TurnPreviewPopover = memo(function TurnPreviewPopover({
   return (
     <div
       role="tooltip"
-      className="border-border/40 bg-brand-mantle/98 ring-border/20 pointer-events-none w-[320px] rounded-xl border p-3.5 shadow-2xl ring-1 backdrop-blur-2xl select-none"
+      className="border-border/40 bg-brand-mantle/98 ring-border/20 pointer-events-none w-[min(320px,calc(100vw-2rem))] rounded-lg border p-3.5 shadow-2xl ring-1 backdrop-blur-2xl select-none"
     >
       {/* 1. User Prompt */}
       <p className="text-text-main line-clamp-2 text-[12.5px] leading-snug font-semibold tracking-tight">
@@ -34,31 +34,33 @@ export const TurnPreviewPopover = memo(function TurnPreviewPopover({
       )}
 
       {/* 3. Metadata: Model, Provider & Diff Stats */}
-      <div className="border-border/20 mt-3 space-y-1.5 border-t pt-2.5 text-[11px]">
-        {/* Model & Provider Info */}
-        {modelName && (
-          <div className="text-text-muted flex items-center gap-1.5">
-            {providerIcon && (
-              <img src={providerIcon} alt="" className="h-3.5 w-3.5 object-contain" />
-            )}
-            <span className="truncate">
-              <span className="text-text-main/90 font-medium">{modelName}</span>
-              {providerName ? (
-                <span className="text-text-muted/60"> via {providerName}</span>
-              ) : null}
-            </span>
-          </div>
-        )}
+      {(modelName || hasDiffs) && (
+        <div className="border-border/20 mt-3 space-y-1.5 border-t pt-2.5 text-[11px]">
+          {/* Model & Provider Info */}
+          {modelName && (
+            <div className="text-text-muted flex items-center gap-1.5">
+              {providerIcon && (
+                <img src={providerIcon} alt="" className="h-3.5 w-3.5 object-contain" />
+              )}
+              <span className="truncate">
+                <span className="text-text-main/90 font-medium">{modelName}</span>
+                {providerName ? (
+                  <span className="text-text-muted/60"> via {providerName}</span>
+                ) : null}
+              </span>
+            </div>
+          )}
 
-        {/* Code Diff Stats */}
-        {hasDiffs && (
-          <div className="flex items-center gap-1.5 font-mono text-[11px]">
-            <span className="text-text-muted/60">±</span>
-            <span className="text-emerald-400">+{diffStats.additions}</span>
-            <span className="text-rose-400">-{diffStats.deletions}</span>
-          </div>
-        )}
-      </div>
+          {/* Code Diff Stats */}
+          {hasDiffs && (
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+              <span className="text-text-muted/60">±</span>
+              <span className="text-emerald-400">+{diffStats.additions}</span>
+              <span className="text-rose-400">-{diffStats.deletions}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });

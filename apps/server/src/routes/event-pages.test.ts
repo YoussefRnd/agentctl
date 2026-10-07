@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { validatorCompiler } from '@fastify/type-provider-zod';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
-import { sessionEventPageSchema } from '@agentctl/shared';
+import { sessionEventPageSchema, sessionTurnIndexSchema } from '@agentctl/shared';
 import { expect, it } from 'vitest';
 import { eventsRoutes } from './events.js';
 
@@ -57,6 +57,97 @@ it('returns bounded chronological pages, with turn anchors and session-scoped cu
     expect(last.nextBeforeId).toBeNull();
     expect((await app.inject(`/api/sessions/${id}/events/page?limit=501`)).statusCode).toBe(400);
     expect((await fetch('beforeId=1')).events).toEqual([]);
+    const window = await fetch('aroundId=5&limit=2');
+    expect(window.events.map((event) => event.id)).toEqual([5, 6]);
+    expect(window.nextBeforeId).toBe(5);
+    expect(window.nextAfterId).toBe(6);
+    const forward = await fetch('afterId=6&limit=2');
+    expect(forward.events.map((event) => event.id)).toEqual([7, 8]);
+    expect(forward.nextAfterId).toBeNull();
+    expect((await app.inject(`/api/sessions/${id}/events/page?aroundId=4`)).statusCode).toBe(404);
+    expect(
+      (await app.inject(`/api/sessions/${id}/events/page?aroundId=5&beforeId=6`)).statusCode,
+    ).toBe(400);
+  } finally {
+    await app.close();
+  }
+});
+
+it('indexes every foreground turn independently of message pages with bounded prompt previews', async () => {
+  const app = Fastify();
+  const db = createDatabase(':memory:');
+  app.decorate('db', db);
+  app.setValidatorCompiler(validatorCompiler);
+  await app.register(eventsRoutes, { prefix: '/api' });
+  const id = '11111111-1111-4111-8111-111111111111';
+  const other = '22222222-2222-4222-8222-222222222222';
+  db.insert(projects).values({ id: 'project', name: 'Project', path: '/tmp/project' }).run();
+  for (const sessionId of [id, other])
+    db.insert(sessions)
+      .values({
+        id: sessionId,
+        projectId: 'project',
+        branch: 'main',
+        worktreePath: '/tmp/project',
+        taskSlug: sessionId,
+        baseCommit: 'none',
+        agent: 'agent',
+        selectedProvider: 'agent',
+      })
+      .run();
+  for (let turn = 0; turn < 250; turn++) {
+    db.insert(sessionEvents)
+      .values({
+        sessionId: id,
+        type: 'text',
+        data: JSON.stringify({
+          role: 'user',
+          content: turn === 0 ? 'p'.repeat(4096) : `Prompt ${turn + 1}`,
+        }),
+      })
+      .run();
+    db.insert(sessionEvents)
+      .values({
+        sessionId: id,
+        type: 'text',
+        data: JSON.stringify({ role: 'provider', content: 'response body omitted '.repeat(1000) }),
+      })
+      .run();
+  }
+  db.insert(sessionEvents)
+    .values({
+      sessionId: id,
+      type: 'text',
+      metadata: JSON.stringify({ nativeSessionId: 'child' }),
+      data: JSON.stringify({ role: 'user', content: 'Child prompt' }),
+    })
+    .run();
+  db.insert(sessionEvents)
+    .values({
+      sessionId: other,
+      type: 'text',
+      data: JSON.stringify({ role: 'user', content: 'Other session prompt' }),
+    })
+    .run();
+  try {
+    const response = await app.inject(`/api/sessions/${id}/events/turns`);
+    expect(response.statusCode).toBe(200);
+    const index = sessionTurnIndexSchema.parse(response.json());
+    expect(index).toHaveLength(250);
+    expect(index[0].prompt).toHaveLength(600);
+    expect(index.at(-1)?.prompt).toBe('Prompt 250');
+    expect(index.map((turn) => turn.eventId)).toEqual(
+      Array.from({ length: 250 }, (_, i) => i * 2 + 1),
+    );
+    expect(index[0].summary).toHaveLength(1000);
+    expect(response.body).not.toContain('response body omitted '.repeat(1000));
+    expect(response.body).not.toContain('Child prompt');
+    expect(response.body).not.toContain('Other session prompt');
+    const page = sessionEventPageSchema.parse(
+      (await app.inject(`/api/sessions/${id}/events/page`)).json(),
+    );
+    expect(page.events.length).toBeLessThanOrEqual(200);
+    expect(page.nextBeforeId).not.toBeNull();
   } finally {
     await app.close();
   }

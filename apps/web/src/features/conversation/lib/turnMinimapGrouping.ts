@@ -1,7 +1,9 @@
-import type { SessionEventRow } from '@agentctl/shared';
-import { isSessionEventText, isSessionEventToolCall } from '@agentctl/shared';
+import type { SessionEventRow, SessionTurnAnchor } from '@agentctl/shared';
+import { isSessionEventText, extractTurnSummary } from '@agentctl/shared';
 import { extractTurnChanges, type ReviewFile } from '@/features/review';
 import { orderConversationEvents } from './orderConversationEvents';
+
+export { extractTurnSummary } from '@agentctl/shared';
 
 export interface ConversationTurn {
   id: string;
@@ -24,71 +26,55 @@ export interface ConversationTurn {
   isStreaming?: boolean;
 }
 
-/**
- * Extracts a concise summary from agent events in a turn.
- */
-export function extractTurnSummary(agentEvents: SessionEventRow[]): string {
-  // 1. Look for provider text response
-  for (let i = agentEvents.length - 1; i >= 0; i--) {
-    const e = agentEvents[i];
-    if (
-      isSessionEventText(e) &&
-      (e.data.role === 'provider' || (e.data as { role?: string }).role === 'assistant')
-    ) {
-      const text = e.data.content?.trim();
-      if (text) {
-        // Return first clean paragraph / sentence
-        const firstParagraph = text.split(/\n\s*\n/)[0]?.trim() ?? text;
-        return firstParagraph;
-      }
-    }
+/** Complete timeline anchors remain stable while only message pages are loaded. */
+export function mergeTurnIndex(
+  anchors: SessionTurnAnchor[],
+  loadedTurns: ConversationTurn[],
+  sessionId: string,
+  sessionMeta?: Pick<ConversationTurn, 'modelName' | 'providerName' | 'providerIcon' | 'userName'>,
+): ConversationTurn[] {
+  const byId = new Map(
+    anchors.map((anchor): [number, ConversationTurn] => [
+      anchor.eventId,
+      {
+        id: `turn-${anchor.eventId}`,
+        turnIndex: 0,
+        userEvent: {
+          id: anchor.eventId,
+          sessionId,
+          type: 'text',
+          data: { role: 'user', content: anchor.prompt },
+          createdAt: new Date(anchor.timestamp),
+        },
+        userPrompt: anchor.prompt,
+        agentEvents: [],
+        turnSummary: anchor.summary ?? '',
+        diffStats: anchor.diffStats ?? { additions: 0, deletions: 0, filesCount: 0 },
+        ...sessionMeta,
+        timestamp: anchor.timestamp,
+      },
+    ]),
+  );
+  const anchorsById = new Map(anchors.map((anchor) => [anchor.eventId, anchor]));
+  for (const turn of loadedTurns) {
+    const anchor = anchorsById.get(turn.userEvent.id);
+    // Pages can contain only part of a turn. Keep its complete indexed summary
+    // until all saved output is present, then follow loaded and live output.
+    const useIndexedSummary =
+      anchor?.eventCount !== undefined
+        ? turn.agentEvents.length < anchor.eventCount
+        : turn.agentEvents.length === 0;
+    byId.set(turn.userEvent.id, {
+      ...turn,
+      turnSummary: useIndexedSummary ? (anchor?.summary ?? turn.turnSummary) : turn.turnSummary,
+      diffStats: anchor?.diffStats ?? turn.diffStats,
+    });
   }
-
-  // 2. Look for plan_update
-  for (const e of agentEvents) {
-    if (e.type === 'plan_update') {
-      const planData = e.data as { plan?: { name?: string; text?: string }[] } | undefined;
-      if (Array.isArray(planData?.plan) && planData.plan.length > 0) {
-        const firstStep = planData.plan.find((p) => p.name || p.text);
-        if (firstStep) return firstStep.name || firstStep.text || '';
-      }
-    }
-  }
-
-  // 3. Look for tool call activities
-  const toolNames = agentEvents
-    .filter(isSessionEventToolCall)
-    .map(
-      (e) =>
-        (e.data as { title?: string; name?: string }).title ||
-        (e.data as { title?: string; name?: string }).name,
-    )
-    .filter(Boolean);
-
-  if (toolNames.length > 0) {
-    const unique = Array.from(new Set(toolNames));
-    if (unique.length === 1) {
-      return `Executed ${unique[0]}`;
-    }
-    return `Executed ${unique.slice(0, 2).join(', ')}${unique.length > 2 ? ` and ${unique.length - 2} other actions` : ''}`;
-  }
-
-  // 4. Look for thought updates
-  for (const e of agentEvents) {
-    if (isSessionEventText(e) && e.data.role === 'thought') {
-      const text = e.data.content?.trim();
-      if (text) {
-        const firstLine = text.split(/\n+/)[0]?.trim() ?? text;
-        return firstLine;
-      }
-    }
-  }
-
-  if (agentEvents.length === 0) {
-    return 'Awaiting agent response...';
-  }
-
-  return 'No response generated';
+  const persisted = [...byId.values()]
+    .filter((turn) => turn.userEvent.id >= 0)
+    .sort((a, b) => a.userEvent.id - b.userEvent.id);
+  const optimistic = loadedTurns.filter((turn) => turn.userEvent.id < 0);
+  return [...persisted, ...optimistic].map((turn, turnIndex) => ({ ...turn, turnIndex }));
 }
 
 /**

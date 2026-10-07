@@ -10,11 +10,13 @@ import {
   elicitationResponseSchema,
 } from '@agentctl/shared';
 import { AppError } from '../errors/app-error.js';
+import { readTurnIndex } from './session-turn-index.js';
 import {
   EVENT_HISTORY_BYTE_BUDGET,
   EVENT_REPLAY_LIMIT,
   parseEventRow,
   readEventPage,
+  readEventWindow,
   readEventReplay,
   readSessionChangeCatchUp,
 } from './session-event-history.js';
@@ -98,20 +100,44 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
     },
   );
 
+  fastify
+    .withTypeProvider<ZodTypeProvider>()
+    .get(
+      '/sessions/:id/events/turns',
+      { schema: { params: z.object({ id: z.uuid() }) } },
+      (request) => {
+        return readTurnIndex(fastify.db, request.params.id);
+      },
+    );
+
   fastify.withTypeProvider<ZodTypeProvider>().get(
     '/sessions/:id/events/page',
     {
       schema: {
         params: z.object({ id: z.uuid() }),
-        querystring: z.object({
-          beforeId: z.coerce.number().int().positive().optional(),
-          limit: z.coerce.number().int().min(1).max(500).default(200),
-        }),
+        querystring: z
+          .object({
+            beforeId: z.coerce.number().int().positive().optional(),
+            aroundId: z.coerce.number().int().positive().optional(),
+            afterId: z.coerce.number().int().positive().optional(),
+            limit: z.coerce.number().int().min(1).max(500).default(200),
+          })
+          .refine(
+            (query) =>
+              [query.beforeId, query.aroundId, query.afterId].filter((id) => id !== undefined)
+                .length <= 1,
+            'Use one history cursor',
+          ),
       },
     },
     async (request) => {
       const { id } = request.params;
-      const { beforeId, limit } = request.query;
+      const { beforeId, aroundId, afterId, limit } = request.query;
+      if (aroundId !== undefined || afterId !== undefined) {
+        const page = readEventWindow(fastify.db, id, { aroundId, afterId, limit });
+        if (!page) throw new AppError('Event not found', 404);
+        return page;
+      }
       return readEventPage(fastify.db, id, { beforeId, limit });
     },
   );

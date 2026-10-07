@@ -174,6 +174,7 @@ it('resets paged history on reconnect while preserving unsent messages and ignor
   });
   expect(mocks.fetch).toHaveBeenLastCalledWith(
     `/api/sessions/${sessionId}/events/page?limit=200&beforeId=100`,
+    { signal: expect.any(AbortSignal) },
   );
   expect(mocks.connect).toHaveBeenCalledTimes(1);
 });
@@ -198,4 +199,149 @@ it('exposes a failed initial page and retries it before starting the live stream
   expect(hook.historyError).toBeNull();
   expect(hook.events.map((row) => row.id)).toEqual([5]);
   expect(mocks.connect).toHaveBeenCalledWith(5);
+});
+
+it('jumps directly to an older window, pages forward without gaps, and keeps live updates separate', async () => {
+  mocks.fetch.mockResolvedValueOnce({ events: [event(900), event(901)], nextBeforeId: 900 });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  mocks.fetch.mockResolvedValueOnce({
+    events: [event(10), event(11)],
+    nextBeforeId: 10,
+    nextAfterId: 11,
+  });
+  await act(async () => {
+    await hook.loadEvent(10);
+  });
+  await settle();
+  expect(mocks.fetch).toHaveBeenLastCalledWith(
+    `/api/sessions/${sessionId}/events/page?limit=200&aroundId=10`,
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(hook.visibleEvents.map((row) => row.id)).toEqual([10, 11]);
+  expect(hook.hasNewer).toBe(true);
+  await act(async () => mocks.engines[0].onEventsUpdate([event(902)]));
+  await settle();
+  expect(hook.visibleEvents.map((row) => row.id)).toEqual([10, 11]);
+  expect(hook.events.at(-1)?.id).toBe(902);
+  mocks.fetch.mockResolvedValueOnce({
+    events: [event(12), event(13)],
+    nextBeforeId: 12,
+    nextAfterId: 13,
+  });
+  await act(async () => {
+    await hook.loadNewer();
+  });
+  await settle();
+  expect(hook.visibleEvents.map((row) => row.id)).toEqual([10, 11, 12, 13]);
+  await act(async () => hook.returnToLatest());
+  expect(hook.visibleEvents.map((row) => row.id)).toEqual([900, 901, 902]);
+  expect(hook.hasNewer).toBe(false);
+});
+
+it('cancels a superseded jump and ignores its late response', async () => {
+  mocks.fetch.mockResolvedValueOnce({ events: [event(900)], nextBeforeId: 900 });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  let finish!: (page: unknown) => void;
+  mocks.fetch.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  let first!: Promise<void>;
+  await act(async () => {
+    first = hook.loadEvent(10);
+  });
+  const signal = mocks.fetch.mock.calls.at(-1)![1].signal as AbortSignal;
+  mocks.fetch.mockResolvedValueOnce({
+    events: [event(50), event(51)],
+    nextBeforeId: 50,
+    nextAfterId: 51,
+  });
+  await act(async () => {
+    await hook.loadEvent(50);
+  });
+  await settle();
+  expect(signal.aborted).toBe(true);
+  await act(async () => {
+    finish({ events: [event(10)], nextBeforeId: 10, nextAfterId: 10 });
+    await first;
+  });
+  expect(hook.visibleEvents.map((row) => row.id)).toEqual([50, 51]);
+});
+
+it('bounds loaded history while retaining an older cursor for discarded rows', async () => {
+  mocks.fetch.mockResolvedValueOnce({
+    events: Array.from({ length: 200 }, (_, i) => event(i + 1001)),
+    nextBeforeId: 1001,
+  });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  for (let start = 801; start >= 1; start -= 200) {
+    mocks.fetch.mockResolvedValueOnce({
+      events: Array.from({ length: 200 }, (_, i) => event(i + start)),
+      nextBeforeId: start === 1 ? null : start,
+    });
+    await act(async () => {
+      await hook.loadOlder();
+    });
+    await settle();
+  }
+  expect(hook.visibleEvents).toHaveLength(1000);
+  expect(hook.events.length).toBeLessThanOrEqual(1200);
+  expect(hook.hasNewer).toBe(true);
+  await act(async () => hook.returnToLatest());
+  expect(hook.visibleEvents[0].id).toBe(1001);
+  expect(hook.hasOlder).toBe(true);
+});
+
+it('retains the owning input when restoring a latest page with an earlier turn anchor', async () => {
+  const reply = (id: number): SessionEventRow => ({
+    ...event(id),
+    type: 'text',
+    parentEventId: 1,
+    data: { role: 'provider', content: String(id) },
+  });
+  mocks.fetch.mockResolvedValueOnce({
+    events: [event(1), reply(900), reply(901)],
+    nextBeforeId: 900,
+  });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  mocks.fetch.mockResolvedValueOnce({
+    events: [reply(100), reply(101)],
+    nextBeforeId: 100,
+    nextAfterId: 101,
+  });
+  await act(async () => {
+    await hook.loadEvent(100);
+  });
+  await settle();
+  await act(async () => hook.returnToLatest());
+  expect(hook.visibleEvents.map((row) => row.id)).toEqual([1, 900, 901]);
 });

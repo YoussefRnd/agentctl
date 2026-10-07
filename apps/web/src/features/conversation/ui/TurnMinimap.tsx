@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, memo } from 'react';
 import type { ConversationTurn } from '../lib/turnMinimapGrouping';
 import { TurnPreviewPopover } from './TurnPreviewPopover';
+import { Tooltip } from '@agentctl/ui';
 
 interface TurnMinimapProps {
   turns: ConversationTurn[];
@@ -8,201 +9,193 @@ interface TurnMinimapProps {
   onSelectTurn: (turn: ConversationTurn) => void;
 }
 
+const Tick = memo(function Tick({
+  turn,
+  index,
+  active,
+  strength,
+  hovering,
+  onSelect,
+  onFocus,
+  onBlur,
+}: {
+  turn: ConversationTurn;
+  index: number;
+  active: boolean;
+  strength: number;
+  hovering: boolean;
+  onSelect: (turn: ConversationTurn) => void;
+  onFocus: (index: number) => void;
+  onBlur: () => void;
+}) {
+  const bright = active || strength > 0.08;
+  return (
+    <div className="relative flex min-h-0 w-full flex-1 items-center justify-end [&>span]:h-full [&>span]:w-full">
+      <Tooltip
+        content={<TurnPreviewPopover turn={turn} />}
+        side="left"
+        delayDuration={150}
+        className="rounded-lg border-0 bg-transparent p-0 shadow-none backdrop-blur-none"
+      >
+        <button
+          type="button"
+          onClick={(event) => {
+            if (event.detail === 0) onSelect(turn);
+          }}
+          onFocus={() => onFocus(index)}
+          onBlur={onBlur}
+          className="focus-visible:outline-accent relative flex h-full w-full cursor-pointer items-center justify-end px-1 focus-visible:outline"
+          aria-label={`Turn ${index + 1}`}
+          aria-current={active ? 'location' : undefined}
+        >
+          <span
+            style={{
+              width: 22,
+              height: 1.5,
+              maxHeight: '50%',
+              transform: `scale(${(hovering ? 10 / 22 : 0.5) + strength * (12 / 22)}, ${1 + strength / 3})`,
+              backgroundColor: bright ? 'var(--color-text-main)' : 'var(--color-text-muted)',
+              opacity: active ? 1 : (hovering ? 0.25 : 0.35) + strength * 0.75,
+            }}
+            className="pointer-events-none block origin-right rounded-full transition-[transform,opacity,background-color] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          />
+        </button>
+      </Tooltip>
+    </div>
+  );
+});
+
 export const TurnMinimap = memo(function TurnMinimap({
   turns,
   activeTurnIndex,
   onSelectTurn,
 }: TurnMinimapProps) {
-  const [hoveredTurnIndex, setHoveredTurnIndex] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-
-  const hoverTimeoutRef = useRef<number | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<number | null>(null);
   const railRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<number | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const pendingPositionRef = useRef<number | null>(null);
+  const draggingRef = useRef(false);
+  const didScrubRef = useRef(false);
+  const lastScrubIndexRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current != null) {
-        window.clearTimeout(hoverTimeoutRef.current);
-      }
-    };
+  const clearHoverTimeout = useCallback(() => {
+    if (hoverTimeoutRef.current != null) window.clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = null;
   }, []);
-
-  const handleMouseEnter = useCallback((index: number) => {
-    if (hoverTimeoutRef.current != null) {
-      window.clearTimeout(hoverTimeoutRef.current);
-      hoverTimeoutRef.current = null;
-    }
-    setHoveredTurnIndex(index);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    hoverTimeoutRef.current = window.setTimeout(() => {
-      setHoveredTurnIndex(null);
-    }, 120);
-  }, []);
-
-  const handleTickClick = useCallback(
-    (turn: ConversationTurn) => {
-      onSelectTurn(turn);
+  const handleFocus = useCallback(
+    (index: number) => {
+      clearHoverTimeout();
+      setHoverPosition(index);
     },
-    [onSelectTurn],
+    [clearHoverTimeout],
   );
-
-  // Trackpad / Mouse drag scrubber
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (turns.length === 0 || !railRef.current) return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      setIsDragging(true);
-
-      const rect = railRef.current.getBoundingClientRect();
-      const relativeY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
-      const ratio = relativeY / rect.height;
-      const targetIndex = Math.min(Math.floor(ratio * turns.length), turns.length - 1);
-      setHoveredTurnIndex(targetIndex);
-      onSelectTurn(turns[targetIndex]);
+  const handleLeave = useCallback(() => {
+    clearHoverTimeout();
+    hoverTimeoutRef.current = window.setTimeout(() => setHoverPosition(null), 120);
+  }, [clearHoverTimeout]);
+  useEffect(
+    () => () => {
+      if (hoverTimeoutRef.current != null) window.clearTimeout(hoverTimeoutRef.current);
+      if (frameRef.current != null) window.cancelAnimationFrame(frameRef.current);
+    },
+    [],
+  );
+  const selectScrubPosition = useCallback(
+    (position: number) => {
+      const index = Math.max(0, Math.min(Math.round(position), turns.length - 1));
+      if (index !== lastScrubIndexRef.current && turns[index]) {
+        lastScrubIndexRef.current = index;
+        onSelectTurn(turns[index]);
+      }
     },
     [turns, onSelectTurn],
   );
-
   const handlePointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!isDragging || turns.length === 0 || !railRef.current) return;
-      const rect = railRef.current.getBoundingClientRect();
-      const relativeY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
-      const ratio = relativeY / rect.height;
-      const targetIndex = Math.min(Math.floor(ratio * turns.length), turns.length - 1);
-      setHoveredTurnIndex(targetIndex);
-      onSelectTurn(turns[targetIndex]);
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const rect = railRef.current?.getBoundingClientRect();
+      if (!rect?.height || !turns.length) return;
+      clearHoverTimeout();
+      pendingPositionRef.current = Math.max(
+        0,
+        Math.min(((event.clientY - rect.top) / rect.height) * turns.length - 0.5, turns.length - 1),
+      );
+      if (draggingRef.current) didScrubRef.current = true;
+      if (frameRef.current != null) return;
+      frameRef.current = window.requestAnimationFrame(() => {
+        frameRef.current = null;
+        const position = pendingPositionRef.current;
+        if (position == null) return;
+        setHoverPosition(position);
+        if (draggingRef.current && didScrubRef.current) selectScrubPosition(position);
+      });
     },
-    [isDragging, turns, onSelectTurn],
+    [turns.length, clearHoverTimeout, selectScrubPosition],
   );
-
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || !turns.length) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      draggingRef.current = true;
+      didScrubRef.current = false;
+      lastScrubIndexRef.current = null;
+    },
+    [turns.length],
+  );
   const handlePointerUp = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (isDragging) {
-        try {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        } catch {
-          // ignore
-        }
-        setIsDragging(false);
-      }
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const rect = railRef.current?.getBoundingClientRect();
+      if (draggingRef.current && rect?.height)
+        selectScrubPosition(
+          Math.max(
+            0,
+            Math.min(
+              ((event.clientY - rect.top) / rect.height) * turns.length - 0.5,
+              turns.length - 1,
+            ),
+          ),
+        );
+      draggingRef.current = false;
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
     },
-    [isDragging],
+    [selectScrubPosition, turns.length],
   );
-
-  if (turns.length === 0) {
-    return null;
-  }
-
-  const activeTurn = hoveredTurnIndex != null ? turns[hoveredTurnIndex] : null;
-
-  const getTickDimensions = (index: number) => {
-    if (hoveredTurnIndex == null) {
-      if (index === activeTurnIndex) {
-        return {
-          width: '11px',
-          height: '1.5px',
-          backgroundColor: '#ffffff',
-          boxShadow: '0 0 6px rgba(255, 255, 255, 0.5)',
-          opacity: 1,
-        };
-      }
-      return {
-        width: '11px',
-        height: '1.5px',
-        backgroundColor: 'rgba(163, 163, 163, 0.35)',
-        boxShadow: 'none',
-        opacity: 0.7,
-      };
-    }
-
-    const distance = Math.abs(index - hoveredTurnIndex);
-
-    if (distance === 0) {
-      return {
-        width: '22px',
-        height: '2px',
-        backgroundColor: '#ffffff',
-        boxShadow: '0 0 8px rgba(255, 255, 255, 0.7)',
-        opacity: 1,
-      };
-    }
-    if (distance === 1) {
-      return {
-        width: '16px',
-        height: '1.5px',
-        backgroundColor: 'rgba(255, 255, 255, 0.75)',
-        boxShadow: 'none',
-        opacity: 0.85,
-      };
-    }
-    if (distance === 2) {
-      return {
-        width: '13px',
-        height: '1.5px',
-        backgroundColor: 'rgba(255, 255, 255, 0.45)',
-        boxShadow: 'none',
-        opacity: 0.65,
-      };
-    }
-    return {
-      width: '10px',
-      height: '1.5px',
-      backgroundColor: 'rgba(163, 163, 163, 0.25)',
-      boxShadow: 'none',
-      opacity: 0.5,
-    };
-  };
-
+  const handlePointerCancel = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    draggingRef.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+  }, []);
+  if (!turns.length) return null;
   return (
-    <div
-      ref={railRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      className="absolute top-1/2 right-2 z-30 flex -translate-y-1/2 cursor-ns-resize touch-none flex-col items-end select-none"
-      aria-label="Conversation turn timeline minimap"
-    >
-      {/* Ticks rail */}
-      <div className="flex flex-col items-end gap-[3px] p-0.5">
+    <div className="absolute inset-y-6 right-2 z-30 flex w-8 items-center justify-end select-none">
+      <div
+        ref={railRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onPointerEnter={clearHoverTimeout}
+        onPointerLeave={handleLeave}
+        style={{ height: turns.length * 10 }}
+        className="flex max-h-full w-full cursor-ns-resize touch-none flex-col items-end"
+        aria-label="Conversation turn timeline minimap"
+      >
         {turns.map((turn, index) => {
-          const isHovered = index === hoveredTurnIndex;
-          const tickStyle = getTickDimensions(index);
-
+          const distance = hoverPosition == null ? Infinity : Math.abs(index - hoverPosition);
+          const strength = distance < 3 ? Math.exp((-distance * distance) / 2) : 0;
           return (
-            <div
+            <Tick
               key={turn.id}
-              className="relative flex items-center justify-end"
-              onMouseEnter={() => {
-                handleMouseEnter(index);
-              }}
-              onMouseLeave={handleMouseLeave}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  handleTickClick(turn);
-                }}
-                className="group relative flex cursor-pointer items-center justify-end px-1 py-[3px] focus:outline-none"
-                aria-label={`Turn ${index + 1}`}
-              >
-                {/* Horizontal tick bar */}
-                <span
-                  style={tickStyle}
-                  className="block rounded-full transition-[width,height,background-color,box-shadow,opacity] duration-150 ease-out"
-                />
-              </button>
-
-              {/* Hover Popover */}
-              {isHovered && activeTurn && (
-                <div className="animate-in fade-in-0 zoom-in-95 absolute top-1/2 right-11 z-50 -translate-y-1/2 duration-100">
-                  <TurnPreviewPopover turn={activeTurn} />
-                </div>
-              )}
-            </div>
+              turn={turn}
+              index={index}
+              active={index === activeTurnIndex}
+              strength={strength}
+              hovering={hoverPosition != null}
+              onSelect={onSelectTurn}
+              onFocus={handleFocus}
+              onBlur={handleLeave}
+            />
           );
         })}
       </div>

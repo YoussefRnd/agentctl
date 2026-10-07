@@ -80,6 +80,18 @@ Closing the mobile inspector now returns to the chat without a panel mount callb
 it. Switching back to desktop registers a fresh panel group and collapses the closed inspector,
 so the chat regains the available width without a panel-constraint error.
 
+Older conversation pages load automatically when scrolling upward near the beginning of the
+loaded history. The feed preserves the visible message as pages are prepended, shows a quiet
+loading status at the history boundary, and offers Retry only after a failed request.
+
+The turn timeline uses a complete index of foreground user prompts, independently of the
+loaded message pages. Tick count and turn numbering stay fixed as history loads. Selecting
+an unloaded turn fetches the required older pages and navigates to that input. Loaded turns
+retain their detailed previews; unloaded turns show their prompt without an invented response
+summary. The rail compresses to fit the chat height and previews respect viewport bounds.
+An isolated 500-message conversation showed all 250 ticks before its older pages loaded;
+first/last-turn navigation and rail containment were checked on desktop and at 320×568.
+
 These screenshots use disposable fixture data:
 
 ![Desktop conversation and changed-file review](images/ui-polish-desktop.jpg)
