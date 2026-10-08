@@ -32,11 +32,16 @@ export function ContextChipStrip({ contexts, onRemove }: ContextChipStripProps) 
   if (contexts.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3 pb-0 sm:px-5">
+    <div
+      role="group"
+      aria-label="Attached context"
+      className="flex flex-wrap items-center gap-1.5 px-3 pt-3 pb-0 sm:px-5"
+    >
       {contexts.map((ctx) => (
         <div
           key={ctx.id}
-          className="border-border/30 bg-surface/70 hover:bg-surface hover:border-accent/40 group/chip flex items-center gap-1.5 rounded-full border py-0.5 pr-1 pl-2.5 text-xs shadow-xs backdrop-blur-sm transition-[color,background-color,border-color] duration-150"
+          title={ctx.subtitle || ctx.value}
+          className="border-border/30 bg-surface/70 hover:bg-surface hover:border-accent/40 group/chip flex items-center gap-1.5 rounded-lg border py-1 pr-1 pl-2.5 text-xs shadow-xs backdrop-blur-sm transition-[color,background-color,border-color] duration-150"
         >
           {renderContextIcon(ctx)}
           <span className="text-text-main max-w-[180px] truncate font-mono text-[11px] font-medium">
@@ -45,7 +50,7 @@ export function ContextChipStrip({ contexts, onRemove }: ContextChipStripProps) 
           <IconButton
             onClick={() => onRemove(ctx.id)}
             size="sm"
-            className="ml-0.5 h-5 w-5 rounded-full p-0 hover:bg-rose-500/15 hover:text-rose-400"
+            className="ml-0.5 h-6 w-6 rounded-md p-0 hover:bg-rose-500/15 hover:text-rose-400"
             title={`Remove ${ctx.title}`}
             aria-label={`Remove ${ctx.title}`}
           >

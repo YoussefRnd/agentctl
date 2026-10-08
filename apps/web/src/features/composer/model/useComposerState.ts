@@ -4,7 +4,7 @@ import type { ContextItem } from '@agentctl/api-client';
 import { useAttachments } from './useAttachments';
 import { useContextAutocomplete } from './useContextAutocomplete';
 import { usePromptHistory } from './usePromptHistory';
-import { resolveAgentFeatures, type ProviderDiscovery } from '@agentctl/shared';
+import { fuzzySearch, resolveAgentFeatures, type ProviderDiscovery } from '@agentctl/shared';
 import { useSettingsOverlayStore } from '@/features/settings';
 import { useWorkbenchStore } from '@/features/workbench';
 import { useDraftStore } from './useDraftStore';
@@ -280,12 +280,10 @@ export function useComposerState({
 
   const filteredCommands = useMemo(() => {
     if (!isSlashCommand) return [];
-    const query = input.slice(1).toLowerCase().trim();
-    if (!query) return commands;
-    return commands.filter((c) => c.name.toLowerCase().includes(query));
+    return fuzzySearch(commands, input.slice(1), (command) => [command.name]);
   }, [isSlashCommand, input, commands]);
 
-  const showSlashMenu = isSlashCommand && filteredCommands.length > 0 && !input.includes(' ');
+  const showSlashMenu = isSlashCommand && !/\s/.test(input);
 
   const matchingCommand = useMemo<CommandInfo | undefined>(() => {
     if (!isSlashCommand) return undefined;
@@ -355,7 +353,7 @@ export function useComposerState({
 
         // Resolve dynamic git context (like git:diff) if attached
         if (dynamicContexts.length > 0) {
-          const resolved = await contextAutocomplete.resolveAttachedContexts();
+          const resolved = await contextAutocomplete.resolveAttachedContexts(dynamicContexts);
           if (resolved?.formattedContent) {
             finalPrompt = finalPrompt
               ? `${finalPrompt}\n\n${resolved.formattedContent}`

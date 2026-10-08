@@ -1,6 +1,6 @@
 import { RefreshCw, X, Loader2, AlertCircle } from 'lucide-react';
 import type { PendingAttachment } from '../model/useAttachments';
-import { Button, IconButton } from '@agentctl/ui';
+import { Button, IconButton, ImagePreview } from '@agentctl/ui';
 
 interface AttachmentStripProps {
   attachments: PendingAttachment[];
@@ -23,17 +23,14 @@ export function AttachmentStrip({ attachments, onRemove, onRetry }: AttachmentSt
       style={{ scrollbarWidth: 'none' }}
     >
       {attachments.map((attachment) => (
-        <div
+        <ImagePreview
           key={attachment.localId}
+          src={attachment.objectUrl}
+          filename={attachment.file.name}
+          previewable={attachment.state === 'ready'}
           className="group border-border/40 bg-surface-secondary/40 relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border shadow-sm transition-colors sm:h-18 sm:w-18"
+          imageClassName="object-cover transition-transform duration-200 group-hover:scale-105"
         >
-          {/* Base image thumbnail */}
-          <img
-            src={attachment.objectUrl}
-            alt={attachment.file.name}
-            className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-          />
-
           {/* Bottom subtle gradient for text readability */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-black/80 to-transparent" />
 
@@ -103,7 +100,7 @@ export function AttachmentStrip({ attachments, onRemove, onRetry }: AttachmentSt
               {formatSize(attachment.file.size)}
             </span>
           )}
-        </div>
+        </ImagePreview>
       ))}
     </div>
   );

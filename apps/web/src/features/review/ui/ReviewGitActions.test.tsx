@@ -29,6 +29,7 @@ function renderActions(
     openMenu?: boolean;
     openCommitDialog?: boolean;
     commitMessage?: string;
+    workspaceBusy?: boolean;
   } = {},
 ) {
   const container = document.createElement('div');
@@ -64,6 +65,7 @@ function renderActions(
         isBaseBranch={options.isBaseBranch ?? false}
         canPush
         isLoadingGitStatus={false}
+        workspaceBusy={options.workspaceBusy}
         commitMessage={options.commitMessage ?? 'feat: improve review workflow'}
         onCommitMessageChange={vi.fn()}
         onSwitchBranch={actions.onSwitchBranch}
@@ -101,6 +103,44 @@ function renderActions(
 }
 
 describe('ReviewGitActions', () => {
+  it.each(['Escape', 'close button'])(
+    'dismisses the commit dialog with %s while the agent is running',
+    async (method) => {
+      const { container, actions, findButton } = renderActions({
+        stagedCount: 1,
+        openMenu: false,
+        workspaceBusy: true,
+      });
+      act(() => container.querySelector<HTMLButtonElement>('[aria-label="Commit"]')!.click());
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(dialog).not.toBeNull();
+      expect(findButton('Commit')?.disabled).toBe(true);
+      expect(findButton('Commit and push')?.disabled).toBe(true);
+      act(() => {
+        if (method === 'Escape')
+          dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        else dialog.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click();
+      });
+      await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+      expect(actions.onCommit).not.toHaveBeenCalled();
+      expect(actions.onPush).not.toHaveBeenCalled();
+    },
+  );
+
+  it('opens and dismisses the Git menu while the agent is running, keeping mutations disabled', async () => {
+    const { findButton, actions } = renderActions({ workspaceBusy: true, openCommitDialog: false });
+    expect(findButton('Fetch remote changes')).toBeDefined();
+    expect(findButton('Fetch remote changes')?.disabled).toBe(true);
+    expect(findButton('Switch or create branch')?.disabled).toBe(true);
+    act(() =>
+      findButton('Fetch remote changes')!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      ),
+    );
+    await vi.waitFor(() => expect(findButton('Fetch remote changes')).toBeUndefined());
+    expect(actions.onFetch).not.toHaveBeenCalled();
+  });
+
   it('requires an explicit commit message', async () => {
     const { actions, findButton } = renderActions({ stagedCount: 1, commitMessage: '' });
     expect(findButton('Commit')?.disabled).toBe(true);

@@ -272,7 +272,7 @@ export function AdvancedSettingsPopover({ isLoading }: { isLoading: boolean }) {
         side="top"
         align="end"
         sideOffset={8}
-        className="border-border/50 bg-brand-mantle/95 w-[290px] rounded-lg border p-4 shadow-2xl backdrop-blur-xl"
+        className="border-border/50 bg-brand-mantle/95 w-80 max-w-[calc(100vw-2rem)] rounded-xl border p-4 shadow-2xl backdrop-blur-xl"
       >
         <div className="custom-scrollbar max-h-[400px] overflow-y-auto pr-0.5">
           <ConfigOptionsPanel filterCategories={[...PRIMARY_CONFIG_CATEGORIES]} />

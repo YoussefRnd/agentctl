@@ -33,6 +33,7 @@ export async function searchContext(
   query = '',
   type: 'all' | ContextItemType = 'all',
   scope: 'sessions' | 'projects' = 'sessions',
+  signal?: AbortSignal,
 ): Promise<ContextItem[]> {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
@@ -41,6 +42,7 @@ export async function searchContext(
   const qs = params.toString() ? `?${params.toString()}` : '';
   const response = await apiClient.fetch<{ items: ContextItem[] }>(
     `/api/${scope}/${sessionId}/context/search${qs}`,
+    { signal },
   );
   return response.items;
 }

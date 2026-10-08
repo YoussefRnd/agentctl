@@ -1,14 +1,27 @@
-import React, { useEffect, useRef } from 'react';
-import { Folder, Code2, Loader2, CornerDownLeft } from 'lucide-react';
-import { cn, PopoverContent } from '@agentctl/ui';
+import { useEffect, useRef } from 'react';
+import { Folder, Code2, Loader2, Check, Search, AlertCircle } from 'lucide-react';
+import { cn } from '@agentctl/ui';
 import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem, ContextItemType } from '@agentctl/api-client';
 import { FileIcon } from '@/shared';
+import {
+  SuggestionDropdown,
+  SuggestionHeader,
+  SuggestionList,
+  SuggestionOption,
+  SuggestionFooter,
+} from './SuggestionDropdown';
 
 interface ContextDropdownProps {
   isOpen: boolean;
   items: ContextItem[];
   isLoading: boolean;
+  searchError: boolean;
+  query: string;
+  listboxId: string;
+  attachedContexts: ContextItem[];
+  onActiveIndexChange: (index: number) => void;
+  onDismiss: () => void;
   activeIndex: number;
   onSelectItem: (item: ContextItem) => void;
   filterType: 'all' | ContextItemType;
@@ -34,11 +47,24 @@ function renderDropdownIcon(item: ContextItem) {
   return <Code2 className="text-accent h-3.5 w-3.5 shrink-0" />;
 }
 
+const filters = [
+  { type: 'all', label: 'All' },
+  { type: 'file', label: 'Files' },
+  { type: 'folder', label: 'Folders' },
+  { type: 'git', label: 'Git' },
+] as const;
+
 export function ContextDropdown({
   isOpen,
   items,
   isLoading,
+  searchError,
+  query,
+  listboxId,
+  attachedContexts,
   activeIndex,
+  onActiveIndexChange,
+  onDismiss,
   onSelectItem,
   filterType,
   setFilterType,
@@ -46,150 +72,108 @@ export function ContextDropdown({
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
-    if (isOpen && itemRefs.current[activeIndex]) {
-      itemRefs.current[activeIndex]?.scrollIntoView({
-        block: 'nearest',
-        behavior: 'smooth',
-      });
-    }
-  }, [isOpen, activeIndex]);
+    if (isOpen) itemRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [isOpen, activeIndex, items]);
 
   if (!isOpen) return null;
 
   return (
-    <PopoverContent
-      role="region"
-      aria-label="Context suggestions"
-      side="top"
-      align="start"
-      sideOffset={10}
-      onOpenAutoFocus={(event) => event.preventDefault()}
-      onCloseAutoFocus={(event) => event.preventDefault()}
-      className="border-border/30 bg-brand-mantle/95 flex max-h-[min(20rem,var(--radix-popover-content-available-height))] w-(--radix-popover-trigger-width) flex-col overflow-hidden rounded-lg border p-1 shadow-2xl"
-    >
-      {/* Header with Segmented Filter Pills */}
-      <div className="border-border/20 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-2.5 py-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="bg-accent/15 text-accent flex h-4.5 w-4.5 items-center justify-center rounded font-mono text-[11px] font-bold">
-            @
-          </span>
-          <span className="text-text-main text-[11px] font-semibold tracking-tight">
-            Add Context
-          </span>
-        </div>
+    <SuggestionDropdown label="Context suggestions" onDismiss={onDismiss}>
+      <SuggestionHeader
+        symbol="@"
+        title="Add context"
+        description="Search workspace files, folders, and Git"
+        trailing={
+          attachedContexts.length > 0 ? (
+            <span className="bg-accent/10 text-accent rounded-full px-2 py-1 text-[11px]">
+              {attachedContexts.length} attached
+            </span>
+          ) : undefined
+        }
+      />
 
-        {/* Segmented filter pills */}
-        <div className="border-border/20 bg-surface-secondary/40 flex items-center rounded-lg border p-0.5">
-          {(['all', 'file', 'folder', 'git'] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setFilterType(tab)}
-              className={cn(
-                'cursor-pointer rounded-md px-2 py-0.5 text-[10px] font-medium capitalize transition-all duration-150 select-none',
-                filterType === tab
-                  ? 'border-border/40 bg-surface text-text-main font-semibold shadow-xs'
-                  : 'text-text-muted hover:text-text-main',
-              )}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+      <div
+        role="group"
+        aria-label="Filter context"
+        className="flex shrink-0 items-center gap-1 px-3 pt-2.5 pb-2"
+      >
+        {filters.map(({ type, label }) => (
+          <button
+            key={type}
+            type="button"
+            aria-pressed={filterType === type}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setFilterType(type)}
+            className={cn(
+              'focus-visible:ring-accent cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
+              filterType === type
+                ? 'bg-accent/15 text-accent'
+                : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Items List */}
-      <div className="custom-scrollbar flex max-h-64 min-h-0 flex-col gap-0.5 overflow-y-auto p-1">
-        {isLoading && items.length === 0 ? (
-          <div className="text-text-muted flex items-center justify-center gap-2 py-8 text-xs font-medium">
-            <Loader2 className="text-accent h-4 w-4 animate-spin" />
-            <span>Searching workspace...</span>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="text-text-muted py-8 text-center text-xs">
-            No matching files or git context found.
-          </div>
-        ) : (
-          items.map((item, index) => {
-            const isActive = index === activeIndex;
-            return (
-              <button
-                key={item.id}
-                ref={(el) => {
-                  itemRefs.current[index] = el;
-                }}
-                type="button"
-                onClick={() => onSelectItem(item)}
-                className={cn(
-                  'group/item flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors duration-150 select-none',
-                  isActive
-                    ? 'bg-accent/15 text-text-main shadow-xs'
-                    : 'text-text-muted hover:text-text-main hover:bg-white/5',
-                )}
-              >
-                <div
-                  className={cn(
-                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors',
-                    isActive ? 'bg-accent/20' : 'bg-surface-secondary/70',
-                  )}
-                >
-                  {renderDropdownIcon(item)}
-                </div>
-
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span
-                    className={cn(
-                      'truncate font-mono text-xs font-medium',
-                      isActive ? 'text-accent' : 'text-text-main',
-                    )}
-                  >
-                    {item.title}
+      <SuggestionList id={listboxId} label="Workspace context" loading={isLoading}>
+        {items.map((item, index) => {
+          const attached = attachedContexts.some((context) => context.id === item.id);
+          return (
+            <SuggestionOption
+              key={item.id}
+              id={`${listboxId}-option-${index}`}
+              active={index === activeIndex}
+              accessibleLabel={`${item.title}${item.subtitle ? `, ${item.subtitle}` : ''}${attached ? ', already attached' : ''}`}
+              ref={(element) => {
+                itemRefs.current[index] = element;
+              }}
+              title={item.title}
+              description={item.subtitle}
+              query={query}
+              icon={renderDropdownIcon(item)}
+              onActivate={() => onActiveIndexChange(index)}
+              onSelect={() => onSelectItem(item)}
+              trailing={
+                attached ? (
+                  <span className="text-accent flex shrink-0 items-center gap-1 text-[11px]">
+                    <Check aria-hidden="true" className="h-3.5 w-3.5" />
+                    Attached
                   </span>
-                  {item.subtitle && (
-                    <span className="text-text-muted/50 truncate font-mono text-[10px]">
-                      {item.subtitle}
-                    </span>
-                  )}
-                </div>
+                ) : undefined
+              }
+            />
+          );
+        })}
+      </SuggestionList>
 
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <span className="border-border/30 bg-surface-secondary/60 text-text-muted/60 rounded border px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase">
-                    {item.type}
-                  </span>
-                  {isActive && (
-                    <CornerDownLeft className="text-accent/80 h-3 w-3 shrink-0 opacity-80" />
-                  )}
-                </div>
-              </button>
-            );
-          })
-        )}
-      </div>
-
-      {/* Keyboard navigation helper footer */}
-      <div className="border-border/15 bg-surface-secondary/20 text-text-muted/50 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-2.5 py-1.5 text-[10px]">
-        <span className="truncate">Attach file, folder, or git diff</span>
-        <div className="flex items-center gap-2 font-mono text-[9px]">
-          <span className="flex items-center gap-1">
-            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
-              ↑↓
-            </kbd>
-            navigate
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
-              ↵
-            </kbd>
-            attach
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="border-border/40 bg-surface text-text-muted rounded border px-1 py-0.5">
-              Esc
-            </kbd>
-            close
-          </span>
+      {items.length === 0 && (
+        <div
+          role="status"
+          className="text-text-muted flex flex-col items-center gap-2 px-4 pt-3 pb-7 text-center text-xs"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 aria-hidden="true" className="text-accent h-5 w-5 animate-spin" />
+              <p>Searching workspace…</p>
+            </>
+          ) : searchError ? (
+            <>
+              <AlertCircle aria-hidden="true" className="h-5 w-5" />
+              <p>Couldn’t search this workspace.</p>
+              <p className="text-[11px]">Edit your search or switch filters to try again.</p>
+            </>
+          ) : (
+            <>
+              <Search aria-hidden="true" className="h-5 w-5" />
+              <p>{query ? <>No matches for “{query}”</> : 'No context available.'}</p>
+              <p className="text-[11px]">Try a file name, path, or another filter.</p>
+            </>
+          )}
         </div>
-      </div>
-    </PopoverContent>
+      )}
+
+      <SuggestionFooter count={items.length} action="attach" loading={isLoading} />
+    </SuggestionDropdown>
   );
 }

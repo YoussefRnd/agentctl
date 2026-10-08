@@ -29,3 +29,5 @@ export * from './elicitation-validation.js';
 
 export * from './agent-defaults.js';
 export * from './conversation-preview.js';
+
+export * from './fuzzy-search.js';

@@ -18,6 +18,7 @@ import {
   RepoPushIcon,
 } from '@primer/octicons-react';
 import { Check, ChevronDown, Loader2 } from 'lucide-react';
+import { formatShortcut } from '@/shared/lib/platform';
 
 type PendingAction = 'commit' | 'commit-push' | 'push' | 'pull' | 'switch' | 'fetch' | null;
 
@@ -103,7 +104,9 @@ export function ReviewGitActions({
   const includedCount = includeUnstaged
     ? (uncommittedCount ?? stagedCount + unstagedCount)
     : stagedCount;
-  const isBusy = pendingAction !== null || workspaceBusy;
+  // Agent activity blocks Git mutations, but must not trap users in an overlay.
+  const isGitActionPending = pendingAction !== null;
+  const isBusy = isGitActionPending || workspaceBusy;
   const isDiverged = aheadCount > 0 && behindCount > 0;
 
   const run = async (
@@ -174,7 +177,7 @@ export function ReviewGitActions({
         <Popover
           open={menuOpen}
           onOpenChange={(nextOpen) => {
-            if (!isBusy) {
+            if (!isGitActionPending) {
               setMenuOpen(nextOpen);
             }
           }}
@@ -273,7 +276,7 @@ export function ReviewGitActions({
       <Dialog
         open={branchDialogOpen}
         onOpenChange={(open) => {
-          if (!isBusy) {
+          if (!isGitActionPending) {
             setBranchDialogOpen(open);
             setError(null);
           }
@@ -350,7 +353,7 @@ export function ReviewGitActions({
       <Dialog
         open={commitDialogOpen}
         onOpenChange={(nextOpen) => {
-          if (!isBusy) {
+          if (!isGitActionPending) {
             setError(null);
             setCommitDialogOpen(nextOpen);
           }
@@ -469,7 +472,7 @@ export function ReviewGitActions({
                   <span>Commit</span>
                 </span>
                 <kbd className="border-border/20 bg-surface/80 text-text-muted rounded border px-1.5 py-0.5 font-mono text-[10px]">
-                  Ctrl+↵
+                  {formatShortcut('↵')}
                 </kbd>
               </button>
 

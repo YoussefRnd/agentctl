@@ -12,6 +12,32 @@ const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/we
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 
+/** Fetch image bytes using the same backend and authentication as uploads. */
+export async function fetchAttachment(
+  sessionId: string,
+  attachmentId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const token = getDesktopCapability();
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal,
+    },
+  );
+  if (response.status === 401) redirectToLogin();
+  if (!response.ok) {
+    throw new ApiError('Could not load image attachment', response.status);
+  }
+  const blob = await response.blob();
+  if (!ALLOWED_TYPES.has(blob.type)) {
+    throw new ApiError('Invalid image attachment response', 415);
+  }
+  return blob;
+}
+
 /**
  * Upload a single image file to the session attachment store.
  * Uses XMLHttpRequest so upload progress can be tracked.

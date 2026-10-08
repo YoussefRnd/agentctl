@@ -19,6 +19,7 @@ import { MarkdownTable } from './MarkdownTable';
 import { formatShortcut } from '@/shared/lib/platform';
 import { parseUserMessageContent } from '../../lib/userMessageParser';
 import { ContextAttachmentChip } from './ContextAttachmentChip';
+import { MessageImageAttachment } from './MessageImageAttachment';
 
 type Role = 'provider' | 'user';
 
@@ -131,18 +132,13 @@ export const TextCard = memo(function TextCard({
       <div data-font-ctx="chat" className="group/card flex min-w-0 justify-end py-2">
         <div className="flex max-w-[85%] min-w-0 flex-col items-end gap-1.5 sm:max-w-[75%]">
           {attachments && attachments.length > 0 && (
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex max-w-full min-w-0 flex-wrap justify-end gap-2">
               {attachments.map((att) => (
-                <div
+                <MessageImageAttachment
                   key={att.attachmentId}
-                  className="group/img border-border bg-surface-secondary hover:border-accent/30 relative overflow-hidden rounded-lg border transition-colors duration-200"
-                >
-                  <img
-                    src={`/api/sessions/${sessionId}/attachments/${att.attachmentId}`}
-                    alt={att.filename}
-                    className="max-h-60 max-w-full rounded-lg object-contain"
-                  />
-                </div>
+                  sessionId={sessionId}
+                  attachment={att}
+                />
               ))}
             </div>
           )}

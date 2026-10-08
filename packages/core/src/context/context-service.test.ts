@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ContextService } from './context-service.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -26,6 +26,7 @@ describe('ContextService', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
@@ -54,6 +55,50 @@ describe('ContextService', () => {
 
     const results2 = await contextService.search(testDir, 'gd');
     expect(results2.some((r) => r.id === 'git:diff')).toBe(true);
+  });
+
+  it('reuses the search index and shares concurrent builds', async () => {
+    const service = contextService as unknown as {
+      buildWorkspaceIndex: (workspace: string) => Promise<unknown>;
+    };
+    const build = vi.spyOn(service, 'buildWorkspaceIndex');
+    const [files, folders] = await Promise.all([
+      contextService.search(testDir, '', 'file'),
+      contextService.search(testDir, '', 'folder'),
+    ]);
+    expect(files.every((item) => item.type === 'file')).toBe(true);
+    expect(folders.map((item) => item.value)).toContain('src');
+    await contextService.search(testDir, 'index');
+    expect(build).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes the workspace index after its TTL', async () => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    await contextService.search(testDir);
+    await fs.writeFile(path.join(testDir, 'new-file.ts'), 'export {};');
+    expect(await contextService.search(testDir, 'new-file', 'file')).toEqual([]);
+    clock.mockReturnValue(now + 5001);
+    const refreshed = await contextService.search(testDir, 'new-file', 'file');
+    expect(refreshed.map((item) => item.value)).toContain('new-file.ts');
+  });
+
+  it('preserves Git paths containing spaces and Unicode', async () => {
+    const filename = 'résumé notes.ts';
+    await fs.writeFile(path.join(testDir, filename), 'export {};');
+    const results = await contextService.search(testDir, 'résumé', 'file');
+    expect(results.map((item) => item.value)).toContain(filename);
+    const resolved = await contextService.resolve(testDir, [{ type: 'file', value: filename }]);
+    expect(resolved.items[0]?.title).toBe(filename);
+  });
+
+  it('offers files on an empty query even in deeply nested workspaces', async () => {
+    const directory = Array.from({ length: 55 }, (_, index) => `dir${index}`).join('/');
+    await fs.mkdir(path.join(testDir, directory), { recursive: true });
+    await fs.writeFile(path.join(testDir, directory, 'deep.ts'), 'export {};');
+    const results = await contextService.search(testDir);
+    expect(results.length).toBe(50);
+    expect(results.some((item) => item.title === 'deep.ts')).toBe(true);
   });
 
   it('resolves file contents into formatted markdown', async () => {

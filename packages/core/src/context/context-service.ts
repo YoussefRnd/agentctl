@@ -1,3 +1,4 @@
+import { fuzzySearch } from '@agentctl/shared';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { simpleGit } from 'simple-git';
@@ -31,10 +32,12 @@ export interface ResolvedContextResult {
 }
 
 const MAX_FILE_SIZE_BYTES = 48 * 1024; // 48KB maximum per attached file snippet
-const CACHE_TTL_MS = 5000; // 5s workspace file list TTL cache
+const CACHE_TTL_MS = 5000; // 5s workspace search index TTL cache
+const MAX_CACHED_WORKSPACES = 20;
 
 export class ContextService {
-  private fileListCache = new Map<string, { files: string[]; cachedAt: number }>();
+  private workspaceIndexCache = new Map<string, { items: ContextItem[]; cachedAt: number }>();
+  private pendingIndexes = new Map<string, Promise<ContextItem[]>>();
 
   /**
    * Search workspace files, folders, git targets, and symbols
@@ -88,122 +91,21 @@ export class ContextService {
     // 2. Scan workspace files via Git (or filesystem fallback)
     if (filterType === 'all' || filterType === 'file' || filterType === 'folder') {
       try {
-        const fileList = await this.getWorkspaceFiles(workspacePath);
-
-        const folders = new Set<string>();
-
-        // Collect folders and filter files
-        for (const file of fileList) {
-          const dir = path.dirname(file);
-          if (dir && dir !== '.') {
-            const segments = dir.split('/');
-            let current = '';
-            for (const seg of segments) {
-              current = current ? `${current}/${seg}` : seg;
-              folders.add(current);
-            }
-          }
-        }
-
-        // Add Folders
-        if (filterType === 'all' || filterType === 'folder') {
-          for (const folder of Array.from(folders)) {
-            const folderName = path.basename(folder);
-            results.push({
-              id: `folder:${folder}`,
-              type: 'folder',
-              title: `${folderName}/`,
-              subtitle: folder,
-              value: folder,
-            });
-          }
-        }
-
-        // Add Files
-        if (filterType === 'all' || filterType === 'file') {
-          for (const file of fileList) {
-            const fileName = path.basename(file);
-            results.push({
-              id: `file:${file}`,
-              type: 'file',
-              title: fileName,
-              subtitle: file,
-              value: file,
-            });
-          }
+        const items = await this.getWorkspaceIndex(workspacePath);
+        for (const item of items) {
+          if (filterType === 'all' || item.type === filterType) results.push(item);
         }
       } catch {
         // Workspace read error
       }
     }
 
-    if (!q) {
-      return results.slice(0, 50);
-    }
-
-    // Score all candidate items with fuzzy subsequence matching
-    const scored: Array<{ item: ContextItem; score: number }> = [];
-
-    for (const item of results) {
-      // Score against both the short title (e.g. app.ts) and full path (e.g. apps/server/src/app.ts)
-      const titleScore = this.fuzzyScore(item.title, q);
-      const pathScore = item.subtitle ? this.fuzzyScore(item.subtitle, q) : -1;
-      const idScore = item.id.startsWith('git:') ? this.fuzzyScore(item.id, q) : -1;
-
-      const maxScore = Math.max(titleScore, pathScore, idScore);
-      if (maxScore > 0) {
-        scored.push({ item, score: maxScore });
-      }
-    }
-
-    return scored
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 50)
-      .map((s) => s.item);
-  }
-
-  /**
-   * Fast, high-precision fuzzy subsequence scoring (fzf-style).
-   * Returns positive score if query is a subsequence of target, or -1 if no match.
-   */
-  private fuzzyScore(target: string, query: string): number {
-    if (!query) return 100;
-    const t = target.toLowerCase();
-    const q = query.toLowerCase();
-
-    let tIdx = 0;
-    let qIdx = 0;
-    let score = 0;
-    let consecutive = 0;
-
-    while (tIdx < t.length && qIdx < q.length) {
-      if (t[tIdx] === q[qIdx]) {
-        score += 10;
-        // Consecutive match bonus
-        if (consecutive > 0) score += consecutive * 15;
-        consecutive++;
-
-        // Word boundary bonus (start of string or preceded by /, -, _, ., space)
-        if (tIdx === 0 || '/-_ .:'.includes(t[tIdx - 1])) {
-          score += 35;
-        }
-        qIdx++;
-      } else {
-        consecutive = 0;
-      }
-      tIdx++;
-    }
-
-    // Must match all characters of query in order
-    if (qIdx < q.length) return -1;
-
-    // Exact match bonus
-    if (t === q) score += 200;
-    else if (t.startsWith(q)) score += 80;
-
-    // Penalty for length gap
-    score -= (t.length - q.length) * 0.4;
-    return Math.max(1, score);
+    return fuzzySearch(
+      results,
+      q,
+      (item) => [item.title, item.subtitle, item.type === 'git' ? item.id : undefined],
+      50,
+    );
   }
 
   /**
@@ -378,26 +280,74 @@ export class ContextService {
     );
   }
 
-  private async getWorkspaceFiles(workspacePath: string): Promise<string[]> {
-    const cached = this.fileListCache.get(workspacePath);
-    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-      return cached.files;
-    }
+  private async getWorkspaceIndex(workspacePath: string): Promise<ContextItem[]> {
+    const cached = this.workspaceIndexCache.get(workspacePath);
+    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return cached.items;
+    const pending = this.pendingIndexes.get(workspacePath);
+    if (pending) return pending;
 
-    let fileList: string[] = [];
+    const build = this.buildWorkspaceIndex(workspacePath);
+    this.pendingIndexes.set(workspacePath, build);
+    try {
+      const items = await build;
+      if (this.workspaceIndexCache.size >= MAX_CACHED_WORKSPACES) {
+        const oldest = this.workspaceIndexCache.keys().next().value;
+        if (oldest !== undefined) this.workspaceIndexCache.delete(oldest);
+      }
+      this.workspaceIndexCache.set(workspacePath, { items, cachedAt: Date.now() });
+      return items;
+    } finally {
+      this.pendingIndexes.delete(workspacePath);
+    }
+  }
+
+  private async buildWorkspaceIndex(workspacePath: string): Promise<ContextItem[]> {
+    let fileList: string[];
     try {
       const git = simpleGit(workspacePath);
-      const raw: string = await git.raw(['ls-files', '--cached', '--others', '--exclude-standard']);
-      fileList = raw
-        .split('\n')
-        .map((f: string) => f.trim())
-        .filter((f: string) => f.length > 0);
+      // NUL delimiters preserve spaces, Unicode, and newlines in Git file names.
+      const raw: string = await git.raw([
+        'ls-files',
+        '-z',
+        '--cached',
+        '--others',
+        '--exclude-standard',
+      ]);
+      fileList = [...new Set(raw.split('\0').filter(Boolean))];
     } catch {
       fileList = await this.scanDirFallback(workspacePath);
     }
 
-    this.fileListCache.set(workspacePath, { files: fileList, cachedAt: Date.now() });
-    return fileList;
+    const items: ContextItem[] = [];
+    const folders = new Set<string>();
+    for (const file of fileList) {
+      items.push({
+        id: `file:${file}`,
+        type: 'file',
+        title: path.basename(file),
+        subtitle: file,
+        value: file,
+      });
+      const dir = path.dirname(file);
+      if (dir === '.') continue;
+      let current = '';
+      for (const segment of dir.split('/')) {
+        current = current ? `${current}/${segment}` : segment;
+        folders.add(current);
+      }
+    }
+    // Show files before folders for an empty search so large directory trees
+    // cannot fill the entire 50-result limit before any file is offered.
+    for (const folder of folders) {
+      items.push({
+        id: `folder:${folder}`,
+        type: 'folder',
+        title: `${path.basename(folder)}/`,
+        subtitle: folder,
+        value: folder,
+      });
+    }
+    return items;
   }
 
   private async scanDirFallback(dir: string, baseDir = dir): Promise<string[]> {

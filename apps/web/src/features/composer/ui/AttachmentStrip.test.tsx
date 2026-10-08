@@ -37,6 +37,25 @@ afterEach(() => {
 });
 
 describe('AttachmentStrip', () => {
+  it('uses the shared viewer for local previews while keeping remove controls independent', () => {
+    const { root, onRemove } = renderStrip([makeAttachment()]);
+    try {
+      expect(document.querySelector('img')?.getAttribute('src')).toBe('blob:fake');
+      act(() =>
+        document.querySelector<HTMLButtonElement>('[aria-label="Preview img.png"]')!.click(),
+      );
+      expect(document.querySelector('[role="dialog"] img')?.getAttribute('src')).toBe('blob:fake');
+      act(() => document.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!.click());
+      act(() =>
+        document.querySelector<HTMLButtonElement>('[aria-label="Remove attachment"]')!.click(),
+      );
+      expect(onRemove).toHaveBeenCalledWith('local-1');
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    } finally {
+      act(() => root.unmount());
+    }
+  });
+
   it('failed upload shows a Retry button that retries instead of removing', () => {
     const { onRemove, onRetry } = renderStrip([makeAttachment({ state: 'error' })]);
 

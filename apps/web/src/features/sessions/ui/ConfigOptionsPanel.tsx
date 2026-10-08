@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useSession } from '../model/SessionContext';
 import {
   getAgentConfigCategory,
@@ -27,20 +27,12 @@ export function ConfigOptionsPanel({
   );
   const supportsDynamicConfig = resolveAgentFeatures(activeProvider).configuration.options;
 
-  const groupedOptions = useMemo(() => {
+  const visibleOptions = useMemo(() => {
     const filterSet = new Set(filterCategories);
-    const groups: Record<string, AgentConfigOption[]> = {};
-    for (const opt of configOptions) {
-      const cat = getAgentConfigCategory(opt);
-      if (filterSet.has(cat)) continue;
-
-      groups[cat] ??= [];
-      groups[cat].push(opt);
-    }
-    return groups;
+    return configOptions.filter((option) => !filterSet.has(getAgentConfigCategory(option)));
   }, [configOptions, filterCategories]);
 
-  if (configOptions.length === 0 || !supportsDynamicConfig) return null;
+  if (visibleOptions.length === 0 || !supportsDynamicConfig) return null;
 
   const handleUpdate = (id: string, value: string) => {
     setUpdatingId(id);
@@ -49,37 +41,20 @@ export function ConfigOptionsPanel({
     });
   };
 
-  const hasMultipleCategories = Object.keys(groupedOptions).length > 1;
-
   return (
     <div className="flex flex-col gap-3">
-      {/* Clean Minimal Header matching ThinkingEffort */}
-      <div className="flex items-center justify-between">
-        <span className="text-text-main text-xs font-bold tracking-tight">Agent Configuration</span>
-      </div>
-
-      <div className="space-y-3">
-        {Object.entries(groupedOptions).map(([category, options]) => (
-          <div key={category} className="space-y-2">
-            {hasMultipleCategories && category !== 'other' && (
-              <span className="text-text-muted/50 text-[10px] font-semibold tracking-wider uppercase">
-                {category.replace(/_/g, ' ')}
-              </span>
-            )}
-            <div className="space-y-2">
-              {options.map((opt) => (
-                <ConfigOptionRow
-                  key={opt.id}
-                  option={opt}
-                  onChange={(val) => {
-                    handleUpdate(opt.id, val);
-                  }}
-                  disabled={!!updatingId}
-                  isUpdating={updatingId === opt.id}
-                />
-              ))}
-            </div>
-          </div>
+      <h3 className="border-border/30 text-text-main border-b pb-3 text-xs font-semibold">
+        Agent Configuration
+      </h3>
+      <div className="divide-border/30 divide-y">
+        {visibleOptions.map((option) => (
+          <ConfigOptionRow
+            key={option.id}
+            option={option}
+            onChange={(value) => handleUpdate(option.id, value)}
+            disabled={!!updatingId}
+            isUpdating={updatingId === option.id}
+          />
         ))}
       </div>
     </div>
@@ -94,6 +69,9 @@ interface ConfigOptionRowProps {
 }
 
 function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptionRowProps) {
+  const optionId = useId();
+  const labelId = `${optionId}-label`;
+  const descriptionId = `${optionId}-description`;
   const currentOption = (option.options ?? []).find((o) => o.value === option.currentValue);
   const description = currentOption?.description ?? option.description;
 
@@ -113,20 +91,27 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
           ];
 
     return (
-      <div className="flex items-center justify-between gap-3 py-1">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0">
+        <div className="min-w-0 flex-1 basis-36">
           <div className="flex items-center gap-1.5">
-            <span className="text-text-main text-xs font-medium tracking-tight">{option.name}</span>
+            <span id={labelId} className="text-text-main text-xs font-medium">
+              {option.name}
+            </span>
             {isUpdating && <Loader2 size={11} className="text-accent animate-spin" />}
           </div>
           {description && (
-            <p className="text-text-muted/60 mt-0.5 text-[11px] leading-snug font-normal">
+            <p id={descriptionId} className="text-text-muted mt-1 text-[11px] leading-relaxed">
               {description}
             </p>
           )}
         </div>
 
-        <div className="border-border/40 bg-surface-secondary/40 flex shrink-0 items-center rounded-lg border p-0.5">
+        <div
+          role="group"
+          aria-labelledby={labelId}
+          aria-describedby={description ? descriptionId : undefined}
+          className="border-border/40 bg-surface-secondary/40 flex shrink-0 items-center rounded-lg border p-0.5"
+        >
           {binaryOptions.map((opt) => {
             const isSelected =
               String(option.currentValue).toLowerCase() === opt.value.toLowerCase();
@@ -135,12 +120,13 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
                 key={opt.value}
                 type="button"
                 disabled={disabled}
+                aria-pressed={isSelected}
                 onClick={() => onChange(opt.value)}
                 className={cn(
-                  'cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-all select-none',
+                  'focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors select-none focus-visible:ring-2 focus-visible:outline-none disabled:cursor-default disabled:opacity-50',
                   isSelected
-                    ? 'bg-accent/20 text-accent border-accent/40 border font-semibold shadow-xs'
-                    : 'text-text-muted hover:text-text-main border border-transparent',
+                    ? 'bg-accent/15 text-accent border-accent/40 font-semibold shadow-xs'
+                    : 'text-text-muted hover:text-text-main border-transparent',
                 )}
               >
                 {opt.name}
@@ -153,19 +139,16 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
   }
 
   return (
-    <div className="group relative space-y-1.5 py-1">
+    <div className="relative space-y-1.5 py-3 first:pt-0 last:pb-0">
       <div className="flex items-baseline justify-between">
-        <label
-          htmlFor={`config-${option.id}`}
-          className="text-text-main text-xs font-medium tracking-tight"
-        >
+        <label htmlFor={optionId} className="text-text-main text-xs font-medium">
           {option.name}
         </label>
         {isUpdating && <Loader2 size={11} className="text-accent animate-spin" />}
       </div>
 
       <Select
-        id={`config-${option.id}`}
+        id={optionId}
         value={typeof option.currentValue === 'string' ? option.currentValue : ''}
         onChange={onChange}
         disabled={disabled}
@@ -176,11 +159,7 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
         triggerClassName="h-8.5 rounded-lg border-border/40 bg-surface-secondary/50 hover:bg-surface-secondary text-xs font-medium"
       />
 
-      {description && (
-        <p className="text-text-muted/60 px-0.5 text-[11px] leading-snug font-normal">
-          {description}
-        </p>
-      )}
+      {description && <p className="text-text-muted text-[11px] leading-relaxed">{description}</p>}
     </div>
   );
 }

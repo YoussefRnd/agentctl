@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@agentctl/ui';
+import { useState, useEffect, useRef, useMemo, useId, type ElementType } from 'react';
+import { Dialog, DialogContent, DialogTitle, SearchHighlight, cn } from '@agentctl/ui';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getSessionDisplayTitle } from '@agentctl/shared';
+import { fuzzySearch, getSessionDisplayTitle } from '@agentctl/shared';
 import {
   Search,
   Folder,
@@ -16,7 +16,9 @@ import {
   PanelRight,
   Maximize2,
   Plus,
-  ArrowRight,
+  CornerDownLeft,
+  Loader2,
+  X,
   FolderGit2,
 } from 'lucide-react';
 import { useSettingsOverlayStore } from '@/features/settings';
@@ -30,11 +32,14 @@ interface PaletteItem {
   category: 'Sessions' | 'Workspaces' | 'Actions';
   title: string;
   subtitle?: string;
-  icon: React.ElementType;
+  icon: ElementType;
   badge?: string;
   badgeType?: 'running' | 'needs_attention' | 'error' | 'default';
   onSelect: () => void;
 }
+
+const categories = ['Sessions', 'Workspaces', 'Actions'] as const;
+type PaletteFilter = 'All' | PaletteItem['category'];
 
 export function CommandPalette() {
   const isOpen = useCommandPaletteStore((s) => s.isOpen);
@@ -46,13 +51,20 @@ export function CommandPalette() {
   const { themeMode, setThemeMode } = useTheme();
   const navigate = useNavigate();
 
+  const listboxId = useId();
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<PaletteFilter>('All');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
-  const { data: projects = [] } = useQuery({
+  const {
+    data: projects = [],
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({
     ...projectQueries.all(),
     enabled: isOpen,
   });
@@ -61,6 +73,7 @@ export function CommandPalette() {
   useEffect(() => {
     if (isOpen) {
       setQuery('');
+      setFilter('All');
       setSelectedIndex(0);
     }
   }, [isOpen]);
@@ -92,8 +105,10 @@ export function CommandPalette() {
             s.status === 'running'
               ? 'Running'
               : s.status === 'needs_attention'
-                ? 'Review Needed'
-                : undefined,
+                ? 'Needs review'
+                : s.status === 'error'
+                  ? 'Error'
+                  : undefined,
           badgeType,
           onSelect: () => {
             closePalette();
@@ -227,66 +242,53 @@ export function CommandPalette() {
     toggleMaximized,
   ]);
 
-  // Filter items based on query
+  const searchQuery = query.trim();
   const filteredItems = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
+    const candidates = filter === 'All' ? items : items.filter((item) => item.category === filter);
+    return fuzzySearch(candidates, searchQuery, (item) => [
+      item.title,
+      item.subtitle,
+      item.category,
+    ]);
+  }, [items, searchQuery, filter]);
+  const activeIndex = Math.min(selectedIndex, Math.max(0, filteredItems.length - 1));
+  const indexedItems = filteredItems.map((item, index) => ({ item, index }));
+  // Preserve global fuzzy ranking while searching. Browsing uses category groups;
+  // the DOM order and keyboard order always refer to the same indexed list.
+  const groups = searchQuery
+    ? [{ label: 'Best matches', items: indexedItems }]
+    : categories.map((category) => ({
+        label: category,
+        items: indexedItems.filter(({ item }) => item.category === category),
+      }));
 
-    return items.filter((item) => {
-      const matchTitle = item.title.toLowerCase().includes(q);
-      const matchSubtitle = item.subtitle?.toLowerCase().includes(q) ?? false;
-      const matchCategory = item.category.toLowerCase().includes(q);
-      return matchTitle || matchSubtitle || matchCategory;
-    });
-  }, [items, query]);
-
-  // Reset selected index on query change
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
-  // Keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
       closePalette();
       return;
     }
-
-    if (filteredItems.length === 0) return;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev + 1) % filteredItems.length);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 + filteredItems.length) % filteredItems.length);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const current = filteredItems[selectedIndex];
-      if (current) {
-        current.onSelect();
-      }
+    // Let filter buttons handle their own Enter and Space keys.
+    if (event.target !== inputRef.current || filteredItems.length === 0) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      setSelectedIndex((activeIndex + step + filteredItems.length) % filteredItems.length);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      filteredItems[activeIndex]?.onSelect();
     }
   };
 
-  // Scroll active item into view
   useEffect(() => {
-    if (!listRef.current) return;
-    const activeEl = listRef.current.querySelector<HTMLElement>(`[data-index="${selectedIndex}"]`);
-    if (activeEl) {
-      activeEl.scrollIntoView({ block: 'nearest' });
-    }
-  }, [selectedIndex]);
+    if (!isOpen) return;
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [isOpen, activeIndex, filteredItems]);
 
   if (!isOpen) return null;
-
-  // Group filtered items by category
-  const categories: Array<'Sessions' | 'Workspaces' | 'Actions'> = [
-    'Sessions',
-    'Workspaces',
-    'Actions',
-  ];
 
   return (
     <Dialog
@@ -298,7 +300,10 @@ export function CommandPalette() {
       <DialogContent
         showCloseButton={false}
         aria-describedby={undefined}
-        className="border-border/60 bg-surface-elevated/95 flex max-w-xl flex-col gap-0 overflow-hidden border p-0"
+        className="border-border/50 bg-brand-mantle flex max-h-[min(38rem,calc(100dvh-2rem))] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl border p-0 shadow-2xl"
+        onEscapeKeyDown={(event) => {
+          if (event.isComposing) event.preventDefault();
+        }}
         onKeyDown={handleKeyDown}
         onOpenAutoFocus={(event) => {
           previousFocusRef.current =
@@ -311,139 +316,256 @@ export function CommandPalette() {
           previousFocusRef.current?.focus();
         }}
       >
-        <DialogTitle className="sr-only">Command Palette</DialogTitle>
-        {/* Search Header */}
-        <div className="border-border/40 bg-surface/50 flex shrink-0 items-center gap-3 border-b px-4 py-3">
-          <Search className="text-text-muted h-4 w-4 shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            aria-label="Search commands"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a command or search sessions, workspaces..."
-            className="text-text-main placeholder:text-text-muted/50 min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
-          />
-          <kbd className="border-border/40 bg-surface-secondary/60 text-text-muted rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold">
-            ESC
-          </kbd>
+        <div className="border-border/30 shrink-0 border-b px-4 pt-4 pb-3">
+          <div className="mb-3 flex items-center gap-2.5">
+            <span
+              aria-hidden="true"
+              className="bg-accent/15 text-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+            >
+              <Search className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <DialogTitle className="text-text-main text-xs font-semibold">
+                Command Palette
+              </DialogTitle>
+              <p className="text-text-muted mt-0.5 text-[11px]">
+                Jump to a session, workspace, or action
+              </p>
+            </div>
+          </div>
+          <div className="border-border/40 bg-surface-secondary/50 focus-within:border-accent/50 flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors">
+            <Search aria-hidden="true" className="text-text-muted h-4 w-4 shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              role="combobox"
+              aria-label="Search commands"
+              aria-autocomplete="list"
+              aria-expanded={true}
+              aria-controls={listboxId}
+              aria-activedescendant={
+                filteredItems[activeIndex] ? `${listboxId}-option-${activeIndex}` : undefined
+              }
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSelectedIndex(0);
+              }}
+              placeholder="Search sessions, workspaces, and actions…"
+              autoComplete="off"
+              spellCheck={false}
+              className="text-text-main placeholder:text-text-muted/60 min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+            <button
+              type="button"
+              onClick={closePalette}
+              aria-label="Close command palette"
+              className="text-text-muted hover:bg-accent/10 hover:text-text-main focus-visible:ring-accent flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <X aria-hidden="true" className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
-        {/* Results List */}
+        <div
+          role="group"
+          aria-label="Filter search results"
+          className="flex shrink-0 flex-wrap items-center gap-1 px-3 pt-2.5 pb-2"
+        >
+          {(['All', ...categories] as const).map((category) => (
+            <button
+              key={category}
+              type="button"
+              aria-pressed={filter === category}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setFilter(category);
+                setSelectedIndex(0);
+                inputRef.current?.focus();
+              }}
+              className={cn(
+                'focus-visible:ring-accent cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                filter === category
+                  ? 'bg-accent/15 text-accent'
+                  : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
+              )}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+
+        {isPending && (
+          <div
+            role="status"
+            className="text-text-muted flex shrink-0 items-center gap-2 px-4 pb-2 text-[11px]"
+          >
+            <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+            Loading sessions and workspaces…
+          </div>
+        )}
+        {isError && (
+          <div
+            role="status"
+            className="text-text-muted flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2 text-[11px]"
+          >
+            <span>Couldn’t load sessions and workspaces. Actions are still available.</span>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="text-accent focus-visible:ring-accent cursor-pointer rounded px-1 py-0.5 focus-visible:ring-2 focus-visible:outline-none"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <div
           ref={listRef}
-          className="divide-border/10 max-h-[55vh] min-h-0 flex-1 divide-y overflow-y-auto p-2"
+          id={listboxId}
+          role="listbox"
+          aria-label="Search results"
+          aria-busy={isPending}
+          className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-2"
         >
-          {filteredItems.length === 0 ? (
-            <div className="text-text-muted py-10 text-center text-xs">
-              No matching commands or sessions found
-            </div>
-          ) : (
-            categories.map((cat) => {
-              const catItems = filteredItems.filter((i) => i.category === cat);
-              if (catItems.length === 0) return null;
-
-              return (
-                <div key={cat} className="py-1.5 first:pt-0 last:pb-0">
-                  <div className="text-text-muted/70 px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase">
-                    {cat}
+          {groups.map(
+            (group) =>
+              group.items.length > 0 && (
+                <div
+                  key={group.label}
+                  role="group"
+                  aria-label={group.label}
+                  className="pb-2 last:pb-0"
+                >
+                  <div
+                    aria-hidden="true"
+                    className="text-text-muted px-2.5 py-2 text-[10px] font-semibold tracking-wider uppercase"
+                  >
+                    {group.label}
                   </div>
                   <div className="space-y-0.5">
-                    {catItems.map((item) => {
-                      const itemIndex = filteredItems.findIndex((i) => i.id === item.id);
-                      const isSelected = itemIndex === selectedIndex;
+                    {group.items.map(({ item, index }) => {
+                      const selected = index === activeIndex;
                       const Icon = item.icon;
-
                       return (
                         <button
                           key={item.id}
+                          id={`${listboxId}-option-${index}`}
                           type="button"
-                          data-index={itemIndex}
-                          onMouseEnter={() => setSelectedIndex(itemIndex)}
-                          onFocus={() => setSelectedIndex(itemIndex)}
+                          role="option"
+                          aria-selected={selected}
+                          aria-label={`${item.title}${item.subtitle ? `, ${item.subtitle}` : ''}${item.badge ? `, ${item.badge}` : ''}`}
+                          tabIndex={-1}
+                          data-index={index}
+                          data-item-id={item.id}
+                          title={`${item.title}${item.subtitle ? ` — ${item.subtitle}` : ''}`}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onMouseMove={() => {
+                            if (!selected) setSelectedIndex(index);
+                          }}
                           onClick={item.onSelect}
-                          className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 text-left transition-colors ${
-                            isSelected
-                              ? 'bg-accent/15 text-text-main shadow-xs'
-                              : 'text-text-muted hover:text-text-main hover:bg-surface/50'
-                          }`}
+                          className={cn(
+                            'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors',
+                            selected
+                              ? 'bg-accent/10 text-text-main'
+                              : 'text-text-muted hover:bg-surface-secondary',
+                          )}
                         >
-                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                            <div
-                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                                isSelected
-                                  ? 'bg-accent/20 text-accent'
-                                  : 'bg-surface-secondary text-text-muted'
-                              }`}
-                            >
-                              <Icon className="h-3.5 w-3.5" />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span
-                                  className={`truncate text-xs font-semibold ${isSelected ? 'text-text-main' : ''}`}
-                                >
-                                  {item.title}
-                                </span>
-                                {item.badge && (
-                                  <span
-                                    className={`py-0.2 inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 font-mono text-[9px] font-bold ${
-                                      item.badgeType === 'running'
-                                        ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20'
-                                        : item.badgeType === 'needs_attention'
-                                          ? 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20'
-                                          : 'bg-surface-secondary text-text-muted'
-                                    }`}
-                                  >
-                                    {item.badgeType === 'running' && (
-                                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                                    )}
-                                    {item.badge}
-                                  </span>
-                                )}
-                              </div>
-                              {item.subtitle && (
-                                <p className="text-text-muted/60 truncate font-mono text-[10px]">
-                                  {item.subtitle}
-                                </p>
-                              )}
-                            </div>
+                          <div
+                            aria-hidden="true"
+                            className={cn(
+                              'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                              selected
+                                ? 'bg-accent/15 text-accent'
+                                : 'bg-surface-secondary/70 text-text-muted',
+                            )}
+                          >
+                            <Icon className="h-4 w-4" />
                           </div>
-
-                          <div className="shrink-0">
-                            {isSelected ? <ArrowRight className="text-accent h-3.5 w-3.5" /> : null}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-text-main truncate text-xs font-medium">
+                              <SearchHighlight text={item.title} query={searchQuery} />
+                            </p>
+                            {item.subtitle && (
+                              <p className="text-text-muted mt-1 truncate text-[11px]">
+                                <SearchHighlight text={item.subtitle} query={searchQuery} />
+                              </p>
+                            )}
+                            {item.badge && (
+                              <span
+                                className={cn(
+                                  'mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]',
+                                  item.badgeType === 'running'
+                                    ? 'bg-emerald-500/10 text-emerald-400'
+                                    : item.badgeType === 'needs_attention'
+                                      ? 'bg-amber-500/10 text-amber-400'
+                                      : 'text-danger bg-danger/10',
+                                )}
+                              >
+                                {item.badgeType === 'running' && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                                  />
+                                )}
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {searchQuery && filter === 'All' && (
+                              <span className="text-text-muted bg-surface-secondary/70 hidden rounded-md px-1.5 py-1 text-[10px] sm:inline">
+                                <SearchHighlight text={item.category} query={searchQuery} />
+                              </span>
+                            )}
+                            {selected && (
+                              <CornerDownLeft
+                                aria-hidden="true"
+                                className="text-accent h-3.5 w-3.5"
+                              />
+                            )}
                           </div>
                         </button>
                       );
                     })}
                   </div>
                 </div>
-              );
-            })
+              ),
           )}
         </div>
 
-        {/* Footer info bar */}
-        <div className="border-border/30 bg-surface/30 text-text-muted/70 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-3.5 py-2 text-[10.5px]">
+        {filteredItems.length === 0 && !isPending && (
+          <div
+            role="status"
+            className="text-text-muted flex flex-col items-center gap-2 px-4 pt-3 pb-8 text-center text-xs"
+          >
+            <Search aria-hidden="true" className="h-5 w-5" />
+            <p>
+              {searchQuery ? (
+                <>No matches for “{searchQuery}”</>
+              ) : (
+                `No ${filter.toLowerCase()} available.`
+              )}
+            </p>
+            <p className="text-[11px]">Try a shorter name, a workspace path, or another filter.</p>
+          </div>
+        )}
+
+        <div className="border-border/30 text-text-muted flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-[11px]">
+          <span role="status">
+            {filteredItems.length} {filteredItems.length === 1 ? 'result' : 'results'}
+          </span>
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 font-medium">
-              <kbd className="border-border/40 bg-surface-secondary/70 rounded px-1 font-mono text-[9px]">
-                ↑
-              </kbd>
-              <kbd className="border-border/40 bg-surface-secondary/70 rounded px-1 font-mono text-[9px]">
-                ↓
-              </kbd>
-              <span>navigate</span>
+            <span>
+              <kbd className="font-mono">↑↓</kbd> navigate
             </span>
-            <span className="flex items-center gap-1 font-medium">
-              <kbd className="border-border/40 bg-surface-secondary/70 rounded px-1 font-mono text-[9px]">
-                ↵
-              </kbd>
-              <span>select</span>
+            <span>
+              <kbd className="font-mono">↵</kbd> open
+            </span>
+            <span>
+              <kbd className="font-mono">Esc</kbd> close
             </span>
           </div>
-          <span className="font-mono text-[9.5px]">agentctl palette</span>
         </div>
       </DialogContent>
     </Dialog>
