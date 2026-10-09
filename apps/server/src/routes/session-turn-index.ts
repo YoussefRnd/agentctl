@@ -3,6 +3,7 @@ import { sessionEvents, sessionEventChanges, type DbClient } from '@agentctl/cor
 import {
   extractTurnSummary,
   orderConversationEvents,
+  isComposerOnlyInput,
   type SessionTurnAnchor,
 } from '@agentctl/shared';
 
@@ -75,6 +76,7 @@ function buildTurnIndex(db: Pick<DbClient, 'select'>, sessionId: string): Sessio
         string | null
       >`json_extract(${sessionEvents.metadata}, '$.nativeSessionId')`,
       role: sql<string | null>`json_extract(${sessionEvents.data}, '$.role')`,
+      deliveryStatus: sql<string | null>`json_extract(${sessionEvents.data}, '$.deliveryStatus')`,
       content: sql<string>`case when ${sessionEvents.type} = 'text' then substr(coalesce(json_extract(${sessionEvents.data}, '$.content'), ''), 1, 1000) else '' end`,
       name: sql<string | null>`substr(json_extract(${sessionEvents.data}, '$.name'), 1, 200)`,
       title: sql<string | null>`substr(json_extract(${sessionEvents.data}, '$.title'), 1, 200)`,
@@ -104,6 +106,7 @@ function buildTurnIndex(db: Pick<DbClient, 'select'>, sessionId: string): Sessio
     },
     data: {
       role: row.role,
+      deliveryStatus: row.deliveryStatus,
       content: row.content,
       name: row.name,
       title: row.title,
@@ -140,6 +143,7 @@ function buildTurnIndex(db: Pick<DbClient, 'select'>, sessionId: string): Sessio
     });
   };
   for (const event of orderConversationEvents(events)) {
+    if (isComposerOnlyInput(event)) continue;
     if (event.type === 'text' && event.role === 'user' && !event.nativeSessionId) {
       finish();
       current = event;

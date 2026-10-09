@@ -7,7 +7,7 @@ import type { SessionEventRow, SessionWithCapabilities } from '@agentctl/shared'
 import { sessionKeys, useMessageQueueStore } from '@/shared';
 
 vi.mock('@agentctl/api-client', () => ({
-  api: { sendInput: vi.fn() },
+  api: { sendInput: vi.fn(), resumeSessionQueue: vi.fn() },
 }));
 
 vi.mock('sonner', () => ({
@@ -91,6 +91,7 @@ let queryClient: QueryClient;
 beforeEach(() => {
   streamState.events = [];
   mockedSendInput.mockReset();
+  vi.mocked(api.resumeSessionQueue).mockReset();
   useMessageQueueStore.getState().clearQueue();
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -110,6 +111,168 @@ afterEach(() => {
 });
 
 describe('SessionStreamProvider queued message send', () => {
+  it('rejects stale retry callbacks for uncertain local outbox delivery', async () => {
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+    useMessageQueueStore
+      .getState()
+      .enqueueMessage('sess-1', 'uncertain prompt', [], -1, 'uncertain', 'unknown');
+    function Retry() {
+      const queue = useSessionQueue();
+      return (
+        <>
+          <button onClick={() => queue.retryQueuedMessage('uncertain')}>retry queue</button>
+          <button onClick={() => queue.retryMessage(-1)}>retry message</button>
+        </>
+      );
+    }
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SessionStreamProvider sessionId="sess-1">
+            <Retry />
+          </SessionStreamProvider>
+        </QueryClientProvider>,
+      ),
+    );
+    await act(async () => {
+      for (const button of container.querySelectorAll<HTMLButtonElement>('button')) button.click();
+    });
+    expect(mockedSendInput).not.toHaveBeenCalled();
+    expect(useMessageQueueStore.getState().queuedMessages['sess-1'][0].status).toBe('unknown');
+  });
+
+  it.each(['unknown', 'contradictory-policy'] as const)(
+    'does not replay a persisted message with %s delivery',
+    async (kind) => {
+      const event = {
+        ...ghostEvent(),
+        id: 7,
+        data: {
+          ...ghostEvent().data,
+          deliveryStatus: kind === 'unknown' ? ('unknown' as const) : ('failed' as const),
+          ...(kind === 'contradictory-policy'
+            ? {
+                deliveryFailure: {
+                  version: 1 as const,
+                  id: 'failure',
+                  category: 'connection' as const,
+                  scope: 'attempt' as const,
+                  stage: 'dispatch' as const,
+                  delivery: 'unknown' as const,
+                  message: 'Connection interrupted',
+                  actions: ['retry' as const],
+                },
+              }
+            : {}),
+        },
+      };
+      queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('error'));
+      queryClient.setQueryData(sessionKeys.events('sess-1'), [event]);
+      function Retry() {
+        const queue = useSessionQueue();
+        return <button onClick={() => queue.retryMessage(7)}>retry</button>;
+      }
+      await act(async () =>
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <SessionStreamProvider sessionId="sess-1">
+              <Retry />
+            </SessionStreamProvider>
+          </QueryClientProvider>,
+        ),
+      );
+      await act(async () => container.querySelector('button')!.click());
+      expect(api.resumeSessionQueue).not.toHaveBeenCalled();
+      expect(mockedSendInput).not.toHaveBeenCalled();
+      expect(useMessageQueueStore.getState().queuedMessages['sess-1'] ?? []).toEqual([]);
+    },
+  );
+
+  it('retries a persisted rejection with a new receipt only after explicitly resuming', async () => {
+    const event = {
+      ...ghostEvent(),
+      id: 7,
+      data: {
+        ...ghostEvent().data,
+        deliveryStatus: 'failed' as const,
+        clientMessageId: 'rejected-receipt',
+        attachmentIds: ['image'],
+      },
+    };
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('error'));
+    queryClient.setQueryData(sessionKeys.events('sess-1'), [event]);
+    vi.mocked(api.resumeSessionQueue).mockImplementation(async () => {
+      queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+      return { status: 200, body: { success: true }, headers: new Headers() } as never;
+    });
+    mockedSendInput.mockResolvedValue({
+      status: 200,
+      body: { success: true, eventId: 8 },
+      headers: new Headers(),
+    } as never);
+    function Retry() {
+      const queue = useSessionQueue();
+      return <button onClick={() => queue.retryMessage(7)}>retry</button>;
+    }
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SessionStreamProvider sessionId="sess-1">
+            <Retry />
+          </SessionStreamProvider>
+        </QueryClientProvider>,
+      ),
+    );
+    expect(mockedSendInput).not.toHaveBeenCalled();
+    await act(async () => container.querySelector('button')!.click());
+    await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledOnce());
+    expect(api.resumeSessionQueue).toHaveBeenCalledOnce();
+    const body = mockedSendInput.mock.calls[0][0].body;
+    expect(body).toMatchObject({ input: 'hello world', attachmentIds: ['image'] });
+    expect(body.clientMessageId).not.toBe('rejected-receipt');
+  });
+
+  it('keeps an accepted queued message successful when its HTTP acknowledgment is lost', async () => {
+    queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
+    let reject!: (error: Error) => void;
+    mockedSendInput.mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail;
+      }) as never,
+    );
+    act(() =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SessionStreamProvider sessionId="sess-1">
+            <Harness optimisticEventId={-1} />
+          </SessionStreamProvider>
+        </QueryClientProvider>,
+      ),
+    );
+    await act(async () => container.querySelector('button')!.click());
+    await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledOnce());
+    const receipt = useMessageQueueStore.getState().queuedMessages['sess-1'][0].id;
+    await act(async () => {
+      queryClient.setQueryData(sessionKeys.events('sess-1'), [
+        {
+          ...ghostEvent(),
+          id: 7,
+          data: {
+            role: 'user',
+            content: 'hello world',
+            clientMessageId: receipt,
+            deliveryStatus: 'queued',
+          },
+        },
+      ]);
+      reject(new Error('response lost'));
+    });
+    expect(useMessageQueueStore.getState().queuedMessages['sess-1']).toEqual([]);
+    expect(mockedToastError).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData<SessionEventRow[]>(sessionKeys.events('sess-1'))?.[0],
+    ).toMatchObject({ id: 7, data: { deliveryStatus: 'queued' } });
+  });
   it('continues with the next queued message when a failed head is cancelled', async () => {
     queryClient.setQueryData(sessionKeys.detail('sess-1'), makeSession('idle'));
     mockedSendInput
@@ -207,8 +370,13 @@ describe('SessionStreamProvider queued message send', () => {
     await vi.waitFor(() => expect(mockedSendInput).toHaveBeenCalledTimes(2));
     const retried = queryClient
       .getQueryData<SessionEventRow[]>(sessionKeys.events('sess-1'))
-      ?.find((event) => event.id === -1);
-    expect(retried?.type === 'text' && retried.data.deliveryStatus).toBe('accepted');
+      ?.find((event) => event.id === 7);
+    expect(retried?.type === 'text' && retried.data.deliveryStatus).toBe('queued');
+    expect(
+      queryClient
+        .getQueryData<SessionEventRow[]>(sessionKeys.events('sess-1'))
+        ?.some((event) => event.id === -1),
+    ).toBe(false);
   });
 
   it('re-enqueues a failed message when retried while the session is running', async () => {

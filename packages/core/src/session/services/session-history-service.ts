@@ -332,16 +332,6 @@ export class SessionHistoryService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    if (sessionRecord.status === 'running') {
-      if (mode !== 'fork') {
-        this.deps.runtimeRegistry.stopSession(sessionId);
-        await this.deps.db
-          .update(sessions)
-          .set({ status: 'idle', updatedAt: new Date() })
-          .where(eq(sessions.id, sessionId));
-      }
-    }
-
     let undoSnapshotHash: string | undefined;
     let restoredFiles:
       Array<{ path: string; status: 'added' | 'modified' | 'deleted' }> | undefined;
@@ -353,13 +343,19 @@ export class SessionHistoryService {
 
       const metadata = event.metadata as { snapshotHash?: string } | undefined;
 
-      if (mode === 'files') {
-        if (!metadata?.snapshotHash) {
-          throw new Error(
-            'No snapshot hash available for file rewind. This project may not be a git repo.',
-          );
-        }
+      if (mode === 'files' && !metadata?.snapshotHash) {
+        throw new Error(
+          'No snapshot hash available for file rewind. This project may not be a git repo.',
+        );
+      }
+      // Finish flushing the old runtime before deleting its history or accepting another turn.
+      await this.deps.runtimeRegistry.stopSessionAndWait(sessionId);
+      await this.deps.db
+        .update(sessions)
+        .set({ status: 'idle', updatedAt: new Date() })
+        .where(eq(sessions.id, sessionId));
 
+      if (mode === 'files' && metadata?.snapshotHash) {
         const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
         const projectPath =
           sessionRecord.mode === 'worktree'
@@ -412,11 +408,7 @@ export class SessionHistoryService {
       eventId,
       restoredFiles,
     });
-    this.deps.runtimeRegistry.stopSession(sessionId);
-
-    void this.deps.restartSession(sessionId).catch((err: unknown) => {
-      this.deps.logger.error({ err, sessionId }, 'Failed to restart session after rewind');
-    });
+    await this.deps.restartSession(sessionId, { resumeExisting: false });
 
     return { undoSnapshotHash, restoredFiles };
   }
@@ -435,6 +427,8 @@ export class SessionHistoryService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
+    await this.deps.runtimeRegistry.stopSessionAndWait(sessionId);
+
     if (backup.undoSnapshotHash) {
       const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
       const projectPath =
@@ -450,11 +444,7 @@ export class SessionHistoryService {
     }
 
     this.rewindBackups.delete(sessionId);
-    this.deps.runtimeRegistry.stopSession(sessionId);
-
-    void this.deps.restartSession(sessionId).catch((err: unknown) => {
-      this.deps.logger.error({ err, sessionId }, 'Failed to restart session after undo rewind');
-    });
+    await this.deps.restartSession(sessionId, { resumeExisting: false });
   }
 
   async previewSnapshotDiff(

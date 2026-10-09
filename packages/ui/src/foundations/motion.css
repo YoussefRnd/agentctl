@@ -73,6 +73,29 @@
     animation-timing-function: var(--ease-out);
   }
 
+  .motion-editor {
+    animation: editor-reveal var(--duration-normal) var(--ease-out);
+  }
+
+  .motion-history {
+    transition: opacity var(--duration-normal) var(--ease-out);
+
+    &[aria-busy='true'] {
+      opacity: 0.65;
+    }
+  }
+
+  @keyframes editor-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   .click-press {
     transition-property: transform, opacity;
     transition-duration: var(--duration-fast);

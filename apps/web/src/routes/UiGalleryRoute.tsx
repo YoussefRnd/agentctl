@@ -3,16 +3,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DEFAULT_FONT_CONFIG, type ElicitationItem } from '@agentctl/shared';
 import { Inbox } from 'lucide-react';
 import { SessionConfigProvider } from '@/features/sessions';
+import { useSettingsOverlayStore } from '@/features/settings';
 import {
   StreamingMarkdown,
   TextCard,
+  TurnErrorCard,
   ApprovalCard,
   ElicitationCard,
   CommandResultCard,
   ToolOutput,
   ToolDiffBlock,
+  TurnMinimap,
+  type ConversationTurn,
 } from '@/features/conversation';
 import { CommandInputComposer } from '@/features/composer';
+import { MessageQueue } from '../features/composer/ui/QueuedMessagesPillStack';
+import type { QueuedMessage } from '@/shared/stores/useMessageQueueStore';
+import { RewindConfirmDialog } from '../features/sessions/ui/RewindConfirmDialog';
+import type { RewindMode } from '../features/sessions/ui/RewindMenu';
 // Gallery-only screens stay outside the eager settings feature entry.
 import { McpServerForm } from '../features/settings/ui/McpServerForm';
 import { McpServerCard } from '../features/settings/ui/McpServerCard';
@@ -53,6 +61,196 @@ const stressMarkdown = [
   '| File | Change | Status | Details | Owner |\n| --- | --- | --- | --- | --- |\n' +
     '| composer.tsx | Layout containment | Ready for review | Narrow panel verification | Interface team |',
 ].join('\n\n');
+
+const minimapTurns: ConversationTurn[] = Array.from({ length: 24 }, (_, index) => ({
+  id: `preview-turn-${index}`,
+  turnIndex: index,
+  userEvent: {
+    id: index + 1,
+    sessionId: 'minimap-preview',
+    type: 'text',
+    data: { role: 'user', content: `Review change ${index + 1}` },
+    createdAt: new Date('2026-10-08T12:00:00Z'),
+  },
+  userPrompt: `Review change ${index + 1}`,
+  agentEvents: [],
+  turnSummary: 'The change is ready for review.',
+  diffStats: { additions: 12, deletions: 3, filesCount: 1 },
+  modelName: 'Codex',
+  providerName: 'OpenAI',
+  userName: 'You',
+  timestamp: '2026-10-08T12:00:00Z',
+  isStreaming: false,
+}));
+
+function TurnMinimapPreview() {
+  const [selected, setSelected] = useState(12);
+  return (
+    <div
+      aria-label="Turn minimap preview"
+      className="border-border/30 relative h-80 w-full border-y py-6 pr-16"
+    >
+      <p className="text-text-main text-right">{minimapTurns[selected].userPrompt}</p>
+      <p className="text-text-main mt-8">The change is ready for review.</p>
+      <TurnMinimap
+        turns={minimapTurns}
+        activeTurnIndex={selected}
+        onSelectTurn={(turn) => setSelected(turn.turnIndex)}
+      />
+    </div>
+  );
+}
+
+function QueueEditingPreview() {
+  const [messages, setMessages] = useState<QueuedMessage[]>([
+    {
+      id: 'first',
+      text: 'Check the queue changes and simplify the message editor.',
+      status: 'queued',
+      accepted: true,
+    },
+    {
+      id: 'second',
+      text: 'Run the tests and review the mobile layout.',
+      status: 'queued',
+      accepted: true,
+      attachmentIds: ['image'],
+    },
+    {
+      id: 'third',
+      text: 'Summarize what changed.',
+      status: 'failed',
+      error: 'Connection interrupted',
+    },
+  ]);
+  const [prompt, setPrompt] = useState('did u complete?');
+  const [rewindMode, setRewindMode] = useState<RewindMode>('conversation');
+  const [rewindOpen, setRewindOpen] = useState(false);
+  const [isRewinding, setIsRewinding] = useState(false);
+  const [client] = useState(() => new QueryClient());
+  return (
+    <section aria-label="Queue and editing preview" className="mx-auto w-full max-w-2xl">
+      <QueryClientProvider client={client}>
+        <SessionConfigProvider sessionId="">
+          <TextCard
+            content={prompt}
+            variant="user"
+            eventId={1}
+            onRewind={(_, mode) => {
+              setRewindMode(mode);
+              setRewindOpen(true);
+            }}
+            onEditSubmit={(_, value) => setPrompt(value)}
+          />
+          <RewindConfirmDialog
+            open={rewindOpen}
+            onOpenChange={(open) => {
+              if (!open) setRewindOpen(false);
+            }}
+            mode={rewindMode}
+            messageCount={2}
+            isLoading={isRewinding}
+            onConfirm={() => {
+              setIsRewinding(true);
+              window.setTimeout(() => {
+                setPrompt('did u complete?');
+                setRewindOpen(false);
+                setIsRewinding(false);
+              }, 450);
+            }}
+          />
+        </SessionConfigProvider>
+      </QueryClientProvider>
+      <div className="mt-5">
+        <MessageQueue
+          messages={messages}
+          onCancel={(id) => setMessages((items) => items.filter((item) => item.id !== id))}
+          onMove={(index, direction) =>
+            setMessages((items) => {
+              const next = [...items];
+              const target = index + (direction === 'up' ? -1 : 1);
+              [next[index], next[target]] = [next[target], next[index]];
+              return next;
+            })
+          }
+          onRetry={(id) =>
+            setMessages((items) =>
+              items.map((item) =>
+                item.id === id ? { ...item, status: 'queued', error: undefined } : item,
+              ),
+            )
+          }
+          onEdit={async (id, text) => {
+            setMessages((items) =>
+              items.map((item) => (item.id === id ? { ...item, text } : item)),
+            );
+            return true;
+          }}
+        />
+        <div className="border-border/30 bg-brand-mantle text-text-muted rounded-b-xl border px-4 py-4 text-sm">
+          Ask a question or add a follow-up...
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProviderAccessPreview() {
+  const [client] = useState(() => new QueryClient());
+  const [retried, setRetried] = useState(false);
+  const message =
+    'Authentication required\nAgent stderr: [session/create] phase=register durationMs=1620';
+  return (
+    <div className="mx-auto max-w-2xl">
+      <QueryClientProvider client={client}>
+        <SessionConfigProvider sessionId="">
+          <TextCard
+            content="hey"
+            variant="user"
+            eventId={1}
+            deliveryStatus="failed"
+            deliveryError={message}
+          />
+        </SessionConfigProvider>
+      </QueryClientProvider>
+      <TurnErrorCard
+        failure={{
+          version: 1,
+          id: 'preview-access',
+          category: 'authentication',
+          scope: 'attempt',
+          stage: 'dispatch',
+          delivery: 'rejected',
+          attemptId: 'preview',
+          eventId: 1,
+          message:
+            'Sign in again or check your subscription with this provider, then retry or choose another provider.',
+          details: 'Authentication required',
+          actions: ['provider_settings', 'retry'],
+        }}
+        onRetry={() => setRetried(true)}
+        onProviderSettings={() => useSettingsOverlayStore.getState().openSettings('providers')}
+        pending={retried}
+      />
+      <TurnErrorCard
+        failure={{
+          version: 1,
+          id: 'preview-connection',
+          category: 'connection',
+          scope: 'attempt',
+          stage: 'dispatch',
+          delivery: 'unknown',
+          attemptId: 'preview-unknown',
+          eventId: 2,
+          message: 'Refresh the session to check its current state before trying again.',
+          details: 'Connection closed before acknowledgement',
+          actions: ['refresh_session'],
+        }}
+        onRefresh={() => setRetried(false)}
+      />
+    </div>
+  );
+}
 
 function LayoutStressCases() {
   const [width, setWidth] = useState('360');
@@ -492,6 +690,27 @@ export function UiGalleryRoute() {
         </header>
 
         <LayoutStressCases />
+
+        <GallerySection
+          title="Provider access"
+          description="Rejected prompts with concise recovery guidance."
+        >
+          <ProviderAccessPreview />
+        </GallerySection>
+
+        <GallerySection
+          title="Turn minimap"
+          description="Pointer scrubbing and keyboard selection."
+        >
+          <TurnMinimapPreview />
+        </GallerySection>
+
+        <GallerySection
+          title="Queue and editing"
+          description="Waiting prompts and the inline message editor."
+        >
+          <QueueEditingPreview />
+        </GallerySection>
 
         <GallerySection
           title="Buttons"

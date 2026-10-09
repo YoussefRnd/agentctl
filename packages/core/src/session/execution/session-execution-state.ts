@@ -20,7 +20,14 @@ export function readSessionExecutionState(db: DbClient, sessionId: string): Sess
       tx
         .select({ attempt: sessionTurnAttempts })
         .from(sessionTurnAttempts)
-        .innerJoin(sessionOperations, eq(sessionOperations.id, sessionTurnAttempts.operationId));
+        .innerJoin(sessionOperations, eq(sessionOperations.id, sessionTurnAttempts.operationId))
+        .innerJoin(
+          sessionEvents,
+          and(
+            eq(sessionEvents.id, sessionOperations.eventId),
+            eq(sessionEvents.sessionId, sessionTurnAttempts.sessionId),
+          ),
+        );
     const active = attemptQuery()
       .where(
         and(
@@ -96,9 +103,10 @@ export function readSessionExecutionState(db: DbClient, sessionId: string): Sess
       ? { message: operation.error }
       : undefined;
     let timings: SessionExecution['timings'];
+    let failureEventId = 0;
     if (latest) {
       const diagnostics = tx
-        .select({ data: sessionEvents.data })
+        .select({ id: sessionEvents.id, data: sessionEvents.data })
         .from(sessionEvents)
         .where(
           and(
@@ -123,7 +131,39 @@ export function readSessionExecutionState(db: DbClient, sessionId: string): Sess
         const parsedTimings = turnTimingsSchema.safeParse(data.timings);
         if (parsedTimings.success) timings = { ...timings, ...parsedTimings.data };
         const parsedError = sessionExecutionErrorSchema.safeParse(data.error);
-        if (parsedError.success) error = parsedError.data;
+        if (parsedError.success) {
+          error = parsedError.data;
+          failureEventId = row.id;
+        }
+      }
+    }
+    if (session.status === 'error') {
+      const runtimeFailure = tx
+        .select({
+          id: sessionEvents.id,
+          createdAt: sessionEvents.createdAt,
+          data: sessionEvents.data,
+        })
+        .from(sessionEvents)
+        .where(
+          and(
+            eq(sessionEvents.sessionId, sessionId),
+            eq(sessionEvents.type, 'status'),
+            sql`json_extract(${sessionEvents.data}, '$.status') = 'runtime_error'`,
+            sql`coalesce(json_extract(${sessionEvents.data}, '$.diagnosticOnly'), 0) = 0`,
+          ),
+        )
+        .orderBy(desc(sessionEvents.id))
+        .get();
+      if (
+        runtimeFailure &&
+        runtimeFailure.id > failureEventId &&
+        (!latest?.startedAt || runtimeFailure.createdAt >= latest.startedAt)
+      ) {
+        const parsed = sessionExecutionErrorSchema.safeParse(
+          jsonCodecs.unknownRecord(runtimeFailure.data).error,
+        );
+        if (parsed.success) error = parsed.data;
       }
     }
     return {

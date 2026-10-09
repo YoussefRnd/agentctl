@@ -70,7 +70,9 @@ export function CommandBar({
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const { queuedMessages } = useSessionQueue();
-  const hasQueuedMessages = queuedMessages.some((message) => message.status !== 'sending');
+  const hasQueuedMessages = queuedMessages.some(
+    (message) => message.status !== 'sending' || message.waiting,
+  );
 
   return (
     <div className="flex w-full flex-col">

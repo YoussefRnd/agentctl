@@ -3,9 +3,15 @@ import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions, sessionEvents } from '../../db/index.js';
 import { sessionOperations, sessionTurnAttempts, sessionRuntimeBindings } from '../../db/schema.js';
 import { noopLogger } from '../../logger.js';
-import { AgentError } from '../../agent/errors.js';
+import { AgentError, AgentPromptRejectedError } from '../../agent/errors.js';
+import { chatErrorSchema } from '@agentctl/shared';
+import { SessionRuntime } from '../runtime/session-runtime.js';
+import type { AgentSession } from '../../agent/types.js';
+import { normalizeChatError } from '../../agent/chat-error.js';
+import { MessageAcceptanceService } from '../commands/message-acceptance-service.js';
 import { SessionEventRepository } from '../persistence/session-event-repository.js';
 import { SessionOperationWorker, type PendingSessionMessage } from './session-operation-worker.js';
+import { readSessionExecutionState } from './session-execution-state.js';
 
 function deferred() {
   let resolve!: () => void;
@@ -54,6 +60,229 @@ async function pauseQueue(context: ReturnType<typeof fixture>) {
 }
 
 describe('SessionOperationWorker', () => {
+  it('retires rewound operations atomically and dispatches the next send', async () => {
+    const context = fixture();
+    await pauseQueue(context);
+    const oldEvent = await context.worker.acceptMessage('s', 'discarded prompt', [], 'old');
+    await context.worker.acceptMessage('s', 'discarded follow-up', [], 'old-follow-up');
+    context.db
+      .update(sessionOperations)
+      .set({ status: 'unknown' })
+      .where(eq(sessionOperations.commandId, 'old'))
+      .run();
+    context.db
+      .update(sessionTurnAttempts)
+      .set({ status: 'unknown', dispatchedAt: new Date() })
+      .where(eq(sessionTurnAttempts.operationId, context.operations()[0].id))
+      .run();
+    const backup = await context.events.backupAndDeleteEventsAfter('s', oldEvent);
+    expect(context.operations().map((item) => item.status)).toEqual(['cancelled', 'cancelled']);
+    expect(context.attempts().map((item) => item.status)).toEqual(['cancelled', 'cancelled']);
+    expect(readSessionExecutionState(context.db, 's').execution).toBe('idle');
+    context.db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, 's')).run();
+    await context.worker.acceptMessage('s', 'send again', [], 'new');
+    await context.worker.idle('s');
+    expect(context.dispatch.mock.calls.map(([, message]) => message.text)).toEqual(['send again']);
+    expect(readSessionExecutionState(context.db, 's')).toMatchObject({
+      execution: 'completed',
+      attention: 'none',
+      queue: [],
+    });
+    await context.events.restoreEvents('s', backup);
+    context.worker.wake('s');
+    await context.worker.idle('s');
+    expect(context.dispatch).toHaveBeenCalledOnce();
+  });
+
+  it('repairs orphaned deliveries from older rewinds during recovery without resending them', async () => {
+    const context = fixture();
+    await pauseQueue(context);
+    const oldEvent = await context.worker.acceptMessage('s', 'orphaned prompt', [], 'orphan');
+    await context.worker.acceptMessage('s', 'waiting prompt', [], 'waiting');
+    await context.worker.idle('s');
+    context.worker.stop();
+    context.db
+      .update(sessionOperations)
+      .set({ status: 'unknown' })
+      .where(eq(sessionOperations.commandId, 'orphan'))
+      .run();
+    context.db
+      .update(sessionTurnAttempts)
+      .set({ status: 'unknown', dispatchedAt: new Date() })
+      .where(eq(sessionTurnAttempts.operationId, context.operations()[0].id))
+      .run();
+    context.db.delete(sessionEvents).where(eq(sessionEvents.id, oldEvent)).run();
+    context.db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, 's')).run();
+    const recovered = new SessionOperationWorker(
+      context.db,
+      context.events,
+      context.dispatch,
+      noopLogger,
+    );
+    cleanup.push(async () => {
+      recovered.stop();
+      await recovered.idle('s');
+    });
+    await recovered.recover();
+    await recovered.idle('s');
+    expect(context.operations()[0].status).toBe('cancelled');
+    expect(context.attempts()[0].status).toBe('cancelled');
+    expect(context.dispatch.mock.calls.map(([, message]) => message.text)).toEqual([
+      'waiting prompt',
+    ]);
+    expect(readSessionExecutionState(context.db, 's')).toMatchObject({
+      attention: 'none',
+      queue: [],
+    });
+  });
+
+  it('does not clear unresolved delivery that still belongs to retained history', async () => {
+    const context = fixture();
+    await pauseQueue(context);
+    await context.worker.acceptMessage('s', 'retained uncertain prompt', [], 'retained');
+    const removed = await context.worker.acceptMessage('s', 'removed prompt', [], 'removed');
+    context.db
+      .update(sessionOperations)
+      .set({ status: 'unknown' })
+      .where(eq(sessionOperations.commandId, 'retained'))
+      .run();
+    context.db
+      .update(sessionTurnAttempts)
+      .set({ status: 'unknown' })
+      .where(eq(sessionTurnAttempts.operationId, context.operations()[0].id))
+      .run();
+    await context.events.backupAndDeleteEventsAfter('s', removed);
+    context.db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, 's')).run();
+    await context.worker.acceptMessage('s', 'new prompt', [], 'new');
+    await context.worker.idle('s');
+    expect(context.operations()[0].status).toBe('unknown');
+    expect(readSessionExecutionState(context.db, 's').attention).toBe('delivery_uncertain');
+    expect(context.dispatch).not.toHaveBeenCalled();
+    await expect(context.worker.resumeQueue('s')).rejects.toThrow('Resolve uncertain delivery');
+  });
+
+  it('reconciles an old orphan when sending again without requiring a server restart', async () => {
+    const context = fixture();
+    await pauseQueue(context);
+    const orphan = await context.worker.acceptMessage('s', 'old prompt', [], 'old');
+    await context.worker.idle('s');
+    context.db
+      .update(sessionOperations)
+      .set({ status: 'unknown' })
+      .where(eq(sessionOperations.commandId, 'old'))
+      .run();
+    context.db
+      .update(sessionTurnAttempts)
+      .set({ status: 'unknown', dispatchedAt: new Date() })
+      .where(eq(sessionTurnAttempts.operationId, context.operations()[0].id))
+      .run();
+    context.db.delete(sessionEvents).where(eq(sessionEvents.id, orphan)).run();
+    context.db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, 's')).run();
+    await context.worker.acceptMessage('s', 'send again', [], 'new');
+    await context.worker.idle('s');
+    expect(context.operations()[0].status).toBe('cancelled');
+    expect(context.attempts()[0].status).toBe('cancelled');
+    expect(context.dispatch.mock.calls.map(([, message]) => message.text)).toEqual(['send again']);
+  });
+
+  it('wakes an existing queue when a session command finishes resetting it to idle', async () => {
+    const context = fixture();
+    await pauseQueue(context);
+    await context.worker.acceptMessage('s', 'waiting prompt', [], 'waiting');
+    await context.worker.idle('s');
+    await context.worker.runCommand('s', 'session.rewind', {}, async () => {
+      context.db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, 's')).run();
+    });
+    await context.worker.idle('s');
+    expect(context.dispatch).toHaveBeenCalledOnce();
+    expect(context.operations().find((item) => item.commandId === 'waiting')?.status).toBe(
+      'succeeded',
+    );
+  });
+
+  it('edits a waiting message in place and dispatches the updated payload without changing its receipt', async () => {
+    const gate = deferred();
+    const context = fixture(async (_session, message) => {
+      if (message.text === 'first') await gate.promise;
+    });
+    cleanup.unshift(async () => gate.resolve());
+    await context.worker.acceptMessage('s', 'first', [], 'first');
+    await vi.waitFor(() => expect(context.dispatch).toHaveBeenCalledOnce());
+    const eventId = await context.worker.acceptMessage('s', 'original', [], 'waiting');
+    const before = context.operations().find((item) => item.commandId === 'waiting')!;
+    await context.worker.changeQueuedMessage('s', 'waiting', 'edit', 'updated message');
+    const after = context.operations().find((item) => item.commandId === 'waiting')!;
+    expect(after).toMatchObject({
+      id: before.id,
+      eventId,
+      queuePosition: before.queuePosition,
+      fingerprint: before.fingerprint,
+    });
+    const event = context.db
+      .select()
+      .from(sessionEvents)
+      .where(eq(sessionEvents.id, eventId))
+      .get()!;
+    expect(JSON.parse(event.data)).toMatchObject({
+      content: 'updated message',
+      clientMessageId: 'waiting',
+      attachmentIds: [],
+      deliveryStatus: 'queued',
+    });
+    expect(await context.worker.acceptMessage('s', 'original', [], 'waiting')).toBe(eventId);
+    const deliver = vi.fn();
+    expect(
+      await new MessageAcceptanceService(context.db).accept(
+        's',
+        'original',
+        [],
+        'waiting',
+        deliver,
+      ),
+    ).toBe(eventId);
+    expect(deliver).not.toHaveBeenCalled();
+    await expect(
+      new MessageAcceptanceService(context.db).accept('s', 'different', [], 'waiting', deliver),
+    ).rejects.toThrow('different content');
+    await expect(context.worker.changeQueuedMessage('s', 'first', 'edit', 'wrong')).rejects.toThrow(
+      'already running',
+    );
+    gate.resolve();
+    await context.worker.idle('s');
+    expect(context.dispatch.mock.calls.map(([, message]) => message.text)).toEqual([
+      'first',
+      'updated message',
+    ]);
+  });
+
+  it('rejects empty, oversized, and uncertain edits and does not reorder across uncertain delivery', async () => {
+    const context = fixture();
+    await pauseQueue(context);
+    await context.worker.acceptMessage('s', 'first', [], 'first');
+    await context.worker.acceptMessage('s', 'second', [], 'second');
+    await expect(context.worker.changeQueuedMessage('s', 'first', 'edit', '  ')).rejects.toThrow(
+      'empty',
+    );
+    await expect(
+      context.worker.changeQueuedMessage('s', 'first', 'edit', 'x'.repeat(1_048_577)),
+    ).rejects.toThrow('limit');
+    const first = context.operations().find((item) => item.commandId === 'first')!;
+    context.db
+      .update(sessionOperations)
+      .set({ status: 'unknown' })
+      .where(eq(sessionOperations.id, first.id))
+      .run();
+    await expect(
+      context.worker.changeQueuedMessage('s', 'first', 'edit', 'changed'),
+    ).rejects.toThrow('uncertain');
+    await expect(context.worker.changeQueuedMessage('s', 'second', 'up')).rejects.toThrow(
+      'uncertain',
+    );
+    expect(context.operations()[0].payload).toContain('first');
+    await context.worker.changeQueuedMessage('s', 'first', 'cancel');
+    expect(context.operations()[0].status).toBe('cancelled');
+  });
+
   it('acknowledges durable input while the provider is still running and dispatches once', async () => {
     const gate = deferred();
     const context = fixture(() => gate.promise);
@@ -146,7 +375,10 @@ describe('SessionOperationWorker', () => {
       const eventId = await context.worker.acceptMessage('s', 'hello');
       await context.worker.idle('s');
       const status = dispatched ? 'unknown' : 'failed';
-      expect(context.operations()[0]).toMatchObject({ status, error: 'provider lost' });
+      expect(context.operations()[0]).toMatchObject({
+        status,
+        error: 'The agent could not complete this turn.',
+      });
       expect(context.attempts()[0].status).toBe(status);
       expect((await context.events.getEvent(eventId))?.data).toMatchObject({
         deliveryStatus: status,
@@ -159,24 +391,32 @@ describe('SessionOperationWorker', () => {
     },
   );
 
-  it('records an explicit insertion rejection as failed even after dispatch', async () => {
-    let context: ReturnType<typeof fixture>;
-    context = fixture(async (_session, message) => {
-      context.db
-        .update(sessionTurnAttempts)
-        .set({ dispatchedAt: new Date() })
-        .where(eq(sessionTurnAttempts.id, message.attemptId))
-        .run();
-      throw new AgentError('prompt_rejected', 'Input rejected');
-    });
-    const eventId = await context.worker.acceptMessage('s', 'hello');
-    await context.worker.idle('s');
-    expect(context.operations()[0]).toMatchObject({ status: 'failed', error: 'Input rejected' });
-    expect(context.attempts()[0].status).toBe('failed');
-    expect((await context.events.getEvent(eventId))?.data).toMatchObject({
-      deliveryStatus: 'failed',
-    });
-  });
+  it.each(['prompt_rejected', 'authentication_required'] as const)(
+    'records %s as failed even after dispatch',
+    async (kind) => {
+      let context: ReturnType<typeof fixture>;
+      context = fixture(async (_session, message) => {
+        context.db
+          .update(sessionTurnAttempts)
+          .set({ dispatchedAt: new Date() })
+          .where(eq(sessionTurnAttempts.id, message.attemptId))
+          .run();
+        throw new AgentError(kind, 'Input rejected', { delivery: 'rejected' });
+      });
+      const eventId = await context.worker.acceptMessage('s', 'hello');
+      await context.worker.idle('s');
+      expect(context.operations()[0]).toMatchObject({ status: 'failed' });
+      expect(context.attempts()[0].status).toBe('failed');
+      expect((await context.events.getEvent(eventId))?.data).toMatchObject({
+        deliveryStatus: 'failed',
+        deliveryFailure: {
+          delivery: 'rejected',
+          details: 'Input rejected',
+          actions: expect.arrayContaining(['retry']),
+        },
+      });
+    },
+  );
 
   it.each([false, true])('recovers an interrupted turn with dispatched=%s', async (dispatched) => {
     const context = fixture();
@@ -317,6 +557,135 @@ describe('SessionOperationWorker', () => {
       'failed',
     );
   });
+});
+
+it.each([401, 402, 429])(
+  'persists one structured rejection for provider response %s and pauses later input',
+  async (code) => {
+    let context: ReturnType<typeof fixture>;
+    context = fixture(async (_session, message) => {
+      context.db
+        .update(sessionTurnAttempts)
+        .set({ dispatchedAt: new Date() })
+        .where(eq(sessionTurnAttempts.id, message.attemptId))
+        .run();
+      throw new AgentPromptRejectedError({
+        code,
+        message: 'Provider refused request',
+        data: { private: 'secret', retryAfterMs: 3000 },
+      });
+    });
+    await pauseQueue(context);
+    const eventId = await context.worker.acceptMessage('s', 'first', [], 'first');
+    await context.worker.acceptMessage('s', 'second', [], 'second');
+    await context.worker.resumeQueue('s');
+    await context.worker.idle('s');
+    const failures = context.db
+      .select()
+      .from(sessionEvents)
+      .all()
+      .map((row) => ({ ...row, data: JSON.parse(row.data) }))
+      .filter((row) => row.data.status === 'prompt_failed');
+    expect(failures).toHaveLength(1);
+    expect(failures[0].parentEventId).toBe(eventId);
+    const failure = chatErrorSchema.parse(failures[0].data.error);
+    expect(failure).toMatchObject({ code, delivery: 'rejected', providerId: 'provider', eventId });
+    expect(failure.actions).toContain('retry');
+    expect(JSON.stringify(failure)).not.toContain('secret');
+    expect(readSessionExecutionState(context.db, 's').error).toEqual(failure);
+    expect(context.operations().map((operation) => operation.status)).toEqual([
+      'failed',
+      'pending',
+    ]);
+    expect(context.dispatch).toHaveBeenCalledOnce();
+  },
+);
+
+it.each([false, true])(
+  'gives the worker sole ownership of a runtime failure (provider accepted=%s)',
+  async (accepted) => {
+    let runtime: SessionRuntime;
+    const context = fixture(async (_session, message) => {
+      await runtime.prompt(message.text, [], undefined, undefined, undefined, undefined, message);
+    });
+    const handle = {
+      id: 'remote',
+      history: 'fresh',
+      closed: new Promise<void>(() => undefined),
+      onError: () => undefined,
+      onClose: () => undefined,
+      close: async () => {},
+      prompt: async () => {
+        if (accepted)
+          await runtime.handleDomainEvent({
+            type: 'user_message_accepted',
+            messageId: 'remote-message',
+          });
+        throw new AgentError(
+          'authentication_required',
+          'Authentication required\nAgent stderr: internal timings',
+          { delivery: 'rejected' },
+        );
+      },
+    } as unknown as AgentSession;
+    runtime = new SessionRuntime('s', handle, context.db, context.events, '/tmp/project');
+    const eventId = await context.worker.acceptMessage('s', 'hello');
+    await context.worker.idle('s');
+    const events = context.db
+      .select()
+      .from(sessionEvents)
+      .all()
+      .map((row) => ({ ...row, data: JSON.parse(row.data) }));
+    expect(events.filter((row) => row.data.status === 'prompt_failed')).toHaveLength(1);
+    expect(events.filter((row) => row.data.status === 'operation_failed')).toHaveLength(0);
+    expect(events.find((row) => row.data.status === 'runtime_error')?.data.diagnosticOnly).toBe(
+      true,
+    );
+    const state = readSessionExecutionState(context.db, 's');
+    expect(state).toMatchObject({
+      execution: 'failed',
+      attention: 'error',
+      queue: [],
+      error: { delivery: accepted ? 'accepted' : 'rejected' },
+    });
+    expect((await context.events.getEvent(eventId))?.data).toMatchObject({
+      deliveryStatus: accepted ? 'accepted' : 'failed',
+    });
+    if (accepted) expect(chatErrorSchema.parse(state.error).actions).not.toContain('retry');
+  },
+);
+
+it('pauses queued follow-ups when an inserted foreground turn fails without throwing', async () => {
+  let context: ReturnType<typeof fixture>;
+  context = fixture(async (_session, message) => {
+    context.db
+      .update(sessionTurnAttempts)
+      .set({ status: 'failed' })
+      .where(eq(sessionTurnAttempts.id, message.attemptId))
+      .run();
+  });
+  await pauseQueue(context);
+  await context.worker.acceptMessage('s', 'first', [], 'first');
+  await context.worker.acceptMessage('s', 'second', [], 'second');
+  await context.worker.resumeQueue('s');
+  await context.worker.idle('s');
+  expect(context.operations().map((operation) => operation.status)).toEqual(['failed', 'pending']);
+  expect(context.db.select().from(sessions).get()?.status).toBe('error');
+  expect(context.dispatch).toHaveBeenCalledOnce();
+});
+
+it('reports a newer independent runtime failure instead of retaining a historical turn error', async () => {
+  const context = fixture(async () => {
+    throw new Error('Old failure');
+  });
+  await context.worker.acceptMessage('s', 'hello');
+  await context.worker.idle('s');
+  const failure = normalizeChatError(
+    new AgentError('transport_lost', 'Independent connection failure'),
+    { stage: 'dispatch', id: 'new-runtime-failure' },
+  );
+  await context.events.append('s', 'status', { status: 'runtime_error', error: failure });
+  expect(readSessionExecutionState(context.db, 's').error).toEqual(failure);
 });
 
 it('does not turn an explicitly failed inserted attempt into a successful operation', async () => {

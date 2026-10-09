@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { SessionEventRow, SessionEventSnapshot } from '@agentctl/shared';
 import { initialHistoryOptions } from '../api/sessionNavigation';
 import { mergeEventHistory, useSessionEvents } from './useSessionEvents';
+import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
@@ -54,6 +55,37 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   client.clear();
+  useMessageQueueStore.getState().clearQueue();
+});
+
+it('removes an outbox item when SSE confirms acceptance after a lost HTTP response', async () => {
+  mocks.fetch.mockResolvedValueOnce({ events: [event(5)], nextBeforeId: null });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <Harness />
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  useMessageQueueStore
+    .getState()
+    .enqueueMessage(sessionId, 'follow-up', ['image'], -1, 'receipt', 'failed');
+  const accepted = {
+    ...event(6, 'follow-up'),
+    data: {
+      role: 'user' as const,
+      content: 'follow-up',
+      clientMessageId: 'receipt',
+      deliveryStatus: 'queued' as const,
+    },
+  };
+  await act(async () => mocks.engines[0].onEventsUpdate([accepted]));
+  await settle();
+  expect(useMessageQueueStore.getState().queuedMessages[sessionId]).toEqual([]);
+  expect(hook.events.find((item) => item.id === 6)).toMatchObject({
+    data: { deliveryStatus: 'queued' },
+  });
 });
 
 it('loads only the latest page, preserves live updates during pagination, and deduplicates turn anchors', async () => {

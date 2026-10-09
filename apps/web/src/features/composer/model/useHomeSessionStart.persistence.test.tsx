@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { sessionRowSchema } from '@agentctl/shared';
+import { toast } from 'sonner';
 import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 import { useDraftStore } from './useDraftStore';
 import { useHomeSessionStart } from './useHomeSessionStart';
@@ -121,4 +122,34 @@ it('restores a created home session and reuses its pending message instead of cr
   });
   expect(useMessageQueueStore.getState().queuedMessages[session.id]).toEqual([]);
   expect(useDraftStore.getState().homeDrafts[projectId]).toBeUndefined();
+});
+
+it('clears the first-message outbox when live history confirms a lost HTTP acknowledgment', async () => {
+  mocks.send.mockImplementation(async ({ body }) => {
+    client.setQueryData(
+      ['events', session.id],
+      [
+        {
+          id: 42,
+          sessionId: session.id,
+          type: 'text',
+          createdAt: new Date(),
+          data: {
+            role: 'user',
+            content: 'hello',
+            clientMessageId: body.clientMessageId,
+            deliveryStatus: 'accepted',
+          },
+        },
+      ],
+    );
+    throw new Error('Lost acknowledgment');
+  });
+  await act(async () => {
+    expect(await hook.startSession(projectId, 'hello', [], selection)).toBe(true);
+  });
+  expect(useMessageQueueStore.getState().queuedMessages[session.id]).toEqual([]);
+  expect(useDraftStore.getState().homeDrafts[projectId]).toBeUndefined();
+  expect(toast.error).not.toHaveBeenCalled();
+  expect(mocks.send).toHaveBeenCalledOnce();
 });

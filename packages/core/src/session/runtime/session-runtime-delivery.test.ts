@@ -13,7 +13,7 @@ import type { SessionStatusTransitioner } from '../contracts.js';
 import { SessionEventRepository } from '../persistence/session-event-repository.js';
 import { SessionRuntime } from './session-runtime.js';
 import { readSessionExecutionState } from '../execution/session-execution-state.js';
-import { sessionExecutionSchema } from '@agentctl/shared';
+import { sessionExecutionSchema, providerErrorCopy } from '@agentctl/shared';
 
 async function createSession(
   prompt: AgentSession['prompt'],
@@ -122,7 +122,11 @@ describe('SessionRuntime message delivery', () => {
   });
 
   it('records an inserted foreground failure without retiring the healthy runtime', async () => {
-    const error = { code: -32000, message: 'Provider quota exhausted', data: { retryable: true } };
+    const error = {
+      code: -32000,
+      message: 'Provider quota exhausted',
+      data: { code: 'insufficient_quota', retryable: true },
+    };
     const prompt = vi
       .fn<AgentSession['prompt']>()
       .mockResolvedValueOnce({ stopReason: 'error', error, userMessageId: 'inserted' })
@@ -165,14 +169,21 @@ describe('SessionRuntime message delivery', () => {
       .map((row) => ({ ...row, data: JSON.parse(row.data) }));
     expect(rows.find((row) => row.data.status === 'turn_end')?.data).toMatchObject({
       stopReason: 'error',
-      error,
+      error: { category: 'billing', delivery: 'accepted', details: error.message },
     });
     expect(rows.find((row) => row.data.status === 'prompt_failed')?.data).toMatchObject({
-      message: error.message,
-      error,
+      message: providerErrorCopy('billing').message,
+      error: {
+        category: 'billing',
+        delivery: 'accepted',
+        details: error.message,
+        actions: ['provider_settings'],
+      },
     });
     expect(db.select().from(sessionTurnAttempts).get()?.status).toBe('failed');
-    expect(db.select().from(sessionOperations).get()?.error).toBe(error.message);
+    expect(db.select().from(sessionOperations).get()?.error).toBe(
+      providerErrorCopy('billing').message,
+    );
     expect(db.select().from(sessions).get()?.status).toBe('idle');
     expect(session.isDead).toBe(false);
     await session.prompt('try again');
@@ -180,7 +191,11 @@ describe('SessionRuntime message delivery', () => {
   });
 
   it('exposes persisted timing and error details for the attempt without leaking them to the next one', async () => {
-    const failure = { code: -32000, message: 'Quota exhausted', data: { retryable: true } };
+    const failure = {
+      code: -32000,
+      message: 'Quota exhausted',
+      data: { code: 'insufficient_quota', retryable: true },
+    };
     let context: Awaited<ReturnType<typeof createSession>>;
     context = await createSession(async () => {
       await context.session.handleDomainEvent({
@@ -250,7 +265,7 @@ describe('SessionRuntime message delivery', () => {
       execution: 'failed',
       attemptId: 'first',
       eventId: first,
-      error: failure,
+      error: { category: 'billing', delivery: 'accepted', details: failure.message },
     });
     expect(Object.keys(execution.timings!).sort()).toEqual([
       'acceptanceMs',
@@ -272,7 +287,7 @@ describe('SessionRuntime message delivery', () => {
     expect(
       context.db.select().from(sessionOperations).where(eq(sessionOperations.id, 'first')).get()
         ?.error,
-    ).toBe(failure.message);
+    ).toBe(providerErrorCopy('billing').message);
     context.db
       .update(sessionTurnAttempts)
       .set({ status: 'running', startedAt: new Date() })

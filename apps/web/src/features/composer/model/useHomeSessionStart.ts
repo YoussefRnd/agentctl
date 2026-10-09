@@ -176,10 +176,28 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
         queue.dequeueMessage(session.id, clientMessageId);
         acknowledgeSessionInput(queryClient, session.id, clientMessageId, response.body.eventId);
         store.clearHomeDraft(projectId);
+        void queryClient.invalidateQueries({ queryKey: ['session-execution', session.id] });
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
         return true;
       } catch (err) {
         if (pendingSessionId && clientMessageId) {
+          const accepted = queryClient
+            .getQueryData<SessionEventRow[]>(sessionKeys.events(pendingSessionId))
+            ?.some(
+              (event) =>
+                event.id > 0 &&
+                event.type === 'text' &&
+                event.data.clientMessageId === clientMessageId,
+            );
+          if (accepted) {
+            useMessageQueueStore.getState().dequeueMessage(pendingSessionId, clientMessageId);
+            useDraftStore.getState().clearHomeDraft(projectId);
+            void queryClient.invalidateQueries({
+              queryKey: ['session-execution', pendingSessionId],
+            });
+            void queryClient.invalidateQueries({ queryKey: ['projects'] });
+            return true;
+          }
           if (optimisticEventId !== undefined)
             updateOptimisticDelivery(
               queryClient,

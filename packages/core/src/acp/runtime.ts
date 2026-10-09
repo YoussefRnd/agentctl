@@ -16,6 +16,7 @@ import {
   ClientSideConnection,
   ndJsonStream,
   PROTOCOL_VERSION,
+  RequestError,
   type NewSessionResponse,
   type ResumeSessionResponse,
   type LoadSessionResponse,
@@ -40,7 +41,7 @@ import type {
   AgentSessionCallbacks,
   AgentSessionOptions,
 } from '../agent/types.js';
-import { AgentAuthenticationRequiredError } from '../agent/errors.js';
+import { AgentAuthenticationRequiredError, normalizeAgentError } from '../agent/errors.js';
 import {
   ProcessStreamTransport,
   cleanEnv,
@@ -263,7 +264,13 @@ export class AcpV1AgentDriver implements AgentDriver {
           })
           .catch(async (error: unknown) => {
             await updates.drain().catch(() => undefined);
-            throw withProcessDiagnostics(error, child);
+            const failure = withProcessDiagnostics(error, child);
+            // v1's response spans the whole turn. Only its explicit auth code proves rejection;
+            // output observed before this response will still override rejection downstream.
+            throw normalizeAgentError(
+              failure,
+              error instanceof RequestError && error.code === -32000 ? 'rejected' : 'unknown',
+            );
           });
         await updates.drain();
         return {

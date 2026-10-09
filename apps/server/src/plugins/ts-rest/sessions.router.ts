@@ -61,7 +61,12 @@ export function createSessionsRouter(
     }),
     changeQueuedMessage: async ({ params, body }) => {
       try {
-        await fastify.sessionManager.changeQueuedMessage(params.id, params.commandId, body.action);
+        await fastify.sessionManager.changeQueuedMessage(
+          params.id,
+          params.commandId,
+          body.action,
+          body.action === 'edit' ? body.input : undefined,
+        );
         publishSessionChange(fastify, params.id);
         return { status: 200 as const, body: { success: true as const } };
       } catch (error) {

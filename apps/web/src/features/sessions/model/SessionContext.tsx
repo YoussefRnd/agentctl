@@ -121,7 +121,11 @@ export function useSession() {
 // 2. SESSION STREAM CONTEXT
 // ==========================================
 import { useMessageQueueStore, type QueuedMessage } from '@/shared';
-import { sendSessionInput, updateOptimisticDelivery } from './messageDelivery';
+import {
+  acknowledgeSessionInput,
+  sendSessionInput,
+  updateOptimisticDelivery,
+} from './messageDelivery';
 export type { QueuedMessage };
 const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];
 
@@ -148,7 +152,9 @@ interface SessionStreamContextValue {
   structuredPlan: StructuredPlanItem[];
   queuedMessages: QueuedMessage[];
   queueAttention?: 'none' | 'approval' | 'delivery_uncertain' | 'error';
-  resumeQueue?: () => Promise<void>;
+  resumeQueue?: () => Promise<void | boolean>;
+  queuePendingId?: string;
+  editQueuedMessage: (id: string, text: string) => Promise<boolean>;
   enqueueMessage: (
     text: string,
     attachmentIds?: string[],
@@ -168,6 +174,8 @@ type SessionQueueValue = Pick<
   | 'queuedMessages'
   | 'queueAttention'
   | 'resumeQueue'
+  | 'queuePendingId'
+  | 'editQueuedMessage'
   | 'enqueueMessage'
   | 'dequeueMessage'
   | 'retryMessage'
@@ -234,11 +242,51 @@ export function SessionStreamProvider({
   );
   const dequeueMessage = useCallback(
     (id: string) => {
-      if (acceptedQueue.queuedMessages.some((message) => message.id === id))
+      if (
+        acceptedQueue.queuedMessages.some((message) => message.id === id) ||
+        queryClient
+          .getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId))
+          ?.some(
+            (event) => event.id > 0 && event.type === 'text' && event.data.clientMessageId === id,
+          )
+      )
         void acceptedQueue.changeMessage(id, 'cancel');
-      else dequeueQueuedMessage(sessionId, id);
+      else {
+        const message = useMessageQueueStore
+          .getState()
+          .queuedMessages[sessionId]?.find((item) => item.id === id);
+        if (!message || message.status === 'sending') return;
+        dequeueQueuedMessage(sessionId, id);
+        if (message.optimisticEventId !== undefined)
+          updateOptimisticDelivery(queryClient, sessionId, message.optimisticEventId, 'cancelled');
+      }
     },
-    [dequeueQueuedMessage, sessionId, acceptedQueue],
+    [dequeueQueuedMessage, sessionId, acceptedQueue, queryClient],
+  );
+  const editQueuedMessage = useCallback(
+    async (id: string, text: string) => {
+      if (
+        acceptedQueue.queuedMessages.some((message) => message.id === id) ||
+        queryClient
+          .getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId))
+          ?.some(
+            (event) => event.id > 0 && event.type === 'text' && event.data.clientMessageId === id,
+          )
+      )
+        return acceptedQueue.changeMessage(id, 'edit', text);
+      const queue = useMessageQueueStore.getState();
+      const message = queue.queuedMessages[sessionId]?.find((item) => item.id === id);
+      if (!message || !queue.editMessage(sessionId, id, text)) return false;
+      queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), (old = []) =>
+        old.map((event) =>
+          event.id === message.optimisticEventId && event.type === 'text'
+            ? { ...event, data: { ...event.data, content: text.trim() } }
+            : event,
+        ),
+      );
+      return true;
+    },
+    [acceptedQueue, sessionId, queryClient],
   );
   const reorderQueuedMessages = useCallback(
     (newQueue: QueuedMessage[]) => reorderQueuedMessagesForSession(sessionId, newQueue),
@@ -247,6 +295,14 @@ export function SessionStreamProvider({
   const moveQueuedMessage = useCallback(
     (index: number, direction: 'up' | 'down') => {
       const message = displayQueue[index];
+      const neighbor = displayQueue[index + (direction === 'up' ? -1 : 1)];
+      if (
+        !message ||
+        !neighbor ||
+        !!message.accepted !== !!neighbor.accepted ||
+        [message, neighbor].some((item) => item.status === 'sending' || item.status === 'unknown')
+      )
+        return;
       if (message?.accepted) void acceptedQueue.changeMessage(message.id, direction);
       else
         moveQueuedMessageForSession(
@@ -291,7 +347,7 @@ export function SessionStreamProvider({
       const message = useMessageQueueStore
         .getState()
         .queuedMessages[sessionId]?.find((candidate) => candidate.id === id);
-      if (!message || message.status === 'sending') return;
+      if (!message || message.status === 'sending' || message.status === 'unknown') return;
       awaitingQueuedTurnRef.current = false;
       useMessageQueueStore.getState().setMessageStatus(sessionId, id, 'queued');
       if (message.optimisticEventId !== undefined)
@@ -317,6 +373,21 @@ export function SessionStreamProvider({
       const event = queryClient
         .getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId))
         ?.find((candidate) => candidate.id === eventId);
+      if (
+        eventId > 0 &&
+        event?.type === 'text' &&
+        event.data.deliveryStatus === 'failed' &&
+        (!event.data.deliveryFailure ||
+          (event.data.deliveryFailure.actions.includes('retry') &&
+            ['not_sent', 'rejected'].includes(event.data.deliveryFailure.delivery)))
+      ) {
+        // A rejected send is a new, explicitly requested attempt, not a replay
+        // of its durable receipt. Never offer this path for uncertain delivery.
+        void acceptedQueue.resume().then((resumed) => {
+          if (resumed) enqueueMessage(event.data.content, event.data.attachmentIds);
+        });
+        return;
+      }
       if (eventId < 0 && event?.type === 'text' && event.data.deliveryStatus === 'failed') {
         const id = enqueueMessage(
           event.data.content,
@@ -327,7 +398,7 @@ export function SessionStreamProvider({
         retryQueuedMessage(id);
       }
     },
-    [sessionId, queryClient, enqueueMessage, retryQueuedMessage],
+    [sessionId, queryClient, enqueueMessage, retryQueuedMessage, acceptedQueue],
   );
 
   useEffect(() => {
@@ -348,7 +419,12 @@ export function SessionStreamProvider({
       return;
 
     const nextMessage = queuedMessages[0];
-    if (nextMessage.status === 'failed' || nextMessage.status === 'sending') return;
+    if (
+      nextMessage.status === 'failed' ||
+      nextMessage.status === 'sending' ||
+      nextMessage.status === 'unknown'
+    )
+      return;
     awaitingQueuedTurnRef.current = true;
     queuedTurnStartEventIdRef.current = latestEventId;
     const setDelivery = (status: 'queued' | 'sending' | 'accepted' | 'failed', error?: string) => {
@@ -357,12 +433,26 @@ export function SessionStreamProvider({
           queryClient,
           sessionId,
           nextMessage.optimisticEventId,
-          status,
+          status === 'sending' ? 'queued' : status,
           error,
         );
       }
     };
     const markFailed = (error: unknown) => {
+      const accepted = queryClient
+        .getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId))
+        ?.find(
+          (event) =>
+            event.id > 0 && event.type === 'text' && event.data.clientMessageId === nextMessage.id,
+        );
+      if (accepted) {
+        if (currentSessionRef.current === sessionId)
+          queuedTurnStartEventIdRef.current = accepted.id;
+        dequeueQueuedMessage(sessionId, nextMessage.id);
+        void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+        return;
+      }
       if (currentSessionRef.current === sessionId) {
         awaitingQueuedTurnRef.current = false;
       }
@@ -380,14 +470,22 @@ export function SessionStreamProvider({
       });
       void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     };
+    useMessageQueueStore.getState().setMessageStatus(sessionId, nextMessage.id, 'sending');
+    setDelivery('sending');
     queueMicrotask(() => {
-      useMessageQueueStore.getState().setMessageStatus(sessionId, nextMessage.id, 'sending');
-      setDelivery('sending');
       void sendSessionInput(sessionId, nextMessage.text, nextMessage.attachmentIds, nextMessage.id)
         .then((eventId) => {
           if (currentSessionRef.current === sessionId) queuedTurnStartEventIdRef.current = eventId;
-          dequeueMessage(nextMessage.id);
-          setDelivery('accepted');
+          dequeueQueuedMessage(sessionId, nextMessage.id);
+          acknowledgeSessionInput(
+            queryClient,
+            sessionId,
+            nextMessage.id,
+            eventId,
+            nextMessage.optimisticEventId,
+            'queued',
+          );
+          void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
           void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
         })
         .catch(markFailed);
@@ -400,6 +498,7 @@ export function SessionStreamProvider({
     sessionId,
     queryClient,
     dequeueMessage,
+    dequeueQueuedMessage,
     enqueueMessage,
     retryQueuedMessage,
     isConnected,
@@ -514,6 +613,8 @@ export function SessionStreamProvider({
       execution: acceptedQueue.execution,
       queueAttention: acceptedQueue.execution?.attention,
       resumeQueue: acceptedQueue.resume,
+      queuePendingId: acceptedQueue.pendingId,
+      editQueuedMessage,
       enqueueMessage,
       dequeueMessage,
       retryMessage,
@@ -544,6 +645,8 @@ export function SessionStreamProvider({
       displayQueue,
       acceptedQueue.execution,
       acceptedQueue.resume,
+      acceptedQueue.pendingId,
+      editQueuedMessage,
       enqueueMessage,
       dequeueMessage,
       retryMessage,
@@ -585,6 +688,8 @@ export function SessionStreamProvider({
       queuedMessages: displayQueue,
       queueAttention: acceptedQueue.execution?.attention,
       resumeQueue: acceptedQueue.resume,
+      queuePendingId: acceptedQueue.pendingId,
+      editQueuedMessage,
       enqueueMessage,
       dequeueMessage,
       retryMessage,
@@ -596,6 +701,8 @@ export function SessionStreamProvider({
       displayQueue,
       acceptedQueue.execution?.attention,
       acceptedQueue.resume,
+      acceptedQueue.pendingId,
+      editQueuedMessage,
       enqueueMessage,
       dequeueMessage,
       retryMessage,

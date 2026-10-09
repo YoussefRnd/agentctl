@@ -5,6 +5,7 @@ import type { IEventBus } from '../manager.js';
 import type { SessionEvent, SessionEventPayload, SessionEventMetadata } from '@agentctl/shared';
 import type { SessionEventDbRow } from '../../db/zod-schemas.js';
 import { sessionEventCodecs } from '../../db/json-codecs.js';
+import { cancelRemovedMessageOperations } from '../execution/session-operation-reconciliation.js';
 
 export const SESSION_CHANGE_RETENTION = 10_000;
 type EventTransaction = Pick<DbClient, 'select' | 'insert' | 'update' | 'delete'>;
@@ -185,52 +186,62 @@ export class SessionEventRepository {
     shouldPublish = true,
     clearFields: readonly string[] = [],
   ): Promise<void> {
-    const committed = this.db.transaction((tx) => {
-      const row = tx.select().from(sessionEvents).where(eq(sessionEvents.id, eventId)).get();
-      if (!row) return undefined;
-      const existingData = sessionEventCodecs.parseData(row.type, row.data);
-      const existingMetadata = sessionEventCodecs.parseMetadata(row.metadata);
-      const mergedMetadata =
-        metadata === undefined
-          ? existingMetadata
-          : metadata === null
-            ? null
-            : {
-                ...existingMetadata,
-                ...metadata,
-              };
-      let mergedData = data;
-      if (existingData && typeof existingData === 'object' && data && typeof data === 'object') {
-        const supplied = Object.fromEntries(
-          Object.entries(data).filter(([, value]) => value !== undefined),
-        );
-        mergedData = { ...existingData, ...supplied };
-        for (const field of clearFields) delete (mergedData as Record<string, unknown>)[field];
-      }
-      const validatedData = sessionEventCodecs.validateData(
-        row.type,
-        mergedData as SessionEventPayload<SessionEvent['type']>,
-      );
-      const validatedMetadata = sessionEventCodecs.validateMetadata(mergedMetadata);
-      const first = tx
-        .update(sessionEvents)
-        .set({
-          data: JSON.stringify(validatedData),
-          metadata: validatedMetadata ? JSON.stringify(validatedMetadata) : null,
-        })
-        .where(eq(sessionEvents.id, eventId))
-        .returning()
-        .get()!;
-      const change = this.recordChange(tx, row.sessionId, eventId);
-      const delta = extractTokens(validatedMetadata) - extractTokens(existingMetadata);
-      if (delta)
-        tx.update(sessions)
-          .set({ totalTokens: sql`MAX(0, ${sessions.totalTokens} + ${delta})` })
-          .where(eq(sessions.id, row.sessionId))
-          .run();
-      return { ...first, createdAt: new Date(first.createdAt), sequence: change.sequence };
-    });
+    const committed = this.db.transaction((tx) =>
+      this.updateInTransaction(tx, eventId, data, metadata, clearFields),
+    );
     if (shouldPublish && committed) this.publishCommitted(committed);
+  }
+
+  updateInTransaction(
+    tx: EventTransaction,
+    eventId: number,
+    data: unknown,
+    metadata?: SessionEventMetadata | null,
+    clearFields: readonly string[] = [],
+  ): (SessionEventDbRow & { sequence: number }) | undefined {
+    const row = tx.select().from(sessionEvents).where(eq(sessionEvents.id, eventId)).get();
+    if (!row) return undefined;
+    const existingData = sessionEventCodecs.parseData(row.type, row.data);
+    const existingMetadata = sessionEventCodecs.parseMetadata(row.metadata);
+    const mergedMetadata =
+      metadata === undefined
+        ? existingMetadata
+        : metadata === null
+          ? null
+          : {
+              ...existingMetadata,
+              ...metadata,
+            };
+    let mergedData = data;
+    if (existingData && typeof existingData === 'object' && data && typeof data === 'object') {
+      const supplied = Object.fromEntries(
+        Object.entries(data).filter(([, value]) => value !== undefined),
+      );
+      mergedData = { ...existingData, ...supplied };
+      for (const field of clearFields) delete (mergedData as Record<string, unknown>)[field];
+    }
+    const validatedData = sessionEventCodecs.validateData(
+      row.type,
+      mergedData as SessionEventPayload<SessionEvent['type']>,
+    );
+    const validatedMetadata = sessionEventCodecs.validateMetadata(mergedMetadata);
+    const first = tx
+      .update(sessionEvents)
+      .set({
+        data: JSON.stringify(validatedData),
+        metadata: validatedMetadata ? JSON.stringify(validatedMetadata) : null,
+      })
+      .where(eq(sessionEvents.id, eventId))
+      .returning()
+      .get()!;
+    const change = this.recordChange(tx, row.sessionId, eventId);
+    const delta = extractTokens(validatedMetadata) - extractTokens(existingMetadata);
+    if (delta)
+      tx.update(sessions)
+        .set({ totalTokens: sql`MAX(0, ${sessions.totalTokens} + ${delta})` })
+        .where(eq(sessions.id, row.sessionId))
+        .run();
+    return { ...first, createdAt: new Date(first.createdAt), sequence: change.sequence };
   }
 
   async findMessage(sessionId: string, role: string, messageId: string, nativeSessionId?: string) {
@@ -319,6 +330,7 @@ export class SessionEventRepository {
       tx.delete(sessionEvents)
         .where(and(gte(sessionEvents.id, eventId), eq(sessionEvents.sessionId, sessionId)))
         .run();
+      cancelRemovedMessageOperations(tx, sessionId);
       // Deleted pointers force a reconnect snapshot, including an empty history.
       this.recordChange(tx, sessionId, eventId);
       const tokens = rows.reduce((sum, row) => sum + extractTokens(row.metadata), 0);

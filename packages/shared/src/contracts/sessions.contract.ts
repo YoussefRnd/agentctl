@@ -43,12 +43,15 @@ export const sessionsContract = {
     method: 'POST',
     path: '/api/sessions/:id/queue/:commandId',
     pathParams: z.object({ id: z.uuid(), commandId: z.string() }),
-    body: z.object({ action: z.enum(['cancel', 'up', 'down']) }),
+    body: z.discriminatedUnion('action', [
+      z.object({ action: z.enum(['cancel', 'up', 'down']) }),
+      z.object({ action: z.literal('edit'), input: z.string().trim().min(1) }),
+    ]),
     responses: {
       200: z.object({ success: z.literal(true) }),
       409: z.object({ message: z.string() }),
     },
-    summary: 'Cancel or reorder a message before dispatch',
+    summary: 'Edit, cancel, or reorder a message before dispatch',
   },
   importNativeSession: {
     method: 'POST',

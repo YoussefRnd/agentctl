@@ -17,8 +17,6 @@ const Tick = memo(
     strength,
     hovering,
     onSelect,
-    onFocus,
-    onBlur,
   }: {
     turn: ConversationTurn;
     index: number;
@@ -26,8 +24,6 @@ const Tick = memo(
     strength: number;
     hovering: boolean;
     onSelect: (index: number) => void;
-    onFocus: (index: number) => void;
-    onBlur: () => void;
   }) {
     const bright = active || strength > 0.08;
     return (
@@ -43,8 +39,6 @@ const Tick = memo(
             onClick={(event) => {
               if (event.detail === 0) onSelect(index);
             }}
-            onFocus={() => onFocus(index)}
-            onBlur={onBlur}
             className="focus-visible:outline-accent relative flex h-full w-full cursor-pointer items-center justify-end px-1 focus-visible:outline"
             aria-label={`Turn ${index + 1}`}
             aria-current={active ? 'location' : undefined}
@@ -76,8 +70,6 @@ const Tick = memo(
       previous.strength === next.strength &&
       previous.hovering === next.hovering &&
       previous.onSelect === next.onSelect &&
-      previous.onFocus === next.onFocus &&
-      previous.onBlur === next.onBlur &&
       a.id === b.id &&
       a.userPrompt === b.userPrompt &&
       a.turnSummary === b.turnSummary &&
@@ -98,7 +90,6 @@ export const TurnMinimap = memo(function TurnMinimap({
 }: TurnMinimapProps) {
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
   const railRef = useRef<HTMLDivElement>(null);
-  const hoverTimeoutRef = useRef<number | null>(null);
   const frameRef = useRef<number | null>(null);
   const pendingPositionRef = useRef<number | null>(null);
   const draggingRef = useRef(false);
@@ -113,28 +104,23 @@ export const TurnMinimap = memo(function TurnMinimap({
     if (latest.turns[index]) latest.onSelectTurn(latest.turns[index]);
   }, []);
 
-  const clearHoverTimeout = useCallback(() => {
-    if (hoverTimeoutRef.current != null) window.clearTimeout(hoverTimeoutRef.current);
-    hoverTimeoutRef.current = null;
+  const clearHover = useCallback(() => {
+    if (frameRef.current != null) window.cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    pendingPositionRef.current = null;
+    setHoverPosition(null);
   }, []);
-  const handleFocus = useCallback(
-    (index: number) => {
-      clearHoverTimeout();
-      setHoverPosition(index);
-    },
-    [clearHoverTimeout],
-  );
-  const handleLeave = useCallback(() => {
-    clearHoverTimeout();
-    hoverTimeoutRef.current = window.setTimeout(() => setHoverPosition(null), 120);
-  }, [clearHoverTimeout]);
-  useEffect(
-    () => () => {
-      if (hoverTimeoutRef.current != null) window.clearTimeout(hoverTimeoutRef.current);
+  const resetPointer = useCallback(() => {
+    draggingRef.current = false;
+    clearHover();
+  }, [clearHover]);
+  useEffect(() => {
+    window.addEventListener('blur', resetPointer);
+    return () => {
+      window.removeEventListener('blur', resetPointer);
       if (frameRef.current != null) window.cancelAnimationFrame(frameRef.current);
-    },
-    [],
-  );
+    };
+  }, [resetPointer]);
   const selectScrubPosition = useCallback(
     (position: number) => {
       const index = Math.max(0, Math.min(Math.round(position), turns.length - 1));
@@ -149,11 +135,24 @@ export const TurnMinimap = memo(function TurnMinimap({
     (event: React.PointerEvent<HTMLDivElement>) => {
       const rect = railRef.current?.getBoundingClientRect();
       if (!rect?.height || !turns.length) return;
-      clearHoverTimeout();
-      pendingPositionRef.current = Math.max(
+      const position = Math.max(
         0,
         Math.min(((event.clientY - rect.top) / rect.height) * turns.length - 0.5, turns.length - 1),
       );
+      // Captured drag events can arrive outside the rail. Keep scrubbing, but
+      // never let them leave a hover enlargement behind.
+      if (
+        event.pointerType === 'touch' ||
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      ) {
+        clearHover();
+        if (draggingRef.current) selectScrubPosition(position);
+        return;
+      }
+      pendingPositionRef.current = position;
       if (draggingRef.current) didScrubRef.current = true;
       if (frameRef.current != null) return;
       frameRef.current = window.requestAnimationFrame(() => {
@@ -164,7 +163,7 @@ export const TurnMinimap = memo(function TurnMinimap({
         if (draggingRef.current && didScrubRef.current) selectScrubPosition(position);
       });
     },
-    [turns.length, clearHoverTimeout, selectScrubPosition],
+    [turns.length, clearHover, selectScrubPosition],
   );
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -190,16 +189,31 @@ export const TurnMinimap = memo(function TurnMinimap({
           ),
         );
       draggingRef.current = false;
+      if (
+        !rect ||
+        event.pointerType === 'touch' ||
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom
+      )
+        clearHover();
       if (event.currentTarget.hasPointerCapture(event.pointerId))
         event.currentTarget.releasePointerCapture(event.pointerId);
     },
-    [selectScrubPosition, turns.length],
+    [selectScrubPosition, turns.length, clearHover],
   );
-  const handlePointerCancel = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    draggingRef.current = false;
-    if (event.currentTarget.hasPointerCapture(event.pointerId))
-      event.currentTarget.releasePointerCapture(event.pointerId);
-  }, []);
+  const handlePointerCancel = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      resetPointer();
+      if (event.currentTarget.hasPointerCapture(event.pointerId))
+        event.currentTarget.releasePointerCapture(event.pointerId);
+    },
+    [resetPointer],
+  );
+  const handleLostPointerCapture = useCallback(() => {
+    if (draggingRef.current) resetPointer();
+  }, [resetPointer]);
   if (!turns.length) return null;
   return (
     <div className="absolute inset-y-6 right-2 z-30 flex w-8 items-center justify-end select-none">
@@ -209,8 +223,8 @@ export const TurnMinimap = memo(function TurnMinimap({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onPointerEnter={clearHoverTimeout}
-        onPointerLeave={handleLeave}
+        onLostPointerCapture={handleLostPointerCapture}
+        onPointerLeave={clearHover}
         style={{ height: turns.length * 10 }}
         className="flex max-h-full w-full cursor-ns-resize touch-none flex-col items-end"
         aria-label="Conversation turn timeline minimap"
@@ -227,8 +241,6 @@ export const TurnMinimap = memo(function TurnMinimap({
               strength={strength}
               hovering={hoverPosition != null}
               onSelect={selectTick}
-              onFocus={handleFocus}
-              onBlur={handleLeave}
             />
           );
         })}

@@ -155,6 +155,29 @@ it('renders a small window of a long conversation and can navigate to an off-scr
   expect(container.querySelector('[data-message="1"]')).toBeNull();
 });
 
+it('hides queued prompts and stale navigator anchors until the prompt is dispatched', async () => {
+  const waiting: SessionEventRow = {
+    ...events[1],
+    type: 'text',
+    data: { role: 'user', content: 'Waiting prompt', deliveryStatus: 'queued' },
+  };
+  stream.turnIndex = [events[0], waiting].map((event) => ({
+    eventId: event.id,
+    prompt: String(event.data.content),
+    timestamp: new Date(event.createdAt!).toISOString(),
+  }));
+  await render(undefined, [events[0], waiting]);
+  expect(container.querySelector('[data-message="1"]')).not.toBeNull();
+  expect(container.querySelector('[data-message="2"]')).toBeNull();
+  expect(container.querySelectorAll('[data-timeline] button')).toHaveLength(0);
+  await render(undefined, [
+    events[0],
+    { ...waiting, data: { ...waiting.data, deliveryStatus: 'accepted' } } as SessionEventRow,
+  ]);
+  expect(container.querySelectorAll('[data-message="2"]')).toHaveLength(1);
+  expect(container.querySelectorAll('[data-timeline] button')).toHaveLength(2);
+});
+
 it('requests older history without jumping back to the end of the conversation', async () => {
   await render(250);
   const viewport = container.querySelector('[tabindex="0"]') as HTMLElement;
@@ -273,7 +296,7 @@ it('keeps a foreground failure with its original input when another input is que
     },
   ];
   await render(undefined, failed);
-  expect(container.textContent).toContain('Agent run failed');
+  expect(container.textContent).toContain('Provider limit reached');
   expect(container.textContent).toContain('Provider quota exhausted');
   expect(container.textContent).not.toContain('Refresh session');
   await render(undefined, [failed[0], { ...events[2], id: 3 }, { ...failed[1], id: 4 }]);

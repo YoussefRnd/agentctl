@@ -7,8 +7,10 @@ export interface QueuedMessage {
   text: string;
   attachmentIds?: string[];
   optimisticEventId?: number;
+  eventId?: number;
   status?: 'queued' | 'sending' | 'failed' | 'unknown';
   accepted?: boolean;
+  waiting?: boolean;
   error?: string;
 }
 
@@ -21,6 +23,7 @@ interface MessageQueueState {
     optimisticEventId?: number,
     id?: string,
     status?: QueuedMessage['status'],
+    waiting?: boolean,
   ) => string;
   setMessageStatus: (
     sessionId: string,
@@ -28,6 +31,7 @@ interface MessageQueueState {
     status: NonNullable<QueuedMessage['status']>,
     error?: string,
   ) => void;
+  editMessage: (sessionId: string, id: string, text: string) => boolean;
   dequeueMessage: (sessionId: string, id: string) => void;
   reorderQueuedMessages: (sessionId: string, newQueue: QueuedMessage[]) => void;
   moveQueuedMessage: (sessionId: string, index: number, direction: 'up' | 'down') => void;
@@ -36,7 +40,7 @@ interface MessageQueueState {
 
 export const useMessageQueueStore = create<MessageQueueState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       queuedMessages: {},
 
       enqueueMessage: (
@@ -46,13 +50,21 @@ export const useMessageQueueStore = create<MessageQueueState>()(
         optimisticEventId,
         id = crypto.randomUUID(),
         status = 'queued',
+        waiting = false,
       ) => {
         set((state) => ({
           queuedMessages: {
             ...state.queuedMessages,
             [sessionId]: [
               ...(state.queuedMessages[sessionId] ?? []).filter((message) => message.id !== id),
-              { id, text, attachmentIds, optimisticEventId, status },
+              {
+                id,
+                text,
+                attachmentIds,
+                optimisticEventId,
+                status,
+                ...(waiting ? { waiting } : {}),
+              },
             ],
           },
         }));
@@ -64,7 +76,16 @@ export const useMessageQueueStore = create<MessageQueueState>()(
           queuedMessages: {
             ...state.queuedMessages,
             [sessionId]: (state.queuedMessages[sessionId] ?? []).map((message) =>
-              message.id === id ? { ...message, status, error } : message,
+              message.id === id
+                ? {
+                    ...message,
+                    status,
+                    error,
+                    ...(status === 'sending' && message.status === 'queued'
+                      ? { waiting: true }
+                      : {}),
+                  }
+                : message,
             ),
           },
         })),
@@ -76,6 +97,27 @@ export const useMessageQueueStore = create<MessageQueueState>()(
             [sessionId]: (state.queuedMessages[sessionId] ?? []).filter((msg) => msg.id !== id),
           },
         }));
+      },
+
+      editMessage: (sessionId, id, text) => {
+        const message = get().queuedMessages[sessionId]?.find((item) => item.id === id);
+        if (
+          !message ||
+          message.status === 'sending' ||
+          message.status === 'failed' ||
+          message.status === 'unknown' ||
+          !text.trim()
+        )
+          return false;
+        set((state) => ({
+          queuedMessages: {
+            ...state.queuedMessages,
+            [sessionId]: state.queuedMessages[sessionId].map((item) =>
+              item.id === id ? { ...item, text: text.trim() } : item,
+            ),
+          },
+        }));
+        return true;
       },
 
       reorderQueuedMessages: (sessionId, newQueue) => {
@@ -95,6 +137,12 @@ export const useMessageQueueStore = create<MessageQueueState>()(
             return state;
           }
           const next = [...queue];
+          if (
+            [queue[index], queue[targetIndex]].some(
+              (item) => item.status === 'sending' || item.status === 'unknown',
+            )
+          )
+            return state;
           const [item] = next.splice(index, 1);
           next.splice(targetIndex, 0, item);
           return { queuedMessages: { ...state.queuedMessages, [sessionId]: next } };
@@ -128,7 +176,12 @@ export const useMessageQueueStore = create<MessageQueueState>()(
             )
             .map((message) => ({
               ...message,
-              status: message.status === 'failed' ? 'failed' : 'queued',
+              status:
+                message.status === 'failed'
+                  ? 'failed'
+                  : message.status === 'unknown'
+                    ? 'unknown'
+                    : 'queued',
             }));
         }
         return { ...current, queuedMessages };

@@ -972,7 +972,8 @@ describe('SessionManager tests', () => {
     const row = db.select().from(sessionEvents).get();
     expect(JSON.parse(row!.data ?? '{}')).toMatchObject({
       deliveryStatus: 'failed',
-      deliveryError: 'prompt already in progress',
+      deliveryError: 'The agent could not complete this turn.',
+      deliveryFailure: { version: 1, delivery: 'not_sent', details: 'prompt already in progress' },
     });
     session.kill();
   });
@@ -995,6 +996,62 @@ describe('SessionManager tests', () => {
       'Event not found: 99',
     );
     expect(getEventWithMetadata).toHaveBeenCalledWith('session-1', 99);
+  });
+
+  test('rewind waits for a fresh runtime and sends again with only retained context', async () => {
+    const db = inputDatabase();
+    db.update(sessions)
+      .set({ agentSessionId: JSON.stringify({ 'provider-1': 'old-native-session' }) })
+      .where(eq(sessions.id, 'session-1'))
+      .run();
+    const store = new SessionEventRepository(db, eventBus);
+    await store.append('session-1', 'text', { role: 'user', content: 'Keep this context' });
+    await store.append('session-1', 'text', { role: 'provider', content: 'Retained reply' });
+    const removed = await store.append('session-1', 'text', {
+      role: 'user',
+      content: 'Discard this prompt',
+    });
+    let finishStartup!: () => void;
+    const startup = new Promise<void>((resolve) => {
+      finishStartup = resolve;
+    });
+    const prompt = vi.fn().mockResolvedValue({ stopReason: 'end_turn' });
+    const startSession = vi.fn<AgentDriver['startSession']>(async (...args) => {
+      await startup;
+      return { ...(await fakeRuntime.startSession(...args)), prompt };
+    });
+    const manager = new SessionManager(
+      db,
+      mockWorkspaceManager,
+      mockProviderRegistry,
+      eventBus,
+      noopLogger,
+      { ...fakeRuntime, startSession },
+    );
+    let completed = false;
+    const rewind = manager.rewindSession('session-1', removed, 'conversation').then(() => {
+      completed = true;
+    });
+    try {
+      await vi.waitFor(() => expect(startSession).toHaveBeenCalledOnce());
+      expect(completed).toBe(false);
+      expect(startSession.mock.calls[0][2].intent).toEqual({ kind: 'new' });
+      finishStartup();
+      await rewind;
+      await manager.startInput('session-1', 'Send again', [], 'resend');
+      await manager.waitForSessionOperations('session-1');
+      expect(prompt).toHaveBeenCalledOnce();
+      expect(prompt.mock.calls[0][0]).toBe('Send again');
+      expect(prompt.mock.calls[0][2]).toContain('Keep this context');
+      expect(prompt.mock.calls[0][2]).not.toContain('Discard this prompt');
+      expect(
+        (await db.query.sessions.findFirst({ where: eq(sessions.id, 'session-1') }))?.status,
+      ).toBe('idle');
+    } finally {
+      finishStartup();
+      await rewind;
+      await manager.stopSessionAndWait('session-1');
+    }
   });
 
   test('rewind fork mode does not require the event to exist and forks the full history', async () => {

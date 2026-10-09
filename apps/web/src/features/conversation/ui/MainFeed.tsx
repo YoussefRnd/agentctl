@@ -42,6 +42,7 @@ export function MainFeed() {
     historyError,
     loadOlderHistory,
     execution,
+    editQueuedMessage,
   } = useSessionStream();
   useEffect(() => {
     if (
@@ -177,11 +178,15 @@ export function MainFeed() {
     eventId: number;
     mode: RewindMode;
     messageCount?: number;
+    input: string;
   } | null>(null);
 
+  const [isRewindDialogOpen, setIsRewindDialogOpen] = useState(false);
   const [isRewinding, setIsRewinding] = useState(false);
   const [rewindError, setRewindError] = useState<string | null>(null);
-  const isRewindingRef = useRef(false);
+  const historyMutationRef = useRef(false);
+  const historySnapshotRef = useRef<{ sessionId: string; events: typeof events } | null>(null);
+  const [isEditingHistory, setIsEditingHistory] = useState(false);
 
   const [rewindUndoState, setRewindUndoState] = useState<{
     eventId: number;
@@ -233,9 +238,24 @@ export function MainFeed() {
   };
 
   const [rewindInput, setRewindInput] = useState('');
+  const isHistoryChanging =
+    (isRewinding || isUndoing || isEditingHistory) &&
+    historySnapshotRef.current?.sessionId === sessionId;
+  const refreshConversation = useCallback(
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['session', sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['events', sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ['projects'] }),
+      ]),
+    [queryClient, sessionId],
+  );
 
   const handleRewindRequest = useCallback(
     (eventId: number, mode: RewindMode) => {
+      if (historyMutationRef.current) return;
       const eventIndex = events.findIndex((e) => e.id === eventId);
       const messageCount =
         eventIndex === -1
@@ -251,27 +271,27 @@ export function MainFeed() {
         event && event.type === 'text' && 'content' in event.data
           ? (event.data as { content: string }).content
           : '';
-      if (content) {
-        setRewindInput(content);
-      }
-
-      setConfirmRewind({ eventId, mode, messageCount });
+      setConfirmRewind({ eventId, mode, messageCount, input: content });
+      setIsRewindDialogOpen(true);
       setRewindError(null);
     },
     [events],
   );
 
   const handleRewindConfirm = useCallback(async () => {
-    if (!confirmRewind) return;
-    if (isRewindingRef.current) return;
-    isRewindingRef.current = true;
+    if (!confirmRewind || !isRewindDialogOpen) return;
+    if (historyMutationRef.current) return;
+    historyMutationRef.current = true;
+    historySnapshotRef.current = { sessionId, events: visibleEvents ?? events };
     setIsRewinding(true);
     setRewindError(null);
     try {
       const result = await rewindSession(sessionId, confirmRewind.eventId, confirmRewind.mode);
+      await refreshConversation();
       if (confirmRewind.mode === 'fork') {
         toast.success('Fork created successfully');
       } else {
+        setRewindInput(confirmRewind.input);
         toast.success('Session rewound');
         setIsDiffExpanded(false);
         setRewindUndoState({
@@ -280,58 +300,91 @@ export function MainFeed() {
           restoredFiles: result.restoredFiles,
         });
       }
-      setConfirmRewind(null);
+      setIsRewindDialogOpen(false);
       if (result.forkSessionId) {
         void navigate(`/sessions/${result.forkSessionId}`);
       }
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
     } catch (err) {
       setRewindError(err instanceof Error ? err.message : 'Rewind failed');
     } finally {
-      isRewindingRef.current = false;
+      historyMutationRef.current = false;
       setIsRewinding(false);
     }
-  }, [confirmRewind, sessionId, queryClient, navigate]);
+  }, [
+    confirmRewind,
+    isRewindDialogOpen,
+    sessionId,
+    refreshConversation,
+    navigate,
+    visibleEvents,
+    events,
+  ]);
 
   const handleUndoRewind = useCallback(async () => {
-    if (!rewindUndoState || isUndoing) return;
+    if (!rewindUndoState || historyMutationRef.current) return;
+    historyMutationRef.current = true;
+    historySnapshotRef.current = { sessionId, events: visibleEvents ?? events };
     setIsUndoing(true);
     try {
       await undoRewind(sessionId);
+      await refreshConversation();
       toast.success('Rewind undone');
       setRewindUndoState(null);
-      void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to undo rewind');
     } finally {
+      historyMutationRef.current = false;
       setIsUndoing(false);
     }
-  }, [rewindUndoState, isUndoing, sessionId, queryClient]);
+  }, [rewindUndoState, sessionId, refreshConversation, visibleEvents, events]);
 
   const handleEditAndSubmit = useCallback(
     async (eventId: number, newContent: string) => {
       const trimmed = newContent.trim();
-      if (!trimmed) return;
+      if (!trimmed || historyMutationRef.current) return false;
+      const event =
+        queryClient
+          .getQueryData<typeof events>(['events', sessionId])
+          ?.find((item) => item.id === eventId) ?? events.find((item) => item.id === eventId);
+      if (
+        event?.type === 'text' &&
+        event.data.deliveryStatus === 'queued' &&
+        event.data.clientMessageId
+      )
+        return editQueuedMessage(event.data.clientMessageId, trimmed);
+      const attachmentIds =
+        event?.type === 'text'
+          ? (event.data.attachmentIds ??
+            event.data.attachments?.map((attachment) => attachment.attachmentId))
+          : undefined;
       setRewindUndoState(null);
+      historyMutationRef.current = true;
+      historySnapshotRef.current = { sessionId, events: visibleEvents ?? events };
+      setIsEditingHistory(true);
       try {
         await rewindSession(sessionId, eventId, 'conversation');
-        await handleSend(trimmed);
+        const sent = await handleSend(trimmed, attachmentIds);
+        await refreshConversation();
+        if (sent === false) return false;
         toast.success('Prompt updated and restarted');
-        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-        void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
-        void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        return true;
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to update prompt');
+        return false;
+      } finally {
+        historyMutationRef.current = false;
+        setIsEditingHistory(false);
       }
     },
-    [sessionId, handleSend, queryClient],
+    [
+      sessionId,
+      handleSend,
+      queryClient,
+      events,
+      visibleEvents,
+      editQueuedMessage,
+      refreshConversation,
+    ],
   );
 
   const pendingApprovals = events.filter(
@@ -441,8 +494,26 @@ export function MainFeed() {
           </div>
         )}
 
-        {!hasUserMessages && !isLoadingEvents && !approval ? (
-          <main className="relative flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-y-auto select-none">
+        <RewindConfirmDialog
+          open={isRewindDialogOpen}
+          onOpenChange={(open: boolean) => {
+            if (!open && !historyMutationRef.current) {
+              setIsRewindDialogOpen(false);
+            }
+          }}
+          sessionId={sessionId}
+          eventId={confirmRewind?.eventId}
+          mode={confirmRewind?.mode ?? 'conversation'}
+          messageCount={confirmRewind?.messageCount ?? 0}
+          onConfirm={() => void handleRewindConfirm()}
+          isLoading={isRewinding}
+          error={rewindError}
+        />
+        {!hasUserMessages && !isLoadingEvents && !approval && !isHistoryChanging ? (
+          <main
+            aria-busy={isHistoryChanging || undefined}
+            className="motion-history relative flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-y-auto select-none"
+          >
             <NewSessionEmptyState projectName={sessionData?.session.project?.name ?? 'agentctl'}>
               <CommandBar
                 variant="hero"
@@ -450,7 +521,7 @@ export function MainFeed() {
                   setRewindUndoState(null);
                   void handleSend(val, attachmentIds);
                 }}
-                disabled={!isConnected || isSwitching || isLoadingSession}
+                disabled={!isConnected || isSwitching || isLoadingSession || isHistoryChanging}
                 selectedProviderId={sessionData?.session.selectedProvider}
                 selectedModelId={sessionData?.session.selectedModel}
                 onProviderSelect={handleProviderSelect}
@@ -460,12 +531,19 @@ export function MainFeed() {
           </main>
         ) : (
           <>
-            <main className="min-h-0 w-full flex-1 overflow-hidden">
-              {isLoadingEvents ? (
+            <main
+              aria-busy={isHistoryChanging || undefined}
+              className="motion-history min-h-0 w-full flex-1 overflow-hidden"
+            >
+              {isLoadingEvents && !isHistoryChanging ? (
                 <LoadingState message="Loading session..." className="h-full" />
               ) : (
                 <EventFeed
-                  events={visibleEvents ?? events}
+                  events={
+                    isHistoryChanging
+                      ? historySnapshotRef.current!.events
+                      : (visibleEvents ?? events)
+                  }
                   targetEventId={targetEventId}
                   onTargetEventHandled={handleTargetEventHandled}
                   isConnected={isConnected}
@@ -477,25 +555,6 @@ export function MainFeed() {
                 />
               )}
             </main>
-
-            <RewindConfirmDialog
-              open={confirmRewind !== null}
-              onOpenChange={(open: boolean) => {
-                if (!open) {
-                  setConfirmRewind(null);
-                  setRewindError(null);
-                }
-              }}
-              sessionId={sessionId}
-              eventId={confirmRewind?.eventId}
-              mode={confirmRewind?.mode ?? 'conversation'}
-              messageCount={confirmRewind?.messageCount ?? 0}
-              onConfirm={() => {
-                void handleRewindConfirm();
-              }}
-              isLoading={isRewinding}
-              error={rewindError}
-            />
 
             <div className="mx-auto w-full max-w-[800px] shrink-0 bg-transparent px-3 pb-3 sm:px-6 sm:pb-4">
               {rewindUndoState && !approval && (
@@ -583,6 +642,7 @@ export function MainFeed() {
                         className="hover:bg-surface-secondary/80"
                         title="Dismiss"
                         aria-label="Dismiss rewind summary"
+                        disabled={isHistoryChanging}
                       >
                         <X className="h-3.5 w-3.5" />
                       </IconButton>
@@ -622,7 +682,7 @@ export function MainFeed() {
                     setRewindUndoState(null);
                     void handleSend(val, attachmentIds);
                   }}
-                  disabled={!isConnected || isSwitching || isLoadingSession}
+                  disabled={!isConnected || isSwitching || isLoadingSession || isHistoryChanging}
                   selectedProviderId={sessionData?.session.selectedProvider}
                   selectedModelId={sessionData?.session.selectedModel}
                   onProviderSelect={handleProviderSelect}

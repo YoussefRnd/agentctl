@@ -1,8 +1,256 @@
 import { describe, it, expect } from 'vitest';
-import { groupFeedEvents } from './eventFeedGrouping';
-import type { SessionEventRow } from '@agentctl/shared';
+import { groupFeedEvents, hasCurrentChatFailure } from './eventFeedGrouping';
+import { providerErrorCopy, type ChatError, type SessionEventRow } from '@agentctl/shared';
+
+const failure: ChatError = {
+  version: 1,
+  id: 'attempt:one:failure',
+  category: 'authentication',
+  scope: 'attempt',
+  stage: 'dispatch',
+  delivery: 'rejected',
+  message: providerErrorCopy('authentication').message,
+  attemptId: 'one',
+  eventId: 1,
+  actions: ['provider_settings', 'retry'],
+};
+
+it('deduplicates structured failures by identity, even when runtime text differs', () => {
+  const events: SessionEventRow[] = [
+    {
+      id: 1,
+      sessionId: 's',
+      type: 'text',
+      data: { role: 'user', content: 'hey' },
+      createdAt: new Date(),
+    },
+    {
+      id: 2,
+      sessionId: 's',
+      type: 'status',
+      data: { status: 'runtime_error', error: failure, title: 'Process closed' },
+      createdAt: new Date(),
+    },
+    {
+      id: 3,
+      sessionId: 's',
+      type: 'status',
+      data: { status: 'prompt_failed', error: failure },
+      parentEventId: 1,
+      createdAt: new Date(),
+    },
+    {
+      id: 4,
+      sessionId: 's',
+      type: 'status',
+      data: { status: 'prompt_failed', error: failure },
+      parentEventId: 1,
+      createdAt: new Date(),
+    },
+  ];
+  const groups = groupFeedEvents(events, null);
+  expect(groups.map((group) => group.type)).toEqual(['user', 'error']);
+  expect('event' in groups[1] && groups[1].event.id).toBe(4);
+});
+
+it('keeps independent structured failures with identical wording separate', () => {
+  const events: SessionEventRow[] = ['one', 'two'].map((attemptId, index) => ({
+    id: index + 1,
+    sessionId: 's',
+    type: 'status',
+    createdAt: new Date(),
+    data: {
+      status: 'prompt_failed',
+      error: { ...failure, id: `attempt:${attemptId}:failure`, attemptId },
+    },
+  }));
+  expect(groupFeedEvents(events, null).map((group) => group.type)).toEqual(['error', 'error']);
+});
+
+it('does not surface diagnostic-only lifecycle events as another failure', () => {
+  const events: SessionEventRow[] = [
+    {
+      id: 1,
+      sessionId: 's',
+      type: 'status',
+      data: { status: 'runtime_error', error: failure, diagnosticOnly: true },
+      createdAt: new Date(),
+    },
+  ];
+  expect(groupFeedEvents(events, null)).toEqual([]);
+});
+
+it('does not let a historical error hide the current failure fallback', () => {
+  const events: SessionEventRow[] = [
+    {
+      id: 1,
+      sessionId: 's',
+      type: 'status',
+      data: { status: 'prompt_failed', error: failure },
+      createdAt: new Date(),
+    },
+    {
+      id: 2,
+      sessionId: 's',
+      type: 'text',
+      data: { role: 'user', content: 'new turn' },
+      createdAt: new Date(),
+    },
+  ];
+  const groups = groupFeedEvents(events, null);
+  expect(hasCurrentChatFailure(groups)).toBe(false);
+  const execution = {
+    connection: 'lost' as const,
+    execution: 'failed' as const,
+    attention: 'error' as const,
+    queue: [],
+    error: { ...failure, id: 'new-failure' },
+  };
+  expect(hasCurrentChatFailure(groups, execution)).toBe(false);
+  expect(hasCurrentChatFailure(groups, { ...execution, error: failure })).toBe(true);
+});
 
 describe('groupFeedEvents', () => {
+  it('shows one error when a connection closes before the prompt executor can record failure', () => {
+    const events: SessionEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's',
+        type: 'text',
+        data: { role: 'user', content: 'hey' },
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        sessionId: 's',
+        type: 'status',
+        data: { status: 'runtime_error', title: 'Connection closed' },
+        createdAt: new Date(),
+      },
+      {
+        id: 3,
+        sessionId: 's',
+        type: 'status',
+        parentEventId: 1,
+        data: { status: 'operation_failed', message: 'Connection closed' },
+        createdAt: new Date(),
+      },
+    ];
+    expect(groupFeedEvents(events, null).map((group) => group.type)).toEqual(['user', 'error']);
+  });
+
+  it('does not let a hidden child failure suppress a parent runtime error', () => {
+    const events: SessionEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's',
+        type: 'text',
+        data: { role: 'user', content: 'hey' },
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        sessionId: 's',
+        type: 'status',
+        parentEventId: 1,
+        metadata: { nativeSessionId: 'child' },
+        data: { status: 'prompt_failed', message: 'Child failed' },
+        createdAt: new Date(),
+      },
+      {
+        id: 3,
+        sessionId: 's',
+        type: 'status',
+        data: { status: 'runtime_error', title: 'Parent disconnected' },
+        createdAt: new Date(),
+      },
+    ];
+    expect(groupFeedEvents(events, null).map((group) => group.type)).toEqual(['user', 'notice']);
+  });
+
+  it.each([false, true])(
+    'shows one rejection instead of duplicate runtime and worker failures (correlated=%s)',
+    (correlated) => {
+      const metadata = correlated ? { attemptId: 'attempt' } : undefined;
+      const events: SessionEventRow[] = [
+        {
+          id: 1,
+          sessionId: 's',
+          type: 'text',
+          data: { role: 'user', content: 'hey' },
+          metadata,
+          createdAt: new Date(),
+        },
+        {
+          id: 2,
+          sessionId: 's',
+          type: 'status',
+          parentEventId: 1,
+          data: { status: 'prompt_failed', message: 'Authentication required' },
+          metadata,
+          createdAt: new Date(),
+        },
+        {
+          id: 3,
+          sessionId: 's',
+          type: 'status',
+          data: { status: 'runtime_error', title: 'Authentication required' },
+          metadata,
+          createdAt: new Date(),
+        },
+        {
+          id: 4,
+          sessionId: 's',
+          type: 'status',
+          parentEventId: 1,
+          data: { status: 'operation_failed', message: 'Authentication required' },
+          createdAt: new Date(),
+        },
+      ];
+      expect(groupFeedEvents(events, null).map((group) => group.type)).toEqual(['user', 'error']);
+    },
+  );
+
+  it('keeps startup failures and independent runtime failures visible', () => {
+    const events: SessionEventRow[] = [
+      {
+        id: 1,
+        sessionId: 's',
+        type: 'text',
+        data: { role: 'user', content: 'hey' },
+        createdAt: new Date(),
+      },
+      {
+        id: 2,
+        sessionId: 's',
+        type: 'status',
+        parentEventId: 1,
+        data: { status: 'operation_failed', message: 'Authentication required' },
+        createdAt: new Date(),
+      },
+      {
+        id: 3,
+        sessionId: 's',
+        type: 'text',
+        data: { role: 'user', content: 'next' },
+        createdAt: new Date(),
+      },
+      {
+        id: 4,
+        sessionId: 's',
+        type: 'status',
+        data: { status: 'runtime_error', title: 'Connection closed' },
+        createdAt: new Date(),
+      },
+    ];
+    expect(groupFeedEvents(events, null).map((group) => group.type)).toEqual([
+      'user',
+      'error',
+      'user',
+      'notice',
+    ]);
+  });
+
   it('does not create an agent turn for standalone system status events (e.g. process exit SIGTERM)', () => {
     const events: SessionEventRow[] = [
       {

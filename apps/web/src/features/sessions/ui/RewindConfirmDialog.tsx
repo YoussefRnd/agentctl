@@ -65,14 +65,23 @@ export function RewindConfirmDialog({
   const files = snapshotData?.files ?? [];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md overflow-hidden p-0">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!isLoading) onOpenChange(next);
+      }}
+    >
+      <DialogContent
+        showCloseButton={!isLoading}
+        aria-busy={isLoading || undefined}
+        className="data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100 data-[state=open]:slide-in-from-bottom-2 data-[state=closed]:slide-out-to-bottom-2 max-w-md overflow-hidden p-0"
+      >
         <div className="p-5">
           <DialogHeader className="mb-4">
             <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
               <IconComponent className="text-accent h-4.5 w-4.5" />
             </div>
-            <DialogTitle>Time Machine Rollback</DialogTitle>
+            <DialogTitle>{mode === 'fork' ? 'Fork session' : 'Rewind conversation'}</DialogTitle>
             <DialogDescription className="text-text-muted text-xs font-normal">
               {modeLabel[mode]}
             </DialogDescription>
@@ -180,7 +189,8 @@ export function RewindConfirmDialog({
           <Button
             onClick={onConfirm}
             disabled={isLoading}
-            className="bg-accent text-brand-crust flex h-8 items-center gap-1.5 px-4 text-xs font-medium hover:opacity-90"
+            aria-busy={isLoading || undefined}
+            className="min-w-36"
           >
             {isLoading ? (
               <>

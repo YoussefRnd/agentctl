@@ -1,6 +1,7 @@
 import { RequestCancellation } from '../requests/request-cancellation.js';
 import { randomUUID } from 'node:crypto';
 import { SessionTurnExecutor } from '../execution/session-turn-executor.js';
+import { normalizeChatError } from '../../agent/chat-error.js';
 import { sessions, sessionTurnAttempts, sessionRuntimeBindings } from '../../db/schema.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { DbClient } from '../../db/index.js';
@@ -441,14 +442,22 @@ export class SessionRuntime {
       return;
     this.logger.error(error, `Error in session runtime ${this.sessionId}`);
     this.stopKind = 'error';
+    const failure = normalizeChatError(error, {
+      stage: 'dispatch',
+      attemptId: this.activeAttemptId,
+      id: this.activeAttemptId ? undefined : `runtime:${this.runtimeId}:failure`,
+    });
     await this.eventRepository.append(
       this.sessionId,
       'status',
       {
         status: 'runtime_error',
-        title: (error instanceof Error ? error.message : String(error)).slice(0, 5000),
+        title: failure.message,
+        error: failure,
+        diagnosticOnly: !!this.activeAttemptId,
       },
       null,
+      this.activeAttemptId ? { attemptId: this.activeAttemptId } : undefined,
     );
     await this.flushAll();
     await this.projector.finalizeInFlightToolCalls('interrupted');

@@ -4,13 +4,14 @@ import {
   nextOptimisticEventId,
   sendSessionInput,
   updateOptimisticDelivery,
+  acknowledgeSessionInput,
 } from './messageDelivery';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 import { sessionKeys } from '@/shared/lib/queryKeys';
-import type { SessionEventRow, SessionWithCapabilities } from '@agentctl/shared';
+import type { SessionEventRow, SessionExecution, SessionWithCapabilities } from '@agentctl/shared';
 import {
   acceptPromptPerformance,
   beginPromptPerformance,
@@ -34,10 +35,15 @@ export function useSessionActions() {
     const currentSession =
       queryClient.getQueryData<SessionWithCapabilities>(sessionKeys.detail(sessionId)) ??
       sessionData;
-    const isRunning = currentSession?.session.status === 'running';
+    const execution = queryClient.getQueryData<SessionExecution>(['session-execution', sessionId]);
+    const isWaiting =
+      currentSession?.session.status === 'running' ||
+      currentSession?.session.status === 'error' ||
+      !!execution?.queue.length ||
+      execution?.attention === 'delivery_uncertain';
     const tempId = nextOptimisticEventId();
     const clientMessageId = crypto.randomUUID();
-    if (!isRunning) beginPromptPerformance(sessionId, clientMessageId);
+    if (!isWaiting) beginPromptPerformance(sessionId, clientMessageId);
     const optimisticEvent: SessionEventRow = {
       id: tempId,
       sessionId: sessionId,
@@ -46,7 +52,7 @@ export function useSessionActions() {
         role: 'user',
         content: text,
         clientMessageId,
-        deliveryStatus: 'sending',
+        deliveryStatus: isWaiting ? 'queued' : 'sending',
         attachmentIds,
       },
       createdAt: new Date(),
@@ -59,8 +65,16 @@ export function useSessionActions() {
     {
       useMessageQueueStore
         .getState()
-        .enqueueMessage(sessionId, text, attachmentIds, tempId, clientMessageId, 'sending');
-      if (!isRunning)
+        .enqueueMessage(
+          sessionId,
+          text,
+          attachmentIds,
+          tempId,
+          clientMessageId,
+          'sending',
+          isWaiting,
+        );
+      if (!isWaiting)
         queryClient.setQueryData<SessionWithCapabilities>(
           ['session', sessionId],
           (old: SessionWithCapabilities | undefined) => {
@@ -85,7 +99,7 @@ export function useSessionActions() {
             s.id === sessionId
               ? {
                   ...s,
-                  status: 'running',
+                  status: isWaiting ? (currentSession?.session.status ?? s.status) : 'running',
                   updatedAt: new Date(),
                   lastActivityAt: optimisticEvent.createdAt,
                 }
@@ -96,12 +110,34 @@ export function useSessionActions() {
 
       try {
         const acceptedId = await sendSessionInput(sessionId, text, attachmentIds, clientMessageId);
-        if (!isRunning) acceptPromptPerformance(sessionId, acceptedId, clientMessageId);
+        if (!isWaiting) acceptPromptPerformance(sessionId, acceptedId, clientMessageId);
         useMessageQueueStore.getState().dequeueMessage(sessionId, clientMessageId);
-        updateOptimisticDelivery(queryClient, sessionId, tempId, 'accepted');
+        acknowledgeSessionInput(
+          queryClient,
+          sessionId,
+          clientMessageId,
+          acceptedId,
+          tempId,
+          isWaiting ? 'queued' : 'accepted',
+        );
+        void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
         void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        return true;
       } catch (error) {
-        if (!isRunning) cancelPromptPerformance(sessionId);
+        const persisted = queryClient
+          .getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId))
+          ?.find(
+            (event) =>
+              event.id > 0 &&
+              event.type === 'text' &&
+              event.data.clientMessageId === clientMessageId,
+          );
+        if (persisted) {
+          useMessageQueueStore.getState().dequeueMessage(sessionId, clientMessageId);
+          void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
+          return true;
+        }
+        if (!isWaiting) cancelPromptPerformance(sessionId);
         const message = error instanceof Error ? error.message : 'Message was not accepted';
         useMessageQueueStore
           .getState()
@@ -110,7 +146,7 @@ export function useSessionActions() {
         queryClient.setQueryData<SessionWithCapabilities>(
           ['session', sessionId],
           (old: SessionWithCapabilities | undefined) => {
-            if (!old) return old;
+            if (!old || isWaiting) return old;
             return {
               ...old,
               session: {
@@ -129,6 +165,7 @@ export function useSessionActions() {
             onClick: () => handleRetry(tempId),
           },
         });
+        return false;
       }
     }
   };

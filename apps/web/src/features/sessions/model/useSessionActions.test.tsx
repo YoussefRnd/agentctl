@@ -38,7 +38,7 @@ function Harness() {
   actions = useSessionActions();
   return null;
 }
-function setStatus(status: 'idle' | 'running') {
+function setStatus(status: 'idle' | 'running' | 'error') {
   client.setQueryData(sessionKeys.detail('s'), {
     session: { id: 's', status },
     capabilities: [],
@@ -98,6 +98,53 @@ it('queues a toast retry using current state and preserves its attachments', asy
   ]);
 });
 
+it('keeps an active turn running when a follow-up send fails', async () => {
+  setStatus('running');
+  mocks.sendInput.mockRejectedValueOnce(new Error('offline'));
+  await act(async () => {
+    await actions.handleSend('follow-up');
+  });
+  expect(
+    client.getQueryData<SessionWithCapabilities>(sessionKeys.detail('s'))?.session.status,
+  ).toBe('running');
+});
+
+it('acknowledges the HTTP receipt before SSE arrives and refreshes the accepted queue', async () => {
+  setStatus('running');
+  mocks.sendInput.mockResolvedValueOnce({ status: 200, body: { success: true, eventId: 42 } });
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  await act(async () => {
+    await actions.handleSend('follow-up', ['image']);
+  });
+  expect(client.getQueryData<SessionEventRow[]>(sessionKeys.events('s'))).toEqual([
+    expect.objectContaining({
+      id: 42,
+      data: expect.objectContaining({
+        attachmentIds: ['image'],
+        content: 'follow-up',
+        deliveryStatus: 'queued',
+      }),
+    }),
+  ]);
+  expect(useMessageQueueStore.getState().queuedMessages.s).toEqual([]);
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['session-execution', 's'] });
+});
+
+it('keeps input to a paused queue queued instead of presenting it as a dispatched turn', async () => {
+  setStatus('error');
+  mocks.sendInput.mockResolvedValueOnce({ status: 200, body: { eventId: 42, success: true } });
+  await act(async () => {
+    await actions.handleSend('wait until resumed');
+  });
+  expect(
+    client.getQueryData<SessionWithCapabilities>(sessionKeys.detail('s'))?.session.status,
+  ).toBe('error');
+  expect(client.getQueryData<SessionEventRow[]>(sessionKeys.events('s'))?.[0]).toMatchObject({
+    id: 42,
+    data: { deliveryStatus: 'queued' },
+  });
+});
+
 it('retries a retained failed message once with its original attachments', async () => {
   client.setQueryData(sessionKeys.events('s'), [
     {
@@ -128,7 +175,7 @@ it('retries a retained failed message once with its original attachments', async
     },
   });
   expect(client.getQueryData<SessionEventRow[]>(sessionKeys.events('s'))).toEqual([
-    expect.objectContaining({ data: expect.objectContaining({ deliveryStatus: 'accepted' }) }),
+    expect.objectContaining({ data: expect.objectContaining({ deliveryStatus: 'queued' }) }),
   ]);
 });
 

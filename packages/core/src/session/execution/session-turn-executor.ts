@@ -10,12 +10,9 @@ import type { SessionEventRepositoryLike, SessionStatusTransitioner } from '../c
 import type { SessionStateProjector } from '../projection/session-state-projector.js';
 import type { PermissionEngine } from '../../security/permission-engine.js';
 import { SkillRegistry, type SkillActivation } from '../../skills/registry.js';
-import {
-  isDefaultSessionTitle,
-  sessionExecutionErrorSchema,
-  type TurnTimings,
-} from '@agentctl/shared';
+import { isDefaultSessionTitle, type TurnTimings, type ChatError } from '@agentctl/shared';
 import { resolveMessageAttachments } from '../commands/message-attachments.js';
+import { normalizeChatError } from '../../agent/chat-error.js';
 
 interface TurnRuntimeState {
   runtimeId: string;
@@ -63,7 +60,7 @@ export class SessionTurnExecutor {
   private async recordFailure(
     attemptId: string,
     eventId: number | undefined,
-    error: { message: string; code?: number; data?: unknown },
+    error: ChatError,
     timings: TurnTimings,
   ): Promise<void> {
     const attempt = await this.db
@@ -230,11 +227,13 @@ export class SessionTurnExecutor {
             await this.projector.flushAll();
           }
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          // Stream execution error to UI
-          await this.projector.appendText(`\n\n*Manual Tool Execution Error:*\n> ${msg}\n`);
-          await this.projector.flushAll();
-
+          this.logger.error(err, 'Manual MCP tool execution failed');
+          const failure = normalizeChatError(err, {
+            stage: 'stream',
+            attemptId,
+            eventId: turn.eventId,
+            providerId: sessionRecord?.selectedProvider,
+          });
           const timings = diagnostics.finish();
           await this.db
             .update(sessionTurnAttempts)
@@ -248,11 +247,11 @@ export class SessionTurnExecutor {
           await this.eventRepository.append(
             this.sessionId,
             'status',
-            { status: 'turn_end', stopReason: 'error', timings, error: { message: msg } },
+            { status: 'turn_end', stopReason: 'error', timings, error: failure },
             turn.eventId,
             { attemptId },
           );
-          await this.recordFailure(attemptId, turn.eventId, { message: msg }, timings);
+          await this.recordFailure(attemptId, turn.eventId, failure, timings);
 
           if (this.runtimeRegistry) {
             await this.runtimeRegistry.transitionTo(this.sessionId, 'idle');
@@ -301,6 +300,20 @@ export class SessionTurnExecutor {
         finalEmbeddedContext || undefined,
       );
       const timings = diagnostics.finish();
+      const foregroundFailure =
+        promptResult.stopReason === 'error'
+          ? normalizeChatError(
+              promptResult.error ?? { message: 'The agent reported a foreground error.' },
+              {
+                stage: 'stream',
+                attemptId,
+                eventId: turn.eventId,
+                providerId: sessionRecord?.selectedProvider,
+              },
+            )
+          : undefined;
+      if (foregroundFailure)
+        this.logger.error(promptResult.error, 'Provider foreground execution failed');
 
       if (
         this.deps.isStopped() ||
@@ -322,7 +335,7 @@ export class SessionTurnExecutor {
         status: 'turn_end',
         stopReason: promptResult.stopReason,
         timings,
-        ...(promptResult.error ? { error: promptResult.error } : {}),
+        ...(foregroundFailure ? { error: foregroundFailure } : {}),
       };
 
       if (snapshotService && this.cwd && snapshotService.getTurnChanges) {
@@ -434,13 +447,8 @@ export class SessionTurnExecutor {
       await this.eventRepository.append(this.sessionId, 'status', turnData, turn.eventId, {
         attemptId,
       });
-      if (promptResult.stopReason === 'error')
-        await this.recordFailure(
-          attemptId,
-          turn.eventId,
-          promptResult.error ?? { message: 'The agent reported a foreground error.' },
-          timings,
-        );
+      if (foregroundFailure)
+        await this.recordFailure(attemptId, turn.eventId, foregroundFailure, timings);
 
       if (this.runtimeRegistry) {
         await this.runtimeRegistry.transitionTo(this.sessionId, 'idle');
@@ -451,25 +459,62 @@ export class SessionTurnExecutor {
           .where(eq(sessions.id, this.sessionId));
       }
     } catch (error: unknown) {
-      if (this.deps.isStopped()) throw error;
       if (
         this.runtimeRegistry?.ownsRuntime &&
         !this.runtimeRegistry.ownsRuntime(this.sessionId, this.deps.runtimeId)
       )
         throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      const details = sessionExecutionErrorSchema.safeParse(error);
+      if (
+        accepted &&
+        !this.db
+          .select({ id: sessionOperations.id })
+          .from(sessionTurnAttempts)
+          .innerJoin(sessionOperations, eq(sessionOperations.id, sessionTurnAttempts.operationId))
+          .where(
+            and(eq(sessionTurnAttempts.id, attemptId), eq(sessionOperations.status, 'running')),
+          )
+          .get()
+      )
+        throw error;
+      const timings = diagnostics.finish();
       await this.projector.flushAll().catch((flushError: unknown) => {
         this.logger.error(flushError, 'Failed to flush events after prompt error');
       });
-      await this.recordFailure(
-        attemptId,
-        this.diagnosticTurn?.eventId,
-        details.success ? { ...details.data, message } : { message },
-        diagnostics.finish(),
-      ).catch((eventError: unknown) => {
-        this.logger.error(eventError, 'Failed to record prompt error');
-      });
+      if (accepted) {
+        // The durable worker owns delivery classification and the visible failure event.
+        await this.eventRepository
+          .append(
+            this.sessionId,
+            'status',
+            {
+              status: 'turn_end',
+              stopReason: 'error',
+              timings,
+            },
+            accepted.eventId,
+            { attemptId },
+          )
+          .catch((eventError: unknown) => {
+            this.logger.error(eventError, 'Failed to record prompt timings');
+          });
+      } else {
+        const failure = normalizeChatError(error, {
+          stage:
+            timings.acceptanceMs !== undefined || timings.firstOutputMs !== undefined
+              ? 'stream'
+              : timings.completionMs !== undefined
+                ? 'dispatch'
+                : 'prepare',
+          attemptId,
+          eventId: this.diagnosticTurn?.eventId,
+        });
+        await this.recordFailure(attemptId, this.diagnosticTurn?.eventId, failure, timings).catch(
+          (eventError: unknown) => {
+            this.logger.error(eventError, 'Failed to record prompt error');
+          },
+        );
+      }
+      if (this.deps.isStopped()) throw error;
       await this.deps.onError(error).catch((handleError: unknown) => {
         this.logger.error(handleError, 'Failed to update session after prompt error');
       });

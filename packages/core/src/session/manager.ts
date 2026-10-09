@@ -462,9 +462,10 @@ export class SessionManager {
   changeQueuedMessage(
     sessionId: string,
     commandId: string,
-    action: 'cancel' | 'up' | 'down',
+    action: 'cancel' | 'up' | 'down' | 'edit',
+    input?: string,
   ): Promise<void> {
-    return this.operationWorker.changeQueuedMessage(sessionId, commandId, action);
+    return this.operationWorker.changeQueuedMessage(sessionId, commandId, action, input);
   }
 
   async recoverInterruptedOperations(): Promise<void> {

@@ -1,5 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { sessionEvents } from '../../db/schema.js';
+import { sessionOperations } from '../../db/schema.js';
+import { createHash } from 'node:crypto';
 import type { DbClient } from '../../db/index.js';
 
 /** Stable acceptance receipts survive server restarts and lost HTTP responses. */
@@ -61,8 +63,18 @@ export class MessageAcceptanceService {
     if (
       data.content !== input ||
       JSON.stringify(data.attachmentIds ?? []) !== JSON.stringify(attachmentIds ?? [])
-    )
-      throw new Error('Message ID was reused with different content');
+    ) {
+      // Queue edits change the dispatch payload, but the original acceptance
+      // receipt must still acknowledge retries of a lost HTTP response.
+      const operation = await this.db.query.sessionOperations.findFirst({
+        where: and(eq(sessionOperations.sessionId, sessionId), eq(sessionOperations.commandId, id)),
+      });
+      const fingerprint = createHash('sha256')
+        .update(JSON.stringify([input, attachmentIds ?? []]))
+        .digest('hex');
+      if (operation?.kind !== 'message.send' || operation.fingerprint !== fingerprint)
+        throw new Error('Message ID was reused with different content');
+    }
     return row.id;
   }
 }

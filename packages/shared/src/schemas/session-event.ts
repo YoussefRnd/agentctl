@@ -1,6 +1,7 @@
 import { planArtifactSchema, planItemSchema } from './plan.js';
 import { fileChangeStatsSchema } from './file-change.js';
 import { z } from 'zod';
+import { chatErrorSchema } from './chat-error.js';
 
 export const sessionEventTextDataSchema = z
   .object({
@@ -12,6 +13,7 @@ export const sessionEventTextDataSchema = z
       .enum(['queued', 'sending', 'accepted', 'failed', 'unknown', 'cancelled'])
       .optional(),
     deliveryError: z.string().optional(),
+    deliveryFailure: chatErrorSchema.optional(),
     attachmentIds: z.array(z.string()).optional(),
     clientMessageId: z.string().optional(),
     messageId: z.string().optional(),

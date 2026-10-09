@@ -13,6 +13,18 @@ const state = vi.hoisted(() => ({
   approve: vi.fn(),
   deny: vi.fn(),
   feedMounts: 0,
+  invalidate: vi.fn(),
+  rewind: vi.fn(),
+  send: vi.fn(),
+  undo: vi.fn(),
+  rewindHandler: null as
+    null | ((eventId: number, mode: 'conversation' | 'files' | 'fork') => void),
+  editHandler: null as null | ((eventId: number, content: string) => Promise<boolean>),
+}));
+vi.mock('@agentctl/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agentctl/api-client')>()),
+  rewindSession: state.rewind,
+  undoRewind: state.undo,
 }));
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
@@ -20,7 +32,7 @@ vi.mock('react-router-dom', () => ({
 }));
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-query')>()),
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: state.invalidate, getQueryData: () => undefined }),
 }));
 vi.mock('@/features/sessions', () => ({
   useSession: () => ({
@@ -35,7 +47,7 @@ vi.mock('@/features/sessions', () => ({
     loadOlderHistory: vi.fn(),
   }),
   useSessionActions: () => ({
-    handleSend: vi.fn(),
+    handleSend: state.send,
     handleRetry: vi.fn(),
     handleApprove: state.approve,
     handleDeny: state.deny,
@@ -43,14 +55,32 @@ vi.mock('@/features/sessions', () => ({
   useOpenWorkspaceFile: () => vi.fn(),
   useSessionTurnState: () => null,
   useSessionExecution: () => undefined,
-  RewindConfirmDialog: () => null,
+  RewindConfirmDialog: ({
+    open,
+    isLoading,
+    onConfirm,
+    onOpenChange,
+  }: {
+    open: boolean;
+    isLoading: boolean;
+    onConfirm: () => void;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open ? (
+      <div role="dialog" aria-busy={isLoading}>
+        <button onClick={onConfirm}>Confirm rewind</button>
+        <button onClick={() => onOpenChange(false)}>Cancel rewind</button>
+      </div>
+    ) : null,
 }));
 vi.mock('@/features/providers', () => ({
   useProviders: () => ({ switchProvider: vi.fn(), isSwitching: false }),
   SwitchAgentModal: () => null,
 }));
 vi.mock('@/features/composer', () => ({
-  CommandBar: () => <input aria-label="Message draft" />,
+  CommandBar: ({ initialInput, disabled }: { initialInput?: string; disabled?: boolean }) => (
+    <input aria-label="Message draft" data-initial-input={initialInput ?? ''} disabled={disabled} />
+  ),
   useDraftStore: { getState: () => ({ updateHomeDraft: vi.fn() }) },
 }));
 vi.mock('@/features/review', () => ({
@@ -76,7 +106,17 @@ vi.mock('./EventFeed', async () => {
   const { useEffect } = await import('react');
   const { SubagentBlock, extractSubagentGroups } = await import('@/features/subagents');
   return {
-    EventFeed: ({ events }: { events: SessionEventRow[] }) => {
+    EventFeed: ({
+      events,
+      onRewind,
+      onEditSubmit,
+    }: {
+      events: SessionEventRow[];
+      onRewind: typeof state.rewindHandler;
+      onEditSubmit: typeof state.editHandler;
+    }) => {
+      state.rewindHandler = onRewind;
+      state.editHandler = onEditSubmit;
       useEffect(() => {
         state.feedMounts++;
       }, []);
@@ -112,6 +152,10 @@ beforeEach(() => {
   state.feedMounts = 0;
   state.approve.mockClear();
   state.deny.mockClear();
+  state.invalidate.mockReset().mockResolvedValue(undefined);
+  state.rewind.mockReset().mockResolvedValue({});
+  state.send.mockReset().mockResolvedValue(true);
+  state.undo.mockReset().mockResolvedValue(undefined);
   state.events = [
     row(1, 'text', { role: 'user', content: 'Review my code' }),
     row(2, 'tool_call', {
@@ -126,6 +170,78 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+});
+
+describe('conversation history transitions', () => {
+  test('does not change the composer draft when a rewind is cancelled', () => {
+    render();
+    act(() => state.rewindHandler!(1, 'conversation'));
+    expect(container.querySelector('input')?.dataset.initialInput).toBe('');
+    act(() =>
+      [...container.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Cancel rewind')!
+        .click(),
+    );
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector('input')?.dataset.initialInput).toBe('');
+    expect(state.rewind).not.toHaveBeenCalled();
+  });
+
+  test('keeps rewind busy until history refresh finishes, even when the feed becomes empty', async () => {
+    let finishRefresh!: () => void;
+    // One shared gate releases all invalidations.
+    const refresh = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    state.invalidate.mockReturnValue(refresh);
+    render();
+    act(() => state.rewindHandler!(1, 'conversation'));
+    await act(async () => {
+      [...container.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Confirm rewind')!
+        .click();
+    });
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(container.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
+    expect(container.querySelector('input')?.disabled).toBe(true);
+    act(() =>
+      [...container.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Cancel rewind')!
+        .click(),
+    );
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    state.events = [];
+    render();
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="parent-feed"]')).not.toBeNull();
+    expect(state.feedMounts).toBe(1);
+    await act(async () => finishRefresh());
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector('input')?.dataset.initialInput).toBe('Review my code');
+    expect(container.querySelector('input')?.disabled).toBe(false);
+    expect(state.rewind).toHaveBeenCalledExactlyOnceWith('session-a', 1, 'conversation');
+  });
+
+  test('serializes edited resubmission and waits for history before completing it', async () => {
+    let finishRefresh!: () => void;
+    state.invalidate.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishRefresh = resolve;
+      }),
+    );
+    render();
+    let edit!: Promise<boolean>;
+    await act(async () => {
+      edit = state.editHandler!(1, 'Updated prompt');
+    });
+    expect(container.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
+    await act(async () => expect(await state.editHandler!(1, 'Duplicate')).toBe(false));
+    expect(state.send).toHaveBeenCalledExactlyOnceWith('Updated prompt', undefined);
+    await act(async () => finishRefresh());
+    expect(await edit).toBe(true);
+    expect(container.querySelector('main')?.getAttribute('aria-busy')).toBeNull();
+    expect(state.feedMounts).toBe(1);
+  });
 });
 afterEach(() => {
   act(() => root.unmount());

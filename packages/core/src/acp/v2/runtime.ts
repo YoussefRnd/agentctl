@@ -60,6 +60,7 @@ import type {
 import {
   AgentAuthenticationRequiredError,
   AgentError,
+  normalizeAgentError,
   AgentPromptRejectedError,
 } from '../../agent/errors.js';
 import { type Logger, noopLogger } from '../../logger.js';
@@ -603,8 +604,8 @@ export class AcpV2AgentDriver implements AgentDriver {
           await updates.drain().catch(() => undefined);
           const failure = withProcessDiagnostics(error, child);
           if (!inserted && !connection.signal.aborted && error instanceof RequestError)
-            throw new AgentPromptRejectedError(error);
-          throw failure;
+            throw withProcessDiagnostics(new AgentPromptRejectedError(error), child);
+          throw normalizeAgentError(failure, inserted ? 'accepted' : 'unknown');
         }
       },
       async authenticate(methodId) {

@@ -264,7 +264,15 @@ describe('SessionRuntime Manual MCP Tool Interceptor', () => {
           data.content.includes('Manual Tool Execution Error:')
         );
       });
-      expect(errorTextEvent).toBeDefined();
+      expect(errorTextEvent).toBeUndefined();
+      const failures = dbEventsAfterFail.filter(
+        (event) => event.type === 'status' && JSON.parse(event.data).status === 'prompt_failed',
+      );
+      expect(failures).toHaveLength(1);
+      expect(JSON.parse(failures[0].data).error).toMatchObject({
+        version: 1,
+        delivery: 'accepted',
+      });
 
       const turnEndEvent = dbEventsAfterFail.find((e) => {
         if (e.type !== 'status') return false;

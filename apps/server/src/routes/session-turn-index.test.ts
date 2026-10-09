@@ -82,4 +82,21 @@ it('keeps previews with their owning queued input and returns captured change co
   expect(readTurnIndex(db, 's')[0].summary).toBe('Updated first answer.');
   db.delete(sessionEvents).where(gte(sessionEvents.id, 2)).run();
   expect(readTurnIndex(db, 's').map((turn) => turn.eventId)).toEqual([1]);
+  add(
+    7,
+    'text',
+    { role: 'user', content: 'Still waiting', deliveryStatus: 'queued' },
+    undefined,
+    'waiting',
+  );
+  add(8, 'text', { role: 'user', content: 'Removed', deliveryStatus: 'cancelled' });
+  expect(readTurnIndex(db, 's').map((turn) => turn.eventId)).toEqual([1]);
+  db.update(sessionEvents)
+    .set({
+      data: JSON.stringify({ role: 'user', content: 'Still waiting', deliveryStatus: 'accepted' }),
+    })
+    .where(eq(sessionEvents.id, 7))
+    .run();
+  db.insert(sessionEventChanges).values({ sessionId: 's', eventId: 7 }).run();
+  expect(readTurnIndex(db, 's').map((turn) => turn.eventId)).toEqual([1, 7]);
 });

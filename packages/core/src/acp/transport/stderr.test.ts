@@ -25,7 +25,8 @@ test('bounds stderr and redacts secrets split across chunks while preserving pro
   const error = Object.assign(new Error('RPC rejected'), { code: -32602 });
   expect(withProcessDiagnostics(error, child)).toBe(error);
   expect(error.code).toBe(-32602);
-  expect(error.message).toContain('Agent stderr:');
+  expect(error.message).toBe('RPC rejected');
+  expect(error).toHaveProperty('processDiagnostics', excerpt);
 });
 
 test('redacts common credentials and authentication URL query parameters', () => {

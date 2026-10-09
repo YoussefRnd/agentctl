@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { chatErrorSchema } from './chat-error.js';
 
 export const turnTimingsSchema = z.object({
   preparationMs: z.number().nonnegative().optional(),
@@ -7,11 +8,14 @@ export const turnTimingsSchema = z.object({
   completionMs: z.number().nonnegative().optional(),
 });
 export type TurnTimings = z.infer<typeof turnTimingsSchema>;
-export const sessionExecutionErrorSchema = z.object({
-  message: z.string(),
-  code: z.number().optional(),
-  data: z.unknown().optional(),
-});
+export const sessionExecutionErrorSchema = z.union([
+  chatErrorSchema,
+  z.object({
+    message: z.string(),
+    code: z.number().optional(),
+    data: z.unknown().optional(),
+  }),
+]);
 
 export const sessionExecutionSchema = z.object({
   connection: z.enum(['connected', 'closed', 'lost', 'disconnected']),

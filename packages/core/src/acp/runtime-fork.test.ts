@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
 import { afterEach, expect, test, vi } from 'vitest';
-import type { ClientSideConnection } from '@agentclientprotocol/sdk';
+import { RequestError, type ClientSideConnection } from '@agentclientprotocol/sdk';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import { AcpV1AgentDriver } from './runtime.js';
 import { parseAcpCapabilities } from './transport/capabilities-cache.js';
@@ -65,6 +65,26 @@ function setup(supported = true, extraSessionCapabilities: Record<string, unknow
 }
 
 afterEach(() => vi.unstubAllEnvs());
+
+test('v1 marks explicit authentication rejections as known failed delivery, not a lost connection', async () => {
+  const { execute, connection } = setup(false);
+  const session = await execute();
+  connection.prompt.mockRejectedValueOnce(RequestError.authRequired());
+  await expect(session.prompt('hello')).rejects.toMatchObject({
+    kind: 'authentication_required',
+    delivery: 'rejected',
+  });
+  connection.prompt.mockRejectedValueOnce(new Error('Authentication required'));
+  await expect(session.prompt('hello')).rejects.toMatchObject({
+    kind: 'authentication_required',
+    delivery: 'unknown',
+  });
+  connection.prompt.mockRejectedValueOnce(new Error('Connection closed'));
+  await expect(session.prompt('hello')).rejects.toMatchObject({
+    message: 'Connection closed',
+    delivery: 'unknown',
+  });
+});
 
 test('v1 cancellation cancels pending approval callbacks without affecting a sibling session', async () => {
   const { runtime, manager, connection } = setup(false);

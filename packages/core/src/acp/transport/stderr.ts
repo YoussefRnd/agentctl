@@ -1,43 +1,14 @@
-import os from 'node:os';
 import type { ChildProcess } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
+import { redactAgentErrorText as sanitizeStderr } from '../../agent/error-redaction.js';
+
+export { sanitizeStderr };
 
 export const STDERR_TAIL_BYTES = 4096;
 const tails = new WeakMap<
   ChildProcess,
   { raw: string; environment: Record<string, string | undefined> }
 >();
-
-export function sanitizeStderr(
-  text: string,
-  environment: Record<string, string | undefined> = process.env,
-): string {
-  let clean = text.replaceAll('\0', '');
-  for (const [key, value] of Object.entries(environment)) {
-    if (
-      value &&
-      value.length >= 4 &&
-      /secret|token|password|api.?key|credential|authorization/i.test(key)
-    )
-      clean = clean.split(value).join('[redacted]');
-  }
-  for (const home of new Set([environment.HOME, environment.USERPROFILE, os.homedir()]))
-    if (home && home.length > 1) clean = clean.split(home).join('~');
-  return clean
-    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
-    .replace(/\bAuthorization:\s*Basic\s+\S+/gi, 'Authorization: Basic [redacted]')
-    .replace(
-      /\b(?:x-api-key|api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*\S+/gi,
-      '[redacted credential]',
-    )
-    .replace(
-      /\b(?:sk-[A-Za-z0-9][A-Za-z0-9-]{7,}|gh[pousr]_[A-Za-z0-9]+|xox[a-zA-Z]-[A-Za-z0-9-]+)\b/g,
-      '[redacted]',
-    )
-    .replace(/https?:\/\/[^\s]*\/pair#[^\s]*/gi, '[pairing URL]')
-    .replace(/(https?:\/\/[^\s?#]+)\?[^\s]*/gi, '$1?[redacted query]')
-    .trim();
-}
 
 export function observeAcpStderr(
   child: ChildProcess,
@@ -72,6 +43,7 @@ export function withProcessDiagnostics(error: unknown, child: ChildProcess): Err
   const tail = tails.get(child);
   result.message = sanitizeStderr(result.message, tail?.environment);
   const excerpt = stderrExcerpt(child);
-  if (excerpt && !result.message.includes(excerpt)) result.message += `\nAgent stderr: ${excerpt}`;
+  // Diagnostics belong in logs, not in the protocol/user-facing error message.
+  if (excerpt) Object.assign(result, { processDiagnostics: excerpt });
   return result;
 }

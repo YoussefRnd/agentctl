@@ -1,4 +1,4 @@
-import { memo, useState, useMemo } from 'react';
+import { memo, useState, useMemo, useRef, useLayoutEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -13,13 +13,15 @@ import {
   PopoverContent,
   PopoverTrigger,
   Tooltip,
+  MessageEditor,
+  cn,
 } from '@agentctl/ui';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 import { MarkdownTable } from './MarkdownTable';
-import { formatShortcut } from '@/shared/lib/platform';
 import { parseUserMessageContent } from '../../lib/userMessageParser';
 import { ContextAttachmentChip } from './ContextAttachmentChip';
 import { MessageImageAttachment } from './MessageImageAttachment';
+import { presentProviderError, type ChatError } from '@agentctl/shared';
 
 type Role = 'provider' | 'user';
 
@@ -36,19 +38,11 @@ interface TextCardProps {
   eventId?: number;
   deliveryStatus?: 'queued' | 'sending' | 'accepted' | 'failed' | 'unknown' | 'cancelled';
   deliveryError?: string;
+  deliveryFailure?: ChatError;
   onRetry?: (eventId: number) => void;
   hasGitRepo?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
-  onEditSubmit?: (eventId: number, newContent: string) => void;
-}
-
-function autoFocusTextarea(textarea: HTMLTextAreaElement | null) {
-  if (textarea) {
-    textarea.style.height = 'auto';
-    textarea.style.height = `${String(Math.min(textarea.scrollHeight, 360))}px`;
-    textarea.focus();
-    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-  }
+  onEditSubmit?: (eventId: number, newContent: string) => void | boolean | Promise<void | boolean>;
 }
 
 function renderTextWithMentions(node: React.ReactNode): React.ReactNode {
@@ -85,6 +79,7 @@ export const TextCard = memo(function TextCard({
   eventId,
   deliveryStatus,
   deliveryError,
+  deliveryFailure,
   onRetry,
   hasGitRepo,
   onRewind,
@@ -93,8 +88,9 @@ export const TextCard = memo(function TextCard({
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const messageRef = useRef<HTMLDivElement>(null);
+  const previousSizeRef = useRef<{ width: number; height: number } | null>(null);
   const parsed = useMemo(() => parseUserMessageContent(content), [content]);
-  const [draftContent, setDraftContent] = useState(parsed.prompt || content);
   const { sessionId } = useSession();
 
   const handleCopy = () => {
@@ -105,32 +101,77 @@ export const TextCard = memo(function TextCard({
     }, 2000);
   };
 
-  const handleStartEdit = () => {
-    setDraftContent(parsed.prompt || content);
-    setIsEditing(true);
+  const changeEditing = (editing: boolean) => {
+    const rect = messageRef.current?.getBoundingClientRect();
+    previousSizeRef.current = rect ? { width: rect.width, height: rect.height } : null;
+    setIsEditing(editing);
   };
 
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setDraftContent(parsed.prompt || content);
-  };
+  useLayoutEffect(() => {
+    const element = messageRef.current;
+    const previous = previousSizeRef.current;
+    previousSizeRef.current = null;
+    if (!element || !previous) return;
+    if (!isEditing)
+      element
+        .querySelector<HTMLButtonElement>('[aria-label="Edit prompt"]')
+        ?.focus({ preventScroll: true });
+    if (!element.animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const next = element.getBoundingClientRect();
+    const tokens = getComputedStyle(element);
+    const timing = {
+      duration: parseFloat(tokens.getPropertyValue('--duration-normal')) || 200,
+      easing: tokens.getPropertyValue('--ease-out').trim() || 'ease-out',
+    };
+    // Animate actual dimensions, not text scale, so the virtualized feed tracks the resize.
+    const animation = element.animate(
+      [
+        {
+          width: `${previous.width}px`,
+          height: `${previous.height}px`,
+          maxWidth: '100%',
+          overflow: 'clip',
+        },
+        {
+          width: `${next.width}px`,
+          height: `${next.height}px`,
+          maxWidth: '100%',
+          overflow: 'clip',
+        },
+      ],
+      timing,
+    );
+    const reveal = !isEditing
+      ? element
+          .querySelector<HTMLElement>('.group\\/bubble')
+          ?.animate([{ opacity: 0.4 }, { opacity: 1 }], timing)
+      : undefined;
+    return () => {
+      animation.cancel();
+      reveal?.cancel();
+    };
+  }, [isEditing]);
 
-  const handleSaveEdit = () => {
-    const trimmed = draftContent.trim();
-    if (!trimmed) return;
-    setIsEditing(false);
+  const handleSaveEdit = async (trimmed: string) => {
     if (eventId && onEditSubmit) {
       const attachmentIndex = content.indexOf('### Context Attachment:');
       const fullUpdatedContent =
         attachmentIndex !== -1 ? `${trimmed}\n\n${content.slice(attachmentIndex)}` : trimmed;
-      onEditSubmit(eventId, fullUpdatedContent);
+      return onEditSubmit(eventId, fullUpdatedContent);
     }
+    return false;
   };
 
   if (variant === 'user') {
     return (
       <div data-font-ctx="chat" className="group/card flex min-w-0 justify-end py-2">
-        <div className="flex max-w-[85%] min-w-0 flex-col items-end gap-1.5 sm:max-w-[75%]">
+        <div
+          ref={messageRef}
+          className={cn(
+            'flex min-w-0 flex-col items-end gap-1.5',
+            isEditing ? 'w-full max-w-full' : 'max-w-[85%] sm:max-w-[75%]',
+          )}
+        >
           {attachments && attachments.length > 0 && (
             <div className="flex max-w-full min-w-0 flex-wrap justify-end gap-2">
               {attachments.map((att) => (
@@ -144,53 +185,13 @@ export const TextCard = memo(function TextCard({
           )}
           <div className="group/bubble relative flex w-full min-w-0 flex-col items-end">
             {isEditing ? (
-              <div className="border-border/70 bg-surface/90 focus-within:border-accent/50 focus-within:ring-accent/20 w-full min-w-0 rounded-lg border p-3 shadow-lg backdrop-blur-md transition-colors focus-within:ring-1">
-                <textarea
-                  ref={autoFocusTextarea}
-                  value={draftContent}
-                  aria-label="Edit message prompt"
-                  onChange={(e) => {
-                    setDraftContent(e.target.value);
-                    e.target.style.height = 'auto';
-                    e.target.style.height = `${String(Math.min(e.target.scrollHeight, 360))}px`;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleCancelEdit();
-                    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      handleSaveEdit();
-                    }
-                  }}
-                  rows={Math.max(2, Math.min(8, draftContent.split('\n').length))}
-                  className="text-text-main placeholder:text-text-muted/40 max-h-[360px] w-full resize-none bg-transparent leading-relaxed outline-none"
-                  placeholder="Edit your prompt..."
-                />
-                <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-2">
-                  <span className="text-text-muted/40 hidden text-[11px] select-none sm:inline">
-                    Esc to cancel • {formatShortcut('Enter')} to submit
-                  </span>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelEdit}
-                      className="h-7 px-2.5 text-xs"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleSaveEdit}
-                      disabled={!draftContent.trim()}
-                      className="h-7 px-3 text-xs"
-                    >
-                      Save &amp; Submit
-                    </Button>
-                  </div>
-                </div>
-              </div>
+              <MessageEditor
+                initialValue={parsed.prompt}
+                label="Edit message prompt"
+                submitLabel={deliveryStatus === 'queued' ? 'Save' : 'Send'}
+                onSubmit={handleSaveEdit}
+                onCancel={() => changeEditing(false)}
+              />
             ) : (
               <>
                 {parsed.prompt ? (
@@ -229,16 +230,20 @@ export const TextCard = memo(function TextCard({
                       ? 'Queued on the server'
                       : deliveryStatus === 'cancelled'
                         ? 'Message cancelled'
-                        : `Delivery uncertain: ${deliveryError ?? 'The connection was interrupted. Check the provider before resending.'}`}
+                        : 'Delivery uncertain'}
                   </div>
                 )}
                 {deliveryStatus === 'failed' && (
                   <div className="mt-2 flex max-w-full flex-wrap items-center gap-2 text-xs text-rose-400">
                     <span role="status" className="min-w-0 [overflow-wrap:anywhere]">
-                      Message not sent{deliveryError ? `: ${deliveryError}` : ''}
+                      Message not sent
+                      {deliveryError && (eventId === undefined || eventId < 0)
+                        ? `: ${presentProviderError(deliveryError).message}`
+                        : ''}
                     </span>
-                    {eventId !== undefined && eventId < 0 && onRetry && (
+                    {eventId !== undefined && onRetry && !deliveryFailure && (
                       <Button variant="ghost" size="sm" onClick={() => onRetry(eventId)}>
+                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
                         Retry
                       </Button>
                     )}
@@ -262,18 +267,22 @@ export const TextCard = memo(function TextCard({
                     </IconButton>
                   </Tooltip>
 
-                  {eventId !== undefined && eventId > 0 && (
-                    <Tooltip content="Edit prompt">
-                      <IconButton
-                        size="compact"
-                        onClick={handleStartEdit}
-                        className="hover:bg-surface-secondary/80"
-                        aria-label="Edit prompt"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
+                  {eventId !== undefined &&
+                    eventId > 0 &&
+                    onEditSubmit &&
+                    deliveryStatus !== 'unknown' &&
+                    deliveryStatus !== 'cancelled' && (
+                      <Tooltip content="Edit prompt">
+                        <IconButton
+                          size="compact"
+                          onClick={() => changeEditing(true)}
+                          className="hover:bg-surface-secondary/80"
+                          aria-label="Edit prompt"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
 
                   {eventId !== undefined && eventId > 0 && onRewind && (
                     <Popover open={showMenu} onOpenChange={setShowMenu}>

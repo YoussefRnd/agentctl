@@ -6,6 +6,18 @@ export interface ConversationPreviewEvent {
   metadata?: { attemptId?: string; nativeSessionId?: string };
 }
 
+/** Pending input belongs to the composer, not to the conversation timeline. */
+export function isComposerOnlyInput(event: ConversationPreviewEvent): boolean {
+  return (
+    event.type === 'text' &&
+    event.data.role === 'user' &&
+    !event.metadata?.nativeSessionId &&
+    (event.data.deliveryStatus === 'queued' ||
+      event.data.deliveryStatus === 'cancelled' ||
+      (event.id < 0 && event.data.deliveryStatus === 'failed'))
+  );
+}
+
 /** Queued inputs precede output in storage. Keep output with its owning input. */
 export function orderConversationEvents<T extends ConversationPreviewEvent>(events: T[]): T[] {
   const byId = new Map(events.map((event) => [event.id, event]));

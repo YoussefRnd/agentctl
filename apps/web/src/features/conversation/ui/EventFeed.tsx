@@ -12,17 +12,22 @@ import {
   type WheelEvent,
 } from 'react';
 import { RefreshCw, ArrowDown, LoaderCircle } from 'lucide-react';
-import { AgentIcon } from '@/shared';
 import { useQueryClient } from '@tanstack/react-query';
-import type { SessionEventRow } from '@agentctl/shared';
+import { isComposerOnlyInput, type SessionEventRow } from '@agentctl/shared';
 import {
   useSession,
   useSessionStream,
   useSessionTurnIndex,
   type RewindMode,
 } from '@/features/sessions';
-import { Button, Card, IconButton, LoadingState } from '@agentctl/ui';
-import { groupFeedEvents, type FeedEventGroup } from '../lib/eventFeedGrouping';
+import { Button, IconButton, LoadingState } from '@agentctl/ui';
+import {
+  groupFeedEvents,
+  hasCurrentChatFailure,
+  type FeedEventGroup,
+} from '../lib/eventFeedGrouping';
+import { useSettingsOverlayStore } from '@/features/settings';
+import { TurnErrorCard } from './cards/TurnErrorCard';
 import { EventFeedItem } from './EventFeedItem';
 import { TurnMinimap } from './TurnMinimap';
 import {
@@ -40,7 +45,7 @@ interface EventFeedProps {
   hasGitRepo?: boolean;
   isSessionRunning?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
-  onEditSubmit?: (eventId: number, newContent: string) => void;
+  onEditSubmit?: (eventId: number, newContent: string) => void | boolean | Promise<void | boolean>;
   onRetryMessage?: (eventId: number) => void;
 }
 
@@ -91,9 +96,19 @@ export function EventFeed({
     loadOlderHistory,
     isLoadingOlderHistory,
     historyError,
+    execution,
+    queuePendingId,
   } = useSessionStream();
   const isSessionError = sessionData?.session.status === 'error';
   const queryClient = useQueryClient();
+  const refreshSession = useCallback(() => {
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['session', sessionId] }),
+      queryClient.invalidateQueries({ queryKey: ['events', sessionId] }),
+      queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] }),
+    ]);
+  }, [queryClient, sessionId]);
+  const openProviderSettings = () => useSettingsOverlayStore.getState().openSettings('providers');
 
   const activeProvider = useMemo(() => {
     const providerId = sessionData?.session.selectedProvider || sessionData?.session.agent;
@@ -126,13 +141,14 @@ export function EventFeed({
   );
   const conversationTurns = useMemo(() => {
     if (hasMoreHistory && !turnIndex) return [];
+    const composerOnlyIds = new Set(events.filter(isComposerOnlyInput).map((event) => event.id));
     return mergeTurnIndex(
-      hasMoreHistory ? (turnIndex ?? []) : [],
+      hasMoreHistory ? (turnIndex ?? []).filter((turn) => !composerOnlyIds.has(turn.eventId)) : [],
       loadedTurns,
       sessionId,
       turnMeta,
     );
-  }, [turnIndex, hasMoreHistory, loadedTurns, sessionId, turnMeta]);
+  }, [turnIndex, hasMoreHistory, loadedTurns, sessionId, turnMeta, events]);
   const navigationEventId = targetEventId ?? selectedTurnEventId;
 
   const groupedEvents = useMemo(
@@ -562,6 +578,9 @@ export function EventFeed({
                     onRewind={onRewind}
                     onEditSubmit={onEditSubmit}
                     onRetryMessage={onRetryMessage}
+                    onProviderSettings={openProviderSettings}
+                    onRefresh={refreshSession}
+                    recoveryPending={queuePendingId !== undefined}
                   />
                 </div>
               </div>
@@ -569,39 +588,27 @@ export function EventFeed({
           })}
         </div>
 
-        {isSessionError && (
+        {isSessionError && !hasCurrentChatFailure(groupedEvents, execution) && (
           <div className="mx-auto max-w-[800px] px-3 pt-2 pb-4 sm:px-6">
-            <div className="animate-in fade-in slide-in-from-left-2">
-              <Card status="error" className="flex flex-col gap-3 p-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/25 bg-rose-500/8 text-rose-400">
-                    <AgentIcon className="h-4 w-4" />
-                  </div>
-                  <span className="text-[11px] font-bold tracking-wider text-rose-400 uppercase">
-                    Agent connection unavailable
-                  </span>
-                </div>
-                <p className="text-text-muted/90 text-[12px] leading-relaxed">
-                  The agent connection is unavailable. Refresh the session to see its current state.
-                </p>
-                <div className="mt-1 flex items-center gap-3">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => {
-                      void queryClient.invalidateQueries({
-                        queryKey: ['session', sessionId],
-                      });
-                      void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
-                    }}
-                    className="border border-rose-500/30 bg-rose-500/15 px-3 text-[11px] text-rose-300 hover:bg-rose-500/25"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Refresh session
-                  </Button>
-                </div>
-              </Card>
-            </div>
+            <TurnErrorCard
+              failure={execution?.error}
+              message="Agent connection unavailable"
+              onRefresh={refreshSession}
+              onProviderSettings={openProviderSettings}
+              onRetry={
+                execution?.eventId !== undefined &&
+                onRetryMessage &&
+                events.some(
+                  (event) =>
+                    event.id === execution.eventId &&
+                    event.type === 'text' &&
+                    event.data.deliveryStatus === 'failed',
+                )
+                  ? () => onRetryMessage(execution.eventId!)
+                  : undefined
+              }
+              pending={queuePendingId !== undefined}
+            />
           </div>
         )}
       </div>

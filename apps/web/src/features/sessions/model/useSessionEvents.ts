@@ -8,6 +8,7 @@ import { getApiBaseUrl } from '@/shared/lib/api-base-url';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { observePromptPerformance, cancelPromptPerformance } from '@/shared/lib/promptPerformance';
 import { reconcileOptimisticMessages } from './reconcileOptimisticMessages';
+import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 
 import { useSessionHistory, mergeEventHistory } from './useSessionHistory';
 export { mergeEventHistory } from './useSessionHistory';
@@ -27,12 +28,37 @@ export function useSessionEvents(sessionId: string | null) {
 
     const token = getDesktopCapability() ?? undefined;
     const sseUrl = `${getApiBaseUrl()}/api/sessions/${sessionId}/events/stream`;
+    const reconcileOutbox = (events: SessionEventRow[]) => {
+      const store = useMessageQueueStore.getState();
+      let hasUserUpdate = false;
+      for (const event of events) {
+        if (
+          event.id > 0 &&
+          event.type === 'text' &&
+          event.data.role === 'user' &&
+          event.data.clientMessageId
+        ) {
+          hasUserUpdate = true;
+          if (
+            store.queuedMessages[sessionId]?.some(
+              (message) => message.id === event.data.clientMessageId,
+            )
+          )
+            store.dequeueMessage(sessionId, event.data.clientMessageId);
+        }
+      }
+      if (hasUserUpdate) {
+        void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.turnIndex(sessionId) });
+      }
+    };
 
     const engine = new SessionEngine({
       sessionId,
       sseUrl,
       token,
       onHistorySnapshot: (snapshot) => {
+        reconcileOutbox(snapshot.events);
         observePromptPerformance(sessionId, snapshot.events);
         void queryClient.invalidateQueries({ queryKey: sessionKeys.turnIndex(sessionId) });
         resetWindow(sessionId, snapshot);
@@ -48,6 +74,7 @@ export function useSessionEvents(sessionId: string | null) {
         void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       },
       onEventsUpdate: (newEvents) => {
+        reconcileOutbox(newEvents);
         observePromptPerformance(sessionId, newEvents);
         queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
           const lastOldId = old.length > 0 ? old[old.length - 1].id : 0;

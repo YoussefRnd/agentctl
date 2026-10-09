@@ -42,6 +42,8 @@ Shared primitives and semantic foundation classes are the source of truth for ap
 - `motion-disclosure`: color-only trigger transitions.
 - `motion-floating`: short fade and directional movement for menus and popovers.
 - `motion-dialog`: restrained dialog entrance and exit.
+- `motion-editor`: subtle reveal for an explicitly opened message editor.
+- `motion-history`: quiet pending fade during conversation history changes.
 - Spatial movement is disabled under `prefers-reduced-motion`.
 
 ## Status and feedback

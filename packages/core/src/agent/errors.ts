@@ -1,8 +1,14 @@
-import type { AgentConfigOption } from '@agentctl/shared';
+import {
+  classifyProviderError,
+  type AgentConfigOption,
+  type ChatErrorDelivery,
+} from '@agentctl/shared';
 import type { AgentSession } from './types.js';
 
 export type AgentErrorKind =
   | 'authentication_required'
+  | 'billing_required'
+  | 'rate_limited'
   | 'unsupported'
   | 'invalid_request'
   | 'prompt_rejected'
@@ -10,14 +16,47 @@ export type AgentErrorKind =
   | 'agent_failure';
 
 export class AgentError extends Error {
+  readonly delivery?: ChatErrorDelivery;
   constructor(
     public readonly kind: AgentErrorKind,
     message: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; delivery?: ChatErrorDelivery },
   ) {
     super(message, options);
     this.name = 'AgentError';
+    this.delivery = options?.delivery ?? (kind === 'prompt_rejected' ? 'rejected' : undefined);
   }
+}
+
+/** Preserve protocol evidence separately from a provider's failure category. */
+export function normalizeAgentError(error: unknown, delivery?: ChatErrorDelivery): AgentError {
+  if (error instanceof AgentError && delivery === undefined) return error;
+  const category = classifyProviderError(error);
+  const kind: AgentErrorKind =
+    error instanceof AgentError
+      ? error.kind
+      : category === 'authentication'
+        ? 'authentication_required'
+        : category === 'billing'
+          ? 'billing_required'
+          : category === 'rate_limit'
+            ? 'rate_limited'
+            : category === 'invalid_request'
+              ? 'invalid_request'
+              : category === 'connection'
+                ? 'transport_lost'
+                : 'agent_failure';
+  const message =
+    error instanceof Error
+      ? error.message
+      : error &&
+          typeof error === 'object' &&
+          'message' in error &&
+          typeof error.message === 'string'
+        ? error.message
+        : String(error);
+  // Text classification can guide recovery, but cannot prove that insertion was rejected.
+  return new AgentError(kind, message, { cause: error, delivery: delivery ?? 'unknown' });
 }
 
 /** A provider explicitly rejected insertion; delivery is known to have failed. */
@@ -38,7 +77,7 @@ export class AgentAuthenticationRequiredError extends AgentError {
     public readonly pendingSession: AgentSession,
     public readonly configOptions: AgentConfigOption[] = [],
   ) {
-    super('authentication_required', 'Authentication required');
+    super('authentication_required', 'Authentication required', { delivery: 'rejected' });
     this.name = 'AgentAuthenticationRequiredError';
   }
 }

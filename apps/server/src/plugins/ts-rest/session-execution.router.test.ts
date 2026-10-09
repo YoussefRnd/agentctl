@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { initServer } from '@ts-rest/fastify';
-import { sessionsContract } from '@agentctl/shared';
+import { sessionsContract, chatErrorSchema, providerErrorCopy } from '@agentctl/shared';
 import { createDatabase, projects, sessions, sessionOperations } from '@agentctl/core/db';
 import { eq } from 'drizzle-orm';
 import { SessionOperationWorker } from '../../../../../packages/core/src/session/execution/session-operation-worker.js';
@@ -9,6 +9,7 @@ import { noopLogger } from '../../../../../packages/core/src/logger.js';
 import { randomUUID } from 'node:crypto';
 import { expect, test, vi } from 'vitest';
 import { createSessionsRouter } from './sessions.router.js';
+import { normalizeAgentError } from '../../../../../packages/core/src/agent/errors.js';
 
 test('accepted queue survives independent API reads and supports reorder and cancellation', async () => {
   const db = createDatabase(':memory:');
@@ -35,7 +36,7 @@ test('accepted queue survives independent API reads and supports reorder and can
   const error = {
     message: 'Provider failure details. '.repeat(60),
     code: -32000,
-    data: { reason: 'quota' },
+    data: { code: 'insufficient_quota', secret: 'private-provider-data' },
   };
   const timings = { preparationMs: 12, acceptanceMs: 5, firstOutputMs: 9, completionMs: 80 };
   const worker = new SessionOperationWorker(
@@ -48,11 +49,11 @@ test('accepted queue survives independent API reads and supports reorder and can
         await events.append(
           id,
           'status',
-          { status: 'prompt_failed', message: error.message, error, timings },
+          { status: 'turn_end', stopReason: 'error', timings },
           message.eventId,
           { attemptId: message.attemptId },
         );
-        throw new Error(error.message);
+        throw normalizeAgentError(error);
       }
     },
     noopLogger,
@@ -83,6 +84,28 @@ test('accepted queue survives independent API reads and supports reorder and can
     });
     expect(move.statusCode).toBe(200);
     expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/sessions/${id}/queue/second`,
+          payload: { action: 'edit', input: 'edited second' },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await app.inject(`/api/sessions/${id}/execution`)).json().queue[0]).toMatchObject({
+      id: 'second',
+      text: 'edited second',
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/sessions/${id}/queue/second`,
+          payload: { action: 'edit', input: '  ' },
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect(
       (await app.inject(`/api/sessions/${id}/execution`))
         .json()
         .queue.map((message: { id: string }) => message.id),
@@ -107,20 +130,22 @@ test('accepted queue survives independent API reads and supports reorder and can
     ).toBe(409);
     finish();
     await worker.idle(id);
-    expect(dispatched).toEqual(['active', 'second', 'first']);
+    expect(dispatched).toEqual(['active', 'edited second', 'first']);
     expect((await app.inject(`/api/sessions/${id}/execution`)).json()).toMatchObject({
       execution: 'failed',
-      error,
+      error: { category: 'billing', delivery: 'not_sent', details: error.message.trim() },
       timings,
       queue: [],
     });
     // Reads reconstruct diagnostics from durable rows, without a live turn executor.
     const restored = (await app.inject(`/api/sessions/${id}/execution`)).json();
-    expect(restored).toMatchObject({ error, timings });
+    expect(restored).toMatchObject({ error: { version: 1, category: 'billing' }, timings });
+    expect(chatErrorSchema.parse(restored.error)).toEqual(restored.error);
+    expect(JSON.stringify(restored)).not.toContain('private-provider-data');
     expect(
       db.select().from(sessionOperations).where(eq(sessionOperations.commandId, 'first')).get()
         ?.error,
-    ).toBe(error.message);
+    ).toBe(providerErrorCopy('billing').message);
   } finally {
     finish();
     await worker.idle(id);

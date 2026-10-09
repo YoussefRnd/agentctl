@@ -7,3 +7,4 @@ export * from './state-change.js';
 export * from './session-event-page.js';
 
 export * from './review.js';
+export * from './chat-error.js';

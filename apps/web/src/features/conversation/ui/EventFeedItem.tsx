@@ -5,6 +5,7 @@ import { TextCard } from './cards/TextCard';
 import { TurnErrorCard } from './cards/TurnErrorCard';
 import type { FeedEventGroup } from '../lib/eventFeedGrouping';
 import type { ElicitationItem } from '@agentctl/shared';
+import { chatErrorSchema } from '@agentctl/shared';
 import type { RewindMode } from '@/features/sessions';
 
 interface EventFeedItemProps {
@@ -14,8 +15,11 @@ interface EventFeedItemProps {
   hasGitRepo?: boolean;
   isConnected?: boolean;
   onRewind?: (eventId: number, mode: RewindMode) => void;
-  onEditSubmit?: (eventId: number, newContent: string) => void;
+  onEditSubmit?: (eventId: number, newContent: string) => void | boolean | Promise<void | boolean>;
   onRetryMessage?: (eventId: number) => void;
+  onProviderSettings?: () => void;
+  onRefresh?: () => void;
+  recoveryPending?: boolean;
 }
 
 export function EventFeedItem({
@@ -27,10 +31,32 @@ export function EventFeedItem({
   onRewind,
   onEditSubmit,
   onRetryMessage,
+  onProviderSettings,
+  onRefresh,
+  recoveryPending,
 }: EventFeedItemProps) {
-  if (group.type === 'error') {
-    const message = group.event.type === 'status' ? group.event.data.message : undefined;
-    return <TurnErrorCard message={typeof message === 'string' ? message : undefined} />;
+  if (
+    group.type === 'error' ||
+    (group.type === 'notice' &&
+      group.event.type === 'status' &&
+      group.event.data.status === 'runtime_error')
+  ) {
+    const data = group.event.type === 'status' ? group.event.data : {};
+    const failure = chatErrorSchema.safeParse(data.error);
+    const eventId = failure.success ? failure.data.eventId : undefined;
+    const message = data.message ?? data.title;
+    return (
+      <TurnErrorCard
+        failure={data.error}
+        message={typeof message === 'string' ? message : undefined}
+        onRetry={
+          eventId !== undefined && onRetryMessage ? () => onRetryMessage(eventId) : undefined
+        }
+        onProviderSettings={onProviderSettings}
+        onRefresh={onRefresh}
+        pending={recoveryPending}
+      />
+    );
   }
   if (group.type === 'notice') {
     const data = group.event.data as { title?: string };
@@ -118,6 +144,7 @@ export function EventFeedItem({
         eventId={e.id}
         deliveryStatus={e.type === 'text' ? e.data.deliveryStatus : undefined}
         deliveryError={e.type === 'text' ? e.data.deliveryError : undefined}
+        deliveryFailure={e.type === 'text' ? e.data.deliveryFailure : undefined}
         onRetry={onRetryMessage}
         hasGitRepo={hasGitRepo}
         onRewind={onRewind}

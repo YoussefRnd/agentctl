@@ -1,7 +1,9 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { and, asc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { AgentError } from '../../agent/errors.js';
+import { normalizeChatError } from '../../agent/chat-error.js';
+import { readSessionFailureStage } from './session-failure-stage.js';
 import type { DbClient } from '../../db/index.js';
 import {
   sessions,
@@ -14,6 +16,10 @@ import type { SessionEventRepository } from '../persistence/session-event-reposi
 import { resolveMessageAttachments } from '../commands/message-attachments.js';
 import { MessageAcceptanceService } from '../commands/message-acceptance-service.js';
 import { SessionCommandCoordinator } from '../commands/session-command-coordinator.js';
+import {
+  cancelRemovedMessageOperations,
+  messageEventExists,
+} from './session-operation-reconciliation.js';
 
 const messageSchema = z.object({
   text: z.string(),
@@ -82,6 +88,7 @@ export class SessionOperationWorker {
         const row = this.db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
         if (!row || ['archived', 'merged', 'discarded'].includes(row.status))
           throw new Error('Session is unavailable');
+        this.db.transaction((tx) => cancelRemovedMessageOperations(tx, sessionId));
         const pending = this.db
           .select({ id: sessionOperations.id })
           .from(sessionOperations)
@@ -169,6 +176,7 @@ export class SessionOperationWorker {
           and(
             eq(sessionOperations.sessionId, sessionId),
             inArray(sessionOperations.status, ['unknown', 'running']),
+            or(ne(sessionOperations.kind, 'message.send'), messageEventExists(this.db)),
           ),
         )
         .get()
@@ -185,6 +193,7 @@ export class SessionOperationWorker {
           eq(sessionOperations.sessionId, sessionId),
           eq(sessionOperations.kind, 'message.send'),
           eq(sessionOperations.status, 'pending'),
+          messageEventExists(this.db),
         ),
       )
       .orderBy(asc(sessionOperations.queuePosition), asc(sessionOperations.eventId))
@@ -211,6 +220,7 @@ export class SessionOperationWorker {
                 and(
                   eq(sessionOperations.sessionId, sessionId),
                   inArray(sessionOperations.status, ['running', 'unknown']),
+                  or(ne(sessionOperations.kind, 'message.send'), messageEventExists(tx)),
                 ),
               )
               .get()
@@ -271,6 +281,12 @@ export class SessionOperationWorker {
             ),
           )
           .run();
+        if (ended?.status === 'failed') {
+          // An accepted turn can fail without throwing (notably ACP v2 foreground errors).
+          // Keep its runtime available, but do not drain more input into a failing provider.
+          this.db.update(sessions).set({ status: 'error' }).where(eq(sessions.id, sessionId)).run();
+          return;
+        }
       } catch (error) {
         if (
           this.db
@@ -280,14 +296,14 @@ export class SessionOperationWorker {
             .get()?.status !== 'running'
         )
           return;
-        const message = error instanceof Error ? error.message : String(error);
-        const deliveryUnknown =
-          !(error instanceof AgentError && error.kind === 'prompt_rejected') &&
-          this.db
-            .select()
-            .from(sessionTurnAttempts)
-            .where(eq(sessionTurnAttempts.id, attempt.id))
-            .get()?.dispatchedAt != null;
+        const failure = normalizeChatError(error, {
+          stage: readSessionFailureStage(this.db, attempt.id),
+          providerId: attempt.providerId,
+          attemptId: attempt.id,
+          eventId: operation.eventId,
+        });
+        const message = failure.message;
+        const deliveryUnknown = failure.delivery === 'unknown';
         this.db
           .update(sessionOperations)
           .set({ status: deliveryUnknown ? 'unknown' : 'failed', error: message })
@@ -301,19 +317,22 @@ export class SessionOperationWorker {
           .where(
             and(
               eq(sessionTurnAttempts.id, attempt.id),
-              inArray(sessionTurnAttempts.status, ['queued', 'running', 'waiting']),
+              inArray(sessionTurnAttempts.status, ['queued', 'running', 'waiting', 'interrupted']),
             ),
           )
           .run();
         await this.events.update(operation.eventId, {
-          deliveryStatus: deliveryUnknown ? 'unknown' : 'failed',
+          deliveryStatus:
+            failure.delivery === 'accepted' ? 'accepted' : deliveryUnknown ? 'unknown' : 'failed',
           deliveryError: message,
+          deliveryFailure: failure,
         });
         await this.events.append(
           sessionId,
           'status',
-          { status: 'operation_failed', message, operationId: operation.id },
+          { status: 'prompt_failed', message, error: failure, operationId: operation.id },
           operation.eventId,
+          { attemptId: attempt.id },
         );
         this.db.update(sessions).set({ status: 'error' }).where(eq(sessions.id, sessionId)).run();
         this.logger.error(error, 'Accepted session message failed');
@@ -323,6 +342,7 @@ export class SessionOperationWorker {
   }
 
   async recover(): Promise<void> {
+    this.db.transaction((tx) => cancelRemovedMessageOperations(tx));
     const lost = this.db
       .select()
       .from(sessionOperations)
@@ -368,13 +388,40 @@ export class SessionOperationWorker {
       if (recovered?.status === 'pending')
         await this.events.update(operation.eventId, { deliveryStatus: 'queued' }, undefined, [
           'deliveryError',
+          'deliveryFailure',
         ]);
-      else
+      else {
+        const attempt = this.attemptForOperation(operation.id);
+        const failure = normalizeChatError(
+          new AgentError(
+            'transport_lost',
+            'Interrupted by server restart. This message was not resent.',
+          ),
+          {
+            stage: 'dispatch',
+            attemptId: attempt?.id,
+            providerId: attempt?.providerId,
+            eventId: operation.eventId,
+          },
+        );
         await this.events.update(operation.eventId, {
           deliveryStatus: 'unknown',
-          deliveryError:
-            'Interrupted by server restart. Provider delivery is unknown; this message was not resent.',
+          deliveryError: failure.message,
+          deliveryFailure: failure,
         });
+        await this.events.append(
+          operation.sessionId,
+          'status',
+          {
+            status: 'prompt_failed',
+            message: failure.message,
+            error: failure,
+            operationId: operation.id,
+          },
+          operation.eventId,
+          { attemptId: attempt?.id },
+        );
+      }
     }
     for (const row of this.db
       .select({ sessionId: sessionOperations.sessionId })
@@ -382,6 +429,14 @@ export class SessionOperationWorker {
       .where(eq(sessionOperations.status, 'pending'))
       .all())
       this.wake(row.sessionId);
+  }
+
+  private attemptForOperation(operationId: string) {
+    return this.db
+      .select()
+      .from(sessionTurnAttempts)
+      .where(eq(sessionTurnAttempts.operationId, operationId))
+      .get();
   }
 
   cancelPending(sessionId: string): Promise<void> {
@@ -421,10 +476,15 @@ export class SessionOperationWorker {
     });
     for (const item of pending)
       if (item.eventId)
-        await this.events.update(item.eventId, {
-          deliveryStatus: 'cancelled',
-          deliveryError: 'Queued message cancelled',
-        });
+        await this.events.update(
+          item.eventId,
+          {
+            deliveryStatus: 'cancelled',
+            deliveryError: 'Queued message cancelled',
+          },
+          undefined,
+          ['deliveryFailure'],
+        );
   }
 
   /** Stop dispatch before retiring a workspace; keep all acceptance behind the same lane. */
@@ -464,7 +524,8 @@ export class SessionOperationWorker {
   async changeQueuedMessage(
     sessionId: string,
     commandId: string,
-    action: 'cancel' | 'up' | 'down',
+    action: 'cancel' | 'up' | 'down' | 'edit',
+    input?: string,
   ): Promise<void> {
     await this.commands.run(sessionId, async () => {
       const pending = this.db
@@ -482,7 +543,34 @@ export class SessionOperationWorker {
       const index = pending.findIndex((item) => item.commandId === commandId);
       if (index < 0) throw new Error('Message is already running or is no longer queued');
       const item = pending[index];
-      if (action === 'cancel') {
+      if (action !== 'cancel' && item.status === 'unknown')
+        throw new Error('Resolve uncertain delivery before changing this message');
+      if (action === 'edit') {
+        const text = input?.trim();
+        if (!text) throw new Error('Message cannot be empty');
+        if (Buffer.byteLength(text) > 1_048_576)
+          throw new Error('Message exceeds the acceptance limit');
+        const payload = messageSchema.parse(JSON.parse(item.payload));
+        const committed = this.db.transaction((tx) => {
+          const updated = tx
+            .update(sessionOperations)
+            .set({ payload: JSON.stringify({ ...payload, text }), updatedAt: new Date() })
+            .where(and(eq(sessionOperations.id, item.id), eq(sessionOperations.status, 'pending')))
+            .returning()
+            .get();
+          if (!updated) throw new Error('Message is already running or is no longer queued');
+          if (!item.eventId) throw new Error('Message event is missing');
+          const event = this.events.updateInTransaction(
+            tx,
+            item.eventId,
+            { content: text },
+            { promptTokens: Math.ceil(text.length / 4) },
+          );
+          if (!event) throw new Error('Message event is missing');
+          return event;
+        });
+        this.events.publishCommitted(committed);
+      } else if (action === 'cancel') {
         this.db.transaction((tx) => {
           tx.update(sessionOperations)
             .set({ status: 'cancelled' })
@@ -494,13 +582,20 @@ export class SessionOperationWorker {
             .run();
         });
         if (item.eventId)
-          await this.events.update(item.eventId, {
-            deliveryStatus: 'cancelled',
-            deliveryError: 'Queued message cancelled',
-          });
+          await this.events.update(
+            item.eventId,
+            {
+              deliveryStatus: 'cancelled',
+              deliveryError: 'Queued message cancelled',
+            },
+            undefined,
+            ['deliveryFailure'],
+          );
       } else {
         const neighbor = pending[index + (action === 'up' ? -1 : 1)];
         if (!neighbor) return;
+        if (neighbor.status === 'unknown')
+          throw new Error('Resolve uncertain delivery before reordering these messages');
         this.db.transaction((tx) => {
           tx.update(sessionOperations)
             .set({ queuePosition: neighbor.queuePosition })
@@ -519,6 +614,7 @@ export class SessionOperationWorker {
   async resumeQueue(sessionId: string): Promise<void> {
     await this.commands.run(sessionId, async () => {
       if (!this.accepting) throw new Error('Server is stopping');
+      this.db.transaction((tx) => cancelRemovedMessageOperations(tx, sessionId));
       if (this.running.has(sessionId)) throw new Error('A turn is still running');
       if (
         this.db
@@ -556,7 +652,7 @@ export class SessionOperationWorker {
     execute: () => Promise<void>,
     commandId: string = randomUUID(),
   ): Promise<void> {
-    return this.commands.run(sessionId, async () => {
+    const command = this.commands.run(sessionId, async () => {
       if (!this.accepting) throw new Error('Server is stopping');
       const fingerprint = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
       const previous = this.db
@@ -619,5 +715,6 @@ export class SessionOperationWorker {
         throw error;
       }
     });
+    return command.finally(() => this.wake(sessionId));
   }
 }

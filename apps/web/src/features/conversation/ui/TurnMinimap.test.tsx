@@ -49,6 +49,7 @@ const mockTurns: ConversationTurn[] = [
 ];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   document.body.innerHTML = '';
 });
 
@@ -105,4 +106,158 @@ it('selects the latest full turn and handler when unchanged previews skip render
   expect(oldHandler).not.toHaveBeenCalled();
   expect(currentHandler).toHaveBeenCalledExactlyOnceWith(latest);
   act(() => root.unmount());
+});
+
+function renderPointerMinimap() {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const onSelect = vi.fn();
+  let frame: FrameRequestCallback | undefined;
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    frame = callback;
+    return 1;
+  });
+  const cancelFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+  act(() =>
+    root.render(<TurnMinimap turns={mockTurns} activeTurnIndex={0} onSelectTurn={onSelect} />),
+  );
+  const rail = container.querySelector('[aria-label="Conversation turn timeline minimap"]')!;
+  vi.spyOn(rail, 'getBoundingClientRect').mockReturnValue({
+    top: 100,
+    bottom: 120,
+    left: 200,
+    right: 232,
+    height: 20,
+    width: 32,
+    x: 200,
+    y: 100,
+    toJSON: () => ({}),
+  });
+  Object.assign(rail, {
+    setPointerCapture: vi.fn(),
+    hasPointerCapture: vi.fn(() => true),
+    releasePointerCapture: vi.fn(),
+  });
+  const pointer = (type: string, x = 220, y = 105, pointerType = 'mouse') => {
+    const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 });
+    Object.defineProperties(event, {
+      pointerId: { value: 1 },
+      pointerType: { value: pointerType },
+    });
+    act(() => rail.dispatchEvent(event));
+  };
+  const flushFrame = () => act(() => frame?.(0));
+  const expectResting = () => {
+    for (const tick of container.querySelectorAll('button[aria-label^="Turn "] > span')) {
+      expect((tick as HTMLElement).style.transform).toBe('scale(0.5, 1)');
+    }
+  };
+  const expectHovered = () => {
+    expect((container.querySelector('button > span') as HTMLElement).style.transform).not.toBe(
+      'scale(0.5, 1)',
+    );
+  };
+  return {
+    container,
+    root,
+    onSelect,
+    pointer,
+    flushFrame,
+    cancelFrame,
+    expectResting,
+    expectHovered,
+  };
+}
+
+it('keeps focused and active ticks flat when the pointer is elsewhere', () => {
+  const view = renderPointerMinimap();
+  act(() => (view.container.querySelector('button') as HTMLButtonElement).focus());
+  view.expectResting();
+  expect(view.container.querySelector('button[aria-current="location"] > span')).toHaveProperty(
+    'style.opacity',
+    '1',
+  );
+  act(() => view.root.unmount());
+});
+
+it('clears hover on pointer exit, including a pending animation frame', () => {
+  const view = renderPointerMinimap();
+  view.pointer('pointermove');
+  view.flushFrame();
+  view.expectHovered();
+  view.pointer('pointermove', 220, 115);
+  view.pointer('pointerout', 100, 115);
+  view.expectResting();
+  expect(view.cancelFrame).toHaveBeenCalled();
+  view.flushFrame();
+  view.expectResting();
+  act(() => view.root.unmount());
+});
+
+it('keeps captured scrubbing functional without enlarging ticks outside the rail', () => {
+  const view = renderPointerMinimap();
+  view.pointer('pointerdown');
+  view.pointer('pointermove');
+  view.flushFrame();
+  view.expectHovered();
+  view.onSelect.mockClear();
+  view.pointer('pointermove', 100, 140);
+  view.expectResting();
+  view.pointer('pointerup', 100, 140);
+  view.flushFrame();
+  view.expectResting();
+  expect(view.onSelect).toHaveBeenCalledExactlyOnceWith(mockTurns[1]);
+  act(() => view.root.unmount());
+});
+
+it('clears hover when a captured pointer is released outside without another move', () => {
+  const view = renderPointerMinimap();
+  view.pointer('pointermove');
+  view.flushFrame();
+  view.expectHovered();
+  view.pointer('pointerdown');
+  view.pointer('pointerup', 100, 140);
+  view.expectResting();
+  expect(view.onSelect).toHaveBeenCalledExactlyOnceWith(mockTurns[1]);
+  act(() => view.root.unmount());
+});
+
+it.each(['pointercancel', 'lostpointercapture'])('clears hover when %s ends a drag', (event) => {
+  const view = renderPointerMinimap();
+  view.pointer('pointerdown');
+  view.pointer('pointermove');
+  view.flushFrame();
+  view.expectHovered();
+  view.onSelect.mockClear();
+  view.pointer(event);
+  view.expectResting();
+  view.pointer('pointerup');
+  expect(view.onSelect).not.toHaveBeenCalled();
+  act(() => view.root.unmount());
+});
+
+it('clears hover and dragging when the window loses focus', () => {
+  const view = renderPointerMinimap();
+  view.pointer('pointerdown');
+  view.pointer('pointermove');
+  view.flushFrame();
+  view.expectHovered();
+  view.onSelect.mockClear();
+  act(() => window.dispatchEvent(new Event('blur')));
+  view.expectResting();
+  view.pointer('pointerup');
+  expect(view.onSelect).not.toHaveBeenCalled();
+  act(() => view.root.unmount());
+});
+
+it('does not leave hover enlargement after touch input', () => {
+  const view = renderPointerMinimap();
+  view.pointer('pointerdown', 220, 105, 'touch');
+  view.pointer('pointermove', 220, 115, 'touch');
+  view.pointer('pointerup', 220, 115, 'touch');
+  view.flushFrame();
+  view.expectResting();
+  expect(view.onSelect).toHaveBeenCalledExactlyOnceWith(mockTurns[1]);
+  act(() => view.root.unmount());
 });

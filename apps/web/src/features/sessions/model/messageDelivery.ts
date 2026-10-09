@@ -3,7 +3,7 @@ import type { SessionEventRow } from '@agentctl/shared';
 import { api } from '@agentctl/api-client';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 
-type DeliveryStatus = 'queued' | 'sending' | 'accepted' | 'failed';
+type DeliveryStatus = 'queued' | 'sending' | 'accepted' | 'failed' | 'cancelled';
 let lastOptimisticId = 0;
 
 export function nextOptimisticEventId(): number {
@@ -17,11 +17,15 @@ export function acknowledgeSessionInput(
   sessionId: string,
   clientMessageId: string,
   eventId: number,
+  optimisticEventId?: number,
+  deliveryStatus: 'accepted' | 'queued' = 'accepted',
 ): void {
   queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), (old = []) => {
     const existing = old.find((event) => event.id === eventId);
     const optimistic = old.find(
-      (event) => event.type === 'text' && event.data.clientMessageId === clientMessageId,
+      (event) =>
+        event.type === 'text' &&
+        (event.data.clientMessageId === clientMessageId || event.id === optimisticEventId),
     );
     const accepted =
       existing ??
@@ -29,13 +33,16 @@ export function acknowledgeSessionInput(
         ? {
             ...optimistic,
             id: eventId,
-            data: { ...optimistic.data, deliveryStatus: 'accepted' as const },
+            data: { ...optimistic.data, clientMessageId, deliveryStatus },
           }
         : undefined);
     const remaining = old.filter(
       (event) =>
         event.id !== eventId &&
-        !(event.type === 'text' && event.data.clientMessageId === clientMessageId),
+        !(
+          event.type === 'text' &&
+          (event.data.clientMessageId === clientMessageId || event.id === optimisticEventId)
+        ),
     );
     if (accepted) remaining.push(accepted);
     return remaining.sort((a, b) =>

@@ -76,3 +76,50 @@ test('does not create a separate conversation turn for a native child transcript
     'user',
   ]);
 });
+
+test('keeps queued and cancelled input out of the chat and minimap until dispatch', () => {
+  const active = row(
+    1,
+    'text',
+    { role: 'user', content: 'active', deliveryStatus: 'accepted' },
+    undefined,
+    'a',
+  );
+  const waiting = row(
+    2,
+    'text',
+    { role: 'user', content: 'waiting', deliveryStatus: 'queued' },
+    undefined,
+    'b',
+  );
+  const events = [
+    active,
+    waiting,
+    row(3, 'text', { role: 'provider', content: 'still responding' }, 1, 'a'),
+    row(4, 'text', { role: 'user', content: 'removed', deliveryStatus: 'cancelled' }),
+    row(-1, 'text', { role: 'user', content: 'unsent', deliveryStatus: 'failed' }),
+  ];
+  expect(orderConversationEvents(events).map((event) => event.id)).toEqual([1, 3]);
+  expect(groupFeedEvents(events, 3, true).map((group) => group.type)).toEqual(['user', 'agent']);
+  expect(groupConversationTurns(events).map((turn) => turn.userEvent.id)).toEqual([1]);
+  expect(waiting.data).toMatchObject({ deliveryStatus: 'queued' });
+  const dispatched = events.map((event) =>
+    event === waiting
+      ? ({ ...waiting, data: { ...waiting.data, deliveryStatus: 'accepted' } } as SessionEventRow)
+      : event,
+  );
+  expect(
+    groupFeedEvents(dispatched, null)
+      .filter((group) => group.type === 'user')
+      .map((group) => group.event.id),
+  ).toEqual([1, 2]);
+  expect(groupConversationTurns(dispatched).map((turn) => turn.userEvent.id)).toEqual([1, 2]);
+});
+
+test('retains immediate optimistic input and failed dispatched turns in chat', () => {
+  const events = [
+    row(1, 'text', { role: 'user', content: 'failed turn', deliveryStatus: 'failed' }),
+    row(-1, 'text', { role: 'user', content: 'immediate send', deliveryStatus: 'sending' }),
+  ];
+  expect(orderConversationEvents(events).map((event) => event.id)).toEqual([1, -1]);
+});
