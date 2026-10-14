@@ -1,9 +1,16 @@
+import type { CreatePullRequestResult } from '@agentctl/shared';
 import { ConfirmationModal } from '@agentctl/ui';
 import { ApplySessionDialog } from './ApplySessionDialog';
 import { CreatePullRequestDialog } from './CreatePullRequestDialog';
 
 interface ReviewDialogsProps {
   sessionId: string;
+  branches: string[];
+  mode: 'local' | 'worktree';
+  uncommittedCount: number;
+  workspaceBusy: boolean;
+  defaultMessage?: string;
+  onCommitAll: (message: string) => Promise<void>;
   isDiscardModalOpen: boolean;
   isApplyDialogOpen: boolean;
   isPullRequestDialogOpen: boolean;
@@ -17,12 +24,18 @@ interface ReviewDialogsProps {
   onSetApplyDialogOpen: (open: boolean) => void;
   onSetPullRequestDialogOpen: (open: boolean) => void;
   onCommitMessageChange: (val: string) => void;
-  onConfirmApply: () => Promise<void>;
-  onPullRequestSuccess?: (url: string, created: boolean) => void;
+  onConfirmApply: (message: string, targetBranch?: string) => Promise<void>;
+  onPullRequestSuccess?: (url: string, status: CreatePullRequestResult['status']) => void;
 }
 
 export function ReviewDialogs({
   sessionId,
+  branches,
+  mode,
+  uncommittedCount,
+  workspaceBusy,
+  defaultMessage,
+  onCommitAll,
   isDiscardModalOpen,
   isApplyDialogOpen,
   isPullRequestDialogOpen,
@@ -54,6 +67,14 @@ export function ReviewDialogs({
       />
 
       <ApplySessionDialog
+        sessionId={sessionId}
+        branches={branches}
+        mode={mode}
+        currentBranch={currentBranch}
+        uncommittedCount={uncommittedCount}
+        workspaceBusy={workspaceBusy}
+        defaultMessage={defaultMessage}
+        onCommitAll={onCommitAll}
         open={isApplyDialogOpen}
         onOpenChange={onSetApplyDialogOpen}
         baseBranch={defaultBaseBranch ?? 'main'}
@@ -63,6 +84,8 @@ export function ReviewDialogs({
       />
 
       <CreatePullRequestDialog
+        workspaceBusy={workspaceBusy}
+        uncommittedCount={uncommittedCount}
         open={isPullRequestDialogOpen}
         onOpenChange={onSetPullRequestDialogOpen}
         sessionId={sessionId}

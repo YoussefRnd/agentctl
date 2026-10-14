@@ -336,13 +336,14 @@ export class SessionManager {
     sessionId: string,
     action: 'merge' | 'discard',
     commitMessage?: string,
+    targetBranch?: string,
   ): Promise<void> {
     return this.operationWorker.retireSession(
       sessionId,
       'session.finalize',
-      { action, commitMessage },
+      { action, commitMessage, targetBranch },
       () => this.runtimeRegistry.stopSessionAndWait(sessionId),
-      () => this.lifecycle.finalizeSession(sessionId, action, commitMessage),
+      () => this.lifecycle.finalizeSession(sessionId, action, commitMessage, targetBranch),
     );
   }
 

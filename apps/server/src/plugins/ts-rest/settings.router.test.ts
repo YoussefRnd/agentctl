@@ -10,6 +10,20 @@ async function settingsApp(initial: Record<string, string> = {}) {
   const publishState = vi.fn();
   app.decorate('providerRegistry', {
     getSettings: () => ({ ...values }),
+    getProvider: (id: string) =>
+      id === 'writer'
+        ? {
+            isInstalled: true,
+            toDiscovery: () => ({
+              enabled: true,
+              hidden: false,
+              customModels: [{ id: 'custom', name: 'Custom' }],
+              configOptions: [
+                { id: 'llm', category: 'model', options: [{ value: 'fast', name: 'Fast' }] },
+              ],
+            }),
+          }
+        : undefined,
     updateSetting: (key: string, value: string) => {
       values[key] = value;
     },
@@ -94,6 +108,80 @@ test('malformed saved fonts use defaults and invalid patches publish no change',
     });
     expect(response.statusCode).toBe(400);
     expect(publishState).not.toHaveBeenCalled();
+  } finally {
+    await app.close();
+  }
+});
+
+test('generation settings round-trip a dedicated provider/model and reset to session defaults', async () => {
+  const { app, values } = await settingsApp();
+  try {
+    expect((await app.inject('/api/settings')).json().gitTextGeneration).toBeNull();
+    const selection = { providerId: 'writer', modelId: 'fast' };
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      payload: { gitTextGeneration: selection },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().gitTextGeneration).toEqual(selection);
+    expect(JSON.parse(values.gitTextGeneration!)).toEqual(selection);
+    expect(
+      (
+        await app.inject({ method: 'PATCH', url: '/api/settings', payload: { showThinking: true } })
+      ).json().gitTextGeneration,
+    ).toEqual(selection);
+    expect((await app.inject('/api/settings')).json().gitTextGeneration).toEqual(selection);
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: '/api/settings',
+          payload: { gitTextGeneration: null },
+        })
+      ).json().gitTextGeneration,
+    ).toBeNull();
+  } finally {
+    await app.close();
+  }
+});
+test.each([
+  { providerId: 'missing', modelId: null },
+  { providerId: 'writer', modelId: 'wrong-provider-model' },
+  { providerId: '', modelId: 'fast' },
+  { providerId: 'writer' },
+])('invalid generation selections cannot partially save other settings: %j', async (selection) => {
+  const { app, values, publishState } = await settingsApp({
+    showThinking: 'true',
+    gitTextGeneration: JSON.stringify({ providerId: 'writer', modelId: null }),
+  });
+  try {
+    const before = { ...values };
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      payload: { gitTextGeneration: selection, showThinking: false },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(values).toEqual(before);
+    expect(publishState).not.toHaveBeenCalled();
+  } finally {
+    await app.close();
+  }
+});
+test('custom models and provider defaults can be saved, and malformed saved settings can be repaired', async () => {
+  const { app } = await settingsApp({ gitTextGeneration: '{broken' });
+  try {
+    expect((await app.inject('/api/settings')).json().gitTextGeneration).toBeNull();
+    for (const modelId of ['custom', null]) {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/settings',
+        payload: { gitTextGeneration: { providerId: 'writer', modelId } },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().gitTextGeneration).toEqual({ providerId: 'writer', modelId });
+    }
   } finally {
     await app.close();
   }

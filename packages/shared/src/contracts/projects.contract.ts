@@ -46,6 +46,7 @@ export const createPullRequestBodySchema = z.object({
   title: z.string().trim().min(1),
   body: z.string(),
   baseBranch: z.string().trim().min(1),
+  headBranch: z.string().trim().min(1).optional(),
 });
 export type CreatePullRequestBody = z.infer<typeof createPullRequestBodySchema>;
 

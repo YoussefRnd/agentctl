@@ -1,3 +1,6 @@
+import { generateGitText } from '@agentctl/core';
+import { AcpAgentDriver } from '@agentctl/core/acp';
+import { buildGitTextContext, resolveGitTextGenerationSelection } from '@agentctl/core/git';
 import { readSessionExecutionState } from '@agentctl/core/session';
 import { canMutateWorkspace } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
@@ -39,9 +42,34 @@ async function getSessionGitContext(fastify: FastifyInstance, id: string, requir
   return { session, project };
 }
 
+/** Keep Git mutations in the same session lane as checkout/teardown, and
+ * publish partial changes (index updates, fetched refs, hooks) even on failure. */
+async function runSessionGitMutation<T>(
+  fastify: FastifyInstance,
+  id: string,
+  action: string,
+  operation: (context: Awaited<ReturnType<typeof getSessionGitContext>>) => Promise<T>,
+): Promise<T> {
+  try {
+    return await fastify.sessionManager.runWorkspaceCommand(id, { action }, async () => {
+      const context = await getSessionGitContext(fastify, id);
+      try {
+        return await operation(context);
+      } finally {
+        publishWorkspaceChange(fastify, id);
+      }
+    });
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(error instanceof Error ? error.message : String(error), 400);
+  }
+}
+
 export function createSessionsRouter(
   fastify: FastifyInstance,
 ): RouterImplementation<typeof sessionsContract> {
+  const generatingDrafts = new Set<string>();
+  const textDriver = new AcpAgentDriver();
   return {
     resumeSessionQueue: async ({ params }) => {
       try {
@@ -139,23 +167,53 @@ export function createSessionsRouter(
         body: { success },
       });
     },
+    getSessionMergePreview: async ({ params, query }) => {
+      try {
+        const { session, project } = await getSessionGitContext(fastify, params.id);
+        if (session.mode !== 'worktree')
+          throw new AppError('Only worktree sessions merge into a destination branch', 400);
+        const result = await fastify.worktreeManager.getMergePreview(
+          project.repoRoot!,
+          session.worktreePath,
+          session.branch,
+          query.targetBranch ?? session.baseBranch ?? 'main',
+        );
+        if (
+          result.hasMergeHead &&
+          query.targetBranch &&
+          query.targetBranch !== (session.baseBranch ?? 'main')
+        )
+          throw new AppError(
+            `Finish or abort the pending merge into ${session.baseBranch ?? 'main'} before choosing another destination.`,
+            400,
+          );
+        return { status: 200 as const, body: result };
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode === 404) throw error;
+        return {
+          status: 400 as const,
+          body: { message: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    },
     mergeSession: async ({
       params,
       body,
     }: {
       params: { id: string };
-      body: { commitMessage?: string };
+      body: { commitMessage?: string; targetBranch?: string };
     }) => {
       const { id } = params;
-      const { commitMessage } = body;
+      const { commitMessage, targetBranch } = body;
       try {
-        await fastify.sessionService.finalizeSession(id, 'merge', commitMessage);
+        await fastify.sessionService.finalizeSession(id, 'merge', commitMessage, targetBranch);
         publishWorkspaceChange(fastify, id);
         return {
           status: 200 as const,
           body: { success: true },
         };
       } catch (err) {
+        publishWorkspaceChange(fastify, id);
         return {
           status: 400 as const,
           body: { message: err instanceof Error ? err.message : String(err) },
@@ -295,9 +353,9 @@ export function createSessionsRouter(
     stageFile: async ({ params, body }: { params: { id: string }; body: { filePath: string } }) => {
       const { id } = params;
       const { filePath } = body;
-      const { session, project } = await getSessionGitContext(fastify, id);
-      await fastify.worktreeManager.stageFile(project.repoRoot!, session.worktreePath, filePath);
-      publishWorkspaceChange(fastify, id);
+      await runSessionGitMutation(fastify, id, 'stageFile', ({ session, project }) =>
+        fastify.worktreeManager.stageFile(project.repoRoot!, session.worktreePath, filePath),
+      );
       return { status: 200 as const, body: { success: true } };
     },
     revertFile: async ({
@@ -309,9 +367,9 @@ export function createSessionsRouter(
     }) => {
       const { id } = params;
       const { filePath } = body;
-      const { session, project } = await getSessionGitContext(fastify, id);
-      await fastify.worktreeManager.revertFile(project.repoRoot!, session.worktreePath, filePath);
-      publishWorkspaceChange(fastify, id);
+      await runSessionGitMutation(fastify, id, 'revertFile', ({ session, project }) =>
+        fastify.worktreeManager.revertFile(project.repoRoot!, session.worktreePath, filePath),
+      );
       return { status: 200 as const, body: { success: true } };
     },
     unstageFile: async ({
@@ -323,23 +381,23 @@ export function createSessionsRouter(
     }) => {
       const { id } = params;
       const { filePath } = body;
-      const { session, project } = await getSessionGitContext(fastify, id);
-      await fastify.worktreeManager.unstageFile(project.repoRoot!, session.worktreePath, filePath);
-      publishWorkspaceChange(fastify, id);
+      await runSessionGitMutation(fastify, id, 'unstageFile', ({ session, project }) =>
+        fastify.worktreeManager.unstageFile(project.repoRoot!, session.worktreePath, filePath),
+      );
       return { status: 200 as const, body: { success: true } };
     },
     stageAllFiles: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const { session, project } = await getSessionGitContext(fastify, id);
-      await fastify.worktreeManager.stageAll(project.repoRoot!, session.worktreePath);
-      publishWorkspaceChange(fastify, id);
+      await runSessionGitMutation(fastify, id, 'stageAll', ({ session, project }) =>
+        fastify.worktreeManager.stageAll(project.repoRoot!, session.worktreePath),
+      );
       return { status: 200 as const, body: { success: true } };
     },
     unstageAllFiles: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const { session, project } = await getSessionGitContext(fastify, id);
-      await fastify.worktreeManager.unstageAll(project.repoRoot!, session.worktreePath);
-      publishWorkspaceChange(fastify, id);
+      await runSessionGitMutation(fastify, id, 'unstageAll', ({ session, project }) =>
+        fastify.worktreeManager.unstageAll(project.repoRoot!, session.worktreePath),
+      );
       return { status: 200 as const, body: { success: true } };
     },
     commitChanges: async ({
@@ -351,15 +409,15 @@ export function createSessionsRouter(
     }) => {
       const { id } = params;
       const { message } = body;
-      const { session, project } = await getSessionGitContext(fastify, id);
       try {
-        await fastify.worktreeManager.commit(
-          project.repoRoot!,
-          session.worktreePath,
-          message,
-          body.includeUnstaged,
+        await runSessionGitMutation(fastify, id, 'commit', ({ session, project }) =>
+          fastify.worktreeManager.commit(
+            project.repoRoot!,
+            session.worktreePath,
+            message,
+            body.includeUnstaged,
+          ),
         );
-        publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: { success: true } };
       } catch (err) {
         return {
@@ -370,10 +428,10 @@ export function createSessionsRouter(
     },
     pushChanges: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const { session, project } = await getSessionGitContext(fastify, id);
       try {
-        const result = await fastify.worktreeManager.push(project.repoRoot!, session.worktreePath);
-        publishWorkspaceChange(fastify, id);
+        const result = await runSessionGitMutation(fastify, id, 'push', ({ session, project }) =>
+          fastify.worktreeManager.push(project.repoRoot!, session.worktreePath),
+        );
         return { status: 200 as const, body: result };
       } catch (err) {
         return {
@@ -384,10 +442,10 @@ export function createSessionsRouter(
     },
     pullChanges: async ({ params }: { params: { id: string } }) => {
       const { id } = params;
-      const { session, project } = await getSessionGitContext(fastify, id);
       try {
-        const result = await fastify.worktreeManager.pull(project.repoRoot!, session.worktreePath);
-        publishWorkspaceChange(fastify, id);
+        const result = await runSessionGitMutation(fastify, id, 'pull', ({ session, project }) =>
+          fastify.worktreeManager.pull(project.repoRoot!, session.worktreePath),
+        );
         return { status: 200 as const, body: result };
       } catch (err) {
         return {
@@ -397,10 +455,14 @@ export function createSessionsRouter(
       }
     },
     fetchChanges: async ({ params }) => {
-      const { session, project } = await getSessionGitContext(fastify, params.id);
       try {
-        const result = await fastify.worktreeManager.fetch(project.repoRoot!, session.worktreePath);
-        publishWorkspaceChange(fastify, params.id);
+        const result = await runSessionGitMutation(
+          fastify,
+          params.id,
+          'fetch',
+          ({ session, project }) =>
+            fastify.worktreeManager.fetch(project.repoRoot!, session.worktreePath),
+        );
         return { status: 200 as const, body: result };
       } catch (err) {
         return {
@@ -459,21 +521,66 @@ export function createSessionsRouter(
       );
       return { status: 200 as const, body: status };
     },
+    generateGitDraft: async ({ params, body }) => {
+      if (generatingDrafts.has(params.id))
+        return {
+          status: 400 as const,
+          body: { message: 'A draft is already being generated for this session.' },
+        };
+      generatingDrafts.add(params.id);
+      try {
+        const { session, project } = await getSessionGitContext(fastify, params.id);
+        const { provider, modelId } = resolveGitTextGenerationSelection(
+          fastify.providerRegistry,
+          session,
+        );
+        const cwd = session.worktreePath || project.repoRoot!;
+        const context = await buildGitTextContext(cwd, body);
+        const launch = provider.getLaunchConfig(modelId, 'low');
+        const draft = await generateGitText(
+          textDriver,
+          launch,
+          {
+            providerId: provider.id,
+            selectedModel: modelId,
+            selectedThinkingEffort: 'low',
+            customModels: provider.toDiscovery().customModels,
+            features: provider.features,
+          },
+          context.prompt,
+          body.kind,
+        );
+        const latest = await buildGitTextContext(cwd, body);
+        if (latest.fingerprint !== context.fingerprint)
+          throw new Error(
+            'The selected changes changed while generating. Generate a new draft for the latest changes.',
+          );
+        return { status: 200 as const, body: draft };
+      } catch (error) {
+        return {
+          status: 400 as const,
+          body: { message: error instanceof Error ? error.message : String(error) },
+        };
+      } finally {
+        generatingDrafts.delete(params.id);
+      }
+    },
     createPullRequest: async ({ params, body }) => {
       const { id } = params;
-      const { session, project } = await getSessionGitContext(fastify, id);
 
       try {
-        const result = await fastify.worktreeManager.createPullRequest(
-          project.repoRoot!,
-          session.worktreePath,
-          {
-            title: body.title,
-            body: body.body,
-            baseBranch: body.baseBranch,
-          },
+        const result = await runSessionGitMutation(
+          fastify,
+          id,
+          'createPullRequest',
+          ({ session, project }) =>
+            fastify.worktreeManager.createPullRequest(project.repoRoot!, session.worktreePath, {
+              title: body.title,
+              body: body.body,
+              baseBranch: body.baseBranch,
+              headBranch: body.headBranch,
+            }),
         );
-        publishWorkspaceChange(fastify, id);
         return { status: 200 as const, body: result };
       } catch (err) {
         return {

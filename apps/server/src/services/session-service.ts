@@ -400,7 +400,12 @@ export class SessionService {
     return this.parseSessionRow(updatedSession);
   }
 
-  async finalizeSession(sessionId: string, action: 'merge' | 'discard', commitMessage?: string) {
+  async finalizeSession(
+    sessionId: string,
+    action: 'merge' | 'discard',
+    commitMessage?: string,
+    targetBranch?: string,
+  ) {
     const session = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
     });
@@ -409,8 +414,10 @@ export class SessionService {
       throw new AppError('Session not found', 404);
     }
 
+    if (targetBranch && session.mode !== 'worktree')
+      throw new AppError('Destination branches apply only to worktree sessions', 400);
     try {
-      await this.sessionManager.finalizeSession(sessionId, action, commitMessage);
+      await this.sessionManager.finalizeSession(sessionId, action, commitMessage, targetBranch);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (
@@ -542,7 +549,7 @@ export class SessionService {
 
     const project = session.project;
     if (!project.repoRoot) {
-      return { canMerge: true, hasConflicts: false, conflictingFiles: [] };
+      throw new AppError('Project repo root is not configured', 400);
     }
 
     const result = await this.worktreeManager.checkMergeConflicts(

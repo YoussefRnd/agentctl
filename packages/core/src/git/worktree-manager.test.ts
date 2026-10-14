@@ -47,6 +47,10 @@ describe('parseGitHubRemoteUrl', () => {
     ['https://github.com/agentctl/agentctl.git', 'https://github.com/agentctl/agentctl'],
     ['https://github.com/agentctl/agentctl', 'https://github.com/agentctl/agentctl'],
     ['https://gitlab.com/agentctl/agentctl.git', null],
+    ['ssh://git@github.com:22/agentctl/agentctl.git', 'https://github.com/agentctl/agentctl'],
+    ['https://github.com.evil.example/agentctl/agentctl.git', null],
+    ['https://notgithub.com/agentctl/agentctl.git', null],
+    ['/tmp/github.com/agentctl/agentctl.git', null],
   ])('normalizes %s', (remote, expected) => {
     expect(parseGitHubRemoteUrl(remote)).toBe(expected);
   });
@@ -189,11 +193,12 @@ describe('WorkspaceManager Integration Tests', () => {
     const mainFileContent = await fs.readFile(path.join(repoPath, 'feature.txt'), 'utf-8');
     expect(mainFileContent).toBe('my new feature');
 
-    // Verify directory is deleted
-    await expect(fs.stat(workspace.path)).rejects.toThrow();
+    // Keep the source history and local files until explicit session deletion.
+    expect((await fs.stat(workspace.path)).isDirectory()).toBe(true);
+    expect(await manager.listBranches(repoPath)).toContain(result.branch);
   });
 
-  test('should safely refresh branch with fast-forward, non-ancestor pre-refresh recording, and dirty protection', async () => {
+  test('refreshes only by fast-forward and preserves dirty files and diverged commits', async () => {
     const sessionId = 'test-refresh-session';
     const taskSlug = 'refresh-test';
 
@@ -235,14 +240,15 @@ describe('WorkspaceManager Integration Tests', () => {
     await simpleGit(repoPath).commit('amended commit', ['--amend']);
     const amendedMainCommit = (await simpleGit(repoPath).revparse(['HEAD'])).trim();
 
-    // Refresh branch onto amended main (non-ancestor)
-    const resetResult = await manager.refreshBranch(repoPath, result.path, 'master');
-    expect(resetResult.moved).toBe(true);
-    expect(resetResult.headCommit).toBe(amendedMainCommit);
-
-    // Verify pre-refresh ref was recorded
-    const preRefreshRef = (await wtGit.revparse(['refs/agentctl/pre-refresh'])).trim();
-    expect(preRefreshRef).toBe(previousWtCommit);
+    // Diverged history must never silently reset away session commits.
+    await expect(manager.refreshBranch(repoPath, result.path, 'master')).rejects.toThrow(
+      'diverged',
+    );
+    expect((await wtGit.revparse(['HEAD'])).trim()).toBe(previousWtCommit);
+    expect((await simpleGit(repoPath).revparse(['HEAD'])).trim()).toBe(amendedMainCommit);
+    expect(await fs.readFile(path.join(result.path, 'worktree-commit.txt'), 'utf8')).toBe(
+      'local worktree commit',
+    );
 
     // Clean up worktree
     await manager.removeWorktreeOnly(repoPath, result.path);

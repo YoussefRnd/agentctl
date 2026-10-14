@@ -132,12 +132,14 @@ export class SessionLifecycleService {
     sessionId: string,
     action: 'merge' | 'discard',
     commitMessage?: string,
+    targetBranch?: string,
   ): Promise<void> {
     await this.deps.sessionWorkspace.finalize(
       sessionId,
       action === 'merge' ? 'merged' : 'discarded',
       {
         commitMessage,
+        baseBranch: targetBranch,
       },
     );
   }

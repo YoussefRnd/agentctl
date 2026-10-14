@@ -1,3 +1,4 @@
+import { GitGenerationSettingsPanel } from './GitGenerationSettingsPanel';
 import { useTheme } from '@/shared';
 import { useProviders } from '@/features/providers';
 import { useSettings } from '../api/useSettings';
@@ -15,7 +16,7 @@ import type { FontConfig } from '@agentctl/shared';
 export function GeneralSettingsView() {
   const { themeMode, setThemeMode, lightTheme, darkTheme, setLightTheme, setDarkTheme } =
     useTheme();
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, isLoading: isLoadingSettings, isUpdating } = useSettings();
   const providersApi = useProviders(null);
 
   const {
@@ -177,6 +178,13 @@ export function GeneralSettingsView() {
           </div>
         </Card>
       </div>
+
+      <GitGenerationSettingsPanel
+        value={settings?.gitTextGeneration ?? null}
+        providers={providersApi.providers}
+        disabled={isLoadingSettings || isUpdating || providersApi.isLoadingProviders}
+        onChange={(gitTextGeneration) => updateSettings({ gitTextGeneration })}
+      />
 
       {/* Workspace Defaults Section */}
       <div className="space-y-2.5">

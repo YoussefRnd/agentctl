@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { XIcon } from 'lucide-react';
+import { XIcon } from '@primer/octicons-react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 
 import { cn } from '../../utils.js';
@@ -51,7 +51,7 @@ function DialogContent({
         <DialogPrimitive.Content
           data-slot="dialog-content"
           className={cn(
-            'liquid-glass motion-dialog data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 pointer-events-auto grid max-h-full w-full max-w-md min-w-0 gap-3 overflow-y-auto rounded-xl p-4 shadow-2xl outline-none',
+            'liquid-glass motion-dialog data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 pointer-events-auto grid max-h-full w-full max-w-md min-w-0 grid-cols-1 gap-3 overflow-y-auto rounded-xl p-4 shadow-2xl outline-none',
             className,
           )}
           {...props}

@@ -66,7 +66,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const switchBranchMutation = useMutation({
     mutationFn: (branch: string) => patchSession(sessionId, { branch }),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const switchBranch = useCallback(
@@ -78,7 +78,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const switchModeMutation = useMutation({
     mutationFn: (mode: 'local' | 'worktree') => switchSessionMode(sessionId, mode),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const switchMode = useCallback(
@@ -90,12 +90,12 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const stageMutation = useMutation({
     mutationFn: (filePath: string) => stageReviewFile(sessionId, filePath),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const revertMutation = useMutation({
     mutationFn: (filePath: string) => revertReviewFile(sessionId, filePath),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const stageFile = useCallback(
@@ -114,7 +114,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const unstageMutation = useMutation({
     mutationFn: (filePath: string) => unstageReviewFile(sessionId, filePath),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const unstageFile = useCallback(
@@ -126,7 +126,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const stageAllMutation = useMutation({
     mutationFn: () => stageAllReviewFiles(sessionId),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const stageAll = useCallback(async () => {
@@ -135,7 +135,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const unstageAllMutation = useMutation({
     mutationFn: () => unstageAllReviewFiles(sessionId),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'files'),
   });
 
   const unstageAll = useCallback(async () => {
@@ -145,7 +145,7 @@ export function useWorkspaceReviewState(sessionId: string) {
   const commitChangesMutation = useMutation({
     mutationFn: ({ message, includeUnstaged }: { message: string; includeUnstaged: boolean }) =>
       commitWorkspaceChanges(sessionId, message, includeUnstaged),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
   });
 
   const commitChanges = useCallback(
@@ -157,7 +157,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const pushChangesMutation = useMutation({
     mutationFn: () => pushWorkspaceChanges(sessionId),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
   });
 
   const pushChanges = useCallback(async () => {
@@ -166,7 +166,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const pullChangesMutation = useMutation({
     mutationFn: () => pullWorkspaceChanges(sessionId),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'git'),
   });
 
   const pullChanges = useCallback(async () => {
@@ -175,7 +175,7 @@ export function useWorkspaceReviewState(sessionId: string) {
 
   const mergeBranchMutation = useMutation({
     mutationFn: (branch: string) => mergeSessionBranch(sessionId, branch),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const mergeBranch = useCallback(
@@ -186,20 +186,26 @@ export function useWorkspaceReviewState(sessionId: string) {
   );
 
   const mergeMutation = useMutation({
-    mutationFn: (commitMessage?: string) => mergeSession(sessionId, commitMessage),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
+    mutationFn: ({
+      commitMessage,
+      targetBranch,
+    }: {
+      commitMessage?: string;
+      targetBranch?: string;
+    }) => mergeSession(sessionId, commitMessage, targetBranch),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const mergeSessionFn = useCallback(
-    async (commitMessage?: string) => {
-      await mergeMutation.mutateAsync(commitMessage);
+    async (commitMessage?: string, targetBranch?: string) => {
+      await mergeMutation.mutateAsync({ commitMessage, targetBranch });
     },
     [mergeMutation],
   );
 
   const discardMutation = useMutation({
     mutationFn: () => discardSession(sessionId),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId, 'session'),
   });
 
   const discardSessionFn = useCallback(async () => {

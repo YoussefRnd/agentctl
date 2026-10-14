@@ -147,12 +147,18 @@ export function ReviewView() {
     onSuccess: invalidateWorkspace,
   });
   const fetchChanges = async () => {
-    await fetchWorkspaceChanges(sessionId);
-    invalidateWorkspace();
+    try {
+      await fetchWorkspaceChanges(sessionId);
+    } finally {
+      invalidateWorkspace();
+    }
   };
   const createBranch = async (name: string) => {
-    await createWorkspaceBranch(sessionId, name);
-    invalidateWorkspace();
+    try {
+      await createWorkspaceBranch(sessionId, name);
+    } finally {
+      invalidateWorkspace();
+    }
   };
   const safeAction = async (operation: () => Promise<void>) => {
     try {
@@ -307,20 +313,20 @@ export function ReviewView() {
     gitStatus.branch !== 'HEAD';
 
   const pullRequestBlockedReason = useMemo(() => {
-    if (uncommittedCount > 0) return 'Commit or discard all changes before creating a pull request';
     if (!gitStatus.isRepo) return gitStatus.error ?? 'This workspace is not a Git repository';
     if (!gitStatus.branch || gitStatus.branch === 'HEAD')
       return 'Check out a branch before creating a pull request';
     if (!gitStatus.hasPrimaryRemote) return 'Configure a Git remote before creating a pull request';
     if (gitStatus.remoteProvider !== 'github')
       return 'Pull request creation currently supports GitHub remotes only';
-    if (gitStatus.branch === baseBranch)
-      return 'Create a feature branch before creating a pull request';
     return undefined;
-  }, [baseBranch, gitStatus, uncommittedCount]);
+  }, [gitStatus]);
 
   const gitActions = (
     <ReviewGitActions
+      sessionId={sessionData?.session.id ?? ''}
+      baseBranch={baseBranch}
+      mode={sessionData?.session.mode ?? 'local'}
       branch={gitStatus.branch}
       branches={branches}
       hasBranchChanges={files.length > 0}
@@ -396,6 +402,8 @@ export function ReviewView() {
     return (
       <ReviewClosedState
         sessionStatus={sessionStatus}
+        baseBranch={baseBranch}
+        mode={sessionData?.session.mode}
         canRecover={sessionStatus === 'discarded' && !!sessionData?.session.discardBackup}
         isRecovering={undoDiscard.isPending}
         onRecover={() => {
@@ -479,6 +487,14 @@ export function ReviewView() {
 
       <ReviewDialogs
         sessionId={sessionData?.session.id ?? ''}
+        branches={branches}
+        mode={sessionData?.session.mode ?? 'local'}
+        uncommittedCount={uncommittedCount}
+        workspaceBusy={!canMutateWorkspace(sessionStatus)}
+        defaultMessage={sessionData?.session.title || sessionData?.session.taskSlug}
+        onCommitAll={async (message) => {
+          await onCommitChanges(message, true);
+        }}
         isDiscardModalOpen={state.isDiscardModalOpen}
         isApplyDialogOpen={state.isApplyDialogOpen}
         isPullRequestDialogOpen={state.isPullRequestDialogOpen}
@@ -486,7 +502,7 @@ export function ReviewView() {
         isDiscarding={isDiscarding}
         defaultTitle={sessionData?.session.title ?? ''}
         defaultBaseBranch={baseBranch}
-        currentBranch={sessionData?.session.branch ?? ''}
+        currentBranch={gitStatus.branch ?? sessionData?.session.branch ?? ''}
         onCloseDiscardModal={() => {
           dispatch({ type: 'SET_DISCARD_MODAL_OPEN', payload: false });
         }}
@@ -510,16 +526,24 @@ export function ReviewView() {
         onCommitMessageChange={(val) => {
           dispatch({ type: 'SET_COMMIT_MESSAGE', payload: val });
         }}
-        onConfirmApply={async () => {
-          await onMerge(state.commitMessage.trim());
-          toast.success('Changes applied and session finished');
-        }}
-        onPullRequestSuccess={(url, created) => {
+        onConfirmApply={async (message, targetBranch) => {
+          await onMerge(message, targetBranch);
           toast.success(
-            created ? 'Pull request created' : 'Branch pushed. Finish the PR on GitHub.',
+            sessionData?.session.mode === 'worktree'
+              ? `Merged to ${targetBranch ?? baseBranch}. Source worktree kept.`
+              : 'Session finished',
+          );
+        }}
+        onPullRequestSuccess={(url, status) => {
+          toast.success(
+            status === 'created'
+              ? 'Pull request created'
+              : status === 'already_exists'
+                ? 'Branch pushed. Existing pull request updated.'
+                : 'Branch pushed. Finish the PR on GitHub.',
             {
               action: {
-                label: created ? 'Open PR' : 'Continue on GitHub',
+                label: status === 'needs_browser' ? 'Continue on GitHub' : 'Open PR',
                 onClick: () => {
                   window.open(url, '_blank');
                 },

@@ -4,6 +4,7 @@ import { simpleGit } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ReviewFile } from './utils.js';
@@ -47,8 +48,21 @@ export interface Workspace {
 }
 
 export function parseGitHubRemoteUrl(remoteUrl: string): string | null {
-  const match = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(remoteUrl.trim());
-  return match ? `https://github.com/${match[1]}/${match[2]}` : null;
+  const remote = remoteUrl.trim();
+  const scp = /^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/i.exec(remote);
+  if (scp) return `https://github.com/${scp[1]}/${scp[2]}`;
+  try {
+    const url = new URL(remote);
+    if (
+      url.hostname.toLowerCase() !== 'github.com' ||
+      !['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol)
+    )
+      return null;
+    const match = /^\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url.pathname);
+    return match ? `https://github.com/${match[1]}/${match[2]}` : null;
+  } catch {
+    return null;
+  }
 }
 
 export function parsePorcelainWorktrees(output: string): ListedWorktree[] {
@@ -239,7 +253,11 @@ export class WorkspaceManager {
     return validWorktrees;
   }
 
-  private async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
+  private async removeWorktree(
+    repoPath: string,
+    worktreePath: string,
+    force = true,
+  ): Promise<void> {
     let rootPath = worktreePath;
     try {
       const git = simpleGit(worktreePath);
@@ -250,7 +268,7 @@ export class WorkspaceManager {
     } catch {
       // ignore, fallback to worktreePath
     }
-    await simpleGit(repoPath).raw(['worktree', 'remove', '--force', rootPath]);
+    await simpleGit(repoPath).raw(['worktree', 'remove', ...(force ? ['--force'] : []), rootPath]);
   }
 
   private async deleteBranch(repoPath: string, branchName: string): Promise<void> {
@@ -320,7 +338,7 @@ export class WorkspaceManager {
         if (file.startsWith('.env')) {
           const src = path.join(repoPath, file);
           const dest = path.join(storagePath, file);
-          await fs.copyFile(src, dest).catch(() => undefined);
+          await fs.copyFile(src, dest, constants.COPYFILE_EXCL).catch(() => undefined);
         }
       }
     } catch {
@@ -353,7 +371,7 @@ export class WorkspaceManager {
               await fs.symlink(src, dest, 'dir').catch(() => undefined);
             } else {
               // Copy individual files
-              await fs.copyFile(src, dest).catch(() => undefined);
+              await fs.copyFile(src, dest, constants.COPYFILE_EXCL).catch(() => undefined);
             }
           }
         }
@@ -508,9 +526,13 @@ export class WorkspaceManager {
             workspacePath: workdirPrefix ? path.join(storagePath, workdirPrefix) : storagePath,
           };
         }
-        // Git checkout preserves the directory and rejects unsafe transitions.
+        await this.assertNoGitOperation(storagePath);
+        const incomingRef = startPoint ?? `refs/heads/${branchName}`;
+        await this.assertIgnoredFilesSafe(storagePath, incomingRef);
         await current.raw(
-          startPoint ? ['checkout', '-b', branchName, startPoint] : ['checkout', branchName],
+          startPoint
+            ? ['checkout', '--no-overwrite-ignore', '-b', branchName, startPoint]
+            : ['checkout', '--no-overwrite-ignore', branchName],
         );
       } else {
         await git.raw(
@@ -537,7 +559,22 @@ export class WorkspaceManager {
   async removeWorktreeOnly(repoPath: string, worktreePath: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
       try {
-        await this.removeWorktree(repoPath, worktreePath);
+        if ((await fs.stat(worktreePath).catch(() => null))?.isDirectory()) {
+          const root = (await simpleGit(worktreePath).revparse(['--show-toplevel'])).trim();
+          if (
+            await simpleGit(root).raw([
+              'ls-files',
+              '--others',
+              '--ignored',
+              '--exclude-standard',
+              '-z',
+            ])
+          )
+            throw new Error(
+              'This worktree contains ignored local files. Move them to the project before switching workspace mode. Your worktree has been kept.',
+            );
+        }
+        await this.removeWorktree(repoPath, worktreePath, false);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         if (
@@ -621,6 +658,133 @@ export class WorkspaceManager {
     );
   }
 
+  private async mergeDestination(repoPath: string, baseBranch: string) {
+    const git = simpleGit(repoPath);
+    await git.raw(['check-ref-format', '--branch', baseBranch]);
+    const head = (await git.revparse(['--verify', `refs/heads/${baseBranch}^{commit}`])).trim();
+    if (!/^[0-9a-f]{40,64}$/i.test(head))
+      throw new Error(`Cannot resolve destination branch ${baseBranch}`);
+    const checkout = (await this.listWorktrees(repoPath)).find((wt) => wt.branch === baseBranch);
+    return { head, path: checkout?.path };
+  }
+
+  private async assertNoGitOperation(worktreePath: string, allowMergeHead = false): Promise<void> {
+    const git = simpleGit(worktreePath);
+    for (const marker of [
+      'MERGE_HEAD',
+      'CHERRY_PICK_HEAD',
+      'REVERT_HEAD',
+      'rebase-merge',
+      'rebase-apply',
+    ]) {
+      if (allowMergeHead && marker === 'MERGE_HEAD') continue;
+      const markerPath = (await git.raw(['rev-parse', '--git-path', marker])).trim();
+      if (
+        await fs
+          .access(path.resolve(worktreePath, markerPath))
+          .then(() => true)
+          .catch(() => false)
+      ) {
+        throw new Error(`Finish or abort the Git operation in ${worktreePath} before merging.`);
+      }
+    }
+  }
+
+  private async assertIgnoredFilesSafe(worktreePath: string, incomingRef: string): Promise<void> {
+    const root = (await simpleGit(worktreePath).revparse(['--show-toplevel'])).trim();
+    const git = simpleGit(root);
+    const ignored = (
+      await git.raw(['ls-files', '--others', '--ignored', '--exclude-standard', '-z'])
+    )
+      .split('\0')
+      .filter(Boolean);
+    if (!ignored.length) return;
+    const incoming = new Set(
+      (await git.raw(['ls-tree', '-r', '--name-only', '-z', incomingRef]))
+        .split('\0')
+        .filter(Boolean),
+    );
+    const directories = new Set<string>();
+    for (const file of incoming) {
+      let index = file.indexOf('/');
+      while (index !== -1) {
+        directories.add(file.slice(0, index));
+        index = file.indexOf('/', index + 1);
+      }
+    }
+    for (const file of ignored) {
+      let collision = incoming.has(file) || directories.has(file);
+      let index = file.indexOf('/');
+      while (!collision && index !== -1) {
+        collision = incoming.has(file.slice(0, index));
+        index = file.indexOf('/', index + 1);
+      }
+      if (collision)
+        throw new Error(
+          `The merge would overwrite ignored file ${file} in ${root}. Move or rename it, then retry. Your files have been kept.`,
+        );
+    }
+  }
+
+  async getMergePreview(
+    repoPath: string,
+    worktreePath: string,
+    branchName: string,
+    baseBranch: string,
+  ) {
+    return this.gitMutex.run(repoPath, async () => {
+      if (branchName === baseBranch)
+        throw new Error('The session branch and destination branch must be different.');
+      const git = simpleGit(worktreePath);
+      if ((await this.getCurrentBranch(worktreePath)) !== branchName)
+        throw new Error('The workspace branch has changed. Refresh the session before merging.');
+      const destination = await this.mergeDestination(repoPath, baseBranch);
+      const status = await git.status();
+      const prefix = (await git.revparse(['--show-prefix'])).trim();
+      const outsideProject = !!prefix && status.files.some((file) => !file.path.startsWith(prefix));
+      const hasMergeHead = await git
+        .raw(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])
+        .then((value) => !!value.trim())
+        .catch(() => false);
+      await this.assertNoGitOperation(worktreePath, hasMergeHead);
+      let blockedReason: string | null = null;
+      if (status.conflicted.length)
+        blockedReason =
+          'Resolve the conflicted files in this worktree and stage each resolution, then retry.';
+      else if (outsideProject)
+        blockedReason =
+          'There are changes outside this project folder. Open the repository root to commit them before merging.';
+      else if (hasMergeHead && status.files.some((file) => file.working_dir !== ' '))
+        blockedReason =
+          'Stage all conflict resolutions and commit or discard any other workspace edits before merging.';
+      if (destination.path) {
+        if (!(await simpleGit(destination.path).status()).isClean())
+          blockedReason = `Commit or stash changes in ${baseBranch} at ${destination.path} before merging. Your files have been kept.`;
+        await this.assertNoGitOperation(destination.path);
+      }
+      try {
+        await this.assertIgnoredFilesSafe(worktreePath, destination.head);
+        if (destination.path)
+          await this.assertIgnoredFilesSafe(destination.path, 'refs/heads/' + branchName);
+      } catch (error) {
+        blockedReason = error instanceof Error ? error.message : String(error);
+      }
+      // A staged conflict resolution is deliberately different from HEAD; it
+      // will be committed before checking the destination again during finalize.
+      const conflicts = hasMergeHead
+        ? { hasConflicts: status.conflicted.length > 0, conflictingFiles: status.conflicted }
+        : await this.mergeConflicts(worktreePath, destination.head);
+      return {
+        baseBranch,
+        targetPath: destination.path ?? null,
+        uncommittedCount: status.files.length,
+        hasMergeHead,
+        blockedReason,
+        ...conflicts,
+      };
+    });
+  }
+
   async finalize(
     repoPath: string,
     worktreePath: string,
@@ -631,127 +795,155 @@ export class WorkspaceManager {
     commitMessage?: string,
   ): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
-      if (action === 'merge') {
-        const gitWorktree = simpleGit(worktreePath);
-        const before = await gitWorktree.status();
-        if (before.conflicted.length === 0 && !before.isClean()) {
-          const mergeInProgress = await gitWorktree
-            .raw(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])
-            .then((v) => !!v.trim())
-            .catch(() => false);
-          if (!mergeInProgress)
-            throw new Error('Commit or discard workspace changes before applying the session');
-        }
-
-        // Check if there is already a merge in progress (MERGE_HEAD exists)
-        let hasMergeHead = false;
-        try {
-          const mergeHeadPath = (
-            await gitWorktree.raw(['rev-parse', '--git-path', 'MERGE_HEAD'])
-          ).trim();
-          const absMergeHeadPath = path.isAbsolute(mergeHeadPath)
-            ? mergeHeadPath
-            : path.resolve(worktreePath, mergeHeadPath);
-          hasMergeHead = await fs
-            .access(absMergeHeadPath)
-            .then(() => true)
-            .catch(() => false);
-        } catch {
-          // ignore
-        }
-
-        const worktreeStatus = await gitWorktree.status();
-        if (worktreeStatus.conflicted.length > 0) {
+      if (action !== 'merge') return;
+      if (branchName === baseBranch)
+        throw new Error('The session branch and destination branch must be different.');
+      const git = simpleGit(worktreePath);
+      if ((await this.getCurrentBranch(worktreePath)) !== branchName)
+        throw new Error('The workspace branch has changed. Refresh the session before merging.');
+      // Validate the destination before modifying even the source worktree.
+      const destination = await this.mergeDestination(repoPath, baseBranch);
+      const assertDestination = async () => {
+        if (
+          (await simpleGit(repoPath).revparse([`refs/heads/${baseBranch}`])).trim() !==
+          destination.head
+        )
           throw new Error(
-            'Merge conflict occurred. Please resolve conflicts in the sandbox first.',
+            `${baseBranch} changed while preparing the merge. Retry with the latest changes.`,
+          );
+        if (destination.path) {
+          if ((await this.getCurrentBranch(destination.path)) !== baseBranch)
+            throw new Error('The destination checkout changed branches. Refresh and retry.');
+          if (!(await simpleGit(destination.path).status()).isClean())
+            throw new Error(
+              `Working tree is not clean. Commit or stash changes in ${baseBranch} at ${destination.path} before merging.`,
+            );
+          await this.assertNoGitOperation(destination.path);
+        } else if ((await this.listWorktrees(repoPath)).some((wt) => wt.branch === baseBranch)) {
+          throw new Error(
+            'The destination branch was checked out while preparing the merge. Retry.',
           );
         }
-
-        if (hasMergeHead) {
-          // Conflicts are resolved and staged. We can commit the merge in the worktree.
-          try {
-            await gitWorktree.commit(`Merge branch '${baseBranch}' into ${branchName}`);
-          } catch (commitErr) {
-            const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
-            if (!msg.includes('nothing to commit') && !msg.includes('no changes added to commit')) {
-              throw commitErr;
-            }
-          }
-        } else {
-          // 1. Test merge baseBranch into worktree first to detect conflicts in sandbox
-          try {
-            await gitWorktree.merge([baseBranch]);
-          } catch (mergeErr) {
-            const statusAfterMerge = await gitWorktree.status();
-            if (statusAfterMerge.conflicted.length > 0) {
-              throw new Error(
-                'Merge conflict occurred. Please resolve conflicts in the sandbox first.',
-              );
-            }
-            throw mergeErr;
-          }
-        }
-
-        // 2. Check if the host working tree is clean before applying changes
-        const status = await simpleGit(repoPath).status();
-        if (!status.isClean()) {
+      };
+      await assertDestination();
+      const before = await git.status();
+      if (before.conflicted.length)
+        throw new Error(
+          'Merge conflict occurred. Resolve conflicts in this worktree and stage each resolution before retrying.',
+        );
+      const hasMergeHead = await git
+        .raw(['rev-parse', '-q', '--verify', 'MERGE_HEAD'])
+        .then((value) => !!value.trim())
+        .catch(() => false);
+      await this.assertNoGitOperation(worktreePath, hasMergeHead);
+      if (hasMergeHead) {
+        if (before.files.some((file) => file.working_dir !== ' '))
           throw new Error(
-            'Working tree is not clean. Please commit or stash your changes before applying.',
+            'Stage all conflict resolutions and commit or discard any other workspace edits before merging.',
           );
-        }
-
-        // Save original branch
-        const originalBranch = await this.getCurrentBranch(repoPath);
-
-        // 3. Checkout baseBranch in host and apply the clean merge
-        const hostHead = (await simpleGit(repoPath).revparse(['HEAD'])).trim();
-        await simpleGit(repoPath).checkout(baseBranch);
-        const baseHead = (await simpleGit(repoPath).revparse(['HEAD'])).trim();
-
-        try {
-          await simpleGit(repoPath).merge(['--squash', branchName]);
-          try {
-            const staged = (await simpleGit(repoPath).diff(['--cached', '--name-only'])).trim();
-            if (staged) {
-              await simpleGit(repoPath).commit(commitMessage ?? taskSlug);
-              if ((await simpleGit(repoPath).revparse(['HEAD'])).trim() === baseHead) {
-                throw new Error('Apply commit failed. Check your commit hooks.');
-              }
-            }
-          } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : String(error);
-            if (
-              !message.includes('nothing to commit') &&
-              !message.includes('no changes added to commit')
-            ) {
-              throw error;
-            }
-          }
-        } catch (err: unknown) {
-          // Squash merges do not create MERGE_HEAD. Restore the clean host explicitly.
-          await simpleGit(repoPath).raw(['reset', '--hard', baseHead]);
-          if (originalBranch && originalBranch !== baseBranch) {
-            await simpleGit(repoPath)
-              .checkout(originalBranch)
-              .catch(() => undefined);
-          }
-          if (
-            (await this.getCurrentBranch(repoPath)) === originalBranch &&
-            originalBranch !== baseBranch
-          ) {
-            await simpleGit(repoPath).raw(['reset', '--hard', hostHead]);
-          }
-          throw err;
-        }
-
-        // Restore original branch
-        if (originalBranch && originalBranch !== baseBranch) {
-          await simpleGit(repoPath).checkout(originalBranch);
-        }
+        const previousHead = (await git.revparse(['HEAD'])).trim();
+        await git.commit(`Merge branch '${baseBranch}' into ${branchName}`);
+        if ((await git.revparse(['HEAD'])).trim() === previousHead)
+          throw new Error('Git did not commit the conflict resolutions. Check your commit hooks.');
+      } else if (!before.isClean()) {
+        throw new Error('Commit or discard workspace changes before applying the session');
       }
-
-      if (action === 'merge')
-        await this.removeWorktreeAndBranch(repoPath, worktreePath, branchName);
+      await this.assertNoGitOperation(worktreePath);
+      await this.assertIgnoredFilesSafe(worktreePath, destination.head);
+      // Conflicts stay in the isolated source worktree for review and recovery.
+      try {
+        await git.merge(['--no-overwrite-ignore', destination.head]);
+      } catch (error) {
+        if ((await git.status()).conflicted.length)
+          throw new Error(
+            'Merge conflict occurred. Resolve conflicts in this worktree and stage each resolution before retrying.',
+          );
+        throw error;
+      }
+      await this.assertNoGitOperation(worktreePath);
+      if (!(await git.status()).isClean())
+        throw new Error(
+          'The workspace changed while preparing the merge. Commit or discard workspace changes and retry.',
+        );
+      if ((await this.getCurrentBranch(worktreePath)) !== branchName)
+        throw new Error(
+          'The workspace branch changed while preparing the merge. Refresh and retry.',
+        );
+      const sourceHead = (await git.revparse(['HEAD'])).trim();
+      await fs.mkdir(this.baseDir, { recursive: true });
+      const integrationPath = await fs.mkdtemp(path.join(this.baseDir, '.apply-'));
+      await simpleGit(repoPath).raw([
+        'worktree',
+        'add',
+        '--detach',
+        integrationPath,
+        destination.head,
+      ]);
+      const integration = simpleGit({
+        baseDir: integrationPath,
+        timeout: { block: 120000, stdErr: false, stdOut: false },
+      });
+      try {
+        // Build the squash commit away from every user checkout. Hook failures
+        // never require a destructive reset of the destination's files/index.
+        await integration.merge(['--squash', sourceHead]);
+        const staged = (await integration.diff(['--cached', '--name-only'])).trim();
+        if (staged) {
+          await integration.commit(commitMessage?.trim() || taskSlug);
+          const appliedHead = (await integration.revparse(['HEAD'])).trim();
+          if (appliedHead === destination.head)
+            throw new Error('Git did not create the merge commit. Check your commit hooks.');
+          await assertDestination();
+          if (
+            (await this.getCurrentBranch(worktreePath)) !== branchName ||
+            (await git.revparse(['HEAD'])).trim() !== sourceHead ||
+            !(await git.status()).isClean()
+          )
+            throw new Error(
+              'The source workspace changed while preparing the merge. Your work is kept. Refresh and retry.',
+            );
+          if (destination.path) {
+            await this.assertIgnoredFilesSafe(destination.path, appliedHead);
+            const target = simpleGit(destination.path);
+            try {
+              await target.merge(['--ff-only', '--no-overwrite-ignore', appliedHead]);
+            } catch (error) {
+              // A post-merge hook can fail after the fast-forward succeeded.
+              if ((await target.revparse(['HEAD'])).trim() !== appliedHead) throw error;
+            }
+          } else {
+            await simpleGit(repoPath).raw([
+              'update-ref',
+              `refs/heads/${baseBranch}`,
+              appliedHead,
+              destination.head,
+            ]);
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${message} Your session worktree is kept. Merge preparation is available at ${integrationPath}.`,
+          { cause: error },
+        );
+      }
+      // Cleanup is best effort after a durable merge. Never remove files added
+      // by a hook, including ignored files, and never turn success into failure.
+      try {
+        const ignored = await integration.raw([
+          'ls-files',
+          '--others',
+          '--ignored',
+          '--exclude-standard',
+          '-z',
+        ]);
+        if ((await integration.status()).isClean() && !ignored)
+          await simpleGit(repoPath).raw(['worktree', 'remove', integrationPath]);
+      } catch {
+        /* Keep the preparation worktree for recovery. */
+      }
+      // Retain the source branch, commits, and ignored files until the user
+      // explicitly deletes the session. A squash does not retain its history.
     });
   }
 
@@ -934,13 +1126,13 @@ export class WorkspaceManager {
       ).trim();
       const isAncestor = mergeBase.length > 0 && mergeBase === headCommit;
 
-      if (!isAncestor) {
-        // Record previous commit so nothing is lost if upstream was rewritten (rebase/squash/amend)
-        await git.raw(['update-ref', 'refs/agentctl/pre-refresh', headCommit]);
-        await git.raw(['reset', '--merge', targetCommit]);
-      } else {
-        await git.raw(['merge', '--ff-only', targetCommit]);
-      }
+      if (!isAncestor)
+        throw new Error(
+          'Cannot refresh branch: local and target history have diverged. Merge the target into this worktree to keep your commits.',
+        );
+      await this.assertNoGitOperation(worktreePath);
+      await this.assertIgnoredFilesSafe(worktreePath, targetCommit);
+      await git.raw(['merge', '--ff-only', '--no-overwrite-ignore', targetCommit]);
 
       const newHead = (await git.revparse(['HEAD'])).trim();
       return { moved: true, headCommit: newHead };
@@ -959,6 +1151,7 @@ export class WorkspaceManager {
       }).env('GIT_TERMINAL_PROMPT', '0');
       if (!(await git.status()).isClean())
         throw new Error('Cannot pull: worktree has uncommitted changes');
+      await this.assertNoGitOperation(worktreePath);
       const before = (await git.revparse(['HEAD'])).trim();
       await git.fetch(target.remote, target.ref);
       this.fetchedAt.set(repoPath, new Date().toISOString());
@@ -970,7 +1163,8 @@ export class WorkspaceManager {
         throw new Error(
           'Local and remote branches have diverged. Resolve the branch in a terminal before pulling.',
         );
-      await git.raw(['merge', '--ff-only', remoteHead]);
+      await this.assertIgnoredFilesSafe(worktreePath, remoteHead);
+      await git.raw(['merge', '--ff-only', '--no-overwrite-ignore', remoteHead]);
       this.prCache.clear();
       return {
         success: true,
@@ -981,8 +1175,45 @@ export class WorkspaceManager {
 
   async merge(repoPath: string, worktreePath: string, branchName: string): Promise<void> {
     await this.gitMutex.run(repoPath, async () => {
-      await simpleGit(worktreePath).merge([branchName]);
+      const git = simpleGit(worktreePath);
+      if (!(await git.status()).isClean())
+        throw new Error('Commit or stash workspace changes before merging another branch.');
+      await this.assertNoGitOperation(worktreePath);
+      const sourceHead = (
+        await git.revparse(['--verify', '--end-of-options', `${branchName}^{commit}`])
+      ).trim();
+      await this.assertIgnoredFilesSafe(worktreePath, sourceHead);
+      await git.merge(['--no-overwrite-ignore', sourceHead]);
     });
+  }
+
+  private async mergeConflicts(
+    worktreePath: string,
+    sourceRef: string,
+  ): Promise<{ hasConflicts: boolean; conflictingFiles: string[] }> {
+    const git = simpleGit(worktreePath);
+    const targetHead = (await git.revparse(['HEAD'])).trim();
+    const sourceHead = (await git.revparse(['--verify', `${sourceRef}^{commit}`])).trim();
+    const args = ['merge-tree', '--write-tree', '--name-only', '-z', targetHead, sourceHead];
+    let stdout: string;
+    let hasConflicts = false;
+    try {
+      stdout = (
+        await execFileAsync('git', args, { cwd: worktreePath, maxBuffer: 16 * 1024 * 1024 })
+      ).stdout;
+    } catch (error) {
+      const failure = error as { code?: number; stdout?: string };
+      // Exit 1 is a real conflict; all other failures must reach the caller.
+      if (failure.code !== 1 || !failure.stdout) throw error;
+      stdout = failure.stdout;
+      hasConflicts = true;
+    }
+    const fields = stdout.split('\0');
+    if (!/^[0-9a-f]{40,64}$/i.test(fields[0]))
+      throw new Error('Git returned an invalid merge preview');
+    const end = fields.indexOf('', 1);
+    const conflictingFiles = hasConflicts ? fields.slice(1, end < 0 ? undefined : end) : [];
+    return { hasConflicts, conflictingFiles: [...new Set(conflictingFiles)] };
   }
 
   async checkMergeConflicts(
@@ -990,37 +1221,7 @@ export class WorkspaceManager {
     targetWorktreePath: string,
     sourceBranch: string,
   ): Promise<{ hasConflicts: boolean; conflictingFiles: string[] }> {
-    return this.gitMutex.run(repoPath, async () => {
-      try {
-        const git = simpleGit(targetWorktreePath);
-        const targetHead = (await git.revparse(['HEAD'])).trim();
-        const sourceHead = (await git.revparse([sourceBranch])).trim();
-
-        const output = await git.raw(['merge-tree', targetHead, sourceHead]).catch(() => null);
-        if (!output) {
-          return { hasConflicts: false, conflictingFiles: [] };
-        }
-
-        const lines = output.split('\n');
-        const conflictingFiles: string[] = [];
-
-        for (const line of lines) {
-          if (line.includes('CONFLICT') || line.includes('changed in both')) {
-            const parts = line.split(':');
-            if (parts.length > 1) {
-              conflictingFiles.push(parts[parts.length - 1].trim());
-            }
-          }
-        }
-
-        return {
-          hasConflicts: conflictingFiles.length > 0 || output.includes('CONFLICT'),
-          conflictingFiles: Array.from(new Set(conflictingFiles)),
-        };
-      } catch {
-        return { hasConflicts: false, conflictingFiles: [] };
-      }
-    });
+    return this.gitMutex.run(repoPath, () => this.mergeConflicts(targetWorktreePath, sourceBranch));
   }
 
   async detectPullRequest(
@@ -1135,7 +1336,7 @@ export class WorkspaceManager {
         const remoteUrl = primaryRemote?.refs.push || primaryRemote?.refs.fetch || '';
         const hasPrimaryRemote = primaryRemote !== undefined;
         const remoteProvider = hasPrimaryRemote
-          ? remoteUrl.includes('github.com')
+          ? parseGitHubRemoteUrl(remoteUrl) !== null
             ? ('github' as const)
             : ('other' as const)
           : null;
@@ -1250,8 +1451,13 @@ export class WorkspaceManager {
         baseDir: worktreePath,
         timeout: { block: 120000, stdErr: false, stdOut: false },
       }).env('GIT_TERMINAL_PROMPT', '0');
-      const head = params.headBranch ?? (await this.getCurrentBranch(worktreePath));
-      const base = params.baseBranch ?? (await this.getCurrentBranch(repoPath)) ?? 'main';
+      const currentBranch = await this.getCurrentBranch(worktreePath);
+      const head = params.headBranch ?? currentBranch;
+      if (head !== currentBranch)
+        throw new Error(
+          'The workspace branch changed. Refresh and review the current branch before publishing.',
+        );
+      const base = (params.baseBranch ?? (await this.getCurrentBranch(repoPath)) ?? 'main').trim();
 
       if (!head || head === 'HEAD') {
         throw new Error('Cannot create a pull request from a detached HEAD');
@@ -1262,6 +1468,10 @@ export class WorkspaceManager {
       if (head === base) {
         throw new Error('The head and base branches must be different');
       }
+
+      await git.raw(['check-ref-format', '--branch', head]);
+      await git.raw(['check-ref-format', '--branch', base]);
+      await this.assertNoGitOperation(worktreePath);
 
       const worktreeStatus = await git.status();
       if (!worktreeStatus.isClean()) {
@@ -1282,11 +1492,15 @@ export class WorkspaceManager {
         throw new Error('Pull request creation currently supports GitHub remotes only');
       }
 
-      await git.push([primaryRemote.name, `refs/heads/${head}:refs/heads/${head}`]);
+      await git.push([
+        ...(target.configured ? [] : ['--set-upstream']),
+        primaryRemote.name,
+        `refs/heads/${head}:refs/heads/${head}`,
+      ]);
       this.prCache.clear();
 
       const existingPr = await this.detectPullRequest(worktreePath, head, repoWebUrl);
-      if (existingPr?.state === 'open') {
+      if (existingPr?.state === 'open' && existingPr.baseBranch === base) {
         return { status: 'already_exists', pr: existingPr };
       }
 

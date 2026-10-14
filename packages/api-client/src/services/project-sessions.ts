@@ -275,10 +275,11 @@ export async function switchSessionMode(
 export async function mergeSession(
   sessionId: string,
   commitMessage?: string,
+  targetBranch?: string,
 ): Promise<{ success: boolean }> {
   const res = await api.mergeSession({
     params: { id: sessionId },
-    body: { commitMessage },
+    body: { commitMessage, targetBranch },
   });
   assertApiStatus(res, 200, 'Failed to merge session');
   return res.body;
@@ -528,5 +529,17 @@ export async function createWorkspaceBranch(
 export async function undoDiscardSession(sessionId: string): Promise<{ success: boolean }> {
   const res = await api.undoDiscard({ params: { id: sessionId }, body: {} });
   assertApiStatus(res, 200, 'Failed to undo discard');
+  return res.body;
+}
+
+export async function generateGitDraft(
+  sessionId: string,
+  body:
+    | { kind: 'commit'; includeUnstaged?: boolean }
+    | { kind: 'merge'; targetBranch: string }
+    | { kind: 'pr'; targetBranch: string },
+): Promise<{ title: string; body: string }> {
+  const res = await api.generateGitDraft({ params: { id: sessionId }, body });
+  assertApiStatus(res, 200, 'Failed to generate draft');
   return res.body;
 }

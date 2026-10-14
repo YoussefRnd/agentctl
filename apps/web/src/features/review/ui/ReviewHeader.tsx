@@ -1,13 +1,14 @@
 import {
-  Columns,
-  Rows,
-  ChevronsUpDown,
-  ChevronsDownUp,
-  Check,
-  ChevronDown,
-  Menu,
-  WrapText,
-} from 'lucide-react';
+  ColumnsIcon,
+  RowsIcon,
+  UnfoldIcon,
+  FoldIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ListUnorderedIcon,
+  WrapIcon,
+} from '@primer/octicons-react';
+
 import { Dropdown, SearchBar, Tooltip, cn } from '@agentctl/ui';
 import { useMemo, type ChangeEvent, type ReactNode } from 'react';
 import type { ReviewScope } from '../model/useReviewUIStore';
@@ -128,7 +129,7 @@ export function ReviewHeader({
 
   return (
     <div className="border-border/20 bg-surface-secondary/20 sticky top-0 z-20 shrink-0 space-y-2 border-b p-2 backdrop-blur-md">
-      {/* Scope, navigation, display options, and Git actions */}
+      {/* Review scope and display controls */}
       <div className="flex flex-wrap items-center justify-between gap-1.5">
         {/* Scope Dropdown */}
         <Dropdown.Root>
@@ -138,7 +139,7 @@ export function ReviewHeader({
               className="motion-disclosure text-text-main hover:bg-surface/60 border-border/20 data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-xs font-medium"
             >
               <span>{currentOption.label}</span>
-              <ChevronDown className="text-text-muted/50 h-3.5 w-3.5" />
+              <ChevronDownIcon className="text-text-muted/50 h-3.5 w-3.5" />
             </button>
           </Dropdown.Trigger>
           <Dropdown.Portal>
@@ -158,7 +159,7 @@ export function ReviewHeader({
                   <span>{label}</span>
                   <span className="flex items-center gap-2">
                     <span className="font-mono text-[10px] opacity-60">{count}</span>
-                    {scope === id && <Check className="h-3.5 w-3.5" />}
+                    {scope === id && <CheckIcon className="h-3.5 w-3.5" />}
                   </span>
                 </Dropdown.Item>
               ))}
@@ -179,7 +180,7 @@ export function ReviewHeader({
                     className="motion-disclosure border-border/20 bg-surface/50 text-text-muted hover:text-text-main hover:bg-surface-secondary data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 flex h-6.5 cursor-pointer items-center gap-1.5 rounded-md border px-1.5 text-xs"
                     aria-label="Jump to file"
                   >
-                    <Menu className="h-3.5 w-3.5" />
+                    <ListUnorderedIcon className="h-3.5 w-3.5" />
                   </button>
                 </Dropdown.Trigger>
               </Tooltip>
@@ -252,7 +253,7 @@ export function ReviewHeader({
                 className="motion-disclosure border-border/20 bg-surface/50 text-text-muted hover:text-text-main data-[state=open]:bg-accent/10 flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px]"
               >
                 <span>View</span>
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDownIcon className="h-3 w-3" />
               </button>
             </Dropdown.Trigger>
             <Dropdown.Portal>
@@ -268,14 +269,14 @@ export function ReviewHeader({
                     className="gap-2"
                   >
                     {mode === 'inline' ? (
-                      <Rows className="h-3.5 w-3.5" />
+                      <RowsIcon className="h-3.5 w-3.5" />
                     ) : (
-                      <Columns className="h-3.5 w-3.5" />
+                      <ColumnsIcon className="h-3.5 w-3.5" />
                     )}
                     <span className="flex-1">
                       {mode === 'inline' ? 'Inline diff' : 'Split diff'}
                     </span>
-                    {viewMode === mode && <Check className="text-accent h-3.5 w-3.5" />}
+                    {viewMode === mode && <CheckIcon className="text-accent h-3.5 w-3.5" />}
                   </Dropdown.Item>
                 ))}
                 <Dropdown.Separator />
@@ -285,18 +286,18 @@ export function ReviewHeader({
                   onSelect={onToggleWrapLines}
                   className="gap-2"
                 >
-                  <WrapText className="h-3.5 w-3.5" />
+                  <WrapIcon className="h-3.5 w-3.5" />
                   <span className="flex-1">Wrap lines</span>
-                  {wrapLines && <Check className="text-accent h-3.5 w-3.5" />}
+                  {wrapLines && <CheckIcon className="text-accent h-3.5 w-3.5" />}
                 </Dropdown.Item>
                 {files.length > 0 && (
                   <>
                     <Dropdown.Separator />
                     <Dropdown.Item onSelect={onToggleAll} className="gap-2">
                       {allCollapsed ? (
-                        <ChevronsUpDown className="h-3.5 w-3.5" />
+                        <UnfoldIcon className="h-3.5 w-3.5" />
                       ) : (
-                        <ChevronsDownUp className="h-3.5 w-3.5" />
+                        <FoldIcon className="h-3.5 w-3.5" />
                       )}
                       {allCollapsed ? 'Expand all diffs' : 'Collapse all diffs'}
                     </Dropdown.Item>
@@ -313,9 +314,9 @@ export function ReviewHeader({
               type="button"
               disabled={isStagingAll}
               onClick={onStageAll}
-              className="border-accent/30 bg-accent/10 text-accent hover:bg-accent/20 flex h-6 cursor-pointer items-center rounded-md border px-2 text-[11px] font-semibold transition-colors active:scale-[0.97] disabled:opacity-50"
+              className="border-border/25 text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-7 cursor-pointer items-center rounded-md border px-2 text-[11px] transition-colors disabled:opacity-50"
             >
-              {isStagingAll ? 'Staging...' : 'Stage All'}
+              {isStagingAll ? 'Staging...' : 'Stage all'}
             </button>
           )}
 
@@ -326,16 +327,15 @@ export function ReviewHeader({
               onClick={onUnstageAll}
               className="border-border/30 bg-surface text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 cursor-pointer items-center rounded-md border px-2 text-[11px] font-semibold transition-colors active:scale-[0.97] disabled:opacity-50"
             >
-              {isUnstagingAll ? 'Unstaging...' : 'Unstage All'}
+              {isUnstagingAll ? 'Unstaging...' : 'Unstage all'}
             </button>
           )}
-
-          {/* Git Actions dropdown (Commit, PR, Push, etc. - preserved!) */}
-          {gitActions}
         </div>
       </div>
 
-      {/* Bottom Row: Full-width Search / Filter Input + Status Filter Chips */}
+      {gitActions && <div className="border-border/15 border-t pt-2">{gitActions}</div>}
+
+      {/* Search and file filters */}
       <div className="space-y-1.5">
         <SearchBar
           value={searchQuery}

@@ -1,3 +1,4 @@
+import { readGitTextGenerationSetting, validateGitTextGenerationSetting } from '@agentctl/core/git';
 import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
 import { DEFAULT_FONT_CONFIG, settingsContract, type FontConfig } from '@agentctl/shared';
@@ -30,6 +31,13 @@ export function createSettingsRouter(
         onboardingVersion: raw.onboardingVersion ?? '1.0.0',
         setupStep: raw.setupStep ?? null,
         defaultProviderId: raw.defaultProviderId ?? null,
+        gitTextGeneration: (() => {
+          try {
+            return readGitTextGenerationSetting(raw.gitTextGeneration);
+          } catch {
+            return null;
+          }
+        })(),
         showThinking: raw.showThinking === 'true',
         defaultToWorktree:
           raw.defaultToWorktree !== undefined ? raw.defaultToWorktree === 'true' : true,
@@ -41,6 +49,22 @@ export function createSettingsRouter(
   return {
     getSettings: readSettings,
     patchSettings: async ({ body }) => {
+      if (body.gitTextGeneration) {
+        try {
+          validateGitTextGenerationSetting(fastify.providerRegistry, body.gitTextGeneration);
+        } catch (error) {
+          return {
+            status: 400 as const,
+            body: { message: error instanceof Error ? error.message : String(error) },
+          };
+        }
+      }
+      if (body.gitTextGeneration !== undefined) {
+        fastify.providerRegistry.updateSetting(
+          'gitTextGeneration',
+          JSON.stringify(body.gitTextGeneration),
+        );
+      }
       for (const key of [
         'onboardingCompleted',
         'onboardingVersion',

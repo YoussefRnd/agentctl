@@ -590,3 +590,32 @@ it('keeps literal Unicode, whitespace, and backslash filenames in the review', a
     false,
   );
 });
+
+it('refuses PR publication during an unfinished Git operation or with an invalid base', async () => {
+  const { repo, manager } = await fixture();
+  git(repo, 'checkout', '-b', 'feature');
+  await assert.rejects(
+    manager.createPullRequest(repo, repo, { title: 'Draft', baseBranch: '--help' }),
+  );
+  await fs.writeFile(path.join(repo, '.git', 'MERGE_HEAD'), git(repo, 'rev-parse', 'HEAD') + '\n');
+  assert.equal(git(repo, 'status', '--porcelain'), '');
+  await assert.rejects(
+    manager.createPullRequest(repo, repo, { title: 'Draft', baseBranch: 'main' }),
+    /Finish or abort the Git operation/,
+  );
+});
+
+it('refuses to publish a different branch from the one the user reviewed', async () => {
+  const { repo, manager } = await fixture();
+  git(repo, 'checkout', '-b', 'unexpected-branch');
+  const head = git(repo, 'rev-parse', 'HEAD');
+  await assert.rejects(
+    manager.createPullRequest(repo, repo, {
+      title: 'Reviewed draft',
+      baseBranch: 'main',
+      headBranch: 'reviewed-branch',
+    }),
+    /workspace branch changed/,
+  );
+  assert.equal(git(repo, 'rev-parse', 'HEAD'), head);
+});

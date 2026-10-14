@@ -119,6 +119,25 @@ export const sessionsContract = {
     },
     summary: 'Send input to a running terminal process in the session',
   },
+  getSessionMergePreview: {
+    method: 'GET',
+    path: '/api/sessions/:id/merge-preview',
+    pathParams: z.object({ id: z.uuid() }),
+    query: z.object({ targetBranch: z.string().min(1).optional() }),
+    responses: {
+      200: z.object({
+        baseBranch: z.string(),
+        targetPath: z.string().nullable(),
+        uncommittedCount: z.number(),
+        hasMergeHead: z.boolean(),
+        blockedReason: z.string().nullable(),
+        hasConflicts: z.boolean(),
+        conflictingFiles: z.array(z.string()),
+      }),
+      400: z.object({ message: z.string() }),
+    },
+    summary: 'Check the destination and workspace before merging a worktree session',
+  },
   mergeSession: {
     method: 'POST',
     path: '/api/sessions/:id/merge',
@@ -127,12 +146,13 @@ export const sessionsContract = {
     }),
     body: z.object({
       commitMessage: z.string().optional(),
+      targetBranch: z.string().min(1).optional(),
     }),
     responses: {
       200: z.object({ success: z.boolean() }),
       400: z.object({ message: z.string() }),
     },
-    summary: 'Merge and close session',
+    summary: 'Merge into the chosen local branch and close session',
   },
   discardSession: {
     method: 'POST',
@@ -430,6 +450,21 @@ export const sessionsContract = {
       200: gitStatusSchema,
     },
     summary: 'Get Git tracking status and active PR for session',
+  },
+  generateGitDraft: {
+    method: 'POST',
+    path: '/api/sessions/:id/git/generate-draft',
+    pathParams: z.object({ id: z.uuid() }),
+    body: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('commit'), includeUnstaged: z.boolean().optional() }),
+      z.object({ kind: z.literal('merge'), targetBranch: z.string().trim().min(1) }),
+      z.object({ kind: z.literal('pr'), targetBranch: z.string().trim().min(1) }),
+    ]),
+    responses: {
+      200: z.object({ title: z.string(), body: z.string() }),
+      400: z.object({ message: z.string() }),
+    },
+    summary: 'Generate an editable draft using the session provider without changing Git state',
   },
   createPullRequest: {
     method: 'POST',

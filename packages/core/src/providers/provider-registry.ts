@@ -693,6 +693,7 @@ export class ProviderRegistry {
       'onboardingVersion',
       'setupStep',
       'defaultProviderId',
+      'gitTextGeneration',
       'showThinking',
       'defaultToWorktree',
       'registrySyncError',

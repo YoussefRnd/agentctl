@@ -1,17 +1,18 @@
+import {
+  ChevronRightIcon,
+  ChevronDownIcon,
+  LinkExternalIcon,
+  PlusIcon,
+  DashIcon,
+  UndoIcon,
+  CommentIcon,
+  KebabHorizontalIcon,
+} from '@primer/octicons-react';
 import { useMemo, useRef, useLayoutEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { DiffBlock } from './diff/DiffBlock';
 import type { ReviewFile, FileState } from './ReviewHeader';
-import {
-  ChevronRight,
-  ChevronDown,
-  ExternalLink,
-  Plus,
-  Minus,
-  Undo2,
-  MessageSquarePlus,
-  Ellipsis,
-} from 'lucide-react';
+
 import { Dropdown, cn } from '@agentctl/ui';
 import { toast } from 'sonner';
 import type { parseDiff } from '@/shared/lib/diff-parser';
@@ -245,9 +246,9 @@ export function ReviewFileList({
                     </span>
                     <span className="text-text-muted absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover/filerow:opacity-100">
                       {collapsed ? (
-                        <ChevronRight className="h-3.5 w-3.5" />
+                        <ChevronRightIcon className="h-3.5 w-3.5" />
                       ) : (
-                        <ChevronDown className="h-3.5 w-3.5" />
+                        <ChevronDownIcon className="h-3.5 w-3.5" />
                       )}
                     </span>
                   </div>
@@ -273,7 +274,11 @@ export function ReviewFileList({
                       onClick={() => (canStage ? onStage?.(file.path) : onUnstage?.(file.path))}
                       className="border-accent/20 text-accent hover:bg-accent/15 flex h-6 cursor-pointer items-center gap-1 rounded-md border px-1.5 text-[10px] font-medium transition-colors"
                     >
-                      {canStage ? <Plus className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                      {canStage ? (
+                        <PlusIcon className="h-3 w-3" />
+                      ) : (
+                        <DashIcon className="h-3 w-3" />
+                      )}
                       {canStage ? 'Stage' : 'Unstage'}
                     </button>
                   )}
@@ -284,14 +289,14 @@ export function ReviewFileList({
                         aria-label={`More actions for ${file.path}`}
                         className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded-md"
                       >
-                        <Ellipsis className="h-3.5 w-3.5" />
+                        <KebabHorizontalIcon className="h-3.5 w-3.5" />
                       </button>
                     </Dropdown.Trigger>
                     <Dropdown.Portal>
                       <Dropdown.Content align="end" className="min-w-44">
                         {onOpenFile && (
                           <Dropdown.Item onSelect={() => onOpenFile(file.path)} className="gap-2">
-                            <ExternalLink className="h-3.5 w-3.5" />
+                            <LinkExternalIcon className="h-3.5 w-3.5" />
                             Open in editor
                           </Dropdown.Item>
                         )}
@@ -308,12 +313,12 @@ export function ReviewFileList({
                             toast.success(`Added @${fileName} to chat`);
                           }}
                         >
-                          <MessageSquarePlus className="h-3.5 w-3.5" />
+                          <CommentIcon className="h-3.5 w-3.5" />
                           Add to chat
                         </Dropdown.Item>
                         {canStage && canUnstage && (
                           <Dropdown.Item onSelect={() => onUnstage?.(file.path)} className="gap-2">
-                            <Minus className="h-3.5 w-3.5" />
+                            <DashIcon className="h-3.5 w-3.5" />
                             Unstage file
                           </Dropdown.Item>
                         )}
@@ -324,7 +329,7 @@ export function ReviewFileList({
                               onSelect={() => onRevert(file.path)}
                               className="gap-2 text-rose-400 focus-visible:bg-rose-500/10"
                             >
-                              <Undo2 className="h-3.5 w-3.5" />
+                              <UndoIcon className="h-3.5 w-3.5" />
                               Discard file changes
                             </Dropdown.Item>
                           </>

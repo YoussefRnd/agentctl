@@ -22,7 +22,7 @@ export function useGitStatus(sessionId: string) {
 
   const createPullRequestMutation = useMutation({
     mutationFn: (body: CreatePullRequestBody) => createPullRequest(sessionId, body),
-    onSuccess: () => invalidateWorkspaceQueries(queryClient, sessionId),
+    onSettled: () => invalidateWorkspaceQueries(queryClient, sessionId),
   });
 
   return {

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '@agentctl/api-client';
-import { type FontConfig } from '@agentctl/shared';
+import { type FontConfig, type GitTextGenerationSettings } from '@agentctl/shared';
 import { settingsKeys } from '@/shared/lib/queryKeys';
 
 export interface SystemSettings {
@@ -9,6 +9,7 @@ export interface SystemSettings {
   onboardingVersion: string | number;
   setupStep: string | null;
   defaultProviderId: string | null;
+  gitTextGeneration?: GitTextGenerationSettings | null;
   showThinking: boolean;
   defaultToWorktree?: boolean;
   registrySyncError: string | null;

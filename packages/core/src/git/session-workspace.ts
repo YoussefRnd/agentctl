@@ -490,11 +490,31 @@ export class SessionWorkspace {
         if (!project.repoRoot) {
           throw new Error('Project repo root not set. Cannot finalize worktree session.');
         }
+        const targetBranch = options?.baseBranch ?? session.baseBranch ?? 'main';
+        if (resolution === 'merged' && targetBranch !== (session.baseBranch ?? 'main')) {
+          // Remember a validated destination before attempting the merge, so a
+          // conflict can be retried against the same branch after reopening.
+          const preview = await this.workspaceManager.getMergePreview(
+            project.repoRoot,
+            session.worktreePath,
+            session.branch,
+            targetBranch,
+          );
+          if (preview.hasMergeHead)
+            throw new Error(
+              `Finish or abort the pending merge into ${session.baseBranch ?? 'main'} before choosing another destination.`,
+            );
+          if (preview.blockedReason) throw new Error(preview.blockedReason);
+          await client
+            .update(sessions)
+            .set({ baseBranch: targetBranch })
+            .where(eq(sessions.id, sessionId));
+        }
         await this.workspaceManager.finalize(
           project.repoRoot,
           session.worktreePath,
           session.branch,
-          options?.baseBranch ?? session.baseBranch ?? 'main',
+          targetBranch,
           resolution === 'merged' ? 'merge' : 'discard',
           options?.taskSlug ?? session.taskSlug,
           options?.commitMessage,
@@ -661,15 +681,15 @@ export class SessionWorkspace {
     }
   }
 
-  /** Only clean finalized sessions owned by this database, once per repository. */
+  /** Keep finished workspaces recoverable until the user explicitly deletes them. */
   async syncOrphans(activeSessionIds: string[], knownSessionIds: string[]): Promise<void> {
     const allProjects = await this.db.query.projects.findMany();
-    const discarded = await this.db.query.sessions.findMany({
-      where: eq(sessions.status, 'discarded'),
-    });
+    const finished = await this.db.query.sessions.findMany();
     const preservedIds = [
       ...activeSessionIds,
-      ...discarded.filter((session) => session.discardBackup).map((session) => session.id),
+      ...finished
+        .filter((session) => session.status === 'merged' || session.discardBackup)
+        .map((session) => session.id),
     ];
     const repositories = new Set(
       allProjects

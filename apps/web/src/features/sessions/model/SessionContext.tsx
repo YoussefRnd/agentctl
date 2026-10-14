@@ -64,7 +64,7 @@ interface SessionConfigContextValue {
   isSwitchingBranch: boolean;
   switchMode: (mode: SessionMode) => Promise<void>;
   isSwitchingMode: boolean;
-  mergeSession: (commitMessage?: string) => Promise<void>;
+  mergeSession: (commitMessage?: string, targetBranch?: string) => Promise<void>;
   isMergingSession: boolean;
   discardSession: () => Promise<void>;
   isDiscardingSession: boolean;

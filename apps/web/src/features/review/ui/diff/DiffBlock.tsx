@@ -1,4 +1,13 @@
 import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  LinkExternalIcon,
+  CopyIcon,
+  CheckIcon,
+  QuoteIcon,
+  CommentIcon,
+} from '@primer/octicons-react';
+import {
   useState,
   useCallback,
   useMemo,
@@ -12,15 +21,7 @@ import type { DiffHunk } from '@/shared/lib/diff-parser';
 import { buildSplitRows } from '@/shared/lib/diff-parser';
 import { getLanguageForPath } from '@/shared/lib/code-highlighter-utils';
 import { DiffLine } from './DiffLine';
-import {
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-  Copy,
-  Check,
-  MessageSquareQuote,
-  MessageSquarePlus,
-} from 'lucide-react';
+
 import { Tooltip } from '@agentctl/ui';
 import { toast } from 'sonner';
 import { useDraftStore } from '@/features/composer';
@@ -67,7 +68,7 @@ function HunkHeader({ hunk, path }: { hunk: DiffHunk; path: string }) {
           }}
           className="text-text-muted hover:text-text-main flex h-5 cursor-pointer items-center gap-1 rounded px-1.5 text-[8px] font-medium hover:bg-white/10"
         >
-          <MessageSquareQuote className="h-3 w-3" />
+          <QuoteIcon className="h-3 w-3" />
           <span>Quote</span>
         </button>
       </Tooltip>
@@ -281,9 +282,9 @@ export const DiffBlock = memo(function DiffBlock({
           >
             <div className="text-text-muted/40 group-hover:text-accent/60 shrink-0 transition-colors">
               {isCollapsed ? (
-                <ChevronRight className="h-3.5 w-3.5" />
+                <ChevronRightIcon className="h-3.5 w-3.5" />
               ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
+                <ChevronDownIcon className="h-3.5 w-3.5" />
               )}
             </div>
             <div className="flex flex-col truncate">
@@ -323,9 +324,9 @@ export const DiffBlock = memo(function DiffBlock({
                 aria-label="Copy file path"
               >
                 {copiedPath ? (
-                  <Check className="text-brand-green h-3 w-3" />
+                  <CheckIcon className="text-brand-green h-3 w-3" />
                 ) : (
-                  <Copy className="h-3 w-3" />
+                  <CopyIcon className="h-3 w-3" />
                 )}
               </button>
             </Tooltip>
@@ -347,7 +348,7 @@ export const DiffBlock = memo(function DiffBlock({
                 className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.95]"
                 aria-label="Add to chat composer"
               >
-                <MessageSquarePlus className="h-3 w-3" />
+                <CommentIcon className="h-3 w-3" />
               </button>
             </Tooltip>
 
@@ -359,7 +360,7 @@ export const DiffBlock = memo(function DiffBlock({
                   className="text-text-muted hover:text-text-main hover:bg-surface-secondary flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors active:scale-[0.95]"
                   aria-label="Open file in editor"
                 >
-                  <ExternalLink className="h-3 w-3" />
+                  <LinkExternalIcon className="h-3 w-3" />
                 </button>
               </Tooltip>
             )}

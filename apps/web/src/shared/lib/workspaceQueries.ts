@@ -12,6 +12,9 @@ export function invalidateWorkspaceQueries(
   void client.invalidateQueries({
     queryKey: sessionId ? sessionKeys.review(sessionId) : sessionKeys.allReviews,
   });
+  void client.invalidateQueries({
+    queryKey: sessionId ? sessionKeys.mergePreview(sessionId) : sessionKeys.allMergePreviews,
+  });
   // A failed request has no immutable result yet and should be retryable.
   void client.invalidateQueries({
     queryKey: sessionId ? sessionKeys.reviewFiles(sessionId) : sessionKeys.allReviewFiles,

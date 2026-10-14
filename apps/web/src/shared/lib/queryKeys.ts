@@ -9,6 +9,11 @@ export const sessionKeys = {
     ['session-review-file', sessionId, filePath, fromHash, toHash] as const,
   allBranches: ['session-branches'] as const,
   branches: (sessionId: string) => ['session-branches', sessionId] as const,
+  allMergePreviews: ['session-merge-preview'] as const,
+  mergePreview: (sessionId: string, targetBranch?: string) =>
+    targetBranch
+      ? (['session-merge-preview', sessionId, targetBranch] as const)
+      : (['session-merge-preview', sessionId] as const),
   allGitStatuses: ['session-git-status'] as const,
   gitStatus: (sessionId: string) => ['session-git-status', sessionId] as const,
   events: (sessionId: string) => ['events', sessionId] as const,

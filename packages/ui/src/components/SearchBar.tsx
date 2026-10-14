@@ -1,5 +1,5 @@
 import { type InputHTMLAttributes, type Ref } from 'react';
-import { Search, X } from 'lucide-react';
+import { SearchIcon, XIcon } from '@primer/octicons-react';
 import { cn } from '../utils.js';
 
 export interface SearchBarProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -19,7 +19,7 @@ export function SearchBar({
 }: SearchBarProps) {
   return (
     <div className={cn('group relative flex w-full items-center', containerClassName)}>
-      <Search className="text-text-muted/50 group-focus-within:text-accent pointer-events-none absolute top-1/2 left-3 z-10 h-3.5 w-3.5 -translate-y-1/2 transition-colors" />
+      <SearchIcon className="text-text-muted/50 group-focus-within:text-accent pointer-events-none absolute top-1/2 left-3 z-10 h-3.5 w-3.5 -translate-y-1/2 transition-colors" />
       <input
         ref={ref}
         type="text"
@@ -38,7 +38,7 @@ export function SearchBar({
           onClick={onClear}
           className="hover:bg-surface-secondary/80 text-text-muted/60 hover:text-text-main focus-visible:ring-accent/40 click-press absolute top-1/2 right-1.5 z-10 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
         >
-          <X className="h-3.5 w-3.5" />
+          <XIcon className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
