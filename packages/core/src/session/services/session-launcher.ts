@@ -21,7 +21,6 @@ import type { SessionRuntimeRegistry } from '../runtime/session-runtime-registry
 import type { SessionWorkspace } from '../../git/session-workspace.js';
 
 const DEFAULT_AGENT_MODEL = '';
-const DEFAULT_THINKING_EFFORT: ThinkingEffort = 'medium';
 
 export interface CreateSessionParams {
   projectId: string;
@@ -72,7 +71,7 @@ export class SessionLauncher {
       if (opt === modelOption) {
         return { ...opt, currentValue: selectedModel };
       }
-      if (opt === thinkingOption) {
+      if (opt === thinkingOption && selectedThinkingEffort !== null) {
         return { ...opt, currentValue: selectedThinkingEffort };
       }
       return opt;
@@ -277,7 +276,7 @@ export class SessionLauncher {
     args: string[],
     env?: Record<string, string>,
     selectedModel = DEFAULT_AGENT_MODEL,
-    selectedThinkingEffort: ThinkingEffort = DEFAULT_THINKING_EFFORT,
+    selectedThinkingEffort: ThinkingEffort = null,
     features: AgentFeatures = EMPTY_AGENT_FEATURES,
     resolvedThinkingConfigId?: string,
     intent: AgentSessionIntent = { kind: 'new' },

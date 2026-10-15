@@ -2,7 +2,12 @@ import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
 import { sessionEvents, sessions, sessionEventChanges } from '../../db/schema.js';
 import type { DbClient } from '../../db/index.js';
 import type { IEventBus } from '../manager.js';
-import type { SessionEvent, SessionEventPayload, SessionEventMetadata } from '@agentctl/shared';
+import type {
+  SessionEvent,
+  SessionEventPayload,
+  SessionEventMetadata,
+  SessionNotice,
+} from '@agentctl/shared';
 import type { SessionEventDbRow } from '../../db/zod-schemas.js';
 import { sessionEventCodecs } from '../../db/json-codecs.js';
 import { cancelRemovedMessageOperations } from '../execution/session-operation-reconciliation.js';
@@ -33,6 +38,9 @@ function extractTokens(metadata: unknown): number {
 }
 
 export class SessionEventRepository {
+  publishNotice(notice: SessionNotice): void {
+    this.eventBus.publish(notice);
+  }
   constructor(
     private db: DbClient,
     public eventBus: IEventBus,

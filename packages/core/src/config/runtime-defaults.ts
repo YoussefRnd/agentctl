@@ -1,4 +1,4 @@
-export { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '@agentctl/shared';
+export { DEFAULT_AGENT_MODEL } from '@agentctl/shared';
 
 function positiveIntegerFromEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);

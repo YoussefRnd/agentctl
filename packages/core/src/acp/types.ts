@@ -1,12 +1,14 @@
+import type { ClientCapabilities } from '@agentclientprotocol/sdk';
 import type { ChildProcess } from 'node:child_process';
 import type { AgentConnectionDiagnostic } from '../agent/diagnostics.js';
-import type { ClientCapabilities } from '@agentclientprotocol/sdk';
-import type { AcpAgentConnection } from './transport/client-connection.js';
 import type {
   AgentDescriptor,
+  AgentMcpGateway,
   AgentSessionCallbacks,
   AgentSessionOptions,
 } from '../agent/types.js';
+import type { AcpAgentConnection } from './transport/client-connection.js';
+import type { AcpConnectionLease } from './transport/connection-lease.js';
 
 export type {
   AgentConfigOption,
@@ -50,15 +52,17 @@ export interface CacheStorage {
 
 export interface IConnectionManager {
   getProviderIdByCommand(command: string): string | undefined;
-  getConnection(providerId: string): Promise<{
-    generation?: number;
-    child: ChildProcess;
-    transport: AgentStreamTransport;
-    connection: AcpAgentConnection;
-    capabilities: AcpParsedCapabilities;
-  }>;
-  closeSession(providerId: string, sessionId: string): Promise<void>;
-  writeTerminalInput(terminalId: string, data: string): boolean;
+  getConnection(
+    providerId: string,
+    options?: { mcpGateway?: AgentMcpGateway },
+  ): Promise<AcpConnectionLease>;
+  closeSession(providerId: string, sessionId: string, lease: AcpConnectionLease): Promise<void>;
+  writeTerminalInput(
+    terminalId: string,
+    data: string,
+    lease: AcpConnectionLease,
+    sessionId: string,
+  ): boolean;
   registerActiveSession(
     acpSessionId: string,
     session: {
@@ -68,8 +72,13 @@ export interface IConnectionManager {
       callbacks: AgentSessionCallbacks;
     },
     providerId: string,
+    lease: AcpConnectionLease,
   ): void;
-  unregisterActiveSession?(acpSessionId: string, providerId: string): void;
+  unregisterActiveSession?(
+    acpSessionId: string,
+    providerId: string,
+    lease: AcpConnectionLease,
+  ): void;
 }
 
 /** Complete connection lifecycle required by the application composition root. */

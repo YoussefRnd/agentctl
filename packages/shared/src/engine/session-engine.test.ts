@@ -85,6 +85,47 @@ describe('SessionEngine', () => {
     expect(engine.getIsConnected()).toBe(true);
   });
 
+  it('delivers live notices without changing history, streaming state or reconnect cursors', async () => {
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const onNotice = vi.fn();
+    engine = new SessionEngine({
+      sessionId,
+      sseUrl: 'http://localhost/stream',
+      onNotice,
+      onEventsUpdate,
+      onStatusChange,
+      onStreamingChange,
+      onError,
+    });
+    engine.connect(5);
+    await vi.advanceTimersByTimeAsync(0);
+    const notice = {
+      type: 'notice',
+      sessionId,
+      severity: '_future',
+      title: 'Integration unavailable',
+      description: 'Continuing.',
+    };
+    onStreamingChange.mockClear();
+    mockController.enqueue(`event: session_notice\ndata: ${JSON.stringify(notice)}\n\n`);
+    mockController.enqueue(
+      `event: session_notice\ndata: ${JSON.stringify({ ...notice, sessionId: '22222222-2222-4222-8222-222222222222' })}\n\n`,
+    );
+    await vi.advanceTimersByTimeAsync(16);
+    expect(onNotice).toHaveBeenCalledExactlyOnceWith(notice);
+    expect(onEventsUpdate).not.toHaveBeenCalled();
+    expect(onStreamingChange).not.toHaveBeenCalled();
+    const replacement = new MockStreamController();
+    fetchMock.mockResolvedValue({ ok: true, status: 200, body: replacement.stream });
+    mockController.close();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining('lastEventId=5'),
+      expect.any(Object),
+    );
+    replacement.close();
+  });
+
   it('does not restart a connection while it is opening', async () => {
     let resolveFetch!: (value: unknown) => void;
     fetchMock.mockImplementationOnce(

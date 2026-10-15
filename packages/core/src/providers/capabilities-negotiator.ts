@@ -2,6 +2,7 @@ import type { Provider } from './provider.js';
 import {
   DEFAULT_AGENT_MODEL,
   findAgentConfigOption,
+  resolveThinkingEffort,
   type AgentFeatures,
   type ThinkingEffort,
 } from '@agentctl/shared';
@@ -23,7 +24,6 @@ export function negotiateCapabilities(
 ): NegotiatedCapabilities {
   const defaultSelection = provider.resolveDefaultSelection();
   let selectedModel = requestedModel ?? defaultSelection.selectedModel;
-  let selectedThinkingEffort = requestedThinkingEffort ?? defaultSelection.selectedThinkingEffort;
 
   const discovery = provider.toDiscovery();
   const configOptions = discovery.configOptions ?? [];
@@ -52,18 +52,12 @@ export function negotiateCapabilities(
 
   // 2. Validate / Negotiate Thinking Effort
   const thinkingOption = findAgentConfigOption(configOptions, 'thought_level');
-  let resolvedThinkingConfigId: string | undefined = undefined;
-  if (thinkingOption) {
-    resolvedThinkingConfigId = thinkingOption.id;
-    const isEffortAvailable =
-      thinkingOption.options?.some(
-        (opt: { value: string }) => opt.value === selectedThinkingEffort,
-      ) ?? false;
-    if (!isEffortAvailable && (thinkingOption.options?.length ?? 0) > 0) {
-      selectedThinkingEffort = (thinkingOption.options?.[0]?.value ??
-        defaultSelection.selectedThinkingEffort) as ThinkingEffort;
-    }
-  }
+  const resolvedThinkingConfigId = thinkingOption?.id;
+  const selectedThinkingEffort = resolveThinkingEffort(
+    thinkingOption,
+    requestedThinkingEffort,
+    defaultSelection.selectedThinkingEffort,
+  );
 
   return {
     selectedModel,

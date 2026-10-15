@@ -13,21 +13,6 @@ const ACTIVE_GRID_STYLE = {
   backgroundSize: '5px 5px, 5px 5px, 100% 100%',
 };
 
-const EFFORT_ORDER = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
-
-function explicitEffortOptions(options: AgentConfigOption['options']) {
-  const levels = options?.filter((item) => item.value !== 'default') ?? [];
-  // Some providers advertise levels in descending order. Preserve their order for unknown values.
-  if (levels.every((item) => EFFORT_ORDER.includes(item.value as (typeof EFFORT_ORDER)[number]))) {
-    return [...levels].sort(
-      (a, b) =>
-        EFFORT_ORDER.indexOf(a.value as (typeof EFFORT_ORDER)[number]) -
-        EFFORT_ORDER.indexOf(b.value as (typeof EFFORT_ORDER)[number]),
-    );
-  }
-  return levels;
-}
-
 export function ThinkingEffortControl({
   option,
   onChange,
@@ -44,8 +29,7 @@ export function ThinkingEffortControl({
   const [isOpen, setIsOpen] = useState(false);
   const [localIndex, setLocalIndex] = useState<number | null>(null);
   const options = option?.options;
-  const levels = useMemo(() => explicitEffortOptions(options), [options]);
-  const defaultOption = options?.find((item) => item.value === 'default');
+  const levels = useMemo(() => options ?? [], [options]);
   const currentValue = option?.currentValue;
   const selectionKey = JSON.stringify([
     option?.id,
@@ -84,7 +68,6 @@ export function ThinkingEffortControl({
   if (!option || !options?.length) return null;
 
   const currentIndex = levels.findIndex((item) => item.value === currentValue);
-  const isDefaultSelected = localIndex === null && currentValue === defaultOption?.value;
   const displayIndex = localIndex ?? Math.max(0, currentIndex);
   const maxVal = Math.max(0, levels.length - 1);
   const progress = maxVal > 0 ? displayIndex / maxVal : 0;
@@ -100,7 +83,7 @@ export function ThinkingEffortControl({
   const activeOptionName =
     localIndex !== null
       ? (levels[localIndex]?.name ?? levels[0]?.name)
-      : (options.find((item) => item.value === currentValue)?.name ?? options[0].name);
+      : (options.find((item) => item.value === currentValue)?.name ?? option.name);
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -149,40 +132,17 @@ export function ThinkingEffortControl({
             <span className="text-text-main shrink-0 text-xs font-bold tracking-tight">
               Thinking Effort
             </span>
-            <div className="flex min-w-0 items-center gap-2 text-[11px]">
-              {!isDefaultSelected && (
-                <span className="text-accent truncate font-mono font-bold">{activeOptionName}</span>
-              )}
-              {defaultOption && (
-                <button
-                  type="button"
-                  disabled={disabled || isUpdating}
-                  aria-label="Use provider default"
-                  aria-pressed={isDefaultSelected}
-                  title="Use provider default"
-                  onClick={() => {
-                    setLocalIndex(null);
-                    if (currentValue !== defaultOption.value) sendSelection(defaultOption.value);
-                  }}
-                  className={cn(
-                    'focus-visible:ring-accent/50 shrink-0 rounded-full border px-2 py-0.5 font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-40',
-                    isDefaultSelected
-                      ? 'border-accent/40 bg-accent/10 text-accent'
-                      : 'border-border/30 text-text-muted hover:border-border/50 hover:text-text-main',
-                  )}
-                >
-                  Default
-                </button>
-              )}
-            </div>
+            <span className="text-accent truncate font-mono text-[11px] font-bold">
+              {activeOptionName}
+            </span>
           </div>
 
           {levels.length > 1 && (
             <>
               {/* Subheader labels */}
               <div className="text-text-muted/50 flex justify-between text-[11px] font-semibold">
-                <span>Faster</span>
-                <span>Smarter</span>
+                <span>{levels[0].name}</span>
+                <span>{levels[levels.length - 1].name}</span>
               </div>
 
               {/* Slider Container */}
@@ -196,7 +156,7 @@ export function ThinkingEffortControl({
                   <div
                     className="to-accent/30 pointer-events-none absolute top-1/2 left-0 h-5 -translate-y-1/2 bg-gradient-to-r from-blue-500/20 blur-md transition-colors duration-300"
                     style={{
-                      width: `${(isDefaultSelected ? 0 : progress * 100).toString()}%`,
+                      width: `${(progress * 100).toString()}%`,
                     }}
                   />
 
@@ -204,13 +164,13 @@ export function ThinkingEffortControl({
                   <div
                     className="absolute top-0 bottom-0 left-0 rounded-md transition-colors duration-300"
                     style={{
-                      width: `${(isDefaultSelected ? 0 : progress * 100).toString()}%`,
+                      width: `${(progress * 100).toString()}%`,
                       ...ACTIVE_GRID_STYLE,
                     }}
                   />
 
                   {/* Custom Thumb - Math-aligned to stay perfectly centered within track bounds */}
-                  {!isDefaultSelected && levels.length > 0 && (
+                  {(localIndex !== null || currentIndex >= 0) && (
                     <div
                       data-testid="thinking-effort-thumb"
                       className="absolute top-1/2 h-6 w-3.5 -translate-y-1/2 rounded-[4px] border-white bg-white shadow-lg transition-transform duration-300"
@@ -229,24 +189,8 @@ export function ThinkingEffortControl({
                     step="1"
                     value={displayIndex}
                     aria-label="Thinking effort level"
-                    aria-valuetext={
-                      isDefaultSelected ? 'Provider default' : levels[displayIndex]?.name
-                    }
+                    aria-valuetext={levels[displayIndex]?.name}
                     onChange={(event) => selectLevel(event.currentTarget.value)}
-                    onClick={(event) => {
-                      // A range already at zero does not fire change when Default switches to Low.
-                      if (isDefaultSelected) selectLevel(event.currentTarget.value);
-                    }}
-                    onKeyDown={(event) => {
-                      if (
-                        isDefaultSelected &&
-                        ['Home', 'ArrowRight', 'ArrowUp'].includes(event.key)
-                      ) {
-                        event.preventDefault();
-                        setLocalIndex(0);
-                        if (debounceMs === 0) sendSelection(levels[0].value);
-                      }
-                    }}
                     className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
                   />
                 </div>

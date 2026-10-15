@@ -28,6 +28,9 @@ export class AcpRequestScopes<T> {
   get(requestId: string | number): T | undefined {
     return this.scopes.get(requestId);
   }
+  release(predicate: (scope: T) => boolean): void {
+    for (const [id, scope] of this.scopes) if (predicate(scope)) this.scopes.delete(id);
+  }
   clear(): void {
     this.scopes.clear();
   }

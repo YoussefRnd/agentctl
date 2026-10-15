@@ -1,13 +1,13 @@
-import { createCompactionProjector } from './compaction.js';
-import { createTerminalProjector } from './terminals.js';
 import type {
   AgentMessage,
-  UserMessage,
   AgentThought,
   AvailableCommandsUpdate,
+  CompactionSummaryChunk,
+  CompactionUpdate,
   ConfigOptionUpdate,
   ContentChunk,
   PlanItems,
+  PlanRemoved,
   PlanUpdate,
   SessionConfigOption,
   SessionInfoUpdate,
@@ -18,16 +18,16 @@ import type {
   ToolCallContentChunk,
   ToolCallUpdate,
   UsageUpdate,
-  PlanRemoved,
-  CompactionUpdate,
-  CompactionSummaryChunk,
+  UserMessage,
 } from '@agentclientprotocol/sdk/experimental/v2';
 import type { AgentConfigOption } from '@agentctl/shared';
 import type { AgentToolCallContent, AgentUpdate } from '../../agent/types.js';
-import { modelContextMetadata } from '../protocol/model-context.js';
+import { createCompactionProjector } from '../protocol/compaction.js';
 import { displayAcpContent } from '../protocol/content.js';
+import { modelContextMetadata } from '../protocol/model-context.js';
 import { projectRetryMetadata } from '../protocol/retry-metadata.js';
 import { toolArgumentsFrom } from '../protocol/tool-call-utils.js';
+import { createTerminalProjector } from './terminals.js';
 
 function textFromContent(content: unknown): string {
   if (!Array.isArray(content)) return '';
@@ -85,6 +85,17 @@ export function projectV2SessionUpdate(
   projectTerminal = createTerminalProjector(),
 ): AgentUpdate[] {
   switch (update.sessionUpdate) {
+    case 'notice': {
+      const notice = update as { severity: string; title: string; description?: string | null };
+      return [
+        {
+          type: 'notice',
+          severity: notice.severity,
+          title: notice.title,
+          description: notice.description ?? undefined,
+        },
+      ];
+    }
     case 'user_message_chunk':
     case 'agent_message_chunk': {
       const value = update as ContentChunk;

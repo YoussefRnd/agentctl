@@ -3,10 +3,12 @@ import type {
   SessionEventMetadata,
   SessionEventPayload,
   SessionStatus,
+  SessionNotice,
 } from '@agentctl/shared';
 import type { SessionEventDbRow } from '../db/zod-schemas.js';
 
 export interface SessionEventRepositoryLike {
+  publishNotice?(notice: SessionNotice): void;
   append<T extends SessionEvent['type']>(
     sessionId: string,
     type: T,

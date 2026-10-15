@@ -1,7 +1,7 @@
 import { applicationInfo } from '../../config/application-info.js';
 import type { AcpAgentConnection } from '../transport/client-connection.js';
 import type { ClientCapabilities } from '@agentclientprotocol/sdk';
-import { initializeAcpConnection } from '../transport/capabilities-cache.js';
+import { initializeAcpConnection } from '../v1/capabilities.js';
 
 export async function initializeAuthConnection(
   connection: AcpAgentConnection,

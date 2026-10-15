@@ -34,6 +34,21 @@ describe('SessionEventRepository transactions', () => {
     context = fixture();
   });
 
+  it('publishes notices without creating history rows or advancing the change cursor', () => {
+    const { db, bus, repository } = context;
+    const notice = {
+      type: 'notice' as const,
+      sessionId: 's',
+      severity: 'error',
+      title: 'Optional integration unavailable',
+    };
+    repository.publishNotice(notice);
+    expect(bus.publish).toHaveBeenCalledExactlyOnceWith(notice);
+    expect(db.select().from(sessionEvents).all()).toEqual([]);
+    expect(db.select().from(sessionEventChanges).all()).toEqual([]);
+    expect(db.select().from(sessions).get()?.status).toBe('idle');
+  });
+
   it('commits the row, token count and change cursor before publishing', async () => {
     const { db, bus, repository } = context;
     bus.publish.mockImplementation((event) => {

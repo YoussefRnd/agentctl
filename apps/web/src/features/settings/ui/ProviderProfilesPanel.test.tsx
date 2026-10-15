@@ -51,7 +51,17 @@ const provider = {
   isProfile: true,
   registryAgentId: 'agent',
   installState: 'installed_local',
-  configOptions: [{ id: 'llm', category: 'model', options: [{ value: 'model', name: 'Model' }] }],
+  configOptions: [
+    { id: 'llm', category: 'model', options: [{ value: 'model', name: 'Model' }] },
+    {
+      id: 'effort',
+      category: 'thought_level',
+      options: [
+        { value: 'thinking', name: 'Thinking' },
+        { value: 'none', name: 'No reasoning' },
+      ],
+    },
+  ],
 } as ProviderDiscovery;
 const change = (index: number, value: string) =>
   act(() => {
@@ -79,13 +89,16 @@ test('saves protocol and model defaults on the selected profile without copying 
   change(0, 'profile');
   change(1, 'v1');
   change(2, 'model');
-  change(3, 'high');
+  expect(
+    [...container.querySelectorAll('select')[3].options].map((option) => option.value),
+  ).toContain('thinking');
+  change(3, 'thinking');
   await click('Save configuration');
   expect(mocks.config).toHaveBeenCalledWith('profile', undefined, undefined, {
     customModels: [],
     protocol: 'v1',
     defaultModel: 'model',
-    defaultThinkingEffort: 'high',
+    defaultThinkingEffort: 'thinking',
   });
 });
 

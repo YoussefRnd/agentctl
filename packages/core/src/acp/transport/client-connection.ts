@@ -1,22 +1,27 @@
 import {
+  client,
+  methods,
+  type ClientConnection,
+  type ClientSideConnection,
+  type SessionNotification,
+  type Stream,
+} from '@agentclientprotocol/sdk';
+import type { ClientSessionContext } from '../protocol/client-handlers.js';
+import type { AgentSessionCallbacks } from '../../agent/types.js';
+import { createClientHandlers, type ClientHandlerContext } from '../protocol/client-handlers.js';
+import { AcpRequestScopes, SESSION_REQUEST_METHODS } from '../protocol/request-scopes.js';
+import {
   AcpSubagentSessions,
   isSubagentNotification,
   type SubagentNotification,
 } from '../protocol/subagent-sessions.js';
-import { withSessionSetupTracking } from './subagent-stream.js';
-import { AcpRequestScopes, SESSION_REQUEST_METHODS } from '../protocol/request-scopes.js';
-import { wrapDebug } from './stream-debug.js';
-import type { ClientSessionContext } from '../protocol/client-handlers.js';
-import { ACP_MAX_PENDING_UPDATES } from './limits.js';
 import {
-  client,
-  methods,
-  type ClientSideConnection,
-  type ClientConnection,
-  type Stream,
-  type SessionNotification,
-} from '@agentclientprotocol/sdk';
-import { createClientHandlers, type ClientHandlerContext } from '../protocol/client-handlers.js';
+  ACP_MAX_PENDING_UPDATES,
+  ACP_MAX_PENDING_UPDATE_BYTES,
+  acpPayloadBytes,
+} from './limits.js';
+import { wrapDebug } from './stream-debug.js';
+import { withSessionSetupTracking } from './subagent-stream.js';
 
 /** The outbound ACP operations used by the v1 driver, independent of SDK wrapper classes. */
 export type AcpAgentConnection = Pick<
@@ -44,7 +49,9 @@ export type AcpAgentConnection = Pick<
 > & {
   close?(): void;
   resolveSessionContext?(sessionId: string): ClientSessionContext;
-  flushPendingSessionUpdates?(): Promise<void>;
+  flushPendingSessionUpdates?(sessionId?: string): Promise<void>;
+  releaseSessionContext?(sessionId: string): void;
+  drainSessionUpdates?(sessionId: string): Promise<void>;
 };
 
 /** Register with the app API so individual requests retain their cancellation context. */
@@ -64,6 +71,54 @@ export async function connectAcpClient(
     draft: boolean;
     historical: boolean;
   }> = [];
+  let pendingBytes = 0;
+  const processing = new Map<string, Set<Promise<void>>>();
+  const failures = new Map<string, unknown>();
+  const trackUpdate = (
+    params: SessionNotification | SubagentNotification,
+    work: () => Promise<void>,
+  ) => {
+    const root = rootFor(params.sessionId);
+    let owner: AgentSessionCallbacks | undefined;
+    try {
+      owner = context.resolveSession({ sessionId: root }).callbacks;
+    } catch {
+      /* Setup is still pending. */
+    }
+    const active = processing.get(root) ?? new Set<Promise<void>>();
+    processing.set(root, active);
+    const result = work();
+    const settled = result
+      .catch((error: unknown) => {
+        let current: AgentSessionCallbacks | undefined;
+        try {
+          current = context.resolveSession({ sessionId: root }).callbacks;
+        } catch {
+          /* Session was released. */
+        }
+        if ((owner && current === owner) || (!owner && adapted.canBuffer(root))) {
+          if (!failures.has(root) && failures.size >= ACP_MAX_PENDING_UPDATES)
+            failures.delete(failures.keys().next().value!);
+          if (!failures.has(root)) failures.set(root, error);
+        }
+      })
+      .finally(() => {
+        active.delete(settled);
+        if (processing.get(root) === active && active.size === 0) processing.delete(root);
+      });
+    active.add(settled);
+    // Notifications have no response. Retain failure for completion without allowing
+    // the SDK's default error logger to dump the original protocol payload.
+    return settled;
+  };
+  const drainSessionUpdates = async (id: string) => {
+    while (processing.get(id)?.size) await Promise.all(processing.get(id)!);
+    if (failures.has(id)) {
+      const error = failures.get(id);
+      failures.delete(id);
+      throw error;
+    }
+  };
   const canResolve = (id: string) => {
     try {
       subagents.resolve(id);
@@ -77,26 +132,50 @@ export async function connectAcpClient(
     draft: boolean,
     historical: boolean,
   ) => {
-    if (pending.length >= ACP_MAX_PENDING_UPDATES)
+    if (!adapted.canBuffer(rootFor(notification.sessionId))) return;
+    const bytes = acpPayloadBytes(notification);
+    if (
+      pending.length >= ACP_MAX_PENDING_UPDATES ||
+      bytes > ACP_MAX_PENDING_UPDATE_BYTES - pendingBytes
+    )
       throw new Error('Too many ACP updates before session setup');
     pending.push({ notification, draft, historical });
+    pendingBytes += bytes;
   };
   let flushing: Promise<void> | undefined;
-  const flushPendingSessionUpdates = () =>
-    (flushing ??= (async () => {
-      const snapshot = pending.splice(0);
-      for (const item of snapshot) {
-        if (!canResolve(item.notification.sessionId)) {
-          pending.push(item);
-          continue;
+  const flushPendingSessionUpdates = (sessionId?: string) => {
+    const work = (flushing ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(async () => {
+        const snapshot = pending.splice(0);
+        pendingBytes = 0;
+        for (const item of snapshot) {
+          if (!canResolve(item.notification.sessionId)) {
+            if (adapted.canBuffer(rootFor(item.notification.sessionId))) {
+              pending.push(item);
+              pendingBytes += acpPayloadBytes(item.notification);
+            }
+            continue;
+          }
+          if (item.draft)
+            await subagents.update(item.notification as SubagentNotification, item.historical);
+          else await handlers.sessionUpdate(item.notification as SessionNotification);
         }
-        if (item.draft)
-          await subagents.update(item.notification as SubagentNotification, item.historical);
-        else await handlers.sessionUpdate(item.notification as SessionNotification);
-      }
-    })().finally(() => {
-      flushing = undefined;
-    }));
+        if (sessionId) adapted.finishSetup(sessionId);
+        // Drop unmatched traffic once its setup has finished rather than scanning it forever.
+        for (let i = pending.length - 1; i >= 0; i--) {
+          if (!adapted.canBuffer(rootFor(pending[i]!.notification.sessionId))) {
+            pendingBytes -= acpPayloadBytes(pending[i]!.notification);
+            pending.splice(i, 1);
+          }
+        }
+      })
+      .finally(() => {
+        if (flushing === work) flushing = undefined;
+      });
+    flushing = work;
+    return sessionId ? work.then(() => drainSessionUpdates(sessionId)) : work;
+  };
   const scopes = new AcpRequestScopes<ClientSessionContext>((method, params) => {
     if (!SESSION_REQUEST_METHODS.has(method)) return undefined;
     try {
@@ -122,24 +201,34 @@ export async function connectAcpClient(
     .onRequest(methods.client.session.requestPermission, ({ params, signal }) =>
       handlers.requestPermission(params, signal),
     )
-    .onNotification(methods.client.session.update, async ({ params }) => {
-      if (pending.length && canResolve(params.sessionId)) await flushPendingSessionUpdates();
-      if (isSubagentNotification(params)) {
-        const historical = adapted.isHistorical(rootFor(params.sessionId));
-        if (params.update.sessionUpdate === 'subagent_update')
-          pendingRoots.set(params.update.sessionId, rootFor(params.sessionId));
+    .onNotification(methods.client.session.update, ({ params }) =>
+      trackUpdate(params, async () => {
+        if (
+          params.update.sessionUpdate === 'notice' &&
+          adapted.isHistorical(rootFor(params.sessionId))
+        )
+          return;
+        if (isSubagentNotification(params)) {
+          const historical = adapted.isHistorical(rootFor(params.sessionId));
+          if (
+            params.update.sessionUpdate === 'subagent_update' &&
+            !canResolve(params.sessionId) &&
+            adapted.canBuffer(rootFor(params.sessionId))
+          )
+            pendingRoots.set(params.update.sessionId, rootFor(params.sessionId));
+          if (!canResolve(params.sessionId)) {
+            queuePending(params, true, historical);
+            return;
+          }
+          return subagents.update(params, historical);
+        }
         if (!canResolve(params.sessionId)) {
-          queuePending(params, true, historical);
+          queuePending(params, false, adapted.isHistorical(rootFor(params.sessionId)));
           return;
         }
-        return subagents.update(params, historical);
-      }
-      if (!canResolve(params.sessionId)) {
-        queuePending(params, false, adapted.isHistorical(rootFor(params.sessionId)));
-        return;
-      }
-      return handlers.sessionUpdate(params);
-    })
+        return handlers.sessionUpdate(params);
+      }),
+    )
     .onRequest(methods.client.fs.readTextFile, ({ params }) => handlers.readTextFile!(params))
     .onRequest(methods.client.fs.writeTextFile, ({ params, signal }) =>
       handlers.writeTextFile!(params, signal),
@@ -192,13 +281,42 @@ export async function connectAcpClient(
     .finally(() => {
       scopes.clear();
       subagents.clear();
+      handlers.dispose();
       pending.length = 0;
+      pendingBytes = 0;
       pendingRoots.clear();
+      processing.clear();
+      failures.clear();
     })
     .catch(() => undefined);
   return {
     ...agentConnectionFacade(connection),
     flushPendingSessionUpdates,
+    drainSessionUpdates,
+    releaseSessionContext(id) {
+      const callbacks = subagents.releaseRoot(id);
+      try {
+        callbacks.add(context.resolveSession({ sessionId: id }).callbacks);
+      } catch {
+        /* Already removed. */
+      }
+      handlers.releaseSession(callbacks);
+      scopes.release((scope) => callbacks.has(scope.callbacks));
+      adapted.release(id);
+      processing.delete(id);
+      failures.delete(id);
+      for (const [child, root] of pendingRoots) if (root === id) pendingRoots.delete(child);
+      for (let i = pending.length - 1; i >= 0; i--) {
+        const item = pending[i]!;
+        if (
+          item.notification.sessionId === id ||
+          !adapted.canBuffer(rootFor(item.notification.sessionId))
+        ) {
+          pendingBytes -= acpPayloadBytes(item.notification);
+          pending.splice(i, 1);
+        }
+      }
+    },
     resolveSessionContext: (id) => subagents.resolve(id),
   };
 }

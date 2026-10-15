@@ -15,20 +15,14 @@ import {
 } from '@agentctl/ui';
 import {
   DEFAULT_AGENT_MODEL,
-  DEFAULT_THINKING_EFFORT,
-  THINKING_EFFORTS,
   findAgentConfigOption,
+  resolveThinkingEffort,
   type SessionMode,
   type ThinkingEffort,
 } from '@agentctl/shared';
 import { useDraftStore } from '@/features/composer';
 import { useProviders } from '@/features/providers';
 import { useSettings } from '@/features/settings';
-
-const thinkingOptions: SelectOption[] = THINKING_EFFORTS.map((value) => ({
-  value,
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-}));
 
 interface QuickLaunchSessionDialogProps {
   open: boolean;
@@ -64,8 +58,7 @@ export function QuickLaunchSessionDialog({
 
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AGENT_MODEL);
-  const [selectedThinkingEffort, setSelectedThinkingEffort] =
-    useState<ThinkingEffort>(DEFAULT_THINKING_EFFORT);
+  const [selectedThinkingEffort, setSelectedThinkingEffort] = useState<ThinkingEffort>(null);
   const [selectedMode, setSelectedMode] = useState<SessionMode>(effectiveDefaultMode);
   const [taskSlug, setTaskSlug] = useState<string>('');
   const [showNativeSessions, setShowNativeSessions] = useState(false);
@@ -103,12 +96,21 @@ export function QuickLaunchSessionDialog({
     );
   }, [installedProviders, providers, selectedProviderId]);
 
+  const thinkingOption = findAgentConfigOption(activeProvider?.configOptions, 'thought_level');
+  const thinkingOptions: SelectOption[] =
+    thinkingOption?.options?.map((option) => ({ value: option.value, label: option.name })) ?? [];
+
   useEffect(() => {
     setSelectedModel(activeProvider?.defaultModel ?? DEFAULT_AGENT_MODEL);
     setSelectedThinkingEffort(
-      (activeProvider?.defaultThinkingEffort ?? DEFAULT_THINKING_EFFORT) as ThinkingEffort,
+      resolveThinkingEffort(thinkingOption, undefined, activeProvider?.defaultThinkingEffort),
     );
-  }, [selectedProviderId, activeProvider?.defaultModel, activeProvider?.defaultThinkingEffort]);
+  }, [
+    selectedProviderId,
+    activeProvider?.defaultModel,
+    activeProvider?.defaultThinkingEffort,
+    thinkingOption,
+  ]);
 
   // Extract model options for active provider
   const modelOptions = useMemo<SelectOption[]>(() => {
@@ -223,19 +225,21 @@ export function QuickLaunchSessionDialog({
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-text-muted text-[11px] font-bold tracking-wider uppercase">
-                Thinking Effort
-              </label>
-              <Select
-                options={thinkingOptions}
-                value={selectedThinkingEffort}
-                onChange={(v) => {
-                  setSelectedThinkingEffort(v as ThinkingEffort);
-                }}
-                placeholder="Thinking Effort"
-              />
-            </div>
+            {thinkingOptions.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-text-muted text-[11px] font-bold tracking-wider uppercase">
+                  Thinking Effort
+                </label>
+                <Select
+                  options={thinkingOptions}
+                  value={selectedThinkingEffort ?? ''}
+                  onChange={(v) => {
+                    setSelectedThinkingEffort(v);
+                  }}
+                  placeholder="Thinking Effort"
+                />
+              </div>
+            )}
           </div>
 
           {/* Workspace Mode */}

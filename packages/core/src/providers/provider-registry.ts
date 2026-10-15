@@ -517,7 +517,7 @@ export class ProviderRegistry {
       defaultConfigOptions?: AgentConfigOption[];
       protocol?: 'auto' | 'v1' | 'v2';
       defaultModel?: string;
-      defaultThinkingEffort?: string;
+      defaultThinkingEffort?: string | null;
     },
   ): Promise<ProviderDiscovery> {
     return this.runProviderOperation(providerId, 'set-config', async () => {

@@ -13,6 +13,8 @@ import {
   withCustomModels,
   decodeCustomModels,
   planArtifactSchema,
+  findAgentConfigOption,
+  isThinkingEffort,
   type SessionEventPayload,
 } from '@agentctl/shared';
 
@@ -128,6 +130,9 @@ export class SessionStateProjector {
 
   async handleDomainEvent(event: AgentUpdate): Promise<void> {
     switch (event.type) {
+      case 'notice':
+        this.eventRepository.publishNotice?.({ ...event, sessionId: this.sessionId });
+        break;
       case 'subagent_update':
         await this.subagents.association(event.association);
         break;
@@ -324,10 +329,12 @@ export class SessionStateProjector {
           event.configOptions,
           decodeCustomModels(provider?.customModels),
         );
+        const thinkingValue = findAgentConfigOption(configOptions, 'thought_level')?.currentValue;
         await this.db
           .update(sessions)
           .set({
             sessionConfigOptions: JSON.stringify(configOptions),
+            selectedThinkingEffort: isThinkingEffort(thinkingValue) ? thinkingValue : null,
             updatedAt: new Date(),
           })
           .where(eq(sessions.id, this.sessionId));

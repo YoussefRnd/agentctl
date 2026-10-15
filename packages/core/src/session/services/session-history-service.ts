@@ -69,7 +69,7 @@ export class SessionHistoryService {
       mode: string;
       selectedProvider: string;
       selectedModel: string;
-      selectedThinkingEffort: string;
+      selectedThinkingEffort: ThinkingEffort;
       contextLimit: number;
       project: { path: string; repoRoot: string | null; subdir: string };
     },

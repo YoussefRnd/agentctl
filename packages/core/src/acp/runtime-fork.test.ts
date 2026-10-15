@@ -1,12 +1,12 @@
-import { EventEmitter } from 'node:events';
-import type { ChildProcess } from 'node:child_process';
-import { afterEach, expect, test, vi } from 'vitest';
 import { RequestError, type ClientSideConnection } from '@agentclientprotocol/sdk';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { afterEach, expect, test, vi } from 'vitest';
+import { runAgentDriverConformance } from '../agent/conformance.js';
 import { AcpV1AgentDriver } from './runtime.js';
 import { parseAcpCapabilities } from './transport/capabilities-cache.js';
 import type { AgentStreamTransport, IConnectionManager } from './types.js';
-import { runAgentDriverConformance } from '../agent/conformance.js';
 
 function setup(supported = true, extraSessionCapabilities: Record<string, unknown> = {}) {
   const closed = new Promise<void>(() => {});
@@ -275,13 +275,18 @@ test('fork startup adopts the returned id, targets the destination workspace, an
     'forked-agent-id',
     expect.objectContaining({ localSessionId: 'local-fork' }),
     'provider',
+    expect.objectContaining({ connection }),
   );
   await handle.prompt('Continue');
   expect(connection.prompt).toHaveBeenCalledWith(
     expect.objectContaining({ sessionId: 'forked-agent-id' }),
   );
   await handle.close();
-  expect(manager.closeSession).toHaveBeenCalledWith('provider', 'forked-agent-id');
+  expect(manager.closeSession).toHaveBeenCalledWith(
+    'provider',
+    'forked-agent-id',
+    expect.objectContaining({ connection }),
+  );
 });
 
 test.each(['unadvertised', 'method-not-found'])(

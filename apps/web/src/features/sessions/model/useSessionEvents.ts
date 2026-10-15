@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SessionEventRow } from '@agentctl/shared';
 import { SessionEngine } from '@agentctl/shared';
+import { toast } from 'sonner';
 
 import { getDesktopCapability } from '@agentctl/api-client';
 import { getApiBaseUrl } from '@/shared/lib/api-base-url';
@@ -57,6 +58,13 @@ export function useSessionEvents(sessionId: string | null) {
       sessionId,
       sseUrl,
       token,
+      onNotice: (notice) => {
+        const options = { description: notice.description };
+        if (notice.severity === 'error') toast.error(notice.title, options);
+        else if (notice.severity === 'warning') toast.warning(notice.title, options);
+        else if (notice.severity === 'info') toast.info(notice.title, options);
+        else toast(notice.title, options);
+      },
       onHistorySnapshot: (snapshot) => {
         reconcileOutbox(snapshot.events);
         observePromptPerformance(sessionId, snapshot.events);

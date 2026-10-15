@@ -50,7 +50,7 @@ export class SessionCommandHandler {
     params: {
       selectedProvider: string;
       selectedModel: string;
-      selectedThinkingEffort: ThinkingEffort;
+      selectedThinkingEffort?: ThinkingEffort;
     },
     options: { forceNewAgentSession?: boolean } = {},
   ): Promise<SessionRuntime | null> {
@@ -73,7 +73,10 @@ export class SessionCommandHandler {
     const selection = negotiateCapabilities(
       provider,
       params.selectedModel,
-      params.selectedThinkingEffort,
+      params.selectedThinkingEffort === undefined &&
+        sessionRecord.selectedProvider === params.selectedProvider
+        ? sessionRecord.selectedThinkingEffort
+        : params.selectedThinkingEffort,
     );
     if (!selection.selectedModel.trim()) {
       throw new Error(`Provider ${params.selectedProvider} did not negotiate a model`);
@@ -169,7 +172,7 @@ export class SessionCommandHandler {
             if (Array.isArray(liveOptions)) liveConfigOptions = liveOptions;
             modelWasUpdated = true;
           }
-          if (effortChanged) {
+          if (effortChanged && selection.selectedThinkingEffort !== null) {
             thinkingOption = findAgentConfigOption(liveConfigOptions, 'thought_level');
             if (!thinkingOption) {
               throw new Error('Provider did not advertise a thinking-effort option');
@@ -194,7 +197,7 @@ export class SessionCommandHandler {
           await this.deps.launcher.reportModelFallback(sessionId, selection);
           return activeSession;
         } catch (error) {
-          if (effortWasUpdated && thinkingOption) {
+          if (effortWasUpdated && thinkingOption && sessionRecord.selectedThinkingEffort !== null) {
             await activeSession
               .updateConfigOption(thinkingOption.id, sessionRecord.selectedThinkingEffort)
               .catch(() => undefined);

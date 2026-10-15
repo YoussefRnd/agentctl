@@ -19,7 +19,7 @@ import type { AgentDriver, AgentSession, AgentSessionIntent } from '../../agent/
 import { AgentAuthenticationRequiredError } from '../../agent/errors.js';
 import { SnapshotService } from '../../git/snapshot-service.js';
 import type { McpGateway } from '../../mcp/mcp-gateway.js';
-import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../../config/runtime-defaults.js';
+import { DEFAULT_AGENT_MODEL } from '../../config/runtime-defaults.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
 
 export interface SessionRecord {
@@ -34,7 +34,7 @@ export interface SessionRecord {
   agentSessionId: string | null;
   selectedProvider: string;
   selectedModel: string;
-  selectedThinkingEffort: string;
+  selectedThinkingEffort: ThinkingEffort;
   mode: 'local' | 'worktree';
   approvalMode: 'review' | 'auto_approve' | 'yolo';
   status: SessionStatus;
@@ -211,7 +211,7 @@ export class SessionRuntimeRegistry {
     args: string[],
     env?: Record<string, string>,
     selectedModel = DEFAULT_AGENT_MODEL,
-    selectedThinkingEffort: ThinkingEffort = DEFAULT_THINKING_EFFORT,
+    selectedThinkingEffort: ThinkingEffort = null,
     features: AgentFeatures = EMPTY_AGENT_FEATURES,
     resolvedThinkingConfigId?: string,
     intent: AgentSessionIntent = { kind: 'new' },

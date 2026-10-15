@@ -790,6 +790,14 @@ describe('SessionManager tests', () => {
     expect(JSON.parse(sessionRecordVal.sessionConfigOptions)).toEqual(updatedLiveOptions);
     expect(restarted).toBe(false);
 
+    configUpdated = null;
+    await manager.updateSessionConfig('sess-1', {
+      selectedProvider: 'provider-dynamic',
+      selectedModel: 'model-2',
+    });
+    expect(configUpdated).toBeNull();
+    expect(sessionRecordVal.selectedThinkingEffort).toBe('high');
+
     // 3. Provider changed -> restarts the session
     configUpdated = null;
     await manager.updateSessionConfig('sess-1', {
@@ -2079,7 +2087,7 @@ describe('SessionManager tests', () => {
         [],
         {},
         'default',
-        'medium',
+        null,
         EMPTY_AGENT_FEATURES,
         undefined,
         { kind: 'new' },
@@ -2166,7 +2174,7 @@ describe('SessionManager tests', () => {
         [],
         {},
         'default',
-        'medium',
+        null,
         EMPTY_AGENT_FEATURES,
         undefined,
         { kind: 'resume', sessionId: 'acp-active-session' },

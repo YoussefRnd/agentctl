@@ -12,6 +12,7 @@ import {
   sessionRowSchema,
   providerCapabilitySchema,
   createTaskSlug,
+  type ThinkingEffort,
 } from '@agentctl/shared';
 import { AppError } from '../../errors/app-error.js';
 import { refreshProjectRepository } from '../../services/project-repository.js';
@@ -248,7 +249,7 @@ export function createSessionsRouter(
         persona?: string;
         providerId?: string;
         modelId?: string;
-        thinkingEffort?: 'low' | 'medium' | 'high';
+        thinkingEffort?: ThinkingEffort;
         configId?: string;
         configValue?: string;
         branch?: string;
@@ -268,7 +269,7 @@ export function createSessionsRouter(
         await fastify.sessionService.updateSessionProvider(id, {
           selectedProvider: body.providerId,
           selectedModel: body.modelId ?? '',
-          selectedThinkingEffort: body.thinkingEffort ?? 'medium',
+          selectedThinkingEffort: body.thinkingEffort,
         });
       }
       if (body.persona !== undefined) {
@@ -536,14 +537,15 @@ export function createSessionsRouter(
         );
         const cwd = session.worktreePath || project.repoRoot!;
         const context = await buildGitTextContext(cwd, body);
-        const launch = provider.getLaunchConfig(modelId, 'low');
+        const effort = provider.resolveDefaultSelection().selectedThinkingEffort;
+        const launch = provider.getLaunchConfig(modelId, effort);
         const draft = await generateGitText(
           textDriver,
           launch,
           {
             providerId: provider.id,
             selectedModel: modelId,
-            selectedThinkingEffort: 'low',
+            selectedThinkingEffort: effort,
             customModels: provider.toDiscovery().customModels,
             features: provider.features,
           },

@@ -19,6 +19,7 @@ import {
   type SessionMode,
   sessionRowSchema,
   type SessionRow,
+  type ThinkingEffort,
 } from '@agentctl/shared';
 
 export class SessionService {
@@ -138,7 +139,7 @@ export class SessionService {
     taskSlug: string;
     mode?: SessionMode;
     selectedModel?: string;
-    selectedThinkingEffort?: 'low' | 'medium' | 'high';
+    selectedThinkingEffort?: ThinkingEffort;
     approvalMode?: 'review' | 'auto_approve' | 'yolo';
     agentPersona?: string;
   }) {
@@ -229,7 +230,7 @@ export class SessionService {
     config: {
       selectedProvider: string;
       selectedModel: string;
-      selectedThinkingEffort: 'low' | 'medium' | 'high';
+      selectedThinkingEffort?: ThinkingEffort;
     },
   ) {
     const session = await this.db.query.sessions.findFirst({

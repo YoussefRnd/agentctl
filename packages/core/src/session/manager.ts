@@ -19,7 +19,7 @@ import {
 } from '@agentctl/shared';
 import { SessionRuntimeRegistry } from './runtime/session-runtime-registry.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
-import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
+import { DEFAULT_AGENT_MODEL } from '../config/runtime-defaults.js';
 import { SessionLauncher, type CreateSessionParams } from './services/session-launcher.js';
 import { SessionLifecycleService } from './services/session-lifecycle-service.js';
 import { SessionHistoryService } from './services/session-history-service.js';
@@ -235,7 +235,7 @@ export class SessionManager {
     args: string[],
     env?: Record<string, string>,
     selectedModel = DEFAULT_AGENT_MODEL,
-    selectedThinkingEffort: ThinkingEffort = DEFAULT_THINKING_EFFORT,
+    selectedThinkingEffort: ThinkingEffort = null,
     features: AgentFeatures = EMPTY_AGENT_FEATURES,
     resolvedThinkingConfigId?: string,
     intent: AgentSessionIntent = { kind: 'new' },
@@ -362,7 +362,7 @@ export class SessionManager {
     params: {
       selectedProvider: string;
       selectedModel: string;
-      selectedThinkingEffort: ThinkingEffort;
+      selectedThinkingEffort?: ThinkingEffort;
     },
     options: { forceNewAgentSession?: boolean } = {},
   ): Promise<SessionRuntime | null> {

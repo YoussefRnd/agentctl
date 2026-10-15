@@ -6,10 +6,11 @@ import type {
 } from '@agentclientprotocol/sdk';
 import type { AgentConfigOption } from '@agentctl/shared';
 import type { AgentUpdate } from '../../agent/types.js';
-import { asRecord, toolArgumentsFrom, toolNameFrom } from './tool-call-utils.js';
-import { modelContextMetadata } from './model-context.js';
+import { createCompactionProjector } from './compaction.js';
 import { displayAcpContent } from './content.js';
+import { modelContextMetadata } from './model-context.js';
 import { projectRetryMetadata } from './retry-metadata.js';
+import { asRecord, toolArgumentsFrom, toolNameFrom } from './tool-call-utils.js';
 
 function parseCount(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -107,11 +108,26 @@ export function projectSelectOptions(
  * The SDK only accepts the canonical `sessionUpdate` discriminants, so
  * legacy extension keys (status/plan_update/mode_update) never reach us here.
  */
-export function parseNotificationToEvents(notification: SessionNotification): AgentUpdate[] {
+export function parseNotificationToEvents(
+  notification: SessionNotification,
+  compactions = createCompactionProjector(),
+): AgentUpdate[] {
   const update = notification.update;
   const events: AgentUpdate[] = [];
 
   switch (update.sessionUpdate) {
+    case 'notice':
+      return [
+        {
+          type: 'notice',
+          severity: update.severity,
+          title: update.title,
+          description: update.description ?? undefined,
+        },
+      ];
+    case 'compaction_update':
+    case 'compaction_summary_chunk':
+      return compactions(update);
     case 'user_message_chunk':
     case 'agent_message_chunk': {
       const block = update.content;

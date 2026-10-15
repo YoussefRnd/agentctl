@@ -1,7 +1,3 @@
-import { expect, test } from 'vitest';
-import assert from 'node:assert/strict';
-import { PassThrough } from 'node:stream';
-import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
 import {
   agent,
   methods,
@@ -9,9 +5,13 @@ import {
   PROTOCOL_VERSION,
   type SessionNotification,
 } from '@agentclientprotocol/sdk';
-import { Readable, Writable } from 'node:stream';
-import { cleanEnv, createAgentConnection, type CacheStorage } from '../index.js';
+import assert from 'node:assert/strict';
+import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
+import { PassThrough, Readable, Writable } from 'node:stream';
+import { expect, test } from 'vitest';
 import type { AgentDescriptor, AgentUpdate } from '../../agent/types.js';
+import type { CacheStorage } from '../types.js';
+import { cleanEnv, createAgentConnection } from './process-transport.js';
 
 test('control connections cancel permissions and reject unadvertised client operations', async () => {
   const stdin = new PassThrough();
@@ -204,7 +204,7 @@ test('AcpV1AgentDriver.probe uses cache and skips spawn on cache hit', async () 
     supportsDynamicConfig: false,
   };
 
-  const { cleanEnv, getCacheKey } = await import('../index.js');
+  const { getCacheKey } = await import('../cache/launch-identity.js');
   const hashKey = getCacheKey('test-cmd', [], cleanEnv({}), {
     protocolVersion: String(PROTOCOL_VERSION),
   });
@@ -216,7 +216,7 @@ test('AcpV1AgentDriver.probe uses cache and skips spawn on cache hit', async () 
 });
 
 test('parseNotificationToEvents parses tool_call rawInput with nested arguments', async () => {
-  const { parseNotificationToEvents } = await import('../index.js');
+  const { parseNotificationToEvents } = await import('../protocol/events.js');
   const notification = {
     sessionId: 'sess_123',
     update: {
@@ -241,7 +241,7 @@ test('parseNotificationToEvents parses tool_call rawInput with nested arguments'
 });
 
 test('parseNotificationToEvents parses tool_call rawInput as direct arguments object', async () => {
-  const { parseNotificationToEvents } = await import('../index.js');
+  const { parseNotificationToEvents } = await import('../protocol/events.js');
   const notification = {
     sessionId: 'sess_123',
     update: {
@@ -263,7 +263,7 @@ test('parseNotificationToEvents parses tool_call rawInput as direct arguments ob
 });
 
 test('parseNotificationToEvents parses usage_update notification', async () => {
-  const { parseNotificationToEvents } = await import('../index.js');
+  const { parseNotificationToEvents } = await import('../protocol/events.js');
   const notification = {
     sessionId: 'sess_123',
     update: {
@@ -287,7 +287,7 @@ test('parseNotificationToEvents parses usage_update notification', async () => {
 });
 
 test('parseNotificationToEvents normalizes usage_update values from provider metadata', async () => {
-  const { parseNotificationToEvents } = await import('../index.js');
+  const { parseNotificationToEvents } = await import('../protocol/events.js');
   const notification = {
     sessionId: 'sess_123',
     update: {

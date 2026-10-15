@@ -21,6 +21,16 @@ const mocks = vi.hoisted(() => ({
             { value: 'custom-model', name: 'Custom Model' },
           ],
         },
+        {
+          id: 'effort',
+          category: 'thought_level',
+          currentValue: 'default',
+          options: [
+            { value: 'none', name: 'No reasoning' },
+            { value: 'thinking', name: 'Thinking' },
+            { value: 'default', name: 'Provider default' },
+          ],
+        },
       ],
     },
   ],
@@ -99,7 +109,7 @@ it('prepares a Home draft with the chosen model, effort, and mode without creati
     const selects = container.querySelectorAll('select');
     selects[1].value = 'custom-model';
     selects[1].dispatchEvent(new Event('change', { bubbles: true }));
-    selects[2].value = 'high';
+    selects[2].value = 'thinking';
     selects[2].dispatchEvent(new Event('change', { bubbles: true }));
   });
   await act(async () =>
@@ -110,12 +120,34 @@ it('prepares a Home draft with the chosen model, effort, and mode without creati
   expect(useDraftStore.getState().homeDrafts.project).toMatchObject({
     providerId: 'provider',
     selectedModel: 'custom-model',
-    selectedThinkingEffort: 'high',
+    selectedThinkingEffort: 'thinking',
     mode: 'local',
   });
   expect(container.querySelector('output')!.textContent).toBe('/?project=project');
   expect(mocks.closed).toHaveBeenCalledTimes(1);
   expect(mocks.create).not.toHaveBeenCalled();
+});
+
+it('uses advertised reasoning values, labels, and current default', async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <QuickLaunchSessionDialog
+          open
+          onClose={mocks.closed}
+          projectId="project"
+          projectName="Project"
+        />
+      </MemoryRouter>,
+    ),
+  );
+  const effort = container.querySelectorAll('select')[2];
+  expect([...effort.options].map((option) => [option.value, option.label])).toEqual([
+    ['none', 'No reasoning'],
+    ['thinking', 'Thinking'],
+    ['default', 'Provider default'],
+  ]);
+  expect(effort.value).toBe('default');
 });
 
 it('uses Local and hides Worktree for a non-Git project', async () => {

@@ -79,6 +79,37 @@ describe('FileCacheStorage', () => {
     expect(await storage.get('k1')).toBeNull();
   });
 
+  test('serializes concurrent writers from separate storage instances without losing keys', async () => {
+    const first = new FileCacheStorage(file);
+    const second = new FileCacheStorage(file);
+    await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        (index % 2 ? first : second).set(String(index), sampleResult),
+      ),
+    );
+    for (let index = 0; index < 12; index++)
+      expect(await first.get(String(index))).toEqual(sampleResult);
+    expect(fs.readdirSync(path.dirname(file))).toEqual(['cache.json']);
+  });
+
+  test('prunes expired records on mutation and limits retained descriptors', async () => {
+    const expired = { ts: Date.now() - 2 * 60 * 60 * 1000, result: sampleResult };
+    const records = Object.fromEntries(
+      Array.from({ length: 260 }, (_, index) => [
+        String(index),
+        { ts: Date.now() - index, result: sampleResult },
+      ]),
+    );
+    fs.writeFileSync(file, JSON.stringify({ ...records, expired }));
+    const storage = new FileCacheStorage(file);
+    await storage.set('new', sampleResult);
+    const retained = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    expect(Object.keys(retained)).toHaveLength(256);
+    expect(retained).not.toHaveProperty('expired');
+    expect(retained).toHaveProperty('new');
+    expect(await storage.get('259')).toBeNull();
+  });
+
   test('cache keys are stable per command+args+env and sort keys deterministically', () => {
     const a = getCacheKey('cmd', ['--x'], { A: '1', B: '2' });
     const b = getCacheKey('cmd', ['--x'], { B: '2', A: '1' });

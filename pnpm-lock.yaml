@@ -428,12 +428,12 @@ importers:
       '@tailwindcss/typography':
         specifier: ^0.5.20
         version: 0.5.20(tailwindcss@4.3.3)
-      '@types/hast':
-        specifier: ^3.0.5
-        version: 3.0.5
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.1(@types/node@25.9.8)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@types/hast':
+        specifier: ^3.0.5
+        version: 3.0.5
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
@@ -493,8 +493,8 @@ importers:
   packages/core:
     dependencies:
       '@agentclientprotocol/sdk':
-        specifier: 1.7.0
-        version: 1.7.0(zod@4.6.5)
+        specifier: 1.8.0
+        version: 1.8.0(zod@4.6.5)
       '@agentctl/shared':
         specifier: workspace:*
         version: link:../shared
@@ -614,8 +614,8 @@ importers:
 
 packages:
 
-  '@agentclientprotocol/sdk@1.7.0':
-    resolution: {integrity: sha512-ZORuxsuEnLjRly7t6Ad7zAsWitjWsyprswyPUHz/yycPb+tTm3DGa8XheaHhRXqX8LS9snuxaYavXSRA50TlHw==}
+  '@agentclientprotocol/sdk@1.8.0':
+    resolution: {integrity: sha512-fbP7qHZsFyTJVT0/RPrcWJ8An26qLXHEuGCHHEKDyxD1xpXV+Ejyh2LAE6vBAFePkpVjZeeohnbgvuEhZ7wLMg==}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
@@ -5221,7 +5221,7 @@ packages:
 
 snapshots:
 
-  '@agentclientprotocol/sdk@1.7.0(zod@4.6.5)':
+  '@agentclientprotocol/sdk@1.8.0(zod@4.6.5)':
     dependencies:
       zod: 4.6.5
 

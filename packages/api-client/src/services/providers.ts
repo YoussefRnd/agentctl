@@ -145,7 +145,7 @@ export const providerService = {
       customModels?: CustomModel[];
       protocol?: 'auto' | 'v1' | 'v2';
       defaultModel?: string;
-      defaultThinkingEffort?: string;
+      defaultThinkingEffort?: string | null;
     },
   ): Promise<ProviderDiscovery> {
     return apiClient.fetch<ProviderDiscovery>(`/api/providers/${providerId}/config`, {

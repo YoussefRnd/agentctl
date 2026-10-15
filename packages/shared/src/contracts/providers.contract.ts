@@ -1,6 +1,6 @@
 import { customModelsSchema } from '../custom-models.js';
 import { z } from 'zod';
-import { providerDiscoverySchema } from '../schemas/session.js';
+import { providerDiscoverySchema, thinkingEffortSchema } from '../schemas/session.js';
 import { environmentVariableNameSchema } from '../schemas/registry.js';
 
 const emptyBodySchema = z.record(z.string(), z.unknown()).optional().default({});
@@ -161,7 +161,7 @@ export const providersContract = {
       nativelyLoadsSkills: z.boolean().optional(),
       protocol: z.enum(['auto', 'v1', 'v2']).optional(),
       defaultModel: z.string().optional(),
-      defaultThinkingEffort: z.enum(['', 'low', 'medium', 'high']).optional(),
+      defaultThinkingEffort: thinkingEffortSchema.or(z.literal('')).optional(),
     }),
     responses: {
       200: providerDiscoverySchema,

@@ -1,12 +1,12 @@
-import { test, describe, expect } from 'vitest';
+import { CLIENT_METHODS, type Client } from '@agentclientprotocol/sdk';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CLIENT_METHODS, type Client } from '@agentclientprotocol/sdk';
+import { describe, expect, test } from 'vitest';
+import type { AgentSessionCallbacks } from '../../agent/types.js';
+import { noopLogger } from '../../logger.js';
 import { createClientHandlers } from './client-handlers.js';
 import { TerminalManager } from './terminal-manager.js';
-import { noopLogger } from '../../logger.js';
-import type { AgentSessionCallbacks } from '../../agent/types.js';
 
 function makeContext(cwd: string) {
   const onUpdate = () => Promise.resolve();
@@ -32,7 +32,12 @@ describe('createClientHandlers', () => {
 
     // The SDK request handler switch (acp.js) dispatches these camelCase
     // keys. Keys below MUST stay in sync with the SDK dispatch table.
-    expect(Object.keys(handlers).sort()).toEqual(
+    // Lifecycle helpers are internal; connectAcpClient registers only SDK methods.
+    expect(
+      Object.keys(handlers)
+        .filter((key) => key !== 'releaseSession' && key !== 'dispose')
+        .sort(),
+    ).toEqual(
       [
         'sessionUpdate',
         'requestPermission',

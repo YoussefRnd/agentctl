@@ -11,7 +11,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { simpleGit } from 'simple-git';
-import { DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
 
 export type WorkspaceTargetState = 'active' | 'archived' | 'finalized';
 export type FinalizeResolution = 'merged' | 'discarded';
@@ -21,7 +20,7 @@ export interface EstablishOptions {
   selectedModel: string;
   mode?: SessionMode;
   agent?: string;
-  selectedThinkingEffort?: string;
+  selectedThinkingEffort?: ThinkingEffort;
   contextLimit?: number;
   sessionConfigOptions?: string;
   title?: string;
@@ -226,8 +225,7 @@ export class SessionWorkspace {
       mode: resolvedMode,
       selectedProvider: options.selectedProvider,
       selectedModel: options.selectedModel,
-      selectedThinkingEffort: (options.selectedThinkingEffort ??
-        DEFAULT_THINKING_EFFORT) as ThinkingEffort,
+      selectedThinkingEffort: options.selectedThinkingEffort ?? null,
       contextLimit: options.contextLimit ?? 0,
       sessionConfigOptions: options.sessionConfigOptions ?? '[]',
       title: options.title ?? NEW_SESSION_TITLE,

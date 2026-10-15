@@ -1,9 +1,9 @@
 import { expect, test, vi } from 'vitest';
+import { ACP_SESSION_CLOSE_TIMEOUT_MS } from './limits.js';
 import {
   PersistentAgentConnectionManager,
   type PersistentConnection,
 } from './persistent-connection.js';
-import { ACP_SESSION_CLOSE_TIMEOUT_MS } from './limits.js';
 
 test('an unresponsive session close releases local ownership without killing another session', async () => {
   const manager = new PersistentAgentConnectionManager({} as never, {} as never, {} as never);
@@ -26,7 +26,11 @@ test('an unresponsive session close releases local ownership without killing ano
   internals.connections.set('provider', connection as unknown as PersistentConnection);
   vi.useFakeTimers();
   try {
-    const closing = manager.closeSession('provider', 'closed');
+    const closing = manager.closeSession(
+      'provider',
+      'closed',
+      connection as unknown as PersistentConnection,
+    );
     expect(connection.sessions.has('closed')).toBe(false);
     expect(connection.activeSessions.has('closed')).toBe(false);
     expect(connection.terminalManager.release).toHaveBeenCalledWith('terminal');

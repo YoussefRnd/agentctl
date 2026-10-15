@@ -56,6 +56,7 @@ beforeEach(async () => {
       isReady: true,
       toDiscovery: () => ({ enabled: true, customModels: [] }),
       features: {},
+      resolveDefaultSelection: () => ({ selectedThinkingEffort: null }),
       getLaunchConfig: () => ({ command: 'agent', args: ['--acp'], env: {} }),
     }),
   } as unknown as ProviderRegistry);
@@ -580,49 +581,63 @@ it('rejects the source branch and missing destinations', async () => {
   expect(await git(source, 'status', '--porcelain')).toBe('');
 });
 
-it('generates a draft with the session model in a separate ACP session without changing Git', async () => {
-  await initializeRepository();
-  db.update(sessions)
-    .set({ selectedModel: 'chosen-model' })
-    .where(eq(sessions.id, sessionId))
-    .run();
-  await fs.writeFile(path.join(directory, 'new.txt'), 'new change');
-  const beforeHead = await git(directory, 'rev-parse', 'HEAD');
-  const beforeIndex = await git(directory, 'write-tree');
-  const beforeStatus = await git(directory, 'status', '--porcelain');
-  const close = vi.fn(async () => {});
-  const start = vi
-    .spyOn(AcpAgentDriver.prototype, 'startSession')
-    .mockImplementation(async (_command, _args, options, callbacks) => {
-      expect(options.cwd).not.toBe(directory);
-      expect(options.selectedModel).toBe('chosen-model');
-      expect(options.selectedThinkingEffort).toBe('low');
-      expect(options.intent).toEqual({ kind: 'new' });
-      return {
-        close,
-        prompt: async (prompt: string) => {
-          expect(prompt).toContain('new change');
-          await callbacks.onUpdate({
-            type: 'text',
-            text: '{"subject":"feat: add change","body":""}',
-          });
-          return { stopReason: 'end_turn' };
-        },
-      } as unknown as AgentSession;
+it.each([null, 'vendor-deep'])(
+  'generates a draft with the provider effort %s without changing Git',
+  async (effort) => {
+    const getProvider = app.providerRegistry.getProvider.bind(app.providerRegistry);
+    vi.spyOn(app.providerRegistry, 'getProvider').mockImplementation(
+      (id) =>
+        ({
+          ...getProvider(id)!,
+          resolveDefaultSelection: () => ({
+            selectedModel: 'chosen-model',
+            selectedThinkingEffort: effort,
+          }),
+        }) as never,
+    );
+    await initializeRepository();
+    db.update(sessions)
+      .set({ selectedModel: 'chosen-model' })
+      .where(eq(sessions.id, sessionId))
+      .run();
+    await fs.writeFile(path.join(directory, 'new.txt'), 'new change');
+    const beforeHead = await git(directory, 'rev-parse', 'HEAD');
+    const beforeIndex = await git(directory, 'write-tree');
+    const beforeStatus = await git(directory, 'status', '--porcelain');
+    const close = vi.fn(async () => {});
+    const start = vi
+      .spyOn(AcpAgentDriver.prototype, 'startSession')
+      .mockImplementation(async (_command, _args, options, callbacks) => {
+        expect(options.cwd).not.toBe(directory);
+        expect(options.selectedModel).toBe('chosen-model');
+        expect(options.selectedThinkingEffort).toBe(effort);
+        expect(options.intent).toEqual({ kind: 'new' });
+        return {
+          close,
+          prompt: async (prompt: string) => {
+            expect(prompt).toContain('new change');
+            await callbacks.onUpdate({
+              type: 'text',
+              text: '{"subject":"feat: add change","body":""}',
+            });
+            return { stopReason: 'end_turn' };
+          },
+        } as unknown as AgentSession;
+      });
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/git/generate-draft`,
+      payload: { kind: 'commit', includeUnstaged: true },
     });
-  const response = await app.inject({
-    method: 'POST',
-    url: `/api/sessions/${sessionId}/git/generate-draft`,
-    payload: { kind: 'commit', includeUnstaged: true },
-  });
-  expect(response.statusCode, response.body).toBe(200);
-  expect(response.json()).toEqual({ title: 'feat: add change', body: '' });
-  expect(start).toHaveBeenCalledOnce();
-  expect(close).toHaveBeenCalledOnce();
-  expect(await git(directory, 'rev-parse', 'HEAD')).toBe(beforeHead);
-  expect(await git(directory, 'write-tree')).toBe(beforeIndex);
-  expect(await git(directory, 'status', '--porcelain')).toBe(beforeStatus);
-});
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual({ title: 'feat: add change', body: '' });
+    expect(start).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(await git(directory, 'rev-parse', 'HEAD')).toBe(beforeHead);
+    expect(await git(directory, 'write-tree')).toBe(beforeIndex);
+    expect(await git(directory, 'status', '--porcelain')).toBe(beforeStatus);
+  },
+);
 it('rejects a stale generation when the selected files change', async () => {
   await initializeRepository();
   await fs.writeFile(path.join(directory, 'new.txt'), 'original change');

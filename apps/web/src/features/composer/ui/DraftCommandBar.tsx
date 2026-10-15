@@ -1,8 +1,7 @@
 import {
   approvalBehaviorOptions,
   DEFAULT_AGENT_MODEL,
-  DEFAULT_THINKING_EFFORT,
-  isThinkingEffort,
+  resolveThinkingEffort,
 } from '@agentctl/shared';
 import { useEffect, useState } from 'react';
 import { Monitor, Shield } from 'lucide-react';
@@ -73,12 +72,16 @@ export function DraftCommandBar({
     (typeof thinkingOption?.currentValue === 'string'
       ? thinkingOption.currentValue
       : thinkingOption?.options?.[0]?.value);
-  const selectedThinkingEffort: ThinkingEffort = isThinkingEffort(thinkingValue)
-    ? thinkingValue
-    : DEFAULT_THINKING_EFFORT;
+  const selectedThinkingEffort: ThinkingEffort = resolveThinkingEffort(
+    thinkingOption,
+    thinkingValue,
+  );
   const thinkingConfig =
-    canConfigureThinking && thinkingOption && (draft.thinkingConfig || draft.selectedThinkingEffort)
-      ? { id: thinkingOption.id, value: thinkingValue! }
+    canConfigureThinking &&
+    thinkingOption &&
+    selectedThinkingEffort !== null &&
+    (draft.thinkingConfig || draft.selectedThinkingEffort)
+      ? { id: thinkingOption.id, value: selectedThinkingEffort }
       : undefined;
   const selection: HomeSessionSelection = {
     providerId: activeProvider?.id ?? '',
@@ -160,7 +163,10 @@ export function DraftCommandBar({
               key={`${selection.providerId}:${selectedModel}:${thinkingOption?.id}`}
               option={
                 canConfigureThinking && thinkingOption
-                  ? { ...thinkingOption, currentValue: thinkingValue ?? '' }
+                  ? {
+                      ...thinkingOption,
+                      currentValue: selectedThinkingEffort ?? thinkingOption.currentValue,
+                    }
                   : undefined
               }
               disabled={!!isBusy || isLoadingProviders || isLoadingSettings}
@@ -168,7 +174,7 @@ export function DraftCommandBar({
               onChange={(value) =>
                 updateDraft(projectId, {
                   thinkingConfig: { id: thinkingOption!.id, value },
-                  selectedThinkingEffort: isThinkingEffort(value) ? value : undefined,
+                  selectedThinkingEffort: value,
                 })
               }
             />

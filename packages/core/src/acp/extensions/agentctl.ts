@@ -1,13 +1,13 @@
+import { RequestError } from '@agentclientprotocol/sdk';
+import type { AgentMcpGateway, AgentSessionCallbacks } from '../../agent/types.js';
+import type { Logger } from '../../logger.js';
 import {
   authorizeClientOperation,
   type ClientAuthorizationContext,
-} from './client-authorization.js';
+} from '../protocol/client-authorization.js';
+import type { TerminalManager } from '../protocol/terminal-manager.js';
+import { handleBuiltinBash, handleTerminalWrite } from '../protocol/terminals.js';
 import { resolveAllowedPath } from '../transport/path-security.js';
-import { RequestError } from '@agentclientprotocol/sdk';
-import type { Logger } from '../../logger.js';
-import type { AgentMcpGateway, AgentSessionCallbacks } from '../../agent/types.js';
-import { handleBuiltinBash, handleTerminalWrite } from './terminals.js';
-import type { TerminalManager } from './terminal-manager.js';
 
 export interface ExtensionSessionContext extends ClientAuthorizationContext {
   onTerminalCreated?(terminalId: string, callbacks: AgentSessionCallbacks): void;

@@ -323,6 +323,13 @@
       "when": 1791060000000,
       "tag": "0045_session_execution",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1792080173050,
+      "tag": "0046_dynamic_thinking_effort",
+      "breakpoints": true
     }
   ]
 }

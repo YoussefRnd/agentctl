@@ -1,5 +1,6 @@
 import {
   findAgentConfigOption,
+  resolveThinkingEffort,
   withCustomModels,
   decodeCustomModels,
   type AgentConfigOption,
@@ -13,7 +14,7 @@ import {
   type RegistryAgent,
 } from '@agentctl/shared';
 import type { providers } from '../db/schema.js';
-import { DEFAULT_AGENT_MODEL, DEFAULT_THINKING_EFFORT } from '../config/runtime-defaults.js';
+import { DEFAULT_AGENT_MODEL } from '../config/runtime-defaults.js';
 import { jsonCodecs } from '../db/json-codecs.js';
 import { defaultCredentialVault } from '../security/credential-vault.js';
 
@@ -153,7 +154,10 @@ export class Provider {
     return jsonCodecs.capabilitySnapshot(this.data.capabilitySnapshot);
   }
 
-  getLaunchConfig(selectedModel: string, selectedThinkingEffort: string): ProviderLaunchConfig {
+  getLaunchConfig(
+    selectedModel: string,
+    selectedThinkingEffort: ThinkingEffort,
+  ): ProviderLaunchConfig {
     const extraArgs: string[] = [];
     const configOptions = this.parseConfigOptions();
     const features = this.features;
@@ -203,10 +207,11 @@ export class Provider {
           ? modelOption.currentValue
           : modelOption?.options?.[0]?.value) ??
         DEFAULT_AGENT_MODEL,
-      selectedThinkingEffort: (this.data.defaultThinkingEffort ??
-        thinkingOption?.currentValue ??
-        thinkingOption?.options?.[0]?.value ??
-        DEFAULT_THINKING_EFFORT) as ThinkingEffort,
+      selectedThinkingEffort: resolveThinkingEffort(
+        thinkingOption,
+        undefined,
+        this.data.defaultThinkingEffort,
+      ),
     };
   }
 

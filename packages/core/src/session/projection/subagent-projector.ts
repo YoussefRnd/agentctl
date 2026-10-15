@@ -52,6 +52,7 @@ export class SubagentProjector {
     );
     const scope = { nativeSessionId: subagentId };
     const scoped: SessionEventRepositoryLike = {
+      publishNotice: (notice) => this.repository.publishNotice?.({ ...notice, subagentId }),
       append: (id, type, payload, parent, metadata) =>
         this.repository.append(id, type, payload, parent ?? eventId, { ...metadata, ...scope }),
       getEvent: (id) => this.repository.getEvent(id),
@@ -119,6 +120,9 @@ export class SubagentProjector {
     const conversation = child.conversation;
     const messageId = 'messageId' in event ? event.messageId : undefined;
     switch (event.type) {
+      case 'notice':
+        this.repository.publishNotice?.({ ...event, sessionId: this.sessionId, subagentId });
+        break;
       case 'session_message':
         await this.message(event, subagentId);
         break;

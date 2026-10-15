@@ -4,6 +4,7 @@ import {
 } from '../schemas/session-event-page.js';
 import { sessionEventRowSchema } from '../schemas/session-event.js';
 import type { SessionEventRow } from '../schemas/session-event.js';
+import { sessionNoticeSchema, type SessionNotice } from '../schemas/session-notice.js';
 
 export interface SessionEngineOptions {
   sessionId: string;
@@ -14,6 +15,7 @@ export interface SessionEngineOptions {
   onStatusChange: (isConnected: boolean) => void;
   onStreamingChange: (streamingEventId: number | null) => void;
   onError?: (error: string) => void;
+  onNotice?: (notice: SessionNotice) => void;
 }
 
 export function coalesceBufferedEvents(events: SessionEventRow[]): SessionEventRow[] {
@@ -307,6 +309,11 @@ export class SessionEngine {
     }
 
     try {
+      if (eventName === 'session_notice') {
+        const notice = sessionNoticeSchema.parse(JSON.parse(dataStr));
+        if (notice.sessionId === this.options.sessionId) this.options.onNotice?.(notice);
+        return;
+      }
       if (eventName === 'error') {
         const errorData = JSON.parse(dataStr) as { error?: string };
         this.options.onError?.(errorData.error ?? 'Unknown error');

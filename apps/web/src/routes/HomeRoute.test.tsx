@@ -266,7 +266,7 @@ it('ignores persisted empty sessions and creates on first Send with the selected
     expect.objectContaining({
       selectedModel: 'model-2',
       agentPersona: 'build',
-      selectedThinkingEffort: 'medium',
+      selectedThinkingEffort: 'default',
       approvalMode: 'review',
     }),
   );
@@ -344,8 +344,8 @@ it('uses the shared slider with all advertised thinking levels and keeps changes
   const slider = document.querySelector<HTMLInputElement>(
     'input[aria-label="Thinking effort level"]',
   )!;
-  expect(slider.max).toBe('5');
-  expect(slider.getAttribute('aria-valuetext')).toBe('Provider default');
+  expect(slider.max).toBe('6');
+  expect(slider.getAttribute('aria-valuetext')).toBe('Default');
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '4');
     slider.dispatchEvent(new Event('input', { bubbles: true }));

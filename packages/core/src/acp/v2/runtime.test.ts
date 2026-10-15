@@ -1,21 +1,21 @@
-import { EventEmitter } from 'node:events';
-import type { ChildProcess, spawn } from 'node:child_process';
-import { describe, expect, test, vi } from 'vitest';
 import {
   agent,
   methods,
   ndJsonStream,
   PROTOCOL_VERSION,
-  type SessionConfigOption,
-  type CreateElicitationRequest,
   type AgentCapabilities,
+  type CreateElicitationRequest,
   type NewSessionResponse,
+  type SessionConfigOption,
 } from '@agentclientprotocol/sdk/experimental/v2';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
-import type { AgentStreamTransport } from '../types.js';
-import { AcpV2AgentDriver } from './runtime.js';
+import type { ChildProcess, spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { describe, expect, test, vi } from 'vitest';
 import { runAgentDriverConformance } from '../../agent/conformance.js';
 import type { AgentUpdate } from '../../agent/types.js';
+import type { AgentStreamTransport } from '../types.js';
+import { AcpV2AgentDriver } from './runtime.js';
 
 function harness(
   configOptions: SessionConfigOption[] = [],
@@ -137,11 +137,9 @@ function harness(
     });
     await client.notify(methods.client.session.update, {
       sessionId: params.sessionId,
-      update: {
-        sessionUpdate: 'state_update',
-        state: 'idle',
-        ...(stopReason ? { stopReason } : {}),
-      },
+      update: stopReason
+        ? { sessionUpdate: 'state_update', state: 'idle', stopReason }
+        : { sessionUpdate: 'state_update', state: 'idle', stopReason: null },
     });
     return { messageId: 'message-1' };
   });

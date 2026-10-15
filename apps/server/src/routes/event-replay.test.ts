@@ -99,6 +99,42 @@ it('replaces a large catch-up with a chronological snapshot and a usable history
   );
 });
 
+it('streams notices without history rows, SSE IDs or replay on reconnection', async () => {
+  const notice = {
+    type: 'notice' as const,
+    sessionId,
+    severity: 'error',
+    title: 'Optional integration unavailable',
+  };
+  const state = vi.fn();
+  const unsubscribeState = bus.subscribeState(state);
+  const subscribe = bus.subscribe.bind(bus);
+  const spy = vi.spyOn(bus, 'subscribe').mockImplementation((id, listener) => {
+    const release = subscribe(id, listener);
+    queueMicrotask(() => bus.publish(notice));
+    return release;
+  });
+  try {
+    const body = await readStream('lastEventId=0', (value) =>
+      value.includes('event: session_notice'),
+    );
+    expect(body).toContain(`event: session_notice\ndata: ${JSON.stringify(notice)}\n\n`);
+    expect(body).not.toContain('id: ');
+    expect(state).not.toHaveBeenCalled();
+    expect(db.select().from(sessionEvents).all()).toEqual([]);
+    spy.mockRestore();
+    seed(1);
+    const replay = await readStream('lastEventId=0', (value) =>
+      value.includes('event: session_event'),
+    );
+    expect(replay).not.toContain('session_notice');
+    expect(replay).not.toContain(notice.title);
+  } finally {
+    spy.mockRestore();
+    unsubscribeState();
+  }
+});
+
 it('uses snapshots for a byte-heavy gap and a cursor ahead of the database', async () => {
   seed(3, 'x'.repeat(400_000));
   for (const lastEventId of [0, 999]) {

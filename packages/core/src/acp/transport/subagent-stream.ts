@@ -19,6 +19,7 @@ export function withSessionSetupTracking<T>(
 ) {
   const setups = new Map<string | number, { sessionId?: string; replay: boolean }>();
   const replaying = new Set<string>();
+  const accepted = new Set<string>();
 
   const observeOutgoing = (value: unknown) => {
     const msg = packet(value);
@@ -40,6 +41,14 @@ export function withSessionSetupTracking<T>(
   const writer = stream.writable.getWriter();
   return {
     isHistorical: (id: string) => replaying.has(id),
+    canBuffer: (id: string) =>
+      accepted.has(id) ||
+      [...setups.values()].some((setup) => !setup.sessionId || setup.sessionId === id),
+    finishSetup: (id: string) => accepted.delete(id),
+    release: (id: string) => {
+      accepted.delete(id);
+      replaying.delete(id);
+    },
     readable: new ReadableStream<T>({
       async pull(controller) {
         while (true) {
@@ -69,6 +78,8 @@ export function withSessionSetupTracking<T>(
               if (setup.sessionId) replaying.delete(setup.sessionId);
 
               const result = packet(msg?.result) as { sessionId?: unknown } | undefined;
+              const id = typeof result?.sessionId === 'string' ? result.sessionId : setup.sessionId;
+              if (msg?.result !== undefined && id) accepted.add(id);
               if (typeof result?.sessionId === 'string') options.onRootSession?.(result.sessionId);
             }
             const params = packet(msg?.params) as

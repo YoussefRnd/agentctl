@@ -309,7 +309,7 @@ it('updates an older identified message across turns and projector recreation wi
   expect(JSON.parse(messages[0].data).content).toBe('final');
 });
 
-it('merges the ACP user echo into the accepted row and preserves late corrections to earlier users', async () => {
+it('merges user echoes and preserves cross-role message IDs and late corrections', async () => {
   const db = createDatabase(':memory:');
   db.insert(projects).values({ id: 'p', name: 'Project', path: '/tmp' }).run();
   db.insert(sessions)
@@ -329,7 +329,7 @@ it('merges the ACP user echo into the accepted row and preserves late correction
   const first = await projector.startTurn('hello');
   await projector.appendUserText('hel', 'user-1', 'append');
   await projector.appendUserText('lo', 'user-1', 'append');
-  await projector.appendText('answer', 'agent-1');
+  await projector.appendText('answer', 'user-1');
   await projector.flushAll();
   const second = await projector.startTurn('second');
   await projector.appendUserText('corrected', 'user-1', 'replace');
@@ -344,6 +344,16 @@ it('merges the ACP user echo into the accepted row and preserves late correction
     { content: 'corrected', messageId: 'user-1' },
     { content: 'second', messageId: 'user-2' },
   ]);
+  const providers = db
+    .select()
+    .from(sessionEvents)
+    .all()
+    .filter((row) => JSON.parse(row.data).role === 'provider');
+  expect(providers).toHaveLength(1);
+  expect(JSON.parse(providers[0].data)).toMatchObject({
+    content: 'answer',
+    messageId: 'user-1',
+  });
 });
 
 it('uses the accepted ID to distinguish identical user messages from other clients', async () => {

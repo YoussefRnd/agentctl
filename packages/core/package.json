@@ -48,6 +48,8 @@
     "dev": "tsc -b --watch",
     "test": "vitest run --root ../.. packages/core",
     "typecheck": "tsc --noEmit",
+    "acp:smoke": "node scripts/acp-smoke.mjs",
+    "acp:benchmark": "node scripts/acp-benchmark.mjs",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
@@ -61,7 +63,7 @@
     "src"
   ],
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.7.0",
+    "@agentclientprotocol/sdk": "1.8.0",
     "@agentctl/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.1",
     "dotenv": "^17.4.2",

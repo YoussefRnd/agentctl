@@ -1,28 +1,31 @@
-import { PermissionMetadataCache } from './permission-metadata.js';
-import { authorizeClientOperation } from './client-authorization.js';
-import { resolveAllowedPath } from '../transport/path-security.js';
 import {
   RequestError,
   type Client,
   type CreateElicitationRequest,
   type CreateElicitationResponse,
+  type CreateTerminalRequest,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
-  type WriteTextFileRequest,
-  type CreateTerminalRequest,
   type WaitForTerminalExitRequest,
+  type WriteTextFileRequest,
 } from '@agentclientprotocol/sdk';
-import { throwIfRequestCancelled, waitForRequest } from './request-cancellation.js';
-import type { Logger } from '../../logger.js';
 import type { AgentMcpGateway, AgentSessionCallbacks } from '../../agent/types.js';
-import { parseNotificationToEvents } from './events.js';
-import { parsePermissionRequest, formatPermissionOutcome } from './permissions.js';
+import type { Logger } from '../../logger.js';
+import { createExtensionRouter } from '../extensions/agentctl.js';
+import { resolveAllowedPath } from '../transport/path-security.js';
+import { authorizeClientOperation } from './client-authorization.js';
+import { createCompactionProjector } from './compaction.js';
 import { formatElicitationResponse, projectElicitationRequest } from './elicitations.js';
+import { parseNotificationToEvents } from './events.js';
 import {
+  assertAcpAbsolutePath,
   handleFsReadTextFile,
   handleFsWriteTextFile,
-  assertAcpAbsolutePath,
 } from './file-system.js';
+import { PermissionMetadataCache } from './permission-metadata.js';
+import { formatPermissionOutcome, parsePermissionRequest } from './permissions.js';
+import { throwIfRequestCancelled, waitForRequest } from './request-cancellation.js';
+import type { TerminalManager } from './terminal-manager.js';
 import {
   handleTerminalCreate,
   handleTerminalKill,
@@ -30,8 +33,6 @@ import {
   handleTerminalRelease,
   handleTerminalWaitForExit,
 } from './terminals.js';
-import type { TerminalManager } from './terminal-manager.js';
-import { createExtensionRouter } from './extensions.js';
 
 /**
  * Per-session context resolved from an incoming ACP request.
@@ -85,6 +86,8 @@ export type SignalAwareClientHandlers = Omit<
   | 'waitForTerminalExit'
   | 'extMethod'
 > & {
+  releaseSession(callbacks: ReadonlySet<AgentSessionCallbacks>): void;
+  dispose(): void;
   writeTextFile(params: WriteTextFileRequest, signal?: AbortSignal): Promise<Record<string, never>>;
   createTerminal(
     params: CreateTerminalRequest,
@@ -114,6 +117,10 @@ export function createClientHandlers(ctx: ClientHandlerContext): SignalAwareClie
   const pendingUrlElicitations = new Map<string, ClientSessionContext>();
   const terminalOwners = new Map<string, AgentSessionCallbacks>();
   const metadata = new WeakMap<AgentSessionCallbacks, PermissionMetadataCache>();
+  const compactions = new WeakMap<
+    AgentSessionCallbacks,
+    ReturnType<typeof createCompactionProjector>
+  >();
   const permissionMetadata = (session: ClientSessionContext) => {
     let cache = metadata.get(session.callbacks);
     if (!cache) {
@@ -145,6 +152,19 @@ export function createClientHandlers(ctx: ClientHandlerContext): SignalAwareClie
   });
 
   return {
+    releaseSession(callbacks) {
+      for (const [id, owner] of terminalOwners) if (callbacks.has(owner)) terminalOwners.delete(id);
+      for (const [id, session] of pendingUrlElicitations)
+        if (callbacks.has(session.callbacks)) pendingUrlElicitations.delete(id);
+      for (const callback of callbacks) {
+        metadata.delete(callback);
+        compactions.delete(callback);
+      }
+    },
+    dispose() {
+      terminalOwners.clear();
+      pendingUrlElicitations.clear();
+    },
     async sessionUpdate(n) {
       try {
         const session = ctx.resolveSession(n);
@@ -154,7 +174,12 @@ export function createClientHandlers(ctx: ClientHandlerContext): SignalAwareClie
         ) {
           permissionMetadata(session).remember(n.update);
         }
-        for (const event of parseNotificationToEvents(n)) {
+        let projectCompaction = compactions.get(session.callbacks);
+        if (!projectCompaction) {
+          projectCompaction = createCompactionProjector();
+          compactions.set(session.callbacks, projectCompaction);
+        }
+        for (const event of parseNotificationToEvents(n, projectCompaction)) {
           await session.callbacks.onUpdate(event);
         }
       } catch (err) {
@@ -178,6 +203,7 @@ export function createClientHandlers(ctx: ClientHandlerContext): SignalAwareClie
           },
           'Failed to process ACP session update notification',
         );
+        throw err;
       }
     },
 
@@ -231,6 +257,14 @@ export function createClientHandlers(ctx: ClientHandlerContext): SignalAwareClie
     },
 
     async createTerminal(p, signal) {
+      if (
+        p.outputByteLimit != null &&
+        (!Number.isSafeInteger(p.outputByteLimit) || p.outputByteLimit < 0)
+      )
+        throw RequestError.invalidParams(
+          undefined,
+          'outputByteLimit must be a non-negative safe integer',
+        );
       if (p.cwd !== undefined && p.cwd !== null) assertAcpAbsolutePath(p.cwd);
       const session = ctx.resolveSession(p);
       const env: Record<string, string> = {};

@@ -46,12 +46,12 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
   it('does not let a stale connection close its replacement', () => {
     const mgr = new PersistentAgentConnectionManager({} as any, {} as any, {} as any);
     const stale = {
-      transport: { kill: vi.fn() },
+      transport: { kill: vi.fn(), isAlive: true },
       terminalManager: { dispose: vi.fn().mockResolvedValue(undefined) },
       idleTimer: null,
     };
     const current = {
-      transport: { kill: vi.fn() },
+      transport: { kill: vi.fn(), isAlive: true },
       terminalManager: { dispose: vi.fn().mockResolvedValue(undefined) },
       idleTimer: null,
     };
@@ -82,7 +82,7 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
       sessions: new Map([['owned', { sessionId: 'owned', createdAt: Date.now() }]]),
       activeSessions: new Map([['owned', owned]]),
       terminalToSession: new Map(),
-      transport: { kill: vi.fn() },
+      transport: { kill: vi.fn(), isAlive: true },
       terminalManager: { dispose: vi.fn().mockResolvedValue(undefined), release: vi.fn() },
       idleTimer: null,
     };
@@ -119,18 +119,19 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
     };
 
     const mockConn = {
+      connection: {},
       sessions: new Map([['sess-2', { sessionId: 'sess-2', createdAt: Date.now() }]]),
       activeSessions: new Map(),
       terminalToSession: new Map([['term-123', 'sess-2']]),
       terminalManager: mockTerminalManager,
-      transport: { kill: vi.fn() },
+      transport: { kill: vi.fn(), isAlive: true },
       idleTimer: null,
     };
 
     (mgr as any).connections.set('provider-2', mockConn);
-    mgr.registerActiveSession('sess-2', mockSession, 'provider-2');
+    mgr.registerActiveSession('sess-2', mockSession, 'provider-2', mockConn as any);
 
-    mgr.unregisterActiveSession('sess-2', 'provider-2');
+    mgr.unregisterActiveSession('sess-2', 'provider-2', mockConn as any);
 
     expect(mockConn.activeSessions.has('sess-2')).toBe(false);
     expect(mockConn.terminalToSession.has('term-123')).toBe(false);
@@ -142,10 +143,11 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
     const mgr = new PersistentAgentConnectionManager({} as any, {} as any, {} as any);
     const makeConnection = () => ({
       generation: 1,
+      connection: {},
       sessions: new Map(),
       activeSessions: new Map(),
       terminalToSession: new Map(),
-      transport: { kill: vi.fn() },
+      transport: { kill: vi.fn(), isAlive: true },
       terminalManager: { dispose: vi.fn().mockResolvedValue(undefined), release: vi.fn() },
       idleTimer: null,
     });
@@ -161,17 +163,17 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
     });
     const firstUpdate = vi.fn();
     const secondUpdate = vi.fn();
-    mgr.registerActiveSession('same', session(firstUpdate), 'first');
-    mgr.registerActiveSession('same', session(secondUpdate), 'second');
-    mgr.unregisterActiveSession('same', 'first');
+    mgr.registerActiveSession('same', session(firstUpdate), 'first', first as any);
+    mgr.registerActiveSession('same', session(secondUpdate), 'second', second as any);
+    mgr.unregisterActiveSession('same', 'first', first as any);
     expect(second.activeSessions.get('same')?.callbacks.onUpdate).toBe(secondUpdate);
     expect(second.sessions.has('same')).toBe(true);
 
-    mgr.registerActiveSession('same', session(firstUpdate), 'first');
+    mgr.registerActiveSession('same', session(firstUpdate), 'first', first as any);
     const replacement = makeConnection();
     (mgr as any).connections.set('first', replacement);
     const replacementUpdate = vi.fn();
-    mgr.registerActiveSession('same', session(replacementUpdate), 'first');
+    mgr.registerActiveSession('same', session(replacementUpdate), 'first', replacement as any);
     (mgr as any).handleConnectionExit('first', first, 1, null);
     await Promise.resolve();
     expect(firstUpdate).toHaveBeenCalledOnce();

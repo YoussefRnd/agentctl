@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AcpSubagentSessions, type SubagentNotification } from './subagent-sessions.js';
 import type { AgentSessionCallbacks, AgentUpdate } from '../../agent/types.js';
+import { AcpSubagentSessions, type SubagentNotification } from './subagent-sessions.js';
 
 function harness() {
   const events: AgentUpdate[] = [];
@@ -42,6 +42,57 @@ function harness() {
 }
 
 describe('ACP native child sessions', () => {
+  it('releases one root, its descendants and directed messages while preserving another root', async () => {
+    const { router, announce, message, roots } = harness();
+    await announce('child');
+    await announce('grandchild', 'child');
+    await announce('other-child', 'other');
+    await message('grandchild', { content: [{ type: 'text', text: 'retained' }] });
+    await message('other-child', { content: [{ type: 'text', text: 'sibling' }] });
+    router.resolve('grandchild');
+    expect(router.releaseRoot('root').size).toBeGreaterThan(0);
+    roots.delete('root');
+    expect(() => router.resolve('grandchild')).toThrow();
+    expect(router.isChild('child')).toBe(false);
+    expect(router.isChild('other-child')).toBe(true);
+    expect(router.snapshot()).toMatchObject({ children: 1, messages: 1 });
+    router.releaseRoot('other');
+    expect(router.snapshot()).toEqual({ children: 0, messages: 0, bytes: 0 });
+  });
+
+  it('fails bounded retention without changing previously retained ownership', async () => {
+    const { callbacks } = harness();
+    // The actual root resolver distinguishes root and child IDs.
+    const bounded = new AcpSubagentSessions(
+      (id) => {
+        if (id !== 'root') throw new Error('Unknown root');
+        return { callbacks };
+      },
+      { children: 1, messages: 1, bytes: 128 },
+    );
+    await bounded.update({
+      sessionId: 'root',
+      update: { sessionUpdate: 'subagent_update', sessionId: 'c' },
+    });
+    const before = bounded.snapshot();
+    await expect(
+      bounded.update({
+        sessionId: 'root',
+        update: { sessionUpdate: 'subagent_update', sessionId: 'd' },
+      }),
+    ).rejects.toThrow('entity limit');
+    await expect(
+      bounded.update({
+        sessionId: 'root',
+        update: {
+          sessionUpdate: 'session_message',
+          messageId: 'm',
+          content: [{ type: 'text', text: 'x'.repeat(256) }],
+        },
+      }),
+    ).rejects.toThrow('byte budget');
+    expect(bounded.snapshot()).toEqual(before);
+  });
   it('routes nested children to isolated callbacks while preserving the root security context', async () => {
     const { router, events, announce, callbacks } = harness();
     await announce('child');

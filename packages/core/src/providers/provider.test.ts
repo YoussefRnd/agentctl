@@ -47,6 +47,37 @@ test('negotiates and defaults categorized model and reasoning options with opaqu
   });
 });
 
+test('preserves provider-specific effort IDs and prefers advertised defaults over the first option', () => {
+  const data = row({
+    configOptions: JSON.stringify([
+      {
+        id: 'effort',
+        category: 'thought_level',
+        name: 'Reasoning',
+        type: 'select',
+        currentValue: 'default',
+        options: ['none', 'thinking', 'default'].map((value) => ({ value, name: value })),
+      },
+    ]),
+  });
+  const provider = new Provider(data);
+  expect(provider.resolveDefaultSelection().selectedThinkingEffort).toBe('default');
+  for (const effort of ['none', 'thinking', 'default']) {
+    expect(negotiateCapabilities(provider, undefined, effort).selectedThinkingEffort).toBe(effort);
+  }
+  expect(negotiateCapabilities(provider, undefined, 'medium').selectedThinkingEffort).toBe(
+    'default',
+  );
+  expect(
+    new Provider({ ...data, defaultThinkingEffort: 'thinking' }).resolveDefaultSelection()
+      .selectedThinkingEffort,
+  ).toBe('thinking');
+  expect(
+    new Provider({ ...data, defaultThinkingEffort: 'stale-value' }).resolveDefaultSelection()
+      .selectedThinkingEffort,
+  ).toBe('default');
+});
+
 function row(
   overrides: Partial<(typeof providers)['$inferSelect']>,
 ): (typeof providers)['$inferSelect'] {
@@ -97,6 +128,13 @@ test('Provider.toDiscovery exposes registry distribution', () => {
   expect(discovery.agent?.distribution).toEqual({
     npx: { package: 'foo', args: [], env: {} },
   });
+});
+
+test('does not invent a reasoning override when no effort option is advertised', () => {
+  const provider = new Provider(row({ defaultThinkingEffort: 'ultra' }));
+  expect(provider.resolveDefaultSelection().selectedThinkingEffort).toBeNull();
+  expect(negotiateCapabilities(provider, undefined, 'high').selectedThinkingEffort).toBeNull();
+  expect(provider.getLaunchConfig('default', null).args).not.toContain('--thinking-effort');
 });
 
 test('Provider only reports ready after auth status is known', () => {

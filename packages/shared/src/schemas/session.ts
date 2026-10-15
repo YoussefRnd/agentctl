@@ -1,4 +1,3 @@
-import { THINKING_EFFORTS } from '../agent-defaults.js';
 import { customModelsSchema } from '../custom-models.js';
 import { planArtifactSchema, planItemSchema } from './plan.js';
 import { z } from 'zod';
@@ -16,7 +15,8 @@ export const sessionModeSchema = z.enum(['worktree', 'local']);
 
 export const approvalModeSchema = z.enum(['review', 'auto_approve', 'yolo']);
 
-export const thinkingEffortSchema = z.enum(THINKING_EFFORTS);
+/** Null means no provider reasoning override; non-null IDs are provider-defined. */
+export const thinkingEffortSchema = z.string().min(1).nullable();
 
 export const projectSchema = z.object({
   id: z.uuid(),

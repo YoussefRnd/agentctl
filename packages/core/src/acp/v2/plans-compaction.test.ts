@@ -60,3 +60,53 @@ test('compaction accumulates chunks, replaces final summary, and reports errors'
     }),
   ).toMatchObject([{ call: { status: 'failed', rawOutput: { error: 'Out of capacity' } } }]);
 });
+
+test('compaction patches retain, replace and clear summary, errors and metadata independently', () => {
+  const project = createV2SessionProjector();
+  project({
+    sessionUpdate: 'compaction_update',
+    compactionId: 'c',
+    status: 'failed',
+    summary: [{ type: 'text', text: 'summary' }],
+    error: 'failure',
+    _meta: { source: 'agent' },
+  });
+  expect(
+    project({ sessionUpdate: 'compaction_update', compactionId: 'c', status: 'cancelled' }),
+  ).toMatchObject([
+    {
+      call: {
+        status: 'cancelled',
+        rawOutput: { summary: 'summary', error: 'failure', metadata: { source: 'agent' } },
+      },
+    },
+  ]);
+  expect(
+    project({
+      sessionUpdate: 'compaction_update',
+      compactionId: 'c',
+      status: 'completed',
+      summary: null,
+      error: null,
+      _meta: null,
+    }),
+  ).toMatchObject([{ call: { rawOutput: { summary: '' } } }]);
+  const cleared = project({
+    sessionUpdate: 'compaction_update',
+    compactionId: 'c',
+    status: '_future',
+  });
+  expect(cleared).toMatchObject([{ call: { status: '_future', rawOutput: { summary: '' } } }]);
+  expect(cleared[0]).not.toHaveProperty('call.rawOutput.error');
+});
+
+test('compaction bounds multibyte error text without splitting code points', () => {
+  const project = createV2SessionProjector();
+  const updates = project({
+    sessionUpdate: 'compaction_update',
+    compactionId: 'bounded-error',
+    status: 'failed',
+    error: '😀'.repeat(1024),
+  });
+  expect(updates).toMatchObject([{ call: { rawOutput: { error: '😀'.repeat(512) } } }]);
+});

@@ -16,6 +16,7 @@ it('upgrades populated databases from every migration boundary without losing se
   try {
     // Exercise each historical schema, including the temporarily shipped checks feature.
     for (let count = 0; count <= migrations.length; count++) {
+      let hasSavedEffort = false;
       const databasePath = path.join(directory, `${count}.db`);
       const sqlite = new DatabaseSync(databasePath);
       sqlite.exec('PRAGMA foreign_keys = OFF;');
@@ -45,7 +46,9 @@ it('upgrades populated databases from every migration boundary without losing se
           base_commit: 'none',
           agent: 'agent',
           selected_provider: 'agent',
+          selected_thinking_effort: 'vendor-choice',
         };
+        hasSavedEffort = columns.includes('selected_thinking_effort');
         const fields = Object.keys(values).filter((field) => columns.includes(field));
         sqlite
           .prepare(
@@ -80,6 +83,8 @@ it('upgrades populated databases from every migration boundary without losing se
           id: 'session',
           discardBackup: null,
         });
+        if (hasSavedEffort)
+          expect(db.select().from(sessions).get()?.selectedThinkingEffort).toBe('vendor-choice');
         expect(
           db.select().from(sessionEvents).get(),
           `history after migration ${count}`,
@@ -89,6 +94,13 @@ it('upgrades populated databases from every migration boundary without losing se
         );
       }
       expect(db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
+      expect(
+        db
+          .all<{ name: string; notnull: number; dflt_value: string | null }>(
+            sql`PRAGMA table_info(sessions)`,
+          )
+          .find((column) => column.name === 'selected_thinking_effort'),
+      ).toMatchObject({ notnull: 0, dflt_value: null });
       expect(db.get(sql`PRAGMA foreign_keys`)).toEqual({ foreign_keys: 1 });
       expect(
         db.all(sql`SELECT name FROM sqlite_master WHERE name IN ('project_checks', 'check_runs')`),

@@ -11,6 +11,7 @@ import {
   handoffSessionResponseSchema,
   sessionWithCapabilitiesSchema,
   sessionRowSchema,
+  thinkingEffortSchema,
 } from '../schemas/session.js';
 import {
   gitStatusSchema,
@@ -180,7 +181,7 @@ export const sessionsContract = {
       persona: z.string().optional(),
       providerId: z.string().optional(),
       modelId: z.string().optional(),
-      thinkingEffort: z.enum(['low', 'medium', 'high']).optional(),
+      thinkingEffort: thinkingEffortSchema.optional(),
       configId: z.string().optional(),
       configValue: z.string().optional(),
       branch: z.string().optional(),

@@ -98,3 +98,15 @@ test('a later successful update cannot hide an earlier persistence failure', asy
   await updates.callbacks.onUpdate({ type: 'text', text: 'new turn' });
   await expect(updates.drain()).resolves.toBeUndefined();
 });
+
+test('retained byte limits include queued multibyte payloads and release bytes after work settles', async () => {
+  const queue = new AcpUpdateQueue(10, 12);
+  const held = Promise.withResolvers<void>();
+  const first = queue.enqueue(() => held.promise, '🙂'); // six UTF-8 bytes including JSON quotes
+  expect(queue.snapshot()).toMatchObject({ pending: 1, bytes: 6 });
+  await expect(queue.enqueue(() => undefined, '🙂🙂')).rejects.toThrow('byte budget');
+  held.resolve();
+  await first;
+  expect(queue.snapshot()).toMatchObject({ pending: 0, bytes: 0, peakBytes: 6 });
+  await expect(queue.drain()).rejects.toThrow('byte budget');
+});

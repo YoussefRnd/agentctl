@@ -1,5 +1,10 @@
 import { EventEmitter } from 'node:events';
-import type { SessionEventRow, StateChangeEvent, StateChangeTopic } from '@agentctl/shared';
+import type {
+  SessionEventRow,
+  SessionNotice,
+  StateChangeEvent,
+  StateChangeTopic,
+} from '@agentctl/shared';
 
 export class EventBus {
   private readonly emitter = new EventEmitter();
@@ -9,8 +14,9 @@ export class EventBus {
     this.emitter.setMaxListeners(100);
   }
 
-  publish(event: SessionEventRow): void {
+  publish(event: SessionEventRow | SessionNotice): void {
     this.emitter.emit(`session:${event.sessionId}`, event);
+    if (event.type === 'notice') return;
 
     // Transient text deltas are high frequency and do not change list or
     // workspace metadata. Persisted events do, so notify app-wide clients.
@@ -46,7 +52,10 @@ export class EventBus {
     };
   }
 
-  subscribe(sessionId: string, callback: (event: SessionEventRow) => void): () => void {
+  subscribe(
+    sessionId: string,
+    callback: (event: SessionEventRow | SessionNotice) => void,
+  ): () => void {
     const eventName = `session:${sessionId}`;
     this.emitter.on(eventName, callback);
     return () => {

@@ -1,34 +1,40 @@
-import { DEFAULT_AGENT_INITIALIZATION_TIMEOUT_MS } from '../../config/runtime-defaults.js';
-import { observeAcpStderr } from './stderr.js';
-import { spawn, type ChildProcess } from 'node:child_process';
-import os from 'node:os';
 import { ndJsonStream } from '@agentclientprotocol/sdk';
 import type { RegistryAgent } from '@agentctl/shared';
-import type { ProviderLauncher } from '../../providers/registry/provider-launcher.js';
-import type { ProviderStore } from '../../providers/registry/provider-store.js';
-import type { RegistryFetcher } from '../../providers/registry/registry-fetcher.js';
-import { parseRegistryAgents } from '../../providers/registry/registry-parser.js';
-import { ProcessStreamTransport, cleanEnv } from './process-transport.js';
-import { connectAcpClient, type AcpAgentConnection } from './client-connection.js';
-import { AcpDebugLog, wrapDebug, formatAcpMessageLog } from './stream-debug.js';
-import { AGENTCTL_CLIENT_CAPABILITIES, initializeAcpConnection } from './capabilities-cache.js';
-import type { AcpParsedCapabilities } from '../types.js';
-import type { AgentSessionCallbacks, AgentSessionOptions } from '../../agent/types.js';
-import { type Logger, noopLogger } from '../../logger.js';
-import { TerminalManager } from '../protocol/terminal-manager.js';
+import { spawn, type ChildProcess } from 'node:child_process';
+import os from 'node:os';
 import type {
   AgentConnectionDiagnostic,
   AgentDiagnosticsRecorder,
 } from '../../agent/diagnostics.js';
-import type { AgentFeatures } from '../../agent/types.js';
+import type {
+  AgentFeatures,
+  AgentSessionCallbacks,
+  AgentSessionOptions,
+} from '../../agent/types.js';
+import { DEFAULT_AGENT_INITIALIZATION_TIMEOUT_MS } from '../../config/runtime-defaults.js';
+import { noopLogger, type Logger } from '../../logger.js';
 import { Provider } from '../../providers/provider.js';
+import type { ProviderLauncher } from '../../providers/registry/provider-launcher.js';
+import type { ProviderStore } from '../../providers/registry/provider-store.js';
+import type { RegistryFetcher } from '../../providers/registry/registry-fetcher.js';
+import { parseRegistryAgents } from '../../providers/registry/registry-parser.js';
+import { TerminalManager } from '../protocol/terminal-manager.js';
+import type { AcpParsedCapabilities } from '../types.js';
+import { AGENTCTL_CLIENT_CAPABILITIES, initializeAcpConnection } from '../v1/capabilities.js';
+import { connectAcpClient, type AcpAgentConnection } from './client-connection.js';
+import { ProcessStreamTransport, cleanEnv } from './process-transport.js';
+import { observeAcpStderr } from './stderr.js';
+import { AcpDebugLog, formatAcpMessageLog, wrapDebug } from './stream-debug.js';
 
+import type { AgentMcpGateway } from '../../agent/types.js';
 import { ACP_PROCESS_OPTIONS, ownAcpProcess, withTimeout } from './acp-process-lifecycle.js';
+import { matchesConnectionLease, type AcpConnectionLease } from './connection-lease.js';
 import { ACP_SESSION_CLOSE_TIMEOUT_MS } from './limits.js';
 
 const PERSISTENT_CONNECTION_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface PersistentConnection {
+  mcpGateway?: AgentMcpGateway;
   providerId: string;
   generation: number;
   connection: AcpAgentConnection;
@@ -67,20 +73,29 @@ export class PersistentAgentConnectionManager {
     private diagnostics?: AgentDiagnosticsRecorder,
   ) {}
 
-  registerActiveSession(acpSessionId: string, session: ActiveSession, providerId: string) {
+  registerActiveSession(
+    acpSessionId: string,
+    session: ActiveSession,
+    providerId: string,
+    lease: AcpConnectionLease,
+  ) {
     const conn = this.connections.get(providerId);
+    if (!matchesConnectionLease(conn, lease) || !conn?.transport.isAlive)
+      throw new Error('ACP connection lease is no longer active');
     if (conn) {
       conn.activeSessions.set(acpSessionId, session);
       conn.sessions.set(acpSessionId, { sessionId: acpSessionId, createdAt: Date.now() });
     }
   }
 
-  unregisterActiveSession(acpSessionId: string, providerId: string) {
+  unregisterActiveSession(acpSessionId: string, providerId: string, lease: AcpConnectionLease) {
     const conn = this.connections.get(providerId);
-    if (conn) this.unregisterConnectionSession(conn, acpSessionId);
+    if (conn && matchesConnectionLease(conn, lease))
+      this.unregisterConnectionSession(conn, acpSessionId);
   }
 
   private unregisterConnectionSession(conn: PersistentConnection, acpSessionId: string) {
+    conn.connection?.releaseSessionContext?.(acpSessionId);
     conn.activeSessions.delete(acpSessionId);
     conn.sessions.delete(acpSessionId);
     for (const [termId, sessId] of conn.terminalToSession) {
@@ -92,8 +107,18 @@ export class PersistentAgentConnectionManager {
     }
   }
 
-  writeTerminalInput(terminalId: string, data: string): boolean {
+  writeTerminalInput(
+    terminalId: string,
+    data: string,
+    lease: AcpConnectionLease,
+    sessionId: string,
+  ): boolean {
     for (const conn of this.connections.values()) {
+      if (
+        !matchesConnectionLease(conn, lease) ||
+        conn.terminalToSession.get(terminalId) !== sessionId
+      )
+        continue;
       const term = conn.terminalManager.getTerminal(terminalId);
       if (term) {
         return conn.terminalManager.write(terminalId, data);
@@ -106,9 +131,14 @@ export class PersistentAgentConnectionManager {
     return this.store.listAll().find((p) => p.id === command || p.command === command)?.id;
   }
 
-  async getConnection(providerId: string): Promise<PersistentConnection> {
+  async getConnection(
+    providerId: string,
+    options?: { mcpGateway?: AgentMcpGateway },
+  ): Promise<PersistentConnection> {
     const conn = this.connections.get(providerId);
     if (conn?.transport.isAlive) {
+      if (options?.mcpGateway !== conn.mcpGateway)
+        throw new Error('Persistent ACP connection has a different MCP gateway');
       conn.lastUsed = Date.now();
       this.resetIdleTimer(conn);
       this.diagnostics?.record({
@@ -122,7 +152,12 @@ export class PersistentAgentConnectionManager {
     }
 
     const pending = this.pendingConnections.get(providerId);
-    if (pending) return pending;
+    if (pending) {
+      const connection = await pending;
+      if (options?.mcpGateway !== connection.mcpGateway)
+        throw new Error('Persistent ACP connection has a different MCP gateway');
+      return connection;
+    }
 
     const provider = this.store.get(providerId);
     if (!provider) throw new Error(`Provider ${providerId} not found`);
@@ -143,7 +178,12 @@ export class PersistentAgentConnectionManager {
 
     const launch = this.launcher.resolveLaunch(provider, agent);
     const epoch = this.providerEpochs.get(providerId) ?? 0;
-    const creation = this.createPersistentConnection(providerId, launch, epoch);
+    const creation = this.createPersistentConnection(
+      providerId,
+      launch,
+      epoch,
+      options?.mcpGateway,
+    );
     this.pendingConnections.set(providerId, creation);
     try {
       return await creation;
@@ -158,6 +198,7 @@ export class PersistentAgentConnectionManager {
     providerId: string,
     launch: { command: string; args: string[]; env: Record<string, string> },
     epoch: number,
+    mcpGateway?: AgentMcpGateway,
   ): Promise<PersistentConnection> {
     const generation = this.nextGeneration++;
     this.diagnostics?.record({
@@ -210,7 +251,7 @@ export class PersistentAgentConnectionManager {
         cwd: process.cwd(),
         terminalManager,
         logger: this.logger,
-        mcpGateway: undefined,
+        mcpGateway,
         resolveSession: (params?: { sessionId?: string }) => {
           const acpSessionId = params?.sessionId;
           if (!acpSessionId) {
@@ -233,7 +274,13 @@ export class PersistentAgentConnectionManager {
         },
       },
       stream,
-    );
+    ).catch(async (error: unknown) => {
+      transport.kill();
+      await terminalManager.dispose();
+      if (this.pendingTransports.get(providerId) === transport)
+        this.pendingTransports.delete(providerId);
+      throw error;
+    });
 
     terminalManager.on('output', (event) => {
       const { terminalId, data } = event as { terminalId: string; data: string };
@@ -290,6 +337,7 @@ export class PersistentAgentConnectionManager {
       debugLog,
       capabilities: parsedCapabilities,
       terminalManager,
+      mcpGateway,
     };
 
     if ((this.providerEpochs.get(providerId) ?? 0) !== epoch) {
@@ -335,9 +383,13 @@ export class PersistentAgentConnectionManager {
     }, PERSISTENT_CONNECTION_IDLE_TIMEOUT_MS);
   }
 
-  async closeSession(providerId: string, acpSessionId: string): Promise<void> {
+  async closeSession(
+    providerId: string,
+    acpSessionId: string,
+    lease: AcpConnectionLease,
+  ): Promise<void> {
     const conn = this.connections.get(providerId);
-    if (!conn) return;
+    if (!conn || !matchesConnectionLease(conn, lease)) return;
 
     conn.sessions.delete(acpSessionId);
     this.unregisterConnectionSession(conn, acpSessionId);

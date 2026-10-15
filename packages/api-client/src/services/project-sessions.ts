@@ -220,7 +220,7 @@ export async function patchSession(
     persona?: string;
     providerId?: string;
     modelId?: string;
-    thinkingEffort?: 'low' | 'medium' | 'high';
+    thinkingEffort?: ThinkingEffort;
     configId?: string;
     configValue?: string;
     branch?: string;

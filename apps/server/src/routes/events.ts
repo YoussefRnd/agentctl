@@ -8,6 +8,7 @@ import {
   sessionEventRowSchema,
   isSessionEventRow,
   elicitationResponseSchema,
+  sessionNoticeSchema,
 } from '@agentctl/shared';
 import { AppError } from '../errors/app-error.js';
 import { readTurnIndex } from './session-turn-index.js';
@@ -200,6 +201,12 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       const unsubscribe = fastify.eventBus.subscribe(id, (raw) => {
         if (closed || reply.raw.destroyed || reply.raw.writableEnded) return;
         try {
+          const notice = sessionNoticeSchema.safeParse(raw);
+          if (notice.success) {
+            if (notice.data.sessionId === id)
+              write(`event: session_notice\ndata: ${JSON.stringify(notice.data)}\n\n`);
+            return;
+          }
           const event = parseBusEvent(raw);
           if (catchingUp) {
             pendingBytes += Buffer.byteLength(JSON.stringify(event));

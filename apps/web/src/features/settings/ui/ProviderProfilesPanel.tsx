@@ -211,9 +211,9 @@ export function ProviderProfilesPanel({ providers }: { providers: ProviderDiscov
               onChange={setThinking}
               options={[
                 { value: '', label: 'Agent default' },
-                { value: 'low', label: 'Low' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' },
+                ...(
+                  findAgentConfigOption(provider?.configOptions, 'thought_level')?.options ?? []
+                ).map((option) => ({ value: option.value, label: option.name })),
               ]}
             />
           </label>

@@ -18,11 +18,7 @@ import type {
   SessionEvent,
   SessionMode,
 } from '@agentctl/shared';
-import {
-  DEFAULT_AGENT_MODEL,
-  DEFAULT_CONTEXT_LIMIT,
-  DEFAULT_THINKING_EFFORT,
-} from '../config/runtime-defaults.js';
+import { DEFAULT_AGENT_MODEL, DEFAULT_CONTEXT_LIMIT } from '../config/runtime-defaults.js';
 
 // Timestamps with DB-level defaults and auto-update on updatedAt
 const timestamps = {
@@ -70,9 +66,7 @@ export const sessions = sqliteTable('sessions', {
   agentSessionId: text('agent_session_id'),
   selectedProvider: text('selected_provider').notNull(),
   selectedModel: text('selected_model').notNull().default(DEFAULT_AGENT_MODEL),
-  selectedThinkingEffort: text('selected_thinking_effort')
-    .notNull()
-    .default(DEFAULT_THINKING_EFFORT),
+  selectedThinkingEffort: text('selected_thinking_effort'),
   mode: text('mode').$type<SessionMode>().notNull().default('local'),
   approvalMode: text('approval_mode')
     .$type<'review' | 'auto_approve' | 'yolo'>()

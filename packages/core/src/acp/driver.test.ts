@@ -4,6 +4,9 @@ import type { AgentDescriptor, AgentDriver } from '../agent/types.js';
 import { AcpAgentDriver, selectAcpProtocol } from './driver.js';
 import { AcpProtocolIncompatibilityError, negotiateV2 } from './protocol/negotiation.js';
 import { z } from 'zod';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 const descriptor: AgentDescriptor = {
   status: 'ready',
@@ -75,6 +78,44 @@ describe('ACP protocol negotiation', () => {
     await driver.invalidateProviderCache('agent', [], { ACCOUNT: 'one' });
     await driver.inspectProvider('agent', [], { ACCOUNT: 'one' });
     expect(v2.inspectProvider).toHaveBeenCalledTimes(3);
+  });
+
+  test('renegotiates a cached fallback when the executable or inherited launch environment changes', async () => {
+    const { v1, v2, driver } = setup();
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'acp-identity-'));
+    const command = path.join(directory, 'agent');
+    try {
+      fs.writeFileSync(command, 'first');
+      vi.mocked(v2.inspectProvider).mockRejectedValueOnce(
+        new AcpProtocolIncompatibilityError('legacy'),
+      );
+      await driver.inspectProvider(command, [], {});
+      await driver.inspectProvider(command, [], {});
+      expect(v1.inspectProvider).toHaveBeenCalledTimes(2);
+      fs.writeFileSync(command, 'upgraded executable');
+      await driver.inspectProvider(command, [], {});
+      vi.stubEnv('AGENTCTL_AUDIT_LAUNCH_IDENTITY', 'changed');
+      await driver.inspectProvider(command, [], {});
+      expect(v2.inspectProvider).toHaveBeenCalledTimes(3);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('expires protocol selection instead of retaining a fallback indefinitely', async () => {
+    const { v2, driver } = setup();
+    vi.useFakeTimers();
+    try {
+      vi.mocked(v2.inspectProvider).mockRejectedValueOnce(
+        new AcpProtocolIncompatibilityError('legacy'),
+      );
+      await driver.inspectProvider('agent', [], {});
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000 + 1);
+      await driver.inspectProvider('agent', [], {});
+      expect(v2.inspectProvider).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   test.each(['authentication required', 'process crashed', 'request timed out', 'invalid model'])(
     'does not mask %s with another adapter',
