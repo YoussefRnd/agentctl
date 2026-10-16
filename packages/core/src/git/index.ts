@@ -8,3 +8,6 @@ export * from './repository-context.js';
 export * from './repository-backend.js';
 export * from './text-generation-context.js';
 export * from './text-generation-settings.js';
+
+export { createGitCapabilities, type GitCapabilities } from './composition.js';
+export type * from './capabilities/ports.js';

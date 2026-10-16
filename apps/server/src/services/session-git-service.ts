@@ -1,6 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { sessions, projects, type DbClient } from '@agentctl/core/db';
-import type { WorktreeManager } from '@agentctl/core/git';
+import type {
+  GitRepositoryAccess,
+  GitWorktreeOperations,
+  GitWorkingCopyOperations,
+  GitBranchOperations,
+} from '@agentctl/core/git';
 import type { SessionManager } from '@agentctl/core/session';
 import type { ProviderRegistry } from '@agentctl/core/providers';
 import { canMutateWorkspace, sessionRowSchema } from '@agentctl/shared';
@@ -15,7 +20,13 @@ export class SessionGitService {
       SessionManager,
       'runWorkspaceCommand' | 'getSession' | 'stopSession' | 'getSnapshotService' | 'restartSession'
     >,
-    private readonly worktreeManager: WorktreeManager,
+    private readonly worktreeManager: Pick<
+      GitRepositoryAccess,
+      'resolveRepository' | 'listBranches'
+    > &
+      Pick<GitWorktreeOperations, 'addBranchWorktree'> &
+      Pick<GitWorkingCopyOperations, 'isCleanWorkspace'> &
+      Pick<GitBranchOperations, 'createBranch' | 'merge' | 'checkMergeConflicts'>,
     private readonly providerRegistry: Pick<ProviderRegistry, 'ensureProviderReady'>,
   ) {}
 

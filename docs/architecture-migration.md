@@ -7,9 +7,9 @@ order, acceptance criteria, and evidence needed to declare the migration complet
 
 ## Status and completion rules
 
-Baseline: **2026-10-16**. **4 of 16 checkpoints are complete locally; 12 remain open.**
-This is a checkpoint count, not an estimate of engineering effort. Completed implementation
-is still uncommitted in the current workspace; no merge or release is implied.
+Baseline: **2026-10-16**. **5 of 16 checkpoints are complete locally; 11 remain open.**
+This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03 is committed as `e1fc843`; CP04 is recorded in its own checkpoint
+commit. No merge or release is implied.
 
 - **Done:** every checkbox in that checkpoint is checked, required verification passed, and
   evidence is recorded. Existing suitable architecture can be accepted after review and
@@ -35,7 +35,7 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 | CP01 | Initial boundaries and maintainability foundation             | Done    | CP00                   |
 | CP02 | Remaining server workflows and transport boundaries           | Done    | CP01                   |
 | CP03 | Session execution, persistence, and runtime ownership         | Done    | CP02                   |
-| CP04 | Git capability and forge separation                           | Planned | CP01                   |
+| CP04 | Git capability and forge separation                           | Done    | CP01                   |
 | CP05 | Repository-neutral session workspace and checkpoint workflows | Planned | CP03, CP04             |
 | CP06 | Provider lifecycle and agent protocol composition             | Planned | CP03                   |
 | CP07 | Remaining core domains and infrastructure ownership           | Planned | CP03, CP06             |
@@ -64,7 +64,7 @@ until the full audit, even where initial work has already landed locally.
 | ---------------------------------------------------------------------------------------------------------- | -------------------- | --------------------------- |
 | Server routes, routers, services, events, authentication, terminals, and app composition                   | CP02, CP12           | CP02 accepted; CP12 pending |
 | Core session commands, execution, requests, projection, persistence, runtime, and services                 | CP03, CP05           | CP03 accepted; CP05 pending |
-| Core Git, repository, and forge modules                                                                    | CP04, CP05           | Pending                     |
+| Core Git, repository, and forge modules                                                                    | CP04, CP05           | CP04 accepted; CP05 pending |
 | Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Pending                     |
 | Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Pending                     |
 | Web composer, review, and session features                                                                 | CP08, CP10           | Pending                     |
@@ -212,16 +212,29 @@ reconnect/catch-up, stale bindings, and cleanup. One server owner per database r
 Starting points: `packages/core/src/git/worktree-manager.ts`, snapshot service and helpers,
 `packages/core/src/forge/`, and their callers.
 
-- [ ] Separate worktree allocation/restoration/retirement, working-copy/staging operations,
+- [x] Separate worktree allocation/restoration/retirement, working-copy/staging operations,
       branch/integration operations, and remote/tracking operations into focused capabilities.
-- [ ] Keep snapshot capture/retention and immutable comparisons owned separately; retain literal
+- [x] Keep snapshot capture/retention and immutable comparisons owned separately; retain literal
       path safety, user staging, recoverable restore, and narrow critical sections.
-- [ ] Complete the forge boundary: Git workflows depend on an explicit forge capability for
+- [x] Complete the forge boundary: Git workflows depend on an explicit forge capability for
       forge-specific remote interpretation and PR operations. Unavailable/unsupported hosts are explicit.
-- [ ] Preserve one owner for each Git lock and resource lifetime; extracted adapters do not
+- [x] Preserve one owner for each Git lock and resource lifetime; extracted adapters do not
       reacquire a lock already held by their caller or duplicate connection/cache state.
-- [ ] Migrate callers to focused contracts. Any retained manager facade delegates; it does not
+- [x] Migrate callers to focused contracts. Any retained manager facade delegates; it does not
       continue owning all implementations under new filenames.
+
+Implementation evidence: [Git capability and lock ownership audit](git-architecture.md),
+covering all 34 production Git, forge, and repository modules. `WorkspaceManager` now delegates
+to the capabilities built in `git/composition.ts`; server Git/project callers consume structural
+operation ports. Immutable comparison has its own owner, and only composition selects the
+concrete forge. The repository-neutral session workflow dependency is deliberately CP05.
+
+Verification accepted 2026-10-16: `pnpm exec vitest run --maxWorkers=2` passed **1,454 tests
+across 241 files**. The focused Git/repository/server suite passed **177 tests across 15 files**.
+`pnpm typecheck`, `pnpm lint`, `pnpm architecture:test` (4 tests), `pnpm build`, formatting,
+and whitespace checks passed. The module inventory covers all 34 production files, and a
+read-only extraction comparison confirmed 36 Git method bodies retain their prior implementation
+after dependency rewiring. Seven new regression cases cover the new ownership boundaries.
 
 Exit evidence: Git capability dependency map; adapter tests and current Git safety regressions
 cover staging preservation, worktree retention, dirty/conflicting integration, nested projects,
@@ -453,13 +466,14 @@ misrepresented as implemented backend support.
 
 ## Checkpoint evidence log
 
-| Checkpoint | Revision / delivery                                   | Verification                                                                                                      | Open work                                                                   |
-| ---------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| CP00       | Current local documentation, uncommitted              | Coverage inventory; tracker/link/format checks                                                                    | None within planning scope                                                  |
-| CP01       | Current local implementation, uncommitted             | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide         | Follow-up work assigned to CP02–CP14                                        |
-| CP02       | Local implementation accepted 2026-10-16, uncommitted | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory | None in server application/transport scope; native integration remains CP12 |
-| CP03       | Local implementation accepted 2026-10-16, uncommitted | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit       | None within CP03; neutral workspace remains CP05, provider lifecycle CP06   |
-| CP04–CP15  | Not accepted                                          | Pending                                                                                                           | See each checkpoint                                                         |
+| Checkpoint | Revision / delivery                                             | Verification                                                                                                      | Open work                                                                   |
+| ---------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| CP00       | `e1fc843` (CP03 baseline)                                       | Coverage inventory; tracker/link/format checks                                                                    | None within planning scope                                                  |
+| CP01       | `e1fc843` (CP03 baseline)                                       | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide         | Follow-up work assigned to CP02–CP14                                        |
+| CP02       | `e1fc843`, accepted 2026-10-16                                  | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory | None in server application/transport scope; native integration remains CP12 |
+| CP03       | `e1fc843`, accepted 2026-10-16                                  | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit       | None within CP03; neutral workspace remains CP05, provider lifecycle CP06   |
+| CP04       | Checkpoint commit containing this evidence, accepted 2026-10-16 | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit       | None within CP04; neutral session workflows remain CP05                     |
+| CP05–CP15  | Not accepted                                                    | Pending                                                                                                           | See each checkpoint                                                         |
 
 For each checkpoint, replace the aggregate pending row with its own evidence entry when work
 starts. Include execution date, actual commands/results, accepted paths, unresolved issues, and

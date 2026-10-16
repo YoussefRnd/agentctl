@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { sessions, type DbClient } from '@agentctl/core/db';
 import type { SessionManager } from '@agentctl/core/session';
-import type { WorktreeManager } from '@agentctl/core/git';
+import type { GitRepositoryAccess } from '@agentctl/core/git';
 import type { SessionDetailRecord } from './session-queries.js';
 
 /** Explicit compatibility operation invoked before the legacy session-detail query response. */
@@ -12,7 +12,7 @@ export class SessionReconciler {
       SessionManager,
       'ensureWorkspaceAvailable' | 'getSnapshotService' | 'getEventRepository'
     >,
-    private readonly worktreeManager: Pick<WorktreeManager, 'getCurrentBranch'>,
+    private readonly worktreeManager: Pick<GitRepositoryAccess, 'getCurrentBranch'>,
   ) {}
   async reconcile(session: SessionDetailRecord): Promise<void> {
     const sessionId = session.id;

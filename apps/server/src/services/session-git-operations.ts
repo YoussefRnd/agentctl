@@ -6,7 +6,11 @@ import { eq } from 'drizzle-orm';
 import {
   buildGitTextContext,
   resolveGitTextGenerationSelection,
-  type WorktreeManager,
+  type GitRepositoryAccess,
+  type GitWorkingCopyOperations,
+  type GitBranchOperations,
+  type GitRemoteOperations,
+  type GitPullRequestOperations,
 } from '@agentctl/core/git';
 import type { ProviderRegistry } from '@agentctl/core/providers';
 import type { SessionManager } from '@agentctl/core/session';
@@ -22,7 +26,11 @@ export class SessionGitOperations {
   private readonly generatingDrafts = new Set<string>();
   constructor(
     private readonly db: DbClient,
-    private readonly workspaces: WorktreeManager,
+    private readonly workspaces: Pick<GitRepositoryAccess, 'resolveRepository'> &
+      GitWorkingCopyOperations &
+      Pick<GitBranchOperations, 'getMergePreview'> &
+      GitRemoteOperations &
+      Pick<GitPullRequestOperations, 'createPullRequest'>,
     private readonly manager: Pick<SessionManager, 'runWorkspaceCommand'>,
     private readonly sessions: Pick<SessionService, 'getSnapshotService'>,
     private readonly providers: ProviderRegistry,

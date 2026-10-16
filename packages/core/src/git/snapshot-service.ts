@@ -1,3 +1,6 @@
+import { GitSnapshotComparison } from './snapshot-comparison.js';
+import type { FilePatch, SnapshotFileChange, SnapshotComparison } from './snapshot-types.js';
+export type { FilePatch, SnapshotFileChange, SnapshotComparison } from './snapshot-types.js';
 import { resolveRepositoryContext } from './repository-context.js';
 import type { ReviewResponse, ReviewDiffScope } from '@agentctl/shared';
 import path from 'node:path';
@@ -8,22 +11,6 @@ import { simpleGit } from 'simple-git';
 import { type ReviewFile, parseFileStatus } from './utils.js';
 import { GitMutex } from './mutex.js';
 import { resolveWorkspaceFile } from './file-safety.js';
-
-export interface FilePatch {
-  path: string;
-  status: 'added' | 'modified' | 'deleted';
-}
-
-export interface SnapshotFileChange extends FilePatch {
-  additions: number;
-  deletions: number;
-}
-
-export interface SnapshotComparison {
-  files: SnapshotFileChange[];
-  totalAdditions: number;
-  totalDeletions: number;
-}
 
 export interface RestoreResult {
   backupHash: string;
@@ -55,11 +42,6 @@ export class SnapshotRestoreError extends Error {
   }
 }
 
-interface TreeEntry {
-  mode: string;
-  size: number;
-}
-
 interface SnapshotContext {
   projectPath: string;
   projectPrefix: string;
@@ -74,13 +56,14 @@ export class SnapshotService {
   private baseDir: string;
   private readonly mutex = new GitMutex();
 
-  private readonly maxDiffBytes: number;
+  private readonly comparison: GitSnapshotComparison;
 
   constructor(baseDir?: string, options: { maxDiffBytes?: number } = {}) {
-    this.maxDiffBytes = options.maxDiffBytes ?? 1024 * 1024;
-    if (!Number.isSafeInteger(this.maxDiffBytes) || this.maxDiffBytes <= 0) {
+    const maxDiffBytes = options.maxDiffBytes ?? 1024 * 1024;
+    if (!Number.isSafeInteger(maxDiffBytes) || maxDiffBytes <= 0) {
       throw new Error('maxDiffBytes must be a positive safe integer');
     }
+    this.comparison = new GitSnapshotComparison(maxDiffBytes);
     this.baseDir = baseDir ?? path.join(os.homedir(), '.local', 'share', 'agentctl', 'snapshots');
   }
 
@@ -239,7 +222,7 @@ export class SnapshotService {
     // Tree IDs are immutable. Statistics do not use the private index and
     // should not delay the next capture or restore in this workspace.
     return trees
-      ? this.compareTrees(git, trees[0], trees[1])
+      ? this.comparison.compareTrees(git, trees[0], trees[1])
       : { files: [], totalAdditions: 0, totalDeletions: 0 };
   }
 
@@ -255,81 +238,7 @@ export class SnapshotService {
       this.resolveTreeish(git, context, toHash),
     ]);
 
-    return this.compareTrees(git, fromTree, toTree, filePath);
-  }
-
-  private async compareTrees(
-    git: ReturnType<typeof simpleGit>,
-    fromTree: string,
-    toTree: string,
-    filePath?: string,
-  ): Promise<SnapshotComparison> {
-    if (fromTree === toTree) return { files: [], totalAdditions: 0, totalDeletions: 0 };
-    const [statusOutput, numstatOutput] = await Promise.all([
-      git.raw([
-        '--literal-pathspecs',
-        'diff-tree',
-        '-r',
-        '--no-commit-id',
-        '--no-renames',
-        '--name-status',
-        '-z',
-        fromTree,
-        toTree,
-        ...(filePath ? ['--', filePath] : []),
-      ]),
-      git.raw([
-        '--literal-pathspecs',
-        'diff-tree',
-        '-r',
-        '--no-commit-id',
-        '--no-renames',
-        '--numstat',
-        '-z',
-        fromTree,
-        toTree,
-        ...(filePath ? ['--', filePath] : []),
-      ]),
-    ]);
-
-    const statuses = new Map<string, FilePatch['status']>();
-    const statusFields = statusOutput.split('\0');
-    for (let index = 0; index + 1 < statusFields.length; index += 2) {
-      const statusCode = statusFields[index];
-      const filePath = statusFields[index + 1];
-      if (!statusCode || !filePath) continue;
-      statuses.set(
-        filePath,
-        statusCode === 'A' ? 'added' : statusCode === 'D' ? 'deleted' : 'modified',
-      );
-    }
-
-    const files: SnapshotFileChange[] = [];
-    let totalAdditions = 0;
-    let totalDeletions = 0;
-
-    for (const record of numstatOutput.split('\0')) {
-      if (!record) continue;
-      const firstTab = record.indexOf('\t');
-      const secondTab = record.indexOf('\t', firstTab + 1);
-      if (firstTab < 0 || secondTab < 0) continue;
-      const additionsText = record.slice(0, firstTab);
-      const deletionsText = record.slice(firstTab + 1, secondTab);
-      const filePath = record.slice(secondTab + 1);
-      const additions = additionsText === '-' ? 0 : Number.parseInt(additionsText, 10);
-      const deletions = deletionsText === '-' ? 0 : Number.parseInt(deletionsText, 10);
-      const change = {
-        path: filePath,
-        additions: Number.isFinite(additions) ? additions : 0,
-        deletions: Number.isFinite(deletions) ? deletions : 0,
-        status: statuses.get(filePath) ?? 'modified',
-      } satisfies SnapshotFileChange;
-      files.push(change);
-      totalAdditions += change.additions;
-      totalDeletions += change.deletions;
-    }
-
-    return { files, totalAdditions, totalDeletions };
+    return this.comparison.compareTrees(git, fromTree, toTree, filePath);
   }
 
   private async resolveTreeish(
@@ -408,7 +317,7 @@ export class SnapshotService {
     );
     // Once tree IDs are resolved, details only read immutable objects and do
     // not need to hold the capture/restore lock while formatting the patch.
-    const comparison = await this.compareTrees(git, fromTree, toTree, filePath);
+    const comparison = await this.comparison.compareTrees(git, fromTree, toTree, filePath);
     const files: ReviewFile[] = comparison.files.map((change) => ({
       ...change,
       state:
@@ -421,73 +330,8 @@ export class SnapshotService {
     }));
     if (filePath && files.length === 0)
       files.push({ path: filePath, state: 'modified', diff: '', additions: 0, deletions: 0 });
-    await this.fillDiffs(git, fromTree, toTree, files);
+    await this.comparison.fillDiffs(git, fromTree, toTree, files);
     return files;
-  }
-
-  private async treeEntries(
-    git: ReturnType<typeof simpleGit>,
-    tree: string,
-    paths: string[],
-  ): Promise<Map<string, TreeEntry>> {
-    const entries = new Map<string, TreeEntry>();
-    if (paths.length === 0) return entries;
-    const output = await git.raw([
-      '--literal-pathspecs',
-      'ls-tree',
-      '-r',
-      '-l',
-      '-z',
-      tree,
-      '--',
-      ...paths,
-    ]);
-    for (const record of output.split('\0')) {
-      const tab = record.indexOf('\t');
-      if (tab < 0) continue;
-      const [mode, , , size] = record.slice(0, tab).trim().split(/\s+/);
-      entries.set(record.slice(tab + 1), { mode, size: size === '-' ? 0 : Number(size) });
-    }
-    return entries;
-  }
-
-  private async fillDiffs(
-    git: ReturnType<typeof simpleGit>,
-    fromTree: string,
-    toTree: string,
-    files: ReviewFile[],
-  ): Promise<void> {
-    const paths = files.map((file) => file.path);
-    const [before, after] = await Promise.all([
-      this.treeEntries(git, fromTree, paths),
-      this.treeEntries(git, toTree, paths),
-    ]);
-    for (const file of files) {
-      if (before.get(file.path)?.mode === '160000' || after.get(file.path)?.mode === '160000') {
-        file.diff = 'Nested repository; review its changes in that repository.';
-      } else if (
-        Math.max(before.get(file.path)?.size ?? 0, after.get(file.path)?.size ?? 0) >
-        this.maxDiffBytes
-      ) {
-        file.diff = 'Diff omitted: exceeds the configured size limit. Open it in the editor.';
-      } else {
-        const diff = await git.raw([
-          '--literal-pathspecs',
-          'diff',
-          '--no-ext-diff',
-          '--no-textconv',
-          '--no-renames',
-          fromTree,
-          toTree,
-          '--',
-          file.path,
-        ]);
-        file.diff =
-          Buffer.byteLength(diff) > this.maxDiffBytes
-            ? 'Diff omitted: exceeds the configured size limit. Open it in the editor.'
-            : diff;
-      }
-    }
   }
 
   async revertFiles(
@@ -553,8 +397,8 @@ export class SnapshotService {
     const git = simpleGit(context.projectPath).env(context.env);
     const paths = patches.map((patch) => patch.path);
     const trees = await Promise.all([
-      this.treeEntries(git, snapshotTree, paths),
-      this.treeEntries(git, backupTree, paths),
+      this.comparison.treeEntries(git, snapshotTree, paths),
+      this.comparison.treeEntries(git, backupTree, paths),
     ]);
     // Validate the entire operation before touching any file. A gitlink only
     // stores a commit ID and cannot back up the nested repository's contents.
@@ -666,10 +510,10 @@ export class SnapshotService {
     // Everything below derives from that capture, even if another turn edits
     // files, stages changes, or commits while this response is being built.
     const [sessionChanges, workingChanges] = await Promise.all([
-      this.compareTrees(git, sessionTree, currentTree),
+      this.comparison.compareTrees(git, sessionTree, currentTree),
       sessionTree === workingTree
         ? Promise.resolve(null)
-        : this.compareTrees(git, workingTree, currentTree),
+        : this.comparison.compareTrees(git, workingTree, currentTree),
     ]);
     const working = new Map(
       (workingChanges ?? sessionChanges).files.map((file) => [file.path, file]),
@@ -718,7 +562,7 @@ export class SnapshotService {
       file.sessionDeletions = session.get(file.path)?.deletions ?? 0;
     }
     if (options.includeDiffs !== false) {
-      await this.fillDiffs(
+      await this.comparison.fillDiffs(
         git,
         options.scope === 'working' ? workingTree : sessionTree,
         currentTree,

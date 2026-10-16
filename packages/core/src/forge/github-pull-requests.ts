@@ -24,6 +24,11 @@ export function parseGitHubRemoteUrl(remoteUrl: string): string | null {
 }
 
 export class GitHubPullRequests implements PullRequestHost {
+  resolveRemote(remoteUrl: string) {
+    const repositoryUrl = parseGitHubRemoteUrl(remoteUrl);
+    return repositoryUrl ? { provider: 'github' as const, repositoryUrl } : null;
+  }
+
   async find(
     worktreePath: string,
     branch: string,

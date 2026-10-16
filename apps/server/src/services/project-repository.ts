@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { projects, type DbClient } from '@agentctl/core/db';
-import type { WorktreeManager } from '@agentctl/core/git';
+import type { GitRepositoryAccess } from '@agentctl/core/git';
 
 /** Projects can gain a Git repository after being opened or upgrading an older database. */
 export async function refreshProjectRepository(
   db: DbClient,
-  manager: WorktreeManager,
+  manager: Pick<GitRepositoryAccess, 'resolveRepository'>,
   project: typeof projects.$inferSelect,
 ): Promise<typeof projects.$inferSelect> {
   if (project.repoRoot) return project;

@@ -2,7 +2,7 @@ import { eq, desc } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { projects, sessions, type DbClient } from '@agentctl/core/db';
-import type { WorkspaceManager } from '@agentctl/core/git';
+import type { GitRepositoryAccess } from '@agentctl/core/git';
 import { projectsContract, sessionRowSchema, createTaskSlug } from '@agentctl/shared';
 import type { z } from 'zod';
 import { AppError } from '../../errors/app-error.js';
@@ -17,7 +17,7 @@ export class ProjectService {
   constructor(
     private readonly db: DbClient,
     private readonly directories: ProjectDirectory,
-    private readonly repositories: Pick<WorkspaceManager, 'resolveRepository'>,
+    private readonly repositories: Pick<GitRepositoryAccess, 'resolveRepository'>,
     private readonly sessions: Pick<SessionService, 'createSession'>,
     private readonly events: Pick<EventBus, 'publishState'>,
   ) {}

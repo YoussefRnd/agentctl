@@ -103,7 +103,8 @@ backend rather than sending them to the browser.
 
 This establishes the read/review and checkpoint service boundary. Existing turn capture,
 rewind persistence, staging, branching, worktree creation, integration, and remote/PR workflows
-still use their existing Git implementation. This does not claim another VCS can already
+still use their existing Git implementation, with Git mechanisms now separated into the focused
+capabilities documented in [Git capability ownership](git-architecture.md). This does not claim another VCS can already
 replace every workflow in the application. No new VCS, background service, database migration,
 or independent checkpoint store is introduced.
 

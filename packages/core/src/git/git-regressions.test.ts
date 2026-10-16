@@ -9,11 +9,12 @@ import { SnapshotService } from './snapshot-service.js';
 import { createDatabase, projects } from '../db/index.js';
 import { SessionWorkspace } from './session-workspace.js';
 import { GitMutex } from './mutex.js';
+import { GitHubPullRequests } from '../forge/github-pull-requests.js';
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-audit-'));
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 let serial = 0;
-async function fixture() {
+async function fixture(host?: GitHubPullRequests) {
   const dir = path.join(root, `case-${++serial}`);
   const repo = path.join(dir, 'repo');
   await fs.mkdir(repo, { recursive: true });
@@ -27,7 +28,7 @@ async function fixture() {
   return {
     dir,
     repo,
-    manager: new WorkspaceManager(new GitMutex(), path.join(dir, 'worktrees')),
+    manager: new WorkspaceManager(new GitMutex(), path.join(dir, 'worktrees'), host),
     snapshots: new SnapshotService(path.join(dir, 'snapshots')),
   };
 }
@@ -544,7 +545,8 @@ it('preserves dirty files when archiving and resuming a worktree', async () => {
   assert.equal(await fs.readFile(path.join(resumed.worktreePath, 'draft.txt'), 'utf8'), 'keep');
 });
 it('caches PR lookups outside the repository mutation lock', async () => {
-  const { repo, manager } = await fixture();
+  const host = new GitHubPullRequests();
+  const { repo, manager } = await fixture(host);
   git(repo, 'remote', 'add', 'origin', 'https://github.com/example/project.git');
   let release!: () => void,
     notify!: () => void,
@@ -555,7 +557,7 @@ it('caches PR lookups outside the repository mutation lock', async () => {
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  manager.detectPullRequest = async () => {
+  host.find = async () => {
     calls++;
     notify();
     await gate;
@@ -569,6 +571,30 @@ it('caches PR lookups outside the repository mutation lock', async () => {
   await status;
   await manager.getTrackingStatus(repo, repo);
   assert.equal(calls, 1);
+});
+
+it('shares storage configuration across worktree allocation, review, and integration', async () => {
+  const { repo, manager, dir } = await fixture();
+  await manager.getReviewFiles(repo, repo, 'HEAD');
+  const storage = path.join(dir, 'relocated-worktrees');
+  manager.setBaseDir(storage);
+  const worktree = await manager.capabilities.worktrees.create(repo, 'relocated', 'change');
+  assert(worktree.path.startsWith(storage + path.sep));
+  await fs.writeFile(path.join(worktree.path, 'a.txt'), 'relocated change\n');
+  await manager.capabilities.workingCopy.commit(repo, worktree.path, 'Change', true);
+  const files = await manager.getReviewFiles(repo, worktree.path, worktree.baseCommit);
+  assert.equal(files.length, 1);
+  assert((await fs.stat(path.join(storage, '.review-indexes'))).isDirectory());
+  await manager.capabilities.integration.finalize(
+    repo,
+    worktree.path,
+    worktree.branch,
+    'main',
+    'merge',
+    'Apply relocated change',
+  );
+  assert.equal(await fs.readFile(path.join(repo, 'a.txt'), 'utf8'), 'relocated change\n');
+  assert((await fs.stat(worktree.path)).isDirectory());
 });
 
 it('keeps literal Unicode, whitespace, and backslash filenames in the review', async () => {

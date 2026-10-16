@@ -62,6 +62,7 @@ Run `pnpm architecture:check` to enforce package, server, and frontend boundarie
 See [Code architecture](docs/code-architecture.md) for design patterns, file ownership,
 state conventions and compatibility changes. Track the complete rollout in the
 [Architecture migration checkpoints](docs/architecture-migration.md).
+The [Git capability ownership audit](docs/git-architecture.md) records CP04 boundaries and lock ordering.
 
 ## UI development
 

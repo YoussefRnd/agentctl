@@ -141,10 +141,10 @@ describe('SnapshotService', () => {
         await fs.promises.writeFile(path.join(tempProjectDir, 'file.txt'), 'captured\n');
         const paused = Promise.withResolvers<void>();
         const resume = Promise.withResolvers<void>();
-        const internals = service as unknown as {
-          compareTrees(...args: unknown[]): Promise<SnapshotComparison>;
+        const { comparison: internals } = service as unknown as {
+          comparison: { compareTrees(...args: unknown[]): Promise<SnapshotComparison> };
         };
-        const compareTrees = internals.compareTrees.bind(service);
+        const compareTrees = internals.compareTrees.bind(internals);
         const spy = vi.spyOn(internals, 'compareTrees').mockImplementationOnce(async (...args) => {
           paused.resolve();
           await resume.promise;
@@ -251,10 +251,10 @@ describe('SnapshotService', () => {
       git(tempProjectDir, 'add', '.');
       const paused = Promise.withResolvers<void>();
       const resume = Promise.withResolvers<void>();
-      const internals = service as unknown as {
-        fillDiffs(...args: unknown[]): Promise<void>;
+      const { comparison: internals } = service as unknown as {
+        comparison: { fillDiffs(...args: unknown[]): Promise<void> };
       };
-      const fillDiffs = internals.fillDiffs.bind(service);
+      const fillDiffs = internals.fillDiffs.bind(internals);
       const spy = vi.spyOn(internals, 'fillDiffs').mockImplementationOnce(async (...args) => {
         paused.resolve();
         await resume.promise;

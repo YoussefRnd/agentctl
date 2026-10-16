@@ -153,3 +153,6 @@ suite; a new database initialization test verifies inert imports and one-time de
 The isolated production browser journeys passed startup, session navigation, and deferred asset
 loading after the module moves. These synthetic fixture checks do not measure live provider
 performance or validate native Electron runtime behavior.
+
+The [Git capability audit](git-architecture.md) records CP04 composition, operation contracts,
+forge selection, complete module ownership, and lock/resource ordering.

@@ -72,6 +72,18 @@ async function scan(directory) {
         'forge adapters cannot own Git mutation, persistence, or session lifecycle',
       );
     }
+    if (file.startsWith('packages/core/src/git/capabilities/')) {
+      forbid(
+        /(?:^|\/)(?:worktree-manager|composition|index)\.js$|forge\/(?!types\.js$)/,
+        'Git capabilities cannot depend on the facade, composition, or concrete forge adapters',
+      );
+    }
+    if (file === 'packages/core/src/git/snapshot-comparison.ts') {
+      forbid(
+        /node:fs|(?:^|\/)(?:mutex|snapshot-service)\.js$/,
+        'immutable snapshot comparisons cannot own filesystem mutation or capture locks',
+      );
+    }
     if (
       file.startsWith('apps/server/src/plugins/ts-rest/') ||
       file.startsWith('apps/server/src/routes/')
