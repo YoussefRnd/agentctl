@@ -130,6 +130,7 @@ export interface AgentSubagentAssociation {
 }
 
 export type AgentUpdate =
+  | { type: 'context_compacted'; compactionId: string }
   | { type: 'notice'; severity: string; title: string; description?: string }
   | { type: 'subagent_update'; association: AgentSubagentAssociation }
   | { type: 'subagent_event'; subagentId: string; event: AgentUpdate }

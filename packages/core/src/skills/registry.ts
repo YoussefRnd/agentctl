@@ -217,16 +217,26 @@ export class SkillRegistry {
     return undefined;
   }
 
-  formatContext(activation?: SkillActivation): string {
+  formatCatalog(): string {
     if (this.skills.size === 0) return '';
-
-    const catalog = [
+    return [
       '## Available Agent Skills',
-      ...Array.from(this.skills.values(), (skill) => `- \`${skill.name}\`: ${skill.description}`),
+      ...Array.from(this.skills.values())
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((skill) => `- \`${skill.name}\`: ${skill.description}`),
     ].join('\n');
-    const activatedSkill = this.activate(activation);
-    if (!activatedSkill) return catalog;
+  }
 
-    return `${catalog}\n\n---\n\n### Activated Skill: ${activatedSkill.name}\n\n${activatedSkill.content}`;
+  formatActivation(activation?: SkillActivation): string {
+    const activatedSkill = this.activate(activation);
+    return activatedSkill
+      ? `### Activated Skill: ${activatedSkill.name}\n\n${activatedSkill.content}`
+      : '';
+  }
+
+  formatContext(activation?: SkillActivation): string {
+    return [this.formatCatalog(), this.formatActivation(activation)]
+      .filter(Boolean)
+      .join('\n\n---\n\n');
   }
 }

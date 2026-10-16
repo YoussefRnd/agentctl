@@ -330,6 +330,13 @@
       "when": 1792080173050,
       "tag": "0046_dynamic_thinking_effort",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1792110250812,
+      "tag": "0047_session_skill_catalogs",
+      "breakpoints": true
     }
   ]
 }

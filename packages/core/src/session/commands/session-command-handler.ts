@@ -2,7 +2,12 @@ import { eq } from 'drizzle-orm';
 import type { SessionRuntime } from '../runtime/session-runtime.js';
 import { sessions } from '../../db/schema.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
-import { findAgentConfigOption, type ThinkingEffort } from '@agentctl/shared';
+import {
+  findAgentConfigOption,
+  isThinkingEffort,
+  resolveThinkingEffort,
+  type ThinkingEffort,
+} from '@agentctl/shared';
 import { negotiateCapabilities } from '../../providers/capabilities-negotiator.js';
 import { buildConversationHistoryTranscript } from '../history-transcript.js';
 import { getContextTurnLimit } from '../../config/runtime-defaults.js';
@@ -169,42 +174,63 @@ export class SessionCommandHandler {
         try {
           if (modelChanged) {
             const liveOptions = await activeSession.updateModel(selection.selectedModel);
-            if (Array.isArray(liveOptions)) liveConfigOptions = liveOptions;
             modelWasUpdated = true;
+            if (Array.isArray(liveOptions)) liveConfigOptions = liveOptions;
+            else {
+              const refreshed = await this.deps.db.query.sessions.findFirst({
+                where: eq(sessions.id, sessionId),
+              });
+              liveConfigOptions =
+                jsonCodecs.agentConfigOptionsOrNull(refreshed?.sessionConfigOptions) ?? [];
+            }
           }
-          if (effortChanged && selection.selectedThinkingEffort !== null) {
-            thinkingOption = findAgentConfigOption(liveConfigOptions, 'thought_level');
-            if (!thinkingOption) {
-              throw new Error('Provider did not advertise a thinking-effort option');
-            }
-            if (
-              !thinkingOption.options?.some(
-                (choice) => choice.value === selection.selectedThinkingEffort,
-              )
-            ) {
-              throw new Error(
-                'Provider did not advertise this thinking effort for the selected model',
-              );
-            }
-            await activeSession.updateConfigOption(
+          // A model switch can replace both the effort IDs and the default. Negotiate
+          // against that live snapshot, preserving the old choice only on the same model.
+          thinkingOption = findAgentConfigOption(liveConfigOptions, 'thought_level');
+          selection.selectedThinkingEffort = resolveThinkingEffort(
+            thinkingOption,
+            params.selectedThinkingEffort === undefined && !modelChanged
+              ? sessionRecord.selectedThinkingEffort
+              : params.selectedThinkingEffort,
+            discovery.defaultThinkingEffort,
+          );
+          if (
+            thinkingOption &&
+            selection.selectedThinkingEffort !== null &&
+            selection.selectedThinkingEffort !== thinkingOption.currentValue
+          ) {
+            const updated = await activeSession.updateConfigOption(
               thinkingOption.id,
               selection.selectedThinkingEffort,
             );
             effortWasUpdated = true;
+            if (Array.isArray(updated)) {
+              const effective = findAgentConfigOption(updated, 'thought_level')?.currentValue;
+              selection.selectedThinkingEffort = isThinkingEffort(effective) ? effective : null;
+            }
           }
           // SessionRuntime persists live option updates; keep them when saving legacy selections.
           await persistSelection(true);
           await this.deps.launcher.reportModelFallback(sessionId, selection);
           return activeSession;
         } catch (error) {
-          if (effortWasUpdated && thinkingOption && sessionRecord.selectedThinkingEffort !== null) {
-            await activeSession
-              .updateConfigOption(thinkingOption.id, sessionRecord.selectedThinkingEffort)
-              .catch(() => undefined);
-          }
           if (modelWasUpdated) {
             await activeSession.updateModel(sessionRecord.selectedModel).catch(() => undefined);
           }
+          const originalThinking = findAgentConfigOption(
+            jsonCodecs.agentConfigOptionsOrNull(sessionRecord.sessionConfigOptions) ?? [],
+            'thought_level',
+          );
+          if (
+            (effortWasUpdated || modelWasUpdated) &&
+            originalThinking &&
+            sessionRecord.selectedThinkingEffort !== null
+          ) {
+            await activeSession
+              .updateConfigOption(originalThinking.id, sessionRecord.selectedThinkingEffort)
+              .catch(() => undefined);
+          }
+          await rollbackSelection();
           throw error;
         }
       }

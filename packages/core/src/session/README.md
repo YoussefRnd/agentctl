@@ -97,6 +97,22 @@ Legacy ACP `models` capabilities use `session/set_model`; categorized configurat
 use `session/set_config_option`. Selection follows the advertised protocol surface without
 provider-name mappings.
 
+## Skill context delivery
+
+AgentCtl sends its skills catalog on the first prompt to a native provider session and
+again when the catalog changes. Delivery receipts are persisted in `session_skill_catalogs`,
+scoped by local session, provider, and native session ID, so reconnecting to a restored
+conversation does not repeat the unchanged catalog. Fresh sessions always receive it.
+Explicit skill activation includes the current instructions on every requested invocation.
+Conversation transcripts and other per-message context are independent of catalog delivery.
+
+A reported completed compaction invalidates the catalog receipt. The next prompt refreshes
+it; compaction during a prompt prevents that prompt from marking the catalog as retained.
+Resume reconciles the latest replayed compaction, ignoring older replayed completions.
+Providers that compact without reporting it cannot be detected by AgentCtl. Rejected or
+uncertain sends do not establish a new receipt; a returned foreground failure still means
+the prompt was accepted into the provider conversation.
+
 ## Validation
 
 Regression tests cover transaction rollback, message receipt reuse, ordered and independent

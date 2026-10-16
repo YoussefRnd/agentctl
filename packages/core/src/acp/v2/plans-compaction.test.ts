@@ -50,7 +50,10 @@ test('compaction accumulates chunks, replaces final summary, and reports errors'
       status: 'completed',
       summary: [{ type: 'text', text: 'Final' }],
     }),
-  ).toMatchObject([{ call: { status: 'completed', rawOutput: { summary: 'Final' } } }]);
+  ).toMatchObject([
+    { call: { status: 'completed', rawOutput: { summary: 'Final' } } },
+    { type: 'context_compacted', compactionId: 'compact' },
+  ]);
   expect(
     project({
       sessionUpdate: 'compaction_update',
@@ -90,7 +93,10 @@ test('compaction patches retain, replace and clear summary, errors and metadata 
       error: null,
       _meta: null,
     }),
-  ).toMatchObject([{ call: { rawOutput: { summary: '' } } }]);
+  ).toMatchObject([
+    { call: { rawOutput: { summary: '' } } },
+    { type: 'context_compacted', compactionId: 'c' },
+  ]);
   const cleared = project({
     sessionUpdate: 'compaction_update',
     compactionId: 'c',

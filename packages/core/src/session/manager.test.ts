@@ -754,9 +754,14 @@ describe('SessionManager tests', () => {
       });
       return updatedLiveOptions;
     };
-    session.updateConfigOption = (configId: string, value: string) => {
+    session.updateConfigOption = async (configId: string, value: string) => {
       configUpdated = [configId, value];
-      return Promise.resolve();
+      updatedLiveOptions[0].currentValue = value;
+      await session.handleDomainEvent({
+        type: 'config_option_update',
+        configOptions: updatedLiveOptions,
+      });
+      return updatedLiveOptions;
     };
 
     let restarted = false;

@@ -89,7 +89,10 @@ describe('FileCacheStorage', () => {
     );
     for (let index = 0; index < 12; index++)
       expect(await first.get(String(index))).toEqual(sampleResult);
-    expect(fs.readdirSync(path.dirname(file))).toEqual(['cache.json']);
+    expect(fs.readdirSync(path.dirname(file))).toEqual([
+      'cache.json',
+      'cache.json.writer-lock.sqlite',
+    ]);
   });
 
   test('prunes expired records on mutation and limits retained descriptors', async () => {

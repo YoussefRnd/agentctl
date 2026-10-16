@@ -29,7 +29,10 @@ outside this directory.
 - `protocol/` contains shared content, authentication, permission, compaction, and subagent
   reducers. Custom methods live in `extensions/`.
 - `cache/` owns launch fingerprints and the asynchronous descriptor cache. Writes are atomic
-  and locked across processes. The manifest expires after one hour and retains at most
+  and coordinated across processes with SQLite OS locks, released automatically on a crash.
+  The small coordination file is retained; its presence does not indicate an active writer.
+  Contention retries asynchronously for up to 250 ms; cache write failure is best effort.
+  The manifest expires after one hour and retains at most
   256 entries / 4 MiB, with a 512 KiB maximum per entry.
 
 The public entry point exports the selecting driver and connection-coordinator type.

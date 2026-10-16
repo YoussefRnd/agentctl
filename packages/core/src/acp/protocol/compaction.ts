@@ -49,7 +49,7 @@ export function createCompactionProjector() {
     }
     if (!previous && states.size >= 128) states.delete(states.keys().next().value!);
     states.set(update.compactionId, state);
-    return [
+    const events: AgentUpdate[] = [
       {
         type: 'tool_call',
         contentOperation: 'replace',
@@ -70,5 +70,9 @@ export function createCompactionProjector() {
         },
       },
     ];
+    if (state.status === 'completed' && previous?.status !== 'completed') {
+      events.push({ type: 'context_compacted', compactionId: update.compactionId });
+    }
+    return events;
   };
 }

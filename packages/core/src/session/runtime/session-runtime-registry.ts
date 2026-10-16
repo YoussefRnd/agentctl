@@ -226,6 +226,7 @@ export class SessionRuntimeRegistry {
     );
 
     let session: SessionRuntime | undefined;
+    let replayedCompactionId: string | undefined;
     let replayProjector =
       intent.kind === 'resume' && intent.requireExisting
         ? new SessionStateProjector(
@@ -301,6 +302,8 @@ export class SessionRuntimeRegistry {
         },
         {
           onUpdate: async (event) => {
+            if (!session && event.type === 'context_compacted')
+              replayedCompactionId = event.compactionId;
             if (replayProjector) {
               await replayProjector.handleDomainEvent(event);
             } else if (session && event.type !== 'user_text') {
@@ -342,6 +345,12 @@ export class SessionRuntimeRegistry {
 
       await replayProjector?.flushAll();
       replayProjector = undefined;
+      if (replayedCompactionId && runtimeHandle.history === 'restored') {
+        await session.handleDomainEvent({
+          type: 'context_compacted',
+          compactionId: replayedCompactionId,
+        });
+      }
       const liveConfigOptions = runtimeHandle.configOptions ?? startupConfigOptions;
       if (liveConfigOptions !== undefined) {
         await session.handleDomainEvent({

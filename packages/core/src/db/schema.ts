@@ -5,6 +5,7 @@ import {
   real,
   index,
   uniqueIndex,
+  primaryKey,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
@@ -160,6 +161,21 @@ export const sessionRuntimeBindings = sqliteTable('session_runtime_bindings', {
   capabilities: text('capabilities').notNull().default('{}'),
   ...timestamps,
 });
+
+/** What AgentCtl has delivered to a particular provider-owned conversation. */
+export const sessionSkillCatalogs = sqliteTable(
+  'session_skill_catalogs',
+  {
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id').notNull(),
+    nativeSessionId: text('native_session_id').notNull(),
+    catalogHash: text('catalog_hash'),
+    compactionId: text('compaction_id'),
+  },
+  (table) => [primaryKey({ columns: [table.sessionId, table.providerId, table.nativeSessionId] })],
+);
 
 /** Immutable cursor entries reference the latest conversation row, not duplicated bodies. */
 export const sessionEventChanges = sqliteTable(

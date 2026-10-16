@@ -2,9 +2,9 @@ import { capabilitySnapshotSchema } from '@agentctl/shared';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import type { AgentDescriptor } from '../../agent/types.js';
 import type { CacheStorage } from '../types.js';
+import { withCacheWriterLock } from './writer-lock.js';
 
 interface Entry {
   ts: number;
@@ -87,33 +87,18 @@ export class FileCacheStorage implements CacheStorage {
     const work = previous
       .then(async () => {
         await fs.mkdir(path.dirname(this.file), { recursive: true });
-        // Other desktop/server processes may share the manifest. Failure to acquire is
-        // a cache miss, never a provider failure; a crashed writer's lock is not stolen.
-        const lockPath = `${this.file}.lock`;
-        const deadline = Date.now() + 250;
-        let lock: Awaited<ReturnType<typeof fs.open>>;
-        while (true) {
+        await withCacheWriterLock(this.file, async () => {
+          const temporary = `${this.file}.${randomUUID()}.tmp`;
           try {
-            lock = await fs.open(lockPath, 'wx', 0o600);
-            break;
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || Date.now() >= deadline)
-              throw error;
-            await delay(10);
+            const manifest = this.prune(operation({ ...(await this.read(true)) }));
+            await fs.writeFile(temporary, JSON.stringify(manifest), { mode: 0o600 });
+            await fs.rename(temporary, this.file);
+            this.manifest = manifest;
+            this.stamp = undefined;
+          } finally {
+            await fs.unlink(temporary).catch(() => undefined);
           }
-        }
-        const temporary = `${this.file}.${randomUUID()}.tmp`;
-        try {
-          const manifest = this.prune(operation({ ...(await this.read(true)) }));
-          await fs.writeFile(temporary, JSON.stringify(manifest), { mode: 0o600 });
-          await fs.rename(temporary, this.file);
-          this.manifest = manifest;
-          this.stamp = undefined;
-        } finally {
-          await fs.unlink(temporary).catch(() => undefined);
-          await lock.close();
-          await fs.unlink(lockPath).catch(() => undefined);
-        }
+        });
       })
       .catch(() => {
         this.stamp = undefined;

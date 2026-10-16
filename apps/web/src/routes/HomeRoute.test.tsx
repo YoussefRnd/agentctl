@@ -339,13 +339,20 @@ it('uses Local for a non-Git workspace and does not offer Worktree', async () =>
   expect(mocks.create).toHaveBeenCalledWith('plain', 'local', 'provider', expect.any(Object));
 });
 
-it('uses the shared slider with all advertised thinking levels and keeps changes local', async () => {
+it('keeps Default separate from the thinking slider and changes levels only after interaction', async () => {
   await click('Default');
   const slider = document.querySelector<HTMLInputElement>(
     'input[aria-label="Thinking effort level"]',
   )!;
-  expect(slider.max).toBe('6');
+  expect(slider.max).toBe('5');
   expect(slider.getAttribute('aria-valuetext')).toBe('Default');
+  expect(document.querySelector('[data-testid="thinking-effort-thumb"]')).not.toBeNull();
+  expect(
+    document
+      .querySelector('[data-testid="thinking-effort-slider"]')
+      ?.classList.contains('opacity-40'),
+  ).toBe(true);
+  expect(useDraftStore.getState().homeDrafts.one?.thinkingConfig).toBeUndefined();
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(slider, '4');
     slider.dispatchEvent(new Event('input', { bubbles: true }));

@@ -13,6 +13,7 @@ import { SkillRegistry, type SkillActivation } from '../../skills/registry.js';
 import { isDefaultSessionTitle, type TurnTimings, type ChatError } from '@agentctl/shared';
 import { resolveMessageAttachments } from '../commands/message-attachments.js';
 import { normalizeChatError } from '../../agent/chat-error.js';
+import { SkillCatalogDelivery } from './skill-catalog-delivery.js';
 
 interface TurnRuntimeState {
   runtimeId: string;
@@ -26,6 +27,7 @@ interface TurnRuntimeState {
 /** Owns one prompt turn: context preparation, dispatch, output and usage finalization. */
 export class SessionTurnExecutor {
   private running = false;
+  private skillCatalog: SkillCatalogDelivery;
   private diagnosticTurn?: { attemptId: string; eventId?: number; diagnostics: TurnDiagnostics };
   constructor(
     private sessionId: string,
@@ -39,9 +41,12 @@ export class SessionTurnExecutor {
     private deps: TurnRuntimeState,
     private runtimeRegistry?: SessionStatusTransitioner,
     private mcpGateway?: AgentMcpGateway,
-  ) {}
+  ) {
+    this.skillCatalog = new SkillCatalogDelivery(db, sessionId, runtimeHandle);
+  }
 
   async observeUpdate(event: AgentUpdate): Promise<void> {
+    if (event.type === 'context_compacted') this.skillCatalog.compacted(event.compactionId);
     const turn = this.diagnosticTurn;
     const phase = turn?.diagnostics.observe(event);
     if (!phase || !turn) return;
@@ -285,8 +290,8 @@ export class SessionTurnExecutor {
         const requested = skillActivation.name ?? `purpose "${skillActivation.purpose}"`;
         throw new Error(`Agent skill not found: ${requested}`);
       }
-      const skillsContext = registry.formatContext(activation);
-      const finalEmbeddedContext = [embeddedContext, skillsContext]
+      const skills = this.skillCatalog.prepare(registry, activation);
+      const finalEmbeddedContext = [embeddedContext, skills.context]
         .filter(Boolean)
         .join('\n\n---\n\n');
 
@@ -321,6 +326,7 @@ export class SessionTurnExecutor {
           !this.runtimeRegistry.ownsRuntime(this.sessionId, this.deps.runtimeId))
       )
         throw new Error('Turn ended after its runtime was retired');
+      skills.delivered();
       await this.projector.flushAll();
       await this.projector.finalizeInFlightToolCalls(
         promptResult.stopReason === 'cancelled'

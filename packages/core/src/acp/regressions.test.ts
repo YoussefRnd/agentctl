@@ -43,6 +43,23 @@ test('compaction null summary clears old content', () => {
   expect(events[0]).toMatchObject({ call: { rawOutput: { summary: '' } } });
 });
 
+test('compaction signals context invalidation only when completion is first reported', () => {
+  const project = createCompactionProjector();
+  const update = (status: string) =>
+    project({ sessionUpdate: 'compaction_update', compactionId: 'c', status });
+  expect(update('in_progress').some((event) => event.type === 'context_compacted')).toBe(false);
+  expect(update('failed').some((event) => event.type === 'context_compacted')).toBe(false);
+  expect(update('completed')).toContainEqual({ type: 'context_compacted', compactionId: 'c' });
+  expect(update('completed').some((event) => event.type === 'context_compacted')).toBe(false);
+  expect(
+    project({
+      sessionUpdate: 'compaction_summary_chunk',
+      compactionId: 'c',
+      content: { type: 'text', text: 'summary' },
+    }).some((event) => event.type === 'context_compacted'),
+  ).toBe(false);
+});
+
 test('late close from an old connection preserves a replacement session with the same ID', async () => {
   const manager = new PersistentAgentConnectionManager({} as never, {} as never, {} as never);
   const connections = (manager as unknown as { connections: Map<string, unknown> }).connections;

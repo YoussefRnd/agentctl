@@ -178,7 +178,7 @@ export function ThinkingEffortSelector({
     return null;
   return (
     <ThinkingEffortControl
-      key={`${sessionData.session.id}:${option?.id}`}
+      key={`${sessionData.session.id}:${sessionData.session.selectedModel}:${option?.id}`}
       option={option}
       isUpdating={isUpdating}
       onChange={onChange}

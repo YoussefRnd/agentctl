@@ -130,6 +130,9 @@ export class SessionStateProjector {
 
   async handleDomainEvent(event: AgentUpdate): Promise<void> {
     switch (event.type) {
+      case 'context_compacted':
+        // Lifecycle signal; the accompanying tool call carries the visible summary.
+        break;
       case 'notice':
         this.eventRepository.publishNotice?.({ ...event, sessionId: this.sessionId });
         break;

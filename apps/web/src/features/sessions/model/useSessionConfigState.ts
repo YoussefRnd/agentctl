@@ -54,9 +54,8 @@ export function useSessionConfigState(sessionId: string) {
   const setSessionConfigOptionMutation = useMutation({
     mutationFn: ({ configId, value }: { configId: string; value: string }) =>
       patchSession(sessionId, { configId, configValue: value }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-    },
+    // The slider reconciles with canonical props when this promise resolves.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) }),
     onError: (error: Error) => {
       toast.error('Could not change setting', { description: error.message });
       void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
