@@ -128,7 +128,7 @@ export function createJourneyApi(delayMs = 120) {
             .map((e) => ({ eventId: e.id, prompt: e.data.content, timestamp }));
         else if (suffix === '/execution')
           body = { connection: 'connected', execution: 'idle', queue: [], attention: 'none' };
-        else if (suffix === '/review') body = { files: [] };
+        else if (suffix === '/review' || suffix === '/repository/review') body = { files: [] };
         else if (suffix === '/git/status')
           body = {
             isRepo: false,

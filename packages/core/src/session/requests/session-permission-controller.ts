@@ -12,6 +12,7 @@ import {
 import { RequestCancellation } from './request-cancellation.js';
 
 interface PermissionRuntimeState {
+  runtimeId: string;
   isStopped(): boolean;
   activeAttemptId(): string | undefined;
   parentEventId(subagentId?: string): number | null;
@@ -150,7 +151,9 @@ export class SessionPermissionController {
       });
       try {
         if (this.runtimeRegistry)
-          await this.runtimeRegistry.transitionTo(this.sessionId, 'needs_attention');
+          await this.runtimeRegistry.transitionTo(this.sessionId, 'needs_attention', {
+            runtimeId: this.deps.runtimeId,
+          });
         else
           await this.db
             .update(sessions)
@@ -241,7 +244,10 @@ export class SessionPermissionController {
       this.pendingRequests.size
     )
       return;
-    if (this.runtimeRegistry) await this.runtimeRegistry.transitionTo(this.sessionId, 'running');
+    if (this.runtimeRegistry)
+      await this.runtimeRegistry.transitionTo(this.sessionId, 'running', {
+        runtimeId: this.deps.runtimeId,
+      });
     else
       await this.db
         .update(sessions)

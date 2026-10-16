@@ -19,23 +19,7 @@ import {
 } from '@agentctl/api-client';
 import { invalidateWorkspaceQueries } from '@/shared/lib/workspaceQueries';
 import { sessionKeys } from '@/shared/lib/queryKeys';
-import type { ReviewResponse } from '@agentctl/shared';
-export type { ReviewResponse } from '@agentctl/shared';
-
-const fetchReview = async (sessionId: string): Promise<ReviewResponse> => {
-  const res = await api.getSessionReview({
-    params: { id: sessionId },
-    query: { includeDiffs: 'false', scope: 'working' },
-  });
-  assertApiStatus(res, 200, 'Failed to fetch session review');
-  return {
-    capture: res.body.capture,
-    files: res.body.files.map((file) => ({
-      ...file,
-      diff: file.diff ?? '',
-    })),
-  };
-};
+import { fetchWorkspaceReview } from '../api/workspaceReview';
 
 export function useWorkspaceReviewState(sessionId: string) {
   const queryClient = useQueryClient();
@@ -46,7 +30,7 @@ export function useWorkspaceReviewState(sessionId: string) {
     refetch: refetchReview,
   } = useQuery({
     queryKey: sessionKeys.review(sessionId),
-    queryFn: () => fetchReview(sessionId),
+    queryFn: () => fetchWorkspaceReview(sessionId),
     enabled: !!sessionId,
     staleTime: 2000,
     refetchOnWindowFocus: true,

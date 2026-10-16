@@ -70,3 +70,43 @@ test('keeps invalid submissions pending so a corrected response can settle the r
   ).toBe(true);
   expect(await promise).toMatchObject({ action: 'submit', values: { email: 'user@example.com' } });
 });
+
+test('duplicate pending IDs cannot orphan the original waiter', async () => {
+  const registry = new ElicitationRegistry();
+  const request = {
+    id: 'same',
+    mode: 'url' as const,
+    message: 'Sign in',
+    url: { url: 'https://example.com' },
+  };
+  const original = registry.createElicitation(request);
+  expect(() => registry.createElicitation(request)).toThrow('already pending');
+  registry.clear();
+  expect(await original.promise).toEqual({ action: 'cancel' });
+  const next = registry.createElicitation(request);
+  expect(registry.getElicitation('same')?.status).toBe('pending');
+  registry.cancelElicitation('same');
+  expect(await next.promise).toEqual({ action: 'cancel' });
+});
+
+test('bounds settled history without evicting pending requests and limits outstanding waiters', async () => {
+  const registry = new ElicitationRegistry();
+  const request = (id: string) => ({
+    id,
+    mode: 'url' as const,
+    message: 'Sign in',
+    url: { url: 'https://example.com' },
+  });
+  const pending = registry.createElicitation(request('pending'));
+  for (let i = 0; i < 210; i++) {
+    registry.createElicitation(request(String(i)));
+    registry.cancelElicitation(String(i));
+  }
+  expect(registry.getElicitations()).toHaveLength(201);
+  expect(registry.getElicitation('pending')?.status).toBe('pending');
+  for (let i = 0; i < 99; i++) registry.createElicitation(request(`pending-${i}`));
+  expect(() => registry.createElicitation(request('overflow'))).toThrow('Too many');
+  registry.clear();
+  expect(await pending.promise).toEqual({ action: 'cancel' });
+  expect(registry.getElicitations()).toHaveLength(200);
+});

@@ -22,7 +22,7 @@ import {
   FolderGit2,
 } from 'lucide-react';
 import { useSettingsOverlayStore } from '@/features/settings';
-import { useWorkbenchStore } from '@/features/workbench';
+import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
 import { projectQueries } from '@/features/projects';
 import { useCommandPaletteStore } from '../model/useCommandPaletteStore';
 import { useTheme } from '@/shared';

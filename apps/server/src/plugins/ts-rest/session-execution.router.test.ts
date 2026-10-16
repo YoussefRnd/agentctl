@@ -1,3 +1,5 @@
+import { SessionService } from '../../services/session-service.js';
+import { createServerServices } from '../../composition/server-services.js';
 import Fastify from 'fastify';
 import { initServer } from '@ts-rest/fastify';
 import { sessionsContract, chatErrorSchema, providerErrorCopy } from '@agentctl/shared';
@@ -69,6 +71,11 @@ test('accepted queue survives independent API reads and supports reorder and can
     resumeSessionQueue: worker.resumeQueue.bind(worker),
   } as never);
   app.decorate('eventBus', { publishState: vi.fn() } as never);
+  app.decorate(
+    'sessionService',
+    new SessionService(db, app.sessionManager, app.worktreeManager, app.providerRegistry, app.log),
+  );
+  app.decorate('services', createServerServices(app));
   const server = initServer();
   await app.register(server.plugin(server.router(sessionsContract, createSessionsRouter(app))));
   try {

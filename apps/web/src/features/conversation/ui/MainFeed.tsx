@@ -28,7 +28,7 @@ import {
 } from '@/features/subagents';
 import { rewindSession, restoreSession, undoRewind, handoffSession } from '@agentctl/api-client';
 import { useReviewUIStore } from '@/features/review';
-import { useWorkbenchStore } from '@/features/workbench';
+import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
 import { Button, cn, IconButton, LoadingState } from '@agentctl/ui';
 
 export function MainFeed() {

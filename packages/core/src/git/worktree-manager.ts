@@ -1,3 +1,5 @@
+import { GitHubPullRequests, parseGitHubRemoteUrl } from '../forge/github-pull-requests.js';
+import type { PullRequestHost } from '../forge/types.js';
 import { resolveRepositoryContext, type RepositoryContext } from './repository-context.js';
 import type { GitMutex } from './mutex.js';
 import { simpleGit } from 'simple-git';
@@ -47,23 +49,7 @@ export interface Workspace {
   revertFile(filePath: string): Promise<void>;
 }
 
-export function parseGitHubRemoteUrl(remoteUrl: string): string | null {
-  const remote = remoteUrl.trim();
-  const scp = /^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/i.exec(remote);
-  if (scp) return `https://github.com/${scp[1]}/${scp[2]}`;
-  try {
-    const url = new URL(remote);
-    if (
-      url.hostname.toLowerCase() !== 'github.com' ||
-      !['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol)
-    )
-      return null;
-    const match = /^\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url.pathname);
-    return match ? `https://github.com/${match[1]}/${match[2]}` : null;
-  } catch {
-    return null;
-  }
-}
+export { parseGitHubRemoteUrl } from '../forge/github-pull-requests.js';
 
 export function parsePorcelainWorktrees(output: string): ListedWorktree[] {
   const fields = output.split('\0');
@@ -117,6 +103,7 @@ export class WorkspaceManager {
   constructor(
     private readonly gitMutex: GitMutex,
     baseDir?: string,
+    private readonly pullRequests: PullRequestHost = new GitHubPullRequests(),
   ) {
     if (baseDir) {
       this.setBaseDir(baseDir);
@@ -1238,44 +1225,7 @@ export class WorkspaceManager {
   } | null> {
     try {
       const branch = branchName ?? (await this.getCurrentBranch(worktreePath));
-      if (!branch) return null;
-
-      const { stdout } = await execFileAsync(
-        'gh',
-        [
-          'pr',
-          'view',
-          branch,
-          ...(repositoryUrl ? ['--repo', repositoryUrl] : []),
-          '--json',
-          'number,title,url,state,headRefName,baseRefName',
-        ],
-        { cwd: worktreePath, timeout: 5000 },
-      );
-      const data = JSON.parse(stdout) as {
-        number?: number;
-        title?: string;
-        url?: string;
-        state?: string;
-        headRefName?: string;
-        baseRefName?: string;
-      };
-      if (!data.number || !data.url) return null;
-
-      const stateMap: Record<string, 'open' | 'closed' | 'merged'> = {
-        OPEN: 'open',
-        CLOSED: 'closed',
-        MERGED: 'merged',
-      };
-
-      return {
-        number: data.number,
-        title: data.title ?? '',
-        url: data.url,
-        baseBranch: data.baseRefName ?? 'main',
-        headBranch: data.headRefName ?? branch,
-        state: stateMap[data.state ?? 'OPEN'] ?? 'open',
-      };
+      return await this.pullRequests.find(worktreePath, branch, repositoryUrl);
     } catch {
       return null;
     }
@@ -1504,56 +1454,12 @@ export class WorkspaceManager {
         return { status: 'already_exists', pr: existingPr };
       }
 
-      try {
-        const args = [
-          'pr',
-          'create',
-          '--repo',
-          repoWebUrl,
-          '--title',
-          params.title,
-          '--base',
-          base,
-          '--head',
-          head,
-        ];
-        if (params.body) {
-          args.push('--body', params.body);
-        }
-        const { stdout } = await execFileAsync('gh', args, {
-          cwd: worktreePath,
-          timeout: 15000,
-        });
-
-        const prUrl = stdout.trim().split('\n').pop()?.trim() ?? '';
-        const prNumberMatch = /\/pull\/(\d+)/.exec(prUrl);
-        if (!prNumberMatch) {
-          throw new Error('GitHub CLI did not return a pull request URL');
-        }
-        const prNumber = parseInt(prNumberMatch[1], 10);
-
-        return {
-          status: 'created',
-          pr: {
-            number: prNumber,
-            title: params.title,
-            url: prUrl,
-            baseBranch: base,
-            headBranch: head,
-            state: 'open',
-          },
-        };
-      } catch {
-        const query = new URLSearchParams({
-          expand: '1',
-          title: params.title,
-          ...(params.body ? { body: params.body } : {}),
-        });
-        return {
-          status: 'needs_browser',
-          compareUrl: `${repoWebUrl}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}?${query.toString()}`,
-        };
-      }
+      return this.pullRequests.create(worktreePath, repoWebUrl, {
+        title: params.title,
+        body: params.body,
+        base,
+        head,
+      });
     });
   }
 

@@ -19,9 +19,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@agentctl/api-client', () => ({
   apiClient: { fetch: mocks.fetch },
   getDesktopCapability: () => null,
-}));
-vi.mock('@agentctl/shared', async (original) => ({
-  ...(await original<typeof import('@agentctl/shared')>()),
   SessionEngine: class {
     constructor(options: (typeof mocks.engines)[number]) {
       mocks.engines.push(options);

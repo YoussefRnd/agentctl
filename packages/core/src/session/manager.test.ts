@@ -64,7 +64,7 @@ describe('SessionManager tests', () => {
             get: () => ({ ...value, id: 1, sequence: 1, createdAt: new Date() }),
           }),
         run: () => undefined,
-        onConflictDoUpdate: () => Promise.resolve(),
+        onConflictDoUpdate: () => ({ run: () => undefined }),
       }),
     }),
     query: {

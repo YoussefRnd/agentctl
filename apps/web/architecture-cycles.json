@@ -1,0 +1,10 @@
+{
+  "composer -> review": "WorkspaceStateReviewer reads Git status; pass a workspace view model from page composition.",
+  "composer -> sessions": "Composer consumes session configuration and queue controls; keep a narrow session model API.",
+  "conversation -> subagents": "Agent responses embed child conversations; extract read-only transcript rendering before reversing this dependency.",
+  "review -> composer": "Diff actions insert draft context; replace direct draft-store access with an explicit composer action.",
+  "review -> sessions": "Review consumes session and workspace state; keep a narrow session model API.",
+  "sessions -> composer": "QuickLaunchSessionDialog reads drafts; move launch-dialog composition above the session model.",
+  "sessions -> review": "SessionHeader reads Git status and editor icons; move header composition or neutral query/presentation pieces.",
+  "subagents -> conversation": "SubagentChatView reuses parent activity and terminal cards; extract reusable read-only rendering."
+}

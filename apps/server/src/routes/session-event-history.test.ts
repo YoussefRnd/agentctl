@@ -7,7 +7,7 @@ import {
   readEventPage,
   readEventReplay,
   readSessionChangeCatchUp,
-} from './session-event-history.js';
+} from '../services/session-event-history.js';
 
 const id = '11111111-1111-4111-8111-111111111111';
 let db: ReturnType<typeof createDatabase>;

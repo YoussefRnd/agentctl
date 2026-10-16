@@ -1,7 +1,7 @@
 import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
 import { sessionEvents, sessions, sessionEventChanges } from '../../db/schema.js';
 import type { DbClient } from '../../db/index.js';
-import type { IEventBus } from '../manager.js';
+import type { IEventBus } from '../contracts.js';
 import type {
   SessionEvent,
   SessionEventPayload,
@@ -10,7 +10,7 @@ import type {
 } from '@agentctl/shared';
 import type { SessionEventDbRow } from '../../db/zod-schemas.js';
 import { sessionEventCodecs } from '../../db/json-codecs.js';
-import { cancelRemovedMessageOperations } from '../execution/session-operation-reconciliation.js';
+import { cancelRemovedMessageOperations } from './session-operation-reconciliation.js';
 
 export const SESSION_CHANGE_RETENTION = 10_000;
 type EventTransaction = Pick<DbClient, 'select' | 'insert' | 'update' | 'delete'>;

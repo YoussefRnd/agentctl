@@ -1,16 +1,15 @@
+import { ServerLifecycle } from './services/server-lifecycle.js';
+import { createServerServices } from './composition/server-services.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import secureSession from '@fastify/secure-session';
 import authPlugin from './plugins/auth.js';
 import worktreePlugin from './plugins/worktree.js';
-import sessionManagerPlugin from './plugins/session-manager.js';
 import tsRestPlugin from './plugins/ts-rest.js';
 import { eventsRoutes } from './routes/events.js';
 import { authRoutes } from './routes/auth.js';
 import { serializerCompiler, validatorCompiler } from '@fastify/type-provider-zod';
-import { inArray } from 'drizzle-orm';
-import { sessions } from '@agentctl/core/db';
-import { db as defaultDb } from '@agentctl/core/db';
+import { getDefaultDatabase, type DbClient } from '@agentctl/core/db';
 import { WorktreeManager, GitMutex } from '@agentctl/core/git';
 import { ProviderRegistry } from '@agentctl/core/providers';
 import { SessionManager } from '@agentctl/core/session';
@@ -34,7 +33,7 @@ import { contextRoutes } from './routes/context.js';
 import { attachmentsRoutes } from './routes/attachments.js';
 
 export interface AppDependencies {
-  db?: typeof defaultDb;
+  db?: DbClient;
   worktreeManager?: WorktreeManager;
   providerRegistry?: ProviderRegistry;
   sessionManager?: SessionManager;
@@ -49,7 +48,7 @@ export interface AppDependencies {
 
 declare module 'fastify' {
   interface FastifyInstance {
-    db: typeof defaultDb;
+    db: DbClient;
     worktreeManager: WorktreeManager;
     gitMutex: GitMutex;
     providerRegistry: ProviderRegistry;
@@ -83,7 +82,7 @@ export async function buildApp(deps: AppDependencies = {}) {
     },
   });
 
-  const db = deps.db ?? defaultDb;
+  const db = deps.db ?? getDefaultDatabase();
   const gitMutex = new GitMutex();
   const worktreeManager = deps.worktreeManager ?? new WorktreeManager(gitMutex);
   const runtimeServices =
@@ -156,73 +155,21 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.decorate('config', config);
   fastify.decorate('mcpGateway', mcpGateway);
   fastify.decorate('embedded', deps.embedded ?? false);
+  fastify.decorate('services', createServerServices(fastify));
 
-  providerRegistry.setOnStateChange(() => {
-    eventBus.publishState({ topics: ['providers'] });
+  const lifecycle = new ServerLifecycle({
+    db,
+    providers: providerRegistry,
+    sessions: sessionManager,
+    gateway: mcpGateway,
+    terminals: terminalService,
+    events: eventBus,
+    log: fastify.log,
   });
-
-  providerRegistry.getAuthCoordinator().setCredentialChangeHandler(async (providerIds) => {
-    const affected = await db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(inArray(sessions.selectedProvider, providerIds));
-    await Promise.all(affected.map((session) => sessionManager.stopSessionAndWait(session.id)));
-  });
-
-  await providerRegistry.recoverInterruptedOperations();
-  await sessionManager.recoverInterruptedOperations?.();
-
-  // Refresh the catalog and update installed providers at startup and once per day.
-  let providerUpdateRun: Promise<void> | undefined;
-  const refreshAndUpdateProviders = (): Promise<void> => {
-    if (providerUpdateRun) return providerUpdateRun;
-    const run = (async () => {
-      await providerRegistry.sync();
-      await providerRegistry.autoUpdateInstalledProviders();
-    })();
-    providerUpdateRun = run;
-    void run
-      .finally(() => {
-        if (providerUpdateRun === run) providerUpdateRun = undefined;
-      })
-      .catch(() => undefined);
-    return run;
-  };
-
-  void refreshAndUpdateProviders()
-    .then(async () => {
-      await providerRegistry.probeAllInstalledProviders();
-      eventBus.publishState({ topics: ['providers'] });
-    })
-    .catch((err: unknown) => {
-      fastify.log.error(err, 'Failed to refresh providers on startup');
-    });
-
-  const providerUpdateInterval = setInterval(
-    () => {
-      void refreshAndUpdateProviders().catch((err: unknown) => {
-        fastify.log.error(err, 'Failed to refresh providers in the background');
-      });
-    },
-    24 * 60 * 60 * 1000,
-  );
-  providerUpdateInterval.unref();
-
-  fastify.addHook('onClose', async () => {
-    clearInterval(providerUpdateInterval);
-    await fastify.sessionManager.stopAll();
-    providerRegistry.dispose();
-    terminalService.closeAll();
-    await mcpGateway.stop();
-  });
-
-  fastify.ready(async () => {
-    try {
-      await mcpGateway.start();
-    } catch (err) {
-      fastify.log.error(err, 'Failed to start MCP Gateway');
-    }
-  });
+  await lifecycle.recover();
+  lifecycle.startUpdates();
+  fastify.addHook('onClose', () => lifecycle.stop());
+  fastify.ready(() => lifecycle.startGateway());
 
   // Global error handler — keeps all error serialization in one place.
   fastify.setErrorHandler((error: FastifyError, _request, reply) => {
@@ -316,7 +263,6 @@ export async function buildApp(deps: AppDependencies = {}) {
   // Register other plugins
   await fastify.register(websocket);
   await fastify.register(worktreePlugin);
-  await fastify.register(sessionManagerPlugin);
   await fastify.register(tsRestPlugin);
 
   // Register routes

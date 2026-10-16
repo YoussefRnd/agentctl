@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'hast';
-import { prepareMarkdown } from '../../lib/markdownProcessor';
+import { prepareMarkdown } from '../lib/markdownProcessor';
 import { StreamingMarkdown } from './StreamingMarkdown';
 
 const jobs = vi.hoisted(
@@ -14,7 +14,7 @@ const jobs = vi.hoisted(
       unsubscribe: ReturnType<typeof vi.fn>;
     }[],
 );
-vi.mock('../../lib/markdownWorker', () => ({
+vi.mock('../lib/markdownWorker', () => ({
   subscribeMarkdown: (content: string, listener: (tree: Root | null) => void) => {
     const unsubscribe = vi.fn();
     jobs.push({ content, listener, unsubscribe });

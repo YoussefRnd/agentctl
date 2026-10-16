@@ -2,7 +2,21 @@ import { SearchIcon, BlockedIcon, CheckCircleIcon } from '@primer/octicons-react
 
 import { ReviewCleanState } from './ReviewCleanState';
 
-export function ReviewEmptyState({ searchQuery }: { searchQuery: string }) {
+export function ReviewEmptyState({
+  searchQuery,
+  unavailable,
+}: {
+  searchQuery: string;
+  unavailable?: boolean;
+}) {
+  if (unavailable) {
+    return (
+      <div className="text-text-muted flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <p className="text-sm">Change review is unavailable for this workspace.</p>
+        <p className="mt-2 max-w-sm text-xs">You can keep working in this folder.</p>
+      </div>
+    );
+  }
   if (searchQuery) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-6 text-center opacity-20">

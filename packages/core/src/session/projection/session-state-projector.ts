@@ -35,6 +35,7 @@ export class SessionStateProjector {
     private logger: Logger = noopLogger,
     cwd?: string,
     snapshotService?: SnapshotServiceLike,
+    private canProject: () => boolean = () => true,
   ) {
     this.subagents = new SubagentProjector(
       sessionId,
@@ -129,6 +130,7 @@ export class SessionStateProjector {
   }
 
   async handleDomainEvent(event: AgentUpdate): Promise<void> {
+    if (!this.canProject()) return;
     switch (event.type) {
       case 'context_compacted':
         // Lifecycle signal; the accompanying tool call carries the visible summary.
@@ -190,6 +192,7 @@ export class SessionStateProjector {
         const sessionRecord = await this.db.query.sessions.findFirst({
           where: eq(sessions.id, this.sessionId),
         });
+        if (!this.canProject()) return;
 
         const existingMetrics = jsonCodecs.unknownRecord(sessionRecord?.sessionMetrics);
 
@@ -221,7 +224,7 @@ export class SessionStateProjector {
           updateSet.contextLimit = effectiveContextLimit;
         }
 
-        await this.db.update(sessions).set(updateSet).where(eq(sessions.id, this.sessionId));
+        this.db.update(sessions).set(updateSet).where(eq(sessions.id, this.sessionId)).run();
 
         await this.appendEvent(
           this.sessionId,
@@ -237,13 +240,14 @@ export class SessionStateProjector {
         break;
       }
       case 'available_commands_update':
-        await this.db
+        this.db
           .update(sessions)
           .set({
             availableCommands: JSON.stringify(event.commands),
             updatedAt: new Date(),
           })
-          .where(eq(sessions.id, this.sessionId));
+          .where(eq(sessions.id, this.sessionId))
+          .run();
 
         await this.appendEvent(
           this.sessionId,
@@ -268,6 +272,7 @@ export class SessionStateProjector {
         const record = await this.db.query.sessions.findFirst({
           where: eq(sessions.id, this.sessionId),
         });
+        if (!this.canProject()) return;
         let stored: unknown = [];
         try {
           stored = JSON.parse(record?.planArtifacts ?? '[]');
@@ -290,14 +295,15 @@ export class SessionStateProjector {
                 .filter((artifact) => artifact.kind === 'items')
                 .flatMap((artifact) => artifact.items ?? [])
             : sanitizedPlan;
-        await this.db
+        this.db
           .update(sessions)
           .set({
             planArtifacts: JSON.stringify(artifacts),
             plan: JSON.stringify(effectivePlan),
             updatedAt: new Date(),
           })
-          .where(eq(sessions.id, this.sessionId));
+          .where(eq(sessions.id, this.sessionId))
+          .run();
 
         await this.appendEvent(
           this.sessionId,
@@ -311,13 +317,14 @@ export class SessionStateProjector {
         break;
       }
       case 'metrics_update':
-        await this.db
+        this.db
           .update(sessions)
           .set({
             sessionMetrics: JSON.stringify(event.metrics),
             updatedAt: new Date(),
           })
-          .where(eq(sessions.id, this.sessionId));
+          .where(eq(sessions.id, this.sessionId))
+          .run();
         break;
       case 'config_option_update': {
         const sessionRecord = await this.db.query.sessions.findFirst({
@@ -328,19 +335,21 @@ export class SessionStateProjector {
               where: eq(providers.id, sessionRecord.selectedProvider),
             })
           : undefined;
+        if (!this.canProject()) return;
         const configOptions = withCustomModels(
           event.configOptions,
           decodeCustomModels(provider?.customModels),
         );
         const thinkingValue = findAgentConfigOption(configOptions, 'thought_level')?.currentValue;
-        await this.db
+        this.db
           .update(sessions)
           .set({
             sessionConfigOptions: JSON.stringify(configOptions),
             selectedThinkingEffort: isThinkingEffort(thinkingValue) ? thinkingValue : null,
             updatedAt: new Date(),
           })
-          .where(eq(sessions.id, this.sessionId));
+          .where(eq(sessions.id, this.sessionId))
+          .run();
 
         await this.appendEvent(
           this.sessionId,
@@ -388,13 +397,14 @@ export class SessionStateProjector {
         );
         break;
       case 'mode_update': {
-        await this.db
+        this.db
           .update(sessions)
           .set({
             agentPersona: event.modeId,
             updatedAt: new Date(),
           })
-          .where(eq(sessions.id, this.sessionId));
+          .where(eq(sessions.id, this.sessionId))
+          .run();
 
         await this.appendEvent(
           this.sessionId,
@@ -414,7 +424,7 @@ export class SessionStateProjector {
         if (typeof event.title === 'string') {
           updateObj.title = event.title;
         }
-        await this.db.update(sessions).set(updateObj).where(eq(sessions.id, this.sessionId));
+        this.db.update(sessions).set(updateObj).where(eq(sessions.id, this.sessionId)).run();
 
         await this.appendEvent(
           this.sessionId,

@@ -2,9 +2,12 @@
 
 `SessionManager` is the public application facade. ACP wire formats and negotiation remain
 inside `../acp`; this layer uses the provider-independent `AgentSession` contract.
+The [CP03 ownership audit](../../../../docs/session-architecture.md) inventories every module,
+its accepted responsibility, state transitions, public exports and verification.
 
 | Directory      | Responsibility                                                                                        |
 | -------------- | ----------------------------------------------------------------------------------------------------- |
+| `composition/` | Construct workflow dependencies and internal callbacks without reentering public command lanes        |
 | `commands/`    | Serialize session mutations, validate attachments, recognize acceptance receipts, and handle commands |
 | `execution/`   | Dispatch accepted messages, execute turns, recover operations and expose queue controls               |
 | `runtime/`     | Own a live provider connection, binding and resource cleanup                                          |
@@ -71,6 +74,19 @@ ACP cannot guarantee that the provider did not execute a request before the conn
 Runtime identity checks prevent callbacks from an old connection from changing a replacement
 runtime's state. Attempt updates also preserve cancellation and unknown outcomes. Provider
 permission choices retain their ACP meaning; this architecture adds no provider-name mapping.
+Initializing runtimes own their callbacks but become queryable only after binding succeeds.
+Shutdown revokes callbacks and releases request waiters before I/O, shares one close operation,
+and attempts all cleanup even after failure. Registry cleanup removes only its captured runtime.
+
+## Repository boundary
+
+The registry owns a `RepositoryService` alongside the legacy Git snapshot service. The
+repository service selects a backend, exposes supported capabilities, and issues opaque
+revision references scoped to a backend, repository, and project subdirectory. Review clients
+use these references without interpreting commit IDs, hash lengths, or Git trees. Git is the
+first versioned backend; ordinary folders report that review/checkpoints/restore are unavailable.
+Existing Git lifecycle and persisted snapshot fields remain compatibility paths. See
+[Repository architecture](../../../../docs/repository-architecture.md) for the boundary and migration scope.
 
 ## Read models and reconnect
 
@@ -93,6 +109,8 @@ evaluates policy, records grants and coordinates permission choices. Request can
 uses the SDK request signal in both ACP adapters. Request-scoped elicitations are correlated
 with the exact outstanding client request; unsupported or stale scopes are declined.
 Form validation runs before settling a request, so an invalid submission can be corrected.
+Duplicate pending elicitation IDs are rejected; at most 100 requests may remain outstanding
+and 200 settled items are retained. Failed publication releases the request waiter.
 Legacy ACP `models` capabilities use `session/set_model`; categorized configuration options
 use `session/set_config_option`. Selection follows the advertised protocol surface without
 provider-name mappings.
@@ -119,3 +137,5 @@ Regression tests cover transaction rollback, message receipt reuse, ordered and 
 session dispatch, restart uncertainty, queue mutations, old-message corrections, metadata
 preservation, request cancellation, migration upgrades and SSE catch-up. Use the workspace
 Vitest configuration; localhost and subprocess fixtures require a runtime that permits them.
+Streaming flushes wait for in-flight persistence; background errors are logged and retain
+pending content for retry. Explicit flush failures remain visible to shutdown callers.

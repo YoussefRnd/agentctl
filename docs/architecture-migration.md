@@ -1,0 +1,466 @@
+# AgentCtl architecture migration tracker
+
+This is the source of truth for completing the architecture migration across AgentCtl.
+The design rules live in [Code architecture](code-architecture.md); repository semantics live
+in [Repository architecture](repository-architecture.md). This tracker defines the work,
+order, acceptance criteria, and evidence needed to declare the migration complete.
+
+## Status and completion rules
+
+Baseline: **2026-10-16**. **4 of 16 checkpoints are complete locally; 12 remain open.**
+This is a checkpoint count, not an estimate of engineering effort. Completed implementation
+is still uncommitted in the current workspace; no merge or release is implied.
+
+- **Done:** every checkbox in that checkpoint is checked, required verification passed, and
+  evidence is recorded. Existing suitable architecture can be accepted after review and
+  verification; a file does not need rewriting to count as reviewed.
+- **In progress:** work has started but at least one acceptance criterion is open.
+- **Planned:** criteria are defined, but implementation or acceptance review is outstanding.
+- **Blocked:** name the missing decision/dependency and the next action. It still counts as open.
+
+Update this file in the same change that completes a criterion. Record changed/accepted paths,
+verification commands and results, and a commit/PR when available. Do not mark a whole checkpoint
+Done because only its largest file was split. Changes to scope must be explicit here, with a
+reason; unresolved work cannot be renamed an exception to reach 100%.
+
+**100% means CP00 through CP15 are Done, every coverage row below is accepted, the frontend
+cycle baseline is empty, temporary migration shims are resolved, and the final verification
+gate passes against the exact accepted revision.** It does not mean the application is bug-free.
+
+## Checkpoint dashboard
+
+| ID   | Checkpoint                                                    | Status  | Depends on             |
+| ---- | ------------------------------------------------------------- | ------- | ---------------------- |
+| CP00 | Scope, coverage, and acceptance baseline                      | Done    | —                      |
+| CP01 | Initial boundaries and maintainability foundation             | Done    | CP00                   |
+| CP02 | Remaining server workflows and transport boundaries           | Done    | CP01                   |
+| CP03 | Session execution, persistence, and runtime ownership         | Done    | CP02                   |
+| CP04 | Git capability and forge separation                           | Planned | CP01                   |
+| CP05 | Repository-neutral session workspace and checkpoint workflows | Planned | CP03, CP04             |
+| CP06 | Provider lifecycle and agent protocol composition             | Planned | CP03                   |
+| CP07 | Remaining core domains and infrastructure ownership           | Planned | CP03, CP06             |
+| CP08 | Composer, review, and session dependency cycles               | Planned | CP01                   |
+| CP09 | Conversation and subagent dependency cycle                    | Planned | CP01                   |
+| CP10 | Complete frontend state, effects, and rendering audit         | Planned | CP02, CP08, CP09       |
+| CP11 | Shared contracts, client APIs, and public exports             | Planned | CP05, CP06, CP07, CP10 |
+| CP12 | Desktop lifecycle, server ownership, and IPC                  | Planned | CP02, CP03, CP06       |
+| CP13 | Design system and UI ownership                                | Planned | CP10                   |
+| CP14 | Complete architecture enforcement and delivery tooling        | Planned | CP07, CP11, CP12, CP13 |
+| CP15 | Repository-wide acceptance and migration closure              | Planned | CP00–CP14              |
+
+Recommended execution order: CP02 → CP03 → CP04 → CP05 → CP06 → CP07 → CP08 → CP09 →
+CP10 → CP11 → CP12 → CP13 → CP14 → CP15. Each checkpoint may use multiple reviewable
+changes; keep a complete workflow working between changes.
+
+## Coverage ledger
+
+A checkpoint is responsible for every source file and its relevant tests/configuration under
+its listed area, including files absent from the hotspot list. New files join their owning
+area automatically. Add a coverage row before introducing a new package or product domain.
+Acceptance is recorded at the checkpoint that closes the area; this ledger remains open
+until the full audit, even where initial work has already landed locally.
+
+| Area                                                                                                       | Owning checkpoint(s) | Acceptance                  |
+| ---------------------------------------------------------------------------------------------------------- | -------------------- | --------------------------- |
+| Server routes, routers, services, events, authentication, terminals, and app composition                   | CP02, CP12           | CP02 accepted; CP12 pending |
+| Core session commands, execution, requests, projection, persistence, runtime, and services                 | CP03, CP05           | CP03 accepted; CP05 pending |
+| Core Git, repository, and forge modules                                                                    | CP04, CP05           | Pending                     |
+| Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Pending                     |
+| Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Pending                     |
+| Web composer, review, and session features                                                                 | CP08, CP10           | Pending                     |
+| Web conversation and subagent features                                                                     | CP09, CP10           | Pending                     |
+| Web projects, providers, settings, workbench, updates, command palette, and retained feature directories   | CP10                 | Pending                     |
+| Web app/shell/routes, shared capabilities, performance lab, and test utilities                             | CP10, CP14           | Pending                     |
+| Shared schemas, contracts, types, policies, utilities, and environment definitions                         | CP11                 | Pending                     |
+| API-client services, HTTP errors/configuration, SSE engine, and query integration                          | CP11                 | Pending                     |
+| Electron main process, embedded server, windows/tray, updates, preload, and IPC contracts                  | CP12                 | Pending                     |
+| UI components, primitives, patterns, foundations, exports, and app UI adapters                             | CP13                 | Pending                     |
+| TS configuration package, root workspace configuration, package manifests, patches, and build/test tooling | CP14                 | Pending                     |
+| CI/release workflows, hooks, scripts, browser/performance tooling, and architecture checks                 | CP14                 | Pending                     |
+| Architecture docs, migration notes, compatibility decisions, and release communication                     | CP15                 | Pending                     |
+
+Generated bundles, dependency installations, local databases/credentials, downloaded binaries,
+and personal tool directories are outside the source migration. Their application ownership
+and configuration are still reviewed where relevant. Existing historical SQL migration files
+are retained; schema changes use new migrations with upgrade tests.
+
+## CP00 — Scope, coverage, and acceptance baseline
+
+- [x] Enumerate all application/package areas, tooling, and documentation in the coverage ledger.
+- [x] Define checkpoint statuses, prerequisites, evidence, and a strict final completion gate.
+- [x] Separate the source architecture migration from new product capabilities and distributed execution.
+
+Evidence: this tracker, the current source-directory inventory, and links from README and the
+design guide. This is planning completion; it does not accept unreviewed code in the ledger.
+
+## CP01 — Initial boundaries and maintainability foundation
+
+- [x] Introduce backend-neutral repository/revision contracts with Git and directory adapters;
+      preserve legacy Git review access while the new review path uses opaque references.
+- [x] Separate repository selection, opened-handle operations, identity encoding, and errors;
+      compose default adapters explicitly and add a repository dependency boundary test.
+- [x] Split repository/Git HTTP contracts and routers; separate project query, directory, and
+      open/create workflows, native-session import, and session-aware Git command services.
+- [x] Move SSE transport to the API client, split client helpers by capability, and replace
+      import-time database creation with explicit startup initialization.
+- [x] Extract GitHub CLI operations behind a forge contract; retain Git locking/preflight ownership.
+- [x] Split session configuration, stream composition, message outbox, and status effects;
+      give reusable markdown and workspace navigation their own shared owners.
+- [x] Add package/server checks, parsed frontend dependency/cycle checks, and documented design rules.
+
+Evidence: [code organization and validation](code-architecture.md),
+[repository boundary](repository-architecture.md), and the current local implementation.
+Last implementation verification: 1,429 Vitest tests across 237 files; four architecture
+regression tests; all-workspace typechecks, lint, formatting, builds, and production browser
+journeys passed. These are historical results for CP01, not final-migration acceptance.
+
+## CP02 — Remaining server workflows and transport boundaries
+
+Starting points: `apps/server/src/plugins/ts-rest/`, `routes/`, `services/session-service.ts`,
+`services/terminal-service.ts`, `utils/`, and `app.ts`.
+
+- [x] Audit every endpoint and event channel; map it to an owning workflow, query, transport,
+      or application composition responsibility, including auth, context, attachments, search,
+      diagnostics, settings, providers, MCP, terminal/WebSocket, SSE/history, and turn indexes.
+- [x] Extract remaining product workflows from handlers. Keep HTTP validation/response mapping,
+      streaming backpressure, socket handling, and connection teardown in transport adapters.
+- [x] Separate session-detail query assembly from explicitly named recovery/reconciliation;
+      preserve workspace restoration and metadata repair until callers migrate deliberately.
+- [x] Reduce `SessionService` to intended coordination/delegation; workflows own their own
+      narrow dependencies, transaction boundaries, and publish-after-commit behavior.
+- [x] Centralize service construction/lifetimes in server composition and consistently translate
+      reusable domain errors at the server boundary. Extend thin-handler checks to migrated routes.
+
+Exit evidence: endpoint-to-owner map and accepted file list; affected route/service tests for
+success, missing resources, failures, cancellation, replay, and teardown; stable HTTP/event
+contracts or an explicitly documented compatibility migration. Checkpoint verification passes.
+
+Acceptance evidence (2026-10-16): [server ownership audit and endpoint inventory](server-architecture.md)
+covers 77 contract endpoints plus 21 directly registered routes/channels. Accepted paths include
+all server routers/routes/plugins, focused application services, `composition/`, `app.ts`,
+`errors/`, `utils/`, and their relevant tests. Desktop process ownership remains CP12.
+
+Verification for CP02 and the initial CP03 composition change:
+
+- `pnpm exec vitest run packages/core/src/session apps/server --maxWorkers=2`: 270 tests, 49 files passed.
+- `pnpm exec vitest run --maxWorkers=2`: 1,434 tests, 239 files passed.
+- `pnpm architecture:check`, `pnpm architecture:test` (4 tests), `pnpm typecheck`, `pnpm lint`,
+  and `pnpm build`: passed, including web/desktop builds.
+- Prettier checks on all changed source/docs, document-link and endpoint-inventory checks,
+  and `git diff --check`: passed.
+
+The new regression tests verify query/repair separation, failed workspace recovery,
+concurrent/ordered shutdown, cleanup after failure, and suppression of background follow-up
+work after shutdown. The duplicate unawaited shutdown plugin is removed. Changes are local and
+uncommitted; no HTTP contract or database schema migration is introduced.
+
+## CP03 — Session execution, persistence, and runtime ownership
+
+Starting points: all `packages/core/src/session/`, especially `manager.ts`,
+`execution/session-operation-worker.ts`, `projection/conversation-projector.ts`, and runtime registry.
+
+- [x] Review every session submodule against its existing documented responsibility. Keep
+      `SessionManager` as a deliberate facade; move default wiring and circular callback assembly
+      into explicit composition where needed, without recursive command-lane acquisition.
+- [x] Give acceptance, dispatch, retry/recovery, cancellation, runtime binding, and retirement
+      explicit owners and typed transitions. Reuse suitable existing state machines/coordinators.
+- [x] Isolate persistence transactions and projection policy from provider callbacks and I/O;
+      preserve durable receipts, cursor ordering, snapshot consistency, and bounded retention.
+- [x] Make permission/elicitation/terminal resource scopes and cleanup ownership explicit;
+      prevent stale runtime callbacks from modifying replacement sessions.
+- [x] Narrow dependencies and public exports; preserve provider-independent agent contracts.
+
+Accepted (2026-10-16): the [session ownership audit](session-architecture.md) records all
+35 production modules, their dependency map, transition owners, resource lifetimes and public
+exports. Concrete resources/default selection and workflow callbacks have explicit composition
+owners. Atomic queue acceptance/claim/recovery and history reconciliation have persistence
+owners. Internal services consume narrowed capabilities; runtime/projector/request internals
+are no longer wildcard package exports, and architecture checks enforce the session boundaries.
+
+Runtime identity now fences detached and replacement callbacks, including projection after
+asynchronous reads. Initializing runtimes remain hidden until binding completes. Shutdown
+releases request waiters before I/O, shares one close operation, attempts every cleanup step,
+removes only captured owners, and awaits dispatch settlement. Elicitations have bounded settled
+retention, a pending limit and duplicate-ID protection. Streaming flushes serialize writes,
+await in-flight persistence, report failures and retain pending content for retry. Binding and
+initialized persona persistence commit together. Thirteen new regressions cover these ownership,
+cleanup, capacity, ordering and rollback cases; the legacy startup fixture now models synchronous
+transaction execution correctly.
+
+Verification:
+
+- `pnpm exec vitest run --maxWorkers=2`: **1,447 tests across 241 files passed**.
+- `pnpm exec vitest run packages/core/src/session --maxWorkers=2`: **163 tests across 24 files passed**
+  after the final projection ownership changes. The full suite above includes the binding
+  regression, protocol boundary checks and all server integration tests.
+- `pnpm architecture:test`: four regression tests passed. `pnpm typecheck` passed all workspace
+  typechecks and package/server/frontend architecture checks.
+- `pnpm lint`, `pnpm build` (including web/desktop), Prettier checks for changed/new files and
+  `git diff --check` passed.
+
+No HTTP contract or database schema changes were introduced. Work remains local and uncommitted.
+One server owner per database remains explicit. Git workspace/checkpoint substitution belongs
+to CP05; broader provider/ACP lifecycle composition belongs to CP06, with their existing scope
+and acceptance criteria unchanged.
+
+Exit evidence: accepted session responsibility/dependency map; tests for duplicate acceptance,
+ordered dispatch, unknown delivery, restart recovery, Stop/approval bypass, projector rollback,
+reconnect/catch-up, stale bindings, and cleanup. One server owner per database remains explicit.
+
+## CP04 — Git capability and forge separation
+
+Starting points: `packages/core/src/git/worktree-manager.ts`, snapshot service and helpers,
+`packages/core/src/forge/`, and their callers.
+
+- [ ] Separate worktree allocation/restoration/retirement, working-copy/staging operations,
+      branch/integration operations, and remote/tracking operations into focused capabilities.
+- [ ] Keep snapshot capture/retention and immutable comparisons owned separately; retain literal
+      path safety, user staging, recoverable restore, and narrow critical sections.
+- [ ] Complete the forge boundary: Git workflows depend on an explicit forge capability for
+      forge-specific remote interpretation and PR operations. Unavailable/unsupported hosts are explicit.
+- [ ] Preserve one owner for each Git lock and resource lifetime; extracted adapters do not
+      reacquire a lock already held by their caller or duplicate connection/cache state.
+- [ ] Migrate callers to focused contracts. Any retained manager facade delegates; it does not
+      continue owning all implementations under new filenames.
+
+Exit evidence: Git capability dependency map; adapter tests and current Git safety regressions
+cover staging preservation, worktree retention, dirty/conflicting integration, nested projects,
+remote failure, PR fallback, and lock ordering. GitHub can remain the only implemented forge.
+
+## CP05 — Repository-neutral session workspace and checkpoint workflows
+
+Starting points: `git/session-workspace.ts`, session history/lifecycle/execution services,
+repository contracts, persisted snapshot fields, review/restore APIs, and consumers.
+
+- [ ] Model workspace allocation/lifecycle and integration as capability-specific contracts;
+      session orchestration consumes these contracts rather than concrete Git classes.
+- [ ] Route turn capture, checkpoint comparison, rewind, undo/restore, archive/reactivate,
+      finalization, and teardown through the correct repository/workspace capability.
+- [ ] Write opaque revision references for new persisted checkpoints. Preserve reads and
+      recoverability for historical Git snapshot/baseline fields with explicit compatibility logic.
+- [ ] Keep staging, branch names, remotes, and PR operations optional and Git/forge-specific;
+      unsupported folder/backend workflows are explicit in APIs and UI.
+- [ ] Verify the neutral workflow boundary with a non-Git test adapter, not just fake hash
+      strings. Keep identity/scope/retention semantics consistent across reopen and restoration.
+
+Exit evidence: workflow-to-capability matrix, persistence/compatibility decision, legacy database
+upgrade coverage if schema changes, and complete capture/rewind/workspace integration tests.
+A production second VCS or native history for ordinary folders is not required for this checkpoint.
+
+## CP06 — Provider lifecycle and agent protocol composition
+
+Starting points: `packages/core/src/providers/`, `agent/`, `acp/`, `default-agent-driver.ts`,
+and `agent/runtime-services.ts`.
+
+- [ ] Separate registry queries/profiles, discovery/probing, installation/update operations,
+      credentials/authentication interactions, and native-session controls behind clear owners.
+- [ ] Review large registry, auth, installer, and installation service files for independent
+      policies, I/O adapters, operation state, and cleanup. Keep registry behavior behind a focused facade.
+- [ ] Move concrete default resource construction into explicit factories; agent-facing contracts
+      stay independent of ACP wire types and provider-name conditionals.
+- [ ] Audit v1/v2 drivers, protocol reducers, extensions, transport leases, caches, diagnostics,
+      and bounded queues; retain sound existing separation with recorded acceptance where no change is needed.
+- [ ] Use explicit operation states and cancellation/credential lifetimes; define who owns
+      shared connections and shutdown so one operation cannot retire another's resources.
+
+Exit evidence: provider/agent ownership map; protocol SDK boundary checks; authentication,
+installation recovery, cancellation, version negotiation, session/control, retention-limit,
+and stale-lease regressions. Local SDK peers suffice; live paid-provider calls are not required.
+
+## CP07 — Remaining core domains and infrastructure ownership
+
+Scope: `security/`, `auth/`, `mcp/`, `context/`, `skills/`, `config/`, `db/`, logging, and
+root composition files under `packages/core/src`.
+
+- [ ] Assign and review the public entry, policy, application operations, I/O, and resource
+      lifetime in every remaining core domain. Record accepted modules as well as refactored ones.
+- [ ] Keep credentials/vault and pairing/auth policy behind clear contracts; separate configuration
+      resolution from secret storage and transport without duplicating sensitive data ownership.
+- [ ] Separate MCP gateway connection/routing/lifecycle, context filesystem/search access, and
+      skill discovery/catalog/delivery responsibilities where currently mixed.
+- [ ] Audit database schema/codecs/migration/factory/transaction responsibilities; imports remain
+      inert and transaction types are explicit where needed. Preserve upgrade and rollback semantics.
+- [ ] Remove unintended default instances, environment mutation, and process/resource creation
+      outside declared composition/startup paths; retain documented immutable constants/caches only.
+
+Exit evidence: full remaining-core acceptance ledger; appropriate auth/vault, MCP shutdown,
+context path handling, skills delivery, configuration, and populated-database upgrade tests.
+No unassigned core files remain for the final audit.
+
+## CP08 — Composer, review, and session dependency cycles
+
+Baseline edges in `apps/web/architecture-cycles.json`: composer → review, composer → sessions,
+review → composer, review → sessions, sessions → composer, sessions → review.
+
+- [ ] Move screen-level composition such as session headers and launch/workspace review dialogs
+      to the appropriate page/composition owner; expose narrow session model APIs to leaf features.
+- [ ] Replace review's direct composer-store access with explicit draft/context actions supplied
+      through composition or a deliberately owned capability. Avoid a hidden global event bus.
+- [ ] Give Git status/editor presentation and workspace state a suitable owner so session models
+      do not depend back on review or composer UI.
+- [ ] Remove all six listed cycle exceptions; verify that no indirect replacement cycle exists.
+- [ ] Preserve drafts, comment/context insertion, provider configuration, queued sends, review
+      captures, and session navigation behavior and update-isolation characteristics.
+
+Exit evidence: dependency graph diff, six deleted baseline entries, relevant component/hook tests,
+and production browser journeys covering the composed session screen.
+
+## CP09 — Conversation and subagent dependency cycle
+
+Baseline edges: conversation → subagents and subagents → conversation.
+
+- [ ] Define ownership for reusable read-only transcript, activity, approval presentation, and
+      terminal rendering without moving parent-session control into child views.
+- [ ] Compose parent/child views above their independent models or expose deliberately one-way
+      rendering contracts; keep child identity/grouping and retained state owned explicitly.
+- [ ] Remove both cycle exceptions and verify the feature graph is acyclic with an empty baseline
+      after CP08. Include re-export, type-only, and lazy-import edges.
+- [ ] Preserve child navigation, live streaming, tool grouping, parent approval handling,
+      cancellation, and retained-child cleanup.
+
+Exit evidence: rendering/interaction ownership map, empty cycle baseline, subagent/conversation
+regressions, and a browser fixture journey through parent/child views.
+
+## CP10 — Complete frontend state, effects, and rendering audit
+
+Scope: every web feature plus app/shell/routes/shared, including projects, providers, settings,
+workbench/terminals, updates, command palette, retained empty directories, and performance/test helpers.
+
+- [ ] Audit every feature and composition entry. Split remaining mixed responsibilities in
+      `MainFeed`, `EventFeed`, `ReviewGitActions`, `useComposerState`, terminal panes, provider auth UI,
+      and shell/dialog orchestration where justified by ownership rather than line count.
+- [ ] Keep remote data in React Query, client UI/drafts in deliberately owned stores, and accepted
+      queue/execution state on the server. Extract pure derived policy from effects and rendering.
+- [ ] Give networking, subscriptions, keyboard/window listeners, timers, workers, and terminal
+      resources explicit owners and cleanup. Preserve high-frequency streaming update isolation.
+- [ ] Consolidate duplicated query keys/invalidation/error handling where they express the same
+      behavior; split broad contexts/hooks only along meaningful capabilities.
+- [ ] Review shared modules for real reuse and app-independent direction; keep route composition
+      out of leaf features and avoid introducing new generic store/helper dumping grounds.
+
+Exit evidence: acceptance record for every web area in the ledger; targeted interaction and
+cleanup tests; empty cycle baseline; production navigation/deferred-worker checks and existing
+performance safeguards without unsupported performance claims.
+
+## CP11 — Shared contracts, client APIs, and public exports
+
+Scope: all shared and API-client source, all package/feature public entries, and their consumers.
+
+- [ ] Review large session/event/registry schema and contract files; group them by stable
+      capability and infer types from schemas without circular re-exports or duplicate transport shapes.
+- [ ] Verify shared owns portable contracts/policies only, client owns HTTP/SSE, and application
+      defaults, error normalization, and state policy have one intended source of truth.
+- [ ] Audit HTTP configuration/errors/authorization, abort propagation, SSE parsing/reconnect,
+      query integration, and all capability helper modules. Preserve their public behavior.
+- [ ] Narrow public package/feature exports and eliminate cross-module internal imports. Classify
+      compatibility barrels individually: migrate/remove temporary shims, or document/test an intentional
+      permanent public alias and remove its migration/deprecation status.
+- [ ] Reconcile source-level API changes, historical database/protocol compatibility, and published
+      package surfaces with explicit migration notes. No unknown internal consumers remain.
+
+Exit evidence: accepted public API/dependency map, client/contract compatibility and cancellation
+regressions, and a resolved list for every temporary shim/legacy entry in this migration.
+
+## CP12 — Desktop lifecycle, server ownership, and IPC
+
+Scope: all `apps/desktop` main/preload/shared code and packaging configuration, plus relevant
+server start/stop APIs and browser desktop integration.
+
+- [ ] Audit native lifecycle, server process start/restart/stop, windows, tray, deep links,
+      window controls, and updater ownership. Confirm suitable existing separation where present.
+- [ ] Keep startup/shutdown construction explicit and idempotent; await owned resources and
+      propagate startup failure without duplicate server/process ownership.
+- [ ] Keep preload capabilities and IPC contracts narrow, validated, and independent of renderer
+      internals; ensure listener cleanup and unavailable-native-feature behavior are explicit.
+- [ ] Verify browser and desktop modes share product workflows while native integration stays
+      behind its declared boundary; review packaging/build paths as part of acceptance.
+
+Exit evidence: desktop ownership map, process/lifecycle and IPC tests, web/desktop builds,
+built-renderer worker smoke, and native lifecycle smoke on the available supported environment.
+Unavailable platform checks remain explicitly open or use a named verified CI job; a browser
+fixture alone cannot close native-runtime acceptance.
+
+## CP13 — Design system and UI ownership
+
+Scope: all `packages/ui` foundations/primitives/components/patterns, exports, tests, and consuming UI adapters.
+
+- [ ] Confirm generic design-system code has no product/session/provider dependencies or hidden
+      application networking/state; move any product composition to its owning app feature.
+- [ ] Review reusable contracts, accessibility/keyboard/focus behavior, styling/token ownership,
+      and meaningful duplication across primitives/components/patterns.
+- [ ] Keep feature-specific UI and interaction policy local; consolidate generic components only
+      when their responsibilities and behavior actually match.
+- [ ] Accept the existing gallery/test fixtures and public exports against the final consumers;
+      record areas that already meet the conventions without unnecessary rewrites.
+
+Exit evidence: UI acceptance list, affected accessibility/interaction tests, gallery review,
+both renderer builds, and package import-boundary enforcement.
+
+## CP14 — Complete architecture enforcement and delivery tooling
+
+Scope: architecture scripts, root/package configuration, TS config package, all build/test/dev
+and browser/performance scripts, patches, hooks, and CI/release workflows.
+
+- [ ] Enforce final package/module dependency directions across aliases, relative imports,
+      re-exports, type/lazy imports, and package exports. Include server/core/desktop boundaries,
+      not just the initial project router and selected modules.
+- [ ] Remove the need for the cycle exception mechanism or keep only an empty, tested baseline;
+      ensure fixtures/tests do not accidentally introduce production exceptions.
+- [ ] Keep migration-coverage enforcement and boundary regression tests wired into normal CI;
+      ensure every source area/file maps to an accepted ledger owner and new modules cannot be missed.
+- [ ] Review manifests, TS references, Turbo tasks, test fixtures, scripts/hooks, patches, and
+      dev/release composition for clear ownership and repeatable clean-checkout behavior.
+- [ ] Run the final checks in CI/release with usable failure diagnostics and retained artifacts;
+      validate import rules against deliberate violation fixtures, including relative-path bypasses.
+
+Exit evidence: enforcement coverage matrix, regression tests, normal CI wiring, clean-checkout
+verification results, and no migration-only allowlists, dead compatibility files, or unowned tooling.
+
+## CP15 — Repository-wide acceptance and migration closure
+
+- [ ] CP00–CP14 are Done with file coverage, test evidence, and resolved compatibility decisions.
+- [ ] Re-audit every coverage row against the final source tree. Record accepted, refactored, or
+      deliberately removed modules; verify new files since CP00 are covered. Mark every row Accepted.
+- [ ] Verify zero frontend cycles, no unresolved architecture violations/migration TODOs, no
+      temporary migration shims, and accurate docs/public exports. Retain justified permanent aliases
+      only with their explicit contract and tests.
+- [ ] Run the final verification gate below against one exact revision; record commit SHA, date,
+      command/results, browser/native evidence, remaining product limitations, and any source API changes.
+- [ ] Update README/design/repository/session docs to describe the completed implementation,
+      replace this dashboard's statuses, and announce 16/16 complete only after the gate passes.
+
+Final verification gate:
+
+```sh
+pnpm architecture:check
+pnpm architecture:test
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm --filter @agentctl/web perf:check
+```
+
+Also run formatting and whitespace checks on the complete migration diff, the built desktop
+renderer worker smoke used by CI, populated-database upgrade/legacy revision compatibility
+coverage, and the native lifecycle smoke accepted in CP12. Existing scripts may be improved
+in CP14; record their final exact commands here rather than inventing unimplemented checks.
+
+This gate verifies the source architecture migration. Extra VCS/forge implementations, native
+folder checkpoints, pagination, microservices, multiple server owners per database, new product
+features, and unrelated redesigns are separate follow-up scopes. Their absence must not be
+misrepresented as implemented backend support.
+
+## Checkpoint evidence log
+
+| Checkpoint | Revision / delivery                                   | Verification                                                                                                      | Open work                                                                   |
+| ---------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| CP00       | Current local documentation, uncommitted              | Coverage inventory; tracker/link/format checks                                                                    | None within planning scope                                                  |
+| CP01       | Current local implementation, uncommitted             | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide         | Follow-up work assigned to CP02–CP14                                        |
+| CP02       | Local implementation accepted 2026-10-16, uncommitted | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory | None in server application/transport scope; native integration remains CP12 |
+| CP03       | Local implementation accepted 2026-10-16, uncommitted | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit       | None within CP03; neutral workspace remains CP05, provider lifecycle CP06   |
+| CP04–CP15  | Not accepted                                          | Pending                                                                                                           | See each checkpoint                                                         |
+
+For each checkpoint, replace the aggregate pending row with its own evidence entry when work
+starts. Include execution date, actual commands/results, accepted paths, unresolved issues, and
+commit/PR links when available. Do not carry CP01's test counts forward as proof of later work.

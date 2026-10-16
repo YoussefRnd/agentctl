@@ -33,6 +33,10 @@
       "types": "./dist/git/index.d.ts",
       "default": "./dist/git/index.js"
     },
+    "./repository": {
+      "types": "./dist/repository/index.d.ts",
+      "default": "./dist/repository/index.js"
+    },
     "./db": {
       "types": "./dist/db/index.d.ts",
       "default": "./dist/db/index.js"

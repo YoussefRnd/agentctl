@@ -5,8 +5,8 @@ export const sessionKeys = {
   allReviewFiles: ['session-review-file'] as const,
   reviewFiles: (sessionId: string) => ['session-review-file', sessionId] as const,
   review: (sessionId: string) => ['session-review', sessionId] as const,
-  reviewFile: (sessionId: string, filePath: string, fromHash?: string, toHash?: string) =>
-    ['session-review-file', sessionId, filePath, fromHash, toHash] as const,
+  reviewFile: (sessionId: string, filePath: string, fromRevision?: string, toRevision?: string) =>
+    ['session-review-file', sessionId, filePath, fromRevision, toRevision] as const,
   allBranches: ['session-branches'] as const,
   branches: (sessionId: string) => ['session-branches', sessionId] as const,
   allMergePreviews: ['session-merge-preview'] as const,

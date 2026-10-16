@@ -1,10 +1,21 @@
-import { test, expect, describe, beforeEach, afterEach } from 'vitest';
+import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { SnapshotService, SnapshotRestoreError } from './snapshot-service.js';
+import {
+  SnapshotService,
+  SnapshotRestoreError,
+  type SnapshotComparison,
+} from './snapshot-service.js';
+
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
 
 describe('SnapshotService', () => {
   let service: SnapshotService;
@@ -121,6 +132,53 @@ describe('SnapshotService', () => {
   });
 
   describe('getTurnChanges', () => {
+    test.each(['hash', 'tree ref'])(
+      'allows another capture while calculating statistics from a resolved %s',
+      async (source) => {
+        const baseline = await service.track(tempProjectDir);
+        const from = source === 'hash' ? baseline! : 'refs/agentctl/test-tree';
+        if (source === 'tree ref') git(tempProjectDir, 'update-ref', from, baseline!);
+        await fs.promises.writeFile(path.join(tempProjectDir, 'file.txt'), 'captured\n');
+        const paused = Promise.withResolvers<void>();
+        const resume = Promise.withResolvers<void>();
+        const internals = service as unknown as {
+          compareTrees(...args: unknown[]): Promise<SnapshotComparison>;
+        };
+        const compareTrees = internals.compareTrees.bind(service);
+        const spy = vi.spyOn(internals, 'compareTrees').mockImplementationOnce(async (...args) => {
+          paused.resolve();
+          await resume.promise;
+          return compareTrees(...args);
+        });
+        const comparison = service.getTurnChanges(tempProjectDir, from);
+        let capture: Promise<string | undefined> | undefined;
+        try {
+          await paused.promise;
+          await fs.promises.writeFile(path.join(tempProjectDir, 'file.txt'), 'later\nextra\n');
+          let captureFinished = false;
+          capture = service.track(tempProjectDir).then((hash) => {
+            captureFinished = true;
+            return hash;
+          });
+          await vi.waitFor(() => expect(captureFinished).toBe(true));
+          if (source === 'tree ref') git(tempProjectDir, 'update-ref', from, (await capture)!);
+          resume.resolve();
+          expect(await comparison).toMatchObject({
+            totalAdditions: 1,
+            totalDeletions: 0,
+            files: [{ path: 'file.txt', status: 'added' }],
+          });
+          expect(
+            (await service.getTurnChanges(tempProjectDir, baseline!, await capture)).totalAdditions,
+          ).toBe(2);
+        } finally {
+          resume.resolve();
+          await Promise.allSettled([comparison, capture]);
+          spy.mockRestore();
+        }
+      },
+    );
+
     test('computes exact additions, deletions, and statuses between snapshots', async () => {
       await fs.promises.writeFile(path.join(tempProjectDir, 'existing.txt'), 'line1\nline2\n');
       const { execSync } = await import('node:child_process');
@@ -184,6 +242,59 @@ describe('SnapshotService', () => {
   });
 
   describe('getReviewFiles', () => {
+    test('allows capture during patch formatting and retains the captured status and content', async () => {
+      await fs.promises.writeFile(path.join(tempProjectDir, 'file.txt'), 'baseline\n');
+      git(tempProjectDir, 'add', '.');
+      git(tempProjectDir, 'commit', '-m', 'baseline');
+      const baseline = await service.track(tempProjectDir);
+      await fs.promises.writeFile(path.join(tempProjectDir, 'file.txt'), 'captured\n');
+      git(tempProjectDir, 'add', '.');
+      const paused = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      const internals = service as unknown as {
+        fillDiffs(...args: unknown[]): Promise<void>;
+      };
+      const fillDiffs = internals.fillDiffs.bind(service);
+      const spy = vi.spyOn(internals, 'fillDiffs').mockImplementationOnce(async (...args) => {
+        paused.resolve();
+        await resume.promise;
+        return fillDiffs(...args);
+      });
+      const review = service.getReview(tempProjectDir, baseline!, { scope: 'working' });
+      let capture: Promise<string | undefined> | undefined;
+      try {
+        await paused.promise;
+        await fs.promises.writeFile(path.join(tempProjectDir, 'file.txt'), 'later\nextra\n');
+        git(tempProjectDir, 'add', '.');
+        git(tempProjectDir, 'commit', '-m', 'later edit');
+        let captureFinished = false;
+        capture = service.track(tempProjectDir).then((hash) => {
+          captureFinished = true;
+          return hash;
+        });
+        await vi.waitFor(() => expect(captureFinished).toBe(true));
+        resume.resolve();
+        const { files, capture: reviewCapture } = await review;
+        expect(files).toHaveLength(1);
+        expect(files[0]).toMatchObject({
+          path: 'file.txt',
+          state: 'staged',
+          hasStagedChanges: true,
+          hasUnstagedChanges: false,
+          additions: 1,
+          deletions: 1,
+        });
+        expect(files[0].diff).toContain('+captured');
+        expect(files[0].diff).not.toContain('later');
+        expect(reviewCapture!.currentTree).not.toBe(await capture);
+        expect(git(tempProjectDir, 'status', '--porcelain')).toBe('');
+      } finally {
+        resume.resolve();
+        await Promise.allSettled([review, capture]);
+        spy.mockRestore();
+      }
+    });
+
     test('compares and restores a repository commit within a project subdirectory', async () => {
       const subdirectory = path.join(tempProjectDir, 'packages', 'app');
       await fs.promises.mkdir(subdirectory, { recursive: true });
@@ -244,13 +355,6 @@ describe('SnapshotService', () => {
     });
   });
   describe('snapshot regressions', () => {
-    const git = (cwd: string, ...args: string[]) =>
-      execFileSync('git', args, {
-        cwd,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }).trim();
-
     test('preserves tracked ignored files and respects ancestor ignores in subprojects', async () => {
       const project = path.join(tempProjectDir, 'pkg');
       await fs.promises.mkdir(project);

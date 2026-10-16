@@ -6,7 +6,7 @@ import { useContextAutocomplete } from './useContextAutocomplete';
 import { usePromptHistory } from './usePromptHistory';
 import { fuzzySearch, resolveAgentFeatures, type ProviderDiscovery } from '@agentctl/shared';
 import { useSettingsOverlayStore } from '@/features/settings';
-import { useWorkbenchStore } from '@/features/workbench';
+import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
 import { useDraftStore } from './useDraftStore';
 
 export interface CommandInfo {

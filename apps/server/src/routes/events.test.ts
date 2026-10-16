@@ -1,7 +1,8 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
 import { buildApp } from '../app.js';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
-import { ElicitationRegistry, type SessionManager } from '@agentctl/core/session';
+import type { SessionManager } from '@agentctl/core/session';
+import { ElicitationRegistry } from '../../../../packages/core/src/session/requests/elicitation-registry.js';
 import { ProviderRegistry } from '@agentctl/core/providers';
 import type { FastifyInstance } from 'fastify';
 import { parseServerEnv } from '@agentctl/shared';

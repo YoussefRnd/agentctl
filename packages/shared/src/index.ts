@@ -5,7 +5,6 @@ export * from './schemas/session-event-page.js';
 export * from './schemas/registry.js';
 export * from './schemas/diagnostics.js';
 export * from './schemas/state-change.js';
-export * from './engine/session-engine.js';
 export * from './types/index.js';
 export * from './api-contract.js';
 export * from './env-server.js';
@@ -13,6 +12,7 @@ export * from './env-web.js';
 export * from './utils.js';
 
 export * from './schemas/review.js';
+export * from './schemas/repository.js';
 export * from './workspace-policy.js';
 export * from './agent-config.js';
 

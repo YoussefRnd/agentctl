@@ -22,7 +22,7 @@ import { formatShortcut } from '@/shared/lib/platform';
 import { OpenInPicker } from './OpenInPicker';
 import { SessionHeaderTitle } from './SessionHeaderTitle';
 import { SessionHeaderDialogs } from './SessionHeaderDialogs';
-import type { WorkbenchTab } from '@/features/workbench';
+import type { WorkbenchTab } from '@/shared/stores/useWorkbenchStore';
 
 interface SessionHeaderProps {
   onToggleWorkbench: () => void;

@@ -18,9 +18,9 @@ it('cancels the underlying HTTP request when a captured diff query is abandoned'
       }),
   );
   const controller = new AbortController();
-  const request = api.getSessionReview({
+  const request = api.getRepositoryReview({
     params: { id: '11111111-1111-4111-8111-111111111111' },
-    query: { filePath: 'file.ts', fromHash: 'a'.repeat(40), toHash: 'b'.repeat(40) },
+    query: { filePath: 'file.ts', fromRevision: 'revision:before', toRevision: 'revision:after' },
     fetchOptions: { signal: controller.signal },
   });
   controller.abort();

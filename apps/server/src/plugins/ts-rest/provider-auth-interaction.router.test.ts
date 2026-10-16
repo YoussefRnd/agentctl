@@ -1,3 +1,4 @@
+import { createServerServices } from '../../composition/server-services.js';
 import Fastify from 'fastify';
 import { initServer } from '@ts-rest/fastify';
 import { providersContract } from '@agentctl/shared';
@@ -21,6 +22,7 @@ test('browser auth responses reject expired or wrong-profile requests', async ()
       .code(error instanceof AppError ? error.statusCode : 500)
       .send({ message: error instanceof Error ? error.message : String(error) }),
   );
+  app.decorate('services', createServerServices(app));
   const server = initServer();
   await app.register(server.plugin(server.router(providersContract, createProvidersRouter(app))));
   const respond = (id: string, interactionId: string) =>

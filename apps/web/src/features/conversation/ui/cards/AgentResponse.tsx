@@ -4,7 +4,7 @@ import { memo, useMemo, useEffect } from 'react';
 import { paintPromptPerformance } from '@/shared/lib/promptPerformance';
 import { SubagentBlock, extractSubagentGroups } from '@/features/subagents';
 import { UnifiedActivityBlock } from './UnifiedActivityBlock';
-import { StreamingMarkdown } from './StreamingMarkdown';
+import { StreamingMarkdown } from '../../../../shared/markdown/ui/StreamingMarkdown';
 import { TurnChangesCard } from './TurnChangesCard';
 import { extractTurnChanges } from '@/features/review';
 import { getAgentStreamPhase } from '../../lib/agentStreamPhase';

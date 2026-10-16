@@ -1,8 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
-import { eq, and } from 'drizzle-orm';
-import path from 'node:path';
-import { projects, nativeSessionImports } from '@agentctl/core/db';
 import { AppError } from '../../errors/app-error.js';
 import { providersContract } from '@agentctl/shared';
 
@@ -26,46 +23,7 @@ export function createProvidersRouter(
       body: await fastify.providerRegistry.createProfile(params.id, body.name),
     }),
     listNativeSessions: async ({ params, query }) => {
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, query.projectId),
-      });
-      if (!project) throw new AppError('Project not found', 404);
-      const page = await fastify.providerRegistry.listNativeSessions(
-        params.id,
-        project.path,
-        query.cursor,
-      );
-      const imports = await fastify.db
-        .select()
-        .from(nativeSessionImports)
-        .where(
-          and(
-            eq(nativeSessionImports.projectId, project.id),
-            eq(nativeSessionImports.providerId, params.id),
-            eq(nativeSessionImports.completed, true),
-          ),
-        );
-      const sessions = page.sessions.flatMap((value) => {
-        if (!value || typeof value !== 'object') return [];
-        const row = value as Record<string, unknown>;
-        if (
-          typeof row.sessionId !== 'string' ||
-          typeof row.cwd !== 'string' ||
-          path.resolve(row.cwd) !== path.resolve(project.path)
-        )
-          return [];
-        return [
-          {
-            sessionId: row.sessionId,
-            cwd: row.cwd,
-            title: typeof row.title === 'string' ? row.title : undefined,
-            updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : undefined,
-            importedSessionId: imports.find((item) => item.nativeSessionId === row.sessionId)
-              ?.sessionId,
-          },
-        ];
-      });
-      return { status: 200 as const, body: { sessions, nextCursor: page.nextCursor } };
+      return { status: 200, body: await fastify.services.providerSessions.list(params.id, query) };
     },
     getProviders: async () => {
       const providers = await fastify.providerRegistry.discover();

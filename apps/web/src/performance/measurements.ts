@@ -1,7 +1,7 @@
 import { groupFeedEvents } from '../features/conversation/lib/eventFeedGrouping';
 import { groupConversationTurns } from '../features/conversation/lib/turnMinimapGrouping';
-import { splitStreamingContent } from '../features/conversation/ui/cards/streamingMarkdownUtils';
-import { splitGraphemes } from '../features/conversation/ui/cards/StreamingMarkdown';
+import { splitStreamingContent } from '../shared/markdown/ui/streamingMarkdownUtils';
+import { splitGraphemes } from '../shared/markdown/ui/StreamingMarkdown';
 import { mergeEventHistory } from '../features/sessions/model/useSessionHistory';
 import { conversationFixture, markdownFixture } from './fixtures';
 

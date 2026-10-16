@@ -1,15 +1,17 @@
+import { composeSessionResources } from './composition/session-resources.js';
+import type { IEventBus } from './contracts.js';
+import { composeSessionWorkflows } from './composition/session-workflows.js';
 import { eq } from 'drizzle-orm';
 import { projects } from '../db/schema.js';
 import type { SessionRuntime } from './runtime/session-runtime.js';
 import type { DbClient } from '../db/index.js';
 import type { AgentDriver, AgentSessionIntent } from '../agent/types.js';
 import type { AgentRuntimeServices } from '../agent/runtime-services.js';
-import { createDefaultAgentDriver } from '../default-agent-driver.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
-import { SessionEventRepository } from './persistence/session-event-repository.js';
+import type { SessionEventRepository } from './persistence/session-event-repository.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
-import { SessionWorkspace } from '../git/session-workspace.js';
+import type { SessionWorkspace } from '../git/session-workspace.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
 import {
   EMPTY_AGENT_FEATURES,
@@ -17,18 +19,16 @@ import {
   type SessionMode,
   type ThinkingEffort,
 } from '@agentctl/shared';
-import { SessionRuntimeRegistry } from './runtime/session-runtime-registry.js';
+import type { SessionRuntimeRegistry } from './runtime/session-runtime-registry.js';
 import type { McpGateway } from '../mcp/mcp-gateway.js';
 import { DEFAULT_AGENT_MODEL } from '../config/runtime-defaults.js';
-import { SessionLauncher, type CreateSessionParams } from './services/session-launcher.js';
-import { SessionLifecycleService } from './services/session-lifecycle-service.js';
-import { SessionHistoryService } from './services/session-history-service.js';
+import type { SessionLauncher, CreateSessionParams } from './services/session-launcher.js';
+import type { SessionLifecycleService } from './services/session-lifecycle-service.js';
+import type { SessionHistoryService } from './services/session-history-service.js';
 import { SessionOperationWorker } from './execution/session-operation-worker.js';
-import { SessionCommandHandler } from './commands/session-command-handler.js';
+import type { SessionCommandHandler } from './commands/session-command-handler.js';
 
-export interface IEventBus {
-  publish(event: unknown): void;
-}
+export type { IEventBus } from './contracts.js';
 
 export { type CreateSessionParams };
 export { resolveAgentSessionId } from './agent-session-id.js';
@@ -55,7 +55,7 @@ export class SessionManager {
     providerRegistry: ProviderRegistry,
     eventBus: IEventBus,
     logger: Logger = noopLogger,
-    runtime: AgentDriver = createDefaultAgentDriver(logger),
+    runtime?: AgentDriver,
     mcpGateway?: McpGateway,
     runtimeServices?: AgentRuntimeServices,
   ) {
@@ -63,125 +63,57 @@ export class SessionManager {
     this.providerRegistry = providerRegistry;
     this.logger = logger;
 
-    if (runtimeServices) {
-      this.runtime = runtimeServices.driver;
-    } else {
-      this.runtime = runtime;
-      const connectionAwareRuntime = this.runtime as AgentDriver & {
-        setConnectionManager?: (manager: unknown) => void;
-      };
-      if (connectionAwareRuntime.setConnectionManager) {
-        connectionAwareRuntime.setConnectionManager(this.providerRegistry.getConnectionManager());
-      }
-    }
-
-    this.eventRepository = new SessionEventRepository(db, eventBus);
-    this.runtimeRegistry = new SessionRuntimeRegistry(
+    const resources = composeSessionResources(
       db,
       workspaceManager,
       providerRegistry,
-      this.eventRepository,
+      eventBus,
       logger,
-      this.runtime,
+      runtime,
       mcpGateway,
+      runtimeServices,
     );
-    this.sessionWorkspace = new SessionWorkspace(
-      db,
-      workspaceManager,
-      (sessionId) => {
-        this.runtimeRegistry.stopSession(sessionId);
-      },
-      () => this.runtimeRegistry.getSnapshotService(),
-    );
+    this.runtime = resources.runtime;
+    this.eventRepository = resources.eventRepository;
+    this.runtimeRegistry = resources.runtimeRegistry;
+    this.sessionWorkspace = resources.sessionWorkspace;
 
     const manager = () => this;
-    this.launcher = new SessionLauncher({
-      get eventRepository() {
-        return manager().eventRepository;
+    const workflows = composeSessionWorkflows(
+      {
+        get db() {
+          return manager().db;
+        },
+        get logger() {
+          return manager().logger;
+        },
+        get runtime() {
+          return manager().runtime;
+        },
+        get providerRegistry() {
+          return manager().providerRegistry;
+        },
+        get eventRepository() {
+          return manager().eventRepository;
+        },
+        get runtimeRegistry() {
+          return manager().runtimeRegistry;
+        },
+        get sessionWorkspace() {
+          return manager().sessionWorkspace;
+        },
       },
-      get db() {
-        return manager().db;
+      {
+        startSession: (...args) => manager().startSession(...args),
+        restartSession: (...args) => manager().restartSession(...args),
+        getOrResuscitate: (...args) => manager().getOrResuscitate(...args),
+        createForkSession: (...args) => manager().createForkSession(...args),
       },
-      get logger() {
-        return manager().logger;
-      },
-      get runtimeRegistry() {
-        return manager().runtimeRegistry;
-      },
-      get sessionWorkspace() {
-        return manager().sessionWorkspace;
-      },
-      get providerRegistry() {
-        return manager().providerRegistry;
-      },
-      startSession: (...args) => manager().startSession(...args),
-      restartSession: (...args) => manager().restartSession(...args),
-    });
-    this.lifecycle = new SessionLifecycleService({
-      get db() {
-        return manager().db;
-      },
-      get logger() {
-        return manager().logger;
-      },
-      get runtimeRegistry() {
-        return manager().runtimeRegistry;
-      },
-      get sessionWorkspace() {
-        return manager().sessionWorkspace;
-      },
-      get runtime() {
-        return manager().runtime;
-      },
-      launcher: this.launcher,
-      restartSession: (...args) => manager().restartSession(...args),
-    });
-    this.history = new SessionHistoryService({
-      get db() {
-        return manager().db;
-      },
-      get logger() {
-        return manager().logger;
-      },
-      get runtimeRegistry() {
-        return manager().runtimeRegistry;
-      },
-      get sessionWorkspace() {
-        return manager().sessionWorkspace;
-      },
-      get eventRepository() {
-        return manager().eventRepository;
-      },
-      launcher: this.launcher,
-      startSession: (...args) => manager().startSession(...args),
-      restartSession: (...args) => manager().restartSession(...args),
-      createForkSession: (...args) => manager().createForkSession(...args),
-      updateSessionConfig: (sessionId, params, options) =>
-        manager().commandHandler.updateSessionConfig(sessionId, params, options),
-    });
-    this.commandHandler = new SessionCommandHandler({
-      get db() {
-        return manager().db;
-      },
-      get logger() {
-        return manager().logger;
-      },
-      get runtimeRegistry() {
-        return manager().runtimeRegistry;
-      },
-      get providerRegistry() {
-        return manager().providerRegistry;
-      },
-      get eventRepository() {
-        return manager().eventRepository;
-      },
-      launcher: this.launcher,
-      restartSession: (...args) => manager().restartSession(...args),
-      getOrResuscitate: (...args) => manager().getOrResuscitate(...args),
-      switchMode: (...args) => manager().lifecycle.switchMode(...args),
-      rewindSession: (...args) => manager().history.rewindSession(...args),
-      clearRewindBackup: (...args) => manager().history.clearRewindBackup(...args),
-    });
+    );
+    this.launcher = workflows.launcher;
+    this.lifecycle = workflows.lifecycle;
+    this.history = workflows.history;
+    this.commandHandler = workflows.commandHandler;
     this.operationWorker = new SessionOperationWorker(
       db,
       this.eventRepository,
@@ -299,6 +231,10 @@ export class SessionManager {
     return this.runtimeRegistry.getSnapshotService();
   }
 
+  getRepositoryService() {
+    return this.runtimeRegistry.getRepositoryService();
+  }
+
   stopSessionAndWait(sessionId: string): Promise<void> {
     return this.runtimeRegistry.stopSessionAndWait(sessionId);
   }
@@ -309,7 +245,11 @@ export class SessionManager {
 
   async stopAll(): Promise<void> {
     this.operationWorker.stop();
-    return this.lifecycle.stopAll();
+    try {
+      await this.lifecycle.stopAll();
+    } finally {
+      await this.operationWorker.idleAll();
+    }
   }
 
   async deleteSession(sessionId: string): Promise<void> {

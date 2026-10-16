@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { prepareMarkdown } from '../../lib/markdownProcessor';
+import { prepareMarkdown } from '../lib/markdownProcessor';
 import { PreparedMarkdown } from './PreparedMarkdown';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 import { MarkdownTable } from './MarkdownTable';

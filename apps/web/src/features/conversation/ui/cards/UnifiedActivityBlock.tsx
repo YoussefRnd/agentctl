@@ -21,7 +21,7 @@ import { ThinkingSpinner, StreamingDots } from '@/shared';
 import { useSettings } from '@/features/settings';
 import { useSession, useSessionTurnState } from '@/features/sessions';
 import { formatTokenCount } from '@/shared/lib/formatTokenCount';
-import { StreamingMarkdown } from './StreamingMarkdown';
+import { StreamingMarkdown } from '../../../../shared/markdown/ui/StreamingMarkdown';
 import type { SessionEventRow, SessionEventToolCallData } from '@agentctl/shared';
 import { isSessionEventText, isSessionEventToolCall } from '@agentctl/shared';
 

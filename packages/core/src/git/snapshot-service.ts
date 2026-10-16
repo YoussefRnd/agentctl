@@ -205,15 +205,8 @@ export class SnapshotService {
   }
 
   async diff(projectPath: string, fromHash: string): Promise<FilePatch[]> {
-    const context = await this.getContext(projectPath);
-    if (!context) {
-      return [];
-    }
-    return this.mutex.run(context.lockKey, async () => {
-      const currentHash = await this.trackUnlocked(context);
-      const comparison = await this.compareSnapshotsUnlocked(context, fromHash, currentHash);
-      return comparison.files.map(({ path: filePath, status }) => ({ path: filePath, status }));
-    });
+    const comparison = await this.compareSnapshots(projectPath, fromHash);
+    return comparison.files.map(({ path: filePath, status }) => ({ path: filePath, status }));
   }
 
   async diffBetween(projectPath: string, fromHash: string, toHash: string): Promise<FilePatch[]> {
@@ -234,13 +227,20 @@ export class SnapshotService {
     if (!context) {
       return { files: [], totalAdditions: 0, totalDeletions: 0 };
     }
-    return this.mutex.run(context.lockKey, async () => {
+    const git = simpleGit(context.projectPath).env(context.env);
+    const trees = await this.mutex.run(context.lockKey, async () => {
       const targetHash = toHash ?? (await this.trackUnlocked(context));
-      if (fromHash === targetHash) {
-        return { files: [], totalAdditions: 0, totalDeletions: 0 };
-      }
-      return this.compareSnapshotsUnlocked(context, fromHash, targetHash);
+      if (fromHash === targetHash) return null;
+      return Promise.all([
+        this.resolveTreeish(git, context, fromHash),
+        this.resolveTreeish(git, context, targetHash),
+      ]);
     });
+    // Tree IDs are immutable. Statistics do not use the private index and
+    // should not delay the next capture or restore in this workspace.
+    return trees
+      ? this.compareTrees(git, trees[0], trees[1])
+      : { files: [], totalAdditions: 0, totalDeletions: 0 };
   }
 
   private async compareSnapshotsUnlocked(
@@ -339,12 +339,23 @@ export class SnapshotService {
   ): Promise<string> {
     const objectType = (await git.raw(['cat-file', '-t', hash])).trim();
     if (objectType === 'tree') {
-      return hash;
+      // Callers may supply a ref or abbreviated ID. Pin it before releasing
+      // the capture lock so later reads never depend on a moving ref.
+      return (await git.revparse(['--verify', hash])).trim();
     }
     if (objectType !== 'commit') {
       throw new Error(`Snapshot ${hash} is a ${objectType}, not a tree or commit`);
     }
     return this.projectTree(git, context, hash);
+  }
+
+  /** Resolve legacy selectors at the Git boundary before exposing a revision. */
+  async resolveRevision(projectPath: string, selector: string): Promise<string> {
+    const context = await this.getContext(projectPath);
+    if (!context) throw new Error('Cannot resolve a revision outside a Git repository');
+    return this.mutex.run(context.lockKey, () =>
+      this.resolveTreeish(simpleGit(context.projectPath).env(context.env), context, selector),
+    );
   }
 
   private async projectTree(
@@ -625,82 +636,96 @@ export class SnapshotService {
   ): Promise<SnapshotReview> {
     const context = await this.getContext(projectPath);
     if (!context) return { files: [] };
-    return this.mutex.run(context.lockKey, async () => {
-      const currentTree = await this.trackUnlocked(context, false);
-      const git = simpleGit(context.projectPath).env(context.env);
-      const userGit = simpleGit(context.projectPath);
-      const hasHead = await userGit
-        .revparse(['--verify', 'HEAD'])
-        .then(() => true)
-        .catch(() => false);
-      const workingTree = hasHead
-        ? await this.resolveTreeish(git, context, 'HEAD')
-        : await this.emptyTree(git);
-      const sessionTree =
-        initialHash === 'none' ? workingTree : await this.resolveTreeish(git, context, initialHash);
-      const [sessionChanges, workingChanges, statusOutput] = await Promise.all([
-        this.compareTrees(git, sessionTree, currentTree),
-        sessionTree === workingTree
-          ? Promise.resolve(null)
-          : this.compareTrees(git, workingTree, currentTree),
-        userGit.raw(['status', '--porcelain=v1', '-z', '--untracked-files=all']),
-      ]);
-      const working = new Map(
-        (workingChanges ?? sessionChanges).files.map((file) => [file.path, file]),
+    const git = simpleGit(context.projectPath).env(context.env);
+    const { currentTree, workingTree, sessionTree, statusOutput } = await this.mutex.run(
+      context.lockKey,
+      async () => {
+        const currentTree = await this.trackUnlocked(context, false);
+        const userGit = simpleGit(context.projectPath);
+        const hasHead = await userGit
+          .revparse(['--verify', 'HEAD'])
+          .then(() => true)
+          .catch(() => false);
+        const workingTree = hasHead
+          ? await this.resolveTreeish(git, context, 'HEAD')
+          : await this.emptyTree(git);
+        const sessionTree =
+          initialHash === 'none'
+            ? workingTree
+            : await this.resolveTreeish(git, context, initialHash);
+        const statusOutput = await userGit.raw([
+          'status',
+          '--porcelain=v1',
+          '-z',
+          '--untracked-files=all',
+        ]);
+        return { currentTree, workingTree, sessionTree, statusOutput };
+      },
+    );
+    // Capture mutable state together, then release the private-index lock.
+    // Everything below derives from that capture, even if another turn edits
+    // files, stages changes, or commits while this response is being built.
+    const [sessionChanges, workingChanges] = await Promise.all([
+      this.compareTrees(git, sessionTree, currentTree),
+      sessionTree === workingTree
+        ? Promise.resolve(null)
+        : this.compareTrees(git, workingTree, currentTree),
+    ]);
+    const working = new Map(
+      (workingChanges ?? sessionChanges).files.map((file) => [file.path, file]),
+    );
+    const session = new Map(sessionChanges.files.map((file) => [file.path, file]));
+    const entries = new Map<string, ReviewFile>();
+    for (const change of sessionChanges.files)
+      entries.set(change.path, {
+        path: change.path,
+        state: 'committed',
+        diff: '',
+        hasStagedChanges: false,
+        hasUnstagedChanges: false,
+      });
+    const prefix = context.projectPrefix ? `${context.projectPrefix}/` : '';
+    for (const file of parseFileStatus(statusOutput)) {
+      if (prefix && !file.path.startsWith(prefix)) continue;
+      const filePath = file.path.slice(prefix.length);
+      if (!filePath) continue;
+      const staged = file.index !== ' ' && file.index !== '?';
+      const unstaged = file.working_dir !== ' ';
+      entries.set(filePath, {
+        path: filePath,
+        diff: '',
+        hasStagedChanges: staged,
+        hasUnstagedChanges: unstaged,
+        state: file.conflicted
+          ? 'conflicted'
+          : file.index === '?'
+            ? 'untracked'
+            : unstaged
+              ? file.working_dir === 'D'
+                ? 'deleted'
+                : 'modified'
+              : 'staged',
+      });
+    }
+    const files = [...entries.values()].filter(
+      (file) => !options.filePath || file.path === options.filePath,
+    );
+    for (const file of files) {
+      const stats = (options.scope === 'working' ? working : session).get(file.path);
+      file.additions = stats?.additions ?? 0;
+      file.deletions = stats?.deletions ?? 0;
+      file.sessionAdditions = session.get(file.path)?.additions ?? 0;
+      file.sessionDeletions = session.get(file.path)?.deletions ?? 0;
+    }
+    if (options.includeDiffs !== false) {
+      await this.fillDiffs(
+        git,
+        options.scope === 'working' ? workingTree : sessionTree,
+        currentTree,
+        files,
       );
-      const session = new Map(sessionChanges.files.map((file) => [file.path, file]));
-      const entries = new Map<string, ReviewFile>();
-      for (const change of sessionChanges.files)
-        entries.set(change.path, {
-          path: change.path,
-          state: 'committed',
-          diff: '',
-          hasStagedChanges: false,
-          hasUnstagedChanges: false,
-        });
-      const prefix = context.projectPrefix ? `${context.projectPrefix}/` : '';
-      for (const file of parseFileStatus(statusOutput)) {
-        if (prefix && !file.path.startsWith(prefix)) continue;
-        const filePath = file.path.slice(prefix.length);
-        if (!filePath) continue;
-        const staged = file.index !== ' ' && file.index !== '?';
-        const unstaged = file.working_dir !== ' ';
-        entries.set(filePath, {
-          path: filePath,
-          diff: '',
-          hasStagedChanges: staged,
-          hasUnstagedChanges: unstaged,
-          state: file.conflicted
-            ? 'conflicted'
-            : file.index === '?'
-              ? 'untracked'
-              : unstaged
-                ? file.working_dir === 'D'
-                  ? 'deleted'
-                  : 'modified'
-                : 'staged',
-        });
-      }
-      const files = [...entries.values()].filter(
-        (file) => !options.filePath || file.path === options.filePath,
-      );
-      for (const file of files) {
-        const stats = (options.scope === 'working' ? working : session).get(file.path);
-        file.additions = stats?.additions ?? 0;
-        file.deletions = stats?.deletions ?? 0;
-        file.sessionAdditions = session.get(file.path)?.additions ?? 0;
-        file.sessionDeletions = session.get(file.path)?.deletions ?? 0;
-      }
-      if (options.includeDiffs !== false) {
-        await this.fillDiffs(
-          git,
-          options.scope === 'working' ? workingTree : sessionTree,
-          currentTree,
-          files,
-        );
-      }
-      return { files, capture: { currentTree, workingTree, sessionTree } };
-    });
+    }
+    return { files, capture: { currentTree, workingTree, sessionTree } };
   }
 
   async deleteProjectSnapshots(projectPath: string): Promise<void> {

@@ -1,3 +1,4 @@
+import { createServerServices } from '../composition/server-services.js';
 import { AcpAgentDriver } from '@agentctl/core/acp';
 import type { AgentSession } from '@agentctl/core';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -97,6 +98,7 @@ beforeEach(async () => {
       return reply.code(error.statusCode).send({ message: error.message });
     return reply.send(error);
   });
+  app.decorate('services', createServerServices(app));
   const server = initServer();
   const routes = createSessionsRouter(app);
   await app.register(

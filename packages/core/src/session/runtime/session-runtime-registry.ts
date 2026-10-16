@@ -18,6 +18,8 @@ import { noopLogger } from '../../logger.js';
 import type { AgentDriver, AgentSession, AgentSessionIntent } from '../../agent/types.js';
 import { AgentAuthenticationRequiredError } from '../../agent/errors.js';
 import { SnapshotService } from '../../git/snapshot-service.js';
+import type { RepositoryService } from '../../repository/repository-service.js';
+import { createDefaultRepositoryService } from '../../default-repository-service.js';
 import type { McpGateway } from '../../mcp/mcp-gateway.js';
 import { DEFAULT_AGENT_MODEL } from '../../config/runtime-defaults.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
@@ -57,6 +59,7 @@ export interface SessionRecord {
 }
 
 export interface LaunchContext {
+  runtimeId?: string;
   command?: string;
   args?: string[];
   env?: Record<string, string>;
@@ -66,7 +69,9 @@ export interface LaunchContext {
 
 export class SessionRuntimeRegistry {
   private sessions = new Map<string, SessionRuntime>();
+  private initializing = new Set<SessionRuntime>();
   private snapshotService: SnapshotService;
+  private repositoryService: RepositoryService;
 
   constructor(
     private db: DbClient,
@@ -78,26 +83,37 @@ export class SessionRuntimeRegistry {
     private mcpGateway?: McpGateway,
   ) {
     this.snapshotService = new SnapshotService();
+    this.repositoryService = createDefaultRepositoryService(this.snapshotService);
   }
 
   ownsRuntime(sessionId: string, runtimeId: string): boolean {
-    const current = this.sessions.get(sessionId);
-    return !current || current.runtimeId === runtimeId;
+    return this.sessions.get(sessionId)?.runtimeId === runtimeId;
   }
 
   getSnapshotService(): SnapshotService {
     return this.snapshotService;
   }
 
+  getRepositoryService(): RepositoryService {
+    return this.repositoryService;
+  }
+
   getSession(sessionId: string): SessionRuntime | undefined {
-    return this.sessions.get(sessionId);
+    const session = this.sessions.get(sessionId);
+    return session && !this.initializing.has(session) ? session : undefined;
   }
 
   hasSession(sessionId: string): boolean {
-    return this.sessions.has(sessionId);
+    return this.getSession(sessionId) !== undefined;
   }
 
-  registerSession(sessionId: string, session: SessionRuntime): void {
+  registerSession(sessionId: string, session: SessionRuntime, ready = true): void {
+    const previous = this.sessions.get(sessionId);
+    if (previous && previous !== session) {
+      previous.kill();
+      this.initializing.delete(previous);
+    }
+    if (!ready) this.initializing.add(session);
     this.sessions.set(sessionId, session);
   }
 
@@ -105,6 +121,7 @@ export class SessionRuntimeRegistry {
     const session = this.sessions.get(sessionId);
     if (session) {
       session.kill();
+      this.initializing.delete(session);
       this.sessions.delete(sessionId);
     }
   }
@@ -112,19 +129,37 @@ export class SessionRuntimeRegistry {
   async stopSessionAndWait(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) return;
+    await this.releaseSession(sessionId, session);
+  }
 
-    this.sessions.delete(sessionId);
-    await session.stop();
+  private async releaseSession(sessionId: string, session: SessionRuntime): Promise<void> {
+    try {
+      await session.stop();
+    } finally {
+      this.initializing.delete(session);
+      if (this.sessions.get(sessionId) === session) this.sessions.delete(sessionId);
+    }
   }
 
   clearSessions(): void {
+    for (const session of this.sessions.values()) session.kill();
     this.sessions.clear();
+    this.initializing.clear();
   }
 
   async stopAll(): Promise<void> {
-    const stopPromises = Array.from(this.sessions.values()).map((session) => session.stop());
-    await Promise.all(stopPromises);
-    this.sessions.clear();
+    const stopping = [...this.sessions.entries()];
+    const results = await Promise.allSettled(stopping.map(([, session]) => session.stop()));
+    for (const [sessionId, session] of stopping) {
+      this.initializing.delete(session);
+      if (this.sessions.get(sessionId) === session) this.sessions.delete(sessionId);
+    }
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length)
+      throw new AggregateError(
+        failures.map((result) => result.reason),
+        'Failed to stop sessions',
+      );
   }
 
   async transitionTo(
@@ -132,11 +167,13 @@ export class SessionRuntimeRegistry {
     targetState: SessionStatus,
     context?: LaunchContext,
   ): Promise<void> {
+    if (context?.runtimeId && !this.ownsRuntime(sessionId, context.runtimeId)) return;
     const sessionRecord = await this.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
     });
 
+    if (context?.runtimeId && !this.ownsRuntime(sessionId, context.runtimeId)) return;
     if (!sessionRecord) {
       throw new Error(`Session not found: ${sessionId}`);
     }
@@ -153,7 +190,7 @@ export class SessionRuntimeRegistry {
       'Transitioning session state',
     );
 
-    await this.executeTransitionEffects(sessionRecord, currentState, targetState, context);
+    this.executeTransitionEffects(sessionRecord, currentState, targetState, context);
 
     const updateFields: Partial<typeof sessions.$inferInsert> = {
       status: targetState,
@@ -167,7 +204,7 @@ export class SessionRuntimeRegistry {
       updateFields.lastHeartbeat = new Date();
     }
 
-    await this.db.update(sessions).set(updateFields).where(eq(sessions.id, sessionId));
+    this.db.update(sessions).set(updateFields).where(eq(sessions.id, sessionId)).run();
   }
 
   private validateTransition(from: SessionStatus, to: SessionStatus) {
@@ -195,13 +232,12 @@ export class SessionRuntimeRegistry {
     from: SessionStatus,
     to: SessionStatus,
     _context?: LaunchContext,
-  ): Promise<void> {
+  ): void {
     const sessionId = sessionRecord.id;
 
     if (to === 'archived' || to === 'error' || to === 'merged' || to === 'discarded') {
       this.stopSession(sessionId);
     }
-    return Promise.resolve();
   }
 
   async startSession(
@@ -342,6 +378,7 @@ export class SessionRuntimeRegistry {
         this.logger,
         this.mcpGateway,
       );
+      this.registerSession(sessionId, session, false);
 
       await replayProjector?.flushAll();
       replayProjector = undefined;
@@ -387,7 +424,11 @@ export class SessionRuntimeRegistry {
         .set({ agentSessionId: newAgentSessionIdValue, status: 'idle' })
         .where(eq(sessions.id, sessionId));
     } catch (err: unknown) {
-      await replayProjector?.flushAll();
+      await replayProjector
+        ?.flushAll()
+        .catch((flushError: unknown) =>
+          this.logger.error(flushError, 'Failed to flush interrupted session replay'),
+        );
       replayProjector = undefined;
       if (err instanceof AgentAuthenticationRequiredError) {
         this.logger.warn(`Session ${sessionId} requires authentication`);
@@ -417,13 +458,28 @@ export class SessionRuntimeRegistry {
           this.logger,
           this.mcpGateway,
         );
+        this.registerSession(sessionId, session, false);
       } else {
+        if (session) {
+          await this.releaseSession(sessionId, session).catch((cleanupError: unknown) =>
+            this.logger.error(cleanupError, 'Failed to clean up session startup'),
+          );
+        }
         throw err;
       }
     }
 
-    await session.recordRuntimeBinding(features);
-    this.sessions.set(sessionId, session);
+    try {
+      await session.recordRuntimeBinding(features);
+      if (session.isDead || !this.ownsRuntime(sessionId, session.runtimeId))
+        throw new Error('Session runtime was retired during startup');
+      this.initializing.delete(session);
+    } catch (error) {
+      await this.releaseSession(sessionId, session).catch((cleanupError: unknown) =>
+        this.logger.error(cleanupError, 'Failed to clean up runtime binding'),
+      );
+      throw error;
+    }
     return session;
   }
 

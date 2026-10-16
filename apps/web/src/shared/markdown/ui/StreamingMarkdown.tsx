@@ -6,11 +6,11 @@ import rehypeHighlight from 'rehype-highlight';
 import { MarkdownCodeBlock } from './MarkdownCodeBlock';
 import { MarkdownTable } from './MarkdownTable';
 import { splitStreamingContent, type StreamingContentSegment } from './streamingMarkdownUtils';
-import { GraphemeRevealBuffer } from '../../lib/graphemeRevealBuffer';
-import { subscribeMarkdown } from '../../lib/markdownWorker';
+import { GraphemeRevealBuffer } from '../lib/graphemeRevealBuffer';
+import { subscribeMarkdown } from '../lib/markdownWorker';
 import { PreparedMarkdown } from './PreparedMarkdown';
 
-export { splitGraphemes } from '../../lib/graphemeRevealBuffer';
+export { splitGraphemes } from '../lib/graphemeRevealBuffer';
 
 export type { StreamingContentSegment };
 

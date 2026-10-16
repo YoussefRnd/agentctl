@@ -87,7 +87,7 @@ vi.mock('@/features/review', () => ({
   useReviewUIStore: (select: (store: unknown) => unknown) =>
     select({ setReviewScope: vi.fn(), focusReviewFile: vi.fn() }),
 }));
-vi.mock('@/features/workbench', () => ({
+vi.mock('@/shared/stores/useWorkbenchStore', () => ({
   useWorkbenchStore: (select: (store: unknown) => unknown) =>
     select({ setWorkbenchTab: vi.fn(), setWorkbenchOpen: vi.fn() }),
 }));

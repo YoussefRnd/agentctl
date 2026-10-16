@@ -7,7 +7,7 @@ import {
 } from '@agentctl/core/db';
 import { expect, it, vi } from 'vitest';
 import { eq, gte } from 'drizzle-orm';
-import { readTurnIndex } from './session-turn-index.js';
+import { readTurnIndex } from '../services/session-turn-index.js';
 
 it('keeps previews with their owning queued input and returns captured change counts', () => {
   const db = createDatabase(':memory:');

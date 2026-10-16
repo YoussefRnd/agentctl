@@ -54,27 +54,39 @@ export class ConversationProjector {
     private cwd?: string,
     private snapshotService?: SnapshotServiceLike,
   ) {
-    this.textBuffer = new StreamBuffer(async () => {
-      if (this.messageEventId) {
-        const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
-        await this.eventRepository.updateSilently(
-          this.messageEventId,
-          { content: this.currentMessage, role: 'provider' },
-          { durationMs },
-        );
-      }
-    });
+    this.textBuffer = new StreamBuffer(
+      async () => {
+        if (this.messageEventId) {
+          const durationMs = this.messageStartTime ? Date.now() - this.messageStartTime : 0;
+          await this.eventRepository.updateSilently(
+            this.messageEventId,
+            { content: this.currentMessage, role: 'provider' },
+            { durationMs },
+          );
+        }
+      },
+      500,
+      1000,
+      1000,
+      (error) => this.logger.error(error, 'Failed to persist text stream'),
+    );
 
-    this.thoughtBuffer = new StreamBuffer(async () => {
-      if (this.thoughtEventId) {
-        const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
-        await this.eventRepository.updateSilently(
-          this.thoughtEventId,
-          { content: this.currentThought, role: 'thought' },
-          { durationMs },
-        );
-      }
-    });
+    this.thoughtBuffer = new StreamBuffer(
+      async () => {
+        if (this.thoughtEventId) {
+          const durationMs = this.thoughtStartTime ? Date.now() - this.thoughtStartTime : 0;
+          await this.eventRepository.updateSilently(
+            this.thoughtEventId,
+            { content: this.currentThought, role: 'thought' },
+            { durationMs },
+          );
+        }
+      },
+      500,
+      1000,
+      1000,
+      (error) => this.logger.error(error, 'Failed to persist thought stream'),
+    );
   }
 
   async startTurn(
@@ -86,6 +98,7 @@ export class ConversationProjector {
     acceptedEventId?: number,
     attemptId?: string,
   ): Promise<TurnStart> {
+    await this.flushAll();
     this.activeAttemptId = attemptId;
     this.flushTextDelta();
     this.flushThoughtDelta();

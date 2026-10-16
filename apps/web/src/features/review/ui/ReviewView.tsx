@@ -86,8 +86,8 @@ export function ReviewView() {
   }, []);
   const reviewScope = useReviewUIStore((s) => s.reviewScope);
   const capture = reviewData.capture;
-  const fromHash = reviewScope === 'all_edits' ? capture?.sessionTree : capture?.workingTree;
-  const toHash = capture?.currentTree;
+  const fromRevision = reviewScope === 'all_edits' ? capture?.baseline : capture?.working;
+  const toRevision = capture?.current;
   const detailFiles = useMemo(
     () =>
       summaryFiles.filter(
@@ -99,16 +99,16 @@ export function ReviewView() {
   );
   const detailQueries = useQueries({
     queries: detailFiles.map((file) => ({
-      queryKey: sessionKeys.reviewFile(sessionId, file.path, fromHash, toHash),
+      queryKey: sessionKeys.reviewFile(sessionId, file.path, fromRevision, toRevision),
       enabled: !!sessionId && !!capture,
       queryFn: async ({ signal }) => {
-        const response = await api.getSessionReview({
+        const response = await api.getRepositoryReview({
           params: { id: sessionId },
           fetchOptions: { signal },
           query: {
             filePath: file.path,
-            fromHash,
-            toHash,
+            fromRevision,
+            toRevision,
             // Last Turn filters the live review by touched files. Only Branch
             // Changes compares their contents against the session baseline.
             scope: reviewScope === 'all_edits' ? 'session' : 'working',
@@ -456,7 +456,10 @@ export function ReviewView() {
       ) : sessionStatus === 'archived' ? (
         <ReviewClosedState sessionStatus={sessionStatus} />
       ) : activeFiles.length === 0 ? (
-        <ReviewEmptyState searchQuery={state.searchQuery} />
+        <ReviewEmptyState
+          searchQuery={state.searchQuery}
+          unavailable={reviewData.repository?.capabilities.review === false}
+        />
       ) : (
         <ReviewFileList
           files={parsedFiles}

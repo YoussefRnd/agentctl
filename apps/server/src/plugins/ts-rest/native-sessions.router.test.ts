@@ -1,3 +1,4 @@
+import { createServerServices } from '../../composition/server-services.js';
 import Fastify from 'fastify';
 import { initServer } from '@ts-rest/fastify';
 import { providersContract } from '@agentctl/shared';
@@ -42,6 +43,7 @@ test('native listing scopes cwd to the project and import annotations to the con
   });
   app.decorate('db', db);
   app.decorate('providerRegistry', { listNativeSessions: list } as never);
+  app.decorate('services', createServerServices(app));
   const server = initServer();
   await app.register(server.plugin(server.router(providersContract, createProvidersRouter(app))));
   try {

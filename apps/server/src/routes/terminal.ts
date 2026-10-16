@@ -1,7 +1,6 @@
+import { AppError } from '../errors/app-error.js';
 import type { FastifyPluginCallback } from 'fastify';
 import { randomUUID } from 'node:crypto';
-import { sessions, projects } from '@agentctl/core/db';
-import { eq } from 'drizzle-orm';
 interface WebSocketLike {
   readyState: number;
   OPEN: number;
@@ -21,21 +20,15 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const terminalKey = `${sessionId}:${termId}`;
 
       // 1. Resolve session and workspace directory
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, sessionId),
-      });
-
-      if (!session) {
-        socket.send(JSON.stringify({ type: 'error', error: `Session not found: ${sessionId}` }));
+      let cwd: string;
+      try {
+        cwd = await fastify.services.workspaces.sessionDirectory(sessionId, 'terminal');
+      } catch (error) {
+        if (!(error instanceof AppError) || error.statusCode !== 404) throw error;
+        socket.send(JSON.stringify({ type: 'error', error: error.message }));
         socket.close();
         return;
       }
-
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-
-      const cwd = session.worktreePath || project?.repoRoot || process.cwd();
 
       // 2. Initialize or retrieve terminal session
       fastify.terminalService.getOrCreateTerminal(terminalKey, cwd);

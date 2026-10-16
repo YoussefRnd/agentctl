@@ -11,10 +11,12 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "prettier --write .",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
+    "typecheck": "pnpm architecture:check && turbo typecheck",
+    "test": "pnpm architecture:test && turbo test",
     "clean": "find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name dist -type d -exec rm -rf {} + 2>/dev/null; find packages apps -name .turbo -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name 'tsconfig.tsbuildinfo' -type f -delete 2>/dev/null; rm -rf .turbo",
-    "prepare": "husky"
+    "prepare": "husky",
+    "architecture:check": "node scripts/check-architecture.mjs && pnpm --filter @agentctl/web architecture:check",
+    "architecture:test": "node --test --test-isolation=none scripts/architecture/*.test.mjs"
   },
   "keywords": [],
   "author": "",

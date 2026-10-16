@@ -4,7 +4,7 @@ export { EventFeedItem } from './ui/EventFeedItem.js';
 export { TurnMinimap } from './ui/TurnMinimap.js';
 export type { ConversationTurn } from './lib/turnMinimapGrouping.js';
 export { UnifiedActivityBlock } from './ui/cards/UnifiedActivityBlock.js';
-export { StreamingMarkdown } from './ui/cards/StreamingMarkdown.js';
+export { StreamingMarkdown } from '../../shared/markdown/ui/StreamingMarkdown.js';
 export { TextCard } from './ui/cards/TextCard.js';
 export { TurnErrorCard } from './ui/cards/TurnErrorCard.js';
 export { ApprovalCard } from './ui/cards/ApprovalCard.js';

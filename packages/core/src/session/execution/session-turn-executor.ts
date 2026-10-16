@@ -184,7 +184,9 @@ export class SessionTurnExecutor {
       }
 
       if (this.runtimeRegistry) {
-        await this.runtimeRegistry.transitionTo(this.sessionId, 'running');
+        await this.runtimeRegistry.transitionTo(this.sessionId, 'running', {
+          runtimeId: this.deps.runtimeId,
+        });
       } else {
         await this.db
           .update(sessions)
@@ -259,7 +261,9 @@ export class SessionTurnExecutor {
           await this.recordFailure(attemptId, turn.eventId, failure, timings);
 
           if (this.runtimeRegistry) {
-            await this.runtimeRegistry.transitionTo(this.sessionId, 'idle');
+            await this.runtimeRegistry.transitionTo(this.sessionId, 'idle', {
+              runtimeId: this.deps.runtimeId,
+            });
           } else {
             await this.db
               .update(sessions)
@@ -457,7 +461,9 @@ export class SessionTurnExecutor {
         await this.recordFailure(attemptId, turn.eventId, foregroundFailure, timings);
 
       if (this.runtimeRegistry) {
-        await this.runtimeRegistry.transitionTo(this.sessionId, 'idle');
+        await this.runtimeRegistry.transitionTo(this.sessionId, 'idle', {
+          runtimeId: this.deps.runtimeId,
+        });
       } else {
         await this.db
           .update(sessions)

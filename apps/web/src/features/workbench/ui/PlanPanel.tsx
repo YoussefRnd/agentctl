@@ -1,4 +1,4 @@
-import { StreamingMarkdown } from '@/features/conversation';
+import { StreamingMarkdown } from '@/shared/markdown';
 import { latestPlanArtifacts } from '../libPlanArtifacts';
 import { useMemo } from 'react';
 import { Circle, Loader2, CheckCircle2, CircleSlash } from 'lucide-react';

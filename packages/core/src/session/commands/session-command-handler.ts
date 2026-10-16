@@ -24,10 +24,13 @@ import type { SessionHistoryService } from '../services/session-history-service.
 export interface SessionCommandHandlerDependencies {
   db: DbClient;
   logger: Logger;
-  providerRegistry: ProviderRegistry;
-  eventRepository: SessionEventRepository;
-  runtimeRegistry: SessionRuntimeRegistry;
-  launcher: SessionLauncher;
+  providerRegistry: Pick<ProviderRegistry, 'ensureProviderReady'>;
+  eventRepository: Pick<SessionEventRepository, 'append'>;
+  runtimeRegistry: Pick<SessionRuntimeRegistry, 'getSession' | 'stopSessionAndWait'>;
+  launcher: Pick<
+    SessionLauncher,
+    'buildInitialConfigOptions' | 'ensureWorkspaceAvailable' | 'reportModelFallback'
+  >;
   restartSession: SessionLauncher['restartSession'];
   getOrResuscitate: SessionLauncher['getOrResuscitate'];
   switchMode: SessionLifecycleService['switchMode'];

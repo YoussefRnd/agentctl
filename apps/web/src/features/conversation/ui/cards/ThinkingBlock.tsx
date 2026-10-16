@@ -4,7 +4,7 @@ import { ThinkingSpinner } from '@/shared';
 import { useSettings } from '@/features/settings';
 import { useSession } from '@/features/sessions';
 import { formatTokenCount } from '@/shared/lib/formatTokenCount';
-import { StreamingMarkdown } from './StreamingMarkdown';
+import { StreamingMarkdown } from '../../../../shared/markdown/ui/StreamingMarkdown';
 import type { SessionEventRow } from '@agentctl/shared';
 
 interface ThinkingBlockProps {

@@ -10,7 +10,7 @@ import {
 } from '@/features/sessions';
 import { Workbench } from '@/features/workbench';
 import { MainFeed } from '@/features/conversation';
-import { useWorkbenchStore } from '@/features/workbench';
+import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
 
 const sidebarElement = <Sidebar />;
 

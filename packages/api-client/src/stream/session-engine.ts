@@ -1,10 +1,11 @@
 import {
   sessionEventSnapshotSchema,
+  sessionEventRowSchema,
+  sessionNoticeSchema,
   type SessionEventSnapshot,
-} from '../schemas/session-event-page.js';
-import { sessionEventRowSchema } from '../schemas/session-event.js';
-import type { SessionEventRow } from '../schemas/session-event.js';
-import { sessionNoticeSchema, type SessionNotice } from '../schemas/session-notice.js';
+  type SessionEventRow,
+  type SessionNotice,
+} from '@agentctl/shared';
 
 export interface SessionEngineOptions {
   sessionId: string;

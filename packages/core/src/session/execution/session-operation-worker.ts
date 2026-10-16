@@ -1,25 +1,18 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { and, asc, eq, inArray, or, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { AgentError } from '../../agent/errors.js';
 import { normalizeChatError } from '../../agent/chat-error.js';
 import { readSessionFailureStage } from './session-failure-stage.js';
 import type { DbClient } from '../../db/index.js';
-import {
-  sessions,
-  sessionOperations,
-  sessionTurnAttempts,
-  sessionRuntimeBindings,
-} from '../../db/schema.js';
+import { sessions, sessionOperations, sessionTurnAttempts } from '../../db/schema.js';
 import type { Logger } from '../../logger.js';
 import type { SessionEventRepository } from '../persistence/session-event-repository.js';
 import { resolveMessageAttachments } from '../commands/message-attachments.js';
 import { MessageAcceptanceService } from '../commands/message-acceptance-service.js';
+import { SessionOperationStore } from '../persistence/session-operation-store.js';
 import { SessionCommandCoordinator } from '../commands/session-command-coordinator.js';
-import {
-  cancelRemovedMessageOperations,
-  messageEventExists,
-} from './session-operation-reconciliation.js';
+import { cancelRemovedMessageOperations } from '../persistence/session-operation-reconciliation.js';
 
 const messageSchema = z.object({
   text: z.string(),
@@ -38,6 +31,7 @@ export class SessionOperationWorker {
   private suspendedSessions = new Set<string>();
   readonly commands = new SessionCommandCoordinator();
   private acceptance: MessageAcceptanceService;
+  private store: SessionOperationStore;
 
   constructor(
     private db: DbClient,
@@ -46,6 +40,7 @@ export class SessionOperationWorker {
     private logger: Logger,
   ) {
     this.acceptance = new MessageAcceptanceService(db);
+    this.store = new SessionOperationStore(db, events);
   }
 
   acceptMessage(
@@ -78,7 +73,7 @@ export class SessionOperationWorker {
             throw new Error('Message ID was reused with different content');
           return previous.eventId!;
         }
-        const receipt = await new MessageAcceptanceService(this.db).findReceipt(
+        const receipt = await this.acceptance.findReceipt(
           sessionId,
           commandId,
           text,
@@ -103,45 +98,16 @@ export class SessionOperationWorker {
         const attachments = await resolveMessageAttachments(sessionId, attachmentIds);
         const operationId = randomUUID();
         const attemptId = randomUUID();
-        const event = this.db.transaction((tx) => {
-          const accepted = this.events.insertInTransaction(
-            tx,
-            sessionId,
-            'text',
-            {
-              role: 'user',
-              content: text,
-              clientMessageId: commandId,
-              attachmentIds,
-              attachments: attachments.metadata,
-              deliveryStatus: 'queued',
-            },
-            null,
-            { attemptId, promptTokens: Math.ceil(text.length / 4) },
-          );
-          tx.insert(sessionOperations)
-            .values({
-              id: operationId,
-              sessionId,
-              commandId,
-              kind: 'message.send',
-              fingerprint,
-              payload: JSON.stringify({ text, attachmentIds }),
-              status: 'pending',
-              eventId: accepted.id,
-              queuePosition: accepted.id,
-            })
-            .run();
-          tx.insert(sessionTurnAttempts)
-            .values({
-              id: attemptId,
-              sessionId,
-              operationId,
-              providerId: row.selectedProvider,
-              status: 'queued',
-            })
-            .run();
-          return accepted;
+        const event = this.store.accept({
+          sessionId,
+          text,
+          attachmentIds,
+          commandId,
+          fingerprint,
+          operationId,
+          attemptId,
+          attachments: attachments.metadata,
+          providerId: row.selectedProvider,
         });
         this.events.publishCommitted(event);
         this.wake(sessionId);
@@ -167,37 +133,7 @@ export class SessionOperationWorker {
   }
 
   private next(sessionId: string) {
-    if (this.suspendedSessions.has(sessionId)) return undefined;
-    if (
-      this.db
-        .select({ id: sessionOperations.id })
-        .from(sessionOperations)
-        .where(
-          and(
-            eq(sessionOperations.sessionId, sessionId),
-            inArray(sessionOperations.status, ['unknown', 'running']),
-            or(ne(sessionOperations.kind, 'message.send'), messageEventExists(this.db)),
-          ),
-        )
-        .get()
-    )
-      return undefined;
-    const row = this.db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
-    if (!row || row.status === 'error' || ['archived', 'merged', 'discarded'].includes(row.status))
-      return undefined;
-    return this.db
-      .select()
-      .from(sessionOperations)
-      .where(
-        and(
-          eq(sessionOperations.sessionId, sessionId),
-          eq(sessionOperations.kind, 'message.send'),
-          eq(sessionOperations.status, 'pending'),
-          messageEventExists(this.db),
-        ),
-      )
-      .orderBy(asc(sessionOperations.queuePosition), asc(sessionOperations.eventId))
-      .get();
+    return this.suspendedSessions.has(sessionId) ? undefined : this.store.next(sessionId);
   }
 
   private async drain(sessionId: string): Promise<void> {
@@ -210,39 +146,7 @@ export class SessionOperationWorker {
         .where(eq(sessionTurnAttempts.operationId, operation.id))
         .get();
       if (!attempt || !operation.eventId) throw new Error('Incomplete session operation');
-      const claimed = this.db.transaction(
-        (tx) => {
-          if (
-            tx
-              .select({ id: sessionOperations.id })
-              .from(sessionOperations)
-              .where(
-                and(
-                  eq(sessionOperations.sessionId, sessionId),
-                  inArray(sessionOperations.status, ['running', 'unknown']),
-                  or(ne(sessionOperations.kind, 'message.send'), messageEventExists(tx)),
-                ),
-              )
-              .get()
-          )
-            return undefined;
-          const claimed = tx
-            .update(sessionOperations)
-            .set({ status: 'running', updatedAt: new Date() })
-            .where(
-              and(eq(sessionOperations.id, operation.id), eq(sessionOperations.status, 'pending')),
-            )
-            .returning()
-            .get();
-          if (claimed)
-            tx.update(sessionTurnAttempts)
-              .set({ status: 'running', startedAt: new Date() })
-              .where(eq(sessionTurnAttempts.id, attempt.id))
-              .run();
-          return claimed;
-        },
-        { behavior: 'immediate' },
-      );
+      const claimed = this.store.claim(operation.id, sessionId, attempt.id);
       if (!claimed) return;
       try {
         await this.events.update(operation.eventId, { deliveryStatus: 'accepted' });
@@ -342,56 +246,15 @@ export class SessionOperationWorker {
   }
 
   async recover(): Promise<void> {
-    this.db.transaction((tx) => cancelRemovedMessageOperations(tx));
-    const lost = this.db
-      .select()
-      .from(sessionOperations)
-      .where(eq(sessionOperations.status, 'running'))
-      .all();
-    this.db.transaction((tx) => {
-      tx.update(sessionRuntimeBindings)
-        .set({ connectionState: 'lost' })
-        .where(eq(sessionRuntimeBindings.connectionState, 'connected'))
-        .run();
-      for (const operation of lost) {
-        const attempt = tx
-          .select()
-          .from(sessionTurnAttempts)
-          .where(eq(sessionTurnAttempts.operationId, operation.id))
-          .get();
-        const unsent =
-          operation.kind === 'message.send' && attempt && attempt.dispatchedAt === null;
-        tx.update(sessionOperations)
-          .set({
-            status: unsent ? 'pending' : 'unknown',
-            error: unsent ? null : 'Provider delivery is unknown after server restart',
-          })
-          .where(eq(sessionOperations.id, operation.id))
-          .run();
-        tx.update(sessionTurnAttempts)
-          .set(
-            unsent
-              ? { status: 'queued', runtimeId: null, startedAt: null }
-              : { status: 'unknown', endedAt: new Date() },
-          )
-          .where(eq(sessionTurnAttempts.operationId, operation.id))
-          .run();
-      }
-    });
-    for (const operation of lost) {
+    const recovered = this.store.recover();
+    for (const { operation, attempt, status } of recovered) {
       if (!operation.eventId) continue;
-      const recovered = this.db
-        .select()
-        .from(sessionOperations)
-        .where(eq(sessionOperations.id, operation.id))
-        .get();
-      if (recovered?.status === 'pending')
+      if (status === 'pending')
         await this.events.update(operation.eventId, { deliveryStatus: 'queued' }, undefined, [
           'deliveryError',
           'deliveryFailure',
         ]);
       else {
-        const attempt = this.attemptForOperation(operation.id);
         const failure = normalizeChatError(
           new AgentError(
             'transport_lost',
@@ -429,14 +292,6 @@ export class SessionOperationWorker {
       .where(eq(sessionOperations.status, 'pending'))
       .all())
       this.wake(row.sessionId);
-  }
-
-  private attemptForOperation(operationId: string) {
-    return this.db
-      .select()
-      .from(sessionTurnAttempts)
-      .where(eq(sessionTurnAttempts.operationId, operationId))
-      .get();
   }
 
   cancelPending(sessionId: string): Promise<void> {
@@ -643,6 +498,10 @@ export class SessionOperationWorker {
   }
   async idle(sessionId: string): Promise<void> {
     await this.running.get(sessionId);
+  }
+
+  async idleAll(): Promise<void> {
+    await Promise.all(this.running.values());
   }
 
   runCommand(

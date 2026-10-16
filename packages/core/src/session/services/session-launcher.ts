@@ -35,11 +35,11 @@ export interface CreateSessionParams {
 
 export interface SessionLauncherDependencies {
   db: DbClient;
-  eventRepository: SessionEventRepository;
+  eventRepository: Pick<SessionEventRepository, 'append'>;
   logger: Logger;
-  providerRegistry: ProviderRegistry;
-  runtimeRegistry: SessionRuntimeRegistry;
-  sessionWorkspace: SessionWorkspace;
+  providerRegistry: Pick<ProviderRegistry, 'discover' | 'ensureProviderReady' | 'getSettings'>;
+  runtimeRegistry: Pick<SessionRuntimeRegistry, 'getSession' | 'startSession' | 'stopSession'>;
+  sessionWorkspace: Pick<SessionWorkspace, 'activate' | 'ensureAvailable' | 'establish'>;
   startSession: SessionLauncher['startSession'];
   restartSession: SessionLauncher['restartSession'];
 }

@@ -16,8 +16,8 @@ import {
   MessageEditor,
   cn,
 } from '@agentctl/ui';
-import { MarkdownCodeBlock } from './MarkdownCodeBlock';
-import { MarkdownTable } from './MarkdownTable';
+import { MarkdownCodeBlock } from '../../../../shared/markdown/ui/MarkdownCodeBlock';
+import { MarkdownTable } from '../../../../shared/markdown/ui/MarkdownTable';
 import { parseUserMessageContent } from '../../lib/userMessageParser';
 import { ContextAttachmentChip } from './ContextAttachmentChip';
 import { MessageImageAttachment } from './MessageImageAttachment';

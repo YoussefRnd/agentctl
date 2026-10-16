@@ -1,7 +1,5 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
-import { sessionEvents } from '@agentctl/core/db';
-import { and, asc, eq, gt, lte, sql } from 'drizzle-orm';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
 import type { SessionEventRow } from '@agentctl/shared';
 import {
@@ -11,16 +9,11 @@ import {
   sessionNoticeSchema,
 } from '@agentctl/shared';
 import { AppError } from '../errors/app-error.js';
-import { readTurnIndex } from './session-turn-index.js';
 import {
   EVENT_HISTORY_BYTE_BUDGET,
   EVENT_REPLAY_LIMIT,
   parseEventRow,
-  readEventPage,
-  readEventWindow,
-  readEventReplay,
-  readSessionChangeCatchUp,
-} from './session-event-history.js';
+} from '../services/session-event-history.js';
 
 function formatSSEEvent(event: SessionEventRow, useChangeSequence = false): string {
   return `id: ${String(useChangeSequence ? (event.sequence ?? event.id) : event.id)}\nevent: session_event\ndata: ${JSON.stringify(event)}\n\n`;
@@ -91,13 +84,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
     async (request) => {
       const { id } = request.params;
 
-      const rows = await fastify.db
-        .select()
-        .from(sessionEvents)
-        .where(eq(sessionEvents.sessionId, id))
-        .orderBy(asc(sessionEvents.id));
-
-      return rows.map(parseEventRow);
+      return fastify.services.events.list(id);
     },
   );
 
@@ -107,7 +94,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       '/sessions/:id/events/turns',
       { schema: { params: z.object({ id: z.uuid() }) } },
       (request) => {
-        return readTurnIndex(fastify.db, request.params.id);
+        return fastify.services.events.turns(request.params.id);
       },
     );
 
@@ -135,11 +122,11 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       const { id } = request.params;
       const { beforeId, aroundId, afterId, limit } = request.query;
       if (aroundId !== undefined || afterId !== undefined) {
-        const page = readEventWindow(fastify.db, id, { aroundId, afterId, limit });
+        const page = fastify.services.events.window(id, { aroundId, afterId, limit });
         if (!page) throw new AppError('Event not found', 404);
         return page;
       }
-      return readEventPage(fastify.db, id, { beforeId, limit });
+      return fastify.services.events.page(id, { beforeId, limit });
     },
   );
 
@@ -238,22 +225,19 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       const lastEventId = lastEventIdStr === undefined ? undefined : Number(lastEventIdStr);
       try {
         if (useChangeSequence) {
-          const result = readSessionChangeCatchUp(fastify.db, id, request.query.afterSequence);
+          const result = fastify.services.events.changes(id, request.query.afterSequence);
           if (result.snapshot)
             write(
               `id: ${result.snapshot.changeSequence}\nevent: session_snapshot\ndata: ${JSON.stringify(result.snapshot)}\n\n`,
             );
           for (const event of result.events) sendEvent(event);
         } else {
-          const [{ highWaterId }] = await fastify.db
-            .select({ highWaterId: sql<number>`coalesce(max(${sessionEvents.id}), 0)` })
-            .from(sessionEvents)
-            .where(eq(sessionEvents.sessionId, id));
+          const highWaterId = await fastify.services.events.highWater(id);
           if (lastEventId !== undefined && Number.isSafeInteger(lastEventId) && lastEventId >= 0) {
             if (request.query.snapshots === 'true') {
-              const replay = await readEventReplay(fastify.db, id, lastEventId, highWaterId);
+              const replay = await fastify.services.events.replay(id, lastEventId, highWaterId);
               if (replay === null) {
-                const page = await readEventPage(fastify.db, id, {
+                const page = await fastify.services.events.page(id, {
                   limit: 200,
                   throughId: highWaterId,
                 });
@@ -267,18 +251,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
               // Older clients retain full catch-up, but read it in bounded database batches.
               let cursor = lastEventId;
               while (!closed && !reply.raw.writableEnded) {
-                const rows = await fastify.db
-                  .select()
-                  .from(sessionEvents)
-                  .where(
-                    and(
-                      eq(sessionEvents.sessionId, id),
-                      gt(sessionEvents.id, cursor),
-                      lte(sessionEvents.id, highWaterId),
-                    ),
-                  )
-                  .orderBy(asc(sessionEvents.id))
-                  .limit(EVENT_REPLAY_LIMIT);
+                const rows = await fastify.services.events.batch(id, cursor, highWaterId);
                 if (rows.length === 0) break;
                 for (const row of rows) sendEvent(parseEventRow(row));
                 cursor = rows[rows.length - 1].id;

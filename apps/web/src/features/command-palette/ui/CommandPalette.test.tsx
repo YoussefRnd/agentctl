@@ -22,7 +22,7 @@ vi.mock('@/features/settings', () => ({
     selector: (state: { openSettings: typeof mocks.settings }) => unknown,
   ) => selector({ openSettings: mocks.settings }),
 }));
-vi.mock('@/features/workbench', () => ({
+vi.mock('@/shared/stores/useWorkbenchStore', () => ({
   useWorkbenchStore: (
     selector: (state: {
       toggleWorkbench: typeof mocks.workbench;

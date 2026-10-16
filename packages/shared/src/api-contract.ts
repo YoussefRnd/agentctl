@@ -8,6 +8,8 @@ import { diagnosticsContract } from './contracts/diagnostics.contract.js';
 
 export * from './contracts/projects.contract.js';
 export * from './contracts/sessions.contract.js';
+export * from './contracts/repository.contract.js';
+export * from './contracts/session-git.contract.js';
 export * from './contracts/providers.contract.js';
 export * from './contracts/search.contract.js';
 export * from './contracts/mcp.contract.js';

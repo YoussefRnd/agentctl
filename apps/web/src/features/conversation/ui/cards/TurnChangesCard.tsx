@@ -3,7 +3,7 @@ import { memo, useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useOpenWorkspaceFile } from '@/features/sessions';
 import { useReviewUIStore, type TurnChangesSummary } from '@/features/review';
-import { useWorkbenchStore } from '@/features/workbench';
+import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
 
 interface TurnChangesCardProps {
   summary: TurnChangesSummary;

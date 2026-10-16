@@ -1,3 +1,4 @@
+import { createServerServices } from '../composition/server-services.js';
 import Fastify from 'fastify';
 import { validatorCompiler } from '@fastify/type-provider-zod';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
@@ -10,6 +11,7 @@ it('returns bounded chronological pages, with turn anchors and session-scoped cu
   const db = createDatabase(':memory:');
   app.decorate('db', db);
   app.setValidatorCompiler(validatorCompiler);
+  app.decorate('services', createServerServices(app));
   await app.register(eventsRoutes, { prefix: '/api' });
   const id = '11111111-1111-4111-8111-111111111111';
   const other = '22222222-2222-4222-8222-222222222222';
@@ -78,6 +80,7 @@ it('indexes every foreground turn independently of message pages with bounded pr
   const db = createDatabase(':memory:');
   app.decorate('db', db);
   app.setValidatorCompiler(validatorCompiler);
+  app.decorate('services', createServerServices(app));
   await app.register(eventsRoutes, { prefix: '/api' });
   const id = '11111111-1111-4111-8111-111111111111';
   const other = '22222222-2222-4222-8222-222222222222';

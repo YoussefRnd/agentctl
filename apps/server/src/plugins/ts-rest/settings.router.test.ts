@@ -1,3 +1,4 @@
+import { createServerServices } from '../../composition/server-services.js';
 import Fastify from 'fastify';
 import { initServer } from '@ts-rest/fastify';
 import { DEFAULT_FONT_CONFIG, settingsContract } from '@agentctl/shared';
@@ -29,6 +30,7 @@ async function settingsApp(initial: Record<string, string> = {}) {
     },
   } as never);
   app.decorate('eventBus', { publishState } as never);
+  app.decorate('services', createServerServices(app));
   const server = initServer();
   await app.register(server.plugin(server.router(settingsContract, createSettingsRouter(app))));
   return { app, values, publishState };

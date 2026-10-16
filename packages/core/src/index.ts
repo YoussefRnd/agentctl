@@ -10,7 +10,7 @@ export * from './db/index.js';
 export * from './db/schema.js';
 export * from './db/zod-schemas.js';
 export * from './git/index.js';
-export { SessionEngine } from '@agentctl/shared';
+export * from './repository/index.js';
 export * from './config/index.js';
 export * from './context/context-service.js';
 export * from './logger.js';

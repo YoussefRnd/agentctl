@@ -5,7 +5,7 @@ vi.mock('@/features/sessions', () => ({
   useSession: () => ({ sessionData: { session: { status: 'idle' } } }),
   useSessionStream: () => ({ events: [], structuredPlan: [] }),
 }));
-vi.mock('@/features/conversation', () => ({ StreamingMarkdown: () => null }));
+vi.mock('@/shared/markdown', () => ({ StreamingMarkdown: () => null }));
 
 test('labels cancelled and unfamiliar statuses without presenting them as pending or complete', () => {
   const markup = renderToStaticMarkup(

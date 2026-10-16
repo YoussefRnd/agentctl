@@ -34,10 +34,19 @@ export interface RewindBackup {
 export interface SessionHistoryDependencies {
   db: DbClient;
   logger: Logger;
-  eventRepository: SessionEventRepository;
-  runtimeRegistry: SessionRuntimeRegistry;
-  sessionWorkspace: SessionWorkspace;
-  launcher: SessionLauncher;
+  eventRepository: Pick<
+    SessionEventRepository,
+    'append' | 'backupAndDeleteEventsAfter' | 'getEventWithMetadata' | 'restoreEvents'
+  >;
+  runtimeRegistry: Pick<
+    SessionRuntimeRegistry,
+    'getSession' | 'getSnapshotService' | 'stopSessionAndWait'
+  >;
+  sessionWorkspace: Pick<SessionWorkspace, 'establish'>;
+  launcher: Pick<
+    SessionLauncher,
+    'resolveLaunchParameters' | 'resolveSessionProviderAndParameters'
+  >;
   startSession: SessionLauncher['startSession'];
   restartSession: SessionLauncher['restartSession'];
   createForkSession: SessionHistoryService['createForkSession'];

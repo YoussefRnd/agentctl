@@ -1,3 +1,8 @@
+import {
+  importSpecifiers,
+  cycleEdges,
+  cycleBaselineErrors,
+} from '../../../scripts/architecture/dependencies.mjs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, extname, join, normalize, relative, resolve, sep } from 'node:path';
 
@@ -13,6 +18,8 @@ const legacyRoots = [
   'shared/stores/useUIStore.ts',
 ];
 const errors = [];
+const featureGraph = new Map();
+const cycleBaseline = JSON.parse(await readFile(join(webRoot, 'architecture-cycles.json'), 'utf8'));
 
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -56,11 +63,17 @@ for (const legacyRoot of legacyRoots) {
 for (const path of await walk(sourceRoot)) {
   const source = await readFile(path, 'utf8');
   const ownerFeature = featureName(path);
-  const imports = source.matchAll(/(?:from\s*|import\s*\()(['"])([^'"]+)\1/g);
+  const imports = importSpecifiers(source, path);
+  const production = !/\.(test|spec)\.[jt]sx?$/.test(path);
+  function recordDependency(target) {
+    if (!production || !ownerFeature || !target || target === ownerFeature) return;
+    if (!featureGraph.has(ownerFeature)) featureGraph.set(ownerFeature, new Set());
+    featureGraph.get(ownerFeature).add(target);
+  }
 
-  for (const match of imports) {
-    const specifier = match[2];
+  for (const specifier of imports) {
     const aliasFeature = featureFromSpecifier(specifier);
+    recordDependency(aliasFeature?.name);
     if (aliasFeature && aliasFeature.name !== ownerFeature && aliasFeature.internalPath) {
       report(path, `cross-feature import must use @/features/${aliasFeature.name}`);
     }
@@ -68,6 +81,7 @@ for (const path of await walk(sourceRoot)) {
     if (ownerFeature && specifier.startsWith('.')) {
       const target = normalize(resolve(dirname(path), specifier));
       const targetFeature = featureName(target);
+      recordDependency(targetFeature);
       const targetArea = relative(sourceRoot, target).split(sep)[0];
       if (targetArea === 'app' || targetArea === 'routes') {
         report(path, `feature code cannot depend on ${targetArea}`);
@@ -96,6 +110,8 @@ for (const path of await walk(uiRoot)) {
     report(path, 'packages/ui cannot depend on application code');
   }
 }
+
+errors.push(...cycleBaselineErrors(cycleEdges(featureGraph), cycleBaseline));
 
 if (errors.length > 0) {
   console.error('Architecture boundary violations:\n');

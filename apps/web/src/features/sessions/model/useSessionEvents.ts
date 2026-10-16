@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SessionEventRow } from '@agentctl/shared';
-import { SessionEngine } from '@agentctl/shared';
+import { SessionEngine } from '@agentctl/api-client';
 import { toast } from 'sonner';
 
 import { getDesktopCapability } from '@agentctl/api-client';

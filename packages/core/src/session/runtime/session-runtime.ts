@@ -39,16 +39,31 @@ export class SessionRuntime {
     return this.permissions.engine;
   }
   private isStopped = false;
+  private stopPromise?: Promise<void>;
+  private closePromise?: Promise<void>;
   private stopKind: 'idle' | 'error' | null = null;
   private needsHistoryContext = false;
 
   private projector: SessionStateProjector;
   private turnExecutor: SessionTurnExecutor;
 
+  private canReceive(): boolean {
+    return (
+      !this.isStopped &&
+      (!this.runtimeRegistry?.ownsRuntime ||
+        this.runtimeRegistry.ownsRuntime(this.sessionId, this.runtimeId))
+    );
+  }
+
+  private closeRuntime(): Promise<void> {
+    return (this.closePromise ??= Promise.resolve().then(() => this.runtimeHandle.close()));
+  }
+
   async recordRuntimeBinding(features: AgentFeatures = EMPTY_AGENT_FEATURES): Promise<void> {
-    if (this.isStopped) throw new Error('Session runtime is closed');
+    if (!this.canReceive()) throw new Error('Session runtime is closed');
     const row = await this.db.query.sessions.findFirst({ where: eq(sessions.id, this.sessionId) });
     if (!row) throw new Error('Session is unavailable');
+    if (!this.canReceive()) throw new Error('Session runtime is closed');
     const binding = {
       sessionId: this.sessionId,
       providerId: row.selectedProvider,
@@ -60,16 +75,27 @@ export class SessionRuntime {
         availableModes: this.runtimeHandle.availableModes ?? [],
       }),
     };
-    await this.db
-      .insert(sessionRuntimeBindings)
-      .values({ id: this.runtimeId, ...binding })
-      .onConflictDoUpdate({ target: sessionRuntimeBindings.id, set: binding });
+    this.db.transaction((tx) => {
+      tx.insert(sessionRuntimeBindings)
+        .values({ id: this.runtimeId, ...binding })
+        .onConflictDoUpdate({ target: sessionRuntimeBindings.id, set: binding })
+        .run();
+      if (this.runtimeHandle.availableModes?.length) {
+        tx.update(sessions)
+          .set({
+            availableAgentPersonas: JSON.stringify(this.runtimeHandle.availableModes),
+          })
+          .where(eq(sessions.id, this.sessionId))
+          .run();
+      }
+    });
   }
 
   async bindAttempt(attemptId: string): Promise<void> {
-    if (this.isStopped) throw new Error('Session runtime is closed');
+    if (!this.canReceive()) throw new Error('Session runtime is closed');
     const row = await this.db.query.sessions.findFirst({ where: eq(sessions.id, this.sessionId) });
     if (!row) throw new Error('Session is unavailable');
+    if (!this.canReceive()) throw new Error('Session runtime is closed');
     await this.db
       .update(sessionRuntimeBindings)
       .set({ nativeSessionId: this.nativeSessionId })
@@ -85,7 +111,7 @@ export class SessionRuntime {
   }
 
   private async markAttemptDispatched(): Promise<void> {
-    if (this.isStopped) throw new Error('Session runtime is closed');
+    if (!this.canReceive()) throw new Error('Session runtime is closed');
     if (this.activeAttemptId)
       await this.db
         .update(sessionTurnAttempts)
@@ -144,6 +170,7 @@ export class SessionRuntime {
       logger,
       cwd,
       runtimeRegistry?.getSnapshotService?.(),
+      () => this.canReceive(),
     );
 
     this.permissions = new SessionPermissionController(
@@ -152,7 +179,8 @@ export class SessionRuntime {
       eventRepository,
       cwd,
       {
-        isStopped: () => this.isStopped,
+        runtimeId: this.runtimeId,
+        isStopped: () => !this.canReceive(),
         activeAttemptId: () => this.activeAttemptId,
         parentEventId: (subagentId) => this.projector.subagents.parentFor(subagentId),
         closed: runtimeHandle.closed,
@@ -172,7 +200,7 @@ export class SessionRuntime {
       logger,
       {
         runtimeId: this.runtimeId,
-        isStopped: () => this.isStopped,
+        isStopped: () => !this.canReceive(),
         beginAttempt: (attemptId) => {
           this.activeAttemptId = attemptId;
         },
@@ -185,19 +213,6 @@ export class SessionRuntime {
       runtimeRegistry,
       mcpGateway,
     );
-
-    // Persist available agent personas from initialization
-    if (runtimeHandle.availableModes && runtimeHandle.availableModes.length > 0) {
-      void this.db
-        .update(sessions)
-        .set({
-          availableAgentPersonas: JSON.stringify(runtimeHandle.availableModes),
-        })
-        .where(eq(sessions.id, sessionId))
-        .catch((err: unknown) => {
-          this.logger.error(err, 'Failed to update availableAgentPersonas on init');
-        });
-    }
 
     this.runtimeHandle.onError((err) => {
       this.logger.error(err, `Child process error in session ${this.sessionId}`);
@@ -253,6 +268,7 @@ export class SessionRuntime {
   }
 
   writeTerminalInput(terminalId: string, data: string): boolean {
+    if (!this.canReceive()) return false;
     if (this.runtimeHandle.writeTerminalInput) {
       return this.runtimeHandle.writeTerminalInput(terminalId, data);
     }
@@ -264,6 +280,7 @@ export class SessionRuntime {
   }
 
   resolvePermission(permissionId: string, response: AgentPermissionResponse): void {
+    if (!this.canReceive()) return;
     this.permissions.resolvePermission(permissionId, response);
   }
 
@@ -278,10 +295,10 @@ export class SessionRuntime {
     request: ElicitationRequest,
     signal?: AbortSignal,
   ): Promise<ElicitationResponse> {
-    if (this.isStopped || signal?.aborted) return { action: 'cancel' };
-    const cancellation = new RequestCancellation(signal);
+    if (!this.canReceive() || signal?.aborted) return { action: 'cancel' };
     const epoch = this.permissions.epoch;
     const { item, promise } = this.elicitationRegistry.createElicitation(request);
+    const cancellation = new RequestCancellation(signal);
 
     try {
       await this.eventRepository.append(
@@ -296,32 +313,43 @@ export class SessionRuntime {
         request.subagentId ? { nativeSessionId: request.subagentId } : undefined,
       );
 
-      if (this.isStopped || this.permissions.epoch !== epoch || cancellation.aborted)
-        this.cancelElicitation(request.id);
+      if (!this.canReceive() || this.permissions.epoch !== epoch || cancellation.aborted)
+        this.elicitationRegistry.cancelElicitation(request.id);
       const response = await Promise.race([
         promise,
         cancellation.cancelled.then(() => ({ action: 'cancel' as const })),
       ]);
       if (cancellation.aborted) this.cancelElicitation(request.id);
-      return response;
+      return !this.canReceive() || this.permissions.epoch !== epoch || cancellation.aborted
+        ? { action: 'cancel' }
+        : response;
+    } catch (error) {
+      // A failed publication must not leave an unreachable pending request.
+      this.elicitationRegistry.cancelElicitation(request.id);
+      throw error;
     } finally {
       cancellation.dispose();
     }
   }
 
   respondToElicitation(elicitationId: string, response: ElicitationResponse): boolean {
+    if (!this.canReceive()) return false;
     const ok = this.elicitationRegistry.respondToElicitation(elicitationId, response);
     if (ok) {
-      void this.eventRepository.append(
-        this.sessionId,
-        'status',
-        {
-          status: 'elicitation_responded',
-          elicitationId,
-          response,
-        },
-        null,
-      );
+      void this.eventRepository
+        .append(
+          this.sessionId,
+          'status',
+          {
+            status: 'elicitation_responded',
+            elicitationId,
+            response,
+          },
+          null,
+        )
+        .catch((error: unknown) =>
+          this.logger.error(error, 'Failed to record elicitation response'),
+        );
     }
     return ok;
   }
@@ -345,12 +373,13 @@ export class SessionRuntime {
       this.logger.error(err, 'Failed to flush buffers in kill()');
     });
 
-    void this.runtimeHandle
-      .close()
-      .catch((error: unknown) => this.logger.error(error, 'Failed to close session runtime'));
+    void this.closeRuntime().catch((error: unknown) =>
+      this.logger.error(error, 'Failed to close session runtime'),
+    );
   }
 
   async authenticate(methodId: string): Promise<void> {
+    if (!this.canReceive()) throw new Error('Session runtime is closed');
     await this.runtimeHandle.authenticate(methodId);
   }
 
@@ -375,21 +404,34 @@ export class SessionRuntime {
     }
   }
 
-  async stop(): Promise<void> {
-    await this.flushAll();
-    if (!this.isStopped) {
-      this.isStopped = true;
-      this.rejectPendingApprovals();
-      this.permissionEngine.clear();
-      this.elicitationRegistry.clear();
-      await this.runtimeHandle.close();
+  stop(): Promise<void> {
+    return (this.stopPromise ??= this.stopResources());
+  }
+
+  private async stopResources(): Promise<void> {
+    // Revoke callbacks and release waiters before any fallible I/O.
+    this.isStopped = true;
+    this.rejectPendingApprovals();
+    this.permissionEngine.clear();
+    this.elicitationRegistry.clear();
+    const failures: unknown[] = [];
+    for (const release of [
+      () => this.flushAll(),
+      () => this.closeRuntime(),
+      () => this.closeBinding(this.stopKind === 'error' ? 'lost' : 'closed'),
+      () => this.markSessionStopped('idle'),
+    ]) {
+      try {
+        await release();
+      } catch (error) {
+        failures.push(error);
+      }
     }
-    await this.closeBinding(this.stopKind === 'error' ? 'lost' : 'closed');
-    await this.markSessionStopped('idle');
+    if (failures.length) throw new AggregateError(failures, 'Failed to stop session runtime');
   }
 
   async updateModel(modelId: string): Promise<AgentConfigOption[] | void> {
-    if (this.isStopped || typeof this.runtimeHandle.updateModel !== 'function') return;
+    if (!this.canReceive() || typeof this.runtimeHandle.updateModel !== 'function') return;
     const configOptions = await this.runtimeHandle.updateModel(modelId);
     if (configOptions !== undefined) {
       await this.handleDomainEvent({ type: 'config_option_update', configOptions });
@@ -401,13 +443,14 @@ export class SessionRuntime {
     configId: string,
     value: string | boolean,
   ): Promise<AgentConfigOption[] | void> {
-    if (this.isStopped) return;
+    if (!this.canReceive()) return;
     if (typeof this.runtimeHandle.updateConfigOption === 'function') {
       try {
         const configOptions = await this.runtimeHandle.updateConfigOption(configId, value);
         await this.handleDomainEvent({ type: 'config_option_update', configOptions });
         return configOptions;
       } catch (err) {
+        if (!this.canReceive()) throw err;
         const errorMessage = err instanceof Error ? err.message : String(err);
         this.logger.error(err, `Failed to update config option ${configId} to ${String(value)}`);
         await this.eventRepository.append(
@@ -427,7 +470,7 @@ export class SessionRuntime {
   }
 
   async setMode(modeId: string): Promise<void> {
-    if (this.isStopped) return;
+    if (!this.canReceive()) return;
     if (typeof this.runtimeHandle.setMode === 'function') {
       await this.runtimeHandle.setMode(modeId);
     }
@@ -435,6 +478,7 @@ export class SessionRuntime {
 
   private async handleError(error: unknown): Promise<void> {
     if (
+      this.isStopped ||
       this.stopKind === 'error' ||
       (this.runtimeRegistry?.ownsRuntime &&
         !this.runtimeRegistry.ownsRuntime(this.sessionId, this.runtimeId))
@@ -473,7 +517,9 @@ export class SessionRuntime {
     )
       return;
     if (this.runtimeRegistry) {
-      await this.runtimeRegistry.transitionTo(this.sessionId, status);
+      await this.runtimeRegistry.transitionTo(this.sessionId, status, {
+        runtimeId: this.runtimeId,
+      });
     } else {
       if (status === 'idle') {
         await this.db

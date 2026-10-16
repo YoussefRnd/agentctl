@@ -7,7 +7,7 @@ import { ComposerInput } from '../ui/ComposerInput';
 vi.mock('@/features/settings', () => ({
   useSettingsOverlayStore: { getState: () => ({ openMcpSettings: vi.fn() }) },
 }));
-vi.mock('@/features/workbench', () => ({
+vi.mock('@/shared/stores/useWorkbenchStore', () => ({
   useWorkbenchStore: { getState: () => ({ setWorkbenchTab: vi.fn() }) },
 }));
 

@@ -702,3 +702,24 @@ it('does not turn an explicitly failed inserted attempt into a successful operat
   expect(context.operations()[0].status).toBe('failed');
   expect(context.attempts()[0].status).toBe('failed');
 });
+
+it('rolls back acceptance, tokens and cursors together when inserting the attempt fails', async () => {
+  const context = fixture();
+  context.db.run(
+    "CREATE TRIGGER reject_attempt BEFORE INSERT ON session_turn_attempts BEGIN SELECT RAISE(ABORT, 'attempt unavailable'); END",
+  );
+  const publish = vi.spyOn(context.events, 'publishCommitted');
+  await expect(context.worker.acceptMessage('s', 'hello', [], 'retry')).rejects.toThrow(
+    'attempt unavailable',
+  );
+  expect(context.operations()).toEqual([]);
+  expect(context.attempts()).toEqual([]);
+  expect(context.db.select().from(sessionEvents).all()).toEqual([]);
+  expect(context.db.select().from(sessions).get()?.totalTokens).toBe(0);
+  expect(publish).not.toHaveBeenCalled();
+  expect(context.dispatch).not.toHaveBeenCalled();
+  context.db.run('DROP TRIGGER reject_attempt');
+  await context.worker.acceptMessage('s', 'hello', [], 'retry');
+  await context.worker.idle('s');
+  expect(context.dispatch).toHaveBeenCalledOnce();
+});

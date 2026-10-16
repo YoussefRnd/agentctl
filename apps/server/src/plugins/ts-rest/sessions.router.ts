@@ -1,81 +1,24 @@
-import { generateGitText } from '@agentctl/core';
-import { AcpAgentDriver } from '@agentctl/core/acp';
-import { buildGitTextContext, resolveGitTextGenerationSelection } from '@agentctl/core/git';
-import { readSessionExecutionState } from '@agentctl/core/session';
-import { canMutateWorkspace } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
-import { eq } from 'drizzle-orm';
-import { projects, sessions } from '@agentctl/core/db';
+import { sessionsContract, providerCapabilitySchema, createTaskSlug } from '@agentctl/shared';
+import { createSessionGitRouter } from './session-git.router.js';
+import { createSessionRepositoryRouter } from './session-repository.router.js';
 import {
-  sessionsContract,
-  sessionRowSchema,
-  providerCapabilitySchema,
-  createTaskSlug,
-  type ThinkingEffort,
-} from '@agentctl/shared';
-import { AppError } from '../../errors/app-error.js';
-import { refreshProjectRepository } from '../../services/project-repository.js';
+  publishSessionChange,
+  publishWorkspaceChange,
+} from '../../services/session-state-events.js';
 
-function publishSessionChange(fastify: FastifyInstance, sessionId: string): void {
-  fastify.eventBus.publishState({ topics: ['projects', 'session'], sessionId });
-}
-
-function publishWorkspaceChange(fastify: FastifyInstance, sessionId: string): void {
-  fastify.eventBus.publishState({
-    topics: ['projects', 'session', 'workspace'],
-    sessionId,
-  });
-}
-
-async function getSessionGitContext(fastify: FastifyInstance, id: string, required = true) {
-  const session = await fastify.db.query.sessions.findFirst({ where: eq(sessions.id, id) });
-  if (!session) throw new AppError('Session not found', 404);
-  const savedProject = await fastify.db.query.projects.findFirst({
-    where: eq(projects.id, session.projectId),
-  });
-  if (!savedProject) throw new AppError('Project not found', 404);
-  const project = await refreshProjectRepository(fastify.db, fastify.worktreeManager, savedProject);
-  if (project.repoRoot !== savedProject.repoRoot) publishWorkspaceChange(fastify, id);
-  if (required && !canMutateWorkspace(session.status))
-    throw new AppError('Git changes require an idle workspace', 400);
-  if (required && !project.repoRoot) throw new AppError('Project is not a Git repository', 400);
-  return { session, project };
-}
-
-/** Keep Git mutations in the same session lane as checkout/teardown, and
- * publish partial changes (index updates, fetched refs, hooks) even on failure. */
-async function runSessionGitMutation<T>(
-  fastify: FastifyInstance,
-  id: string,
-  action: string,
-  operation: (context: Awaited<ReturnType<typeof getSessionGitContext>>) => Promise<T>,
-): Promise<T> {
-  try {
-    return await fastify.sessionManager.runWorkspaceCommand(id, { action }, async () => {
-      const context = await getSessionGitContext(fastify, id);
-      try {
-        return await operation(context);
-      } finally {
-        publishWorkspaceChange(fastify, id);
-      }
-    });
-  } catch (error) {
-    if (error instanceof AppError) throw error;
-    throw new AppError(error instanceof Error ? error.message : String(error), 400);
-  }
-}
-
+/** Compose domain handlers while preserving the existing session route contract. */
 export function createSessionsRouter(
   fastify: FastifyInstance,
 ): RouterImplementation<typeof sessionsContract> {
-  const generatingDrafts = new Set<string>();
-  const textDriver = new AcpAgentDriver();
   return {
+    ...createSessionGitRouter(fastify),
+    ...createSessionRepositoryRouter(fastify),
     resumeSessionQueue: async ({ params }) => {
       try {
         await fastify.sessionManager.resumeSessionQueue(params.id);
-        publishSessionChange(fastify, params.id);
+        publishSessionChange(fastify.eventBus, params.id);
         return { status: 200 as const, body: { success: true as const } };
       } catch (error) {
         return {
@@ -86,7 +29,7 @@ export function createSessionsRouter(
     },
     getSessionExecution: async ({ params }) => ({
       status: 200 as const,
-      body: readSessionExecutionState(fastify.db, params.id),
+      body: fastify.sessionService.getExecution(params.id),
     }),
     changeQueuedMessage: async ({ params, body }) => {
       try {
@@ -96,7 +39,7 @@ export function createSessionsRouter(
           body.action,
           body.action === 'edit' ? body.input : undefined,
         );
-        publishSessionChange(fastify, params.id);
+        publishSessionChange(fastify.eventBus, params.id);
         return { status: 200 as const, body: { success: true as const } };
       } catch (error) {
         return {
@@ -107,15 +50,11 @@ export function createSessionsRouter(
     },
     importNativeSession: async ({ body }) => {
       const result = await fastify.sessionService.importNativeSession(body);
-      publishSessionChange(fastify, result.sessionId);
+      publishSessionChange(fastify.eventBus, result.sessionId);
       return { status: 200 as const, body: result };
     },
     getSessions: async () => {
-      const allSessions = await fastify.db.select().from(sessions);
-      return {
-        status: 200 as const,
-        body: allSessions.map((s) => sessionRowSchema.parse(s)),
-      };
+      return { status: 200 as const, body: await fastify.sessionService.getSessions() };
     },
     createSession: async ({ body }) => {
       const session = await fastify.sessionService.createSession({
@@ -128,13 +67,13 @@ export function createSessionsRouter(
         approvalMode: body.approvalMode,
         agentPersona: body.agentPersona,
       });
-      publishSessionChange(fastify, session.id);
+      publishSessionChange(fastify.eventBus, session.id);
       return {
         status: 201 as const,
         body: session,
       };
     },
-    getSessionById: async ({ params }: { params: { id: string } }) => {
+    getSessionById: async ({ params }) => {
       const { id } = params;
       const result = await fastify.sessionService.getSessionWithCapabilities(id);
       return {
@@ -145,21 +84,7 @@ export function createSessionsRouter(
         },
       };
     },
-    getSessionBranches: async ({ params }: { params: { id: string } }) => {
-      const { id } = params;
-      const result = await fastify.sessionService.listBranches(id);
-      return {
-        status: 200 as const,
-        body: result,
-      };
-    },
-    sendTerminalInput: ({
-      params,
-      body,
-    }: {
-      params: { id: string; terminalId: string };
-      body: { data: string };
-    }) => {
+    sendTerminalInput: ({ params, body }) => {
       const { id, terminalId } = params;
       const { data } = body;
       const success = fastify.sessionService.writeTerminalInput(id, terminalId, data);
@@ -168,64 +93,29 @@ export function createSessionsRouter(
         body: { success },
       });
     },
-    getSessionMergePreview: async ({ params, query }) => {
-      try {
-        const { session, project } = await getSessionGitContext(fastify, params.id);
-        if (session.mode !== 'worktree')
-          throw new AppError('Only worktree sessions merge into a destination branch', 400);
-        const result = await fastify.worktreeManager.getMergePreview(
-          project.repoRoot!,
-          session.worktreePath,
-          session.branch,
-          query.targetBranch ?? session.baseBranch ?? 'main',
-        );
-        if (
-          result.hasMergeHead &&
-          query.targetBranch &&
-          query.targetBranch !== (session.baseBranch ?? 'main')
-        )
-          throw new AppError(
-            `Finish or abort the pending merge into ${session.baseBranch ?? 'main'} before choosing another destination.`,
-            400,
-          );
-        return { status: 200 as const, body: result };
-      } catch (error) {
-        if (error instanceof AppError && error.statusCode === 404) throw error;
-        return {
-          status: 400 as const,
-          body: { message: error instanceof Error ? error.message : String(error) },
-        };
-      }
-    },
-    mergeSession: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { commitMessage?: string; targetBranch?: string };
-    }) => {
+    mergeSession: async ({ params, body }) => {
       const { id } = params;
       const { commitMessage, targetBranch } = body;
       try {
         await fastify.sessionService.finalizeSession(id, 'merge', commitMessage, targetBranch);
-        publishWorkspaceChange(fastify, id);
+        publishWorkspaceChange(fastify.eventBus, id);
         return {
           status: 200 as const,
           body: { success: true },
         };
       } catch (err) {
-        publishWorkspaceChange(fastify, id);
+        publishWorkspaceChange(fastify.eventBus, id);
         return {
           status: 400 as const,
           body: { message: err instanceof Error ? err.message : String(err) },
         };
       }
     },
-    discardSession: async ({ params }: { params: { id: string } }) => {
+    discardSession: async ({ params }) => {
       const { id } = params;
       try {
         await fastify.sessionService.finalizeSession(id, 'discard');
-        publishWorkspaceChange(fastify, id);
+        publishWorkspaceChange(fastify.eventBus, id);
         return {
           status: 200 as const,
           body: { success: true },
@@ -237,56 +127,13 @@ export function createSessionsRouter(
         };
       }
     },
-    patchSession: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: {
-        title?: string;
-        mode?: 'local' | 'worktree';
-        approvalMode?: 'review' | 'auto_approve' | 'yolo';
-        persona?: string;
-        providerId?: string;
-        modelId?: string;
-        thinkingEffort?: ThinkingEffort;
-        configId?: string;
-        configValue?: string;
-        branch?: string;
-      };
-    }) => {
+    patchSession: async ({ params, body }) => {
       const { id } = params;
-      if (body.title !== undefined) {
-        await fastify.sessionService.renameSession(id, body.title);
-      }
-      if (body.mode !== undefined) {
-        await fastify.sessionService.switchMode(id, body.mode);
-      }
-      if (body.approvalMode !== undefined) {
-        await fastify.sessionService.updateApprovalMode(id, body.approvalMode);
-      }
-      if (body.providerId !== undefined) {
-        await fastify.sessionService.updateSessionProvider(id, {
-          selectedProvider: body.providerId,
-          selectedModel: body.modelId ?? '',
-          selectedThinkingEffort: body.thinkingEffort,
-        });
-      }
-      if (body.persona !== undefined) {
-        await fastify.sessionManager.setAgentPersona(id, body.persona);
-      }
-      if (body.configId !== undefined && body.configValue !== undefined) {
-        await fastify.sessionManager.setConfigOption(id, body.configId, body.configValue);
-      }
-      if (body.branch !== undefined) {
-        await fastify.sessionService.checkoutBranch(id, body.branch);
-      }
-
-      const result = await fastify.sessionService.getSessionWithCapabilities(id);
+      const result = await fastify.sessionService.patchSession(id, body);
       if (body.branch !== undefined || body.mode !== undefined) {
-        publishWorkspaceChange(fastify, id);
+        publishWorkspaceChange(fastify.eventBus, id);
       } else {
-        publishSessionChange(fastify, id);
+        publishSessionChange(fastify.eventBus, id);
       }
       return {
         status: 200 as const,
@@ -296,198 +143,37 @@ export function createSessionsRouter(
         },
       };
     },
-    deleteSession: async ({ params }: { params: { id: string } }) => {
+    deleteSession: async ({ params }) => {
       const { id } = params;
       await fastify.sessionService.deleteSession(id);
-      publishSessionChange(fastify, id);
+      publishSessionChange(fastify.eventBus, id);
       return {
         status: 204 as const,
         body: undefined,
       };
     },
-    archiveSession: async ({ params }: { params: { id: string } }) => {
+    archiveSession: async ({ params }) => {
       const { id } = params;
       await fastify.sessionService.archiveSession(id);
-      publishSessionChange(fastify, id);
+      publishSessionChange(fastify.eventBus, id);
       return {
         status: 200 as const,
         body: { success: true },
       };
     },
-    restoreSession: async ({ params }: { params: { id: string } }) => {
+    restoreSession: async ({ params }) => {
       const { id } = params;
       await fastify.sessionService.restartSession(id);
-      publishSessionChange(fastify, id);
+      publishSessionChange(fastify.eventBus, id);
       return {
         status: 200 as const,
         body: { success: true },
       };
-    },
-    getSessionReview: async ({ params, query }) => {
-      const { id } = params;
-      const session = await fastify.db.query.sessions.findFirst({
-        where: eq(sessions.id, id),
-      });
-      if (!session) throw new AppError('Session not found', 404);
-      const project = await fastify.db.query.projects.findFirst({
-        where: eq(projects.id, session.projectId),
-      });
-      if (!project) throw new AppError('Project not found', 404);
-
-      const snapshotService = fastify.sessionService.getSnapshotService();
-      if (query.fromHash && query.toHash && query.filePath) {
-        const files = await snapshotService.getCheckpointDiffFiles(
-          session.worktreePath,
-          query.fromHash,
-          query.toHash,
-          query.filePath,
-        );
-        return { status: 200 as const, body: { files } };
-      }
-      const review = await snapshotService.getReview(session.worktreePath, session.baseCommit, {
-        includeDiffs: query.includeDiffs !== 'false',
-        filePath: query.filePath,
-        scope: query.scope,
-      });
-      return { status: 200 as const, body: review };
-    },
-    stageFile: async ({ params, body }: { params: { id: string }; body: { filePath: string } }) => {
-      const { id } = params;
-      const { filePath } = body;
-      await runSessionGitMutation(fastify, id, 'stageFile', ({ session, project }) =>
-        fastify.worktreeManager.stageFile(project.repoRoot!, session.worktreePath, filePath),
-      );
-      return { status: 200 as const, body: { success: true } };
-    },
-    revertFile: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { filePath: string };
-    }) => {
-      const { id } = params;
-      const { filePath } = body;
-      await runSessionGitMutation(fastify, id, 'revertFile', ({ session, project }) =>
-        fastify.worktreeManager.revertFile(project.repoRoot!, session.worktreePath, filePath),
-      );
-      return { status: 200 as const, body: { success: true } };
-    },
-    unstageFile: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { filePath: string };
-    }) => {
-      const { id } = params;
-      const { filePath } = body;
-      await runSessionGitMutation(fastify, id, 'unstageFile', ({ session, project }) =>
-        fastify.worktreeManager.unstageFile(project.repoRoot!, session.worktreePath, filePath),
-      );
-      return { status: 200 as const, body: { success: true } };
-    },
-    stageAllFiles: async ({ params }: { params: { id: string } }) => {
-      const { id } = params;
-      await runSessionGitMutation(fastify, id, 'stageAll', ({ session, project }) =>
-        fastify.worktreeManager.stageAll(project.repoRoot!, session.worktreePath),
-      );
-      return { status: 200 as const, body: { success: true } };
-    },
-    unstageAllFiles: async ({ params }: { params: { id: string } }) => {
-      const { id } = params;
-      await runSessionGitMutation(fastify, id, 'unstageAll', ({ session, project }) =>
-        fastify.worktreeManager.unstageAll(project.repoRoot!, session.worktreePath),
-      );
-      return { status: 200 as const, body: { success: true } };
-    },
-    commitChanges: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { message: string; includeUnstaged?: boolean };
-    }) => {
-      const { id } = params;
-      const { message } = body;
-      try {
-        await runSessionGitMutation(fastify, id, 'commit', ({ session, project }) =>
-          fastify.worktreeManager.commit(
-            project.repoRoot!,
-            session.worktreePath,
-            message,
-            body.includeUnstaged,
-          ),
-        );
-        return { status: 200 as const, body: { success: true } };
-      } catch (err) {
-        return {
-          status: 400 as const,
-          body: { message: err instanceof Error ? err.message : String(err) },
-        };
-      }
-    },
-    pushChanges: async ({ params }: { params: { id: string } }) => {
-      const { id } = params;
-      try {
-        const result = await runSessionGitMutation(fastify, id, 'push', ({ session, project }) =>
-          fastify.worktreeManager.push(project.repoRoot!, session.worktreePath),
-        );
-        return { status: 200 as const, body: result };
-      } catch (err) {
-        return {
-          status: 400 as const,
-          body: { message: err instanceof Error ? err.message : String(err) },
-        };
-      }
-    },
-    pullChanges: async ({ params }: { params: { id: string } }) => {
-      const { id } = params;
-      try {
-        const result = await runSessionGitMutation(fastify, id, 'pull', ({ session, project }) =>
-          fastify.worktreeManager.pull(project.repoRoot!, session.worktreePath),
-        );
-        return { status: 200 as const, body: result };
-      } catch (err) {
-        return {
-          status: 400 as const,
-          body: { message: err instanceof Error ? err.message : String(err) },
-        };
-      }
-    },
-    fetchChanges: async ({ params }) => {
-      try {
-        const result = await runSessionGitMutation(
-          fastify,
-          params.id,
-          'fetch',
-          ({ session, project }) =>
-            fastify.worktreeManager.fetch(project.repoRoot!, session.worktreePath),
-        );
-        return { status: 200 as const, body: result };
-      } catch (err) {
-        return {
-          status: 400 as const,
-          body: { message: err instanceof Error ? err.message : String(err) },
-        };
-      }
-    },
-    createSessionBranch: async ({ params, body }) => {
-      try {
-        await fastify.sessionService.checkoutBranch(params.id, body.name, true);
-        publishWorkspaceChange(fastify, params.id);
-        return { status: 200 as const, body: { success: true } };
-      } catch (err) {
-        return {
-          status: 400 as const,
-          body: { message: err instanceof Error ? err.message : String(err) },
-        };
-      }
     },
     undoDiscard: async ({ params }) => {
       try {
         await fastify.sessionManager.undoDiscard(params.id);
-        publishWorkspaceChange(fastify, params.id);
+        publishWorkspaceChange(fastify.eventBus, params.id);
         return { status: 200 as const, body: { success: true } };
       } catch (err) {
         return {
@@ -496,112 +182,11 @@ export function createSessionsRouter(
         };
       }
     },
-    getGitStatus: async ({ params }: { params: { id: string } }) => {
-      const { id } = params;
-      const { session, project } = await getSessionGitContext(fastify, id, false);
-      if (!project.repoRoot) {
-        return {
-          status: 200 as const,
-          body: {
-            isRepo: false,
-            branch: null,
-            hasPrimaryRemote: false,
-            remoteName: null,
-            remoteProvider: null,
-            upstreamBranch: null,
-            hasUpstream: false,
-            aheadCount: 0,
-            behindCount: 0,
-            pr: null,
-          },
-        };
-      }
-      const status = await fastify.worktreeManager.getTrackingStatus(
-        project.repoRoot,
-        session.worktreePath,
-      );
-      return { status: 200 as const, body: status };
-    },
-    generateGitDraft: async ({ params, body }) => {
-      if (generatingDrafts.has(params.id))
-        return {
-          status: 400 as const,
-          body: { message: 'A draft is already being generated for this session.' },
-        };
-      generatingDrafts.add(params.id);
-      try {
-        const { session, project } = await getSessionGitContext(fastify, params.id);
-        const { provider, modelId } = resolveGitTextGenerationSelection(
-          fastify.providerRegistry,
-          session,
-        );
-        const cwd = session.worktreePath || project.repoRoot!;
-        const context = await buildGitTextContext(cwd, body);
-        const effort = provider.resolveDefaultSelection().selectedThinkingEffort;
-        const launch = provider.getLaunchConfig(modelId, effort);
-        const draft = await generateGitText(
-          textDriver,
-          launch,
-          {
-            providerId: provider.id,
-            selectedModel: modelId,
-            selectedThinkingEffort: effort,
-            customModels: provider.toDiscovery().customModels,
-            features: provider.features,
-          },
-          context.prompt,
-          body.kind,
-        );
-        const latest = await buildGitTextContext(cwd, body);
-        if (latest.fingerprint !== context.fingerprint)
-          throw new Error(
-            'The selected changes changed while generating. Generate a new draft for the latest changes.',
-          );
-        return { status: 200 as const, body: draft };
-      } catch (error) {
-        return {
-          status: 400 as const,
-          body: { message: error instanceof Error ? error.message : String(error) },
-        };
-      } finally {
-        generatingDrafts.delete(params.id);
-      }
-    },
-    createPullRequest: async ({ params, body }) => {
-      const { id } = params;
-
-      try {
-        const result = await runSessionGitMutation(
-          fastify,
-          id,
-          'createPullRequest',
-          ({ session, project }) =>
-            fastify.worktreeManager.createPullRequest(project.repoRoot!, session.worktreePath, {
-              title: body.title,
-              body: body.body,
-              baseBranch: body.baseBranch,
-              headBranch: body.headBranch,
-            }),
-        );
-        return { status: 200 as const, body: result };
-      } catch (err) {
-        return {
-          status: 400 as const,
-          body: { message: err instanceof Error ? err.message : String(err) },
-        };
-      }
-    },
-    rewindSession: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { eventId: number; mode: 'conversation' | 'files' | 'fork' };
-    }) => {
+    rewindSession: async ({ params, body }) => {
       const { id } = params;
       const { eventId, mode } = body;
       const result = await fastify.sessionService.rewindSession(id, eventId, mode);
-      publishWorkspaceChange(fastify, result.forkSessionId ?? id);
+      publishWorkspaceChange(fastify.eventBus, result.forkSessionId ?? id);
       return {
         status: 200 as const,
         body: {
@@ -612,10 +197,10 @@ export function createSessionsRouter(
         },
       };
     },
-    undoRewind: async ({ params }: { params: { id: string } }) => {
+    undoRewind: async ({ params }) => {
       const { id } = params;
       await fastify.sessionService.undoRewind(id);
-      publishWorkspaceChange(fastify, id);
+      publishWorkspaceChange(fastify.eventBus, id);
       return {
         status: 200 as const,
         body: {
@@ -632,7 +217,7 @@ export function createSessionsRouter(
         targetModel,
         nextSessionFocus,
       );
-      publishSessionChange(fastify, result.sessionId);
+      publishSessionChange(fastify.eventBus, result.sessionId);
       return {
         status: 200 as const,
         body: {
@@ -643,17 +228,11 @@ export function createSessionsRouter(
         },
       };
     },
-    restoreSnapshot: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { snapshotHash: string };
-    }) => {
+    restoreSnapshot: async ({ params, body }) => {
       const { id } = params;
       const { snapshotHash } = body;
       const result = await fastify.sessionService.restoreSnapshot(id, snapshotHash);
-      publishWorkspaceChange(fastify, id);
+      publishWorkspaceChange(fastify.eventBus, id);
       return {
         status: 200 as const,
         body: {
@@ -662,40 +241,9 @@ export function createSessionsRouter(
         },
       };
     },
-    previewSnapshotDiff: async ({ params }: { params: { id: string; eventId: number } }) => {
+    previewSnapshotDiff: async ({ params }) => {
       const { id, eventId } = params;
       const result = await fastify.sessionService.previewSnapshotDiff(id, eventId);
-      return {
-        status: 200 as const,
-        body: result,
-      };
-    },
-    mergeSessionBranch: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { branch: string };
-    }) => {
-      const { id } = params;
-      const { branch } = body;
-      await fastify.sessionService.mergeSessionBranch(id, branch);
-      publishWorkspaceChange(fastify, id);
-      return {
-        status: 200 as const,
-        body: { success: true },
-      };
-    },
-    checkMergeBranch: async ({
-      params,
-      query,
-    }: {
-      params: { id: string };
-      query: { branch: string };
-    }) => {
-      const { id } = params;
-      const { branch } = query;
-      const result = await fastify.sessionService.checkMergeBranch(id, branch);
       return {
         status: 200 as const,
         body: result,
@@ -704,13 +252,13 @@ export function createSessionsRouter(
     spawnParallelAgent: async ({ params, body }) => {
       const { id } = params;
       const session = await fastify.sessionService.spawnParallelAgent(id, body);
-      publishSessionChange(fastify, session.id);
+      publishSessionChange(fastify.eventBus, session.id);
       return {
         status: 201 as const,
         body: { session },
       };
     },
-    cancelSession: async ({ params }: { params: { id: string } }) => {
+    cancelSession: async ({ params }) => {
       const { id } = params;
       await fastify.sessionManager.handleClientMessage(id, 'cancel', {});
       return {
@@ -718,13 +266,7 @@ export function createSessionsRouter(
         body: { success: true },
       };
     },
-    approveEvent: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { eventId: number; optionId?: string };
-    }) => {
+    approveEvent: async ({ params, body }) => {
       const { id } = params;
       const { eventId, optionId } = body;
       await fastify.sessionManager.handleClientMessage(id, 'approve', { eventId, optionId });
@@ -733,7 +275,7 @@ export function createSessionsRouter(
         body: { success: true },
       };
     },
-    denyEvent: async ({ params, body }: { params: { id: string }; body: { eventId: number } }) => {
+    denyEvent: async ({ params, body }) => {
       const { id } = params;
       const { eventId } = body;
       await fastify.sessionManager.handleClientMessage(id, 'deny', { eventId });
@@ -742,13 +284,7 @@ export function createSessionsRouter(
         body: { success: true },
       };
     },
-    sendInput: async ({
-      params,
-      body,
-    }: {
-      params: { id: string };
-      body: { input: string; attachmentIds?: string[]; clientMessageId?: string };
-    }) => {
+    sendInput: async ({ params, body }) => {
       const { id } = params;
       const { input, attachmentIds, clientMessageId } = body;
       try {

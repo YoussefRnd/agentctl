@@ -1,0 +1,155 @@
+# Code organization and dependency rules
+
+AgentCtl is a modular monolith. Features have deliberate public APIs and explicit owners for
+workflows, state, persistence, and external resources. Web, server, and Electron remain separate
+application entry points. Moving a workflow between modules should preserve its transactions,
+command lanes, cancellation, recovery, and cleanup behavior.
+
+## Decisions
+
+| Pattern                  | Convention                                                                                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Feature modules          | Group related behavior by product capability. Split by responsibility inside a module when useful.                                                                                    |
+| Ports and adapters       | Use narrow interfaces at variable external boundaries: agent protocols, repositories, workspace allocation, and forge operations.                                                     |
+| Application services     | One owner coordinates each workflow. HTTP handlers translate requests/responses and errors; they do not implement the workflow.                                                       |
+| Composition roots        | Startup constructs resources and owns their lifetime. Importing a database module must not open or migrate SQLite.                                                                    |
+| Command/query separation | Read-model queries assemble data; commands own mutations and reconciliation. Preserve legacy reads that reconcile until their callers migrate explicitly.                             |
+| State transitions        | Model lifecycle transitions explicitly. Prefer discriminated unions, pure transition functions, and existing coordinators where they fit.                                             |
+| Persistence              | Use focused stores for shared queries and transaction rules. A small application service may use the injected database directly; a generic CRUD repository per table is not required. |
+
+Interfaces are useful when they express an ownership boundary, an alternative implementation,
+or a smaller dependency needed by a workflow. Plain functions remain appropriate for pure
+transformations. New layers need a concrete responsibility; modules do not require empty
+`domain`, `ports`, or `adapters` directories.
+
+## Dependency direction
+
+- Shared contracts and policies do not import application code, Node adapters, React, or the API client.
+- The API client owns HTTP/SSE transport and depends on shared contracts, never host implementations.
+- Core owns agent/session/workspace behavior and host adapters, without Fastify or React dependencies.
+- Server routes call application services and queries. Server composition constructs the services.
+- Web routes/app composition assemble features. Features use public entries of other features;
+  shared web capabilities do not depend on features. Prefer an acyclic feature graph.
+- The design system does not import application features. Electron owns native app lifecycle and IPC.
+
+The generic repository boundary and ACP SDK boundary have their own regression tests. The
+package/server architecture check enforces the rules already migrated in this phase. It is
+not a claim that every legacy service has pure domain/application separation.
+
+## Current owners
+
+| Location                                                          | Owns                                                                                         |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `apps/server/src/services/projects/project-queries.ts`            | Project/session read-model assembly, search, and sorting                                     |
+| `apps/server/src/services/projects/project-directory.ts`          | Host folder resolution and exploration, without database/session access                      |
+| `apps/server/src/services/projects/project-service.ts`            | Open/reuse/create/delete project workflows and state notifications                           |
+| `apps/server/src/services/native-session-import-service.ts`       | Native import deduplication, persisted import identity, cleanup, and recovery                |
+| `apps/server/src/services/session-git-service.ts`                 | Session-aware branch checkout, merge, and command-lane coordination                          |
+| `packages/core/src/forge/types.ts`                                | Forge contract independent of Git mutation and session persistence                           |
+| `packages/core/src/forge/github-pull-requests.ts`                 | GitHub CLI requests, response normalization, remote URL parsing, browser fallback            |
+| `packages/core/src/db/database.ts`                                | Explicit database creation and migrations                                                    |
+| `packages/core/src/db/default-database.ts`                        | Environment/path resolution and lazy default database creation                               |
+| `packages/api-client/src/services/`                               | Capability-specific projects, sessions, Git, history, editors, search, and terminal requests |
+| `packages/api-client/src/stream/session-engine.ts`                | SSE parsing, reconnect, event coalescing, and transport lifecycle                            |
+| `apps/web/src/features/sessions/model/SessionConfigContext.tsx`   | Configuration/review context composition                                                     |
+| `apps/web/src/features/sessions/model/SessionStreamContext.tsx`   | History, plan, execution, and queue context composition                                      |
+| `apps/web/src/features/sessions/model/useSessionMessageQueue.ts`  | Client outbox, delivery retry, and durable acceptance reconciliation                         |
+| `apps/web/src/features/sessions/model/useSessionStatusEffects.ts` | Notifications and query invalidation on session status changes                               |
+| `apps/web/src/shared/markdown/`                                   | Reusable markdown rendering, worker processing, and text reveal                              |
+| `apps/web/src/shared/stores/useWorkbenchStore.ts`                 | Client workspace navigation state shared by page and feature consumers                       |
+
+Git preflight, pushing, locking, and PR-cache invalidation remain owned by the existing Git
+workflow. Forge adapters never reacquire the Git lock. Session command services retain the
+existing workspace command lane rather than introducing another queue.
+
+Project listing groups sessions once by project instead of scanning every session again for
+every project. It still loads the existing complete sidebar read model; pagination and query
+limits are separate product/API decisions.
+
+## Frontend state and composition
+
+React Query owns remote data. Zustand owns client-only UI state and drafts. The outbox owns
+optimistic delivery until durable acceptance; the server queue owns accepted messages. Contexts
+expose focused capabilities and preserve existing update isolation for prompts, queues, and
+turn progress. Splitting files must not merge these distinct lifetimes.
+
+Markdown rendering and workspace navigation are shared capabilities used outside their original
+features. Conversation cards and inspector panels now import those owners directly. Compatibility
+exports preserve existing feature entry points during migration.
+
+`apps/web/architecture-cycles.json` records the remaining cyclic feature edges, including type
+and lazy imports. Each entry describes the current dependency and migration direction. The
+checker rejects any additional cyclic edge and requires deleting an exception once its cycle
+is resolved. The baseline must shrink as composition moves upward; new cyclic edges require
+an explicit architecture decision rather than silently expanding this file.
+
+The remaining groups are composer/review/sessions and conversation/subagents. These require
+workflow or rendering separation; relocating their entire stores into `shared` would not by
+itself establish a useful boundary.
+
+## File and API conventions
+
+- Core/server files use descriptive kebab-case names. Web components use PascalCase and hooks
+  use `useSomething`. Preserve local conventions when extracting related files.
+- Public `index.ts` files expose intended capabilities. Internal code imports the owning file
+  directly. Avoid broad root barrels when a focused package entry exists.
+- Keep testable pure policies separate from I/O. Colocate unit tests; route suites verify HTTP
+  integration; adapter tests verify external semantics, cancellation, and failure behavior.
+- Infer transport inputs from the shared schema rather than repeating request interfaces.
+- Use explicit domain errors at reusable boundaries and translate them at the application edge.
+  Existing server-local application services retain `AppError` compatibility.
+
+HTTP URLs, response shapes, session command ordering, and database schemas are unchanged by
+this phase. Capability helper function names remain exported from `@agentctl/api-client`;
+`services/project-sessions.ts` is a compatibility barrel.
+
+Two source-level imports change deliberately:
+
+```ts
+// Transport lives with the client, not shared contracts or core.
+import { SessionEngine } from '@agentctl/api-client';
+
+// Call during startup; importing db contracts no longer initializes SQLite.
+import { getDefaultDatabase } from '@agentctl/core/db';
+const db = getDefaultDatabase();
+```
+
+The former `SessionEngine` exports from shared/core and the eager `db` singleton export are
+removed. All in-repository consumers migrate together. A supplied database bypasses default
+initialization in server startup, keeping test and embedded composition isolated.
+
+## Enforcement and migration
+
+Run `pnpm architecture:check` for package/server and frontend checks, and
+`pnpm architecture:test` for import parsing, multi-hop cycle detection, and baseline regression
+tests. Root typecheck runs the checks; root test runs the architecture regression tests before
+package tests. The checker uses TypeScript syntax trees for import, re-export, dynamic import,
+and type dependencies. Existing protocol/repository boundary tests remain in the Vitest suite.
+
+The [server ownership audit](server-architecture.md) records CP02's endpoint inventory and
+application/transport owners, including explicit session reconciliation and awaited lifecycle
+cleanup. The [session ownership audit](session-architecture.md) inventories all session modules,
+their state transitions, resource lifetimes, persistence rules, and deliberate public exports.
+Session resources and workflow callbacks now have explicit composition owners; persistence
+and internal workflows cannot import the public session facade or barrel.
+
+The [architecture migration tracker](architecture-migration.md) is the authoritative checklist
+for the remaining work across every workspace package, with dependencies, acceptance criteria,
+a coverage ledger, and the final verification gate. Update its checkpoint evidence when work
+is accepted; the initial phase documented here is CP01, not the full migration.
+
+This structure improves maintainability and backend substitution. The execution model still
+assumes one owning server process per database. Horizontal multi-server execution requires a
+separate design for ownership, leases, queues, locking, and event delivery.
+
+## Validation of this phase
+
+The full Vitest suite passed 1,429 tests across 237 files. Four architecture regression tests
+passed separately. Package/server and frontend boundary checks, all workspace typechecks,
+lint, formatting, whitespace checks, and web/desktop builds passed. Existing Git safety,
+provider import recovery, outbox acceptance/retry, and markdown worker tests remain in the
+suite; a new database initialization test verifies inert imports and one-time default creation.
+
+The isolated production browser journeys passed startup, session navigation, and deferred asset
+loading after the module moves. These synthetic fixture checks do not measure live provider
+performance or validate native Electron runtime behavior.

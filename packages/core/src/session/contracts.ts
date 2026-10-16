@@ -7,6 +7,10 @@ import type {
 } from '@agentctl/shared';
 import type { SessionEventDbRow } from '../db/zod-schemas.js';
 
+export interface IEventBus {
+  publish(event: unknown): void;
+}
+
 export interface SessionEventRepositoryLike {
   publishNotice?(notice: SessionNotice): void;
   append<T extends SessionEvent['type']>(
@@ -62,7 +66,7 @@ export interface SessionStatusTransitioner {
   transitionTo(
     sessionId: string,
     targetState: SessionStatus,
-    context?: Record<string, unknown>,
+    context?: { runtimeId?: string },
   ): Promise<void>;
   getSnapshotService?(): SnapshotServiceLike | undefined;
 }

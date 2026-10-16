@@ -1,7 +1,7 @@
 import type { SessionEventTextData } from '@agentctl/shared';
 import { useSession, useSessionStream } from '@/features/sessions';
 import { useSubagentStore } from '@/features/subagents';
-import { StreamingMarkdown } from './StreamingMarkdown';
+import { StreamingMarkdown } from '../../../../shared/markdown/ui/StreamingMarkdown';
 
 /** Reported communication between ACP sessions, distinct from answers to the user. */
 export function SessionMessage({ data }: { data: SessionEventTextData }) {

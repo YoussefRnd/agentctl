@@ -1,3 +1,4 @@
+import { createServerServices } from '../composition/server-services.js';
 import Fastify from 'fastify';
 import { validatorCompiler } from '@fastify/type-provider-zod';
 import http from 'node:http';
@@ -22,6 +23,7 @@ beforeEach(async () => {
     getOrResuscitate: async () => ({ getLiveEventSnapshots: () => [] }),
   });
   app.setValidatorCompiler(validatorCompiler);
+  app.decorate('services', createServerServices(app));
   await app.register(eventsRoutes, { prefix: '/api' });
   db.insert(projects).values({ id: 'project', name: 'Project', path: '/tmp/project' }).run();
   db.insert(sessions)

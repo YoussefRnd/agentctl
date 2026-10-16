@@ -58,7 +58,10 @@ provider.
 | `packages/api-client` | Typed browser and desktop API client                                         |
 | `packages/ui`         | Shared design system primitives and patterns                                 |
 
-The web package enforces feature boundaries with `pnpm --filter @agentctl/web architecture:check`.
+Run `pnpm architecture:check` to enforce package, server, and frontend boundaries.
+See [Code architecture](docs/code-architecture.md) for design patterns, file ownership,
+state conventions and compatibility changes. Track the complete rollout in the
+[Architecture migration checkpoints](docs/architecture-migration.md).
 
 ## UI development
 
@@ -95,6 +98,11 @@ The Git menu provides **Fetch remote changes** and **Switch or create branch**. 
 respects the configured upstream. Creating a branch preserves current edits; switching to an
 existing branch requires a clean workspace and cannot reuse a branch checked out elsewhere.
 Pushing to the base branch is available through an explicit preference in the commit dialog.
+
+Review uses a backend-independent repository boundary with opaque revision references and
+capability discovery. Git is the first versioned backend; ordinary folders remain usable but
+do not provide change history or checkpoints. See [Repository architecture](docs/repository-architecture.md)
+for the supported boundary and remaining Git workflow migration.
 
 Apply requires committed work in isolated worktrees. Discard keeps a recovery copy until the
 session is deleted. Use **Recover discarded changes** in the review panel to resume a retained

@@ -20,7 +20,7 @@ vi.mock('@/features/subagents', () => ({
 }));
 vi.mock('@/features/review', () => ({ extractTurnChanges: () => ({ files: [] }) }));
 vi.mock('./TurnChangesCard', () => ({ TurnChangesCard: () => null }));
-vi.mock('./StreamingMarkdown', () => ({
+vi.mock('../../../../shared/markdown/ui/StreamingMarkdown', () => ({
   StreamingMarkdown: ({ content }: { content: string }) => <p>{content}</p>,
 }));
 const container = document.createElement('div');

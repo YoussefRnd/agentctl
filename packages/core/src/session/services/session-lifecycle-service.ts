@@ -14,9 +14,15 @@ export interface SessionLifecycleDependencies {
   db: DbClient;
   logger: Logger;
   runtime: AgentDriver;
-  runtimeRegistry: SessionRuntimeRegistry;
-  sessionWorkspace: SessionWorkspace;
-  launcher: SessionLauncher;
+  runtimeRegistry: Pick<
+    SessionRuntimeRegistry,
+    'getSession' | 'hasSession' | 'stopAll' | 'stopSession'
+  >;
+  sessionWorkspace: Pick<
+    SessionWorkspace,
+    'activate' | 'archive' | 'finalize' | 'syncOrphans' | 'teardown'
+  >;
+  launcher: Pick<SessionLauncher, 'resolveLaunchParameters'>;
   restartSession: SessionLauncher['restartSession'];
 }
 
