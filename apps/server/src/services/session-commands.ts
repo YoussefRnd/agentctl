@@ -337,6 +337,10 @@ export class SessionCommands {
     }
   }
 
+  getRepositoryService() {
+    return this.sessionManager.getRepositoryService();
+  }
+
   getSnapshotService() {
     return this.sessionManager.getSnapshotService();
   }

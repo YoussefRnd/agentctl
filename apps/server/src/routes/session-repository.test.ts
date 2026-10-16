@@ -56,6 +56,7 @@ beforeEach(async () => {
   } as unknown as FastifyInstance['sessionManager']);
   app.decorate('sessionService', {
     getSnapshotService: () => snapshots,
+    getRepositoryService: () => repositories,
   } as unknown as FastifyInstance['sessionService']);
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError)

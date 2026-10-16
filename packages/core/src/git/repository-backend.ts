@@ -1,3 +1,5 @@
+import type { WorkspaceManager } from './worktree-manager.js';
+import { GitSessionWorkspaceOperations } from './session-workspace-operations.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { simpleGit } from 'simple-git';
@@ -16,14 +18,51 @@ function immutableRevision(id: string): string {
 export class GitRepositoryBackend implements RepositoryBackend {
   readonly id = 'git';
 
-  constructor(private readonly snapshots: SnapshotService) {}
+  constructor(
+    private readonly snapshots: SnapshotService,
+    private readonly workspaces?: WorkspaceManager,
+  ) {}
 
   async open(workspacePath: string): Promise<BackendWorkspace | null> {
     const context = await resolveRepositoryContext(workspacePath);
     if (!context.isGitRepo) return null;
     const common = (await simpleGit(workspacePath).revparse(['--git-common-dir'])).trim();
     const commonDir = await fs.realpath(path.resolve(workspacePath, common));
+    const operations = this.workspaces
+      ? new GitSessionWorkspaceOperations(workspacePath, context, this.workspaces, this.snapshots)
+      : undefined;
     return {
+      legacyProjectMetadata: { repoRoot: context.repoRoot, subdir: context.workdirPrefix },
+      lifecycle: operations,
+      integration: operations,
+      localLabel: async () => {
+        return (
+          await simpleGit(workspacePath)
+            .raw(['symbolic-ref', '--quiet', '--short', 'HEAD'])
+            .catch(() => 'HEAD')
+        ).trim();
+      },
+      stageFile: this.workspaces
+        ? (filePath) => this.workspaces!.stageFile(context.repoRoot, workspacePath, filePath)
+        : undefined,
+      revertFiles: async (revision, paths) => {
+        const patches = await this.snapshots.diff(workspacePath, immutableRevision(revision));
+        await this.snapshots.revertFiles(
+          workspacePath,
+          revision,
+          patches.filter((patch) => paths.includes(patch.path)),
+        );
+      },
+      cleanup: () => this.snapshots.deleteProjectSnapshots(workspacePath),
+      importLegacyRecovery: (recovery) => recovery,
+      importLegacyRevision: async (selector) => {
+        const git = simpleGit(workspacePath);
+        const revision = (await git.revparse(['--verify', '--end-of-options', selector])).trim();
+        const type = (await git.raw(['cat-file', '-t', immutableRevision(revision)])).trim();
+        if (type !== 'commit' && type !== 'tree')
+          throw new RepositoryError('invalid_revision', 'Expected a commit or tree');
+        return revision;
+      },
       identity: {
         repositoryId: repositoryIdentity(this.id, commonDir),
         workspaceId: repositoryIdentity(this.id, context.gitDir),

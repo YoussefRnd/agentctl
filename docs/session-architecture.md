@@ -2,7 +2,7 @@
 
 CP03 covers every production TypeScript file under `packages/core/src/session`, its README,
 and its colocated regression suites. The table below records the accepted owner for all
-35 production modules. Existing cohesive modules were reviewed and retained; extraction is
+36 production modules. Existing cohesive modules were reviewed and retained; extraction is
 used where composition, persistence, or resource ownership was mixed.
 
 ## Dependency and composition rules
@@ -48,6 +48,7 @@ Paths in this table are relative to `packages/core/src/session/`.
 | `manager.ts`                                      | Public facade and one acquisition of the command lane; retirement barriers and awaited dispatch shutdown. Concrete resource/default construction moved to composition.                                                                                                       |
 | `index.ts`                                        | Explicit package exports: manager, creation/event-bus types, native ID resolver, execution query, and event repository/retention constant. Runtime, request, projector, transcript, and internal contracts are no longer wildcard exports.                                   |
 | `contracts.ts`                                    | Narrow event repository, status transition, snapshot, and event-bus ports. No dependency on the facade. Runtime-originated transitions carry an optional runtime identity.                                                                                                   |
+| `composition/repository-resources.ts`             | Select the repository catalog and construct the legacy snapshot resource at composition; neutral workflows consume repository/checkpoint ports.                                                                                                                              |
 | `composition/session-resources.ts`                | Default driver selection, injected driver precedence, legacy connection-manager attachment, event repository, registry, and workspace construction.                                                                                                                          |
 | `composition/session-workflows.ts`                | Workflow dependency/callback assembly without recursive command-lane entry.                                                                                                                                                                                                  |
 | `commands/session-command-coordinator.ts`         | Short per-session command lanes; failed commands release their lane. Provider turns remain outside the lane.                                                                                                                                                                 |
@@ -78,7 +79,7 @@ Paths in this table are relative to `packages/core/src/session/`.
 | `context-budget.ts`                               | Pure byte budgeting and recent context selection.                                                                                                                                                                                                                            |
 | `context-files.ts`                                | Session-scoped canonical-path grants for generated context files; expiry and a 500-entry bound.                                                                                                                                                                              |
 | `history-transcript.ts`                           | Persisted transcript selection, delivery filtering, context budget and private overflow document creation.                                                                                                                                                                   |
-| `handoff.ts`                                      | Handoff document policy and associated private-file/Git context I/O; redaction, retention and unreferenced timer cleanup. Git context remains explicitly assigned to CP05's later neutral-workspace migration.                                                               |
+| `handoff.ts`                                      | Handoff document policy and associated private-file/Git context I/O; redaction, retention and unreferenced timer cleanup. Workspace context is injected through backend-neutral review capabilities after CP05; no Git subprocess remains.                                   |
 | `stream-buffer.ts`                                | Coalesced persistence timers, serialized writes, awaited in-flight flush, observable errors, retryable pending content, and generation-safe reset.                                                                                                                           |
 
 ## State and operation owners
@@ -123,9 +124,9 @@ retry; explicit flush waits for an already-started write and reports persistence
 
 The system still assumes **one owning server process per database**. CP03 does not introduce
 leases, cross-process runtime ownership, automatic resend of uncertain turns, or a new
-protocol. Legacy Git snapshots/workspace workflows remain scoped to CP05; broader provider
-and ACP lifecycle composition remains CP06. These later checkpoint responsibilities are
-unchanged, rather than exceptions to CP03's session ownership audit.
+protocol. Repository-neutral snapshot/workspace workflow acceptance is recorded in
+[the CP05 audit](workspace-architecture.md); broader provider and ACP lifecycle composition
+remains CP06.
 
 ## Verification
 

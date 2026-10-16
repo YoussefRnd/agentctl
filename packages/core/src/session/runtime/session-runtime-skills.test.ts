@@ -1,3 +1,4 @@
+import { composeRepositoryResources } from '../composition/repository-resources.js';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -234,11 +235,11 @@ describe('skill catalog delivery', () => {
     } satisfies AgentDriver;
     const machine = new SessionRuntimeRegistry(
       db,
-      {} as WorkspaceManager,
       {} as ProviderRegistry,
       events,
       noopLogger,
       driver,
+      composeRepositoryResources({} as WorkspaceManager),
     );
     const resume = () =>
       machine.startSession(

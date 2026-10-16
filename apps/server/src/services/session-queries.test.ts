@@ -32,7 +32,7 @@ function setup() {
   const track = vi.fn().mockResolvedValue('captured');
   const manager = {
     ensureWorkspaceAvailable: vi.fn().mockResolvedValue(true),
-    getSnapshotService: () => ({ track }),
+    getCheckpointService: () => ({ track }),
     getEventRepository: () => ({
       recalculateTotalTokens: vi.fn(async () => {
         db.update(sessions)

@@ -7,7 +7,7 @@ import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { AgentDriver } from '../../agent/types.js';
 import type { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
-import type { SessionWorkspace } from '../../git/session-workspace.js';
+import type { SessionWorkspace } from '../../workspace/session-workspace.js';
 import type { SessionLauncher } from './session-launcher.js';
 
 export interface SessionLifecycleDependencies {

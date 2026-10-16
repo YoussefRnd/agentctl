@@ -1,3 +1,6 @@
+import { legacyGitRevision } from '@agentctl/core/git';
+import { createDefaultRepositoryService } from '@agentctl/core';
+import { RepositoryCheckpoints } from '@agentctl/core/repository';
 import { createServerServices } from '../composition/server-services.js';
 import { AcpAgentDriver } from '@agentctl/core/acp';
 import type { AgentSession } from '@agentctl/core';
@@ -70,7 +73,10 @@ beforeEach(async () => {
     () => snapshots,
   );
   app.decorate('worktreeManager', manager);
+  const repositories = createDefaultRepositoryService(snapshots, manager);
   app.decorate('sessionManager', {
+    getRepositoryService: () => repositories,
+    getCheckpointService: () => new RepositoryCheckpoints(repositories),
     getSnapshotService: () => snapshots,
     runWorkspaceCommand: (_id: string, _payload: unknown, execute: () => Promise<unknown>) =>
       execute(),
@@ -248,6 +254,11 @@ it('reuses an isolated checkout across branch switches and removes it on teardow
   for (const branch of ['second', 'first']) {
     const result = await app.sessionService.checkoutBranch(sessionId, branch);
     expect(result.worktreePath).toBe(worktree);
+    expect(result.baseCommit).toMatch(/^revision:v1:/);
+    const repository = await app.sessionManager.getRepositoryService().open(worktree);
+    expect(
+      await git(worktree, 'cat-file', '-t', await legacyGitRevision(repository, result.baseCommit)),
+    ).toBe('commit');
     expect(await git(worktree, 'symbolic-ref', '--short', 'HEAD')).toBe(branch);
     expect(await fs.readFile(path.join(worktree, 'ignored.txt'), 'utf8')).toBe(
       'Retain workspace configuration',

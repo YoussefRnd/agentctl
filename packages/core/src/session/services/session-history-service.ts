@@ -1,3 +1,4 @@
+import { describeWorkspace } from '../../workspace/workspace-context.js';
 import { contextByteBudget } from '../context-budget.js';
 import { eq, asc, desc } from 'drizzle-orm';
 import { sessions, sessionEvents } from '../../db/schema.js';
@@ -15,7 +16,7 @@ import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { SessionEventRepository } from '../persistence/session-event-repository.js';
 import type { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
-import type { SessionWorkspace } from '../../git/session-workspace.js';
+import type { SessionWorkspace } from '../../workspace/session-workspace.js';
 import type { SessionLauncher } from './session-launcher.js';
 import type { SessionRuntime } from '../runtime/session-runtime.js';
 
@@ -40,7 +41,7 @@ export interface SessionHistoryDependencies {
   >;
   runtimeRegistry: Pick<
     SessionRuntimeRegistry,
-    'getSession' | 'getSnapshotService' | 'stopSessionAndWait'
+    'getSession' | 'getRepositoryService' | 'stopSessionAndWait'
   >;
   sessionWorkspace: Pick<SessionWorkspace, 'establish'>;
   launcher: Pick<
@@ -237,6 +238,8 @@ export class SessionHistoryService {
       const skillReference = `Source agent's handoff document: ${original.filePath}\n\n`;
       handoffResult = await generateHandoffDocument(this.deps.db, sessionId, resolvedProviderId, {
         nextSessionFocus,
+        describeWorkspace: (directory) =>
+          describeWorkspace(this.deps.runtimeRegistry.getRepositoryService(), directory),
         maxEventId: latestEventId,
         maxBytes: contextByteBudget(selection.contextWindow) - Buffer.byteLength(skillReference),
       });
@@ -246,6 +249,8 @@ export class SessionHistoryService {
     }
     handoffResult ??= await generateHandoffDocument(this.deps.db, sessionId, resolvedProviderId, {
       nextSessionFocus,
+      describeWorkspace: (directory) =>
+        describeWorkspace(this.deps.runtimeRegistry.getRepositoryService(), directory),
       maxEventId: latestEventId,
       contextWindow: selection.contextWindow,
     });
@@ -353,9 +358,15 @@ export class SessionHistoryService {
       const metadata = event.metadata as { snapshotHash?: string } | undefined;
 
       if (mode === 'files' && !metadata?.snapshotHash) {
-        throw new Error(
-          'No snapshot hash available for file rewind. This project may not be a git repo.',
-        );
+        throw new Error('No checkpoint is available for file rewind in this workspace.');
+      }
+      if (mode === 'files' && metadata?.snapshotHash) {
+        const repository = await this.deps.runtimeRegistry
+          .getRepositoryService()
+          .open(sessionRecord.worktreePath);
+        if (!repository.info.capabilities.restore)
+          throw new Error('This workspace does not support file restoration');
+        await repository.importRevision(metadata.snapshotHash);
       }
       // Finish flushing the old runtime before deleting its history or accepting another turn.
       await this.deps.runtimeRegistry.stopSessionAndWait(sessionId);
@@ -365,14 +376,17 @@ export class SessionHistoryService {
         .where(eq(sessions.id, sessionId));
 
       if (mode === 'files' && metadata?.snapshotHash) {
-        const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
+        const repositories = this.deps.runtimeRegistry.getRepositoryService();
         const projectPath =
           sessionRecord.mode === 'worktree'
             ? sessionRecord.worktreePath
             : sessionRecord.project.path;
 
-        const restore = await snapshotService.restoreFiles(projectPath, metadata.snapshotHash);
-        undoSnapshotHash = restore.backupHash;
+        const repository = await repositories.open(projectPath);
+        const restore = await repository.restore(
+          await repository.importRevision(metadata.snapshotHash),
+        );
+        undoSnapshotHash = restore.backup;
         restoredFiles = restore.restoredFiles;
       }
     }
@@ -439,13 +453,14 @@ export class SessionHistoryService {
     await this.deps.runtimeRegistry.stopSessionAndWait(sessionId);
 
     if (backup.undoSnapshotHash) {
-      const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
+      const repositories = this.deps.runtimeRegistry.getRepositoryService();
       const projectPath =
         sessionRecord.mode === 'worktree' && sessionRecord.worktreePath
           ? sessionRecord.worktreePath
           : sessionRecord.project.path;
 
-      await snapshotService.restoreFiles(projectPath, backup.undoSnapshotHash);
+      const repository = await repositories.open(projectPath);
+      await repository.restore(await repository.importRevision(backup.undoSnapshotHash));
     }
 
     if (backup.deletedEvents && backup.deletedEvents.length > 0) {
@@ -482,11 +497,19 @@ export class SessionHistoryService {
       return { hasSnapshot: false, files: [] };
     }
 
-    const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
+    const repositories = this.deps.runtimeRegistry.getRepositoryService();
     const projectPath =
       sessionRecord.mode === 'worktree' ? sessionRecord.worktreePath : sessionRecord.project.path;
 
-    const patches = await snapshotService.diff(projectPath, metadata.snapshotHash);
+    const repository = await repositories.open(projectPath);
+    if (
+      !repository.info.capabilities.checkpoints ||
+      !repository.info.capabilities.comparisons ||
+      !repository.info.capabilities.restore
+    )
+      return { hasSnapshot: false, files: [] };
+    const baseline = await repository.importRevision(metadata.snapshotHash);
+    const patches = (await repository.compare(baseline, await repository.capture())).files;
     return {
       hasSnapshot: true,
       files: patches.map((p) => ({
@@ -504,13 +527,14 @@ export class SessionHistoryService {
     if (!sessionRecord) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    const snapshotService = this.deps.runtimeRegistry.getSnapshotService();
+    const repositories = this.deps.runtimeRegistry.getRepositoryService();
     const projectPath =
       sessionRecord.mode === 'worktree' && sessionRecord.worktreePath
         ? sessionRecord.worktreePath
         : sessionRecord.project.path;
 
-    const restore = await snapshotService.restoreFiles(projectPath, snapshotHash);
-    return { backupHash: restore.backupHash };
+    const repository = await repositories.open(projectPath);
+    const restore = await repository.restore(await repository.importRevision(snapshotHash));
+    return { backupHash: restore.backup };
   }
 }

@@ -1,5 +1,5 @@
 import { StreamBuffer } from '../stream-buffer.js';
-import type { SessionEventRepositoryLike, SnapshotServiceLike } from '../contracts.js';
+import type { SessionEventRepositoryLike, CheckpointServiceLike } from '../contracts.js';
 import type { SessionEventDbRow } from '../../db/zod-schemas.js';
 import type { Logger } from '../../logger.js';
 import { noopLogger } from '../../logger.js';
@@ -52,7 +52,7 @@ export class ConversationProjector {
     private eventRepository: SessionEventRepositoryLike,
     private logger: Logger = noopLogger,
     private cwd?: string,
-    private snapshotService?: SnapshotServiceLike,
+    private snapshotService?: CheckpointServiceLike,
   ) {
     this.textBuffer = new StreamBuffer(
       async () => {

@@ -3,21 +3,18 @@ import { contextByteBudget, selectContextEntries } from './context-budget.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { eq, asc } from 'drizzle-orm';
 import type { DbClient } from '../db/index.js';
 import { sessionEvents, sessions } from '../db/schema.js';
 import {
   getContextTurnLimit,
-  getGitCommandTimeoutMs,
-  getGitMaxBufferBytes,
   getHandoffRetentionMs,
   getStaleHandoffAgeMs,
 } from '../config/runtime-defaults.js';
 
 export interface HandoffOptions {
   nextSessionFocus?: string;
+  describeWorkspace?: (directory: string) => Promise<string>;
   maxRecentTurns?: number;
   maxEventId?: number;
   contextWindow?: number;
@@ -32,8 +29,6 @@ export interface HandoffResult {
   sourceSessionId: string;
   source: HandoffSource;
 }
-
-const execFileAsync = promisify(execFile);
 
 /**
  * Redact sensitive information (API keys, passwords, bearer tokens)
@@ -176,35 +171,6 @@ export function scheduleHandoffCleanup(filePath: string, delayMs = getHandoffRet
   timer.unref();
 }
 
-async function collectWorkspaceState(cwd: string | null | undefined): Promise<string | undefined> {
-  if (!cwd) return undefined;
-
-  const runGit = async (args: string[]): Promise<string> => {
-    try {
-      const { stdout } = await execFileAsync('git', args, {
-        cwd,
-        timeout: getGitCommandTimeoutMs(),
-        maxBuffer: getGitMaxBufferBytes(),
-      });
-      return stdout.trim();
-    } catch {
-      return '';
-    }
-  };
-
-  const [branch, status, diffStat] = await Promise.all([
-    runGit(['branch', '--show-current']),
-    runGit(['status', '--short', '--untracked-files=all']),
-    runGit(['diff', '--stat']),
-  ]);
-  const lines = [
-    branch ? `Branch: ${branch}` : '',
-    status ? `Working tree:\n${status}` : 'Working tree: clean',
-    diffStat ? `Diff summary:\n${diffStat}` : '',
-  ].filter(Boolean);
-  return lines.length > 0 ? lines.join('\n\n') : undefined;
-}
-
 /**
  * Build the deterministic handoff used when the source agent has no handoff skill.
  */
@@ -339,7 +305,12 @@ export async function generateHandoffDocument(
 
   const recentTurns = conversationEntries;
   const referencedFiles = extractReferencedFiles(eligibleEvents);
-  const workspaceState = await collectWorkspaceState(sessionRecord?.worktreePath);
+  const workspaceState =
+    sessionRecord?.worktreePath && options.describeWorkspace
+      ? await options
+          .describeWorkspace(sessionRecord.worktreePath)
+          .catch(() => 'Workspace review is unavailable.')
+      : undefined;
 
   const content = formatHandoffDocument({
     sessionId,

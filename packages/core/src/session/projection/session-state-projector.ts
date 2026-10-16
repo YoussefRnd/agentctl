@@ -4,7 +4,7 @@ import { sessions, providers } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { Logger } from '../../logger.js';
 import { noopLogger } from '../../logger.js';
-import type { SessionEventRepositoryLike, SnapshotServiceLike } from '../contracts.js';
+import type { SessionEventRepositoryLike, CheckpointServiceLike } from '../contracts.js';
 import type { AgentUpdate } from '../../agent/types.js';
 import { deriveAgentToolEffects } from '../../agent/tool-effects.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
@@ -34,7 +34,7 @@ export class SessionStateProjector {
     private eventRepository: SessionEventRepositoryLike,
     private logger: Logger = noopLogger,
     cwd?: string,
-    snapshotService?: SnapshotServiceLike,
+    snapshotService?: CheckpointServiceLike,
     private canProject: () => boolean = () => true,
   ) {
     this.subagents = new SubagentProjector(

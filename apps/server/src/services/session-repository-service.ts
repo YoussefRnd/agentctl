@@ -50,7 +50,7 @@ export class SessionRepositoryService {
     // Older session records store backend-native selectors. Keep that compatibility
     // at this boundary; clients receive only scoped, opaque revision references.
     return repository.info.capabilities.review && selector !== 'none'
-      ? repository.resolveRevision(selector)
+      ? repository.importRevision(selector)
       : undefined;
   }
 }

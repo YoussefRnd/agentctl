@@ -1,3 +1,4 @@
+import type { WorkspaceLifecycle, WorkspaceIntegration } from './workspace.js';
 import type {
   ReviewDiffScope,
   ReviewFile,
@@ -37,6 +38,15 @@ export interface BackendReview {
 
 export interface BackendWorkspace {
   identity: Omit<SourceRepositoryInfo, 'backendId' | 'capabilities'>;
+  legacyProjectMetadata?: { repoRoot: string; subdir: string };
+  lifecycle?: WorkspaceLifecycle;
+  integration?: WorkspaceIntegration;
+  localLabel?: () => Promise<string>;
+  stageFile?: (filePath: string) => Promise<void>;
+  revertFiles?: (revision: string, paths: string[]) => Promise<void>;
+  cleanup?: () => Promise<void>;
+  importLegacyRevision?: (selector: string) => Promise<string>;
+  importLegacyRecovery?: (recovery: string) => string;
   resolveRevision?: (selector: string) => Promise<string>;
   capture?: () => Promise<string>;
   review?: (

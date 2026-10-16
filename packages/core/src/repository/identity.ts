@@ -27,11 +27,12 @@ export function repositoryIdentity(backendId: string, canonicalPath: string): st
 export class RevisionReferenceCodec {
   constructor(
     private readonly identity: Pick<SourceRepositoryInfo, 'backendId' | 'repositoryId' | 'scope'>,
+    private readonly prefix = PREFIX,
   ) {}
 
   encode(revision: string): RevisionReference {
     return revisionReferenceSchema.parse(
-      PREFIX +
+      this.prefix +
         Buffer.from(
           JSON.stringify({
             version: 1,
@@ -47,9 +48,9 @@ export class RevisionReferenceCodec {
   decode(reference: RevisionReference): string {
     try {
       revisionReferenceSchema.parse(reference);
-      if (!reference.startsWith(PREFIX)) throw new Error();
+      if (!reference.startsWith(this.prefix)) throw new Error();
       const payload = referencePayload.parse(
-        JSON.parse(Buffer.from(reference.slice(PREFIX.length), 'base64url').toString('utf8')),
+        JSON.parse(Buffer.from(reference.slice(this.prefix.length), 'base64url').toString('utf8')),
       );
       if (
         payload.backend !== this.identity.backendId ||

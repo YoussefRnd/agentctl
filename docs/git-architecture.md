@@ -43,8 +43,8 @@ Project opening/repository refresh and session reconciliation consume narrow rep
 ports. Server branch workflows consume the required query, worktree, working-copy, and integration
 operations. Server Git commands consume working-copy, integration, remote, and PR ports. Existing
 application composition can pass the facade because it satisfies these structural contracts.
-Session workspace orchestration retains its facade dependency until the complete workflow moves
-through backend-neutral ports in CP05.
+Session workspace orchestration now consumes the neutral contracts recorded in
+[workspace workflow ownership](workspace-architecture.md).
 
 ## Complete production module inventory
 
@@ -75,7 +75,9 @@ Paths below are relative to `packages/core/src/`.
 | `git/utils.ts`                           | Parse Git status/diff output and retain existing Git review data contracts.                                                                                                          |
 | `git/text-generation-context.ts`         | Prepare bounded Git context/fingerprints for reviewed commit and PR drafts.                                                                                                          |
 | `git/text-generation-settings.ts`        | Select configured text generation provider/model without owning Git or provider lifetimes.                                                                                           |
-| `git/session-workspace.ts`               | Existing session establishment, archive/reactivation, apply/discard/recovery, and teardown orchestration. Safety accepted here; backend-neutral workflow migration remains CP05.     |
+| `git/session-workspace-operations.ts`    | Backend adapter for allocation, repair, retirement, integration, and guarded discard/recovery; no database/session implementation dependency.                                        |
+| `git/legacy-revisions.ts`                | Explicit native-ID export for the legacy Git review API.                                                                                                                             |
+| `git/session-workspace.ts`               | Historical constructor compatibility wrapper delegating to the neutral workspace owner; workflow implementation lives in `workspace/session-workspace.ts`.                           |
 | `git/index.ts`                           | Retain public Git exports and expose capability composition and operation contracts.                                                                                                 |
 | `forge/types.ts`                         | Explicit supported remote identity and PR find/create contracts. No Git locks or mutations.                                                                                          |
 | `forge/github-pull-requests.ts`          | Interpret GitHub remote URLs, call the GitHub CLI, and return the browser creation fallback when CLI creation is unavailable.                                                        |

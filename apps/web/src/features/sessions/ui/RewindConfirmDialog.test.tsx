@@ -1,3 +1,4 @@
+import * as api from '@agentctl/api-client';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -47,3 +48,51 @@ it('keeps the dialog and focus stable while rewinding, then allows dismissal aga
     container.remove();
   }
 });
+
+it.each([false, true])(
+  'makes unavailable file restoration explicit (request failure=%s)',
+  async (failed) => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const preview = vi.spyOn(api, 'previewSnapshotDiff');
+    if (failed) preview.mockRejectedValue(new Error('Unavailable'));
+    else preview.mockResolvedValue({ hasSnapshot: false, files: [] });
+    const confirm = vi.fn();
+    try {
+      await act(async () =>
+        root.render(
+          <QueryClientProvider client={client}>
+            <RewindConfirmDialog
+              open
+              mode="files"
+              sessionId="session"
+              eventId={4}
+              messageCount={1}
+              onOpenChange={() => {}}
+              onConfirm={confirm}
+            />
+          </QueryClientProvider>,
+        ),
+      );
+      await act(async () => {
+        await vi.waitFor(() => expect(client.isFetching()).toBe(0));
+      });
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      const button = [...dialog.querySelectorAll('button')].find((button) =>
+        button.textContent?.includes('Rewind & Restore Files'),
+      )!;
+      expect(button.disabled).toBe(true);
+      expect(dialog.textContent).toMatch(/restoration is unavailable|Could not inspect/);
+      expect(dialog.textContent).not.toContain('No file changes detected');
+      act(() => button.click());
+      expect(confirm).not.toHaveBeenCalled();
+    } finally {
+      act(() => root.unmount());
+      client.clear();
+      preview.mockRestore();
+      container.remove();
+    }
+  },
+);

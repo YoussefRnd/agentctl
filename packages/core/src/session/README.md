@@ -85,7 +85,10 @@ repository service selects a backend, exposes supported capabilities, and issues
 revision references scoped to a backend, repository, and project subdirectory. Review clients
 use these references without interpreting commit IDs, hash lengths, or Git trees. Git is the
 first versioned backend; ordinary folders report that review/checkpoints/restore are unavailable.
-Existing Git lifecycle and persisted snapshot fields remain compatibility paths. See
+Turn capture, rewind, workspace allocation/lifecycle and integration now use the selected backend.
+New persisted checkpoints and discard recovery values are opaque; historical field names and
+Git values remain explicit compatibility paths. See
+[Workspace workflow ownership](../../../../docs/workspace-architecture.md) and
 [Repository architecture](../../../../docs/repository-architecture.md) for the boundary and migration scope.
 
 ## Read models and reconnect

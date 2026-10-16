@@ -1,10 +1,12 @@
+import { composeRepositoryResources } from './repository-resources.js';
+import type { RepositoryService } from '../../repository/repository-service.js';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { AgentDriver } from '../../agent/types.js';
 import type { AgentRuntimeServices } from '../../agent/runtime-services.js';
 import { createDefaultAgentDriver } from '../../default-agent-driver.js';
 import type { WorkspaceManager } from '../../git/worktree-manager.js';
-import { SessionWorkspace } from '../../git/session-workspace.js';
+import { SessionWorkspace } from '../../workspace/session-workspace.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
 import type { McpGateway } from '../../mcp/mcp-gateway.js';
 import type { IEventBus } from '../contracts.js';
@@ -14,13 +16,14 @@ import { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
 /** The default transport and concrete session resources are selected only here. */
 export function composeSessionResources(
   db: DbClient,
-  workspaceManager: WorkspaceManager,
+  workspaceManager: WorkspaceManager | undefined,
   providerRegistry: ProviderRegistry,
   eventBus: IEventBus,
   logger: Logger,
   suppliedDriver?: AgentDriver,
   mcpGateway?: McpGateway,
   runtimeServices?: AgentRuntimeServices,
+  repositories?: Pick<RepositoryService, 'open'>,
 ) {
   const runtime = runtimeServices?.driver ?? suppliedDriver ?? createDefaultAgentDriver(logger);
   if (!runtimeServices) {
@@ -32,18 +35,17 @@ export function composeSessionResources(
   const eventRepository = new SessionEventRepository(db, eventBus);
   const runtimeRegistry = new SessionRuntimeRegistry(
     db,
-    workspaceManager,
     providerRegistry,
     eventRepository,
     logger,
     runtime,
+    composeRepositoryResources(workspaceManager, repositories),
     mcpGateway,
   );
   const sessionWorkspace = new SessionWorkspace(
     db,
-    workspaceManager,
-    (sessionId) => runtimeRegistry.stopSession(sessionId),
-    () => runtimeRegistry.getSnapshotService(),
+    runtimeRegistry.getRepositoryService(),
+    (sessionId) => runtimeRegistry.stopSessionAndWait(sessionId),
   );
   return { runtime, eventRepository, runtimeRegistry, sessionWorkspace };
 }

@@ -14,3 +14,4 @@ export * from './repository/index.js';
 export * from './config/index.js';
 export * from './context/context-service.js';
 export * from './logger.js';
+export { createDefaultRepositoryService } from './default-repository-service.js';

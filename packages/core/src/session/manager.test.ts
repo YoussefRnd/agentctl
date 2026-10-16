@@ -1,3 +1,5 @@
+import { SourceRepository } from '../repository/source-repository.js';
+import { DirectoryBackend } from '../repository/directory-backend.js';
 import { eq } from 'drizzle-orm';
 import { test, it, expect, describe, vi } from 'vitest';
 import { SessionManager, resolveAgentSessionId, type IEventBus } from './manager.js';
@@ -20,6 +22,47 @@ import { simpleGit } from 'simple-git';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+
+function createManager(...args: ConstructorParameters<typeof SessionManager>): SessionManager {
+  const [db, workspaces] = args;
+  const concreteWorkspaceManager = (value: unknown): boolean => value instanceof WorkspaceManager;
+  if (!concreteWorkspaceManager(workspaces)) {
+    args[8] = {
+      open: async (directory) => {
+        const project = await db.query.projects.findFirst();
+        const workspace = await new DirectoryBackend().open(directory);
+        if (project?.repoRoot && workspaces?.resolveBaseRef) {
+          workspace.lifecycle = {
+            allocate: async (input) => {
+              const base = await workspaces.resolveBaseRef(
+                project.repoRoot!,
+                input.target ?? 'main',
+              );
+              const allocated = await workspaces.create(
+                project.repoRoot!,
+                input.sessionId,
+                input.title,
+                base.ref,
+                project.subdir,
+              );
+              return {
+                path: allocated.workspacePath,
+                label: allocated.branch,
+                baseline: allocated.baseCommit,
+                target: base.ref,
+              };
+            },
+            restore: async () => {},
+            retire: async () => {},
+            sync: async () => {},
+          };
+        }
+        return new SourceRepository('fixture', workspace);
+      },
+    };
+  }
+  return new SessionManager(...args);
+}
 
 describe('SessionManager tests', () => {
   const mockDb = {
@@ -241,7 +284,7 @@ describe('SessionManager tests', () => {
 
   test('startInput acknowledges a persisted message before the provider turn ends', async () => {
     const db = inputDatabase();
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -270,7 +313,7 @@ describe('SessionManager tests', () => {
 
   test('startInput rejects an unavailable session before acceptance', async () => {
     const db = inputDatabase();
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -283,7 +326,7 @@ describe('SessionManager tests', () => {
   });
 
   test('SessionManager startSession creates and initializes a session', async () => {
-    const manager = new SessionManager(
+    const manager = createManager(
       mockDb,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -300,7 +343,7 @@ describe('SessionManager tests', () => {
   });
 
   test('SessionManager createSession orchestrates dependencies and starts session', async () => {
-    const manager = new SessionManager(
+    const manager = createManager(
       mockDb,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -382,7 +425,7 @@ describe('SessionManager tests', () => {
       removeWorktreeOnly: () => Promise.resolve(),
     } as unknown as WorkspaceManager;
 
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       workspaceManager,
       mockProviderRegistry,
@@ -402,7 +445,7 @@ describe('SessionManager tests', () => {
       mode: 'worktree',
       worktreePath: '/tmp/worktrees/git-project/session-1/packages/app',
       branch: 'agentctl/session-1/parallel-task',
-      baseCommit: 'base-commit',
+      baseCommit: expect.stringMatching(/^revision:v1:/),
     });
   });
 
@@ -454,7 +497,7 @@ describe('SessionManager tests', () => {
       removeWorktreeOnly: () => Promise.resolve(),
     } as unknown as WorkspaceManager;
 
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       workspaceManager,
       mockProviderRegistry,
@@ -473,13 +516,13 @@ describe('SessionManager tests', () => {
     expect(insertedSession).toMatchObject({
       mode: 'local',
       worktreePath: '/tmp/plain-project',
-      branch: 'main',
+      branch: '',
       baseCommit: 'none',
     });
   });
 
   test('SessionManager resuscitates a dead session or a session not in memory on client message input', async () => {
-    const manager = new SessionManager(
+    const manager = createManager(
       inputDatabase(),
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -569,7 +612,7 @@ describe('SessionManager tests', () => {
         new GitMutex(),
         path.join(tempDir, 'worktrees'),
       );
-      manager = new SessionManager(db, workspaceManager, registry, eventBus, noopLogger, {
+      manager = createManager(db, workspaceManager, registry, eventBus, noopLogger, {
         ...fakeRuntime,
         startSession: startRuntime,
       });
@@ -715,7 +758,7 @@ describe('SessionManager tests', () => {
         return { ...handle, configOptions: initialLiveOptions };
       },
     };
-    const manager = new SessionManager(
+    const manager = createManager(
       localDb,
       mockWorkspaceManager,
       registry,
@@ -847,7 +890,7 @@ describe('SessionManager tests', () => {
         return fakeRuntime.startSession(...args);
       },
     };
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -899,7 +942,7 @@ describe('SessionManager tests', () => {
         }),
       }),
     }) as unknown as DbClient;
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -931,7 +974,7 @@ describe('SessionManager tests', () => {
         }),
       }),
     }) as unknown as DbClient;
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -954,7 +997,7 @@ describe('SessionManager tests', () => {
   });
 
   test('setConfigOption fails for an inactive session', async () => {
-    const manager = new SessionManager(
+    const manager = createManager(
       mockDb,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -970,7 +1013,7 @@ describe('SessionManager tests', () => {
 
   test('legacy input accepts durably and exposes asynchronous dispatch failures', async () => {
     const db = inputDatabase();
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -992,7 +1035,7 @@ describe('SessionManager tests', () => {
   });
 
   test('rewind rejects an event belonging to another session', async () => {
-    const manager = new SessionManager(
+    const manager = createManager(
       mockDb,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -1033,7 +1076,7 @@ describe('SessionManager tests', () => {
       await startup;
       return { ...(await fakeRuntime.startSession(...args)), prompt };
     });
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -1068,7 +1111,7 @@ describe('SessionManager tests', () => {
   });
 
   test('rewind fork mode does not require the event to exist and forks the full history', async () => {
-    const manager = new SessionManager(
+    const manager = createManager(
       mockDb,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -1152,7 +1195,7 @@ describe('SessionManager tests', () => {
             : {}),
         };
       });
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         mockProviderRegistry,
@@ -1216,7 +1259,7 @@ describe('SessionManager tests', () => {
       .set({ agentSessionId: 'agent-session-abc' })
       .where(eq(sessions.id, 'session-1'))
       .run();
-    const manager = new SessionManager(
+    const manager = createManager(
       db,
       mockWorkspaceManager,
       mockProviderRegistry,
@@ -1295,7 +1338,7 @@ describe('SessionManager tests', () => {
       },
     } as unknown as DbClient;
 
-    const manager = new SessionManager(
+    const manager = createManager(
       localDb,
       mockWorkspaceManager,
       registry,
@@ -1389,7 +1432,7 @@ describe('SessionManager tests', () => {
       },
     } as unknown as DbClient;
 
-    const manager = new SessionManager(
+    const manager = createManager(
       localDb,
       mockWorkspaceManager,
       registry,
@@ -1480,7 +1523,7 @@ describe('SessionManager tests', () => {
       );
 
       const mockPrompt = vi.fn().mockResolvedValue(undefined);
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         mockProviderRegistry,
@@ -1548,7 +1591,7 @@ describe('SessionManager tests', () => {
       );
 
       const mockPrompt = vi.fn().mockResolvedValue(undefined);
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         mockProviderRegistry,
@@ -1619,7 +1662,7 @@ describe('SessionManager tests', () => {
         }
 
         const mockPrompt = vi.fn().mockResolvedValue(undefined);
-        const manager = new SessionManager(
+        const manager = createManager(
           db,
           mockWorkspaceManager,
           mockProviderRegistry,
@@ -1723,7 +1766,7 @@ describe('SessionManager tests', () => {
         getSettings: () => Promise.resolve({}),
       } as unknown as ProviderRegistry;
       const runtime = { ...fakeRuntime, startSession: vi.fn(fakeRuntime.startSession) };
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         registry,
@@ -1824,7 +1867,7 @@ describe('SessionManager tests', () => {
         discover: () => Promise.resolve([createTestProvider('provider-default')]),
       } as unknown as ProviderRegistry;
 
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         registry,
@@ -1863,7 +1906,7 @@ describe('SessionManager tests', () => {
         discover: () => Promise.resolve([createTestProvider('provider-global-default')]),
       } as unknown as ProviderRegistry;
 
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         registry,
@@ -1904,7 +1947,7 @@ describe('SessionManager tests', () => {
           ]),
       } as unknown as ProviderRegistry;
 
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         registry,
@@ -1956,7 +1999,7 @@ describe('SessionManager tests', () => {
         discover: () => Promise.resolve([createTestProvider('provider-global-default')]),
       } as unknown as ProviderRegistry;
 
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         registry,
@@ -1994,7 +2037,7 @@ describe('SessionManager tests', () => {
         discover: () => Promise.resolve([]),
       } as unknown as ProviderRegistry;
 
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         registry,
@@ -2070,7 +2113,7 @@ describe('SessionManager tests', () => {
         discover: () => Promise.resolve([provider.toDiscovery()]),
       } as unknown as ProviderRegistry;
 
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         registry,
@@ -2157,7 +2200,7 @@ describe('SessionManager tests', () => {
         discover: () => Promise.resolve([provider.toDiscovery()]),
       } as unknown as ProviderRegistry;
 
-      const manager = new SessionManager(
+      const manager = createManager(
         db,
         mockWorkspaceManager,
         registry,
@@ -2205,7 +2248,7 @@ it('Stop does not launch a new provider runtime when no runtime is active', asyn
     })
     .run();
   const runtime: AgentDriver = { startSession: vi.fn(), inspectProvider: vi.fn() };
-  const manager = new SessionManager(
+  const manager = createManager(
     db,
     {} as WorkspaceManager,
     {} as ProviderRegistry,

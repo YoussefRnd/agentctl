@@ -1,3 +1,5 @@
+import type { RepositoryService } from '../repository/repository-service.js';
+import type { SnapshotService } from '../git/snapshot-service.js';
 import type {
   SessionEvent,
   SessionEventMetadata,
@@ -43,7 +45,7 @@ export interface SessionEventRepositoryLike {
   publishTransient(event: SessionEventDbRow, delta?: string): void;
 }
 
-export interface SnapshotServiceLike {
+export interface CheckpointServiceLike {
   track(cwd: string): Promise<string | undefined>;
   getTurnChanges?(
     projectPath: string,
@@ -68,5 +70,11 @@ export interface SessionStatusTransitioner {
     targetState: SessionStatus,
     context?: { runtimeId?: string },
   ): Promise<void>;
-  getSnapshotService?(): SnapshotServiceLike | undefined;
+  getCheckpointService?(): CheckpointServiceLike | undefined;
+}
+
+/** The native service is retained only for legacy Git HTTP compatibility. */
+export interface SessionRepositoryResources {
+  repositories: Pick<RepositoryService, 'open'>;
+  legacySnapshots: SnapshotService;
 }

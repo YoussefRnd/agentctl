@@ -169,7 +169,7 @@ export class SessionRuntime {
       eventRepository,
       logger,
       cwd,
-      runtimeRegistry?.getSnapshotService?.(),
+      runtimeRegistry?.getCheckpointService?.(),
       () => this.canReceive(),
     );
 

@@ -5,6 +5,7 @@ import { projects, sessions } from '@agentctl/core/db';
 import { eq } from 'drizzle-orm';
 import {
   buildGitTextContext,
+  legacyGitRevision,
   resolveGitTextGenerationSelection,
   type GitRepositoryAccess,
   type GitWorkingCopyOperations,
@@ -32,7 +33,7 @@ export class SessionGitOperations {
       GitRemoteOperations &
       Pick<GitPullRequestOperations, 'createPullRequest'>,
     private readonly manager: Pick<SessionManager, 'runWorkspaceCommand'>,
-    private readonly sessions: Pick<SessionService, 'getSnapshotService'>,
+    private readonly sessions: Pick<SessionService, 'getSnapshotService' | 'getRepositoryService'>,
     private readonly providers: ProviderRegistry,
     private readonly events: Pick<EventBus, 'publishState'>,
     private readonly textDriver: AgentDriver,
@@ -114,13 +115,23 @@ export class SessionGitOperations {
       );
       return { files };
     }
-    const review = await snapshotService.getReview(session.worktreePath, session.baseCommit, {
-      includeDiffs: query.includeDiffs !== 'false',
-      filePath: query.filePath,
-      scope: query.scope,
-    });
-    return review;
+    const repository = await this.sessions.getRepositoryService().open(session.worktreePath);
+    if (repository.info.backendId !== 'git')
+      throw new AppError(
+        'Git review is unavailable for this workspace; use repository review',
+        400,
+      );
+    return snapshotService.getReview(
+      session.worktreePath,
+      await legacyGitRevision(repository, session.baseCommit),
+      {
+        includeDiffs: query.includeDiffs !== 'false',
+        filePath: query.filePath,
+        scope: query.scope,
+      },
+    );
   }
+
   async status(id: string) {
     const { session, project } = await this.context(id, false);
     if (!project.repoRoot) {

@@ -18,7 +18,7 @@ import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
 import type { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
-import type { SessionWorkspace } from '../../git/session-workspace.js';
+import type { SessionWorkspace } from '../../workspace/session-workspace.js';
 
 const DEFAULT_AGENT_MODEL = '';
 
@@ -234,7 +234,8 @@ export class SessionLauncher {
     const settings = await this.deps.providerRegistry.getSettings();
     const defaultToWorktree =
       settings.defaultToWorktree !== undefined ? settings.defaultToWorktree === 'true' : true;
-    const effectiveMode: SessionMode = mode ?? (defaultToWorktree ? 'worktree' : 'local');
+    const effectiveMode: SessionMode | undefined =
+      mode ?? (defaultToWorktree ? undefined : 'local');
     const effectiveSlug = createTaskSlug(taskSlug);
 
     const provider = await this.deps.providerRegistry.ensureProviderReady(resolvedProviderId, {

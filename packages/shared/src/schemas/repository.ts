@@ -10,6 +10,9 @@ export const repositoryCapabilitiesSchema = z.object({
   checkpoints: z.boolean(),
   comparisons: z.boolean(),
   restore: z.boolean(),
+  isolation: z.boolean().default(false),
+  integration: z.boolean().default(false),
+  staging: z.boolean().default(false),
 });
 export type RepositoryCapabilities = z.infer<typeof repositoryCapabilitiesSchema>;
 

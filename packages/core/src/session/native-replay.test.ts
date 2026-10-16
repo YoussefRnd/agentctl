@@ -1,3 +1,4 @@
+import { composeRepositoryResources } from './composition/repository-resources.js';
 import { expect, test, vi } from 'vitest';
 import { createDatabase, projects, sessions, sessionEvents } from '../db/index.js';
 import type { AgentDriver, AgentSession } from '../agent/types.js';
@@ -53,11 +54,11 @@ test('native replay persists startup history with user roles, complete chunks, a
   };
   const machine = new SessionRuntimeRegistry(
     db,
-    {} as WorkspaceManager,
     {} as ProviderRegistry,
     new SessionEventRepository(db, { publish() {} }),
     noopLogger,
     runtime,
+    composeRepositoryResources({} as WorkspaceManager),
   );
   const loaded = await machine.startSession(
     'session',

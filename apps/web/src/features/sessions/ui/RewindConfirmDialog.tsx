@@ -56,13 +56,18 @@ export function RewindConfirmDialog({
 }: RewindConfirmDialogProps) {
   const IconComponent = modeIcon[mode];
 
-  const { data: snapshotData, isLoading: isLoadingSnapshot } = useQuery({
+  const {
+    data: snapshotData,
+    isLoading: isLoadingSnapshot,
+    isError: snapshotError,
+  } = useQuery({
     queryKey: ['snapshot-preview', sessionId, eventId],
     queryFn: () => (sessionId && eventId ? previewSnapshotDiff(sessionId, eventId) : null),
     enabled: open && mode === 'files' && Boolean(sessionId && eventId),
   });
 
   const files = snapshotData?.files ?? [];
+  const filesUnavailable = mode === 'files' && (!snapshotData?.hasSnapshot || snapshotError);
 
   return (
     <Dialog
@@ -91,7 +96,7 @@ export function RewindConfirmDialog({
             <div className="text-text-muted text-xs leading-relaxed font-normal">
               {mode === 'fork' ? (
                 <p>
-                  A new isolated branch session will branch off with the first{' '}
+                  A new session will start with the first{' '}
                   <strong className="text-text-main font-semibold">{String(messageCount)}</strong>{' '}
                   messages. Your current workspace remains unchanged.
                 </p>
@@ -103,8 +108,8 @@ export function RewindConfirmDialog({
                 </p>
               ) : (
                 <p>
-                  Rolls back the conversation and reverts files to the exact Git tree snapshot taken
-                  at this turn.
+                  Rolls back the conversation and restores the workspace checkpoint captured at this
+                  turn.
                 </p>
               )}
             </div>
@@ -133,6 +138,15 @@ export function RewindConfirmDialog({
                     <div className="text-text-muted flex h-16 items-center justify-center gap-2 text-xs">
                       <Loader2 className="text-accent h-4 w-4 animate-spin" />
                       <span>Reading file snapshot diff...</span>
+                    </div>
+                  ) : filesUnavailable ? (
+                    <div className="text-text-muted flex h-16 items-center justify-center gap-2 text-xs">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>
+                        {snapshotError
+                          ? 'Could not inspect this checkpoint. Try again.'
+                          : 'File restoration is unavailable for this checkpoint.'}
+                      </span>
                     </div>
                   ) : files.length > 0 ? (
                     <div className="space-y-1">
@@ -188,7 +202,7 @@ export function RewindConfirmDialog({
           </Button>
           <Button
             onClick={onConfirm}
-            disabled={isLoading}
+            disabled={isLoading || (mode === 'files' && (isLoadingSnapshot || filesUnavailable))}
             aria-busy={isLoading || undefined}
             className="min-w-36"
           >

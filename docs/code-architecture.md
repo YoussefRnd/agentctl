@@ -156,3 +156,6 @@ performance or validate native Electron runtime behavior.
 
 The [Git capability audit](git-architecture.md) records CP04 composition, operation contracts,
 forge selection, complete module ownership, and lock/resource ordering.
+
+The [workspace workflow audit](workspace-architecture.md) records backend-neutral lifecycle,
+checkpoint persistence, legacy import rules, optional Git capabilities, and non-Git adapter acceptance.

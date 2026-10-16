@@ -299,7 +299,7 @@ export class SessionTurnExecutor {
         .filter(Boolean)
         .join('\n\n---\n\n');
 
-      const snapshotService = this.runtimeRegistry?.getSnapshotService?.();
+      const snapshotService = this.runtimeRegistry?.getCheckpointService?.();
 
       await this.deps.markDispatched();
       diagnostics.dispatch();

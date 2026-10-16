@@ -104,6 +104,10 @@ export class SessionService {
   respondToElicitation(...args: Parameters<SessionCommands['respondToElicitation']>) {
     return this.parts.commands.respondToElicitation(...args);
   }
+  getRepositoryService() {
+    return this.manager.getRepositoryService();
+  }
+
   getSnapshotService(...args: Parameters<SessionCommands['getSnapshotService']>) {
     return this.parts.commands.getSnapshotService(...args);
   }

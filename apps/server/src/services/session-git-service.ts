@@ -18,7 +18,11 @@ export class SessionGitService {
     private readonly db: DbClient,
     private readonly sessionManager: Pick<
       SessionManager,
-      'runWorkspaceCommand' | 'getSession' | 'stopSession' | 'getSnapshotService' | 'restartSession'
+      | 'runWorkspaceCommand'
+      | 'getSession'
+      | 'stopSession'
+      | 'getRepositoryService'
+      | 'restartSession'
     >,
     private readonly worktreeManager: Pick<
       GitRepositoryAccess,
@@ -94,10 +98,11 @@ export class SessionGitService {
       session.mode === 'worktree' ? session.worktreePath : undefined,
     );
 
-    // Snapshot the new state
-    const snapshotService = this.sessionManager.getSnapshotService();
-    const treeHash = await snapshotService.track(worktree.workspacePath).catch(() => undefined);
-    const baseCommit = treeHash ?? 'none';
+    // Pin the allocation commit, so a missing unused checkout can be recreated safely.
+    const repository = await this.sessionManager
+      .getRepositoryService()
+      .open(worktree.workspacePath);
+    const baseCommit = await repository.importRevision('HEAD');
 
     await this.db
       .update(sessions)

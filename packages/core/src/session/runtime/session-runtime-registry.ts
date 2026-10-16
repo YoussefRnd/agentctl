@@ -1,7 +1,7 @@
+import { RepositoryCheckpoints } from '../../repository/checkpoints.js';
 import { decodeCustomModels } from '@agentctl/shared';
 import { eq } from 'drizzle-orm';
 import { sessions, mcpServers, providers } from '../../db/schema.js';
-import type { WorkspaceManager } from '../../git/worktree-manager.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
 import {
   EMPTY_AGENT_FEATURES,
@@ -17,9 +17,9 @@ import type { Logger } from '../../logger.js';
 import { noopLogger } from '../../logger.js';
 import type { AgentDriver, AgentSession, AgentSessionIntent } from '../../agent/types.js';
 import { AgentAuthenticationRequiredError } from '../../agent/errors.js';
-import { SnapshotService } from '../../git/snapshot-service.js';
+import type { SnapshotService } from '../../git/snapshot-service.js';
+import type { SessionRepositoryResources } from '../contracts.js';
 import type { RepositoryService } from '../../repository/repository-service.js';
-import { createDefaultRepositoryService } from '../../default-repository-service.js';
 import type { McpGateway } from '../../mcp/mcp-gateway.js';
 import { DEFAULT_AGENT_MODEL } from '../../config/runtime-defaults.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
@@ -71,30 +71,34 @@ export class SessionRuntimeRegistry {
   private sessions = new Map<string, SessionRuntime>();
   private initializing = new Set<SessionRuntime>();
   private snapshotService: SnapshotService;
-  private repositoryService: RepositoryService;
+  private repositoryService: Pick<RepositoryService, 'open'>;
 
   constructor(
     private db: DbClient,
-    private workspaceManager: WorkspaceManager,
     private providerRegistry: ProviderRegistry,
     private eventRepository: SessionEventRepository,
     private logger: Logger = noopLogger,
     private runtime: AgentDriver,
+    repositoryResources: SessionRepositoryResources,
     private mcpGateway?: McpGateway,
   ) {
-    this.snapshotService = new SnapshotService();
-    this.repositoryService = createDefaultRepositoryService(this.snapshotService);
+    this.snapshotService = repositoryResources.legacySnapshots;
+    this.repositoryService = repositoryResources.repositories;
   }
 
   ownsRuntime(sessionId: string, runtimeId: string): boolean {
     return this.sessions.get(sessionId)?.runtimeId === runtimeId;
   }
 
+  getCheckpointService(): RepositoryCheckpoints {
+    return new RepositoryCheckpoints(this.repositoryService);
+  }
+
   getSnapshotService(): SnapshotService {
     return this.snapshotService;
   }
 
-  getRepositoryService(): RepositoryService {
+  getRepositoryService(): Pick<RepositoryService, 'open'> {
     return this.repositoryService;
   }
 

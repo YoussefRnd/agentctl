@@ -40,6 +40,12 @@ async function scan(directory) {
     }
     if (file.startsWith('packages/core/src/session/')) {
       forbid(/(?:^|\/)acp\//, 'session workflows depend on agent contracts, not protocol adapters');
+      if (/\/(?:services|execution|projection)\//.test(file)) {
+        forbid(
+          /simple-git|(?:^|\/)git\/|default-repository-service/,
+          'session workflows use repository and workspace capabilities rather than Git adapters',
+        );
+      }
       if (
         !file.includes('/composition/') &&
         !file.endsWith('/manager.ts') &&
@@ -65,6 +71,15 @@ async function scan(directory) {
           'session persistence cannot depend on provider, filesystem, or workflow implementations',
         );
       }
+    }
+    if (
+      file.startsWith('packages/core/src/workspace/') ||
+      file.startsWith('packages/core/src/repository/')
+    ) {
+      forbid(
+        /simple-git|node:child_process|(?:^|\/)(?:git|acp|providers|session)\//,
+        'repository and workspace workflows cannot depend on concrete VCS, forge, or agent implementations',
+      );
     }
     if (file.startsWith('packages/core/src/forge/')) {
       forbid(

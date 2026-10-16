@@ -1,3 +1,5 @@
+import { createDefaultRepositoryService } from '../default-repository-service.js';
+import { legacyGitRevision } from './legacy-revisions.js';
 import { test, expect, describe, beforeAll, afterEach, beforeEach } from 'vitest';
 import { SessionWorkspace } from './session-workspace.js';
 import { WorkspaceManager } from './worktree-manager.js';
@@ -132,7 +134,10 @@ describe('SessionWorkspace Integration Tests (Mock-Free)', () => {
       'TEST_VALUE=example',
     );
     expect((await simpleGit(context.worktreePath).revparse(['HEAD'])).trim()).toBe(
-      context.baseCommit,
+      await legacyGitRevision(
+        await createDefaultRepositoryService(new SnapshotService()).open(context.worktreePath),
+        context.baseCommit,
+      ),
     );
   });
 

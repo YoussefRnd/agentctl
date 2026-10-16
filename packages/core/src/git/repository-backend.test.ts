@@ -50,6 +50,9 @@ it('reviews and restores captured Git revisions without exposing Git IDs to call
     checkpoints: true,
     comparisons: true,
     restore: true,
+    isolation: false,
+    integration: false,
+    staging: false,
   });
   expect(summary.capture?.current).not.toMatch(/^[0-9a-f]+$/i);
   expect(summary.files[0]).toMatchObject({ path: 'file.txt', state: 'staged', diff: '' });
@@ -111,6 +114,9 @@ it('keeps ordinary folders usable without inventing checkpoint or history suppor
     checkpoints: false,
     comparisons: false,
     restore: false,
+    isolation: false,
+    integration: false,
+    staging: false,
   });
   expect(await repository.review()).toEqual({ repository: repository.info, files: [] });
   await expect(repository.capture()).rejects.toMatchObject({ code: 'unsupported' });

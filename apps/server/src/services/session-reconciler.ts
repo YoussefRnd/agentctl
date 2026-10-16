@@ -10,7 +10,7 @@ export class SessionReconciler {
     private readonly db: DbClient,
     private readonly sessionManager: Pick<
       SessionManager,
-      'ensureWorkspaceAvailable' | 'getSnapshotService' | 'getEventRepository'
+      'ensureWorkspaceAvailable' | 'getCheckpointService' | 'getEventRepository'
     >,
     private readonly worktreeManager: Pick<GitRepositoryAccess, 'getCurrentBranch'>,
   ) {}
@@ -25,7 +25,7 @@ export class SessionReconciler {
         .getCurrentBranch(session.worktreePath)
         .catch(() => null);
       if (currentBranch !== null && currentBranch !== session.branch) {
-        const snapshotService = this.sessionManager.getSnapshotService();
+        const snapshotService = this.sessionManager.getCheckpointService();
         const treeHash = await snapshotService.track(session.worktreePath).catch(() => undefined);
         const newBaseCommit = treeHash ?? session.baseCommit;
         await this.db

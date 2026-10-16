@@ -329,7 +329,7 @@ describe('SessionRuntime message delivery', () => {
       providerPrompt,
       {
         transitionTo: async () => {},
-        getSnapshotService: () => ({ track: () => snapshot }),
+        getCheckpointService: () => ({ track: () => snapshot }),
       },
       gateway,
     );
@@ -358,7 +358,7 @@ describe('SessionRuntime message delivery', () => {
     };
     const mockStateMachine = {
       transitionTo: () => Promise.resolve(),
-      getSnapshotService: () => mockSnapshotService,
+      getCheckpointService: () => mockSnapshotService,
     } as unknown as SessionStatusTransitioner;
 
     let finishPrompt!: () => void;

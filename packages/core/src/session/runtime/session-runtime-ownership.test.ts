@@ -1,3 +1,4 @@
+import { composeRepositoryResources } from '../composition/repository-resources.js';
 import { afterEach, expect, test, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions, sessionRuntimeBindings } from '../../db/index.js';
@@ -32,11 +33,11 @@ function fixture() {
   const events = new SessionEventRepository(db, { publish: vi.fn() });
   const registry = new SessionRuntimeRegistry(
     db,
-    {} as WorkspaceManager,
     {} as ProviderRegistry,
     events,
     noopLogger,
     {} as AgentDriver,
+    composeRepositoryResources({} as WorkspaceManager),
   );
   cleanup.push(() => registry.stopAll());
   function bind(availableModes?: string[]) {

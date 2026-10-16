@@ -1,3 +1,4 @@
+import type { RepositoryService } from '../repository/repository-service.js';
 import { composeSessionResources } from './composition/session-resources.js';
 import type { IEventBus } from './contracts.js';
 import { composeSessionWorkflows } from './composition/session-workflows.js';
@@ -11,7 +12,7 @@ import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
 import type { SessionEventRepository } from './persistence/session-event-repository.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
-import type { SessionWorkspace } from '../git/session-workspace.js';
+import type { SessionWorkspace } from '../workspace/session-workspace.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
 import {
   EMPTY_AGENT_FEATURES,
@@ -51,13 +52,14 @@ export class SessionManager {
 
   constructor(
     db: DbClient,
-    workspaceManager: WorkspaceManager,
+    workspaceManager: WorkspaceManager | undefined,
     providerRegistry: ProviderRegistry,
     eventBus: IEventBus,
     logger: Logger = noopLogger,
     runtime?: AgentDriver,
     mcpGateway?: McpGateway,
     runtimeServices?: AgentRuntimeServices,
+    repositories?: Pick<RepositoryService, 'open'>,
   ) {
     this.db = db;
     this.providerRegistry = providerRegistry;
@@ -72,6 +74,7 @@ export class SessionManager {
       runtime,
       mcpGateway,
       runtimeServices,
+      repositories,
     );
     this.runtime = resources.runtime;
     this.eventRepository = resources.eventRepository;
@@ -225,6 +228,10 @@ export class SessionManager {
 
   getSession(sessionId: string): SessionRuntime | undefined {
     return this.runtimeRegistry.getSession(sessionId);
+  }
+
+  getCheckpointService() {
+    return this.runtimeRegistry.getCheckpointService();
   }
 
   getSnapshotService() {

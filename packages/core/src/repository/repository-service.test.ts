@@ -96,6 +96,9 @@ it('allows read-only review without requiring checkpoints, restore, or revision 
     checkpoints: false,
     comparisons: false,
     restore: false,
+    isolation: false,
+    integration: false,
+    staging: false,
   });
   expect((await repository.review()).files[0].diff).toBe('changes');
   await expect(repository.capture()).rejects.toMatchObject({ code: 'unsupported' });

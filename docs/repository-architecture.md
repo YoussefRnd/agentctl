@@ -99,29 +99,19 @@ hash parameters and tree capture fields for existing clients. Session baselines 
 this boundary remain unchanged; the new API imports those selectors through the selected
 backend rather than sending them to the browser.
 
-## Deliberate migration scope
+## Workspace and checkpoint workflows
 
-This establishes the read/review and checkpoint service boundary. Existing turn capture,
-rewind persistence, staging, branching, worktree creation, integration, and remote/PR workflows
-still use their existing Git implementation, with Git mechanisms now separated into the focused
-capabilities documented in [Git capability ownership](git-architecture.md). This does not claim another VCS can already
-replace every workflow in the application. No new VCS, background service, database migration,
-or independent checkpoint store is introduced.
+Turn capture/comparison, persisted baselines, rewind/undo/restore, archive/reactivation, allocation,
+integration and teardown now use the selected repository/workspace capabilities. The optional Git
+and forge workflows retain their focused implementations. New checkpoint and recovery writes are
+scoped opaque references; historical Git selectors and JSON recovery state have explicit adapter
+imports. See [workspace workflow ownership](workspace-architecture.md) for the workflow matrix,
+persistence decision, module inventory, and verification.
 
-Further migration should move one complete workflow at a time:
-
-1. Store opaque revision references for new checkpoints, retaining compatibility reads for
-   historical snapshot fields. Move turn capture and rewind through the repository handle.
-2. Define capability-specific workspace allocation and integration contracts. Keep staging,
-   branch names, remotes, and forge/PR features optional instead of requiring every backend
-   to emulate Git.
-3. Separate durable change identity from conversation and workspace lifetime. Revisions should
-   belong to retained changes even when execution directories are released.
-4. Implement an additional backend against those contracts when a concrete use case is chosen.
-   Native checkpoints for ordinary folders require an explicit storage and retention design.
-
-Future repository adapters must preserve literal paths, immutable revision reads, scoped
-ownership, user staging, recoverable restore behavior, and clear unsupported operations.
+No new production VCS, ordinary-folder checkpoint store, background service, or database schema
+is introduced. Ordinary folders advertise unsupported history, staging, isolation and integration.
+A file-backed non-Git test adapter verifies the entire neutral workflow boundary. Adding a production
+backend still requires its own durable object/recovery retention and product integration.
 
 ## Validation
 
