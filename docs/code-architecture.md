@@ -77,15 +77,14 @@ Markdown rendering and workspace navigation are shared capabilities used outside
 features. Conversation cards and inspector panels now import those owners directly. Compatibility
 exports preserve existing feature entry points during migration.
 
-`apps/web/architecture-cycles.json` records the remaining cyclic feature edges, including type
-and lazy imports. Each entry describes the current dependency and migration direction. The
-checker rejects any additional cyclic edge and requires deleting an exception once its cycle
-is resolved. The baseline must shrink as composition moves upward; new cyclic edges require
-an explicit architecture decision rather than silently expanding this file.
-
-The remaining groups are composer/review/sessions and conversation/subagents. These require
-workflow or rendering separation; relocating their entire stores into `shared` would not by
-itself establish a useful boundary.
+The feature graph is acyclic. `apps/web/architecture-cycles.json` is empty and the checker
+rejects cycle exceptions, including cycles through re-exports, type and lazy imports. Shared
+owners cannot import application/features, including through relative barrels. Page composition
+owns session headers/launch dialogs and supplies explicit review-to-composer actions. Conversation
+has a one-way dependency on subagents; both use shared transcript renderers that have no parent
+session subscriptions or control APIs. The [frontend ownership map](frontend-architecture.md)
+and [parsed graph snapshot](frontend-feature-graph.json) record these boundaries. Broader frontend
+state/effect and public export auditing remains tracked separately.
 
 ## File and API conventions
 

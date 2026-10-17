@@ -91,16 +91,19 @@ vi.mock('@/shared/stores/useWorkbenchStore', () => ({
   useWorkbenchStore: (select: (store: unknown) => unknown) =>
     select({ setWorkbenchTab: vi.fn(), setWorkbenchOpen: vi.fn() }),
 }));
-vi.mock('@/features/conversation', async () => ({
+vi.mock('@/features/settings', () => ({
+  useSettings: () => ({ settings: { showThinking: false } }),
+}));
+vi.mock('@/shared/transcript', async (original) => ({
+  ...(await original<typeof import('@/shared/transcript')>()),
   StreamingMarkdown: ({ content }: { content: string }) => <p>{content}</p>,
-  UnifiedActivityBlock: ({ events }: { events: SessionEventRow[] }) => (
+  ActivityBlock: ({ events }: { events: SessionEventRow[] }) => (
     <div>
       {events.map((event) => (
         <span key={event.id}>{event.type === 'tool_call' ? event.data.title : ''}</span>
       ))}
     </div>
   ),
-  AgentTerminals: (await import('./cards/AgentTerminals')).AgentTerminals,
 }));
 vi.mock('./EventFeed', async () => {
   const { useEffect } = await import('react');

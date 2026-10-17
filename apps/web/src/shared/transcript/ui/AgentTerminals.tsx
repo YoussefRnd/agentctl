@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { SessionEventRow } from '@agentctl/shared';
-import { collectAgentTerminals } from '../../lib/agentTerminals';
+import { collectAgentTerminals } from '../lib/agentTerminals';
 
 export function AgentTerminals({ events }: { events: SessionEventRow[] }) {
   const terminals = useMemo(() => collectAgentTerminals(events), [events]);

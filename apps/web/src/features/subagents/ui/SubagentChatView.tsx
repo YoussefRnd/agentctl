@@ -2,10 +2,11 @@ import { useEffect, useId, useMemo, useRef } from 'react';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
 import {
   StreamingMarkdown,
-  UnifiedActivityBlock,
+  ActivityBlock,
   AgentTerminals,
-  SessionMessage,
-} from '@/features/conversation';
+  TranscriptMessage,
+  sessionMessageParticipant,
+} from '@/shared/transcript';
 import {
   formatSubagentTitle,
   getSubagentGroupKey,
@@ -28,6 +29,7 @@ interface SubagentChatViewProps {
   onBack: () => void;
   isStreaming?: boolean;
   isConnected?: boolean;
+  showThinking?: boolean;
   onReviewApproval?: () => void;
 }
 
@@ -61,6 +63,7 @@ export function SubagentChatView({
   onBack,
   isStreaming = false,
   isConnected = true,
+  showThinking = false,
   onReviewApproval,
 }: SubagentChatViewProps) {
   const backRef = useRef<HTMLButtonElement>(null);
@@ -223,8 +226,29 @@ export function SubagentChatView({
           {entries.map((events, index) => {
             const first = events[0];
             const streaming = isStreaming && active && index === entries.length - 1;
-            if (first.type === 'text' && first.data.role === 'session')
-              return <SessionMessage key={first.id} data={first.data} />;
+            if (first.type === 'text' && first.data.role === 'session') {
+              const participantId = sessionMessageParticipant(first.data);
+              const participant = groups?.find(
+                (candidate) =>
+                  candidate.subagentEvent.type === 'subagent_update' &&
+                  candidate.subagentEvent.data.native &&
+                  candidate.subagentEvent.data.subagentId === participantId,
+              );
+              const name =
+                participant?.subagentEvent.type === 'subagent_update'
+                  ? participant.subagentEvent.data.name
+                  : undefined;
+              return (
+                <TranscriptMessage
+                  key={first.id}
+                  data={first.data}
+                  participantName={name}
+                  onSelectParticipant={
+                    participant && onSelect ? () => onSelect(participant) : undefined
+                  }
+                />
+              );
+            }
             if (first.type === 'text' && first.data.role !== 'thought') {
               return (
                 <section
@@ -237,11 +261,12 @@ export function SubagentChatView({
               );
             }
             return (
-              <UnifiedActivityBlock
+              <ActivityBlock
                 key={first.id}
                 events={events}
                 isStreaming={streaming}
-                isActive={active && index === entries.length - 1}
+                isCompleted={!(active && index === entries.length - 1)}
+                showThinking={showThinking}
               />
             );
           })}
@@ -283,10 +308,11 @@ export function SubagentChatView({
                 No child activity was reported. Only the delegation record is available.
               </p>
               {!!group.delegationEvents?.length && (
-                <UnifiedActivityBlock
+                <ActivityBlock
                   events={group.delegationEvents}
                   isStreaming={isStreaming && active}
-                  isActive={active}
+                  isCompleted={!active}
+                  showThinking={showThinking}
                 />
               )}
             </SubagentDisclosure>

@@ -1,4 +1,1 @@
-{
-  "conversation -> subagents": "Agent responses embed child conversations; extract read-only transcript rendering before reversing this dependency.",
-  "subagents -> conversation": "SubagentChatView reuses parent activity and terminal cards; extract reusable read-only rendering."
-}
+{}

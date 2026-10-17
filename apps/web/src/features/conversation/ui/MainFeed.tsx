@@ -1,3 +1,4 @@
+import { ChildConversation } from './ChildConversation';
 import { ChangedFileRow } from './ChangedFileRow';
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { afterPaint, journeyPerformance } from '@/shared/lib/performanceRecorder';
@@ -20,7 +21,6 @@ import { EventFeed } from './EventFeed';
 import { NewSessionEmptyState } from './NewSessionEmptyState';
 import { ApprovalComposerSlot } from './ApprovalComposerSlot';
 import {
-  SubagentChatView,
   extractSubagentGroups,
   getSubagentGroupKey,
   isSubagentActive,
@@ -694,7 +694,7 @@ export function MainFeed() {
         )}
       </div>
       {liveActiveSubagent && (
-        <SubagentChatView
+        <ChildConversation
           group={liveActiveSubagent}
           parentTitle={sessionData?.session.title ?? 'Parent conversation'}
           groups={subagentGroups}

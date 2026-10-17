@@ -11,7 +11,8 @@ composition. This prevents moving a cycle into a shared directory without changi
 The original graph contained six cyclic edges between composer, sessions and review. All six
 are removed. Composer and review may consume session model capabilities; sessions have no
 reverse dependency on their UI. Composer does not consume review and review does not select a
-composer store. Conversation/subagent cycles remain assigned to the next checkpoint.
+composer store. The conversation/subagent rendering separation removes the remaining two
+cyclic edges. The feature graph is acyclic and the checker rejects any nonempty cycle baseline.
 
 | Owner                                                      | Responsibility                                                                                                                                                                                                   |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -40,3 +41,34 @@ production bundle with synthetic APIs: click/hover/focus/revisit navigation and 
 draft restoration, review file attachment, hunk quotation and launch dialog cancellation. It
 contacts no model provider and rejects unexpected fixture mutations. Timing samples are fixture
 measurements, not live-provider performance claims.
+
+## Conversation and child transcript ownership
+
+Conversation composes child views through a deliberate one-way dependency on subagents. Both
+features consume shared transcript presentation; subagents no longer import conversation. Shared
+renderers accept events, status, preferences and navigation callbacks and never select a parent
+session, draft store, settings query or approval API.
+
+| Owner                                                                  | Responsibility                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/transcript/ui/ActivityBlock.tsx`                               | Activity summaries, thought display and local disclosure state; callers supply completion/streaming status and thinking preferences.                                                                                                                       |
+| `shared/transcript/ui/ToolActivityRow.tsx`, `lib/tool-presentation.ts` | Tool/approval request presentation and output disclosure/copy; no approval execution or parent cancellation.                                                                                                                                               |
+| `shared/transcript/ui/ToolOutputContent.tsx`                           | Reusable output, diff and location presentation.                                                                                                                                                                                                           |
+| `shared/transcript/ui/AgentTerminals.tsx`, `lib/agentTerminals.ts`     | Event-derived terminal history, replacement/exit handling and existing 64 KiB UTF-8 output bound; no interactive terminal creation.                                                                                                                        |
+| `shared/transcript/ui/TranscriptMessage.tsx`                           | Directed session messages; optional participant labels and navigation callbacks supplied by the caller.                                                                                                                                                    |
+| `features/conversation/ui/cards/UnifiedActivityBlock.tsx`              | Parent session/turn completion policy and settings subscription; delegates display to ActivityBlock.                                                                                                                                                       |
+| `features/conversation/ui/cards/SessionMessage.tsx`                    | Parent stream participant lookup and session-scoped selection callback.                                                                                                                                                                                    |
+| `features/conversation/ui/ChildConversation.tsx`                       | Supplies thinking preferences to child rendering at the conversation composition boundary.                                                                                                                                                                 |
+| `features/conversation/ui/MainFeed.tsx`                                | Retains mounted parent feed/composer, inert state, focus restoration, session-scoped child selection, history/cancellation transitions and parent approval control.                                                                                        |
+| Subagent group utilities/store and `SubagentChatView.tsx`              | Child identity, event grouping, status/connectivity, sibling selection, read-only transcript and observer cleanup. Activity completion derives from the child, independently of parent turn context. Approval notices invoke the parent's review callback. |
+
+Compatibility exports from conversation forward shared display components during migration;
+shared owners never import those barrels. Broader feature/effect auditing and public export
+cleanup remain assigned to the later frontend/contracts checkpoints.
+
+Verification covers child streaming/tool grouping, approval routing, cancellation/disconnect,
+session-scoped selection, focus and follower cleanup. A standalone child render test uses no
+parent session or settings provider and verifies sibling navigation and terminal output. The
+production architecture browser journey also opens child/sibling transcripts, retains the exact
+parent feed/composer nodes and draft, returns with Escape, hides selection in other sessions
+and restores it on return to the original session. Browser fixtures reject unexpected API mutations; no paid provider is involved.

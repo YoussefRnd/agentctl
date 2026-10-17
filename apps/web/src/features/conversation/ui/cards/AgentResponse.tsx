@@ -1,5 +1,5 @@
 import { SessionMessage } from './SessionMessage';
-import { AgentTerminals } from './AgentTerminals';
+import { AgentTerminals } from '@/shared/transcript';
 import { memo, useMemo, useEffect } from 'react';
 import { paintPromptPerformance } from '@/shared/lib/promptPerformance';
 import { SubagentBlock, extractSubagentGroups } from '@/features/subagents';

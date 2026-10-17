@@ -2,7 +2,7 @@ import {
   ToolDiffBlock as DiffBlock,
   ToolLocations as LocationsView,
   ToolOutput,
-} from './ToolOutputContent';
+} from '@/shared/transcript';
 import { useState, useEffect, useRef, memo, type ReactElement } from 'react';
 import {
   Terminal,

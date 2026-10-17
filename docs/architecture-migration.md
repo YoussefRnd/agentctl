@@ -7,7 +7,7 @@ order, acceptance criteria, and evidence needed to declare the migration complet
 
 ## Status and completion rules
 
-Baseline: **2026-10-16**. **9 of 16 checkpoints are complete locally; 7 remain open.**
+Baseline: **2026-10-16**. **10 of 16 checkpoints are complete locally; 6 remain open.**
 This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03
 is committed as `e1fc843`; subsequent completed checkpoints are recorded in descriptive
 implementation commits. No merge or release is implied.
@@ -41,7 +41,7 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 | CP06 | Provider lifecycle and agent protocol composition             | Done    | CP03                   |
 | CP07 | Remaining core domains and infrastructure ownership           | Done    | CP03, CP06             |
 | CP08 | Composer, review, and session dependency cycles               | Done    | CP01                   |
-| CP09 | Conversation and subagent dependency cycle                    | Planned | CP01                   |
+| CP09 | Conversation and subagent dependency cycle                    | Done    | CP01                   |
 | CP10 | Complete frontend state, effects, and rendering audit         | Planned | CP02, CP08, CP09       |
 | CP11 | Shared contracts, client APIs, and public exports             | Planned | CP05, CP06, CP07, CP10 |
 | CP12 | Desktop lifecycle, server ownership, and IPC                  | Planned | CP02, CP03, CP06       |
@@ -70,7 +70,7 @@ until the full audit, even where initial work has already landed locally.
 | Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Accepted                    |
 | Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Accepted                    |
 | Web composer, review, and session features                                                                 | CP08, CP10           | CP08 accepted; CP10 pending |
-| Web conversation and subagent features                                                                     | CP09, CP10           | Pending                     |
+| Web conversation and subagent features                                                                     | CP09, CP10           | CP09 accepted; CP10 pending |
 | Web projects, providers, settings, workbench, updates, command palette, and retained feature directories   | CP10                 | Pending                     |
 | Web app/shell/routes, shared capabilities, performance lab, and test utilities                             | CP10, CP14           | Pending                     |
 | Shared schemas, contracts, types, policies, utilities, and environment definitions                         | CP11                 | Pending                     |
@@ -401,17 +401,44 @@ native Electron checks. Full workspace/build verification follows the conversati
 
 Baseline edges: conversation → subagents and subagents → conversation.
 
-- [ ] Define ownership for reusable read-only transcript, activity, approval presentation, and
+- [x] Define ownership for reusable read-only transcript, activity, approval presentation, and
       terminal rendering without moving parent-session control into child views.
-- [ ] Compose parent/child views above their independent models or expose deliberately one-way
+- [x] Compose parent/child views above their independent models or expose deliberately one-way
       rendering contracts; keep child identity/grouping and retained state owned explicitly.
-- [ ] Remove both cycle exceptions and verify the feature graph is acyclic with an empty baseline
+- [x] Remove both cycle exceptions and verify the feature graph is acyclic with an empty baseline
       after CP08. Include re-export, type-only, and lazy-import edges.
-- [ ] Preserve child navigation, live streaming, tool grouping, parent approval handling,
+- [x] Preserve child navigation, live streaming, tool grouping, parent approval handling,
       cancellation, and retained-child cleanup.
 
 Exit evidence: rendering/interaction ownership map, empty cycle baseline, subagent/conversation
 regressions, and a browser fixture journey through parent/child views.
+
+Acceptance (2026-10-17): the [frontend ownership map](frontend-architecture.md) assigns
+shared transcript/activity/tool/approval presentation, directed messages and bounded terminal
+history to `shared/transcript`. Parent connected wrappers retain session/turn/settings policy;
+conversation supplies child preferences through an explicit composition wrapper. Subagents
+consume supplied groups, child status and navigation/review callbacks without parent session
+contexts or approval/cancellation APIs. The parent feed/composer, session-scoped selection,
+focus restoration and history transitions keep their existing owners.
+
+Both cycle exceptions are deleted. The [parsed graph](frontend-feature-graph.json) has zero
+cycles and an empty baseline; the checker rejects adding exceptions or hiding reverse imports
+through shared barrels. Conversation depends on subagents in one direction only. Existing
+compatibility display exports remain for the public API audit in CP11.
+
+Verification: **135 tests / 21 focused files** include live updates/tool grouping, parent approval
+routing, cancellation/history transitions, selection scope, focus/follower cleanup, bounded
+terminal replacement/exit behavior and a child render without parent providers. The production
+browser fixture passed child/sibling navigation, terminal output, exact parent feed/composer node
+retention, draft preservation, Escape return and session-scoped selection restoration, alongside
+all session/review/deferred-asset journeys (`/tmp/agentctl-transcript-browser.json`). These use
+synthetic APIs with no paid provider or native Electron lifecycle claim. The final source tree passed **1,491 tests / 249 files** with
+`pnpm exec vitest run --maxWorkers=2`, all **5 architecture regression tests**, **9 performance
+checker tests**, workspace `pnpm typecheck`, `pnpm lint`, `pnpm architecture:check`, formatting
+and whitespace checks. `pnpm build` passed; desktop was also rebuilt directly with
+`pnpm --filter @agentctl/desktop build` to avoid the external-input cache issue recorded in CP14.
+The CI built-desktop-renderer markdown worker smoke passed against that fresh output
+(`/tmp/agentctl-frontend-desktop-worker.json`).
 
 ## CP10 — Complete frontend state, effects, and rendering audit
 
@@ -508,6 +535,12 @@ and browser/performance scripts, patches, hooks, and CI/release workflows.
 Exit evidence: enforcement coverage matrix, regression tests, normal CI wiring, clean-checkout
 verification results, and no migration-only allowlists, dead compatibility files, or unowned tooling.
 
+Observed during frontend acceptance: the desktop renderer consumes `apps/web/src` through its
+Vite configuration, but the current Turbo desktop task can reuse its cache after only web source
+changes. Include those external inputs/dependencies in the tooling audit. Frontend acceptance
+uses a direct `pnpm --filter @agentctl/desktop build` plus the CI built-renderer worker smoke to
+verify current sources instead of accepting the cached desktop artifact.
+
 ## CP15 — Repository-wide acceptance and migration closure
 
 - [ ] CP00–CP14 are Done with file coverage, test evidence, and resolved compatibility decisions.
@@ -545,15 +578,19 @@ misrepresented as implemented backend support.
 
 ## Checkpoint evidence log
 
-| Checkpoint | Revision / delivery                                             | Verification                                                                                                                                 | Open work                                                                         |
-| ---------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| CP00       | `e1fc843` (CP03 baseline)                                       | Coverage inventory; tracker/link/format checks                                                                                               | None within planning scope                                                        |
-| CP01       | `e1fc843` (CP03 baseline)                                       | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide                                    | Follow-up work assigned to CP02–CP14                                              |
-| CP02       | `e1fc843`, accepted 2026-10-16                                  | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory                            | None in server application/transport scope; native integration remains CP12       |
-| CP03       | `e1fc843`, accepted 2026-10-16                                  | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit                                  | None within CP03; neutral workspace remains CP05, provider lifecycle CP06         |
-| CP04       | `a628a08`, accepted 2026-10-16                                  | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit                                  | None within CP04; neutral session workflows remain CP05                           |
-| CP05       | Checkpoint commit containing this evidence, accepted 2026-10-16 | 1,467 tests/243 files; combined 348/41; follow-up 55/5; 4 architecture tests; typechecks/lint/format/builds; 41-module and 36-session audits | None within CP05; additional production VCS/folder history remains separate scope |
-| CP06–CP15  | Not accepted                                                    | Pending                                                                                                                                      | See each checkpoint                                                               |
+| Checkpoint | Revision / delivery                                             | Verification                                                                                                                                           | Open work                                                                         |
+| ---------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| CP00       | `e1fc843` (CP03 baseline)                                       | Coverage inventory; tracker/link/format checks                                                                                                         | None within planning scope                                                        |
+| CP01       | `e1fc843` (CP03 baseline)                                       | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide                                              | Follow-up work assigned to CP02–CP14                                              |
+| CP02       | `e1fc843`, accepted 2026-10-16                                  | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory                                      | None in server application/transport scope; native integration remains CP12       |
+| CP03       | `e1fc843`, accepted 2026-10-16                                  | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit                                            | None within CP03; neutral workspace remains CP05, provider lifecycle CP06         |
+| CP04       | `a628a08`, accepted 2026-10-16                                  | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit                                            | None within CP04; neutral session workflows remain CP05                           |
+| CP05       | Checkpoint commit containing this evidence, accepted 2026-10-16 | 1,467 tests/243 files; combined 348/41; follow-up 55/5; 4 architecture tests; typechecks/lint/format/builds; 41-module and 36-session audits           | None within CP05; additional production VCS/folder history remains separate scope |
+| CP06       | `5d60524`, accepted 2026-10-17                                  | Provider/agent 367 tests/58 files; disposal 6/1; typechecks/lint/architecture checks                                                                   | None within provider/protocol composition scope                                   |
+| CP07       | `a117a46`, accepted 2026-10-17                                  | 1,489 tests/248 files; 5 architecture tests; types/lint/format/builds; 214-file ownership ledger                                                       | None within remaining-core scope                                                  |
+| CP08       | `d3b0869`, accepted 2026-10-17                                  | Focused 239/36 and injected-action 7/1; types/lint/architecture/format/web build; production screen journeys                                           | Broader frontend audit remains CP10                                               |
+| CP09       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,491 tests/249 files; focused 135/21; 5 architecture and 9 performance tests; types/lint/format/builds; parent/child browser and desktop worker smoke | Broader frontend audit remains CP10                                               |
+| CP10–CP15  | Not accepted                                                    | Pending                                                                                                                                                | See each checkpoint                                                               |
 
 For each checkpoint, replace the aggregate pending row with its own evidence entry when work
 starts. Include execution date, actual commands/results, accepted paths, unresolved issues, and

@@ -21,6 +21,9 @@ const errors = [];
 const featureGraph = new Map();
 const cycleBaseline = JSON.parse(await readFile(join(webRoot, 'architecture-cycles.json'), 'utf8'));
 
+if (Object.keys(cycleBaseline).length)
+  errors.push('The accepted feature graph is acyclic; cycle exceptions cannot be added.');
+
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];

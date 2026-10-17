@@ -67,6 +67,10 @@ const events = (sessionId) =>
 export function createJourneyApi(delayMs = 120, fixture = {}) {
   const requests = [];
   const failures = [];
+  const fixtureEvents = (sessionId) => [
+    ...events(sessionId),
+    ...(fixture.additionalEvents?.(sessionId) ?? []),
+  ];
   async function handle(request, response) {
     const url = new URL(request.url, 'http://localhost');
     if (!url.pathname.startsWith('/api/')) return false;
@@ -121,9 +125,9 @@ export function createJourneyApi(delayMs = 120, fixture = {}) {
         const suffix = match[2];
         if (suffix === '') body = { session, capabilities: [] };
         else if (suffix === '/events/page')
-          body = { events: events(session.id), nextBeforeId: null, nextAfterId: null };
+          body = { events: fixtureEvents(session.id), nextBeforeId: null, nextAfterId: null };
         else if (suffix === '/events/turns')
-          body = events(session.id)
+          body = fixtureEvents(session.id)
             .filter((e) => e.data.role === 'user')
             .map((e) => ({ eventId: e.id, prompt: e.data.content, timestamp }));
         else if (suffix === '/execution')

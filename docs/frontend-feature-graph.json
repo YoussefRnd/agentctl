@@ -5,12 +5,8 @@
     "conversation": ["composer", "providers", "review", "sessions", "settings", "subagents"],
     "review": ["sessions"],
     "settings": ["providers", "updates"],
-    "subagents": ["conversation"],
     "workbench": ["review", "sessions", "settings"]
   },
-  "cycles": ["conversation -> subagents", "subagents -> conversation"],
-  "baseline": {
-    "conversation -> subagents": "Agent responses embed child conversations; extract read-only transcript rendering before reversing this dependency.",
-    "subagents -> conversation": "SubagentChatView reuses parent activity and terminal cards; extract reusable read-only rendering."
-  }
+  "cycles": [],
+  "baseline": {}
 }
