@@ -249,7 +249,7 @@ export function useSessionMessageQueue(
         if (currentSessionRef.current === sessionId)
           queuedTurnStartEventIdRef.current = accepted.id;
         dequeueQueuedMessage(sessionId, nextMessage.id);
-        void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.execution(sessionId) });
         void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
         return;
       }
@@ -285,7 +285,7 @@ export function useSessionMessageQueue(
             nextMessage.optimisticEventId,
             'queued',
           );
-          void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.execution(sessionId) });
           void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
         })
         .catch(markFailed);

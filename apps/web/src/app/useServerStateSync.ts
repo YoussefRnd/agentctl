@@ -42,7 +42,7 @@ export function applyStateChange(queryClient: QueryClient, event: StateChangeEve
   if (topics.has('workspace')) invalidateWorkspaceQueries(queryClient, event.sessionId);
   if (topics.has('mcp')) {
     void queryClient.invalidateQueries({ queryKey: mcpKeys.all });
-    void queryClient.invalidateQueries({ queryKey: ['mcpTools'] });
+    void queryClient.invalidateQueries({ queryKey: mcpKeys.tools });
   }
   if (topics.has('settings')) {
     void queryClient.invalidateQueries({ queryKey: settingsKeys.all });

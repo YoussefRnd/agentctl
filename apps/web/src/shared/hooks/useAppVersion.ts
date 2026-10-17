@@ -8,12 +8,16 @@ export function useAppVersion(): string {
 
   useEffect(() => {
     if (!window.electronAPI?.getAppVersion) return;
+    let active = true;
     void window.electronAPI
       .getAppVersion()
       .then((ver) => {
-        if (ver) setVersion(ver);
+        if (active && ver) setVersion(ver);
       })
       .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
 
   return version;

@@ -16,7 +16,9 @@ export const sessionKeys = {
       : (['session-merge-preview', sessionId] as const),
   allGitStatuses: ['session-git-status'] as const,
   gitStatus: (sessionId: string) => ['session-git-status', sessionId] as const,
-  events: (sessionId: string) => ['events', sessionId] as const,
+  execution: (sessionId: string) => ['session-execution', sessionId] as const,
+  initialHistory: (sessionId: string) => ['session-initial-history', sessionId] as const,
+  events: (sessionId: string | null) => ['events', sessionId] as const,
   turnIndex: (sessionId: string) => ['events', sessionId, 'turn-index'] as const,
 };
 
@@ -36,4 +38,5 @@ export const settingsKeys = {
 
 export const mcpKeys = {
   all: ['mcp-servers'] as const,
+  tools: ['mcpTools'] as const,
 };

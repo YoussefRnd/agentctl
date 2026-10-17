@@ -1,3 +1,4 @@
+import { projectKeys } from '@/shared/lib/queryKeys';
 import { useSession, useSessionQueue } from './SessionContext';
 import { api, type SidebarProject } from '@agentctl/api-client';
 import {
@@ -35,7 +36,7 @@ export function useSessionActions() {
     const currentSession =
       queryClient.getQueryData<SessionWithCapabilities>(sessionKeys.detail(sessionId)) ??
       sessionData;
-    const execution = queryClient.getQueryData<SessionExecution>(['session-execution', sessionId]);
+    const execution = queryClient.getQueryData<SessionExecution>(sessionKeys.execution(sessionId));
     const isWaiting =
       currentSession?.session.status === 'running' ||
       currentSession?.session.status === 'error' ||
@@ -58,7 +59,7 @@ export function useSessionActions() {
       createdAt: new Date(),
     };
 
-    queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
+    queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), (old = []) => {
       return [...old, optimisticEvent];
     });
 
@@ -76,7 +77,7 @@ export function useSessionActions() {
         );
       if (!isWaiting)
         queryClient.setQueryData<SessionWithCapabilities>(
-          ['session', sessionId],
+          sessionKeys.detail(sessionId),
           (old: SessionWithCapabilities | undefined) => {
             if (!old) return old;
             return {
@@ -91,7 +92,7 @@ export function useSessionActions() {
         );
 
       // Optimistically update projects query in cache
-      queryClient.setQueriesData<SidebarProject[]>({ queryKey: ['projects'] }, (old) => {
+      queryClient.setQueriesData<SidebarProject[]>({ queryKey: projectKeys.all }, (old) => {
         if (!old) return old;
         return old.map((p) => ({
           ...p,
@@ -120,8 +121,8 @@ export function useSessionActions() {
           tempId,
           isWaiting ? 'queued' : 'accepted',
         );
-        void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.execution(sessionId) });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
         return true;
       } catch (error) {
         const persisted = queryClient
@@ -134,7 +135,7 @@ export function useSessionActions() {
           );
         if (persisted) {
           useMessageQueueStore.getState().dequeueMessage(sessionId, clientMessageId);
-          void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.execution(sessionId) });
           return true;
         }
         if (!isWaiting) cancelPromptPerformance(sessionId);
@@ -144,7 +145,7 @@ export function useSessionActions() {
           .setMessageStatus(sessionId, clientMessageId, 'failed', message);
         updateOptimisticDelivery(queryClient, sessionId, tempId, 'failed', message);
         queryClient.setQueryData<SessionWithCapabilities>(
-          ['session', sessionId],
+          sessionKeys.detail(sessionId),
           (old: SessionWithCapabilities | undefined) => {
             if (!old || isWaiting) return old;
             return {
@@ -156,8 +157,8 @@ export function useSessionActions() {
             };
           },
         );
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
         toast.error('Failed to send message', {
           description: message,
           action: {
@@ -177,8 +178,8 @@ export function useSessionActions() {
         body: { eventId, optionId },
       })
       .then(() => {
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       })
       .catch((err: unknown) => {
         toast.error(err instanceof Error ? err.message : 'Failed to respond to approval');
@@ -192,8 +193,8 @@ export function useSessionActions() {
         body: { eventId },
       })
       .then(() => {
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       })
       .catch((err: unknown) => {
         toast.error(err instanceof Error ? err.message : 'Failed to respond to approval');
@@ -207,8 +208,8 @@ export function useSessionActions() {
         body: {},
       })
       .then(() => {
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Failed to stop agent';

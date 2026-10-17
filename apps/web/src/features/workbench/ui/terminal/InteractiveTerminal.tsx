@@ -114,9 +114,18 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       );
     }, [splitTab, resolvedSessionId, activeTab.id, activeTab.panes.length]);
 
+    const layoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(
+      () => () => {
+        if (layoutTimer.current) clearTimeout(layoutTimer.current);
+      },
+      [resolvedSessionId],
+    );
     const handleToggleOrientation = useCallback(() => {
       toggleSplitOrientation(resolvedSessionId, activeTab.id);
-      setTimeout(() => {
+      if (layoutTimer.current) clearTimeout(layoutTimer.current);
+      layoutTimer.current = setTimeout(() => {
+        layoutTimer.current = null;
         activeTab.panes.forEach((p) => {
           paneRefs.current.get(p.id)?.fit();
         });

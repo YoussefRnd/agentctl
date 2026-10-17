@@ -43,6 +43,7 @@ const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 export function useAttachments(sessionId: string, initialFiles: File[] = []): UseAttachmentsReturn {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const initialFilesRef = useRef(initialFiles);
+  const uploads = useRef(new Map<string, AbortController>());
 
   // -------------------------------------------------------------------------
   // Helpers
@@ -59,12 +60,21 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
 
   const uploadFile = useCallback(
     (localId: string, file: File) => {
+      uploads.current.get(localId)?.abort();
+      const controller = new AbortController();
+      uploads.current.set(localId, controller);
       patchAttachment(localId, { state: 'uploading', progress: 0, errorMessage: undefined });
 
-      uploadAttachment(sessionId, file, (pct: number) => {
-        patchAttachment(localId, { progress: pct });
-      })
+      uploadAttachment(
+        sessionId,
+        file,
+        (pct: number) => {
+          if (!controller.signal.aborted) patchAttachment(localId, { progress: pct });
+        },
+        controller.signal,
+      )
         .then(({ attachmentId }: { attachmentId: string }) => {
+          if (controller.signal.aborted) return;
           patchAttachment(localId, {
             state: 'ready',
             attachmentId,
@@ -72,8 +82,12 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
           });
         })
         .catch((err: unknown) => {
+          if (controller.signal.aborted) return;
           const errorMessage = err instanceof Error ? err.message : 'Upload failed';
           patchAttachment(localId, { state: 'error', errorMessage });
+        })
+        .finally(() => {
+          if (uploads.current.get(localId) === controller) uploads.current.delete(localId);
         });
     },
     [sessionId, patchAttachment],
@@ -141,6 +155,8 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
   // -------------------------------------------------------------------------
 
   const removeAttachment = useCallback((localId: string) => {
+    uploads.current.get(localId)?.abort();
+    uploads.current.delete(localId);
     setAttachments((prev) => {
       const target = prev.find((a) => a.localId === localId);
       if (target) {
@@ -155,6 +171,8 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
   // -------------------------------------------------------------------------
 
   const clearAll = useCallback(() => {
+    for (const controller of uploads.current.values()) controller.abort();
+    uploads.current.clear();
     setAttachments((prev) => {
       for (const attachment of prev) {
         URL.revokeObjectURL(attachment.objectUrl);
@@ -182,6 +200,8 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
     attachmentsRef.current = restored;
     setAttachments(restored);
     return () => {
+      for (const controller of uploads.current.values()) controller.abort();
+      uploads.current.clear();
       for (const attachment of attachmentsRef.current) URL.revokeObjectURL(attachment.objectUrl);
     };
   }, [sessionId]);

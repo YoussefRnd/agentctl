@@ -1,3 +1,4 @@
+import { sessionKeys } from '@/shared/lib/queryKeys';
 import { initialHistoryOptions, INITIAL_HISTORY_FRESH_MS } from '../api/sessionNavigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -82,7 +83,7 @@ export function useSessionHistory(sessionId: string | null) {
     [setWindow, client],
   );
   const query = useQuery({
-    queryKey: ['events', sessionId],
+    queryKey: sessionKeys.events(sessionId),
     queryFn: async () => {
       if (!sessionId) return [];
       // Intent cache is only for the first load. Explicit refetches (for example
@@ -94,7 +95,7 @@ export function useSessionHistory(sessionId: string | null) {
           (intent.status === 'success' &&
             Date.now() - intent.dataUpdatedAt < INITIAL_HISTORY_FRESH_MS));
       const page =
-        client.getQueryData(['events', sessionId]) === undefined && hasIntent
+        client.getQueryData(sessionKeys.events(sessionId)) === undefined && hasIntent
           ? await client.fetchQuery(initialHistoryOptions(sessionId))
           : await fetchPage(sessionId);
       resetWindow(sessionId, page);
@@ -174,7 +175,7 @@ export function useSessionHistory(sessionId: string | null) {
                 : (page.nextBeforeId ?? page.events.find((event) => event.id > 0)?.id),
             before: page.nextBeforeId,
           };
-        const current = client.getQueryData<SessionEventRow[]>(['events', sessionId]) ?? [];
+        const current = client.getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId)) ?? [];
         const merged = mergeEventHistory(page.events, current);
         const active = merged.filter(
           (event) =>
@@ -204,7 +205,7 @@ export function useSessionHistory(sessionId: string | null) {
           ),
         );
         client.setQueryData(
-          ['events', sessionId],
+          sessionKeys.events(sessionId),
           merged.filter(
             (event) => event.id < 0 || keepIds.has(event.id) || latest?.anchors?.includes(event.id),
           ),
@@ -253,7 +254,7 @@ export function useSessionHistory(sessionId: string | null) {
     generation.current++;
     requests.current.get(sessionId)?.controller.abort();
     requests.current.delete(sessionId);
-    const current = client.getQueryData<SessionEventRow[]>(['events', sessionId]) ?? [];
+    const current = client.getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId)) ?? [];
     const latest =
       latestRef.current.get(sessionId) ??
       client.getQueryData<HistoryWindow>(['events-latest-window', sessionId]);

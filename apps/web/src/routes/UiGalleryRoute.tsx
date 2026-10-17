@@ -127,6 +127,13 @@ function QueueEditingPreview() {
   const [rewindMode, setRewindMode] = useState<RewindMode>('conversation');
   const [rewindOpen, setRewindOpen] = useState(false);
   const [isRewinding, setIsRewinding] = useState(false);
+  const rewindTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (rewindTimer.current) clearTimeout(rewindTimer.current);
+    },
+    [],
+  );
   const [client] = useState(() => new QueryClient());
   return (
     <section aria-label="Queue and editing preview" className="mx-auto w-full max-w-2xl">
@@ -152,7 +159,9 @@ function QueueEditingPreview() {
             isLoading={isRewinding}
             onConfirm={() => {
               setIsRewinding(true);
-              window.setTimeout(() => {
+              if (rewindTimer.current) clearTimeout(rewindTimer.current);
+              rewindTimer.current = setTimeout(() => {
+                rewindTimer.current = null;
                 setPrompt('did u complete?');
                 setRewindOpen(false);
                 setIsRewinding(false);

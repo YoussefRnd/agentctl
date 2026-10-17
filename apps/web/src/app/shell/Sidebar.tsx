@@ -1,3 +1,5 @@
+import { useWorkspaceDrop } from './model/useWorkspaceDrop';
+import { sessionKeys, projectKeys } from '@/shared/lib/queryKeys';
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -5,7 +7,6 @@ import { Plus, MessageSquare, Folder, FolderUp } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import {
   apiClient,
-  openProjectFolder,
   deleteProject,
   archiveSession,
   deleteSession,
@@ -170,7 +171,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       errorMessage: 'Failed to remove project',
     }).then((result) => {
       if (result) {
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
         void navigate('/');
       }
     });
@@ -188,7 +189,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
           );
           if (project) keepProjectExpanded(project.id);
         }
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
         if (currentActiveSessionId === sessionId) {
           void navigate('/');
         }
@@ -202,8 +203,8 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       errorMessage: 'Failed to archive session',
     }).then((result) => {
       if (result) {
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
-        void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       }
     });
   };
@@ -221,8 +222,8 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
         errorMessage: 'Failed to rename session',
       }).then((result) => {
         if (result) {
-          void queryClient.invalidateQueries({ queryKey: ['projects'] });
-          void queryClient.invalidateQueries({ queryKey: ['session', target.id] });
+          void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(target.id) });
         }
       });
     }
@@ -235,7 +236,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       errorMessage: 'Failed to fork session',
     }).then((result) => {
       if (result?.forkSessionId) {
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
         void navigate(`/sessions/${result.forkSessionId}`);
       }
     });
@@ -248,157 +249,8 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
 
   const totalSessionsCount = filteredProjects.reduce((acc, p) => acc + p.sessions.length, 0);
 
-  const [isDraggingOverSidebar, setIsDraggingOverSidebar] = useState(false);
-  const dragCounter = useRef(0);
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    const types = Array.from(e.dataTransfer?.types || []);
-    if (types.includes('Files') || types.includes('text/uri-list')) {
-      dragCounter.current += 1;
-      if (dragCounter.current === 1) {
-        setIsDraggingOverSidebar(true);
-      }
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'copy';
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounter.current = Math.max(0, dragCounter.current - 1);
-    if (dragCounter.current === 0) {
-      setIsDraggingOverSidebar(false);
-    }
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounter.current = 0;
-    setIsDraggingOverSidebar(false);
-
-    const files = e.dataTransfer?.files;
-    const firstFile = files?.[0];
-
-    let resolvedPath: string | undefined = undefined;
-
-    // 1. Electron webUtils API (if running in Electron)
-    if (firstFile && window.electronAPI?.getPathForFile) {
-      try {
-        resolvedPath = window.electronAPI.getPathForFile(firstFile);
-      } catch {
-        // fallback
-      }
-    }
-
-    // 2. Electron / node-enabled File.path
-    if (
-      !resolvedPath &&
-      firstFile &&
-      'path' in firstFile &&
-      typeof (firstFile as { path?: string }).path === 'string' &&
-      (firstFile as { path?: string }).path
-    ) {
-      resolvedPath = (firstFile as { path?: string }).path;
-    }
-
-    // 3. text/uri-list (Standard MIME type from OS file managers: Nautilus, Dolphin, macOS Finder)
-    if (!resolvedPath && e.dataTransfer) {
-      const uriList = e.dataTransfer.getData('text/uri-list');
-      if (uriList) {
-        const lines = uriList.split(/\r?\n/);
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed && !trimmed.startsWith('#') && trimmed.startsWith('file://')) {
-            try {
-              const url = new URL(trimmed);
-              let p = decodeURIComponent(url.pathname);
-              if (/^\/[a-zA-Z]:/.test(p)) {
-                p = p.slice(1);
-              }
-              if (p) {
-                resolvedPath = p;
-                break;
-              }
-            } catch {
-              // continue
-            }
-          }
-        }
-      }
-    }
-
-    // 4. text/plain fallback (Raw file path or file:// URL)
-    if (!resolvedPath && e.dataTransfer) {
-      const textPlain = e.dataTransfer.getData('text/plain');
-      if (textPlain) {
-        const lines = textPlain.split(/\r?\n/);
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('file://')) {
-            try {
-              const url = new URL(trimmed);
-              let p = decodeURIComponent(url.pathname);
-              if (/^\/[a-zA-Z]:/.test(p)) {
-                p = p.slice(1);
-              }
-              if (p) {
-                resolvedPath = p;
-                break;
-              }
-            } catch {
-              // continue
-            }
-          } else if (trimmed.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(trimmed)) {
-            resolvedPath = trimmed;
-            break;
-          }
-        }
-      }
-    }
-
-    // 5. Match against existing registered projects by folder name
-    const folderName = firstFile?.name?.replace(/[\\/]$/, '');
-    if (!resolvedPath && folderName && projects.length > 0) {
-      const cleanName = folderName.toLowerCase();
-      const match = projects.find(
-        (p) =>
-          p.name.toLowerCase() === cleanName ||
-          p.path.toLowerCase().endsWith(`/${cleanName}`) ||
-          p.path.toLowerCase().endsWith(`\\${cleanName}`),
-      );
-      if (match) {
-        resolvedPath = match.path;
-      }
-    }
-
-    // 6. Path to attempt opening: either full resolved path or the folder name (server searches candidate directories)
-    const pathToOpen = resolvedPath || folderName;
-
-    if (!pathToOpen) {
-      toast.error('Unable to determine folder path');
-      return;
-    }
-
-    try {
-      const project = await openProjectFolder(pathToOpen);
-      await queryClient.invalidateQueries({ queryKey: ['projects'] });
-      void navigate(`/?project=${encodeURIComponent(project.id)}`);
-      toast.success('Workspace opened');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to open workspace';
-      toast.error(msg);
-      if (!resolvedPath) {
-        void navigate('/');
-      }
-    }
-  };
-
+  const { isDraggingOverSidebar, handleDragEnter, handleDragOver, handleDragLeave, handleDrop } =
+    useWorkspaceDrop(projects);
   return (
     <aside
       aria-label="Main Sidebar"

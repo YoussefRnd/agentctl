@@ -22,11 +22,23 @@ export function UpdateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!window.electronAPI?.update) return;
+    let active = true;
+    let observed = false;
+    const unsubscribe = window.electronAPI.update.onUpdate((next) => {
+      observed = true;
+      if (active) setState(next);
+    });
     void window.electronAPI.update
       .getState()
-      .then(setState)
+      .then((initial) => {
+        // A delayed snapshot must not replace a more recent subscription event.
+        if (active && !observed) setState(initial);
+      })
       .catch(() => undefined);
-    return window.electronAPI.update.onUpdate(setState);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   const install = useCallback(() => {

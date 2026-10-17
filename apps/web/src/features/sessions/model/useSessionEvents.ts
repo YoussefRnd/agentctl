@@ -49,7 +49,7 @@ export function useSessionEvents(sessionId: string | null) {
         }
       }
       if (hasUserUpdate) {
-        void queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.execution(sessionId) });
         void queryClient.invalidateQueries({ queryKey: sessionKeys.turnIndex(sessionId) });
       }
     };
@@ -70,7 +70,7 @@ export function useSessionEvents(sessionId: string | null) {
         observePromptPerformance(sessionId, snapshot.events);
         void queryClient.invalidateQueries({ queryKey: sessionKeys.turnIndex(sessionId) });
         resetWindow(sessionId, snapshot);
-        queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) =>
+        queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), (old = []) =>
           mergeEventHistory(
             snapshot.events,
             reconcileOptimisticMessages(
@@ -84,7 +84,7 @@ export function useSessionEvents(sessionId: string | null) {
       onEventsUpdate: (newEvents) => {
         reconcileOutbox(newEvents);
         observePromptPerformance(sessionId, newEvents);
-        queryClient.setQueryData<SessionEventRow[]>(['events', sessionId], (old = []) => {
+        queryClient.setQueryData<SessionEventRow[]>(sessionKeys.events(sessionId), (old = []) => {
           const lastOldId = old.length > 0 ? old[old.length - 1].id : 0;
           const hasOptimistic = old.some((e) => e.id < 0);
           const realUserMessages = newEvents.filter(

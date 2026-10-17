@@ -92,7 +92,12 @@ describe('useAttachments retryAttachment', () => {
       expect(att.dataset.state).toBe('ready');
     });
     expect(mockedUpload).toHaveBeenCalledTimes(2);
-    expect(mockedUpload).toHaveBeenLastCalledWith('sess-1', expect.any(File), expect.any(Function));
+    expect(mockedUpload).toHaveBeenLastCalledWith(
+      'sess-1',
+      expect.any(File),
+      expect.any(Function),
+      expect.any(AbortSignal),
+    );
   });
 });
 
@@ -138,4 +143,30 @@ describe('Home attachments', () => {
     act(() => root.render(null));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:2');
   });
+});
+
+it('aborts removed, cleared and previous-session uploads and ignores their late results', async () => {
+  const signals: AbortSignal[] = [];
+  const completions: ((value: Awaited<ReturnType<typeof uploadAttachment>>) => void)[] = [];
+  mockedUpload.mockImplementation((_session, _file, _progress, signal) => {
+    signals.push(signal!);
+    return new Promise((done) => completions.push(done));
+  });
+  let hook!: ReturnType<typeof useAttachments>;
+  function Session({ id }: { id: string }) {
+    hook = useAttachments(id);
+    return null;
+  }
+  act(() => root.render(<Session id="a" />));
+  act(() => hook.addFiles([makePngFile()]));
+  act(() => hook.removeAttachment(hook.attachments[0].localId));
+  expect(signals[0].aborted).toBe(true);
+  act(() => hook.addFiles([makePngFile()]));
+  act(() => root.render(<Session id="b" />));
+  expect(signals[1].aborted).toBe(true);
+  await act(async () => completions.forEach((done) => done({ attachmentId: 'stale' } as never)));
+  expect(hook.attachments).toEqual([]);
+  act(() => hook.addFiles([makePngFile()]));
+  act(() => hook.clearAll());
+  expect(signals[2].aborted).toBe(true);
 });

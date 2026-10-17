@@ -1,3 +1,4 @@
+import { projectKeys } from '@/shared/lib/queryKeys';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -55,7 +56,7 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
         if (!session) {
           session = await createProjectSession(projectId, mode, providerId, settings);
           store.updateHomeDraft(projectId, { session, uploadedFiles: [] });
-          void queryClient.invalidateQueries({ queryKey: ['projects'] });
+          void queryClient.invalidateQueries({ queryKey: projectKeys.all });
         } else if (
           session.selectedProvider !== providerId ||
           session.selectedModel !== settings.selectedModel ||
@@ -176,8 +177,8 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
         queue.dequeueMessage(session.id, clientMessageId);
         acknowledgeSessionInput(queryClient, session.id, clientMessageId, response.body.eventId);
         store.clearHomeDraft(projectId);
-        void queryClient.invalidateQueries({ queryKey: ['session-execution', session.id] });
-        void queryClient.invalidateQueries({ queryKey: ['projects'] });
+        void queryClient.invalidateQueries({ queryKey: sessionKeys.execution(session.id) });
+        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
         return true;
       } catch (err) {
         if (pendingSessionId && clientMessageId) {
@@ -193,9 +194,9 @@ export function useHomeSessionStart(onStarted: (sessionId: string) => void) {
             useMessageQueueStore.getState().dequeueMessage(pendingSessionId, clientMessageId);
             useDraftStore.getState().clearHomeDraft(projectId);
             void queryClient.invalidateQueries({
-              queryKey: ['session-execution', pendingSessionId],
+              queryKey: sessionKeys.execution(pendingSessionId),
             });
-            void queryClient.invalidateQueries({ queryKey: ['projects'] });
+            void queryClient.invalidateQueries({ queryKey: projectKeys.all });
             return true;
           }
           if (optimisticEventId !== undefined)

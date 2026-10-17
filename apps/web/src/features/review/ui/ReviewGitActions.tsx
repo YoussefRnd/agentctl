@@ -1,5 +1,6 @@
-import { useGitDraft, formatGeneratedCommit } from '../model/useGitDraft';
-import { useRef, useState } from 'react';
+import { formatGeneratedCommit } from '../model/useGitDraft';
+import { useReviewGitActions } from '../model/useReviewGitActions';
+import type { ReviewGitActionsProps } from '../model/review-git-actions';
 import type { ReactNode } from 'react';
 import {
   Dialog,
@@ -33,43 +34,6 @@ import {
 } from './GitDialog';
 
 import { formatShortcut } from '@/shared/lib/platform';
-
-type PendingAction = 'commit' | 'commit-push' | 'push' | 'pull' | 'switch' | 'fetch' | null;
-
-interface ReviewGitActionsProps {
-  sessionId?: string;
-  baseBranch?: string;
-  mode?: 'local' | 'worktree';
-  branch: string | null;
-  branches: string[];
-  hasBranchChanges: boolean;
-  stagedCount: number;
-  unstagedCount: number;
-  uncommittedCount?: number;
-  additions: number;
-  deletions: number;
-  aheadCount: number;
-  behindCount: number;
-  hasUpstream: boolean;
-  isBaseBranch: boolean;
-  canPush: boolean;
-  isLoadingGitStatus: boolean;
-  commitMessage: string;
-  onCommitMessageChange: (value: string) => void;
-  onSwitchBranch: (branch: string) => Promise<void>;
-  onCommit: (message: string, includeUnstaged?: boolean) => Promise<void>;
-  onPush: () => Promise<void>;
-  onPull: () => Promise<void>;
-  onOpenPullRequestDialog: () => void;
-  onFetch?: () => Promise<void>;
-  onCreateBranch?: (name: string) => Promise<void>;
-  lastFetchedAt?: string | null;
-  workspaceBusy?: boolean;
-  existingPullRequest?: { number: number; url: string };
-  pullRequestBlockedReason?: string;
-  onApplySession: () => void;
-  onDiscardChanges: () => void;
-}
 
 export function ReviewGitActions({
   sessionId = '',
@@ -105,134 +69,55 @@ export function ReviewGitActions({
   onApplySession,
   onDiscardChanges,
 }: ReviewGitActionsProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [syncOpen, setSyncOpen] = useState(false);
-  const [pushAfterCommit, setPushAfterCommit] = useState(false);
-  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
-  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
-  const [newBranch, setNewBranch] = useState('');
-  const inFlight = useRef(false);
-  const [allowBaseBranchPush, setAllowBaseBranchPush] = useState(() => {
-    try {
-      return localStorage.getItem('agentctl.allowBaseBranchPush') === 'true';
-    } catch {
-      return false;
-    }
-  });
-  const [includeUnstaged, setIncludeUnstaged] = useState(true);
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [commitStep, setCommitStep] = useState('');
-  const [pushRetry, setPushRetry] = useState<{ sessionId: string; branch: string | null } | null>(
-    null,
-  );
-  const needsPushRetry =
-    pushRetry !== null && pushRetry.sessionId === sessionId && pushRetry.branch === branch;
-
-  const includedCount = includeUnstaged
-    ? (uncommittedCount ?? stagedCount + unstagedCount)
-    : stagedCount;
-  const draft = useGitDraft(
-    sessionId,
+  const {
+    menuOpen,
+    setMenuOpen,
+    syncOpen,
+    setSyncOpen,
+    pushAfterCommit,
+    setPushAfterCommit,
     commitDialogOpen,
-    { kind: 'commit', includeUnstaged },
+    setCommitDialogOpen,
+    branchDialogOpen,
+    setBranchDialogOpen,
+    newBranch,
+    setNewBranch,
+    allowBaseBranchPush,
+    includeUnstaged,
+    setIncludeUnstaged,
+    pendingAction,
+    error,
+    setError,
+    feedback,
+    commitStep,
+    setPushRetry,
+    needsPushRetry,
+    includedCount,
+    draft,
+    isGitActionPending,
+    isBusy,
+    isDiverged,
+    publishAfterCommit,
+    pushBlockedReason,
+    changePushPreference,
+    run,
+    commit,
+  } = useReviewGitActions({
+    sessionId,
+    branch,
+    uncommittedCount,
+    stagedCount,
+    unstagedCount,
+    workspaceBusy,
+    aheadCount,
+    behindCount,
+    canPush,
+    isBaseBranch,
     commitMessage,
-  );
-  // Agent activity blocks Git mutations, but must not trap users in an overlay.
-  const isGitActionPending = pendingAction !== null;
-  const isBusy = isGitActionPending || workspaceBusy || draft.isGenerating;
-  const isDiverged = aheadCount > 0 && behindCount > 0;
-  const publishAfterCommit = pushAfterCommit && canPush;
-  const pushBlockedReason = !canPush
-    ? 'Connect a Git remote and check out a branch before pushing.'
-    : isDiverged
-      ? 'Local and remote history have diverged. Resolve the divergence before pushing or pulling.'
-      : isBaseBranch && !allowBaseBranchPush
-        ? 'Allow pushing to the base branch before publishing your commits.'
-        : undefined;
-  const changePushPreference = (allowed: boolean) => {
-    setAllowBaseBranchPush(allowed);
-    try {
-      localStorage.setItem('agentctl.allowBaseBranchPush', String(allowed));
-    } catch {
-      /* Storage can be unavailable. */
-    }
-  };
-
-  const run = async (
-    action: Exclude<PendingAction, null>,
-    operation: () => Promise<void>,
-    closeOnSuccess = true,
-  ) => {
-    if (inFlight.current || workspaceBusy || draft.isGenerating) return;
-    inFlight.current = true;
-    try {
-      setError(null);
-      setFeedback(null);
-      setPendingAction(action);
-      await operation();
-      if (action === 'fetch') setFeedback('Remote information refreshed.');
-      if (action === 'pull') setFeedback('Remote changes pulled into this branch.');
-      if (action === 'push') {
-        setFeedback('Commits pushed to the remote.');
-        setPushRetry(null);
-      }
-      if (action === 'commit') setFeedback('Changes committed locally.');
-      if (action === 'commit-push') setFeedback('Changes committed and pushed to the remote.');
-      if (closeOnSuccess) {
-        setCommitDialogOpen(false);
-        setSyncOpen(false);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      inFlight.current = false;
-      setPendingAction(null);
-      setCommitStep('');
-    }
-  };
-
-  const retryPush = async () => {
-    if (!needsPushRetry || pushBlockedReason) return;
-    await run('push', async () => {
-      await onPush();
-      setPushRetry(null);
-    });
-  };
-
-  const commit = async (pushAfterCommit: boolean) => {
-    if (needsPushRetry) {
-      await retryPush();
-      return;
-    }
-    if (includedCount === 0 || (pushAfterCommit && pushBlockedReason)) return;
-    await run(pushAfterCommit ? 'commit-push' : 'commit', async () => {
-      let finalMessage = commitMessage.trim();
-      if (!finalMessage && sessionId) {
-        const generated = await draft.generate();
-        if (!generated)
-          throw new Error('Could not generate a message. Try again or enter one manually.');
-        finalMessage = formatGeneratedCommit(generated);
-        onCommitMessageChange(finalMessage);
-      }
-      if (!finalMessage) throw new Error('Enter a commit message');
-      setCommitStep('Committing…');
-      await onCommit(finalMessage, includeUnstaged);
-      if (pushAfterCommit) {
-        setPushRetry({ sessionId, branch });
-        setCommitStep('Pushing…');
-        try {
-          await onPush();
-          setPushRetry(null);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          throw new Error(`Commit succeeded, but push failed: ${message}`);
-        }
-      }
-    });
-  };
-
+    onCommitMessageChange,
+    onCommit,
+    onPush,
+  });
   const openPullRequest = () => {
     setMenuOpen(false);
     if (existingPullRequest) {

@@ -1,4 +1,5 @@
-import { useState, useRef, type ComponentPropsWithoutRef } from 'react';
+import { useCopyFeedback } from '@/shared/hooks/useCopyFeedback';
+import { useRef, type ComponentPropsWithoutRef } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@agentctl/ui';
 
@@ -7,17 +8,13 @@ export function MarkdownCodeBlock({
   className,
   ...props
 }: ComponentPropsWithoutRef<'pre'>) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback();
   const preRef = useRef<HTMLPreElement>(null);
 
   const handleCopy = () => {
     if (!preRef.current) return;
     const text = preRef.current.innerText || '';
-    void navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    copy(text);
   };
 
   return (

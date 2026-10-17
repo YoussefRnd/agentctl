@@ -1,6 +1,10 @@
+import { sessionKeys, projectKeys } from '@/shared/lib/queryKeys';
+import { useFrameScheduler } from '@/shared/hooks/useFrameScheduler';
 import { ChildConversation } from './ChildConversation';
 import { ChangedFileRow } from './ChangedFileRow';
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useRef, useCallback, useMemo, useEffect } from 'react';
+import { useConversationHistory } from '../model/useConversationHistory';
+import { useConversationHandoff } from '../model/useConversationHandoff';
 import { afterPaint, journeyPerformance } from '@/shared/lib/performanceRecorder';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -8,15 +12,13 @@ import { toast } from 'sonner';
 import { RotateCcw, X, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   RewindConfirmDialog,
-  useOpenWorkspaceFile,
   useSession,
   useSessionActions,
   useSessionStream,
   useSessionTurnState,
-  type RewindMode,
 } from '@/features/sessions';
 import { useProviders, SwitchAgentModal } from '@/features/providers';
-import { CommandBar, useDraftStore } from '@/features/composer';
+import { CommandBar } from '@/features/composer';
 import { EventFeed } from './EventFeed';
 import { NewSessionEmptyState } from './NewSessionEmptyState';
 import { ApprovalComposerSlot } from './ApprovalComposerSlot';
@@ -26,13 +28,12 @@ import {
   isSubagentActive,
   useSubagentStore,
 } from '@/features/subagents';
-import { rewindSession, restoreSession, undoRewind, handoffSession } from '@agentctl/api-client';
-import { useReviewUIStore } from '@/features/review';
-import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
+import { restoreSession } from '@agentctl/api-client';
 import { Button, cn, IconButton, LoadingState } from '@agentctl/ui';
 
 export function MainFeed() {
   const { sessionId, sessionData, isLoadingSession } = useSession();
+  const scheduleFrame = useFrameScheduler(sessionId);
   const turn = useSessionTurnState();
   const {
     events,
@@ -83,310 +84,40 @@ export function MainFeed() {
     });
   }, [location.hash, location.pathname, location.search, locationState, navigate]);
 
-  const [switchAgentTarget, setSwitchAgentTarget] = useState<{
-    targetProvider: string;
-    targetModel?: string;
-  } | null>(null);
-  const [isHandoffLoading, setIsHandoffLoading] = useState(false);
-
-  const hasUserMessages = useMemo(() => {
-    return events.some((e) => {
-      if (e.type !== 'text' || !e.data) return false;
-      try {
-        const data = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as {
-          role?: string;
-          text?: string;
-          content?: string;
-        };
-        return data.role === 'user' && Boolean(data.text || data.content);
-      } catch {
-        return false;
-      }
-    });
-  }, [events]);
-
-  const handleProviderSelect = (providerId: string, modelId?: string) => {
-    if (isHandoffLoading) {
-      toast.info('An agent handoff is already in progress');
-      return;
-    }
-    const currentProvider = sessionData?.session.selectedProvider;
-    // If selecting the current provider or the session is empty: do in-place switch directly
-    if (providerId === currentProvider || !hasUserMessages) {
-      switchProvider(providerId, modelId, sessionData);
-      return;
-    }
-
-    // Active session switching to a different provider: trigger handoff modal
-    setSwitchAgentTarget({
-      targetProvider: providerId,
-      targetModel: modelId,
-    });
-  };
-
-  const handleConfirmHandoff = async (nextSessionFocus?: string) => {
-    if (!sessionId || !switchAgentTarget) return;
-    const target = switchAgentTarget;
-    setIsHandoffLoading(true);
-    // The source agent may request permission while preparing the handoff. Close
-    // the modal so those approval controls remain reachable in the main feed.
-    setSwitchAgentTarget(null);
-    try {
-      const result = await handoffSession(
-        sessionId,
-        target.targetProvider,
-        target.targetModel,
-        nextSessionFocus,
-      );
-      toast.success(
-        result.handoffSource === 'skill'
-          ? `Handoff completed with ${target.targetProvider}`
-          : `Handoff completed with generated context for ${target.targetProvider}`,
-      );
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['session', result.sessionId] }),
-        queryClient.invalidateQueries({ queryKey: ['events', result.sessionId] }),
-        queryClient.invalidateQueries({ queryKey: ['projects'] }),
-      ]);
-      if (result.sessionId !== sessionId) {
-        void navigate(`/sessions/${result.sessionId}`);
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to switch agent');
-    } finally {
-      setIsHandoffLoading(false);
-    }
-  };
-
-  const handleConfirmNewSession = () => {
-    const projectId = sessionData?.session.projectId;
-    if (!projectId || !switchAgentTarget) return;
-    const target = switchAgentTarget;
-    setSwitchAgentTarget(null);
-    useDraftStore.getState().updateHomeDraft(projectId, {
-      mode: sessionData.session.mode,
-      providerId: target.targetProvider,
-      selectedModel: target.targetModel,
-      selectedThinkingEffort: undefined,
-      thinkingConfig: undefined,
-      agentPersona: undefined,
-    });
-    void navigate(`/?project=${encodeURIComponent(projectId)}`);
-  };
-
-  const [confirmRewind, setConfirmRewind] = useState<{
-    eventId: number;
-    mode: RewindMode;
-    messageCount?: number;
-    input: string;
-  } | null>(null);
-
-  const [isRewindDialogOpen, setIsRewindDialogOpen] = useState(false);
-  const [isRewinding, setIsRewinding] = useState(false);
-  const [rewindError, setRewindError] = useState<string | null>(null);
-  const historyMutationRef = useRef(false);
-  const historySnapshotRef = useRef<{ sessionId: string; events: typeof events } | null>(null);
-  const [isEditingHistory, setIsEditingHistory] = useState(false);
-
-  const [rewindUndoState, setRewindUndoState] = useState<{
-    eventId: number;
-    mode: RewindMode;
-    restoredFiles?: Array<{
-      path: string;
-      status: 'added' | 'modified' | 'deleted';
-      additions?: number;
-      deletions?: number;
-    }>;
-  } | null>(null);
-  const [isUndoing, setIsUndoing] = useState(false);
-  const [isDiffExpanded, setIsDiffExpanded] = useState(false);
-
-  const setWorkbenchTab = useWorkbenchStore((s) => s.setWorkbenchTab);
-  const setWorkbenchOpen = useWorkbenchStore((s) => s.setWorkbenchOpen);
-  const setReviewScope = useReviewUIStore((s) => s.setReviewScope);
-  const focusReviewFile = useReviewUIStore((s) => s.focusReviewFile);
-  const openWorkspaceFile = useOpenWorkspaceFile();
-
-  const totalAdditions = useMemo(
-    () => rewindUndoState?.restoredFiles?.reduce((acc, f) => acc + (f.additions ?? 0), 0) ?? 0,
-    [rewindUndoState],
-  );
-  const totalDeletions = useMemo(
-    () => rewindUndoState?.restoredFiles?.reduce((acc, f) => acc + (f.deletions ?? 0), 0) ?? 0,
-    [rewindUndoState],
-  );
-
-  const handleOpenReview = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!rewindUndoState?.restoredFiles) return;
-    setWorkbenchTab('changes');
-    setWorkbenchOpen(true);
-    setReviewScope('all_edits', {
-      sessionId,
-      files: rewindUndoState.restoredFiles.map((file) => file.path),
-    });
-  };
-
-  const handleOpenFileReview = (filePath: string) => {
-    if (!rewindUndoState?.restoredFiles) return;
-    setWorkbenchTab('changes');
-    setWorkbenchOpen(true);
-    focusReviewFile(filePath, {
-      sessionId,
-      files: rewindUndoState.restoredFiles.map((file) => file.path),
-    });
-  };
-
-  const [rewindInput, setRewindInput] = useState('');
-  const isHistoryChanging =
-    (isRewinding || isUndoing || isEditingHistory) &&
-    historySnapshotRef.current?.sessionId === sessionId;
-  const refreshConversation = useCallback(
-    () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['session', sessionId] }),
-        queryClient.invalidateQueries({ queryKey: ['events', sessionId] }),
-        queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] }),
-        queryClient.invalidateQueries({ queryKey: ['session-execution', sessionId] }),
-        queryClient.invalidateQueries({ queryKey: ['projects'] }),
-      ]),
-    [queryClient, sessionId],
-  );
-
-  const handleRewindRequest = useCallback(
-    (eventId: number, mode: RewindMode) => {
-      if (historyMutationRef.current) return;
-      const eventIndex = events.findIndex((e) => e.id === eventId);
-      const messageCount =
-        eventIndex === -1
-          ? mode === 'fork'
-            ? events.length
-            : 1
-          : mode === 'fork'
-            ? eventIndex + 1
-            : events.length - eventIndex;
-
-      const event = eventIndex !== -1 ? events[eventIndex] : null;
-      const content =
-        event && event.type === 'text' && 'content' in event.data
-          ? (event.data as { content: string }).content
-          : '';
-      setConfirmRewind({ eventId, mode, messageCount, input: content });
-      setIsRewindDialogOpen(true);
-      setRewindError(null);
-    },
-    [events],
-  );
-
-  const handleRewindConfirm = useCallback(async () => {
-    if (!confirmRewind || !isRewindDialogOpen) return;
-    if (historyMutationRef.current) return;
-    historyMutationRef.current = true;
-    historySnapshotRef.current = { sessionId, events: visibleEvents ?? events };
-    setIsRewinding(true);
-    setRewindError(null);
-    try {
-      const result = await rewindSession(sessionId, confirmRewind.eventId, confirmRewind.mode);
-      await refreshConversation();
-      if (confirmRewind.mode === 'fork') {
-        toast.success('Fork created successfully');
-      } else {
-        setRewindInput(confirmRewind.input);
-        toast.success('Session rewound');
-        setIsDiffExpanded(false);
-        setRewindUndoState({
-          eventId: confirmRewind.eventId,
-          mode: confirmRewind.mode,
-          restoredFiles: result.restoredFiles,
-        });
-      }
-      setIsRewindDialogOpen(false);
-      if (result.forkSessionId) {
-        void navigate(`/sessions/${result.forkSessionId}`);
-      }
-    } catch (err) {
-      setRewindError(err instanceof Error ? err.message : 'Rewind failed');
-    } finally {
-      historyMutationRef.current = false;
-      setIsRewinding(false);
-    }
-  }, [
+  const {
+    switchAgentTarget,
+    setSwitchAgentTarget,
+    isHandoffLoading,
+    hasUserMessages,
+    handleProviderSelect,
+    handleConfirmHandoff,
+    handleConfirmNewSession,
+  } = useConversationHandoff({ sessionId, sessionData, events, switchProvider });
+  const {
     confirmRewind,
     isRewindDialogOpen,
-    sessionId,
-    refreshConversation,
-    navigate,
-    visibleEvents,
-    events,
-  ]);
-
-  const handleUndoRewind = useCallback(async () => {
-    if (!rewindUndoState || historyMutationRef.current) return;
-    historyMutationRef.current = true;
-    historySnapshotRef.current = { sessionId, events: visibleEvents ?? events };
-    setIsUndoing(true);
-    try {
-      await undoRewind(sessionId);
-      await refreshConversation();
-      toast.success('Rewind undone');
-      setRewindUndoState(null);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to undo rewind');
-    } finally {
-      historyMutationRef.current = false;
-      setIsUndoing(false);
-    }
-  }, [rewindUndoState, sessionId, refreshConversation, visibleEvents, events]);
-
-  const handleEditAndSubmit = useCallback(
-    async (eventId: number, newContent: string) => {
-      const trimmed = newContent.trim();
-      if (!trimmed || historyMutationRef.current) return false;
-      const event =
-        queryClient
-          .getQueryData<typeof events>(['events', sessionId])
-          ?.find((item) => item.id === eventId) ?? events.find((item) => item.id === eventId);
-      if (
-        event?.type === 'text' &&
-        event.data.deliveryStatus === 'queued' &&
-        event.data.clientMessageId
-      )
-        return editQueuedMessage(event.data.clientMessageId, trimmed);
-      const attachmentIds =
-        event?.type === 'text'
-          ? (event.data.attachmentIds ??
-            event.data.attachments?.map((attachment) => attachment.attachmentId))
-          : undefined;
-      setRewindUndoState(null);
-      historyMutationRef.current = true;
-      historySnapshotRef.current = { sessionId, events: visibleEvents ?? events };
-      setIsEditingHistory(true);
-      try {
-        await rewindSession(sessionId, eventId, 'conversation');
-        const sent = await handleSend(trimmed, attachmentIds);
-        await refreshConversation();
-        if (sent === false) return false;
-        toast.success('Prompt updated and restarted');
-        return true;
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to update prompt');
-        return false;
-      } finally {
-        historyMutationRef.current = false;
-        setIsEditingHistory(false);
-      }
-    },
-    [
-      sessionId,
-      handleSend,
-      queryClient,
-      events,
-      visibleEvents,
-      editQueuedMessage,
-      refreshConversation,
-    ],
-  );
-
+    setIsRewindDialogOpen,
+    isRewinding,
+    rewindError,
+    historyMutationRef,
+    historySnapshotRef,
+    rewindUndoState,
+    setRewindUndoState,
+    isUndoing,
+    isDiffExpanded,
+    setIsDiffExpanded,
+    openWorkspaceFile,
+    totalAdditions,
+    totalDeletions,
+    handleOpenReview,
+    handleOpenFileReview,
+    rewindInput,
+    isHistoryChanging,
+    handleRewindRequest,
+    handleRewindConfirm,
+    handleUndoRewind,
+    handleEditAndSubmit,
+  } = useConversationHistory({ sessionId, events, visibleEvents, handleSend, editQueuedMessage });
   const pendingApprovals = events.filter(
     (event) => event.type === 'approval_request' && event.data.status === 'pending',
   );
@@ -478,10 +209,10 @@ export function MainFeed() {
                   try {
                     await restoreSession(sessionId);
                     toast.success('Session restored successfully');
-                    void queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
-                    void queryClient.invalidateQueries({ queryKey: ['events', sessionId] });
-                    void queryClient.invalidateQueries({ queryKey: ['session-review', sessionId] });
-                    void queryClient.invalidateQueries({ queryKey: ['projects'] });
+                    void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+                    void queryClient.invalidateQueries({ queryKey: sessionKeys.events(sessionId) });
+                    void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
+                    void queryClient.invalidateQueries({ queryKey: projectKeys.all });
                   } catch (err) {
                     toast.error(err instanceof Error ? err.message : 'Failed to restore session');
                   }
@@ -701,11 +432,11 @@ export function MainFeed() {
           onSelect={(group) => setActiveSubagentId(getSubagentGroupKey(group), sessionId)}
           onBack={() => {
             setActiveSubagentId(null);
-            requestAnimationFrame(() => parentFocusRef.current?.focus());
+            scheduleFrame(() => parentFocusRef.current?.focus());
           }}
           onReviewApproval={() => {
             setActiveSubagentId(null);
-            requestAnimationFrame(() => {
+            scheduleFrame(() => {
               document
                 .querySelector<HTMLElement>(
                   '[data-parent-conversation] [aria-labelledby="approval-title"]',

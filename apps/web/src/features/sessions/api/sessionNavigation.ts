@@ -21,7 +21,7 @@ export const INITIAL_HISTORY_FRESH_MS = 5_000;
 
 export const initialHistoryOptions = (sessionId: string) =>
   queryOptions({
-    queryKey: ['session-initial-history', sessionId] as const,
+    queryKey: sessionKeys.initialHistory(sessionId),
     queryFn: async () =>
       sessionEventPageSchema.parse(
         await apiClient.fetch(`/api/sessions/${sessionId}/events/page?limit=200`),

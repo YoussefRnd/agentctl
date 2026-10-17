@@ -1,3 +1,4 @@
+import { useCopyFeedback } from '@/shared/hooks/useCopyFeedback';
 import { memo, useState, useMemo, useRef, useLayoutEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -86,7 +87,7 @@ export const TextCard = memo(function TextCard({
   onEditSubmit,
 }: TextCardProps) {
   const [showMenu, setShowMenu] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback();
   const [isEditing, setIsEditing] = useState(false);
   const messageRef = useRef<HTMLDivElement>(null);
   const previousSizeRef = useRef<{ width: number; height: number } | null>(null);
@@ -94,11 +95,7 @@ export const TextCard = memo(function TextCard({
   const { sessionId } = useSession();
 
   const handleCopy = () => {
-    void navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    copy(content);
   };
 
   const changeEditing = (editing: boolean) => {

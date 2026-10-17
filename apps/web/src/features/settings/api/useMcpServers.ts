@@ -94,7 +94,7 @@ export interface McpToolData {
 
 export function useMcpTools() {
   const { data: tools = [], isLoading } = useQuery<McpToolData[]>({
-    queryKey: ['mcpTools'],
+    queryKey: mcpKeys.tools,
     queryFn: () => apiClient.fetch<McpToolData[]>('/api/mcp/tools'),
     refetchOnWindowFocus: true,
   });

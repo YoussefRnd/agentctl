@@ -8,7 +8,7 @@ import { sessionKeys } from '@/shared/lib/queryKeys';
 /** The browser outbox owns unacknowledged sends; accepted order belongs to the server. */
 export function useAcceptedMessageQueue(sessionId: string) {
   const client = useQueryClient();
-  const queryKey = useMemo(() => ['session-execution', sessionId], [sessionId]);
+  const queryKey = useMemo(() => sessionKeys.execution(sessionId), [sessionId]);
   const pendingRef = useRef<{ sessionId: string; id: string } | null>(null);
   const [pending, setPending] = useState<typeof pendingRef.current>(null);
   const query = useQuery({

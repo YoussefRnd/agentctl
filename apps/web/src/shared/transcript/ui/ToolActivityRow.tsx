@@ -1,3 +1,4 @@
+import { useCopyFeedback } from '@/shared/hooks/useCopyFeedback';
 import { useState, memo } from 'react';
 import {
   Terminal,
@@ -45,13 +46,7 @@ function ToolOutputDetails({ call }: { call: SessionEventToolCallData }) {
   );
 
   const fallbackText = textBlocks.length === 0 ? getCleanOutputText(rawOutput) : null;
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
+  const { copied, copy: handleCopy } = useCopyFeedback(1500);
 
   return (
     <div className="space-y-1 pt-1 pb-1">

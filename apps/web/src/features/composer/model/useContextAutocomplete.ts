@@ -1,3 +1,4 @@
+import { useFrameScheduler } from '@/shared/hooks/useFrameScheduler';
 import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import {
   searchContext,
@@ -66,6 +67,7 @@ export function useContextAutocomplete({
   setInput,
   textareaRef,
 }: UseContextAutocompleteProps): UseContextAutocompleteReturn {
+  const scheduleFrame = useFrameScheduler(sessionId || projectId);
   const listboxId = useId();
   const [dismissedMatch, setDismissedMatch] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ input: string; start: number; end: number } | null>(
@@ -181,7 +183,7 @@ export function useContextAutocomplete({
         const nextInput = `${before}${after}`;
         setInput(nextInput);
 
-        requestAnimationFrame(() => {
+        scheduleFrame(() => {
           if (textareaRef.current) {
             textareaRef.current.focus();
             textareaRef.current.selectionStart = textareaRef.current.selectionEnd =

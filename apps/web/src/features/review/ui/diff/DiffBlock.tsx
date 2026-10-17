@@ -1,3 +1,4 @@
+import { useCopyFeedback } from '@/shared/hooks/useCopyFeedback';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -265,18 +266,14 @@ export const DiffBlock = memo(function DiffBlock({
     [hunks],
   );
 
-  const [copiedPath, setCopiedPath] = useState(false);
+  const { copied: copiedPath, copy } = useCopyFeedback();
 
   const handleCopyPath = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      void navigator.clipboard.writeText(path);
-      setCopiedPath(true);
-      setTimeout(() => {
-        setCopiedPath(false);
-      }, 2000);
+      copy(path);
     },
-    [path],
+    [path, copy],
   );
 
   const fileName = path.split('/').pop() ?? path;

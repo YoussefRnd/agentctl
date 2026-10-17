@@ -1,0 +1,471 @@
+{
+  "areas": [
+    {
+      "area": "app/composition",
+      "owner": "Application startup, providers, router, query policy and state-change reconciliation",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/app/App.tsx",
+        "apps/web/src/app/AppProviders.tsx",
+        "apps/web/src/app/AppRouter.tsx",
+        "apps/web/src/app/queryClient.ts",
+        "apps/web/src/app/useServerStateSync.ts"
+      ]
+    },
+    {
+      "area": "app/session",
+      "owner": "Session header and launch composition",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/app/session/QuickLaunchSessionDialog.tsx",
+        "apps/web/src/app/session/SessionHeader.tsx",
+        "apps/web/src/app/session/SessionHeaderDialogs.tsx",
+        "apps/web/src/app/session/SessionHeaderTitle.tsx"
+      ]
+    },
+    {
+      "area": "app/shell",
+      "owner": "Shell layout, sidebar workflows, dialogs and host UI adapters",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/app/shell/AppErrorBoundary.tsx",
+        "apps/web/src/app/shell/AppShell.tsx",
+        "apps/web/src/app/shell/FontConfigApplier.tsx",
+        "apps/web/src/app/shell/FontZoomIndicator.tsx",
+        "apps/web/src/app/shell/ProjectItem.tsx",
+        "apps/web/src/app/shell/RenameSessionDialog.tsx",
+        "apps/web/src/app/shell/ShortcutsDialog.tsx",
+        "apps/web/src/app/shell/Sidebar.tsx",
+        "apps/web/src/app/shell/SidebarFilterMenu.tsx",
+        "apps/web/src/app/shell/SidebarFooter.tsx",
+        "apps/web/src/app/shell/SidebarProjectList.tsx",
+        "apps/web/src/app/shell/SidebarSearch.tsx",
+        "apps/web/src/app/shell/SidebarTranscriptResults.tsx",
+        "apps/web/src/app/shell/TitleBar.tsx",
+        "apps/web/src/app/shell/TitleBarWindowControls.tsx",
+        "apps/web/src/app/shell/UpdateIndicator.tsx",
+        "apps/web/src/app/shell/UpdateToast.tsx",
+        "apps/web/src/app/shell/index.ts",
+        "apps/web/src/app/shell/model/droppedWorkspace.ts",
+        "apps/web/src/app/shell/model/fontZoomLogic.ts",
+        "apps/web/src/app/shell/model/useFilteredProjects.ts",
+        "apps/web/src/app/shell/model/useFontZoom.ts",
+        "apps/web/src/app/shell/model/useShellStore.ts",
+        "apps/web/src/app/shell/model/useWorkspaceDrop.ts"
+      ]
+    },
+    {
+      "area": "bootstrap",
+      "owner": "Renderer entry, global CSS and host/test ambient declarations",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/electron.d.ts",
+        "apps/web/src/index.css",
+        "apps/web/src/main.tsx",
+        "apps/web/src/test-setup.ts"
+      ]
+    },
+    {
+      "area": "feature/command-palette",
+      "owner": "Search projection and dialog keyboard/focus state",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/command-palette/index.ts",
+        "apps/web/src/features/command-palette/model/useCommandPaletteStore.ts",
+        "apps/web/src/features/command-palette/ui/CommandPalette.tsx"
+      ]
+    },
+    {
+      "area": "feature/composer",
+      "owner": "Draft/input composition, attachments, context search, commands and durable-send acceptance",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/composer/index.ts",
+        "apps/web/src/features/composer/model/useAttachments.ts",
+        "apps/web/src/features/composer/model/useCommandBarState.ts",
+        "apps/web/src/features/composer/model/useComposerDraft.ts",
+        "apps/web/src/features/composer/model/useComposerFiles.ts",
+        "apps/web/src/features/composer/model/useComposerState.ts",
+        "apps/web/src/features/composer/model/useContextAutocomplete.ts",
+        "apps/web/src/features/composer/model/useDraftStore.ts",
+        "apps/web/src/features/composer/model/useHomeSessionStart.ts",
+        "apps/web/src/features/composer/model/usePromptHistory.ts",
+        "apps/web/src/features/composer/ui/AttachmentStrip.tsx",
+        "apps/web/src/features/composer/ui/CommandBar.tsx",
+        "apps/web/src/features/composer/ui/CommandBarToolbar.tsx",
+        "apps/web/src/features/composer/ui/CommandDropdown.tsx",
+        "apps/web/src/features/composer/ui/CommandInputComposer.tsx",
+        "apps/web/src/features/composer/ui/ComposerInput.tsx",
+        "apps/web/src/features/composer/ui/ContextChipStrip.tsx",
+        "apps/web/src/features/composer/ui/ContextDropdown.tsx",
+        "apps/web/src/features/composer/ui/DraftCommandBar.tsx",
+        "apps/web/src/features/composer/ui/ProviderConfigurator.tsx",
+        "apps/web/src/features/composer/ui/QueuedMessagesPillStack.tsx",
+        "apps/web/src/features/composer/ui/SessionController.tsx",
+        "apps/web/src/features/composer/ui/SlashCommandsDropdown.tsx",
+        "apps/web/src/features/composer/ui/SuggestionDropdown.tsx",
+        "apps/web/src/features/composer/ui/ThinkingEffortControl.tsx",
+        "apps/web/src/features/composer/ui/WorkspaceStateReviewer.tsx"
+      ]
+    },
+    {
+      "area": "feature/conversation",
+      "owner": "Feed rendering composed with history, handoff, virtual viewport and parent approval owners",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/conversation/index.ts",
+        "apps/web/src/features/conversation/lib/agentStreamPhase.ts",
+        "apps/web/src/features/conversation/lib/eventFeedGrouping.ts",
+        "apps/web/src/features/conversation/lib/feedGroupKey.ts",
+        "apps/web/src/features/conversation/lib/orderConversationEvents.ts",
+        "apps/web/src/features/conversation/lib/turnMinimapGrouping.ts",
+        "apps/web/src/features/conversation/lib/userMessageParser.ts",
+        "apps/web/src/features/conversation/model/useConversationHandoff.ts",
+        "apps/web/src/features/conversation/model/useConversationHistory.ts",
+        "apps/web/src/features/conversation/model/useFeedViewport.ts",
+        "apps/web/src/features/conversation/ui/ApprovalComposerSlot.tsx",
+        "apps/web/src/features/conversation/ui/ChangedFileRow.tsx",
+        "apps/web/src/features/conversation/ui/ChildConversation.tsx",
+        "apps/web/src/features/conversation/ui/EventFeed.tsx",
+        "apps/web/src/features/conversation/ui/EventFeedItem.tsx",
+        "apps/web/src/features/conversation/ui/MainFeed.tsx",
+        "apps/web/src/features/conversation/ui/NewSessionEmptyState.tsx",
+        "apps/web/src/features/conversation/ui/TurnMinimap.tsx",
+        "apps/web/src/features/conversation/ui/TurnPreviewPopover.tsx",
+        "apps/web/src/features/conversation/ui/cards/ActivityTimeline.tsx",
+        "apps/web/src/features/conversation/ui/cards/AgentResponse.tsx",
+        "apps/web/src/features/conversation/ui/cards/ApprovalCard.tsx",
+        "apps/web/src/features/conversation/ui/cards/CommandResultCard.tsx",
+        "apps/web/src/features/conversation/ui/cards/ContextAttachmentChip.tsx",
+        "apps/web/src/features/conversation/ui/cards/ElicitationCard.tsx",
+        "apps/web/src/features/conversation/ui/cards/MessageImageAttachment.tsx",
+        "apps/web/src/features/conversation/ui/cards/SessionMessage.tsx",
+        "apps/web/src/features/conversation/ui/cards/TextCard.tsx",
+        "apps/web/src/features/conversation/ui/cards/ThinkingBlock.tsx",
+        "apps/web/src/features/conversation/ui/cards/TimelineEvent.tsx",
+        "apps/web/src/features/conversation/ui/cards/ToolCallCard.tsx",
+        "apps/web/src/features/conversation/ui/cards/TurnChangesCard.tsx",
+        "apps/web/src/features/conversation/ui/cards/TurnErrorCard.tsx",
+        "apps/web/src/features/conversation/ui/cards/UnifiedActivityBlock.tsx"
+      ]
+    },
+    {
+      "area": "feature/projects",
+      "owner": "Project queries and directory explorer",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/projects/api/projectQueries.ts",
+        "apps/web/src/features/projects/index.ts",
+        "apps/web/src/features/projects/ui/DirectoryExplorer.tsx"
+      ]
+    },
+    {
+      "area": "feature/providers",
+      "owner": "Provider queries/mutations, selection and scoped authentication views",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/providers/api/useProviders.ts",
+        "apps/web/src/features/providers/index.ts",
+        "apps/web/src/features/providers/ui/BrowserAuthInteraction.tsx",
+        "apps/web/src/features/providers/ui/EmbeddedAuthTerminal.tsx",
+        "apps/web/src/features/providers/ui/LazyProviderAuthDialog.tsx",
+        "apps/web/src/features/providers/ui/ProviderAuthDialog.tsx",
+        "apps/web/src/features/providers/ui/ProviderPicker.tsx",
+        "apps/web/src/features/providers/ui/SwitchAgentModal.tsx"
+      ]
+    },
+    {
+      "area": "feature/review",
+      "owner": "Captured review data, diff virtualization, Git operation admission and integration dialogs",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/review/index.ts",
+        "apps/web/src/features/review/lib/turnChanges.ts",
+        "apps/web/src/features/review/model/composer-actions.ts",
+        "apps/web/src/features/review/model/review-git-actions.ts",
+        "apps/web/src/features/review/model/useGitDraft.ts",
+        "apps/web/src/features/review/model/useReviewDiffs.ts",
+        "apps/web/src/features/review/model/useReviewGitActions.ts",
+        "apps/web/src/features/review/model/useReviewUIStore.ts",
+        "apps/web/src/features/review/model/useReviewViewState.ts",
+        "apps/web/src/features/review/ui/ApplySessionDialog.tsx",
+        "apps/web/src/features/review/ui/CreatePullRequestDialog.tsx",
+        "apps/web/src/features/review/ui/GitDialog.tsx",
+        "apps/web/src/features/review/ui/ReviewCleanState.tsx",
+        "apps/web/src/features/review/ui/ReviewDialogs.tsx",
+        "apps/web/src/features/review/ui/ReviewFileList.tsx",
+        "apps/web/src/features/review/ui/ReviewGitActions.tsx",
+        "apps/web/src/features/review/ui/ReviewHeader.tsx",
+        "apps/web/src/features/review/ui/ReviewStates.tsx",
+        "apps/web/src/features/review/ui/ReviewView.tsx",
+        "apps/web/src/features/review/ui/diff/DiffBlock.tsx",
+        "apps/web/src/features/review/ui/diff/DiffLine.tsx"
+      ]
+    },
+    {
+      "area": "feature/sessions",
+      "owner": "Session configuration, history/stream/turn and client outbox/accepted-queue composition",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/sessions/api/sessionNavigation.ts",
+        "apps/web/src/features/sessions/api/sessionQueries.ts",
+        "apps/web/src/features/sessions/api/workspaceReview.ts",
+        "apps/web/src/features/sessions/index.ts",
+        "apps/web/src/features/sessions/model/SessionConfigContext.tsx",
+        "apps/web/src/features/sessions/model/SessionContext.tsx",
+        "apps/web/src/features/sessions/model/SessionStreamContext.tsx",
+        "apps/web/src/features/sessions/model/messageDelivery.ts",
+        "apps/web/src/features/sessions/model/reconcileOptimisticMessages.ts",
+        "apps/web/src/features/sessions/model/sessionTurnState.ts",
+        "apps/web/src/features/sessions/model/useAcceptedMessageQueue.ts",
+        "apps/web/src/features/sessions/model/useDoubleEscToStop.ts",
+        "apps/web/src/features/sessions/model/useOpenWorkspaceFile.ts",
+        "apps/web/src/features/sessions/model/useSessionActions.ts",
+        "apps/web/src/features/sessions/model/useSessionConfigState.ts",
+        "apps/web/src/features/sessions/model/useSessionEvents.ts",
+        "apps/web/src/features/sessions/model/useSessionHistory.ts",
+        "apps/web/src/features/sessions/model/useSessionMessageQueue.ts",
+        "apps/web/src/features/sessions/model/useSessionStatusEffects.ts",
+        "apps/web/src/features/sessions/model/useSessionTurnIndex.ts",
+        "apps/web/src/features/sessions/model/useSessionTurnState.ts",
+        "apps/web/src/features/sessions/model/useWorkspaceReviewState.ts",
+        "apps/web/src/features/sessions/ui/ConfigOptionsPanel.tsx",
+        "apps/web/src/features/sessions/ui/NativeSessionImport.tsx",
+        "apps/web/src/features/sessions/ui/OpenInPicker.tsx",
+        "apps/web/src/features/sessions/ui/RewindConfirmDialog.tsx",
+        "apps/web/src/features/sessions/ui/RewindMenu.tsx"
+      ]
+    },
+    {
+      "area": "feature/settings",
+      "owner": "Settings/MCP queries, lazy overlays, setup and registry/profile configuration",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/settings/api/useMcpServers.ts",
+        "apps/web/src/features/settings/api/useSettings.ts",
+        "apps/web/src/features/settings/index.ts",
+        "apps/web/src/features/settings/model/useSettingsOverlayStore.ts",
+        "apps/web/src/features/settings/model/useSetupWizard.ts",
+        "apps/web/src/features/settings/ui/FontSettingsPanel.tsx",
+        "apps/web/src/features/settings/ui/GeneralSettingsView.tsx",
+        "apps/web/src/features/settings/ui/GitGenerationSettingsPanel.tsx",
+        "apps/web/src/features/settings/ui/McpServerCard.tsx",
+        "apps/web/src/features/settings/ui/McpServerForm.tsx",
+        "apps/web/src/features/settings/ui/McpSettings.tsx",
+        "apps/web/src/features/settings/ui/McpToolPermissionEditor.tsx",
+        "apps/web/src/features/settings/ui/McpUtils.ts",
+        "apps/web/src/features/settings/ui/ProviderProfilesPanel.tsx",
+        "apps/web/src/features/settings/ui/ProvidersSettingsView.tsx",
+        "apps/web/src/features/settings/ui/RegistryBrowser.tsx",
+        "apps/web/src/features/settings/ui/RegistryCard.tsx",
+        "apps/web/src/features/settings/ui/SettingsDialog.tsx",
+        "apps/web/src/features/settings/ui/SettingsOverlays.tsx",
+        "apps/web/src/features/settings/ui/SetupWizard.tsx",
+        "apps/web/src/features/settings/ui/SetupWizardChecklistItem.tsx",
+        "apps/web/src/features/settings/ui/SetupWizardProviderRow.tsx",
+        "apps/web/src/features/settings/ui/ThemeSelect.tsx",
+        "apps/web/src/features/settings/ui/UpdateSettingsCard.tsx"
+      ]
+    },
+    {
+      "area": "feature/subagents",
+      "owner": "Native child identity/grouping, scoped selection, read-only navigation and status",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/subagents/index.ts",
+        "apps/web/src/features/subagents/lib/subagentBlockUtils.ts",
+        "apps/web/src/features/subagents/model/useSubagentStore.ts",
+        "apps/web/src/features/subagents/ui/SubagentBlock.tsx",
+        "apps/web/src/features/subagents/ui/SubagentChatView.tsx",
+        "apps/web/src/features/subagents/ui/SubagentDisclosure.tsx",
+        "apps/web/src/features/subagents/ui/SubagentElapsed.tsx",
+        "apps/web/src/features/subagents/ui/SubagentStatus.tsx"
+      ]
+    },
+    {
+      "area": "feature/updates",
+      "owner": "Native update subscription with browser fallback",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/updates/index.ts",
+        "apps/web/src/features/updates/model/UpdateContext.tsx",
+        "apps/web/src/features/updates/model/useUpdate.ts"
+      ]
+    },
+    {
+      "area": "feature/workbench",
+      "owner": "Workbench navigation, terminal workspace state and scoped terminal resources",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/features/workbench/index.ts",
+        "apps/web/src/features/workbench/libPlanArtifacts.ts",
+        "apps/web/src/features/workbench/model/terminal-types.ts",
+        "apps/web/src/features/workbench/model/useTerminalPane.ts",
+        "apps/web/src/features/workbench/model/useTerminalTabsStore.ts",
+        "apps/web/src/features/workbench/model/useWorkbenchStore.ts",
+        "apps/web/src/features/workbench/ui/McpStatusPanel.tsx",
+        "apps/web/src/features/workbench/ui/PlanPanel.tsx",
+        "apps/web/src/features/workbench/ui/StatusPane.tsx",
+        "apps/web/src/features/workbench/ui/Workbench.tsx",
+        "apps/web/src/features/workbench/ui/terminal/InteractiveTerminal.tsx",
+        "apps/web/src/features/workbench/ui/terminal/TerminalPane.tsx",
+        "apps/web/src/features/workbench/ui/terminal/TerminalTabsSidebar.tsx"
+      ]
+    },
+    {
+      "area": "performance",
+      "owner": "Synthetic measurements, fixture workloads and stream probes",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/performance/PerformanceLab.tsx",
+        "apps/web/src/performance/fixtures.ts",
+        "apps/web/src/performance/main.tsx",
+        "apps/web/src/performance/measurements.ts",
+        "apps/web/src/performance/sessionStreamProbe.tsx"
+      ]
+    },
+    {
+      "area": "routes",
+      "owner": "URL/page composition and isolated gallery fixtures",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/routes/HomeRoute.tsx",
+        "apps/web/src/routes/LoginRoute.tsx",
+        "apps/web/src/routes/LoginView.tsx",
+        "apps/web/src/routes/SessionRoute.tsx",
+        "apps/web/src/routes/SessionView.tsx",
+        "apps/web/src/routes/SessionWorkspace.tsx",
+        "apps/web/src/routes/SettingsRoute.tsx",
+        "apps/web/src/routes/UiGalleryRoute.tsx"
+      ]
+    },
+    {
+      "area": "shared/components",
+      "owner": "Generic file icon presentation",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": ["apps/web/src/shared/components/FileIcon.tsx"]
+    },
+    {
+      "area": "shared/editors",
+      "owner": "Editor brand presentation",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": ["apps/web/src/shared/editors/EditorIcons.tsx"]
+    },
+    {
+      "area": "shared/entry",
+      "owner": "Shared capability public entry",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": ["apps/web/src/shared/index.ts"]
+    },
+    {
+      "area": "shared/hooks",
+      "owner": "Local display/resource lifetimes and action/version/theme helpers",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/shared/hooks/useActionDispatcher.ts",
+        "apps/web/src/shared/hooks/useAppVersion.ts",
+        "apps/web/src/shared/hooks/useCopyFeedback.ts",
+        "apps/web/src/shared/hooks/useFrameScheduler.ts",
+        "apps/web/src/shared/hooks/useThemePreferences.ts"
+      ]
+    },
+    {
+      "area": "shared/lib",
+      "owner": "Query identities, workspace invalidation, persistence, notifications, parsing and highlighter workers",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/shared/lib/api-base-url.ts",
+        "apps/web/src/shared/lib/code-highlighter-utils.ts",
+        "apps/web/src/shared/lib/code-highlighter.ts",
+        "apps/web/src/shared/lib/diff-highlighter.ts",
+        "apps/web/src/shared/lib/diff-highlighter.worker.ts",
+        "apps/web/src/shared/lib/diff-parser.ts",
+        "apps/web/src/shared/lib/formatTokenCount.ts",
+        "apps/web/src/shared/lib/notifications.ts",
+        "apps/web/src/shared/lib/performanceRecorder.ts",
+        "apps/web/src/shared/lib/persistentStorage.ts",
+        "apps/web/src/shared/lib/platform.ts",
+        "apps/web/src/shared/lib/promptPerformance.ts",
+        "apps/web/src/shared/lib/queryKeys.ts",
+        "apps/web/src/shared/lib/theme-registry.ts",
+        "apps/web/src/shared/lib/toolColors.ts",
+        "apps/web/src/shared/lib/workspaceQueries.ts"
+      ]
+    },
+    {
+      "area": "shared/markdown",
+      "owner": "Streaming markdown, grapheme reveal, prepared trees and document worker",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/shared/markdown/index.ts",
+        "apps/web/src/shared/markdown/lib/graphemeRevealBuffer.ts",
+        "apps/web/src/shared/markdown/lib/markdown.worker.ts",
+        "apps/web/src/shared/markdown/lib/markdownProcessor.ts",
+        "apps/web/src/shared/markdown/lib/markdownWorker.ts",
+        "apps/web/src/shared/markdown/ui/MarkdownCodeBlock.tsx",
+        "apps/web/src/shared/markdown/ui/MarkdownTable.tsx",
+        "apps/web/src/shared/markdown/ui/PreparedMarkdown.tsx",
+        "apps/web/src/shared/markdown/ui/StreamingMarkdown.tsx",
+        "apps/web/src/shared/markdown/ui/streamingMarkdownUtils.ts"
+      ]
+    },
+    {
+      "area": "shared/providers",
+      "owner": "Theme preference composition and media-query lifetime",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": ["apps/web/src/shared/providers/ThemeProvider.tsx"]
+    },
+    {
+      "area": "shared/stores",
+      "owner": "Client-only navigation, pending UI actions, preferences and pre-acceptance outbox",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/shared/stores/useActionStore.ts",
+        "apps/web/src/shared/stores/useMessageQueueStore.ts",
+        "apps/web/src/shared/stores/useNotificationStore.ts",
+        "apps/web/src/shared/stores/useProjectExpansionStore.ts",
+        "apps/web/src/shared/stores/useWorkbenchStore.ts"
+      ]
+    },
+    {
+      "area": "shared/transcript",
+      "owner": "Read-only activity, directed messages, tool output and bounded terminal history",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/shared/transcript/index.ts",
+        "apps/web/src/shared/transcript/lib/agentTerminals.ts",
+        "apps/web/src/shared/transcript/lib/tool-presentation.ts",
+        "apps/web/src/shared/transcript/ui/ActivityBlock.tsx",
+        "apps/web/src/shared/transcript/ui/AgentTerminals.tsx",
+        "apps/web/src/shared/transcript/ui/ToolActivityRow.tsx",
+        "apps/web/src/shared/transcript/ui/ToolOutputContent.tsx",
+        "apps/web/src/shared/transcript/ui/TranscriptMessage.tsx"
+      ]
+    },
+    {
+      "area": "shared/ui",
+      "owner": "App-independent shared display components",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": [
+        "apps/web/src/shared/ui/AgentIcon.tsx",
+        "apps/web/src/shared/ui/FontPicker.tsx",
+        "apps/web/src/shared/ui/ProviderIcon.tsx",
+        "apps/web/src/shared/ui/RelativeTime.tsx",
+        "apps/web/src/shared/ui/Spinner.tsx",
+        "apps/web/src/shared/ui/StreamingDots.tsx"
+      ]
+    },
+    {
+      "area": "shared/workspace",
+      "owner": "Workspace Git status and mutation queries using shared query identities",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": ["apps/web/src/shared/workspace/useGitStatus.ts"]
+    },
+    {
+      "area": "test-utils",
+      "owner": "Isolated provider/query fixtures for component tests",
+      "evidence": "docs/frontend-state-architecture.md",
+      "files": ["apps/web/src/test-utils/virtualViewport.ts"]
+    }
+  ]
+}

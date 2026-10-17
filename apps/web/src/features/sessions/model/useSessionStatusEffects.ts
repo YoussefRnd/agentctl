@@ -1,3 +1,4 @@
+import { projectKeys } from '@/shared/lib/queryKeys';
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SessionWithCapabilities } from '@agentctl/shared';
@@ -43,7 +44,7 @@ export function useSessionStatusEffects(
       sessionData?.session.status === 'running'
     ) {
       invalidateWorkspaceQueries(queryClient, sessionId, 'files');
-      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
     }
   }, [sessionData?.session.status, sessionId, queryClient]);
 }

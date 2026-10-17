@@ -1,3 +1,4 @@
+import { sessionKeys } from '@/shared/lib/queryKeys';
 import { Profiler, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -276,12 +277,12 @@ export function PerformanceLab() {
           ...event,
           sessionId: STREAM_PROBE_ID,
         }));
-        client.setQueryData(['events', STREAM_PROBE_ID], events);
-        client.setQueryData(['session', STREAM_PROBE_ID], {
+        client.setQueryData(sessionKeys.events(STREAM_PROBE_ID), events);
+        client.setQueryData(sessionKeys.detail(STREAM_PROBE_ID), {
           session: { id: STREAM_PROBE_ID, status: 'idle' },
           capabilities: [],
         });
-        client.setQueryData(['session-execution', STREAM_PROBE_ID], { queue: [] });
+        client.setQueryData(sessionKeys.execution(STREAM_PROBE_ID), { queue: [] });
         const transport = installSyntheticStream();
         const probe = createBrowserProbe();
         probeRef.current = probe;
@@ -317,7 +318,7 @@ export function PerformanceLab() {
             await waitForCommit(
               () =>
                 client
-                  .getQueryData<SessionEventRow[]>(['events', STREAM_PROBE_ID])
+                  .getQueryData<SessionEventRow[]>(sessionKeys.events(STREAM_PROBE_ID))
                   ?.find((event) => event.id === response.id)?.data.content === content,
             );
             await pause(20);

@@ -30,24 +30,24 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 
 ## Checkpoint dashboard
 
-| ID   | Checkpoint                                                    | Status  | Depends on             |
-| ---- | ------------------------------------------------------------- | ------- | ---------------------- |
-| CP00 | Scope, coverage, and acceptance baseline                      | Done    | —                      |
-| CP01 | Initial boundaries and maintainability foundation             | Done    | CP00                   |
-| CP02 | Remaining server workflows and transport boundaries           | Done    | CP01                   |
-| CP03 | Session execution, persistence, and runtime ownership         | Done    | CP02                   |
-| CP04 | Git capability and forge separation                           | Done    | CP01                   |
-| CP05 | Repository-neutral session workspace and checkpoint workflows | Done    | CP03, CP04             |
-| CP06 | Provider lifecycle and agent protocol composition             | Done    | CP03                   |
-| CP07 | Remaining core domains and infrastructure ownership           | Done    | CP03, CP06             |
-| CP08 | Composer, review, and session dependency cycles               | Done    | CP01                   |
-| CP09 | Conversation and subagent dependency cycle                    | Done    | CP01                   |
-| CP10 | Complete frontend state, effects, and rendering audit         | Planned | CP02, CP08, CP09       |
-| CP11 | Shared contracts, client APIs, and public exports             | Planned | CP05, CP06, CP07, CP10 |
-| CP12 | Desktop lifecycle, server ownership, and IPC                  | Planned | CP02, CP03, CP06       |
-| CP13 | Design system and UI ownership                                | Planned | CP10                   |
-| CP14 | Complete architecture enforcement and delivery tooling        | Planned | CP07, CP11, CP12, CP13 |
-| CP15 | Repository-wide acceptance and migration closure              | Planned | CP00–CP14              |
+| ID   | Checkpoint                                                    | Status      | Depends on             |
+| ---- | ------------------------------------------------------------- | ----------- | ---------------------- |
+| CP00 | Scope, coverage, and acceptance baseline                      | Done        | —                      |
+| CP01 | Initial boundaries and maintainability foundation             | Done        | CP00                   |
+| CP02 | Remaining server workflows and transport boundaries           | Done        | CP01                   |
+| CP03 | Session execution, persistence, and runtime ownership         | Done        | CP02                   |
+| CP04 | Git capability and forge separation                           | Done        | CP01                   |
+| CP05 | Repository-neutral session workspace and checkpoint workflows | Done        | CP03, CP04             |
+| CP06 | Provider lifecycle and agent protocol composition             | Done        | CP03                   |
+| CP07 | Remaining core domains and infrastructure ownership           | Done        | CP03, CP06             |
+| CP08 | Composer, review, and session dependency cycles               | Done        | CP01                   |
+| CP09 | Conversation and subagent dependency cycle                    | Done        | CP01                   |
+| CP10 | Complete frontend state, effects, and rendering audit         | In progress | CP02, CP08, CP09       |
+| CP11 | Shared contracts, client APIs, and public exports             | Planned     | CP05, CP06, CP07, CP10 |
+| CP12 | Desktop lifecycle, server ownership, and IPC                  | Planned     | CP02, CP03, CP06       |
+| CP13 | Design system and UI ownership                                | Planned     | CP10                   |
+| CP14 | Complete architecture enforcement and delivery tooling        | Planned     | CP07, CP11, CP12, CP13 |
+| CP15 | Repository-wide acceptance and migration closure              | Planned     | CP00–CP14              |
 
 Recommended execution order: CP02 → CP03 → CP04 → CP05 → CP06 → CP07 → CP08 → CP09 →
 CP10 → CP11 → CP12 → CP13 → CP14 → CP15. Each checkpoint may use multiple reviewable
@@ -460,6 +460,19 @@ workbench/terminals, updates, command palette, retained empty directories, and p
 Exit evidence: acceptance record for every web area in the ledger; targeted interaction and
 cleanup tests; empty cycle baseline; production navigation/deferred-worker checks and existing
 performance safeguards without unsupported performance claims.
+
+Implementation (2026-10-17): [frontend state/effects audit](frontend-state-architecture.md)
+and [web ownership ledger](web-ownership.json) cover all 276 non-test files across 29 owners.
+History/handoff/viewport, Git operation state, draft/file interactions, terminal resources and
+workspace drop resolution have separate owners. Query identities are centralized; cancelled
+focus/copy/layout work, native update snapshot ordering and stale auth callbacks have explicit
+lifetimes. Image upload cancellation now follows attachment/session ownership.
+
+Verification so far: 507 frontend tests/94 files before the final upload-lifetime regression;
+terminal/frame/updates/auth/drop regressions, workspace types/lint, both fresh renderer builds,
+production architecture browser journeys and desktop worker smoke passed. All six performance safeguard suites passed, including streaming isolation and production
+asset budgets (`/tmp/agentctl-frontend-audit-performance/checks.json`). Final upload regressions
+passed 8 tests/2 files. The combined contracts/workspace gate remains pending before acceptance.
 
 ## CP11 — Shared contracts, client APIs, and public exports
 

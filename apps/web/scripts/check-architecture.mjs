@@ -1,3 +1,4 @@
+import { ownershipErrors } from '../../../scripts/architecture/ownership.mjs';
 import {
   importSpecifiers,
   cycleEdges,
@@ -24,14 +25,14 @@ const cycleBaseline = JSON.parse(await readFile(join(webRoot, 'architecture-cycl
 if (Object.keys(cycleBaseline).length)
   errors.push('The accepted feature graph is acyclic; cycle exceptions cannot be added.');
 
-async function walk(directory) {
+async function walk(directory, includeAssets = false) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
     if (entry.name === 'node_modules' || entry.name === 'dist') continue;
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await walk(path)));
-    else if (sourceExtensions.has(extname(entry.name))) files.push(path);
+    if (entry.isDirectory()) files.push(...(await walk(path, includeAssets)));
+    else if (includeAssets || sourceExtensions.has(extname(entry.name))) files.push(path);
   }
   return files;
 }
@@ -55,7 +56,7 @@ for (const legacyRoot of legacyRoots) {
   try {
     const info = await stat(path);
     if (info.isFile()) report(path, 'legacy architecture entry must be removed');
-    if (info.isDirectory() && (await walk(path)).length > 0) {
+    if (info.isDirectory() && (await walk(path, includeAssets)).length > 0) {
       report(path, 'legacy feature directory must remain empty or be removed');
     }
   } catch (error) {
@@ -63,7 +64,18 @@ for (const legacyRoot of legacyRoots) {
   }
 }
 
-for (const path of await walk(sourceRoot)) {
+const sourceFiles = await walk(sourceRoot, true);
+const ledger = JSON.parse(await readFile(join(workspaceRoot, 'docs/web-ownership.json'), 'utf8'));
+errors.push(
+  ...ownershipErrors(
+    sourceFiles
+      .filter((path) => !/\.(test|spec)\.[jt]sx?$/.test(path))
+      .map((path) => relative(workspaceRoot, path)),
+    ledger.areas,
+  ),
+);
+for (const area of ledger.areas) await readFile(join(workspaceRoot, area.evidence), 'utf8');
+for (const path of sourceFiles.filter((path) => sourceExtensions.has(extname(path)))) {
   const source = await readFile(path, 'utf8');
   const ownerFeature = featureName(path);
   const imports = importSpecifiers(source, path);

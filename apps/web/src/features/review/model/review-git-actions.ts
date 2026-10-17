@@ -1,0 +1,34 @@
+export interface ReviewGitActionsProps {
+  sessionId?: string;
+  baseBranch?: string;
+  mode?: 'local' | 'worktree';
+  branch: string | null;
+  branches: string[];
+  hasBranchChanges: boolean;
+  stagedCount: number;
+  unstagedCount: number;
+  uncommittedCount?: number;
+  additions: number;
+  deletions: number;
+  aheadCount: number;
+  behindCount: number;
+  hasUpstream: boolean;
+  isBaseBranch: boolean;
+  canPush: boolean;
+  isLoadingGitStatus: boolean;
+  commitMessage: string;
+  onCommitMessageChange: (value: string) => void;
+  onSwitchBranch: (branch: string) => Promise<void>;
+  onCommit: (message: string, includeUnstaged?: boolean) => Promise<void>;
+  onPush: () => Promise<void>;
+  onPull: () => Promise<void>;
+  onOpenPullRequestDialog: () => void;
+  onFetch?: () => Promise<void>;
+  onCreateBranch?: (name: string) => Promise<void>;
+  lastFetchedAt?: string | null;
+  workspaceBusy?: boolean;
+  existingPullRequest?: { number: number; url: string };
+  pullRequestBlockedReason?: string;
+  onApplySession: () => void;
+  onDiscardChanges: () => void;
+}

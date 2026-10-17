@@ -1,3 +1,4 @@
+import { projectKeys } from '@/shared/lib/queryKeys';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -57,7 +58,7 @@ export function HomeRoute() {
               onSelect={async (dirPath) => {
                 try {
                   const project = await openProjectFolder(dirPath);
-                  await queryClient.invalidateQueries({ queryKey: ['projects'] });
+                  await queryClient.invalidateQueries({ queryKey: projectKeys.all });
                   setSelectedProjectId(project.id);
                   setShowExplorer(false);
                 } catch (err) {

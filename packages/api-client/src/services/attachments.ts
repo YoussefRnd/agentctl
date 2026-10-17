@@ -46,7 +46,9 @@ export function uploadAttachment(
   sessionId: string,
   file: File,
   onProgress?: (pct: number) => void,
+  signal?: AbortSignal,
 ): Promise<UploadAttachmentResult> {
+  if (signal?.aborted) return Promise.reject(new DOMException('Upload aborted', 'AbortError'));
   if (!ALLOWED_TYPES.has(file.type)) {
     return Promise.reject(
       new ApiError(`Unsupported file type: ${file.type}. Allowed: PNG, JPEG, GIF, WebP.`, 415),
@@ -61,6 +63,22 @@ export function uploadAttachment(
 
   return new Promise<UploadAttachmentResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    const cleanup = () => {
+      signal?.removeEventListener('abort', abort);
+    };
+    const succeed = (value: UploadAttachmentResult) => {
+      cleanup();
+      resolve(value);
+    };
+    const fail = (error: unknown) => {
+      cleanup();
+      reject(error);
+    };
+    const abort = () => {
+      xhr.abort();
+      fail(new DOMException('Upload aborted', 'AbortError'));
+    };
+
     const baseUrl = getApiBaseUrl();
     const url = `${baseUrl}/api/sessions/${sessionId}/attachments`;
 
@@ -84,7 +102,7 @@ export function uploadAttachment(
     xhr.onload = () => {
       if (xhr.status === 401) {
         redirectToLogin();
-        reject(new ApiError('Unauthorized', 401));
+        fail(new ApiError('Unauthorized', 401));
         return;
       }
 
@@ -92,9 +110,9 @@ export function uploadAttachment(
         try {
           const data = JSON.parse(xhr.responseText) as UploadAttachmentResult;
           onProgress?.(100);
-          resolve(data);
+          succeed(data);
         } catch {
-          reject(new ApiError('Invalid response from server', 500));
+          fail(new ApiError('Invalid response from server', 500));
         }
         return;
       }
@@ -108,17 +126,30 @@ export function uploadAttachment(
         // keep statusText
       }
 
-      reject(new ApiError(message, xhr.status));
+      fail(new ApiError(message, xhr.status));
     };
 
     xhr.onerror = () => {
-      reject(new ApiError('Network error during upload', 0));
+      fail(new ApiError('Network error during upload', 0));
     };
 
     xhr.onabort = () => {
-      reject(new ApiError('Upload aborted', 0));
+      fail(
+        signal?.aborted
+          ? new DOMException('Upload aborted', 'AbortError')
+          : new ApiError('Upload aborted', 0),
+      );
     };
 
-    xhr.send(file);
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    try {
+      xhr.send(file);
+    } catch (error) {
+      fail(error);
+    }
   });
 }
