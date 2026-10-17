@@ -326,4 +326,43 @@ describe('ProviderAuthCoordinator', () => {
     expect(store.get('work')?.authState).toBe('unknown');
     expect(store.get('work')?.lastVerifiedAt).toBeNull();
   });
+  it('cannot publish successful verification after login was cancelled', async () => {
+    let finish!: (result: Awaited<ReturnType<ProviderLauncher['probe']>>) => void;
+    const result = await runtime.inspectProvider('test-agent', [], {});
+    vi.spyOn(launcher, 'probe').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const login = coordinator.login('test-agent', 'web_oauth');
+    const rejected = expect(login).rejects.toThrow(/cancelled/i);
+    await vi.waitFor(() => expect(launcher.probe).toHaveBeenCalled());
+    coordinator.cancelLogin('test-agent');
+    await rejected;
+    finish(result);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(store.get('test-agent')?.authState).toBe('required');
+  });
+
+  it('shutdown rejects queued authentication and prevents new attempts', async () => {
+    vi.mocked(runtime.authenticateProvider!).mockImplementation(
+      (_cmd, _args, _env, _method, options) =>
+        new Promise((_, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        }),
+    );
+    const first = coordinator.login('test-agent', 'web_oauth');
+    const firstRejected = expect(first).rejects.toThrow(/cancelled/i);
+    await vi.waitFor(() => expect(runtime.authenticateProvider).toHaveBeenCalled());
+    const queued = coordinator.login('test-agent', 'web_oauth');
+    const queuedRejected = expect(queued).rejects.toThrow('disposed');
+    await coordinator.dispose();
+    await Promise.all([firstRejected, queuedRejected]);
+    expect(runtime.authenticateProvider).toHaveBeenCalledTimes(1);
+    await expect(coordinator.login('test-agent', 'web_oauth')).rejects.toThrow('disposed');
+  });
 });

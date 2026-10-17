@@ -9,6 +9,8 @@ interface CoordinationWaiter {
 }
 
 export class ProviderOperationCoordinator {
+  private closed = false;
+  private readonly pending = new Set<Promise<unknown>>();
   private providerOperations = new Map<string, ProviderOperation>();
   private activeMutations = 0;
   private syncActive = false;
@@ -17,9 +19,7 @@ export class ProviderOperationCoordinator {
   acquireMutation(): Promise<() => void> {
     if (!this.syncActive && this.coordinationWaiters.length === 0) {
       this.activeMutations += 1;
-      return Promise.resolve(() => {
-        this.releaseMutation();
-      });
+      return Promise.resolve(this.once(() => this.releaseMutation()));
     }
 
     return new Promise((resolve) => {
@@ -31,9 +31,7 @@ export class ProviderOperationCoordinator {
   acquireSync(): Promise<() => void> {
     if (!this.syncActive && this.activeMutations === 0 && this.coordinationWaiters.length === 0) {
       this.syncActive = true;
-      return Promise.resolve(() => {
-        this.releaseSync();
-      });
+      return Promise.resolve(this.once(() => this.releaseSync()));
     }
 
     return new Promise((resolve) => {
@@ -61,9 +59,7 @@ export class ProviderOperationCoordinator {
       const waiter = this.coordinationWaiters.shift();
       if (!waiter) return;
       this.syncActive = true;
-      waiter.resolve(() => {
-        this.releaseSync();
-      });
+      waiter.resolve(this.once(() => this.releaseSync()));
       return;
     }
 
@@ -72,28 +68,63 @@ export class ProviderOperationCoordinator {
       if (waiter.kind !== 'mutation') break;
       this.coordinationWaiters.shift();
       this.activeMutations += 1;
-      waiter.resolve(() => {
-        this.releaseMutation();
-      });
+      waiter.resolve(this.once(() => this.releaseMutation()));
     }
   }
 
-  async runMutation<T>(op: () => Promise<T>): Promise<T> {
+  private async executeMutation<T>(op: () => Promise<T>): Promise<T> {
     const release = await this.acquireMutation();
     try {
+      this.assertOpen();
       return await op();
     } finally {
       release();
     }
   }
 
-  async runSync(op: () => Promise<void>): Promise<void> {
+  private async executeSync(op: () => Promise<void>): Promise<void> {
     const release = await this.acquireSync();
     try {
+      this.assertOpen();
       await op();
     } finally {
       release();
     }
+  }
+
+  runMutation<T>(op: () => Promise<T>): Promise<T> {
+    return this.track(this.executeMutation(op));
+  }
+  runSync(op: () => Promise<void>): Promise<void> {
+    return this.track(this.executeSync(op));
+  }
+
+  stop(): void {
+    this.closed = true;
+  }
+  async idle(): Promise<void> {
+    await Promise.allSettled(this.pending);
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error('Provider registry is disposed');
+  }
+  private once(release: () => void): () => void {
+    let released = false;
+    return () => {
+      if (!released) {
+        released = true;
+        release();
+      }
+    };
+  }
+  private track<T>(promise: Promise<T>): Promise<T> {
+    this.pending.add(promise);
+    void promise.then(
+      () => this.pending.delete(promise),
+      () => this.pending.delete(promise),
+    );
+    return promise;
   }
 
   runProviderOperation<T>(
@@ -108,6 +139,7 @@ export class ProviderOperationCoordinator {
 
     const promise = this.runMutation(async () => {
       await previous?.promise.catch(() => undefined);
+      this.assertOpen();
       return op();
     });
     this.providerOperations.set(providerId, { name: operationName, promise });

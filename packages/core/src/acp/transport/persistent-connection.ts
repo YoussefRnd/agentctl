@@ -59,6 +59,9 @@ export interface ActiveSession {
 }
 
 export class PersistentAgentConnectionManager {
+  private disposed = false;
+  private disposal?: Promise<void>;
+  private readonly cleanup = new Set<Promise<unknown>>();
   private connections = new Map<string, PersistentConnection>();
   private pendingConnections = new Map<string, Promise<PersistentConnection>>();
   private pendingTransports = new Map<string, ProcessStreamTransport>();
@@ -135,6 +138,7 @@ export class PersistentAgentConnectionManager {
     providerId: string,
     options?: { mcpGateway?: AgentMcpGateway },
   ): Promise<PersistentConnection> {
+    if (this.disposed) throw new Error('Agent connection manager is disposed');
     const conn = this.connections.get(providerId);
     if (conn?.transport.isAlive) {
       if (options?.mcpGateway !== conn.mcpGateway)
@@ -487,7 +491,9 @@ export class PersistentAgentConnectionManager {
       clearTimeout(conn.idleTimer);
       conn.idleTimer = null;
     }
-    void conn.terminalManager.dispose();
+    const cleanup = Promise.allSettled([conn.terminalManager.dispose(), conn.transport.closed]);
+    this.cleanup.add(cleanup);
+    void cleanup.then(() => this.cleanup.delete(cleanup));
     conn.connection.close?.();
     conn.transport.kill();
   }
@@ -531,5 +537,16 @@ export class PersistentAgentConnectionManager {
     for (const providerId of providerIds) {
       this.closeConnection(providerId);
     }
+  }
+  dispose(): Promise<void> {
+    if (this.disposal) return this.disposal;
+    this.disposed = true;
+    this.closeAll();
+    this.disposal = Promise.allSettled(this.pendingConnections.values()).then(async () => {
+      this.closeAll();
+      await Promise.allSettled(this.cleanup);
+      this.providerEpochs.clear();
+    });
+    return this.disposal;
   }
 }

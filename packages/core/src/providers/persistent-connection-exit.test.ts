@@ -183,4 +183,34 @@ describe('PersistentAgentConnectionManager Process Exit', () => {
     expect(second.activeSessions.has('same')).toBe(true);
     expect(replacement.transport.kill).not.toHaveBeenCalled();
   });
+  it('final shutdown awaits terminal and process cleanup and rejects new connections', async () => {
+    const manager = new PersistentAgentConnectionManager({} as any, {} as any, {} as any);
+    let terminalsClosed!: () => void;
+    let processClosed!: () => void;
+    const terminals = new Promise<void>((resolve) => {
+      terminalsClosed = resolve;
+    });
+    const exited = new Promise<void>((resolve) => {
+      processClosed = resolve;
+    });
+    const connection = {
+      idleTimer: null,
+      connection: { close: vi.fn() },
+      transport: { kill: vi.fn(), closed: exited },
+      terminalManager: { dispose: vi.fn(() => terminals) },
+    };
+    (manager as any).connections.set('provider', connection);
+    let finished = false;
+    const disposal = manager.dispose().then(() => {
+      finished = true;
+    });
+    await expect(manager.getConnection('provider')).rejects.toThrow('disposed');
+    expect(connection.transport.kill).toHaveBeenCalledOnce();
+    terminalsClosed();
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    processClosed();
+    await disposal;
+    expect(finished).toBe(true);
+  });
 });

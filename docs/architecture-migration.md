@@ -7,7 +7,7 @@ order, acceptance criteria, and evidence needed to declare the migration complet
 
 ## Status and completion rules
 
-Baseline: **2026-10-16**. **6 of 16 checkpoints are complete locally; 10 remain open.**
+Baseline: **2026-10-16**. **7 of 16 checkpoints are complete locally; 9 remain open.**
 This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03 is committed as `e1fc843`; CP04 and CP05 are recorded in their own checkpoint
 commits. No merge or release is implied.
 
@@ -37,7 +37,7 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 | CP03 | Session execution, persistence, and runtime ownership         | Done    | CP02                   |
 | CP04 | Git capability and forge separation                           | Done    | CP01                   |
 | CP05 | Repository-neutral session workspace and checkpoint workflows | Done    | CP03, CP04             |
-| CP06 | Provider lifecycle and agent protocol composition             | Planned | CP03                   |
+| CP06 | Provider lifecycle and agent protocol composition             | Done    | CP03                   |
 | CP07 | Remaining core domains and infrastructure ownership           | Planned | CP03, CP06             |
 | CP08 | Composer, review, and session dependency cycles               | Planned | CP01                   |
 | CP09 | Conversation and subagent dependency cycle                    | Planned | CP01                   |
@@ -66,7 +66,7 @@ until the full audit, even where initial work has already landed locally.
 | Core session commands, execution, requests, projection, persistence, runtime, and services                 | CP03, CP05           | Accepted                    |
 | Core repository-neutral workspace lifecycle and handoff context                                            | CP05                 | Accepted                    |
 | Core Git, repository, and forge modules                                                                    | CP04, CP05           | Accepted                    |
-| Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Pending                     |
+| Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Accepted                    |
 | Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Pending                     |
 | Web composer, review, and session features                                                                 | CP08, CP10           | Pending                     |
 | Web conversation and subagent features                                                                     | CP09, CP10           | Pending                     |
@@ -285,20 +285,35 @@ A production second VCS or native history for ordinary folders is not required f
 Starting points: `packages/core/src/providers/`, `agent/`, `acp/`, `default-agent-driver.ts`,
 and `agent/runtime-services.ts`.
 
-- [ ] Separate registry queries/profiles, discovery/probing, installation/update operations,
+- [x] Separate registry queries/profiles, discovery/probing, installation/update operations,
       credentials/authentication interactions, and native-session controls behind clear owners.
-- [ ] Review large registry, auth, installer, and installation service files for independent
+- [x] Review large registry, auth, installer, and installation service files for independent
       policies, I/O adapters, operation state, and cleanup. Keep registry behavior behind a focused facade.
-- [ ] Move concrete default resource construction into explicit factories; agent-facing contracts
+- [x] Move concrete default resource construction into explicit factories; agent-facing contracts
       stay independent of ACP wire types and provider-name conditionals.
-- [ ] Audit v1/v2 drivers, protocol reducers, extensions, transport leases, caches, diagnostics,
+- [x] Audit v1/v2 drivers, protocol reducers, extensions, transport leases, caches, diagnostics,
       and bounded queues; retain sound existing separation with recorded acceptance where no change is needed.
-- [ ] Use explicit operation states and cancellation/credential lifetimes; define who owns
+- [x] Use explicit operation states and cancellation/credential lifetimes; define who owns
       shared connections and shutdown so one operation cannot retire another's resources.
 
 Exit evidence: provider/agent ownership map; protocol SDK boundary checks; authentication,
 installation recovery, cancellation, version negotiation, session/control, retention-limit,
 and stale-lease regressions. Local SDK peers suffice; live paid-provider calls are not required.
+
+Acceptance (2026-10-17): [provider and agent ownership map](provider-architecture.md) covers
+all provider/agent/ACP production modules, including retained protocol owners. Registry queries,
+profiles/configuration, readiness/native listing, startup recovery and update policy now have
+separate owners. Runtime construction moved to a root factory; application connection contracts
+are protocol-neutral and diagnostics are scoped to the runtime. Authentication shares attempt
+lifetimes, guards cancelled verification, and retains the credential lane until adapter cleanup.
+Registry shutdown closes admission, drains queued operations and awaits final connection cleanup.
+Archive validation/extraction has its own adapter. Existing candidate transaction, v1/v2 reducers,
+generation leases, bounded caches/queues and diagnostics were reviewed and retained.
+
+Verification: provider/agent/ACP suite **367 tests / 58 files**; final connection disposal
+regression suite **6 tests / 1 file**; workspace `pnpm typecheck`, `pnpm lint`, parsed architecture
+checks and all four architecture regression tests passed. Full workspace verification is recorded
+with the remaining-core acceptance below. Local subprocess/SDK peers only.
 
 ## CP07 — Remaining core domains and infrastructure ownership
 

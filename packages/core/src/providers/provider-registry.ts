@@ -1,25 +1,15 @@
+import { ProviderQueries } from './registry/provider-queries.js';
+import { ProviderRecovery } from './registry/provider-recovery.js';
+import { ProviderConfiguration } from './registry/provider-configuration.js';
+import { ProviderReadiness } from './registry/provider-readiness.js';
 import { createProviderData, providerDataFromRegistry } from './registry/provider-data.js';
-import {
-  findAgentConfigOption,
-  customModelsSchema,
-  type CustomModel,
-  type ProviderDiscovery,
-  type RegistryAgent,
-  type AgentConfigOption,
-} from '@agentctl/shared';
-import { randomUUID } from 'node:crypto';
-import path from 'node:path';
+import { type ProviderDiscovery, type RegistryAgent } from '@agentctl/shared';
 import { type Logger, noopLogger } from '../logger.js';
 import type { AgentDriver } from '../agent/types.js';
 import type { AgentRuntimeServices } from '../agent/runtime-services.js';
 import type { AgentDiagnosticsRecorder } from '../agent/diagnostics.js';
-import {
-  createDefaultAgentConnectionManager,
-  createDefaultAgentDriver,
-  defaultAgentDiagnostics,
-} from '../default-agent-driver.js';
+import { createAgentRuntimeServices } from '../default-agent-runtime.js';
 import type { DbClient } from '../db/index.js';
-import { jsonCodecs } from '../db/json-codecs.js';
 import { Provider, type ProviderData } from './provider.js';
 import { ProviderStore } from './registry/provider-store.js';
 import { BinaryInstaller, getPlatformKey } from './registry/binary-installer.js';
@@ -31,7 +21,7 @@ import { ProviderOperationCoordinator } from './registry/provider-operation-coor
 import { ProviderProbingService } from './registry/provider-probing-service.js';
 import { ProviderAuthCoordinator } from './registry/provider-auth-coordinator.js';
 import { defaultCredentialVault } from '../security/credential-vault.js';
-import type { AgentConnectionManager } from '../acp/types.js';
+import type { AgentConnectionLifecycle } from '../agent/connection-lifecycle.js';
 import {
   ProviderInstallationService,
   type ProviderInstallOptions,
@@ -42,6 +32,10 @@ export { getPlatformKey };
 export { parseRegistryAgents } from './registry/registry-parser.js';
 
 export class ProviderRegistry {
+  private queries: ProviderQueries;
+  private recovery: ProviderRecovery;
+  private configuration: ProviderConfiguration;
+  private readiness: ProviderReadiness;
   private fetcher: RegistryFetcher;
   private installer: BinaryInstaller;
   private store: ProviderStore;
@@ -54,33 +48,24 @@ export class ProviderRegistry {
   private onStateChangeCallback?: () => void;
 
   private activeSync?: Promise<void>;
-  private connectionManager: AgentConnectionManager;
+  private connectionManager: AgentConnectionLifecycle;
   private diagnostics: AgentDiagnosticsRecorder;
   private installation: ProviderInstallationService;
 
   constructor(
-    private db: DbClient,
+    db: DbClient,
     private logger: Logger = noopLogger,
     runtime?: AgentDriver,
     runtimeServices?: AgentRuntimeServices,
   ) {
-    this.diagnostics = runtimeServices?.diagnostics ?? defaultAgentDiagnostics;
-    this.runtime =
-      runtimeServices?.driver ?? runtime ?? createDefaultAgentDriver(logger, this.diagnostics);
-    this.fetcher = runtimeServices?.providers.fetcher ?? new RegistryFetcher(db, logger);
-    this.installer = runtimeServices?.providers.installer ?? new BinaryInstaller();
-    this.store = runtimeServices?.providers.store ?? new ProviderStore(db);
-    this.launcher =
-      runtimeServices?.providers.launcher ?? new ProviderLauncher(this.store, this.installer);
-    this.connectionManager =
-      runtimeServices?.connections ??
-      createDefaultAgentConnectionManager(
-        this.store,
-        this.fetcher,
-        this.launcher,
-        logger,
-        this.diagnostics,
-      );
+    const services = runtimeServices ?? createAgentRuntimeServices({ db, logger, driver: runtime });
+    this.diagnostics = services.diagnostics;
+    this.runtime = services.driver;
+    this.fetcher = services.providers.fetcher;
+    this.installer = services.providers.installer;
+    this.store = services.providers.store;
+    this.launcher = services.providers.launcher;
+    this.connectionManager = services.connections;
     this.authCoordinator = new ProviderAuthCoordinator({
       store: this.store,
       launcher: this.launcher,
@@ -109,6 +94,43 @@ export class ProviderRegistry {
       this.runtime,
       this.logger,
     );
+    this.queries = new ProviderQueries({
+      store: this.store,
+      fetcher: this.fetcher,
+      withInstallProgress: (item) => this.withInstallProgress(item),
+    });
+    this.recovery = new ProviderRecovery({
+      store: this.store,
+      fetcher: this.fetcher,
+      installer: this.installer,
+      logger,
+      notifyStateChange: () => this.notifyStateChange(),
+    });
+    this.configuration = new ProviderConfiguration({
+      store: this.store,
+      authCoordinator: this.authCoordinator,
+      connectionManager: this.connectionManager,
+      runtime: this.runtime,
+      launcher: this.launcher,
+      coordinator: this.coordinator,
+      logger,
+      notifyStateChange: () => this.notifyStateChange(),
+      getProvider: (id) => this.getProvider(id),
+      getAgent: (id, row) => this.getAgent(id, row),
+      probeWithStatePreserved: (...args) => this.probeWithStatePreserved(...args),
+    });
+    this.readiness = new ProviderReadiness({
+      store: this.store,
+      authCoordinator: this.authCoordinator,
+      installer: this.installer,
+      launcher: this.launcher,
+      runtime: this.runtime,
+      logger,
+      sync: () => this.sync(),
+      install: (id) => this.install(id),
+      getAgent: (id, row) => this.getAgent(id, row),
+      probeWithStatePreserved: (...args) => this.probeWithStatePreserved(...args),
+    });
   }
 
   getAuthCoordinator(): ProviderAuthCoordinator {
@@ -134,24 +156,12 @@ export class ProviderRegistry {
     };
   }
 
-  private getAgent(providerId: string, fallback?: ProviderData): RegistryAgent | undefined {
-    const registryId = (fallback ?? this.store.get(providerId))?.registryAgentId ?? providerId;
-    const agent = this.fetcher.getCachedAgents()?.find((candidate) => candidate.id === registryId);
-    if (agent) return agent;
-    const row = fallback ?? this.store.get(providerId);
-    return row ? new Provider(row).toDiscovery().agent : undefined;
-  }
-
-  getConnectionManager(): AgentConnectionManager {
+  getConnectionManager(): AgentConnectionLifecycle {
     return this.connectionManager;
   }
 
   getTransportDiagnostics() {
     return this.diagnostics.snapshot(this.connectionManager.getConnectionDiagnostics());
-  }
-
-  private runMutation<T>(op: () => Promise<T>): Promise<T> {
-    return this.coordinator.runMutation(op);
   }
 
   private runSync(op: () => Promise<void>): Promise<void> {
@@ -168,44 +178,6 @@ export class ProviderRegistry {
 
   getInstallDir(providerId: string): string {
     return this.installer.getInstallDir(this.store.get(providerId)?.registryAgentId ?? providerId);
-  }
-
-  async discover(): Promise<ProviderDiscovery[]> {
-    return this.store
-      .list()
-      .map((row) => this.withInstallProgress(new Provider(row).toDiscovery()));
-  }
-
-  async catalog(): Promise<ProviderDiscovery[]> {
-    // Catalog reads must not fetch, sync, or probe. Startup and explicit Sync All
-    // update the cache and publish the resulting provider state change.
-    const agents = this.fetcher.getCachedAgents();
-    if (!agents) {
-      return this.store
-        .list()
-        .map((row) => this.withInstallProgress(new Provider(row).toDiscovery()));
-    }
-
-    return agents.map((agent) => {
-      const row = this.store.get(agent.id);
-      let discovery: ProviderDiscovery;
-      if (row) {
-        discovery = new Provider(row).toDiscovery();
-      } else {
-        const synthetic = providerDataFromRegistry(agent);
-        discovery = new Provider(synthetic).toDiscovery();
-      }
-
-      if (discovery.agent) {
-        discovery.agent = {
-          ...discovery.agent,
-          repository: agent.repository,
-          website: agent.website,
-        };
-      }
-
-      return this.withInstallProgress(discovery);
-    });
   }
 
   install(providerId: string, options: ProviderInstallOptions = {}): Promise<ProviderDiscovery> {
@@ -377,217 +349,6 @@ export class ProviderRegistry {
     return this.probing.probeAllInstalledProviders((id) => this.refreshProvider(id));
   }
 
-  async recoverInterruptedOperations(): Promise<void> {
-    const agents = this.fetcher.getCachedAgents() ?? [];
-    let changed = false;
-
-    await this.installer.removeStaleStaging(this.logger).catch((error: unknown) => {
-      this.logger.warn({ error }, 'Failed to clean orphaned provider staging directories');
-    });
-
-    for (const row of this.store.listAll()) {
-      const agent = agents.find((candidate) => candidate.id === row.id);
-      if (row.installState === 'installing') {
-        const hasPreviousInstall =
-          !!row.installedVersion ||
-          row.installSource === 'system' ||
-          row.installSource === 'npx' ||
-          row.installSource === 'uvx';
-        const hasCurrentManagedInstall = !!agent && this.installer.isInstalled(row.id, agent);
-        const interruptedError =
-          'INSTALL_INTERRUPTED: Installation was interrupted by application shutdown';
-
-        if (!hasPreviousInstall && hasCurrentManagedInstall && agent) {
-          const target = agent.distribution.binary?.[getPlatformKey()];
-          if (target) {
-            const versionedDir = this.installer.getVersionedInstallDir(
-              agent.id,
-              agent.version,
-              target.archive,
-            );
-            this.store.update(row.id, {
-              command: path.resolve(versionedDir, target.cmd),
-              launchArgs: JSON.stringify(target.args ?? []),
-              launchEnv: JSON.stringify(target.env),
-              installState: 'installed_local',
-              installStage: null,
-              installSource: 'managed',
-              installedVersion: agent.version,
-              installError: interruptedError,
-            });
-          }
-        } else {
-          this.store.setInstallDetails(row.id, {
-            state: hasPreviousInstall
-              ? row.installSource === 'managed'
-                ? 'installed_local'
-                : 'system_available'
-              : 'failed',
-            stage: null,
-            source: row.installSource,
-            installedVersion: row.installedVersion,
-            error: interruptedError,
-          });
-        }
-        changed = true;
-      } else if (row.installStage !== null && row.installStage !== undefined) {
-        this.store.setInstallDetails(row.id, {
-          stage: null,
-          error: 'INSTALL_INTERRUPTED: Installation was interrupted by application shutdown',
-        });
-        changed = true;
-      }
-
-      if (row.authState === 'authenticating' || row.authState === 'verifying') {
-        const authError = {
-          code: 'AUTH_INTERRUPTED',
-          message: 'Authentication was interrupted by application shutdown',
-          retryable: true,
-        };
-        this.store.setAuthDetails(row.id, {
-          authState: 'required',
-          connectionState: 'unknown',
-          authError: JSON.stringify(authError),
-        });
-        changed = true;
-      } else if (row.connectionState === 'checking') {
-        this.store.setAuthDetails(row.id, { connectionState: 'unknown' });
-        changed = true;
-      }
-    }
-
-    if (changed) this.notifyStateChange();
-  }
-
-  async createProfile(providerId: string, name: string): Promise<ProviderDiscovery> {
-    const source = this.store.get(providerId);
-    if (!source) throw new Error('Provider not found');
-    if (!name.trim()) throw new Error('A profile name is required');
-    const id = `profile-${randomUUID()}`;
-    this.store.upsert(id, {
-      ...source,
-      id,
-      registryAgentId: source.registryAgentId ?? providerId,
-      name: name.trim(),
-      customEnv: '{}',
-      authState: 'unknown',
-      connectionState: 'unknown',
-      authError: null,
-      lastVerifiedAt: null,
-      hidden: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    this.notifyStateChange();
-    return this.getProvider(id)!.toDiscovery();
-  }
-
-  async removeProfile(providerId: string): Promise<ProviderDiscovery> {
-    return this.runProviderOperation(providerId, 'remove-profile', async () => {
-      const row = this.store.get(providerId);
-      if (!row?.registryAgentId) throw new Error('Provider is not a named profile');
-      // Keep configuration for saved sessions that still use this profile.
-      this.authCoordinator.cancelLogin(providerId);
-      this.connectionManager.closeConnection(providerId);
-      this.store.update(providerId, { hidden: true });
-      if (this.store.getDefaultProviderId() === providerId)
-        this.store.deleteSetting('defaultProviderId');
-      this.notifyStateChange();
-      return this.getProvider(providerId)!.toDiscovery();
-    });
-  }
-
-  async listNativeSessions(providerId: string, cwd: string, cursor?: string) {
-    const provider = await this.ensureProviderReady(providerId);
-    if (!provider.features.sessions.list || !this.runtime.listSessions)
-      throw new Error('Agent does not support native session listing');
-    const launch = this.launcher.resolveLaunch(
-      this.store.get(providerId)!,
-      this.getAgent(providerId),
-    );
-    return this.runtime.listSessions(launch.command, launch.args, launch.env, { cwd, cursor });
-  }
-
-  async setProviderConfig(
-    providerId: string,
-    updates: {
-      customEnv?: Record<string, string>;
-      customModels?: CustomModel[];
-      nativelyLoadsSkills?: boolean;
-      defaultConfigOptions?: AgentConfigOption[];
-      protocol?: 'auto' | 'v1' | 'v2';
-      defaultModel?: string;
-      defaultThinkingEffort?: string | null;
-    },
-  ): Promise<ProviderDiscovery> {
-    return this.runProviderOperation(providerId, 'set-config', async () => {
-      if (updates.customModels !== undefined) customModelsSchema.parse(updates.customModels);
-      const rowBeforeUpdate = this.store.get(providerId);
-      if (!rowBeforeUpdate) throw new Error(`Provider ${providerId} not found`);
-
-      if (updates.customEnv !== undefined) {
-        const existingCustomEnv = jsonCodecs.stringRecord(rowBeforeUpdate.customEnv);
-        const merged: Record<string, string> = { ...existingCustomEnv };
-        const vaultSnapshot = defaultCredentialVault.snapshotProviderSecrets(providerId);
-        const secretUpdates: Record<string, string | null> = {};
-        for (const [key, value] of Object.entries(updates.customEnv)) {
-          secretUpdates[key] = value.trim().length === 0 ? null : value;
-        }
-        try {
-          const refs = await defaultCredentialVault.setProviderSecrets(providerId, secretUpdates);
-          for (const [key, value] of Object.entries(updates.customEnv)) {
-            if (value.trim().length === 0) delete merged[key];
-            else merged[key] = refs[key];
-          }
-          this.store.setCustomEnv(providerId, merged);
-        } catch (error) {
-          await defaultCredentialVault.restoreProviderSecrets(providerId, vaultSnapshot);
-          throw error;
-        }
-      }
-      if (updates.nativelyLoadsSkills !== undefined) {
-        this.store.update(providerId, { nativelyLoadsSkills: updates.nativelyLoadsSkills });
-      }
-      if (updates.defaultConfigOptions !== undefined) {
-        this.store.setDefaultConfigOptions(providerId, updates.defaultConfigOptions);
-      }
-
-      this.store.update(providerId, {
-        ...(updates.customModels !== undefined
-          ? { customModels: JSON.stringify(updates.customModels) }
-          : {}),
-        ...(updates.protocol !== undefined ? { protocol: updates.protocol } : {}),
-        ...(updates.defaultModel !== undefined
-          ? { defaultModel: updates.defaultModel || null }
-          : {}),
-        ...(updates.defaultThinkingEffort !== undefined
-          ? { defaultThinkingEffort: updates.defaultThinkingEffort || null }
-          : {}),
-      });
-      if (updates.customEnv !== undefined || updates.protocol !== undefined)
-        this.connectionManager.closeConnection(providerId);
-      const agent = this.getAgent(providerId, rowBeforeUpdate);
-
-      this.launcher.invalidateProbe(providerId, this.runtime, agent);
-      if (agent && rowBeforeUpdate.installState !== 'not_installed') {
-        try {
-          await this.probeWithStatePreserved(
-            providerId,
-            agent,
-            rowBeforeUpdate.authState,
-            'apply configuration for',
-          );
-        } catch (err) {
-          this.logger.warn({ err, providerId }, 'Failed to probe provider after config update');
-        }
-      }
-
-      const row = this.store.get(providerId);
-      if (!row) throw new Error(`Provider ${providerId} vanished`);
-      return new Provider(row).toDiscovery();
-    });
-  }
-
   private async probeWithStatePreserved(
     providerId: string,
     agent: RegistryAgent,
@@ -620,114 +381,8 @@ export class ProviderRegistry {
     return promise;
   }
 
-  async ensureProviderReady(
-    providerId: string,
-    options: { force?: boolean } = {},
-  ): Promise<Provider> {
-    await this.authCoordinator.waitForCredentialOperation(providerId);
-    let row = this.store.get(providerId);
-    if (!row) {
-      await this.sync();
-      row = this.store.get(providerId);
-    }
-    if (!row) throw new Error(`Provider ${providerId} not found`);
-
-    const agent = this.getAgent(providerId, row);
-
-    if (
-      row.installState === 'installed_local' &&
-      !this.installer.isInstalledCommand(row.registryAgentId ?? providerId, row.command)
-    ) {
-      this.logger.warn(
-        { providerId, command: row.command, version: agent?.version ?? row.version },
-        'Managed provider executable is missing; reinstalling',
-      );
-      this.store.setInstallState(providerId, 'not_installed');
-      this.store.setAuthState(providerId, 'unknown');
-      row = this.store.get(providerId) ?? row;
-    }
-
-    if (row.installState === 'not_installed') {
-      await this.install(providerId);
-      const updated = this.store.get(providerId);
-      if (!updated) throw new Error(`Provider ${providerId} vanished after install`);
-      return new Provider(updated);
-    }
-
-    if (!options.force && row.authState === 'required') {
-      return new Provider(row);
-    }
-
-    if (!options.force && row.authState === 'not_required' && row.connectionState === 'ready') {
-      return new Provider(row);
-    }
-
-    if (!options.force && row.authState === 'authenticated' && row.connectionState === 'ready') {
-      const opts = jsonCodecs.agentConfigOptions(row.configOptions);
-      const hasModelConfig = !!findAgentConfigOption(opts, 'model');
-      const recentlyVerified =
-        !!row.lastVerifiedAt && Date.now() - row.lastVerifiedAt.getTime() < 5 * 60_000;
-      if (hasModelConfig || recentlyVerified) {
-        return new Provider(row);
-      }
-    }
-
-    if (agent) {
-      this.launcher.invalidateProbe(providerId, this.runtime, agent);
-      await this.probeWithStatePreserved(providerId, agent, row.authState, 'prepare');
-    }
-
-    const updated = this.store.get(providerId);
-    if (!updated) throw new Error(`Provider ${providerId} vanished after probe`);
-    return new Provider(updated);
-  }
-
-  getProvider(id: string): Provider | undefined {
-    const row = this.store.get(id);
-    return row ? new Provider(row) : undefined;
-  }
-
-  getSettings(): Record<string, string | undefined> {
-    const keys = [
-      'onboardingCompleted',
-      'onboardingVersion',
-      'setupStep',
-      'defaultProviderId',
-      'gitTextGeneration',
-      'showThinking',
-      'defaultToWorktree',
-      'registrySyncError',
-      'fontConfig',
-    ];
-    const settings: Record<string, string | undefined> = {};
-    for (const key of keys) {
-      const val = this.store.getSetting(key);
-      if (val !== undefined) settings[key] = val;
-    }
-    return settings;
-  }
-
   updateSetting(key: string, value: string): void {
     this.store.updateSetting(key, value);
-  }
-
-  setDefaultProvider(id: string | null | undefined): void {
-    const normalized = id?.trim() ? id.trim() : null;
-    if (normalized) {
-      const exists = this.store
-        .list()
-        .some((p) => p.id === normalized && p.enabled && p.installState !== 'not_installed');
-      if (!exists) {
-        throw new Error(
-          `Cannot set default provider: ${normalized} is not an enabled, installed provider`,
-        );
-      }
-    }
-    if (normalized) {
-      this.store.setDefaultProviderId(normalized);
-    } else {
-      this.store.deleteSetting('defaultProviderId');
-    }
   }
 
   probeAgent(
@@ -739,9 +394,55 @@ export class ProviderRegistry {
     return this.probing.probeAgent(agent, launch, options, existing);
   }
 
-  dispose(): void {
+  private disposal?: Promise<void>;
+  dispose(): Promise<void> {
+    if (this.disposal) return this.disposal;
+    this.coordinator.stop();
     this.installation.dispose();
-    this.authCoordinator.dispose();
+    const authentication = this.authCoordinator.dispose();
     this.connectionManager.closeAll();
+    this.disposal = Promise.allSettled([authentication, this.coordinator.idle()]).then(async () => {
+      this.connectionManager.closeAll();
+      await this.connectionManager.dispose?.();
+    });
+    return this.disposal;
+  }
+  private getAgent(providerId: string, fallback?: ProviderData): RegistryAgent | undefined {
+    return this.queries.getAgent(providerId, fallback);
+  }
+  discover(): Promise<ProviderDiscovery[]> {
+    return this.queries.discover();
+  }
+  catalog(): Promise<ProviderDiscovery[]> {
+    return this.queries.catalog();
+  }
+  getProvider(id: string): Provider | undefined {
+    return this.queries.getProvider(id);
+  }
+  getSettings(): Record<string, string | undefined> {
+    return this.queries.getSettings();
+  }
+  recoverInterruptedOperations(): Promise<void> {
+    return this.recovery.recoverInterruptedOperations();
+  }
+  createProfile(providerId: string, name: string): Promise<ProviderDiscovery> {
+    return this.configuration.createProfile(providerId, name);
+  }
+  removeProfile(providerId: string): Promise<ProviderDiscovery> {
+    return this.configuration.removeProfile(providerId);
+  }
+  setProviderConfig(
+    ...args: Parameters<ProviderConfiguration['setProviderConfig']>
+  ): Promise<ProviderDiscovery> {
+    return this.configuration.setProviderConfig(...args);
+  }
+  setDefaultProvider(id: string | null | undefined): void {
+    this.configuration.setDefaultProvider(id);
+  }
+  ensureProviderReady(providerId: string, options: { force?: boolean } = {}): Promise<Provider> {
+    return this.readiness.ensureProviderReady(providerId, options);
+  }
+  listNativeSessions(providerId: string, cwd: string, cursor?: string) {
+    return this.readiness.listNativeSessions(providerId, cwd, cursor);
   }
 }

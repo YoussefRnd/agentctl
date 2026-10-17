@@ -44,3 +44,49 @@ describe('ProviderOperationCoordinator', () => {
     expect(res2).toBe(42);
   });
 });
+
+test('shutdown rejects queued work and waits for the operation holding the lane', async () => {
+  const coordinator = new ProviderOperationCoordinator();
+  let finish!: () => void;
+  const running = coordinator.runProviderOperation(
+    'provider',
+    'install',
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+  const queuedWork = () => {
+    throw new Error('must not execute');
+  };
+  const queued = coordinator.runProviderOperation('provider', 'configure', queuedWork);
+  const rejected = expect(queued).rejects.toThrow('disposed');
+  coordinator.stop();
+  let idle = false;
+  const draining = coordinator.idle().then(() => {
+    idle = true;
+  });
+  await Promise.resolve();
+  expect(idle).toBe(false);
+  finish();
+  await Promise.all([running, rejected, draining]);
+  await expect(coordinator.runSync(async () => undefined)).rejects.toThrow('disposed');
+});
+
+test('releasing a mutation lease twice cannot let sync overlap another mutation', async () => {
+  const coordinator = new ProviderOperationCoordinator();
+  const first = await coordinator.acquireMutation();
+  const second = await coordinator.acquireMutation();
+  let syncing = false;
+  const sync = coordinator.runSync(async () => {
+    syncing = true;
+  });
+  first();
+  first();
+  await Promise.resolve();
+  expect(syncing).toBe(false);
+  second();
+  await sync;
+});

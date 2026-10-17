@@ -1,6 +1,6 @@
 import type { ClientCapabilities } from '@agentclientprotocol/sdk';
 import type { ChildProcess } from 'node:child_process';
-import type { AgentConnectionDiagnostic } from '../agent/diagnostics.js';
+import type { AgentConnectionLifecycle } from '../agent/connection-lifecycle.js';
 import type {
   AgentDescriptor,
   AgentMcpGateway,
@@ -82,11 +82,7 @@ export interface IConnectionManager {
 }
 
 /** Complete connection lifecycle required by the application composition root. */
-export interface AgentConnectionManager extends IConnectionManager {
-  getConnectionDiagnostics(): AgentConnectionDiagnostic[];
-  closeConnection(providerId: string): void;
-  closeAll(): void;
-}
+export interface AgentConnectionManager extends IConnectionManager, AgentConnectionLifecycle {}
 
 export interface AcpParsedCapabilities {
   supportsForkSession: boolean;

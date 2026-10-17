@@ -1,3 +1,4 @@
+import { ProviderAuthOperations } from './provider-auth-operations.js';
 import {
   DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
   DEFAULT_TERMINAL_AUTH_TIMEOUT_MS,
@@ -8,7 +9,7 @@ import type { AgentDriver } from '../../agent/types.js';
 import type { ProviderLauncher } from './provider-launcher.js';
 import type { ProviderStore } from './provider-store.js';
 import type { RegistryFetcher } from './registry-fetcher.js';
-import type { AgentConnectionManager } from '../../acp/types.js';
+import type { AgentConnectionLifecycle } from '../../agent/connection-lifecycle.js';
 import { type Logger, noopLogger } from '../../logger.js';
 import { parseRegistryAgents } from './registry-parser.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
@@ -20,7 +21,7 @@ export interface ProviderAuthCoordinatorOptions {
   launcher: ProviderLauncher;
   runtime: AgentDriver;
   fetcher: RegistryFetcher;
-  connectionManager: AgentConnectionManager;
+  connectionManager: AgentConnectionLifecycle;
   logger?: Logger;
   onStateChange?: () => void;
 }
@@ -30,7 +31,7 @@ export class ProviderAuthCoordinator {
   private launcher: ProviderLauncher;
   private runtime: AgentDriver;
   private fetcher: RegistryFetcher;
-  private connectionManager: AgentConnectionManager;
+  private connectionManager: AgentConnectionLifecycle;
   private logger: Logger;
   private onStateChange: () => void;
 
@@ -45,7 +46,7 @@ export class ProviderAuthCoordinator {
   }
   async waitForCredentialOperation(providerId: string): Promise<void> {
     const key = this.store.get(providerId)?.registryAgentId ?? providerId;
-    await this.activeOperations.get(key)?.catch(() => undefined);
+    await this.operations.wait(key);
   }
   getAuthInteraction(providerId: string) {
     return this.browserInteractions.get(providerId)?.request;
@@ -80,13 +81,14 @@ export class ProviderAuthCoordinator {
       this.notify();
     });
   }
-  private async invalidateCredentialPeers(providerId: string): Promise<void> {
+  private async invalidateCredentialPeers(providerId: string, signal?: AbortSignal): Promise<void> {
     const row = this.store.get(providerId)!;
     const agentId = row.registryAgentId ?? row.id;
     const peers = this.store
       .listAll()
       .filter((item) => (item.registryAgentId ?? item.id) === agentId);
     await this.credentialsChanging?.(peers.map((item) => item.id));
+    signal?.throwIfAborted();
     for (const peer of peers) {
       this.connectionManager.closeConnection(peer.id);
       this.launcher.invalidateProbe(peer.id, this.runtime, this.getRegistryAgent(peer.id));
@@ -101,10 +103,7 @@ export class ProviderAuthCoordinator {
     this.notify();
   }
 
-  // Mutex per provider to serialize operations
-  private activeOperations = new Map<string, Promise<unknown>>();
-  // Active abort controllers per provider
-  private abortControllers = new Map<string, AbortController>();
+  private readonly operations = new ProviderAuthOperations();
 
   constructor(options: ProviderAuthCoordinatorOptions) {
     this.store = options.store;
@@ -118,20 +117,7 @@ export class ProviderAuthCoordinator {
 
   private serialize<T>(providerId: string, op: () => Promise<T>): Promise<T> {
     const key = this.store.get(providerId)?.registryAgentId ?? providerId;
-    const prev = this.activeOperations.get(key) ?? Promise.resolve();
-    const next = prev
-      .catch(() => undefined)
-      .then(async () => {
-        return op();
-      })
-      .finally(() => {
-        if (this.activeOperations.get(key) === next) {
-          this.activeOperations.delete(key);
-        }
-      });
-
-    this.activeOperations.set(key, next);
-    return next;
+    return this.operations.serialize(key, op);
   }
 
   private notify(): void {
@@ -208,98 +194,28 @@ export class ProviderAuthCoordinator {
         );
       }
 
-      await this.invalidateCredentialPeers(providerId);
-
-      // 3. Mark authenticating
-      const abortController = new AbortController();
-      this.abortControllers.set(providerId, abortController);
-      const externalSignal = options?.signal;
-      const abortFromExternalSignal = () =>
-        abortController.abort(new Error('Authentication cancelled'));
-      if (externalSignal?.aborted) abortFromExternalSignal();
-      else externalSignal?.addEventListener('abort', abortFromExternalSignal, { once: true });
-
-      this.store.setAuthDetails(providerId, {
-        authState: 'authenticating',
-        connectionState: 'checking',
-        authError: null,
-      });
-      this.notify();
-
-      const timeoutMs = options?.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS;
-
-      try {
-        const launch = this.launcher.resolveLaunch(row, agent);
-        if (!this.runtime.authenticateProvider) {
-          throw new Error('Agent adapter does not support authentication');
-        }
-        abortController.signal.throwIfAborted();
-
-        const authPromise = this.runtime.authenticateProvider(
-          launch.command,
-          launch.args,
-          launch.env,
-          methodId,
-          {
-            signal: abortController.signal,
-            timeoutMs,
-            onBrowserRequest: (request) =>
-              this.requestBrowser(providerId, request, abortController.signal),
-          },
-        );
-        const abortPromise = new Promise<never>((_, reject) => {
-          abortController.signal.addEventListener(
-            'abort',
-            () =>
-              reject(
-                abortController.signal.reason instanceof Error
-                  ? abortController.signal.reason
-                  : new Error('Authentication cancelled'),
-              ),
-            { once: true },
+      await this.runAuthentication(
+        providerId,
+        options?.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
+        options?.signal,
+        'AUTH_FAILED',
+        async (signal, timeoutMs) => {
+          const launch = this.launcher.resolveLaunch(row, agent);
+          if (!this.runtime.authenticateProvider)
+            throw new Error('Agent adapter does not support authentication');
+          await this.runtime.authenticateProvider(
+            launch.command,
+            launch.args,
+            launch.env,
+            methodId,
+            {
+              signal,
+              timeoutMs,
+              onBrowserRequest: (request) => this.requestBrowser(providerId, request, signal),
+            },
           );
-        });
-        const timeout = setTimeout(
-          () => abortController.abort(new Error(`Authentication timed out after ${timeoutMs}ms`)),
-          timeoutMs,
-        );
-        try {
-          await Promise.race([authPromise, abortPromise]);
-        } finally {
-          clearTimeout(timeout);
-        }
-
-        // 4. Verification probe before declaring success
-        this.store.setAuthDetails(providerId, {
-          authState: 'verifying',
-          connectionState: 'checking',
-        });
-        this.notify();
-
-        await this.verify(providerId);
-      } catch (err: unknown) {
-        const current = this.store.get(providerId);
-        if (current?.authState === 'required') throw err;
-        const message = err instanceof Error ? err.message : String(err);
-        const isCancelled = message.toLowerCase().includes('cancelled');
-        const isTimeout = message.toLowerCase().includes('timed out');
-        const authError: AuthError = {
-          code: isCancelled ? 'AUTH_CANCELLED' : isTimeout ? 'AUTH_TIMEOUT' : 'AUTH_FAILED',
-          message,
-          retryable: true,
-        };
-
-        this.store.setAuthDetails(providerId, {
-          authState: isCancelled ? 'required' : 'error',
-          connectionState: isCancelled ? 'ready' : 'error',
-          authError: JSON.stringify(authError),
-        });
-        this.notify();
-        throw err;
-      } finally {
-        externalSignal?.removeEventListener('abort', abortFromExternalSignal);
-        this.abortControllers.delete(providerId);
-      }
+        },
+      );
     });
   }
 
@@ -331,107 +247,79 @@ export class ProviderAuthCoordinator {
         );
       }
 
-      await this.invalidateCredentialPeers(providerId);
+      await this.runAuthentication(
+        providerId,
+        options?.timeoutMs ?? DEFAULT_TERMINAL_AUTH_TIMEOUT_MS,
+        options?.signal,
+        'TERMINAL_AUTH_FAILED',
+        async (signal) => {
+          const launch = this.launcher.resolveLaunch(row, agent);
+          const { exitCode } = await executeCommand(
+            launch.command,
+            [...launch.args, ...(targetMethod.args ?? [])],
+            { ...launch.env, ...targetMethod.env },
+            signal,
+          );
+          if (exitCode !== 0)
+            throw new Error(
+              `Terminal authentication process exited with non-zero code ${exitCode}`,
+            );
+        },
+      );
+    });
+  }
 
-      const abortController = new AbortController();
-      this.abortControllers.set(providerId, abortController);
-      const externalSignal = options?.signal;
-      const abortFromExternalSignal = () =>
-        abortController.abort(new Error('Terminal authentication cancelled'));
-      if (externalSignal?.aborted) abortFromExternalSignal();
-      else externalSignal?.addEventListener('abort', abortFromExternalSignal, { once: true });
-
+  private async runAuthentication(
+    providerId: string,
+    timeoutMs: number,
+    externalSignal: AbortSignal | undefined,
+    failureCode: string,
+    authenticate: (signal: AbortSignal, timeoutMs: number) => Promise<void>,
+  ): Promise<void> {
+    const attempt = this.operations.begin(
+      providerId,
+      timeoutMs,
+      externalSignal,
+      this.store.get(providerId)?.registryAgentId ?? providerId,
+    );
+    try {
+      await attempt.race(this.invalidateCredentialPeers(providerId, attempt.signal));
+      attempt.signal.throwIfAborted();
       this.store.setAuthDetails(providerId, {
         authState: 'authenticating',
         connectionState: 'checking',
         authError: null,
       });
       this.notify();
-
-      try {
-        const baseLaunch = this.launcher.resolveLaunch(row, agent);
-        const terminalArgs = [...baseLaunch.args, ...(targetMethod.args ?? [])];
-        const terminalEnv = { ...baseLaunch.env, ...targetMethod.env };
-        if (abortController.signal.aborted) throw new Error('Terminal authentication cancelled');
-        const commandPromise = executeCommand(
-          baseLaunch.command,
-          terminalArgs,
-          terminalEnv,
-          abortController.signal,
-        );
-        const abortPromise = new Promise<never>((_, reject) => {
-          abortController.signal.addEventListener(
-            'abort',
-            () =>
-              reject(
-                abortController.signal.reason instanceof Error
-                  ? abortController.signal.reason
-                  : new Error('Terminal authentication cancelled'),
-              ),
-            { once: true },
-          );
-        });
-        const timeoutMs = options?.timeoutMs ?? DEFAULT_TERMINAL_AUTH_TIMEOUT_MS;
-        let timeout: ReturnType<typeof setTimeout> | undefined;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeout = setTimeout(() => {
-            const error = new Error(`Terminal authentication timed out after ${timeoutMs}ms`);
-            abortController.abort(error);
-            reject(error);
-          }, timeoutMs);
-        });
-        let exitCode: number;
-        try {
-          ({ exitCode } = await Promise.race([commandPromise, abortPromise, timeoutPromise]));
-        } finally {
-          if (timeout) clearTimeout(timeout);
-        }
-
-        if (exitCode !== 0) {
-          throw new Error(`Terminal authentication process exited with non-zero code ${exitCode}`);
-        }
-
-        // Verify probe
-        this.store.setAuthDetails(providerId, {
-          authState: 'verifying',
-          connectionState: 'checking',
-        });
-        this.notify();
-
-        await this.verify(providerId);
-      } catch (err: unknown) {
-        const current = this.store.get(providerId);
-        if (current?.authState === 'required') throw err;
-        const message = err instanceof Error ? err.message : String(err);
-        const isCancelled = message.toLowerCase().includes('cancelled');
-        const isTimeout = message.toLowerCase().includes('timed out');
-        const authError: AuthError = {
-          code: isCancelled
-            ? 'AUTH_CANCELLED'
-            : isTimeout
-              ? 'AUTH_TIMEOUT'
-              : 'TERMINAL_AUTH_FAILED',
-          message,
-          retryable: true,
-        };
-
-        this.store.setAuthDetails(providerId, {
-          authState: isCancelled ? 'required' : 'error',
-          connectionState: isCancelled ? 'ready' : 'error',
-          authError: JSON.stringify(authError),
-        });
-        this.notify();
-        throw err;
-      } finally {
-        externalSignal?.removeEventListener('abort', abortFromExternalSignal);
-        if (this.abortControllers.get(providerId) === abortController) {
-          this.abortControllers.delete(providerId);
-        }
-      }
-    });
+      await attempt.race(authenticate(attempt.signal, timeoutMs));
+      attempt.signal.throwIfAborted();
+      await attempt.race(this.verify(providerId, attempt.signal));
+    } catch (error) {
+      if (this.store.get(providerId)?.authState === 'required') throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      const cancelled = message.toLowerCase().includes('cancelled');
+      const timedOut = message.toLowerCase().includes('timed out');
+      const authError: AuthError = {
+        code: cancelled ? 'AUTH_CANCELLED' : timedOut ? 'AUTH_TIMEOUT' : failureCode,
+        message,
+        retryable: true,
+      };
+      this.store.setAuthDetails(providerId, {
+        authState: cancelled ? 'required' : 'error',
+        connectionState: cancelled ? 'ready' : 'error',
+        authError: JSON.stringify(authError),
+      });
+      this.notify();
+      throw error;
+    } finally {
+      const pending = this.browserInteractions.get(providerId);
+      if (pending) this.respondAuthInteraction(providerId, pending.request.id, false);
+      attempt.close();
+    }
   }
 
-  async verify(providerId: string): Promise<void> {
+  async verify(providerId: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     const row = this.store.get(providerId);
     if (!row) throw new Error(`Provider ${providerId} not found`);
     const previousAuthState = row.authState === 'needs_auth' ? 'required' : row.authState;
@@ -449,6 +337,7 @@ export class ProviderAuthCoordinator {
 
     try {
       const probeResult = await this.launcher.probe(providerId, this.runtime, agent);
+      signal?.throwIfAborted();
 
       if (probeResult.status === 'needs_auth') {
         const authError: AuthError = {
@@ -473,6 +362,7 @@ export class ProviderAuthCoordinator {
       });
       this.notify();
     } catch (err: unknown) {
+      signal?.throwIfAborted();
       if (this.store.get(providerId)?.authState === 'required') throw err;
       if (isAgentAuthenticationRequiredError(err)) {
         const authError: AuthError = {
@@ -515,11 +405,7 @@ export class ProviderAuthCoordinator {
   cancelLogin(providerId: string): void {
     const pending = this.browserInteractions.get(providerId);
     if (pending) this.respondAuthInteraction(providerId, pending.request.id, false);
-    const controller = this.abortControllers.get(providerId);
-    if (controller) {
-      controller.abort(new Error('Authentication cancelled'));
-      this.abortControllers.delete(providerId);
-    }
+    this.operations.cancel(providerId);
     const row = this.store.get(providerId);
     if (row && (row.authState === 'authenticating' || row.authState === 'verifying')) {
       this.store.setAuthDetails(providerId, {
@@ -530,10 +416,9 @@ export class ProviderAuthCoordinator {
     }
   }
 
-  dispose(): void {
-    for (const providerId of Array.from(this.abortControllers.keys())) {
-      this.cancelLogin(providerId);
-    }
+  dispose(): Promise<void> {
+    for (const id of this.operations.activeProviderIds()) this.cancelLogin(id);
+    return this.operations.dispose();
   }
 
   async logout(providerId: string): Promise<void> {

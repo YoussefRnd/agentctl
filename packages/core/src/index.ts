@@ -15,3 +15,6 @@ export * from './config/index.js';
 export * from './context/context-service.js';
 export * from './logger.js';
 export { createDefaultRepositoryService } from './default-repository-service.js';
+
+export { createAgentRuntimeServices } from './default-agent-runtime.js';
+export type { CreateAgentRuntimeServicesOptions } from './default-agent-runtime.js';

@@ -38,6 +38,24 @@ async function scan(directory) {
         'core cannot depend on app transports or UI',
       );
     }
+    if (
+      file.startsWith('packages/core/src/agent/') ||
+      file.startsWith('packages/core/src/providers/')
+    ) {
+      forbid(
+        /(?:^|\/)acp\//,
+        'agent and provider application contracts cannot depend on ACP adapters',
+      );
+    }
+    if (
+      file.startsWith('packages/core/src/providers/registry/') &&
+      !file.endsWith('/provider-data.js')
+    ) {
+      forbid(
+        /(?:^|\/)provider-registry\.js$/,
+        'provider capabilities cannot depend on their facade',
+      );
+    }
     if (file.startsWith('packages/core/src/session/')) {
       forbid(/(?:^|\/)acp\//, 'session workflows depend on agent contracts, not protocol adapters');
       if (/\/(?:services|execution|projection)\//.test(file)) {

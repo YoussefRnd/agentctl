@@ -7,12 +7,10 @@ import type { ProviderStore } from './providers/registry/provider-store.js';
 import type { RegistryFetcher } from './providers/registry/registry-fetcher.js';
 import type { ProviderLauncher } from './providers/registry/provider-launcher.js';
 
-export const defaultAgentDiagnostics = new AgentDiagnosticsRecorder();
-
 /** Composition helper for applications that use ACP as their configured transport. */
 export function createDefaultAgentDriver(
   logger: Logger,
-  diagnostics: AgentDiagnosticsRecorder = defaultAgentDiagnostics,
+  diagnostics: AgentDiagnosticsRecorder = new AgentDiagnosticsRecorder(),
 ) {
   return AcpAgentDriver.create(spawn, logger, diagnostics);
 }
@@ -23,7 +21,7 @@ export function createDefaultAgentConnectionManager(
   fetcher: RegistryFetcher,
   launcher: ProviderLauncher,
   logger: Logger,
-  diagnostics: AgentDiagnosticsRecorder = defaultAgentDiagnostics,
+  diagnostics: AgentDiagnosticsRecorder = new AgentDiagnosticsRecorder(),
 ) {
   return new PersistentAgentConnectionManager(store, fetcher, launcher, logger, diagnostics);
 }
