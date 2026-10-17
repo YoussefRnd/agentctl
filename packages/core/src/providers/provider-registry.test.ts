@@ -10,7 +10,7 @@ import { noopLogger } from '../logger.js';
 import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
 import { createDatabase } from '../db/index.js';
 import { providers, registrySnapshots } from '../db/schema.js';
-import { defaultCredentialVault } from '../security/credential-vault.js';
+import { getDefaultCredentialVault } from '../default-credential-vault.js';
 
 describe('ProviderRegistry', () => {
   test('automatic updates target only enabled, installed, app-managed providers and continue after a failure', async () => {
@@ -406,7 +406,7 @@ describe('ProviderRegistry', () => {
       data: JSON.stringify({ version: '1', agents: [agent] }),
       fetchedAt: new Date(),
     });
-    const secretRef = await defaultCredentialVault.setSecret(
+    const secretRef = await getDefaultCredentialVault().setSecret(
       agent.id,
       'API_KEY',
       'configured-secret',
@@ -438,7 +438,7 @@ describe('ProviderRegistry', () => {
       expect(stored?.customEnv).toBe(JSON.stringify({ API_KEY: secretRef }));
       expect(stored?.installedVersion).toBe('2.0.0');
     } finally {
-      await defaultCredentialVault.deleteProviderSecrets(agent.id);
+      await getDefaultCredentialVault().deleteProviderSecrets(agent.id);
     }
   });
 

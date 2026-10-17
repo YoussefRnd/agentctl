@@ -5,7 +5,8 @@ import type { ProviderStore } from './provider-store.js';
 import type { AgentDescriptor, AgentDriver } from '../../agent/types.js';
 import { isAgentAuthenticationRequiredError } from '../../agent/errors.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
-import { defaultCredentialVault } from '../../security/credential-vault.js';
+import { defaultCredentialResolver } from '../../default-credential-vault.js';
+import type { CredentialStore } from '../../security/credential-store.js';
 export function resolveNpxPackageSpec(pkg: string, version?: string): string {
   if (!pkg) return '';
   const lastAtIndex = pkg.lastIndexOf('@');
@@ -86,6 +87,10 @@ export class ProviderLauncher {
   constructor(
     private store: ProviderStore,
     private installer: BinaryInstaller,
+    private readonly credentials: Pick<
+      CredentialStore,
+      'resolveEnvSync'
+    > = defaultCredentialResolver,
   ) {}
 
   invalidateProbe(providerId: string, runtime?: AgentDriver, agent?: RegistryAgent): void {
@@ -156,7 +161,7 @@ export class ProviderLauncher {
 
   resolveLaunchFromBase(provider: ProviderData, base: LaunchResolved): LaunchResolved {
     const rawCustomEnv = jsonCodecs.stringRecord(provider.customEnv);
-    const resolvedCustomEnv = defaultCredentialVault.resolveEnvSync(rawCustomEnv);
+    const resolvedCustomEnv = this.credentials.resolveEnvSync(rawCustomEnv);
     const proxy = pickProxyEnv(process.env);
 
     return {

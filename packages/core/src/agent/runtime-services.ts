@@ -1,3 +1,4 @@
+import type { CredentialStore } from '../security/credential-store.js';
 import type { AgentDriver } from './types.js';
 import type { AgentConnectionLifecycle } from './connection-lifecycle.js';
 import type { AgentDiagnosticsRecorder } from './diagnostics.js';
@@ -11,6 +12,7 @@ export interface AgentRuntimeServices {
   connections: AgentConnectionLifecycle;
   diagnostics: AgentDiagnosticsRecorder;
   providers: {
+    credentials: CredentialStore;
     store: ProviderStore;
     fetcher: RegistryFetcher;
     installer: BinaryInstaller;

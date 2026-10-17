@@ -1,3 +1,4 @@
+import type { CredentialStore } from '../../security/credential-store.js';
 import type { AgentDriver } from '../../agent/types.js';
 import type { Logger } from '../../logger.js';
 import { Provider, type ProviderData } from '../provider.js';
@@ -10,6 +11,7 @@ import { findAgentConfigOption } from '@agentctl/shared';
 import { jsonCodecs } from '../../db/json-codecs.js';
 
 interface Dependencies {
+  credentials: Pick<CredentialStore, 'resolveEnvSync'>;
   store: Pick<ProviderStore, 'get' | 'setInstallState' | 'setAuthState'>;
   authCoordinator: Pick<ProviderAuthCoordinator, 'waitForCredentialOperation'>;
   installer: Pick<BinaryInstaller, 'isInstalledCommand'>;
@@ -61,15 +63,15 @@ export class ProviderReadiness {
       await this.deps.install(providerId);
       const updated = this.deps.store.get(providerId);
       if (!updated) throw new Error(`Provider ${providerId} vanished after install`);
-      return new Provider(updated);
+      return new Provider(updated, this.deps.credentials);
     }
 
     if (!options.force && row.authState === 'required') {
-      return new Provider(row);
+      return new Provider(row, this.deps.credentials);
     }
 
     if (!options.force && row.authState === 'not_required' && row.connectionState === 'ready') {
-      return new Provider(row);
+      return new Provider(row, this.deps.credentials);
     }
 
     if (!options.force && row.authState === 'authenticated' && row.connectionState === 'ready') {
@@ -78,7 +80,7 @@ export class ProviderReadiness {
       const recentlyVerified =
         !!row.lastVerifiedAt && Date.now() - row.lastVerifiedAt.getTime() < 5 * 60_000;
       if (hasModelConfig || recentlyVerified) {
-        return new Provider(row);
+        return new Provider(row, this.deps.credentials);
       }
     }
 
@@ -89,7 +91,7 @@ export class ProviderReadiness {
 
     const updated = this.deps.store.get(providerId);
     if (!updated) throw new Error(`Provider ${providerId} vanished after probe`);
-    return new Provider(updated);
+    return new Provider(updated, this.deps.credentials);
   }
 
   async listNativeSessions(providerId: string, cwd: string, cursor?: string) {

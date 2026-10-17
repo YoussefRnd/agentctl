@@ -20,7 +20,7 @@ import { ProviderSync } from './registry/provider-sync.js';
 import { ProviderOperationCoordinator } from './registry/provider-operation-coordinator.js';
 import { ProviderProbingService } from './registry/provider-probing-service.js';
 import { ProviderAuthCoordinator } from './registry/provider-auth-coordinator.js';
-import { defaultCredentialVault } from '../security/credential-vault.js';
+import type { CredentialStore } from '../security/credential-store.js';
 import type { AgentConnectionLifecycle } from '../agent/connection-lifecycle.js';
 import {
   ProviderInstallationService,
@@ -36,6 +36,7 @@ export class ProviderRegistry {
   private recovery: ProviderRecovery;
   private configuration: ProviderConfiguration;
   private readiness: ProviderReadiness;
+  private credentials: CredentialStore;
   private fetcher: RegistryFetcher;
   private installer: BinaryInstaller;
   private store: ProviderStore;
@@ -59,6 +60,7 @@ export class ProviderRegistry {
     runtimeServices?: AgentRuntimeServices,
   ) {
     const services = runtimeServices ?? createAgentRuntimeServices({ db, logger, driver: runtime });
+    this.credentials = services.providers.credentials;
     this.diagnostics = services.diagnostics;
     this.runtime = services.driver;
     this.fetcher = services.providers.fetcher;
@@ -95,6 +97,7 @@ export class ProviderRegistry {
       this.logger,
     );
     this.queries = new ProviderQueries({
+      credentials: this.credentials,
       store: this.store,
       fetcher: this.fetcher,
       withInstallProgress: (item) => this.withInstallProgress(item),
@@ -107,6 +110,7 @@ export class ProviderRegistry {
       notifyStateChange: () => this.notifyStateChange(),
     });
     this.configuration = new ProviderConfiguration({
+      credentials: this.credentials,
       store: this.store,
       authCoordinator: this.authCoordinator,
       connectionManager: this.connectionManager,
@@ -120,6 +124,7 @@ export class ProviderRegistry {
       probeWithStatePreserved: (...args) => this.probeWithStatePreserved(...args),
     });
     this.readiness = new ProviderReadiness({
+      credentials: this.credentials,
       store: this.store,
       authCoordinator: this.authCoordinator,
       installer: this.installer,
@@ -223,12 +228,12 @@ export class ProviderRegistry {
       await this.installer.removeStaging(providerId, this.logger);
     }
 
-    const vaultSnapshot = defaultCredentialVault.snapshotProviderSecrets(providerId);
-    await defaultCredentialVault.deleteProviderSecrets(providerId);
+    const vaultSnapshot = this.credentials.snapshotProviderSecrets(providerId);
+    await this.credentials.deleteProviderSecrets(providerId);
     try {
       this.store.delete(providerId);
     } catch (error) {
-      await defaultCredentialVault.restoreProviderSecrets(providerId, vaultSnapshot);
+      await this.credentials.restoreProviderSecrets(providerId, vaultSnapshot);
       throw error;
     }
 
@@ -340,13 +345,15 @@ export class ProviderRegistry {
   }
 
   autoUpdateInstalledProviders(): Promise<void> {
-    return this.installation.autoUpdateInstalledProviders((id, options) =>
-      this.install(id, options),
+    return this.coordinator.runBackground(() =>
+      this.installation.autoUpdateInstalledProviders((id, options) => this.install(id, options)),
     );
   }
 
   async probeAllInstalledProviders(): Promise<void> {
-    return this.probing.probeAllInstalledProviders((id) => this.refreshProvider(id));
+    return this.coordinator.runBackground(() =>
+      this.probing.probeAllInstalledProviders((id) => this.refreshProvider(id)),
+    );
   }
 
   private async probeWithStatePreserved(
@@ -398,6 +405,7 @@ export class ProviderRegistry {
   dispose(): Promise<void> {
     if (this.disposal) return this.disposal;
     this.coordinator.stop();
+    this.fetcher.dispose?.();
     this.installation.dispose();
     const authentication = this.authCoordinator.dispose();
     this.connectionManager.closeAll();
@@ -423,10 +431,10 @@ export class ProviderRegistry {
     return this.queries.getSettings();
   }
   recoverInterruptedOperations(): Promise<void> {
-    return this.recovery.recoverInterruptedOperations();
+    return this.coordinator.runBackground(() => this.recovery.recoverInterruptedOperations());
   }
   createProfile(providerId: string, name: string): Promise<ProviderDiscovery> {
-    return this.configuration.createProfile(providerId, name);
+    return this.coordinator.runMutation(() => this.configuration.createProfile(providerId, name));
   }
   removeProfile(providerId: string): Promise<ProviderDiscovery> {
     return this.configuration.removeProfile(providerId);
@@ -440,9 +448,13 @@ export class ProviderRegistry {
     this.configuration.setDefaultProvider(id);
   }
   ensureProviderReady(providerId: string, options: { force?: boolean } = {}): Promise<Provider> {
-    return this.readiness.ensureProviderReady(providerId, options);
+    return this.coordinator.runBackground(() =>
+      this.readiness.ensureProviderReady(providerId, options),
+    );
   }
   listNativeSessions(providerId: string, cwd: string, cursor?: string) {
-    return this.readiness.listNativeSessions(providerId, cwd, cursor);
+    return this.coordinator.runBackground(() =>
+      this.readiness.listNativeSessions(providerId, cwd, cursor),
+    );
   }
 }

@@ -1,3 +1,4 @@
+import type { CredentialStore } from '../../security/credential-store.js';
 import { Provider, type ProviderData } from '../provider.js';
 import type { ProviderStore } from './provider-store.js';
 import type { RegistryFetcher } from './registry-fetcher.js';
@@ -5,6 +6,7 @@ import { providerDataFromRegistry } from './provider-data.js';
 import type { RegistryAgent, ProviderDiscovery } from '@agentctl/shared';
 
 interface Dependencies {
+  credentials: Pick<CredentialStore, 'resolveEnvSync'>;
   store: Pick<ProviderStore, 'get' | 'list' | 'getSetting'>;
   fetcher: Pick<RegistryFetcher, 'getCachedAgents'>;
   withInstallProgress: (discovery: ProviderDiscovery) => ProviderDiscovery;
@@ -20,13 +22,15 @@ export class ProviderQueries {
       ?.find((candidate) => candidate.id === registryId);
     if (agent) return agent;
     const row = fallback ?? this.deps.store.get(providerId);
-    return row ? new Provider(row).toDiscovery().agent : undefined;
+    return row ? new Provider(row, this.deps.credentials).toDiscovery().agent : undefined;
   }
 
   async discover(): Promise<ProviderDiscovery[]> {
     return this.deps.store
       .list()
-      .map((row) => this.deps.withInstallProgress(new Provider(row).toDiscovery()));
+      .map((row) =>
+        this.deps.withInstallProgress(new Provider(row, this.deps.credentials).toDiscovery()),
+      );
   }
 
   async catalog(): Promise<ProviderDiscovery[]> {
@@ -36,14 +40,16 @@ export class ProviderQueries {
     if (!agents) {
       return this.deps.store
         .list()
-        .map((row) => this.deps.withInstallProgress(new Provider(row).toDiscovery()));
+        .map((row) =>
+          this.deps.withInstallProgress(new Provider(row, this.deps.credentials).toDiscovery()),
+        );
     }
 
     return agents.map((agent) => {
       const row = this.deps.store.get(agent.id);
       let discovery: ProviderDiscovery;
       if (row) {
-        discovery = new Provider(row).toDiscovery();
+        discovery = new Provider(row, this.deps.credentials).toDiscovery();
       } else {
         const synthetic = providerDataFromRegistry(agent);
         discovery = new Provider(synthetic).toDiscovery();
@@ -63,7 +69,7 @@ export class ProviderQueries {
 
   getProvider(id: string): Provider | undefined {
     const row = this.deps.store.get(id);
-    return row ? new Provider(row) : undefined;
+    return row ? new Provider(row, this.deps.credentials) : undefined;
   }
 
   getSettings(): Record<string, string | undefined> {

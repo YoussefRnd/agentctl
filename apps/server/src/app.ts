@@ -22,7 +22,7 @@ import {
   AuthManager,
   ContextService,
   createAgentRuntimeServices,
-  defaultCredentialVault,
+  migrateProviderCredentials,
   type AgentRuntimeServices,
 } from '@agentctl/core';
 import websocket from '@fastify/websocket';
@@ -98,7 +98,10 @@ export async function buildApp(deps: AppDependencies = {}) {
 
   if (process.env.NODE_ENV !== 'test') {
     try {
-      const { migratedCount } = await defaultCredentialVault.migratePlaintextCustomEnv(db);
+      const { migratedCount } = await migrateProviderCredentials(
+        db,
+        runtimeServices.providers.credentials,
+      );
       if (migratedCount > 0) {
         fastify.log.info({ migratedCount }, 'Migrated provider environment secrets to vault');
       }

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSystemSkillsDirectory, SkillRegistry } from './registry.js';
 
 const originalAgentctlHome = process.env.AGENTCTL_HOME;
@@ -16,6 +16,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   const restore = (name: string, value: string | undefined) => {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;
@@ -95,5 +96,23 @@ Use the example.
     expect(registry.findByPurpose('provider-handoff')?.name).toBe('example-skill');
     await fs.rm(home, { recursive: true, force: true });
     await fs.rm(extra, { recursive: true, force: true });
+  });
+  it('shares bundled installation between concurrent loads and retries a failed copy', async () => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-skill-retry-'));
+    process.env.AGENTCTL_HOME = home;
+    try {
+      const copy = vi.spyOn(fs, 'cp').mockRejectedValueOnce(new Error('copy failed'));
+      const failed = await SkillRegistry.load({ cwd: home, includeWorkspaceSkills: false });
+      expect(failed.findByPurpose('provider-handoff')).toBeUndefined();
+      const [first, second] = await Promise.all([
+        SkillRegistry.load({ cwd: home, includeWorkspaceSkills: false }),
+        SkillRegistry.load({ cwd: home, includeWorkspaceSkills: false }),
+      ]);
+      expect(copy).toHaveBeenCalledTimes(2);
+      expect(first.findByPurpose('provider-handoff')?.name).toBe('handoff');
+      expect(second.formatCatalog()).toBe(first.formatCatalog());
+    } finally {
+      await fs.rm(home, { recursive: true, force: true });
+    }
   });
 });

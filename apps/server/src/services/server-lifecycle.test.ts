@@ -53,8 +53,8 @@ test('background updates have one timer and do not start follow-up work after sh
   const { deps, lifecycle } = setup();
   let release!: () => void;
   deps.providers.sync.mockReturnValue(
-    new Promise<void>((resolve) => {
-      release = resolve;
+    new Promise<void>((_resolve, reject) => {
+      release = () => reject(new Error('Provider registry is disposed'));
     }),
   );
   lifecycle.startUpdates();
@@ -69,4 +69,5 @@ test('background updates have one timer and do not start follow-up work after sh
   expect(deps.providers.autoUpdateInstalledProviders).not.toHaveBeenCalled();
   expect(deps.providers.probeAllInstalledProviders).not.toHaveBeenCalled();
   expect(deps.events.publishState).not.toHaveBeenCalled();
+  expect(deps.log.error).not.toHaveBeenCalled();
 });

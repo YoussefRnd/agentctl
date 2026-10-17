@@ -16,7 +16,8 @@ import {
 import type { providers } from '../db/schema.js';
 import { DEFAULT_AGENT_MODEL } from '../config/runtime-defaults.js';
 import { jsonCodecs } from '../db/json-codecs.js';
-import { defaultCredentialVault } from '../security/credential-vault.js';
+import { defaultCredentialResolver } from '../default-credential-vault.js';
+import type { CredentialStore } from '../security/credential-store.js';
 
 export type ProviderData = Omit<
   typeof providers.$inferSelect,
@@ -58,7 +59,13 @@ export interface ProviderLaunchConfig {
 }
 
 export class Provider {
-  constructor(private readonly data: ProviderData) {}
+  constructor(
+    private readonly data: ProviderData,
+    private readonly credentials: Pick<
+      CredentialStore,
+      'resolveEnvSync'
+    > = defaultCredentialResolver,
+  ) {}
 
   get id(): string {
     return this.data.id;
@@ -184,7 +191,7 @@ export class Provider {
       args: [...jsonCodecs.stringArray(this.data.launchArgs), ...extraArgs],
       env: {
         ...jsonCodecs.stringRecord(this.data.launchEnv),
-        ...defaultCredentialVault.resolveEnvSync(jsonCodecs.stringRecord(this.data.customEnv)),
+        ...this.credentials.resolveEnvSync(jsonCodecs.stringRecord(this.data.customEnv)),
         ...(this.data.protocol && this.data.protocol !== 'auto'
           ? { AGENTCTL_ACP_PROTOCOL: this.data.protocol }
           : {}),

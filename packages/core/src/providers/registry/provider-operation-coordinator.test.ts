@@ -90,3 +90,34 @@ test('releasing a mutation lease twice cannot let sync overlap another mutation'
   second();
   await sync;
 });
+
+test('shutdown drains background orchestration without blocking its nested mutations', async () => {
+  const coordinator = new ProviderOperationCoordinator();
+  let finish!: () => void;
+  const release = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let nestedStarted!: () => void;
+  const nested = new Promise<void>((resolve) => {
+    nestedStarted = resolve;
+  });
+  const background = coordinator.runBackground(async () => {
+    await coordinator.runProviderOperation('provider', 'probe', async () => {
+      nestedStarted();
+    });
+    await release;
+  });
+  await nested;
+  coordinator.stop();
+  const rejected = expect(coordinator.runBackground(async () => undefined)).rejects.toThrow(
+    'disposed',
+  );
+  let finished = false;
+  const idle = coordinator.idle().then(() => {
+    finished = true;
+  });
+  await Promise.resolve();
+  expect(finished).toBe(false);
+  finish();
+  await Promise.all([background, rejected, idle]);
+});

@@ -19,6 +19,7 @@ export class ProviderSync {
       agents = await this.fetcher.fetch();
       this.store.deleteSetting('registrySyncError');
     } catch (err: unknown) {
+      if (this.fetcher.isDisposed) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.store.updateSetting('registrySyncError', msg);
       throw err;

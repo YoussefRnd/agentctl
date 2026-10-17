@@ -3,7 +3,7 @@ import { Provider } from './provider.js';
 import { resolveNpxPackageSpec } from './registry/provider-launcher.js';
 import type { providers } from '../db/schema.js';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
-import { defaultCredentialVault } from '../security/credential-vault.js';
+import { getDefaultCredentialVault } from '../default-credential-vault.js';
 import { negotiateCapabilities } from './capabilities-negotiator.js';
 
 test('negotiates and defaults categorized model and reasoning options with opaque IDs', () => {
@@ -183,7 +183,7 @@ test('resolveNpxPackageSpec formats package specifiers correctly without duplica
 
 test('Provider resolves vaulted environment values before launching a session', async () => {
   const providerId = `vault-launch-${process.pid.toString()}`;
-  const ref = await defaultCredentialVault.setSecret(providerId, 'API_KEY', 'secret-value');
+  const ref = await getDefaultCredentialVault().setSecret(providerId, 'API_KEY', 'secret-value');
   try {
     const launch = new Provider(
       row({
@@ -195,6 +195,6 @@ test('Provider resolves vaulted environment values before launching a session', 
 
     expect(launch.env).toEqual({ PUBLIC_VALUE: 'visible', API_KEY: 'secret-value' });
   } finally {
-    await defaultCredentialVault.deleteProviderSecrets(providerId);
+    await getDefaultCredentialVault().deleteProviderSecrets(providerId);
   }
 });

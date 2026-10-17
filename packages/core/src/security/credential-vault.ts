@@ -2,10 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { eq } from 'drizzle-orm';
-import { providers } from '../db/schema.js';
-import type { DbClient } from '../db/index.js';
-import { jsonCodecs } from '../db/json-codecs.js';
+import type { CredentialStore } from './credential-store.js';
 
 const VAULT_REF_PREFIX = 'vault:';
 
@@ -15,7 +12,7 @@ export interface CredentialVaultOptions {
   keyFile?: string;
 }
 
-export class CredentialVault {
+export class CredentialVault implements CredentialStore {
   private vaultPath: string;
   private keyPath: string;
   private masterKey: Buffer | null = null;
@@ -60,13 +57,14 @@ export class CredentialVault {
     }
 
     // Generate a secure 256-bit master key
-    this.masterKey = crypto.randomBytes(32);
-    fs.writeFileSync(this.keyPath, this.masterKey.toString('hex'), {
+    const key = crypto.randomBytes(32);
+    fs.writeFileSync(this.keyPath, key.toString('hex'), {
       mode: 0o600,
       encoding: 'utf8',
       flag: 'wx',
     });
-    return this.masterKey;
+    this.masterKey = key;
+    return key;
   }
 
   private loadVault(): void {
@@ -102,10 +100,10 @@ export class CredentialVault {
     }
   }
 
-  private persistVault(): void {
+  private persistVault(cache: ReadonlyMap<string, string>): void {
     this.ensureDirectory();
     const data: Record<string, string> = {};
-    for (const [k, v] of this.cache.entries()) {
+    for (const [k, v] of cache.entries()) {
       data[k] = v;
     }
 
@@ -116,10 +114,13 @@ export class CredentialVault {
     const tag = cipher.getAuthTag();
 
     const output = Buffer.concat([iv, tag, ciphertext]);
-    const tempPath = `${this.vaultPath}.${process.pid.toString()}.tmp`;
-    fs.writeFileSync(tempPath, output, { mode: 0o600 });
-    fs.renameSync(tempPath, this.vaultPath);
-    if (process.platform !== 'win32') fs.chmodSync(this.vaultPath, 0o600);
+    const tempPath = `${this.vaultPath}.${crypto.randomUUID()}.tmp`;
+    try {
+      fs.writeFileSync(tempPath, output, { mode: 0o600 });
+      fs.renameSync(tempPath, this.vaultPath);
+    } finally {
+      fs.rmSync(tempPath, { force: true });
+    }
   }
 
   isSecretRef(val: string): boolean {
@@ -140,34 +141,42 @@ export class CredentialVault {
     return this.cache.get(ref) ?? null;
   }
 
-  async setSecret(providerId: string, key: string, value: string): Promise<string> {
+  private write<T>(mutate: (candidate: Map<string, string>) => T): T {
     this.loadVault();
+    const candidate = new Map(this.cache);
+    const result = mutate(candidate);
+    if (
+      candidate.size === this.cache.size &&
+      [...candidate].every(([key, value]) => this.cache.get(key) === value)
+    )
+      return result;
+    this.persistVault(candidate);
+    this.cache = candidate;
+    return result;
+  }
+
+  async setSecret(providerId: string, key: string, value: string): Promise<string> {
     const ref = this.createSecretRef(providerId, key);
-    this.cache.set(ref, value);
-    this.persistVault();
+    this.write((candidate) => candidate.set(ref, value));
     return ref;
   }
 
-  /** Apply a provider's secret changes with a single encrypted-file replacement. */
   async setProviderSecrets(
     providerId: string,
     updates: Record<string, string | null>,
   ): Promise<Record<string, string>> {
-    this.loadVault();
-    const refs: Record<string, string> = {};
-    let modified = false;
-    for (const [key, value] of Object.entries(updates)) {
-      const ref = this.createSecretRef(providerId, key);
-      if (value === null) {
-        modified = this.cache.delete(ref) || modified;
-      } else {
-        this.cache.set(ref, value);
-        refs[key] = ref;
-        modified = true;
+    return this.write((candidate) => {
+      const refs: Record<string, string> = {};
+      for (const [key, value] of Object.entries(updates)) {
+        const ref = this.createSecretRef(providerId, key);
+        if (value === null) candidate.delete(ref);
+        else {
+          candidate.set(ref, value);
+          refs[key] = ref;
+        }
       }
-    }
-    if (modified) this.persistVault();
-    return refs;
+      return refs;
+    });
   }
 
   snapshotProviderSecrets(providerId: string): Record<string, string> {
@@ -182,50 +191,25 @@ export class CredentialVault {
     providerId: string,
     snapshot: Record<string, string>,
   ): Promise<void> {
-    this.loadVault();
     const prefix = `${VAULT_REF_PREFIX}provider:${providerId}:`;
-    for (const ref of Array.from(this.cache.keys())) {
-      if (ref.startsWith(prefix)) this.cache.delete(ref);
-    }
-    for (const [ref, value] of Object.entries(snapshot)) this.cache.set(ref, value);
-    this.persistVault();
+    this.write((candidate) => {
+      for (const ref of candidate.keys()) if (ref.startsWith(prefix)) candidate.delete(ref);
+      for (const [ref, value] of Object.entries(snapshot)) {
+        if (!ref.startsWith(prefix)) throw new Error('Secret snapshot belongs to another provider');
+        candidate.set(ref, value);
+      }
+    });
   }
 
   async deleteSecret(ref: string): Promise<void> {
-    this.loadVault();
-    if (this.cache.delete(ref)) {
-      this.persistVault();
-    }
+    this.write((candidate) => candidate.delete(ref));
   }
-
   async deleteProviderSecrets(providerId: string): Promise<void> {
-    this.loadVault();
-    const prefix = `${VAULT_REF_PREFIX}provider:${providerId}:`;
-    let modified = false;
-    for (const key of Array.from(this.cache.keys())) {
-      if (key.startsWith(prefix)) {
-        this.cache.delete(key);
-        modified = true;
-      }
-    }
-    if (modified) {
-      this.persistVault();
-    }
+    await this.restoreProviderSecrets(providerId, {});
   }
 
   async resolveEnv(env: Record<string, string>): Promise<Record<string, string>> {
-    this.loadVault();
-    const resolved: Record<string, string> = {};
-    for (const [key, val] of Object.entries(env)) {
-      if (this.isSecretRef(val)) {
-        const secret = this.cache.get(val);
-        if (secret === undefined) throw new Error(`Credential vault reference is missing: ${val}`);
-        resolved[key] = secret;
-      } else {
-        resolved[key] = val;
-      }
-    }
-    return resolved;
+    return this.resolveEnvSync(env);
   }
 
   resolveEnvSync(env: Record<string, string>): Record<string, string> {
@@ -242,50 +226,4 @@ export class CredentialVault {
     }
     return resolved;
   }
-
-  async migratePlaintextCustomEnv(db: DbClient): Promise<{ migratedCount: number }> {
-    this.loadVault();
-    const rows = db.select().from(providers).all();
-    let migratedCount = 0;
-    const rowUpdates: Array<{ id: string; customEnv: string }> = [];
-
-    for (const row of rows) {
-      const envRecord = jsonCodecs.stringRecord(row.customEnv);
-      let changed = false;
-      const nextEnvRecord: Record<string, string> = {};
-
-      for (const [key, val] of Object.entries(envRecord)) {
-        if (val && !this.isSecretRef(val)) {
-          const ref = this.createSecretRef(row.id, key);
-          this.cache.set(ref, val);
-          nextEnvRecord[key] = ref;
-          changed = true;
-          migratedCount++;
-        } else {
-          nextEnvRecord[key] = val;
-        }
-      }
-
-      if (changed) {
-        rowUpdates.push({ id: row.id, customEnv: JSON.stringify(nextEnvRecord) });
-      }
-    }
-
-    if (migratedCount > 0) {
-      // Persist secrets before replacing plaintext with references. A crash or
-      // database error can leave harmless orphaned vault entries, but never a
-      // database reference whose secret was not durably written.
-      this.persistVault();
-      for (const update of rowUpdates) {
-        db.update(providers)
-          .set({ customEnv: update.customEnv })
-          .where(eq(providers.id, update.id))
-          .run();
-      }
-    }
-
-    return { migratedCount };
-  }
 }
-
-export const defaultCredentialVault = new CredentialVault();

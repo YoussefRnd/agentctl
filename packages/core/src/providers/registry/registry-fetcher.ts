@@ -10,6 +10,7 @@ import { type Logger, noopLogger } from '../../logger.js';
 const CDN_URL = 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json';
 
 export class RegistryFetcher {
+  private readonly shutdown = new AbortController();
   private activeFetch?: Promise<RegistryAgent[]>;
 
   constructor(
@@ -41,11 +42,12 @@ export class RegistryFetcher {
   }
 
   private async fetchRemote(headers: Record<string, string> = {}): Promise<Response> {
-    const signal = AbortSignal.timeout(8_000);
+    const signal = AbortSignal.any([AbortSignal.timeout(8_000), this.shutdown.signal]);
     return fetch(CDN_URL, { headers, signal });
   }
 
   fetch(): Promise<RegistryAgent[]> {
+    if (this.shutdown.signal.aborted) return Promise.reject(this.shutdown.signal.reason);
     if (this.activeFetch) return this.activeFetch;
     const request = this.fetchUncached();
     this.activeFetch = request;
@@ -91,6 +93,7 @@ export class RegistryFetcher {
 
       return this.mergeAgents(localAgents, validated.agents);
     } catch (err) {
+      this.shutdown.signal.throwIfAborted();
       this.logger.warn(err, 'Failed to fetch remote registry, falling back to cache');
       if (lastSnapshot) {
         try {
@@ -105,6 +108,15 @@ export class RegistryFetcher {
       if (localAgents.length > 0) return localAgents;
       throw err;
     }
+  }
+
+  get isDisposed(): boolean {
+    return this.shutdown.signal.aborted;
+  }
+
+  /** The registry owns this fetcher; shutdown aborts acquisition before draining sync. */
+  dispose(): void {
+    this.shutdown.abort(new Error('Provider registry is disposed'));
   }
 
   private async fetchFresh(localAgents: RegistryAgent[]): Promise<RegistryAgent[]> {

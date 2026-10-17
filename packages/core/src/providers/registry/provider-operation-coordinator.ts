@@ -99,6 +99,16 @@ export class ProviderOperationCoordinator {
     return this.track(this.executeSync(op));
   }
 
+  /** Track orchestration without holding a mutation lane across nested install/sync operations. */
+  runBackground<T>(operation: () => Promise<T>): Promise<T> {
+    return this.track(
+      Promise.resolve().then(() => {
+        this.assertOpen();
+        return operation();
+      }),
+    );
+  }
+
   stop(): void {
     this.closed = true;
   }

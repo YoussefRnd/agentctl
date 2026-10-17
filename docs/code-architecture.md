@@ -159,3 +159,10 @@ forge selection, complete module ownership, and lock/resource ordering.
 
 The [workspace workflow audit](workspace-architecture.md) records backend-neutral lifecycle,
 checkpoint persistence, legacy import rules, optional Git capabilities, and non-Git adapter acceptance.
+
+The [provider/agent audit](provider-architecture.md) records registry capabilities, protocol-neutral
+runtime composition, authentication/install cancellation and awaited shared connection ownership.
+The [remaining-core audit](core-infrastructure-architecture.md) records security/auth, MCP,
+context, skills, configuration, database and root composition ownership. The
+[core ownership ledger](core-ownership.json) assigns every production core module and bundled
+skill asset; architecture checks reject missing, duplicate or stale entries.

@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { sql } from 'drizzle-orm';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { CredentialVault } from './credential-vault.js';
+import { migrateProviderCredentials } from './credential-migration.js';
 import { createDatabase } from '../db/index.js';
 import { providers } from '../db/schema.js';
 
@@ -20,6 +22,7 @@ describe('CredentialVault', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -120,7 +123,7 @@ describe('CredentialVault', () => {
       })
       .run();
 
-    const { migratedCount } = await vault.migratePlaintextCustomEnv(db);
+    const { migratedCount } = await migrateProviderCredentials(db, vault);
     expect(migratedCount).toBe(2);
 
     const updatedRow = db.select().from(providers).all()[0];
@@ -131,5 +134,43 @@ describe('CredentialVault', () => {
 
     expect(await vault.getSecret(updatedEnv.ANTHROPIC_API_KEY)).toBe('sk-ant-test-plaintext');
     expect(await vault.getSecret(updatedEnv.PUBLIC_VAR)).toBe('already_public');
+  });
+  it('keeps memory and disk on the previous secret when atomic replacement fails', async () => {
+    const ref = await vault.setSecret('provider', 'TOKEN', 'original');
+    vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+      throw new Error('disk failure');
+    });
+    await expect(
+      vault.setProviderSecrets('provider', { TOKEN: 'replacement', NEW: 'new-secret' }),
+    ).rejects.toThrow('disk failure');
+    expect(await vault.getSecret(ref)).toBe('original');
+    expect(await vault.getSecret(vault.createSecretRef('provider', 'NEW'))).toBeNull();
+    expect(fs.readdirSync(tmpDir).some((entry) => entry.endsWith('.tmp'))).toBe(false);
+    const reopened = new CredentialVault({
+      vaultFile: path.join(tmpDir, 'test.vault'),
+      keyFile: path.join(tmpDir, 'test.key'),
+    });
+    expect(await reopened.getSecret(ref)).toBe('original');
+  });
+
+  it('rolls back all database references if credential migration fails and can retry', async () => {
+    const db = createDatabase(':memory:');
+    for (const id of ['first', 'second'])
+      db.insert(providers)
+        .values({ id, name: id, command: id, customEnv: JSON.stringify({ TOKEN: id }) })
+        .run();
+    db.run(
+      sql.raw(
+        "CREATE TRIGGER reject_env BEFORE UPDATE OF custom_env ON providers WHEN NEW.id = 'second' BEGIN SELECT RAISE(ABORT, 'migration failure'); END",
+      ),
+    );
+    await expect(migrateProviderCredentials(db, vault)).rejects.toThrow('migration failure');
+    for (const row of db.select().from(providers).all()) {
+      expect(JSON.parse(row.customEnv)).toEqual({ TOKEN: row.id });
+      expect(await vault.getSecret(vault.createSecretRef(row.id, 'TOKEN'))).toBe(row.id);
+    }
+    db.run(sql.raw('DROP TRIGGER reject_env'));
+    expect(await migrateProviderCredentials(db, vault)).toEqual({ migratedCount: 2 });
+    expect(await migrateProviderCredentials(db, vault)).toEqual({ migratedCount: 0 });
   });
 });

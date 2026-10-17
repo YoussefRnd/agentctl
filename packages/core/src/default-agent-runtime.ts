@@ -1,3 +1,5 @@
+import { getDefaultCredentialVault } from './default-credential-vault.js';
+import type { CredentialStore } from './security/credential-store.js';
 import { spawn } from 'node:child_process';
 import type { AgentDriver } from './agent/types.js';
 import { AcpAgentDriver } from './acp/driver.js';
@@ -14,6 +16,7 @@ import type { AgentRuntimeServices } from './agent/runtime-services.js';
 
 export interface CreateAgentRuntimeServicesOptions {
   db?: DbClient;
+  credentials?: CredentialStore;
   driver?: AgentDriver;
   store?: ProviderStore;
   fetcher?: RegistryFetcher;
@@ -40,7 +43,8 @@ export function createAgentRuntimeServices(
   }
   const fetcher = options.fetcher ?? new RegistryFetcher(db!, options.logger);
   const installer = options.installer ?? new BinaryInstaller();
-  const launcher = options.launcher ?? new ProviderLauncher(store, installer);
+  const credentials = options.credentials ?? getDefaultCredentialVault();
+  const launcher = options.launcher ?? new ProviderLauncher(store, installer, credentials);
 
   const connections = new PersistentAgentConnectionManager(
     store,
@@ -59,6 +63,6 @@ export function createAgentRuntimeServices(
     driver,
     connections,
     diagnostics,
-    providers: { store, fetcher, installer, launcher },
+    providers: { store, fetcher, installer, launcher, credentials },
   };
 }

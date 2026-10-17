@@ -18,3 +18,4 @@ export { createDefaultRepositoryService } from './default-repository-service.js'
 
 export { createAgentRuntimeServices } from './default-agent-runtime.js';
 export type { CreateAgentRuntimeServicesOptions } from './default-agent-runtime.js';
+export { getDefaultCredentialVault } from './default-credential-vault.js';

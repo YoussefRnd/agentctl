@@ -1,0 +1,330 @@
+{
+  "areas": [
+    {
+      "area": "acp",
+      "owner": "ACP protocol adapters and transport",
+      "evidence": "docs/provider-architecture.md",
+      "files": [
+        "packages/core/src/acp/cache/launch-identity.ts",
+        "packages/core/src/acp/cache/provider-descriptor.ts",
+        "packages/core/src/acp/cache/writer-lock.ts",
+        "packages/core/src/acp/driver.ts",
+        "packages/core/src/acp/extensions/agentctl.ts",
+        "packages/core/src/acp/index.ts",
+        "packages/core/src/acp/protocol/auth-methods.ts",
+        "packages/core/src/acp/protocol/auth.ts",
+        "packages/core/src/acp/protocol/bounded-text.ts",
+        "packages/core/src/acp/protocol/browser-auth.ts",
+        "packages/core/src/acp/protocol/client-authorization.ts",
+        "packages/core/src/acp/protocol/client-handlers.ts",
+        "packages/core/src/acp/protocol/compaction.ts",
+        "packages/core/src/acp/protocol/content.ts",
+        "packages/core/src/acp/protocol/elicitations.ts",
+        "packages/core/src/acp/protocol/error-classifier.ts",
+        "packages/core/src/acp/protocol/events.ts",
+        "packages/core/src/acp/protocol/file-system.ts",
+        "packages/core/src/acp/protocol/model-context.ts",
+        "packages/core/src/acp/protocol/negotiation.ts",
+        "packages/core/src/acp/protocol/permission-metadata.ts",
+        "packages/core/src/acp/protocol/permissions.ts",
+        "packages/core/src/acp/protocol/prompt.ts",
+        "packages/core/src/acp/protocol/request-cancellation.ts",
+        "packages/core/src/acp/protocol/request-scopes.ts",
+        "packages/core/src/acp/protocol/retry-metadata.ts",
+        "packages/core/src/acp/protocol/session-fork.ts",
+        "packages/core/src/acp/protocol/session-params.ts",
+        "packages/core/src/acp/protocol/subagent-sessions.ts",
+        "packages/core/src/acp/protocol/terminal-manager.ts",
+        "packages/core/src/acp/protocol/terminals.ts",
+        "packages/core/src/acp/protocol/tool-call-utils.ts",
+        "packages/core/src/acp/protocol/usage.ts",
+        "packages/core/src/acp/runtime.ts",
+        "packages/core/src/acp/testing/smoke-peer.mjs",
+        "packages/core/src/acp/transport/acp-process-lifecycle.ts",
+        "packages/core/src/acp/transport/capabilities-cache.ts",
+        "packages/core/src/acp/transport/client-connection.ts",
+        "packages/core/src/acp/transport/connection-lease.ts",
+        "packages/core/src/acp/transport/limits.ts",
+        "packages/core/src/acp/transport/path-security.ts",
+        "packages/core/src/acp/transport/persistent-connection.ts",
+        "packages/core/src/acp/transport/process-transport.ts",
+        "packages/core/src/acp/transport/session-requests.ts",
+        "packages/core/src/acp/transport/stderr.ts",
+        "packages/core/src/acp/transport/stream-debug.ts",
+        "packages/core/src/acp/transport/subagent-stream.ts",
+        "packages/core/src/acp/transport/turn-control.ts",
+        "packages/core/src/acp/transport/update-drain.ts",
+        "packages/core/src/acp/types.ts",
+        "packages/core/src/acp/v1/capabilities.ts",
+        "packages/core/src/acp/v1/configuration.ts",
+        "packages/core/src/acp/v1/control.ts",
+        "packages/core/src/acp/v1/driver.ts",
+        "packages/core/src/acp/v1/session.ts",
+        "packages/core/src/acp/v2/capabilities.ts",
+        "packages/core/src/acp/v2/control.ts",
+        "packages/core/src/acp/v2/driver.ts",
+        "packages/core/src/acp/v2/events.ts",
+        "packages/core/src/acp/v2/permissions.ts",
+        "packages/core/src/acp/v2/runtime.ts",
+        "packages/core/src/acp/v2/session.ts",
+        "packages/core/src/acp/v2/terminals.ts"
+      ]
+    },
+    {
+      "area": "agent",
+      "owner": "Product agent contracts and diagnostics",
+      "evidence": "docs/provider-architecture.md",
+      "files": [
+        "packages/core/src/agent/chat-error.ts",
+        "packages/core/src/agent/conformance.ts",
+        "packages/core/src/agent/connection-lifecycle.ts",
+        "packages/core/src/agent/diagnostics.ts",
+        "packages/core/src/agent/error-redaction.ts",
+        "packages/core/src/agent/errors.ts",
+        "packages/core/src/agent/index.ts",
+        "packages/core/src/agent/runtime-services.ts",
+        "packages/core/src/agent/text-generation.ts",
+        "packages/core/src/agent/tool-effects.ts",
+        "packages/core/src/agent/types.ts"
+      ]
+    },
+    {
+      "area": "auth",
+      "owner": "Pairing policy and browser session persistence",
+      "evidence": "docs/core-infrastructure-architecture.md",
+      "files": [
+        "packages/core/src/auth/auth-manager.ts",
+        "packages/core/src/auth/browser-session-store.ts",
+        "packages/core/src/auth/index.ts",
+        "packages/core/src/auth/types.ts"
+      ]
+    },
+    {
+      "area": "composition",
+      "owner": "Root composition factories, public exports and logger contract",
+      "evidence": "docs/core-infrastructure-architecture.md",
+      "files": [
+        "packages/core/src/default-agent-driver.ts",
+        "packages/core/src/default-agent-runtime.ts",
+        "packages/core/src/default-credential-vault.ts",
+        "packages/core/src/default-repository-service.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/logger.ts"
+      ]
+    },
+    {
+      "area": "config",
+      "owner": "Explicit environment loading and runtime configuration",
+      "evidence": "docs/core-infrastructure-architecture.md",
+      "files": [
+        "packages/core/src/config/application-info.ts",
+        "packages/core/src/config/index.ts",
+        "packages/core/src/config/runtime-defaults.ts",
+        "packages/core/src/config/workspace.ts"
+      ]
+    },
+    {
+      "area": "context",
+      "owner": "Context search/index policy and filesystem/Git adapters",
+      "evidence": "docs/core-infrastructure-architecture.md",
+      "files": [
+        "packages/core/src/context/context-files.ts",
+        "packages/core/src/context/context-service.ts",
+        "packages/core/src/context/git-context.ts",
+        "packages/core/src/context/types.ts",
+        "packages/core/src/context/workspace-index.ts"
+      ]
+    },
+    {
+      "area": "db",
+      "owner": "Schema/codecs, migrations and database creation",
+      "evidence": "docs/core-infrastructure-architecture.md",
+      "files": [
+        "packages/core/src/db/database.ts",
+        "packages/core/src/db/default-database.ts",
+        "packages/core/src/db/index.ts",
+        "packages/core/src/db/json-codecs.ts",
+        "packages/core/src/db/schema.ts",
+        "packages/core/src/db/zod-schemas.ts"
+      ]
+    },
+    {
+      "area": "forge",
+      "owner": "Forge pull request adapter",
+      "evidence": "docs/git-architecture.md",
+      "files": [
+        "packages/core/src/forge/github-pull-requests.ts",
+        "packages/core/src/forge/types.ts"
+      ]
+    },
+    {
+      "area": "git",
+      "owner": "Git capabilities and compatibility composition",
+      "evidence": "docs/git-architecture.md",
+      "files": [
+        "packages/core/src/git/capabilities/branch-integration.ts",
+        "packages/core/src/git/capabilities/ports.ts",
+        "packages/core/src/git/capabilities/pull-requests.ts",
+        "packages/core/src/git/capabilities/remote-target.ts",
+        "packages/core/src/git/capabilities/remote-tracking.ts",
+        "packages/core/src/git/capabilities/repository-queries.ts",
+        "packages/core/src/git/capabilities/types.ts",
+        "packages/core/src/git/capabilities/working-copy.ts",
+        "packages/core/src/git/capabilities/workspace-review.ts",
+        "packages/core/src/git/capabilities/workspace-safety.ts",
+        "packages/core/src/git/capabilities/worktree-lifecycle.ts",
+        "packages/core/src/git/composition.ts",
+        "packages/core/src/git/file-safety.ts",
+        "packages/core/src/git/index.ts",
+        "packages/core/src/git/legacy-revisions.ts",
+        "packages/core/src/git/mutex.ts",
+        "packages/core/src/git/repository-backend.ts",
+        "packages/core/src/git/repository-context.ts",
+        "packages/core/src/git/session-workspace-operations.ts",
+        "packages/core/src/git/session-workspace.ts",
+        "packages/core/src/git/snapshot-comparison.ts",
+        "packages/core/src/git/snapshot-service.ts",
+        "packages/core/src/git/snapshot-types.ts",
+        "packages/core/src/git/text-generation-context.ts",
+        "packages/core/src/git/text-generation-settings.ts",
+        "packages/core/src/git/utils.ts",
+        "packages/core/src/git/worktree-manager.ts"
+      ]
+    },
+    {
+      "area": "mcp",
+      "owner": "MCP routing, resource lifecycle and SDK connection adapter",
+      "evidence": "docs/core-infrastructure-architecture.md",
+      "files": [
+        "packages/core/src/mcp/index.ts",
+        "packages/core/src/mcp/mcp-connection.ts",
+        "packages/core/src/mcp/mcp-connections.ts",
+        "packages/core/src/mcp/mcp-gateway.ts"
+      ]
+    },
+    {
+      "area": "providers",
+      "owner": "Provider lifecycle capabilities and registry facade",
+      "evidence": "docs/provider-architecture.md",
+      "files": [
+        "packages/core/src/providers/capabilities-negotiator.ts",
+        "packages/core/src/providers/index.ts",
+        "packages/core/src/providers/provider-registry.ts",
+        "packages/core/src/providers/provider.ts",
+        "packages/core/src/providers/registry/binary-archive.ts",
+        "packages/core/src/providers/registry/binary-installer.ts",
+        "packages/core/src/providers/registry/provider-auth-coordinator.ts",
+        "packages/core/src/providers/registry/provider-auth-operations.ts",
+        "packages/core/src/providers/registry/provider-configuration.ts",
+        "packages/core/src/providers/registry/provider-data.ts",
+        "packages/core/src/providers/registry/provider-installation-service.ts",
+        "packages/core/src/providers/registry/provider-launcher.ts",
+        "packages/core/src/providers/registry/provider-lifecycle-error.ts",
+        "packages/core/src/providers/registry/provider-operation-coordinator.ts",
+        "packages/core/src/providers/registry/provider-probing-service.ts",
+        "packages/core/src/providers/registry/provider-queries.ts",
+        "packages/core/src/providers/registry/provider-readiness.ts",
+        "packages/core/src/providers/registry/provider-recovery.ts",
+        "packages/core/src/providers/registry/provider-store.ts",
+        "packages/core/src/providers/registry/provider-sync.ts",
+        "packages/core/src/providers/registry/provider-updates.ts",
+        "packages/core/src/providers/registry/registry-fetcher.ts",
+        "packages/core/src/providers/registry/registry-parser.ts"
+      ]
+    },
+    {
+      "area": "repository",
+      "owner": "Repository backend contracts and selection",
+      "evidence": "docs/workspace-architecture.md",
+      "files": [
+        "packages/core/src/repository/checkpoints.ts",
+        "packages/core/src/repository/directory-backend.ts",
+        "packages/core/src/repository/errors.ts",
+        "packages/core/src/repository/identity.ts",
+        "packages/core/src/repository/index.ts",
+        "packages/core/src/repository/repository-service.ts",
+        "packages/core/src/repository/source-repository.ts",
+        "packages/core/src/repository/types.ts",
+        "packages/core/src/repository/workspace.ts"
+      ]
+    },
+    {
+      "area": "security",
+      "owner": "Credential storage, migration and permission policy",
+      "evidence": "docs/core-infrastructure-architecture.md",
+      "files": [
+        "packages/core/src/security/credential-migration.ts",
+        "packages/core/src/security/credential-store.ts",
+        "packages/core/src/security/credential-vault.ts",
+        "packages/core/src/security/index.ts",
+        "packages/core/src/security/path-security.ts",
+        "packages/core/src/security/permission-engine.ts",
+        "packages/core/src/security/permission-options.ts"
+      ]
+    },
+    {
+      "area": "session",
+      "owner": "Session application, execution, persistence and runtime",
+      "evidence": "docs/session-architecture.md",
+      "files": [
+        "packages/core/src/session/agent-session-id.ts",
+        "packages/core/src/session/commands/message-acceptance-service.ts",
+        "packages/core/src/session/commands/message-attachments.ts",
+        "packages/core/src/session/commands/session-command-coordinator.ts",
+        "packages/core/src/session/commands/session-command-handler.ts",
+        "packages/core/src/session/composition/repository-resources.ts",
+        "packages/core/src/session/composition/session-resources.ts",
+        "packages/core/src/session/composition/session-workflows.ts",
+        "packages/core/src/session/context-budget.ts",
+        "packages/core/src/session/context-files.ts",
+        "packages/core/src/session/contracts.ts",
+        "packages/core/src/session/execution/session-execution-state.ts",
+        "packages/core/src/session/execution/session-failure-stage.ts",
+        "packages/core/src/session/execution/session-operation-worker.ts",
+        "packages/core/src/session/execution/session-turn-executor.ts",
+        "packages/core/src/session/execution/skill-catalog-delivery.ts",
+        "packages/core/src/session/execution/turn-diagnostics.ts",
+        "packages/core/src/session/handoff.ts",
+        "packages/core/src/session/history-transcript.ts",
+        "packages/core/src/session/index.ts",
+        "packages/core/src/session/manager.ts",
+        "packages/core/src/session/persistence/session-event-repository.ts",
+        "packages/core/src/session/persistence/session-operation-reconciliation.ts",
+        "packages/core/src/session/persistence/session-operation-store.ts",
+        "packages/core/src/session/projection/conversation-projector.ts",
+        "packages/core/src/session/projection/session-state-projector.ts",
+        "packages/core/src/session/projection/subagent-projector.ts",
+        "packages/core/src/session/requests/elicitation-registry.ts",
+        "packages/core/src/session/requests/request-cancellation.ts",
+        "packages/core/src/session/requests/session-permission-controller.ts",
+        "packages/core/src/session/runtime/session-runtime-registry.ts",
+        "packages/core/src/session/runtime/session-runtime.ts",
+        "packages/core/src/session/services/session-history-service.ts",
+        "packages/core/src/session/services/session-launcher.ts",
+        "packages/core/src/session/services/session-lifecycle-service.ts",
+        "packages/core/src/session/stream-buffer.ts"
+      ]
+    },
+    {
+      "area": "skills",
+      "owner": "Skill catalog, discovery/installation and bundled delivery assets",
+      "evidence": "docs/core-infrastructure-architecture.md",
+      "files": [
+        "packages/core/src/skills/builtin/handoff/SKILL.md",
+        "packages/core/src/skills/registry.ts",
+        "packages/core/src/skills/skill-files.ts",
+        "packages/core/src/skills/types.ts"
+      ]
+    },
+    {
+      "area": "workspace",
+      "owner": "Repository-neutral session workspace lifecycle",
+      "evidence": "docs/workspace-architecture.md",
+      "files": [
+        "packages/core/src/workspace/index.ts",
+        "packages/core/src/workspace/session-workspace.ts",
+        "packages/core/src/workspace/workspace-context.ts"
+      ]
+    }
+  ]
+}

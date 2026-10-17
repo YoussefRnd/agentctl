@@ -59,9 +59,9 @@ describe('ContextService', () => {
 
   it('reuses the search index and shares concurrent builds', async () => {
     const service = contextService as unknown as {
-      buildWorkspaceIndex: (workspace: string) => Promise<unknown>;
+      index: { buildWorkspaceIndex: (workspace: string) => Promise<unknown> };
     };
-    const build = vi.spyOn(service, 'buildWorkspaceIndex');
+    const build = vi.spyOn(service.index, 'buildWorkspaceIndex');
     const [files, folders] = await Promise.all([
       contextService.search(testDir, '', 'file'),
       contextService.search(testDir, '', 'folder'),
@@ -122,5 +122,34 @@ describe('ContextService', () => {
     expect(resolved.formattedContent).toContain('### Context Attachment: Git Working Tree Diff');
     expect(resolved.formattedContent).toContain('-export const hello = "world";');
     expect(resolved.formattedContent).toContain('+export const hello = "agentctl";');
+  });
+  it('rejects file and folder symlinks that leave the workspace', async () => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-context-outside-'));
+    try {
+      await fs.writeFile(path.join(outside, 'secret.txt'), 'outside secret');
+      await fs.symlink(path.join(outside, 'secret.txt'), path.join(testDir, 'escape.txt'));
+      await fs.symlink(outside, path.join(testDir, 'escape-dir'));
+      const resolved = await contextService.resolve(testDir, [
+        { type: 'file', value: 'escape.txt' },
+        { type: 'folder', value: 'escape-dir' },
+        { type: 'file', value: '../outside.txt' },
+      ]);
+      expect(resolved.items).toEqual([]);
+      expect(resolved.formattedContent).toBe('');
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds file attachments by bytes without splitting UTF-8 characters', async () => {
+    const content = 'x' + '€'.repeat(20000);
+    await fs.writeFile(path.join(testDir, 'unicode.txt'), content);
+    const resolved = await contextService.resolve(testDir, [
+      { type: 'file', value: 'unicode.txt' },
+    ]);
+    expect(resolved.items[0]?.size).toBe(Buffer.byteLength(content));
+    expect(resolved.formattedContent).toContain('Truncated');
+    expect(resolved.formattedContent).not.toContain('�');
+    expect(Buffer.byteLength(resolved.formattedContent)).toBeLessThan(48 * 1024 + 250);
   });
 });

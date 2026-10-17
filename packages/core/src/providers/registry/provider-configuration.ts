@@ -1,3 +1,4 @@
+import type { CredentialStore } from '../../security/credential-store.js';
 import type { AgentDriver } from '../../agent/types.js';
 import type { AgentConnectionLifecycle } from '../../agent/connection-lifecycle.js';
 import type { Logger } from '../../logger.js';
@@ -9,10 +10,13 @@ import type { RegistryAgent, ProviderDiscovery } from '@agentctl/shared';
 import { randomUUID } from 'node:crypto';
 import { customModelsSchema, type CustomModel, type AgentConfigOption } from '@agentctl/shared';
 import { jsonCodecs } from '../../db/json-codecs.js';
-import { defaultCredentialVault } from '../../security/credential-vault.js';
 import type { ProviderOperationCoordinator } from './provider-operation-coordinator.js';
 
 interface Dependencies {
+  credentials: Pick<
+    CredentialStore,
+    'snapshotProviderSecrets' | 'setProviderSecrets' | 'restoreProviderSecrets' | 'resolveEnvSync'
+  >;
   store: Pick<
     ProviderStore,
     | 'get'
@@ -103,20 +107,20 @@ export class ProviderConfiguration {
       if (updates.customEnv !== undefined) {
         const existingCustomEnv = jsonCodecs.stringRecord(rowBeforeUpdate.customEnv);
         const merged: Record<string, string> = { ...existingCustomEnv };
-        const vaultSnapshot = defaultCredentialVault.snapshotProviderSecrets(providerId);
+        const vaultSnapshot = this.deps.credentials.snapshotProviderSecrets(providerId);
         const secretUpdates: Record<string, string | null> = {};
         for (const [key, value] of Object.entries(updates.customEnv)) {
           secretUpdates[key] = value.trim().length === 0 ? null : value;
         }
         try {
-          const refs = await defaultCredentialVault.setProviderSecrets(providerId, secretUpdates);
+          const refs = await this.deps.credentials.setProviderSecrets(providerId, secretUpdates);
           for (const [key, value] of Object.entries(updates.customEnv)) {
             if (value.trim().length === 0) delete merged[key];
             else merged[key] = refs[key];
           }
           this.deps.store.setCustomEnv(providerId, merged);
         } catch (error) {
-          await defaultCredentialVault.restoreProviderSecrets(providerId, vaultSnapshot);
+          await this.deps.credentials.restoreProviderSecrets(providerId, vaultSnapshot);
           throw error;
         }
       }
@@ -162,7 +166,7 @@ export class ProviderConfiguration {
 
       const row = this.deps.store.get(providerId);
       if (!row) throw new Error(`Provider ${providerId} vanished`);
-      return new Provider(row).toDiscovery();
+      return new Provider(row, this.deps.credentials).toDiscovery();
     });
   }
 

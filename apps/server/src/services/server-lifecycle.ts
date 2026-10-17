@@ -69,13 +69,14 @@ export class ServerLifecycle {
         if (!this.closing) this.deps.events.publishState({ topics: ['providers'] });
       })
       .catch((err: unknown) => {
-        this.deps.log.error(err, 'Failed to refresh providers on startup');
+        if (!this.closing) this.deps.log.error(err, 'Failed to refresh providers on startup');
       });
 
     this.providerUpdateInterval = setInterval(
       () => {
         void refreshAndUpdateProviders().catch((err: unknown) => {
-          this.deps.log.error(err, 'Failed to refresh providers in the background');
+          if (!this.closing)
+            this.deps.log.error(err, 'Failed to refresh providers in the background');
         });
       },
       24 * 60 * 60 * 1000,

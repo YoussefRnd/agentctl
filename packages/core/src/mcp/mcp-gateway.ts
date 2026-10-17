@@ -1,14 +1,9 @@
-import { applicationInfo } from '../config/application-info.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { DbClient } from '../db/index.js';
 import { mcpServers } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { jsonCodecs } from '../db/json-codecs.js';
-import type { Logger } from '../logger.js';
-import { noopLogger } from '../logger.js';
+import { noopLogger, type Logger } from '../logger.js';
+import { createMcpConnection, type McpConnectionFactory } from './mcp-connection.js';
+import { McpConnections } from './mcp-connections.js';
 
 export interface McpTool {
   name: string;
@@ -17,128 +12,74 @@ export interface McpTool {
   serverId: string;
 }
 
+/** Application facade: configured server selection and tool routing. */
 export class McpGateway {
-  private activeClients = new Map<string, { client: Client; transport: Transport }>();
-  private connectionErrors = new Map<string, string>();
+  private readonly connections: McpConnections;
+  private revision = 0;
+  private starting?: Promise<void>;
+  private stopping?: Promise<void>;
 
   constructor(
-    private db: DbClient,
-    private logger: Logger = noopLogger,
-  ) {}
-
-  getConnectionError(serverId: string): string | undefined {
-    return this.connectionErrors.get(serverId);
+    private readonly db: DbClient,
+    private readonly logger: Logger = noopLogger,
+    create: McpConnectionFactory = createMcpConnection,
+  ) {
+    this.connections = new McpConnections(create, logger);
   }
 
-  async start(): Promise<void> {
-    const enabledServers = await this.db
-      .select()
-      .from(mcpServers)
-      .where(eq(mcpServers.enabled, true));
+  getConnectionError(serverId: string): string | undefined {
+    return this.connections.error(serverId);
+  }
+  isServerConnected(serverId: string): boolean {
+    return !!this.connections.get(serverId);
+  }
 
-    this.logger.info(`Starting MCP Gateway with ${String(enabledServers.length)} enabled servers`);
+  start(): Promise<void> {
+    if (this.starting) return this.starting;
+    return this.startRevision(++this.revision);
+  }
 
-    for (const server of enabledServers) {
-      this.connectionErrors.delete(server.id);
-      try {
-        let transport: Transport;
-        const client = new Client(applicationInfo('agentctl-client-gateway'), {
-          capabilities: {},
-        });
-
-        if (server.type === 'local') {
-          if (!server.command) {
-            this.logger.warn({ serverId: server.id }, 'Local MCP server missing command config');
-            continue;
-          }
-          const args = jsonCodecs.stringArray(server.launchArgs);
-          const env = jsonCodecs.stringRecord(server.launchEnv);
-          this.logger.info(
-            { serverId: server.id, command: server.command, args },
-            'Spawning stdio MCP server',
-          );
-          const cleanEnv: Record<string, string> = {};
-          for (const [k, v] of Object.entries(process.env)) {
-            if (v !== undefined) {
-              cleanEnv[k] = v;
-            }
-          }
-          Object.assign(cleanEnv, env);
-
-          transport = new StdioClientTransport({
-            command: server.command,
-            args,
-            env: cleanEnv,
-          });
-        } else {
-          const sseUrl = server.url ?? '';
-          if (!sseUrl) {
-            this.logger.warn({ serverId: server.id }, 'Remote MCP server missing URL config');
-            continue;
-          }
-
-          const headers = jsonCodecs.stringRecord(server.headers);
-
-          this.logger.info(
-            { serverId: server.id, url: sseUrl },
-            'Connecting to Remote Streamable HTTP MCP server',
-          );
-          transport = new StreamableHTTPClientTransport(new URL(sseUrl), {
-            requestInit: {
-              headers,
-            },
-          });
+  private startRevision(revision: number): Promise<void> {
+    const start = (async () => {
+      await this.stopping;
+      if (revision !== this.revision) return;
+      this.connections.resume();
+      const servers = this.db.select().from(mcpServers).where(eq(mcpServers.enabled, true)).all();
+      for (const server of servers) {
+        if (revision !== this.revision) break;
+        if (this.connections.get(server.id)) continue;
+        try {
+          await this.connections.open(server, true);
+        } catch (error) {
+          if (revision === this.revision)
+            this.logger.error(error, `Failed to connect to MCP server ${server.id}`);
         }
-
-        await client.connect(transport);
-
-        transport.onclose = () => {
-          this.activeClients.delete(server.id);
-          this.logger.warn({ serverId: server.id }, `MCP server ${server.name} disconnected`);
-        };
-        transport.onerror = (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.connectionErrors.set(server.id, msg);
-          this.logger.error(err, `MCP server ${server.id} error`);
-        };
-
-        this.activeClients.set(server.id, { client, transport });
-        this.logger.info({ serverId: server.id }, 'Successfully connected to MCP server');
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.connectionErrors.set(server.id, msg);
-        this.logger.error(
-          err,
-          `Failed to start or connect to MCP server ${server.id} (${server.name})`,
-        );
       }
-    }
+    })().finally(() => {
+      if (this.starting === start) this.starting = undefined;
+    });
+    this.starting = start;
+    return start;
   }
 
   async getTools(): Promise<McpTool[]> {
-    const allTools: McpTool[] = [];
-
-    for (const [serverId, { client }] of this.activeClients.entries()) {
+    const tools: McpTool[] = [];
+    for (const [serverId, connection] of this.connections.entries()) {
       try {
-        const response = await client.listTools();
-        for (const tool of response.tools) {
-          allTools.push({
+        const response = await this.connections.run(connection, (client) => client.listTools());
+        if (this.connections.get(serverId) !== connection) continue;
+        for (const tool of response.tools)
+          tools.push({
             name: `${serverId}__${tool.name}`,
             description: tool.description,
             inputSchema: tool.inputSchema,
             serverId,
           });
-        }
-      } catch (err: unknown) {
-        this.logger.error(err, `Failed to list tools for MCP server ${serverId}`);
+      } catch (error) {
+        this.logger.error(error, `Failed to list tools for MCP server ${serverId}`);
       }
     }
-
-    return allTools;
-  }
-
-  isServerConnected(serverId: string): boolean {
-    return this.activeClients.has(serverId);
+    return tools;
   }
 
   async callTool(
@@ -146,71 +87,33 @@ export class McpGateway {
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<unknown> {
-    const entry = this.activeClients.get(serverId);
-    let client: Client | undefined = entry?.client;
-
-    if (!client) {
-      // Check if server is a remote stateless server in the DB
-      const server = await this.db.query.mcpServers.findFirst({
-        where: eq(mcpServers.id, serverId),
-      });
-
-      if (server && server.enabled && server.type === 'remote' && server.url) {
-        const headers = jsonCodecs.stringRecord(server.headers);
-
-        this.logger.info(
-          { serverId, url: server.url },
-          'Executing stateless remote MCP tool call over Streamable HTTP',
-        );
-
-        const transport = new StreamableHTTPClientTransport(new URL(server.url), {
-          requestInit: { headers },
-        });
-        const statelessClient = new Client(applicationInfo('agentctl-client-gateway'), {
-          capabilities: {},
-        });
-
-        try {
-          await statelessClient.connect(transport);
-          return await statelessClient.callTool({
-            name: toolName,
-            arguments: args,
-          });
-        } finally {
-          try {
-            await transport.close();
-          } catch {
-            // ignore
-          }
-        }
-      }
-
+    this.connections.assertRunning();
+    const connection = this.connections.get(serverId);
+    if (connection)
+      return this.connections.run(connection, (client) =>
+        client.callTool({ name: toolName, arguments: args }),
+      );
+    const server = this.db.query.mcpServers
+      .findFirst({ where: eq(mcpServers.id, serverId) })
+      .sync();
+    if (!server?.enabled || server.type !== 'remote' || !server.url)
       throw new Error(`MCP Server ${serverId} is not connected or active`);
-    }
-
-    this.logger.info({ serverId, toolName, args }, 'Invoking MCP tool');
-    return await client.callTool({
-      name: toolName,
-      arguments: args,
-    });
+    return this.connections.temporary(server, (client) =>
+      client.callTool({ name: toolName, arguments: args }),
+    );
   }
 
   async reload(): Promise<void> {
-    this.logger.info('Reloading MCP Gateway connections');
-    await this.stop();
-    await this.start();
+    const revision = ++this.revision;
+    this.starting = undefined;
+    this.stopping = this.connections.stop();
+    await this.stopping;
+    if (revision === this.revision) await this.startRevision(revision);
   }
 
-  async stop(): Promise<void> {
-    this.logger.info('Shutting down MCP Gateway');
-    for (const [serverId, { transport }] of this.activeClients.entries()) {
-      try {
-        await transport.close();
-      } catch (err: unknown) {
-        this.logger.error(err, `Failed to cleanly close transport for MCP server ${serverId}`);
-      }
-    }
-    this.activeClients.clear();
-    this.connectionErrors.clear();
+  stop(): Promise<void> {
+    ++this.revision;
+    this.starting = undefined;
+    return (this.stopping = this.connections.stop());
   }
 }

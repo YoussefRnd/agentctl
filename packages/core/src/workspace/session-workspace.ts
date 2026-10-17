@@ -27,7 +27,7 @@ export interface EstablishOptions {
   approvalMode?: 'review' | 'auto_approve' | 'yolo';
   agentPersona?: string;
   availableAgentPersonas?: string[];
-  dbTx?: unknown;
+  dbTx?: DbClient;
 }
 export interface TransitionOptions {
   mode?: SessionMode;
@@ -35,7 +35,7 @@ export interface TransitionOptions {
   commitMessage?: string;
   baseBranch?: string;
   taskSlug?: string;
-  dbTx?: unknown;
+  dbTx?: DbClient;
 }
 export interface WorkspaceContext {
   sessionId: string;
@@ -86,7 +86,7 @@ export class SessionWorkspace {
     taskSlug: string,
     options: EstablishOptions,
   ): Promise<WorkspaceContext> {
-    const client = (options.dbTx ?? this.db) as DbClient;
+    const client = options.dbTx ?? this.db;
     const project = await client.query.projects.findFirst({ where: eq(projects.id, projectId) });
     if (!project) throw new Error(`Project not found: ${projectId}`);
     const repository = await this.repositories.open(project.path);
@@ -181,7 +181,7 @@ export class SessionWorkspace {
     }
   }
   async activate(sessionId: string, options?: TransitionOptions): Promise<WorkspaceContext> {
-    const client = (options?.dbTx ?? this.db) as DbClient;
+    const client = options?.dbTx ?? this.db;
     const session = await client.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
@@ -241,8 +241,8 @@ export class SessionWorkspace {
       baseBranch,
     };
   }
-  async archive(sessionId: string, options?: { dbTx?: unknown }): Promise<void> {
-    const client = (options?.dbTx ?? this.db) as DbClient;
+  async archive(sessionId: string, options?: { dbTx?: DbClient }): Promise<void> {
+    const client = options?.dbTx ?? this.db;
     if (!(await client.query.sessions.findFirst({ where: eq(sessions.id, sessionId) })))
       throw new Error(`Session not found: ${sessionId}`);
     await this.stopSessionFn(sessionId);
@@ -257,7 +257,7 @@ export class SessionWorkspace {
     resolution: FinalizeResolution,
     options?: TransitionOptions,
   ): Promise<void> {
-    const client = (options?.dbTx ?? this.db) as DbClient;
+    const client = options?.dbTx ?? this.db;
     const session = await client.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },
@@ -358,8 +358,8 @@ export class SessionWorkspace {
       throw error;
     }
   }
-  async teardown(sessionId: string, options?: { dbTx?: unknown }): Promise<void> {
-    const client = (options?.dbTx ?? this.db) as DbClient;
+  async teardown(sessionId: string, options?: { dbTx?: DbClient }): Promise<void> {
+    const client = options?.dbTx ?? this.db;
     const session = await client.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
       with: { project: true },

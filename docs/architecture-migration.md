@@ -7,9 +7,10 @@ order, acceptance criteria, and evidence needed to declare the migration complet
 
 ## Status and completion rules
 
-Baseline: **2026-10-16**. **7 of 16 checkpoints are complete locally; 9 remain open.**
-This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03 is committed as `e1fc843`; CP04 and CP05 are recorded in their own checkpoint
-commits. No merge or release is implied.
+Baseline: **2026-10-16**. **8 of 16 checkpoints are complete locally; 8 remain open.**
+This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03
+is committed as `e1fc843`; subsequent completed checkpoints are recorded in descriptive
+implementation commits. No merge or release is implied.
 
 - **Done:** every checkbox in that checkpoint is checked, required verification passed, and
   evidence is recorded. Existing suitable architecture can be accepted after review and
@@ -38,7 +39,7 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 | CP04 | Git capability and forge separation                           | Done    | CP01                   |
 | CP05 | Repository-neutral session workspace and checkpoint workflows | Done    | CP03, CP04             |
 | CP06 | Provider lifecycle and agent protocol composition             | Done    | CP03                   |
-| CP07 | Remaining core domains and infrastructure ownership           | Planned | CP03, CP06             |
+| CP07 | Remaining core domains and infrastructure ownership           | Done    | CP03, CP06             |
 | CP08 | Composer, review, and session dependency cycles               | Planned | CP01                   |
 | CP09 | Conversation and subagent dependency cycle                    | Planned | CP01                   |
 | CP10 | Complete frontend state, effects, and rendering audit         | Planned | CP02, CP08, CP09       |
@@ -67,7 +68,7 @@ until the full audit, even where initial work has already landed locally.
 | Core repository-neutral workspace lifecycle and handoff context                                            | CP05                 | Accepted                    |
 | Core Git, repository, and forge modules                                                                    | CP04, CP05           | Accepted                    |
 | Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Accepted                    |
-| Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Pending                     |
+| Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Accepted                    |
 | Web composer, review, and session features                                                                 | CP08, CP10           | Pending                     |
 | Web conversation and subagent features                                                                     | CP09, CP10           | Pending                     |
 | Web projects, providers, settings, workbench, updates, command palette, and retained feature directories   | CP10                 | Pending                     |
@@ -320,20 +321,47 @@ with the remaining-core acceptance below. Local subprocess/SDK peers only.
 Scope: `security/`, `auth/`, `mcp/`, `context/`, `skills/`, `config/`, `db/`, logging, and
 root composition files under `packages/core/src`.
 
-- [ ] Assign and review the public entry, policy, application operations, I/O, and resource
+- [x] Assign and review the public entry, policy, application operations, I/O, and resource
       lifetime in every remaining core domain. Record accepted modules as well as refactored ones.
-- [ ] Keep credentials/vault and pairing/auth policy behind clear contracts; separate configuration
+- [x] Keep credentials/vault and pairing/auth policy behind clear contracts; separate configuration
       resolution from secret storage and transport without duplicating sensitive data ownership.
-- [ ] Separate MCP gateway connection/routing/lifecycle, context filesystem/search access, and
+- [x] Separate MCP gateway connection/routing/lifecycle, context filesystem/search access, and
       skill discovery/catalog/delivery responsibilities where currently mixed.
-- [ ] Audit database schema/codecs/migration/factory/transaction responsibilities; imports remain
+- [x] Audit database schema/codecs/migration/factory/transaction responsibilities; imports remain
       inert and transaction types are explicit where needed. Preserve upgrade and rollback semantics.
-- [ ] Remove unintended default instances, environment mutation, and process/resource creation
+- [x] Remove unintended default instances, environment mutation, and process/resource creation
       outside declared composition/startup paths; retain documented immutable constants/caches only.
 
 Exit evidence: full remaining-core acceptance ledger; appropriate auth/vault, MCP shutdown,
 context path handling, skills delivery, configuration, and populated-database upgrade tests.
 No unassigned core files remain for the final audit.
+
+Acceptance (2026-10-17): [remaining-core ownership audit](core-infrastructure-architecture.md)
+records the public entry, policy, I/O, persistence and resource lifetime for every scoped domain,
+including retained modules. The [core ownership ledger](core-ownership.json) assigns all **214
+production core files and bundled skill assets** across 16 areas, including earlier accepted
+session/repository/provider/ACP owners. Architecture checks reject missing, duplicate or stale
+assignments and require linked acceptance evidence.
+
+MCP routing, SDK connection construction and persistent/temporary lifecycle ownership are
+separate; shutdown drains handshakes/requests and stale callbacks cannot retire replacements.
+Context search/index policy delegates canonical path and bounded UTF-8 file access and Git
+queries. Skill parsing/discovery/install I/O is separate from catalog/activation/delivery, with
+bounded completed installation receipts and retryable failed copies. Pairing policy delegates
+browser-session persistence. CredentialStore is injected through runtime composition; the vault
+is lazy and copy-on-write, and explicit startup migration persists secrets before transactionally
+publishing database references. Failed migration rolls back and retries. Background provider
+work is included in shutdown draining; cancellation aborts registry fetches without false stored
+sync failures or startup error logs. Workspace transaction parameters are typed. Existing database
+schema/codecs/factory/upgrade/savepoint behavior and immutable configuration/logging owners were
+reviewed and retained; no historical SQL or schema change was required.
+
+Verification on the final fixed source tree: **1,489 tests / 248 files**, plus **5 architecture
+regression tests**; workspace `pnpm typecheck`, `pnpm lint`, `pnpm architecture:check`, formatting,
+whitespace checks and `pnpm build` all passed. Focused remaining-core/provider tests passed **143
+tests / 23 files**; final fetch/shutdown regressions passed **4 tests / 2 files**. The full suite
+includes populated database upgrade/rollback, session skill delivery, auth/vault/configuration,
+context, MCP local SDK peers, protocol and server integration coverage. No paid-provider run.
 
 ## CP08 — Composer, review, and session dependency cycles
 
