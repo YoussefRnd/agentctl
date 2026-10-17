@@ -30,24 +30,24 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 
 ## Checkpoint dashboard
 
-| ID   | Checkpoint                                                    | Status  | Depends on             |
-| ---- | ------------------------------------------------------------- | ------- | ---------------------- |
-| CP00 | Scope, coverage, and acceptance baseline                      | Done    | —                      |
-| CP01 | Initial boundaries and maintainability foundation             | Done    | CP00                   |
-| CP02 | Remaining server workflows and transport boundaries           | Done    | CP01                   |
-| CP03 | Session execution, persistence, and runtime ownership         | Done    | CP02                   |
-| CP04 | Git capability and forge separation                           | Done    | CP01                   |
-| CP05 | Repository-neutral session workspace and checkpoint workflows | Done    | CP03, CP04             |
-| CP06 | Provider lifecycle and agent protocol composition             | Done    | CP03                   |
-| CP07 | Remaining core domains and infrastructure ownership           | Done    | CP03, CP06             |
-| CP08 | Composer, review, and session dependency cycles               | Done    | CP01                   |
-| CP09 | Conversation and subagent dependency cycle                    | Done    | CP01                   |
-| CP10 | Complete frontend state, effects, and rendering audit         | Done    | CP02, CP08, CP09       |
-| CP11 | Shared contracts, client APIs, and public exports             | Done    | CP05, CP06, CP07, CP10 |
-| CP12 | Desktop lifecycle, server ownership, and IPC                  | Done    | CP02, CP03, CP06       |
-| CP13 | Design system and UI ownership                                | Done    | CP10                   |
-| CP14 | Complete architecture enforcement and delivery tooling        | Done    | CP07, CP11, CP12, CP13 |
-| CP15 | Repository-wide acceptance and migration closure              | Planned | CP00–CP14              |
+| ID   | Checkpoint                                                    | Status      | Depends on             |
+| ---- | ------------------------------------------------------------- | ----------- | ---------------------- |
+| CP00 | Scope, coverage, and acceptance baseline                      | Done        | —                      |
+| CP01 | Initial boundaries and maintainability foundation             | Done        | CP00                   |
+| CP02 | Remaining server workflows and transport boundaries           | Done        | CP01                   |
+| CP03 | Session execution, persistence, and runtime ownership         | Done        | CP02                   |
+| CP04 | Git capability and forge separation                           | Done        | CP01                   |
+| CP05 | Repository-neutral session workspace and checkpoint workflows | Done        | CP03, CP04             |
+| CP06 | Provider lifecycle and agent protocol composition             | Done        | CP03                   |
+| CP07 | Remaining core domains and infrastructure ownership           | Done        | CP03, CP06             |
+| CP08 | Composer, review, and session dependency cycles               | Done        | CP01                   |
+| CP09 | Conversation and subagent dependency cycle                    | Done        | CP01                   |
+| CP10 | Complete frontend state, effects, and rendering audit         | Done        | CP02, CP08, CP09       |
+| CP11 | Shared contracts, client APIs, and public exports             | Done        | CP05, CP06, CP07, CP10 |
+| CP12 | Desktop lifecycle, server ownership, and IPC                  | Done        | CP02, CP03, CP06       |
+| CP13 | Design system and UI ownership                                | Done        | CP10                   |
+| CP14 | Complete architecture enforcement and delivery tooling        | Done        | CP07, CP11, CP12, CP13 |
+| CP15 | Repository-wide acceptance and migration closure              | In progress | CP00–CP14              |
 
 Recommended execution order: CP02 → CP03 → CP04 → CP05 → CP06 → CP07 → CP08 → CP09 →
 CP10 → CP11 → CP12 → CP13 → CP14 → CP15. Each checkpoint may use multiple reviewable
@@ -56,8 +56,8 @@ changes; keep a complete workflow working between changes.
 ## Coverage ledger
 
 A checkpoint is responsible for every source file and its relevant tests/configuration under
-its listed area, including files absent from the hotspot list. New files join their owning
-area automatically. Add a coverage row before introducing a new package or product domain.
+its listed area, including files absent from the hotspot list. New files must be added explicitly to their owning
+file ledger with acceptance evidence; automated checks reject missing assignments. Add a coverage row before introducing a new package or product domain.
 Acceptance is recorded at the checkpoint that closes the area; this ledger remains open
 until the full audit, even where initial work has already landed locally.
 
@@ -648,16 +648,26 @@ repository/release documentation acceptance.
 
 ## CP15 — Repository-wide acceptance and migration closure
 
-- [ ] CP00–CP14 are Done with file coverage, test evidence, and resolved compatibility decisions.
+- [x] CP00–CP14 are Done with file coverage, test evidence, and resolved compatibility decisions.
 - [ ] Re-audit every coverage row against the final source tree. Record accepted, refactored, or
       deliberately removed modules; verify new files since CP00 are covered. Mark every row Accepted.
-- [ ] Verify zero frontend cycles, no unresolved architecture violations/migration TODOs, no
+- [x] Verify zero frontend cycles, no unresolved architecture violations/migration TODOs, no
       temporary migration shims, and accurate docs/public exports. Retain justified permanent aliases
       only with their explicit contract and tests.
 - [ ] Run the final verification gate below against one exact revision; record commit SHA, date,
       command/results, browser/native evidence, remaining product limitations, and any source API changes.
 - [ ] Update README/design/repository/session docs to describe the completed implementation,
       replace this dashboard's statuses, and announce 16/16 complete only after the gate passes.
+
+Preflight audit (2026-10-17): all **1,163** repository files have exactly one owner across
+**61** accepted areas: **210** core production files/assets, **81** contract/client files,
+**276** web production files, and **596** server/native/UI/tests/tooling/documentation files.
+The parsed feature graph matches its committed snapshot, has zero cycles and an empty baseline.
+All permanent aliases have explicit compatibility decisions; removed forwarding paths are absent.
+Historical SQL migrations are unchanged from `2867b13`, before the architecture commits.
+README, design/repository/session guides and unreleased source compatibility notes now describe
+the implemented architecture. Final gate execution and closure are pending; no release or push
+is implied.
 
 Final verification gate:
 
@@ -686,25 +696,25 @@ misrepresented as implemented backend support.
 
 ## Checkpoint evidence log
 
-| Checkpoint | Revision / delivery                                             | Verification                                                                                                                                                 | Open work                                                                         |
-| ---------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| CP00       | `e1fc843` (CP03 baseline)                                       | Coverage inventory; tracker/link/format checks                                                                                                               | None within planning scope                                                        |
-| CP01       | `e1fc843` (CP03 baseline)                                       | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide                                                    | Follow-up work assigned to CP02–CP14                                              |
-| CP02       | `e1fc843`, accepted 2026-10-16                                  | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory                                            | None in server application/transport scope; native integration remains CP12       |
-| CP03       | `e1fc843`, accepted 2026-10-16                                  | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit                                                  | None within CP03; neutral workspace remains CP05, provider lifecycle CP06         |
-| CP04       | `a628a08`, accepted 2026-10-16                                  | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit                                                  | None within CP04; neutral session workflows remain CP05                           |
-| CP05       | Checkpoint commit containing this evidence, accepted 2026-10-16 | 1,467 tests/243 files; combined 348/41; follow-up 55/5; 4 architecture tests; typechecks/lint/format/builds; 41-module and 36-session audits                 | None within CP05; additional production VCS/folder history remains separate scope |
-| CP06       | `5d60524`, accepted 2026-10-17                                  | Provider/agent 367 tests/58 files; disposal 6/1; typechecks/lint/architecture checks                                                                         | None within provider/protocol composition scope                                   |
-| CP07       | `a117a46`, accepted 2026-10-17                                  | 1,489 tests/248 files; 5 architecture tests; types/lint/format/builds; 214-file ownership ledger                                                             | None within remaining-core scope                                                  |
-| CP08       | `d3b0869`, accepted 2026-10-17                                  | Focused 239/36 and injected-action 7/1; types/lint/architecture/format/web build; production screen journeys                                                 | Broader frontend audit remains CP10                                               |
-| CP09       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,491 tests/249 files; focused 135/21; 5 architecture and 9 performance tests; types/lint/format/builds; parent/child browser and desktop worker smoke       | Broader frontend audit remains CP10                                               |
-| CP10       | `148ef06`, accepted with contracts integration 2026-10-17       | 275-file web ledger; initial frontend 507/94; final combined 1,511/259; cleanup regressions, production journeys, six performance suites                     | None in frontend scope; delivery tooling remains CP14                             |
-| CP11       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,511 tests/259 files; 6 architecture regressions; 80-file ledger; unchanged 77-route surface; types/lint/format/builds/browser/worker/performance           | Source API release communication remains CP15                                     |
-| CP12       | Commit containing this evidence, accepted 2026-10-17            | Final 1,532/267; lifecycle/IPC/navigation regressions; Linux Electron normal/failure smoke on final and clean builds; worker smoke                           | macOS/Windows runtime and OS release integration remain platform checks           |
-| CP13       | Commit containing this evidence, accepted 2026-10-17            | UI acceptance inventory; public-export interaction tests; gallery screenshots and focus/keyboard review; renderer builds/journeys/performance                | No open UI architecture work; exhaustive assistive-technology audit is separate   |
-| CP14       | Commit containing this evidence, accepted 2026-10-17            | 1,162-file coverage; 11 enforcement regressions; full tests/types/lint/format/build; clean install/build/native verification; cache proof; CI/release wiring | Final repository/release documentation closure remains CP15                       |
-| CP15       | Not accepted                                                    | Pending                                                                                                                                                      | See each checkpoint                                                               |
+| Checkpoint | Revision / delivery                                       | Verification                                                                                                                                                 | Follow-up at acceptance (historical)                                              |
+| ---------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| CP00       | `e1fc843` (CP03 baseline)                                 | Coverage inventory; tracker/link/format checks                                                                                                               | None within planning scope                                                        |
+| CP01       | `e1fc843` (CP03 baseline)                                 | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide                                                    | Follow-up work assigned to CP02–CP14                                              |
+| CP02       | `e1fc843`, accepted 2026-10-16                            | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory                                            | None in server application/transport scope; native integration remains CP12       |
+| CP03       | `e1fc843`, accepted 2026-10-16                            | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit                                                  | None within CP03; neutral workspace remains CP05, provider lifecycle CP06         |
+| CP04       | `a628a08`, accepted 2026-10-16                            | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit                                                  | None within CP04; neutral session workflows remain CP05                           |
+| CP05       | `2789c9c`, accepted 2026-10-16                            | 1,467 tests/243 files; combined 348/41; follow-up 55/5; 4 architecture tests; typechecks/lint/format/builds; 41-module and 36-session audits                 | None within CP05; additional production VCS/folder history remains separate scope |
+| CP06       | `5d60524`, accepted 2026-10-17                            | Provider/agent 367 tests/58 files; disposal 6/1; typechecks/lint/architecture checks                                                                         | None within provider/protocol composition scope                                   |
+| CP07       | `a117a46`, accepted 2026-10-17                            | 1,489 tests/248 files; 5 architecture tests; types/lint/format/builds; 214-file ownership ledger                                                             | None within remaining-core scope                                                  |
+| CP08       | `d3b0869`, accepted 2026-10-17                            | Focused 239/36 and injected-action 7/1; types/lint/architecture/format/web build; production screen journeys                                                 | Broader frontend audit remains CP10                                               |
+| CP09       | `4ba6b0e`, accepted 2026-10-17                            | 1,491 tests/249 files; focused 135/21; 5 architecture and 9 performance tests; types/lint/format/builds; parent/child browser and desktop worker smoke       | Broader frontend audit remains CP10                                               |
+| CP10       | `148ef06`, accepted with contracts integration 2026-10-17 | 275-file web ledger; initial frontend 507/94; final combined 1,511/259; cleanup regressions, production journeys, six performance suites                     | None in frontend scope; delivery tooling remains CP14                             |
+| CP11       | `f158004`, accepted 2026-10-17                            | 1,511 tests/259 files; 6 architecture regressions; 80-file ledger; unchanged 77-route surface; types/lint/format/builds/browser/worker/performance           | Source API release communication remains CP15                                     |
+| CP12       | `b62954c`, accepted 2026-10-17                            | Final 1,532/267; lifecycle/IPC/navigation regressions; Linux Electron normal/failure smoke on final and clean builds; worker smoke                           | macOS/Windows runtime and OS release integration remain platform checks           |
+| CP13       | `b62954c`, accepted 2026-10-17                            | UI acceptance inventory; public-export interaction tests; gallery screenshots and focus/keyboard review; renderer builds/journeys/performance                | No open UI architecture work; exhaustive assistive-technology audit is separate   |
+| CP14       | `b62954c`, accepted 2026-10-17                            | 1,162-file coverage; 11 enforcement regressions; full tests/types/lint/format/build; clean install/build/native verification; cache proof; CI/release wiring | Final repository/release documentation closure remains CP15                       |
+| CP15       | Not accepted                                              | Pending                                                                                                                                                      | See each checkpoint                                                               |
 
-For each checkpoint, replace the aggregate pending row with its own evidence entry when work
-starts. Include execution date, actual commands/results, accepted paths, unresolved issues, and
-commit/PR links when available. Do not carry CP01's test counts forward as proof of later work.
+Earlier rows retain their original verification counts and follow-ups as historical evidence.
+Current completion and remaining product/platform scope are stated in the dashboard and final
+acceptance record; earlier phase results do not substitute for the final gate.

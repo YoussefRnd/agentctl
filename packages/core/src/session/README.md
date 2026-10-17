@@ -2,7 +2,7 @@
 
 `SessionManager` is the public application facade. ACP wire formats and negotiation remain
 inside `../acp`; this layer uses the provider-independent `AgentSession` contract.
-The [CP03 ownership audit](../../../../docs/session-architecture.md) inventories every module,
+The [session ownership audit](../../../../docs/session-architecture.md) inventories every module,
 its accepted responsibility, state transitions, public exports and verification.
 
 | Directory      | Responsibility                                                                                        |
@@ -89,7 +89,7 @@ Turn capture, rewind, workspace allocation/lifecycle and integration now use the
 New persisted checkpoints and discard recovery values are opaque; historical field names and
 Git values remain explicit compatibility paths. See
 [Workspace workflow ownership](../../../../docs/workspace-architecture.md) and
-[Repository architecture](../../../../docs/repository-architecture.md) for the boundary and migration scope.
+[Repository architecture](../../../../docs/repository-architecture.md) for the implemented boundary, retained Git compatibility and backend extension scope.
 
 ## Read models and reconnect
 
@@ -142,3 +142,8 @@ preservation, request cancellation, migration upgrades and SSE catch-up. Use the
 Vitest configuration; localhost and subprocess fixtures require a runtime that permits them.
 Streaming flushes wait for in-flight persistence; background errors are logged and retain
 pending content for retry. Explicit flush failures remain visible to shutdown callers.
+
+The [final acceptance record](../../../../docs/architecture-migration.md#cp15--repository-wide-acceptance-and-migration-closure)
+identifies the verified revision and full gate. Source integration changes are listed in the
+[architecture release notes](../../../../docs/releases/architecture-migration.md); HTTP and persisted
+record compatibility remain covered separately from source export changes.

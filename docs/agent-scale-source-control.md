@@ -2,8 +2,8 @@
 
 Reviewed October 16, 2026, against the current Git, snapshot, review, and session code.
 
-The subsequent backend-independent review implementation and remaining migration boundaries
-are documented in [Repository architecture](repository-architecture.md).
+This is the original dated design assessment. The implemented repository/workspace boundary
+and backend extension scope are documented in [Repository architecture](repository-architecture.md).
 
 Anthropic's [Redesigning source control at Anthropic](https://www.anthropic.com/engineering/redesigning-source-control)
 describes Scion, a system built for a huge, centralized monorepo with predominantly online

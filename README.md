@@ -37,14 +37,17 @@ provider.
 
 ## Common commands
 
-| Command            | Purpose                                           |
-| ------------------ | ------------------------------------------------- |
-| `pnpm dev:web`     | Run the web client and server in development mode |
-| `pnpm dev:desktop` | Run the Electron desktop application              |
-| `pnpm lint`        | Run the repository linter                         |
-| `pnpm typecheck`   | Typecheck every workspace package                 |
-| `pnpm test`        | Run the complete test suite                       |
-| `pnpm build`       | Build all packages and applications               |
+| Command                   | Purpose                                            |
+| ------------------------- | -------------------------------------------------- |
+| `pnpm dev:web`            | Run the web client and server in development mode  |
+| `pnpm dev:desktop`        | Run the Electron desktop application               |
+| `pnpm lint`               | Run the repository linter                          |
+| `pnpm typecheck`          | Typecheck every workspace package                  |
+| `pnpm test`               | Run the complete test suite                        |
+| `pnpm build`              | Build all packages and applications                |
+| `pnpm architecture:check` | Check dependency directions and ownership coverage |
+| `pnpm ui:check`           | Build and review the isolated UI gallery in Chrome |
+| `pnpm desktop:smoke`      | Exercise built native startup, IPC and shutdown    |
 
 ## Architecture
 
@@ -60,10 +63,25 @@ provider.
 
 Run `pnpm architecture:check` to enforce package, server, and frontend boundaries.
 See [Code architecture](docs/code-architecture.md) for design patterns, file ownership,
-state conventions and compatibility changes. Track the complete rollout in the
-[Architecture migration checkpoints](docs/architecture-migration.md).
+state conventions and compatibility changes. The [architecture migration record](docs/architecture-migration.md) contains the ownership
+coverage and final acceptance evidence.
 The [Git capability ownership audit](docs/git-architecture.md) records capability boundaries and lock ordering.
 [Workspace workflow ownership](docs/workspace-architecture.md) covers repository-neutral session lifecycle and checkpoint persistence.
+
+The application uses focused workflow services, narrow repository/provider ports, explicit
+composition roots, and one owner per resource lifetime. React Query owns remote state; Zustand
+owns client UI state and drafts. Native capabilities are exposed through one shared IPC contract.
+
+The [desktop lifecycle](docs/desktop-architecture.md), [UI acceptance inventory](docs/ui-architecture.md),
+and [delivery/enforcement matrix](docs/tooling-architecture.md) describe the final boundaries.
+Combined ownership ledgers cover application code, assets, tests, scripts and configuration;
+new files require an owner and acceptance evidence. See the
+[source compatibility notes](docs/releases/architecture-migration.md) when updating source integrations.
+
+For the full local acceptance gate, use the commands in the migration record. Browser checks
+require Chrome; Linux native smoke requires Xvfb when DISPLAY is unavailable (`XVFB_PATH` can
+select a binary). Native acceptance currently covers Linux x64. macOS/Windows native release
+checks, signing and update installation remain platform work.
 
 ## UI development
 
@@ -104,7 +122,7 @@ Pushing to the base branch is available through an explicit preference in the co
 Review uses a backend-independent repository boundary with opaque revision references and
 capability discovery. Git is the first versioned backend; ordinary folders remain usable but
 do not provide change history or checkpoints. See [Repository architecture](docs/repository-architecture.md)
-for the supported boundary and remaining Git workflow migration.
+for supported capabilities, scoped revisions, and compatibility rules.
 
 Apply requires committed work in isolated worktrees. Discard keeps a recovery copy until the
 session is deleted. Use **Recover discarded changes** in the review panel to resume a retained

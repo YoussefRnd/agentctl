@@ -29,12 +29,14 @@ transformations. New layers need a concrete responsibility; modules do not requi
 - Core owns agent/session/workspace behavior and host adapters, without Fastify or React dependencies.
 - Server routes call application services and queries. Server composition constructs the services.
 - Web routes/app composition assemble features. Features use public entries of other features;
-  shared web capabilities do not depend on features. Prefer an acyclic feature graph.
+  shared web capabilities do not depend on features. The feature graph must remain acyclic.
 - The design system does not import application features. Electron owns native app lifecycle and IPC.
 
-The generic repository boundary and ACP SDK boundary have their own regression tests. The
-package/server architecture check enforces the rules already migrated in this phase. It is
-not a claim that every legacy service has pure domain/application separation.
+Repository and ACP boundaries have dedicated regression tests. Parsed architecture checks
+enforce package/module directions, public entries, UI purity, main/preload separation and
+frontend cycles. Canonical targets prevent relative-path, re-export, type and lazy-import
+bypasses. A modular monolith can retain a small injected application service without adding
+a generic repository or domain layer.
 
 ## Current owners
 
@@ -50,7 +52,7 @@ not a claim that every legacy service has pure domain/application separation.
 | `packages/core/src/db/database.ts`                                | Explicit database creation and migrations                                                    |
 | `packages/core/src/db/default-database.ts`                        | Environment/path resolution and lazy default database creation                               |
 | `packages/api-client/src/services/`                               | Capability-specific projects, sessions, Git, history, editors, search, and terminal requests |
-| `packages/api-client/src/stream/session-engine.ts`                | SSE parsing, reconnect, event coalescing, and transport lifecycle                            |
+| `packages/api-client/src/stream/session-engine.ts`                | Session stream lifecycle; framing and coalescing have focused stream owners                  |
 | `apps/web/src/features/sessions/model/SessionConfigContext.tsx`   | Configuration/review context composition                                                     |
 | `apps/web/src/features/sessions/model/SessionStreamContext.tsx`   | History, plan, execution, and queue context composition                                      |
 | `apps/web/src/features/sessions/model/useSessionMessageQueue.ts`  | Client outbox, delivery retry, and durable acceptance reconciliation                         |
@@ -74,7 +76,7 @@ expose focused capabilities and preserve existing update isolation for prompts, 
 turn progress. Splitting files must not merge these distinct lifetimes.
 
 Markdown rendering and workspace navigation are shared capabilities used outside their original
-features. Conversation cards and inspector panels now import those owners directly. Consumers import the shared owners directly; temporary feature forwarding exports are removed.
+features. Conversation cards and inspector panels import those owners directly; temporary feature forwarding exports are removed.
 
 The feature graph is acyclic. `apps/web/architecture-cycles.json` is empty and the checker
 rejects cycle exceptions, including cycles through re-exports, type and lazy imports. Shared
@@ -96,11 +98,12 @@ and [parsed graph snapshot](frontend-feature-graph.json) record these boundaries
 - Use explicit domain errors at reusable boundaries and translate them at the application edge.
   Existing server-local application services retain `AppError` compatibility.
 
-HTTP URLs, response shapes, session command ordering, and database schemas are unchanged by
-this phase. Capability helper function names remain exported from `@agentctl/api-client`;
+The architecture migration preserves HTTP URLs/response shapes, session command ordering and
+the database schema. Capability helper function names remain exported from `@agentctl/api-client`;
 `services/project-sessions.ts` has been removed in favor of the package root.
 
-Two source-level imports change deliberately:
+The complete source compatibility list is in the [architecture release notes](releases/architecture-migration.md).
+Two common import changes are:
 
 ```ts
 // Transport lives with the client, not shared contracts or core.
@@ -119,8 +122,8 @@ initialization in server startup, keeping test and embedded composition isolated
 
 Run `pnpm architecture:check` for package/server and frontend checks, and
 `pnpm architecture:test` for import parsing, multi-hop cycle detection, and baseline regression
-tests. Root typecheck runs the checks; root test runs the architecture regression tests before
-package tests. The checker uses TypeScript syntax trees for import, re-export, dynamic import,
+tests. Root typecheck runs the checks; root test runs architecture regressions and the
+consolidated Vitest projects with two workers. The checker uses TypeScript syntax trees for import, re-export, dynamic import,
 and type dependencies. Existing protocol/repository boundary tests remain in the Vitest suite.
 
 The [server ownership audit](server-architecture.md) records CP02's endpoint inventory and
@@ -130,26 +133,26 @@ their state transitions, resource lifetimes, persistence rules, and deliberate p
 Session resources and workflow callbacks now have explicit composition owners; persistence
 and internal workflows cannot import the public session facade or barrel.
 
-The [architecture migration tracker](architecture-migration.md) is the authoritative checklist
-for the remaining work across every workspace package, with dependencies, acceptance criteria,
-a coverage ledger, and the final verification gate. Update its checkpoint evidence when work
-is accepted; the initial phase documented here is CP01, not the full migration.
+The [architecture migration record](architecture-migration.md) contains the complete ownership
+audit, compatibility decisions and verification evidence. Core, web and contracts ledgers map
+production modules to their owners; the workspace ledger covers the remaining source, assets,
+tests, tools and documents. Missing, duplicate or stale file assignments fail normal checks.
+The [enforcement matrix](tooling-architecture.md) describes delivery tasks and violation fixtures.
+The [desktop audit](desktop-architecture.md) and [UI inventory](ui-architecture.md) cover native
+resource lifetimes, IPC, accessibility and gallery acceptance.
 
 This structure improves maintainability and backend substitution. The execution model still
 assumes one owning server process per database. Horizontal multi-server execution requires a
 separate design for ownership, leases, queues, locking, and event delivery.
 
-## Validation of this phase
+## Validation
 
-The full Vitest suite passed 1,429 tests across 237 files. Four architecture regression tests
-passed separately. Package/server and frontend boundary checks, all workspace typechecks,
-lint, formatting, whitespace checks, and web/desktop builds passed. Existing Git safety,
-provider import recovery, outbox acceptance/retry, and markdown worker tests remain in the
-suite; a new database initialization test verifies inert imports and one-time default creation.
-
-The isolated production browser journeys passed startup, session navigation, and deferred asset
-loading after the module moves. These synthetic fixture checks do not measure live provider
-performance or validate native Electron runtime behavior.
+The final revision, test counts, commands and artifacts are recorded in the
+[migration acceptance record](architecture-migration.md#cp15--repository-wide-acceptance-and-migration-closure).
+The gate covers populated-database upgrades, legacy revision decoding, protocol boundaries,
+frontend state/resource cleanup, browser navigation, emitted workers, UI gallery interaction
+and real Linux Electron startup/IPC/shutdown. Synthetic browser journeys do not measure live
+provider latency; native smoke verifies the available platform rather than macOS/Windows.
 
 The [Git capability audit](git-architecture.md) records CP04 composition, operation contracts,
 forge selection, complete module ownership, and lock/resource ordering.

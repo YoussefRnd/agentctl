@@ -1,6 +1,6 @@
 # Session ownership audit
 
-CP03 covers every production TypeScript file under `packages/core/src/session`, its README,
+This audit covers every production TypeScript file under `packages/core/src/session`, its README,
 and its colocated regression suites. The table below records the accepted owner for all
 36 production modules. Existing cohesive modules were reviewed and retained; extraction is
 used where composition, persistence, or resource ownership was mixed.
@@ -122,11 +122,11 @@ older clients. Streaming deltas remain transient; full persisted rows and live s
 support catch-up. Failed background flushes are logged and keep pending content for explicit
 retry; explicit flush waits for an already-started write and reports persistence failure.
 
-The system still assumes **one owning server process per database**. CP03 does not introduce
+The system assumes **one owning server process per database**. This migration does not introduce
 leases, cross-process runtime ownership, automatic resend of uncertain turns, or a new
 protocol. Repository-neutral snapshot/workspace workflow acceptance is recorded in
-[the CP05 audit](workspace-architecture.md); broader provider and ACP lifecycle composition
-remains CP06.
+[the workspace audit](workspace-architecture.md); [provider and ACP lifecycle ownership](provider-architecture.md)
+records protocol composition, cancellation and shared connection disposal.
 
 ## Verification
 
@@ -139,7 +139,7 @@ publication. Stream-buffer tests exercise write ordering, waiting and retry afte
 elicitation tests cover duplicate IDs, pending capacity and settled retention.
 
 The [migration tracker](architecture-migration.md#cp03--session-execution-persistence-and-runtime-ownership)
-records the final commands and results used to accept this checkpoint. Public module visibility
+retains the original session evidence; its final closure section records repository-wide acceptance. Public module visibility
 was narrowed deliberately: server fixtures now import the internal elicitation registry
 directly; application code continues through the facade and execution query. No HTTP contract
 or database schema change is introduced.

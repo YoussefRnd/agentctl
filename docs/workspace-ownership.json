@@ -638,6 +638,7 @@
         "docs/performance.md",
         "docs/provider-architecture.md",
         "docs/public-api.json",
+        "docs/releases/architecture-migration.md",
         "docs/releases/v0.3.0.md",
         "docs/repository-architecture.md",
         "docs/server-architecture.md",

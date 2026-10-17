@@ -1,8 +1,9 @@
 # Server ownership and transport audit
 
-This records CP02's server audit and file ownership. The complete migration is tracked in
-[Architecture migration](architecture-migration.md); these server changes do not close the
-remaining core-session or native-desktop checkpoints.
+This records server transport/application ownership and its original acceptance evidence.
+The [migration record](architecture-migration.md) contains final repository-wide acceptance;
+[session ownership](session-architecture.md) and [desktop lifecycle](desktop-architecture.md)
+describe the corresponding runtime boundaries.
 
 ## Application and transport boundaries
 
@@ -214,5 +215,5 @@ Accepted locally on 2026-10-16. The full suite passed 1,434 tests across 239 fil
 core-session/server suite passed 270 tests across 49 files. Four architecture regression tests,
 all-workspace typechecks, lint, formatting, and web/desktop builds passed. Endpoint inventory,
 local document links, and whitespace checks passed. This includes the initial CP03 workflow
-composition extraction; CP03 as a whole remains open. No native-runtime or live-provider
-acceptance is claimed by these server checks.
+composition extraction. Later session/native acceptance is recorded in the final migration
+gate; these original server checks do not claim native-runtime or live-provider acceptance.

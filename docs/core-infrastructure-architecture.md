@@ -7,8 +7,8 @@ are accepted as they stand. No extra layer is required for a constants file or a
 [`core-ownership.json`](core-ownership.json) records every production core source and bundled
 skill asset, including the previously accepted session, repository, workspace, Git and protocol
 areas. Parsed architecture checks reject missing, duplicate and stale assignments, and require
-an evidence document. This closes core ownership coverage; it does not close the remaining web,
-desktop, public-export or repository-wide migration checkpoints.
+an evidence document. Core acceptance is part of the [repository-wide migration record](architecture-migration.md),
+which also covers frontend, desktop, public exports and delivery tooling.
 
 ## Security and credentials
 
@@ -87,7 +87,7 @@ stdio and HTTP peers still exercise the default adapter.
 | `default-agent-runtime.ts`, `default-agent-driver.ts` | Explicit provider/ACP runtime factories and per-runtime diagnostics. No module-level recorder or process creation.                                                                                                                                                              |
 | `default-repository-service.ts`                       | Explicit Git/directory backend composition; no backend default selected by neutral workflow code.                                                                                                                                                                               |
 | `logger.ts`                                           | Logger contract and shared stateless no-op implementation. Application loggers remain injected.                                                                                                                                                                                 |
-| Root `index.ts`                                       | Existing compatibility/public exports plus explicit factories. Imports allocate no database, vault, provider processes or MCP connections. Public export surface consolidation remains in its own checkpoint.                                                                   |
+| Root `index.ts`                                       | Existing compatibility/public exports plus explicit factories. Imports allocate no database, vault, provider processes or MCP connections. Public entries and retained aliases are recorded in the contracts/public API audit.                                                  |
 
 Declared shared state is limited to lazy default database/vault instances selected explicitly,
 immutable metadata/policies, the bounded skill-install receipts and in-flight copy coordination.

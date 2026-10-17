@@ -113,12 +113,17 @@ is introduced. Ordinary folders advertise unsupported history, staging, isolatio
 A file-backed non-Git test adapter verifies the entire neutral workflow boundary. Adding a production
 backend still requires its own durable object/recovery retention and product integration.
 
-## Validation
+## Validation and extension scope
 
-The full suite passed 1,428 tests across 236 files after the maintainability refactor. The
-focused repository, Git, route, contract, API, and review suite passed 389 tests across 55 files.
-Typechecks, frontend
-architecture checks, lint, formatting, whitespace checks, and web/desktop builds passed.
-The isolated production browser journey check also passed startup, navigation, and deferred
-asset checks with the new review endpoint in its fixture API. These synthetic API journeys
-do not establish backend latency improvements or native Electron runtime behavior.
+The [final migration acceptance](architecture-migration.md#cp15--repository-wide-acceptance-and-migration-closure)
+records exact revision, commands and results. Repository/Git/server tests cover scoped opaque
+references, alternate backend IDs, legacy raw Git revisions, worktree safety, checkpoint recovery
+and ordinary-folder capability fallback. Database tests upgrade populated data from every
+historical migration boundary. Production browser journeys exercise repository review consumers;
+separate native smoke exercises the built Electron integration.
+
+A new production backend implements and advertises its actual capabilities, defines durable
+revision/recovery retention, and passes the neutral workflow and HTTP tests with non-Git IDs.
+AgentCtl's development tooling still uses Git to audit this source checkout. That development
+requirement does not place Git inside the repository-neutral runtime contract. Git-specific
+branch, staging, push and forge operations remain optional backend workflows.

@@ -40,7 +40,7 @@ consumers are checked alongside other packages. Type-only, re-export and lazy im
 | Core Git WorkspaceManager and Git SessionWorkspace                                       | Permanent public APIs. WorkspaceManager delegates to focused Git capabilities; the Git-specific SessionWorkspace constructor adapts existing callers to the repository-neutral workflow. It is distinct from core/workspace construction. Existing Git/workspace lifecycle and historical revision tests cover their behavior. They are not temporary deprecations. |
 | Core lazy database/credential/runtime defaults                                           | Permanent explicitly invoked host-composition APIs, with inert-import/one-time initialization coverage. The standalone credential resolver calls the same lazy store only when used.                                                                                                                                                                                |
 | Core/client context DTO re-exports                                                       | Permanent public type aliases to shared schemas, preserving established import names without duplicate shapes or state.                                                                                                                                                                                                                                             |
-| UI primitive/pattern indexes and root                                                    | Permanent component APIs. Detailed design/accessibility auditing remains the UI checkpoint; its package entry policy is accepted here.                                                                                                                                                                                                                              |
+| UI primitive/pattern indexes and root                                                    | Permanent component APIs. The UI acceptance inventory covers design, accessibility and interactions; named component/theme entries remain the public API.                                                                                                                                                                                                           |
 
 ## Source migration and wire compatibility
 
@@ -48,15 +48,15 @@ Source callers use createApiQueryClient rather than a client-package singleton; 
 supplies mutation notifications and setUnauthorizedHandler. Pairing-token URL cleanup/native port
 resolution moved into the web app. Internal coalescing and registry adapter classes are no longer
 root exports. Source wildcard imports into UI/client internals are rejected; use the named entries
-above. All in-repository consumers and tests migrate together. These source API changes must be
-included in release communication for any external source consumers; no publish/version bump is
-performed by this migration.
+above. All in-repository consumers and tests migrate together. The [source compatibility release notes](releases/architecture-migration.md) enumerate these changes
+for external source consumers. This migration performs no publish or version bump.
 
 The typed HTTP surface, route success/error status sets, historical SQL migrations, checkpoint
 revision decoding, persisted session/event transforms and ACP v1/v2 wire fields are retained.
 This refactor does not add a database migration or remove legacy record/protocol decoding. The
 existing legacy project/session reconciliation read is an intentional server application operation,
-not a temporary source alias. Broader desktop lifecycle and CI/tooling acceptance remain separate.
+not a temporary source alias. Native integration and delivery acceptance are recorded in
+[desktop lifecycle](desktop-architecture.md) and [tooling enforcement](tooling-architecture.md).
 
 Verification covers shared public values/schema identity and old record transforms; unchanged HTTP
 surface; explicit HTTP auth/cancellation/errors; upload cancellation; query cache isolation; SSE
