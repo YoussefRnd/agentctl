@@ -1,12 +1,8 @@
 import { ApiError } from '../api-error.js';
-import { redirectToLogin, getApiBaseUrl, getDesktopCapability } from '../api-client.js';
+import { notifyUnauthorized, getApiBaseUrl, getDesktopCapability } from '../http/configuration.js';
 
-export interface UploadAttachmentResult {
-  attachmentId: string;
-  mimeType: string;
-  filename: string;
-  sizeBytes: number;
-}
+import { attachmentSchema, type UploadAttachmentResult } from '@agentctl/shared';
+export type { UploadAttachmentResult } from '@agentctl/shared';
 
 const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
@@ -27,7 +23,7 @@ export async function fetchAttachment(
       signal,
     },
   );
-  if (response.status === 401) redirectToLogin();
+  if (response.status === 401) notifyUnauthorized();
   if (!response.ok) {
     throw new ApiError('Could not load image attachment', response.status);
   }
@@ -101,14 +97,14 @@ export function uploadAttachment(
 
     xhr.onload = () => {
       if (xhr.status === 401) {
-        redirectToLogin();
+        notifyUnauthorized();
         fail(new ApiError('Unauthorized', 401));
         return;
       }
 
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const data = JSON.parse(xhr.responseText) as UploadAttachmentResult;
+          const data = attachmentSchema.parse(JSON.parse(xhr.responseText));
           onProgress?.(100);
           succeed(data);
         } catch {

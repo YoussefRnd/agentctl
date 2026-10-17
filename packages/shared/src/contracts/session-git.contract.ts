@@ -10,7 +10,7 @@ import {
   createPullRequestResultSchema,
 } from './projects.contract.js';
 
-const emptyBodySchema = z.record(z.string(), z.unknown()).optional().default({});
+import { emptyBodySchema } from './contract-common.js';
 
 export const sessionGitContract = {
   getSessionBranches: {

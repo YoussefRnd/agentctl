@@ -1,0 +1,82 @@
+{
+  "packages": [
+    {
+      "package": "@agentctl/shared",
+      "root": "packages/shared",
+      "entries": [".", "./schemas", "./types"]
+    },
+    {
+      "package": "@agentctl/api-client",
+      "root": "packages/api-client",
+      "entries": ["."]
+    },
+    {
+      "package": "@agentctl/core",
+      "root": "packages/core",
+      "entries": [
+        ".",
+        "./acp",
+        "./config",
+        "./db",
+        "./git",
+        "./mcp",
+        "./providers",
+        "./repository",
+        "./security",
+        "./session",
+        "./workspace"
+      ]
+    },
+    {
+      "package": "@agentctl/ui",
+      "root": "packages/ui",
+      "entries": [".", "./theme.css"]
+    }
+  ],
+  "features": [
+    {
+      "feature": "command-palette",
+      "entries": ["index"]
+    },
+    {
+      "feature": "composer",
+      "entries": ["index", "gallery"]
+    },
+    {
+      "feature": "conversation",
+      "entries": ["index"]
+    },
+    {
+      "feature": "projects",
+      "entries": ["index"]
+    },
+    {
+      "feature": "providers",
+      "entries": ["index"]
+    },
+    {
+      "feature": "review",
+      "entries": ["index"]
+    },
+    {
+      "feature": "sessions",
+      "entries": ["index"]
+    },
+    {
+      "feature": "settings",
+      "entries": ["index", "gallery"]
+    },
+    {
+      "feature": "subagents",
+      "entries": ["index"]
+    },
+    {
+      "feature": "updates",
+      "entries": ["index"]
+    },
+    {
+      "feature": "workbench",
+      "entries": ["index"]
+    }
+  ]
+}

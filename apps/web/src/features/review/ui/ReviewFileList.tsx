@@ -55,22 +55,15 @@ const STATE_BADGE: Record<FileState, { letter: string; color: string; label: str
 export interface ReviewFileListProps {
   composerActions: ReviewComposerActions;
   files?: (ReviewFile & { hunks: ReturnType<typeof parseDiff> })[];
-  groupedFiles?: Record<FileState, (ReviewFile & { hunks: ReturnType<typeof parseDiff> })[]>;
-  collapsedSections?: Record<string, boolean>;
   collapsedFiles: Record<string, boolean>;
   fileStats: Map<string, { additions: number; deletions: number }>;
   viewMode: 'inline' | 'split';
   wrapLines?: boolean;
-  onToggleSection?: (state: FileState) => void;
   onToggleFile: (path: string) => void;
   onStage?: (path: string) => void;
   onUnstage?: (path: string) => void;
   onRevert?: (path: string) => void;
   onOpenFile?: (path: string) => void;
-  onStageAll?: () => void;
-  onUnstageAll?: () => void;
-  isStagingAll?: boolean;
-  isUnstagingAll?: boolean;
   targetFilePath?: string | null;
   targetFileRef?: (element: HTMLDivElement | null) => void;
   onTargetFileHandled?: () => void;
@@ -80,7 +73,6 @@ export interface ReviewFileListProps {
 export function ReviewFileList({
   composerActions,
   files,
-  groupedFiles,
   collapsedFiles,
   fileStats,
   viewMode,
@@ -95,14 +87,7 @@ export function ReviewFileList({
   onTargetFileHandled,
   onVisibleExpandedFilesChange,
 }: ReviewFileListProps) {
-  // Support both unified files array and legacy groupedFiles
-  const allFiles = useMemo(() => {
-    if (files) return files;
-    if (groupedFiles) {
-      return Object.values(groupedFiles).flat();
-    }
-    return [];
-  }, [files, groupedFiles]);
+  const allFiles = useMemo(() => files ?? [], [files]);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const targetRef = useRef<HTMLDivElement | null>(null);

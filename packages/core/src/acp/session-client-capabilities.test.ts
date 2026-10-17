@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { parseAcpCapabilities } from './transport/capabilities-cache.js';
+import { parseAcpCapabilities } from './v1/capabilities.js';
 
 describe('parseAcpCapabilities', () => {
   test('parses loadSession when top-level loadSession is true', () => {
@@ -98,7 +98,7 @@ describe('parseAcpCapabilities', () => {
 
 describe('extractConfigOptionsFromSessionResult', () => {
   test('extracts models when configOptions is empty or missing', async () => {
-    const { extractConfigOptionsFromSessionResult } = await import('./runtime.js');
+    const { extractConfigOptionsFromSessionResult } = await import('./v1/configuration.js');
     const res = extractConfigOptionsFromSessionResult({
       models: {
         availableModels: [
@@ -117,7 +117,7 @@ describe('extractConfigOptionsFromSessionResult', () => {
   });
 
   test('merges configOptions and models when both are returned by agent', async () => {
-    const { extractConfigOptionsFromSessionResult } = await import('./runtime.js');
+    const { extractConfigOptionsFromSessionResult } = await import('./v1/configuration.js');
     const res = extractConfigOptionsFromSessionResult({
       configOptions: [
         {
@@ -145,7 +145,7 @@ describe('extractConfigOptionsFromSessionResult', () => {
   });
 
   test('does not duplicate model option if already present in configOptions', async () => {
-    const { extractConfigOptionsFromSessionResult } = await import('./runtime.js');
+    const { extractConfigOptionsFromSessionResult } = await import('./v1/configuration.js');
     const res = extractConfigOptionsFromSessionResult({
       configOptions: [
         {

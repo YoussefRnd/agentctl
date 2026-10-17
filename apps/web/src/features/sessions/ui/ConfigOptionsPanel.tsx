@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from 'react';
-import { useSession } from '../model/SessionContext';
+import { useSession } from '../model/SessionConfigContext';
 import {
   getAgentConfigCategory,
   resolveAgentFeatures,

@@ -3,7 +3,7 @@ import type { ChildProcess, spawn } from 'node:child_process';
 import { expect, test, vi } from 'vitest';
 import type { AgentDriver } from '../agent/types.js';
 import { AcpAgentDriver } from './driver.js';
-import { AcpV2AgentDriver } from './v2/runtime.js';
+import { AcpV2AgentDriver } from './v2/driver.js';
 import type { AgentStreamTransport } from './types.js';
 import { noopLogger } from '../logger.js';
 

@@ -18,8 +18,7 @@
   "dependencies": {
     "@agentctl/shared": "workspace:*",
     "@tanstack/react-query": "^5.104.0",
-    "@ts-rest/core": "^3.52.1",
-    "sonner": "^2.0.8"
+    "@ts-rest/core": "^3.52.1"
   },
   "peerDependencies": {
     "react": "^19.2.6"
@@ -30,5 +29,11 @@
     "@typescript/native": "catalog:",
     "react": "^19.3.0",
     "typescript": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }

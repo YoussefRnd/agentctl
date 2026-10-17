@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { SessionEventRow, SessionEventSnapshot } from '@agentctl/shared';
 import { initialHistoryOptions } from '../api/sessionNavigation';
-import { mergeEventHistory, useSessionEvents } from './useSessionEvents';
+import { useSessionEvents } from './useSessionEvents';
+import { mergeEventHistory } from './useSessionHistory';
 import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 
 const mocks = vi.hoisted(() => ({
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@agentctl/api-client', () => ({
   apiClient: { fetch: mocks.fetch },
   getDesktopCapability: () => null,
+  getApiBaseUrl: () => '',
   SessionEngine: class {
     constructor(options: (typeof mocks.engines)[number]) {
       mocks.engines.push(options);

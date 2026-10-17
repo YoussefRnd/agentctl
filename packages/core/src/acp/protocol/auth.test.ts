@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { initializeAuthConnection, authenticateConnection } from './auth.js';
 import { PROTOCOL_VERSION, type ClientSideConnection } from '@agentclientprotocol/sdk';
-import { AGENTCTL_CLIENT_CAPABILITIES } from '../transport/capabilities-cache.js';
+import { AGENTCTL_CLIENT_CAPABILITIES } from '../v1/capabilities.js';
 
 describe('ACP Protocol Auth Conformance', () => {
   it('rejects a different protocol version on auth connections', async () => {

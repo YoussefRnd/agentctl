@@ -8,6 +8,7 @@
         "apps/web/src/app/App.tsx",
         "apps/web/src/app/AppProviders.tsx",
         "apps/web/src/app/AppRouter.tsx",
+        "apps/web/src/app/apiEnvironment.ts",
         "apps/web/src/app/queryClient.ts",
         "apps/web/src/app/useServerStateSync.ts"
       ]
@@ -80,6 +81,7 @@
       "owner": "Draft/input composition, attachments, context search, commands and durable-send acceptance",
       "evidence": "docs/frontend-state-architecture.md",
       "files": [
+        "apps/web/src/features/composer/gallery.ts",
         "apps/web/src/features/composer/index.ts",
         "apps/web/src/features/composer/model/useAttachments.ts",
         "apps/web/src/features/composer/model/useCommandBarState.ts",
@@ -208,11 +210,9 @@
       "evidence": "docs/frontend-state-architecture.md",
       "files": [
         "apps/web/src/features/sessions/api/sessionNavigation.ts",
-        "apps/web/src/features/sessions/api/sessionQueries.ts",
         "apps/web/src/features/sessions/api/workspaceReview.ts",
         "apps/web/src/features/sessions/index.ts",
         "apps/web/src/features/sessions/model/SessionConfigContext.tsx",
-        "apps/web/src/features/sessions/model/SessionContext.tsx",
         "apps/web/src/features/sessions/model/SessionStreamContext.tsx",
         "apps/web/src/features/sessions/model/messageDelivery.ts",
         "apps/web/src/features/sessions/model/reconcileOptimisticMessages.ts",
@@ -243,6 +243,7 @@
       "files": [
         "apps/web/src/features/settings/api/useMcpServers.ts",
         "apps/web/src/features/settings/api/useSettings.ts",
+        "apps/web/src/features/settings/gallery.ts",
         "apps/web/src/features/settings/index.ts",
         "apps/web/src/features/settings/model/useSettingsOverlayStore.ts",
         "apps/web/src/features/settings/model/useSetupWizard.ts",
@@ -302,7 +303,6 @@
         "apps/web/src/features/workbench/model/terminal-types.ts",
         "apps/web/src/features/workbench/model/useTerminalPane.ts",
         "apps/web/src/features/workbench/model/useTerminalTabsStore.ts",
-        "apps/web/src/features/workbench/model/useWorkbenchStore.ts",
         "apps/web/src/features/workbench/ui/McpStatusPanel.tsx",
         "apps/web/src/features/workbench/ui/PlanPanel.tsx",
         "apps/web/src/features/workbench/ui/StatusPane.tsx",
@@ -374,7 +374,6 @@
       "owner": "Query identities, workspace invalidation, persistence, notifications, parsing and highlighter workers",
       "evidence": "docs/frontend-state-architecture.md",
       "files": [
-        "apps/web/src/shared/lib/api-base-url.ts",
         "apps/web/src/shared/lib/code-highlighter-utils.ts",
         "apps/web/src/shared/lib/code-highlighter.ts",
         "apps/web/src/shared/lib/diff-highlighter.ts",

@@ -1,6 +1,6 @@
 import type { ClientSideConnection, ForkSessionRequest } from '@agentclientprotocol/sdk';
 import type { AcpParsedCapabilities } from '../types.js';
-import { withTimeout } from '../transport/capabilities-cache.js';
+import { withTimeout } from '../transport/acp-process-lifecycle.js';
 
 /** Only a definitive unsupported response permits falling back to a fresh session. */
 export async function forkProviderSession(

@@ -2,8 +2,6 @@ export { ReviewView } from './ui/ReviewView.js';
 export { ReviewHeader, type ReviewFile } from './ui/ReviewHeader.js';
 export { ReviewGitActions } from './ui/ReviewGitActions.js';
 export { ReviewFileList } from './ui/ReviewFileList.js';
-export { EditorBrandIcon } from '../../shared/editors/EditorIcons.js';
-export { useGitStatus } from '../../shared/workspace/useGitStatus.js';
 export {
   extractLatestTurnTouchedFiles,
   extractTurnChanges,

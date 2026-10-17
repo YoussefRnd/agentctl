@@ -5,7 +5,7 @@ import { useSession } from '@/features/sessions';
 import { GlassPanel, Spinner, Dropdown, Tooltip, cn } from '@agentctl/ui';
 import { Maximize2, Minimize2, Terminal, FileText, X, Plus, Layout } from 'lucide-react';
 import { DiffIcon } from '@primer/octicons-react';
-import { useWorkbenchStore, type WorkbenchTab } from '../model/useWorkbenchStore';
+import { useWorkbenchStore, type WorkbenchTab } from '@/shared/stores/useWorkbenchStore';
 
 const ReviewView = lazy(() =>
   import('@/features/review').then((module) => ({ default: module.ReviewView })),

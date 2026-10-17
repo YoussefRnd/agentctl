@@ -74,8 +74,7 @@ expose focused capabilities and preserve existing update isolation for prompts, 
 turn progress. Splitting files must not merge these distinct lifetimes.
 
 Markdown rendering and workspace navigation are shared capabilities used outside their original
-features. Conversation cards and inspector panels now import those owners directly. Compatibility
-exports preserve existing feature entry points during migration.
+features. Conversation cards and inspector panels now import those owners directly. Consumers import the shared owners directly; temporary feature forwarding exports are removed.
 
 The feature graph is acyclic. `apps/web/architecture-cycles.json` is empty and the checker
 rejects cycle exceptions, including cycles through re-exports, type and lazy imports. Shared
@@ -83,8 +82,7 @@ owners cannot import application/features, including through relative barrels. P
 owns session headers/launch dialogs and supplies explicit review-to-composer actions. Conversation
 has a one-way dependency on subagents; both use shared transcript renderers that have no parent
 session subscriptions or control APIs. The [frontend ownership map](frontend-architecture.md)
-and [parsed graph snapshot](frontend-feature-graph.json) record these boundaries. Broader frontend
-state/effect and public export auditing remains tracked separately.
+and [parsed graph snapshot](frontend-feature-graph.json) record these boundaries. The complete [frontend state audit](frontend-state-architecture.md) and [contracts/public API audit](contracts-architecture.md) record the remaining owners and alias decisions.
 
 ## File and API conventions
 
@@ -100,7 +98,7 @@ state/effect and public export auditing remains tracked separately.
 
 HTTP URLs, response shapes, session command ordering, and database schemas are unchanged by
 this phase. Capability helper function names remain exported from `@agentctl/api-client`;
-`services/project-sessions.ts` is a compatibility barrel.
+`services/project-sessions.ts` has been removed in favor of the package root.
 
 Two source-level imports change deliberately:
 

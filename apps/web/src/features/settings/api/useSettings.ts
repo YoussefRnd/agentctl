@@ -1,20 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '@agentctl/api-client';
-import { type FontConfig, type GitTextGenerationSettings } from '@agentctl/shared';
+import type { SystemSettings, PatchSettings } from '@agentctl/shared';
 import { settingsKeys } from '@/shared/lib/queryKeys';
 
-export interface SystemSettings {
-  onboardingCompleted: boolean;
-  onboardingVersion: string | number;
-  setupStep: string | null;
-  defaultProviderId: string | null;
-  gitTextGeneration?: GitTextGenerationSettings | null;
-  showThinking: boolean;
-  defaultToWorktree?: boolean;
-  registrySyncError: string | null;
-  fontConfig?: FontConfig;
-}
+export type { SystemSettings } from '@agentctl/shared';
 
 export function useSettings() {
   const queryClient = useQueryClient();
@@ -25,7 +15,7 @@ export function useSettings() {
   });
 
   const updateSettingsMutation = useMutation({
-    mutationFn: async (payload: Partial<SystemSettings>) => {
+    mutationFn: async (payload: PatchSettings) => {
       return apiClient.fetch<SystemSettings>('/api/settings', {
         method: 'PATCH',
         body: JSON.stringify(payload),

@@ -2,7 +2,7 @@ import { resolveContextFile } from '../../session/context-files.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { RequestError } from '@agentclientprotocol/sdk';
-import { resolveAllowedPath } from '../transport/path-security.js';
+import { resolveAllowedPath } from '../../security/path-security.js';
 
 export interface ReadTextFileParams {
   path: string;

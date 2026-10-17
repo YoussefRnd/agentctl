@@ -1,7 +1,7 @@
 import type { TerminalManager } from './terminal-manager.js';
 import type { Logger } from '../../logger.js';
 import type { AgentUpdate } from '../../agent/types.js';
-import { resolveAllowedPath } from '../transport/path-security.js';
+import { resolveAllowedPath } from '../../security/path-security.js';
 import { waitForRequest, throwIfRequestCancelled } from './request-cancellation.js';
 
 export interface CreateTerminalParams {

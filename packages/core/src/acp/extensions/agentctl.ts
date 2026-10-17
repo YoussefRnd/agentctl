@@ -7,7 +7,7 @@ import {
 } from '../protocol/client-authorization.js';
 import type { TerminalManager } from '../protocol/terminal-manager.js';
 import { handleBuiltinBash, handleTerminalWrite } from '../protocol/terminals.js';
-import { resolveAllowedPath } from '../transport/path-security.js';
+import { resolveAllowedPath } from '../../security/path-security.js';
 
 export interface ExtensionSessionContext extends ClientAuthorizationContext {
   onTerminalCreated?(terminalId: string, callbacks: AgentSessionCallbacks): void;

@@ -4,8 +4,8 @@ import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { afterEach, expect, test, vi } from 'vitest';
 import { runAgentDriverConformance } from '../agent/conformance.js';
-import { AcpV1AgentDriver } from './runtime.js';
-import { parseAcpCapabilities } from './transport/capabilities-cache.js';
+import { AcpV1AgentDriver } from './v1/driver.js';
+import { parseAcpCapabilities } from './v1/capabilities.js';
 import type { AgentStreamTransport, IConnectionManager } from './types.js';
 
 function setup(supported = true, extraSessionCapabilities: Record<string, unknown> = {}) {

@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
   getSessionById: vi.fn(),
   toastError: vi.fn(),
 }));
-vi.mock('./SessionContext', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./SessionContext')>()),
+vi.mock('./SessionConfigContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./SessionConfigContext')>()),
   // Deliberately stale: actions must check the current query cache before sending.
   useSession: () => ({ sessionId: 's', sessionData: { session: { status: 'idle' } } }),
 }));
@@ -28,7 +28,7 @@ vi.mock('@agentctl/api-client', () => ({
 }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }));
-import { SessionStreamProvider } from './SessionContext';
+import { SessionStreamProvider } from './SessionStreamContext';
 import { useSessionActions } from './useSessionActions';
 
 let client: QueryClient;

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { sessionExecutionSchema } from '../schemas/session-execution.js';
 import {
   createSessionSchema,
   handoffSessionSchema,
@@ -12,43 +11,15 @@ import {
 import { repositoryContract } from './repository.contract.js';
 import { sessionGitContract } from './session-git.contract.js';
 
-const emptyBodySchema = z.record(z.string(), z.unknown()).optional().default({});
+import { emptyBodySchema } from './contract-common.js';
 
+import { sessionExecutionContract } from './session-execution.contract.js';
+import { sessionHistoryContract } from './session-history.contract.js';
 export const sessionsContract = {
+  ...sessionExecutionContract,
+  ...sessionHistoryContract,
   ...repositoryContract,
   ...sessionGitContract,
-  resumeSessionQueue: {
-    method: 'POST',
-    path: '/api/sessions/:id/queue/resume',
-    pathParams: z.object({ id: z.uuid() }),
-    body: emptyBodySchema,
-    responses: {
-      200: z.object({ success: z.literal(true) }),
-      409: z.object({ message: z.string() }),
-    },
-    summary: 'Resume safely queued messages after a failure',
-  },
-  getSessionExecution: {
-    method: 'GET',
-    path: '/api/sessions/:id/execution',
-    pathParams: z.object({ id: z.uuid() }),
-    responses: { 200: sessionExecutionSchema },
-    summary: 'Get execution state and accepted message queue',
-  },
-  changeQueuedMessage: {
-    method: 'POST',
-    path: '/api/sessions/:id/queue/:commandId',
-    pathParams: z.object({ id: z.uuid(), commandId: z.string() }),
-    body: z.discriminatedUnion('action', [
-      z.object({ action: z.enum(['cancel', 'up', 'down']) }),
-      z.object({ action: z.literal('edit'), input: z.string().trim().min(1) }),
-    ]),
-    responses: {
-      200: z.object({ success: z.literal(true) }),
-      409: z.object({ message: z.string() }),
-    },
-    summary: 'Edit, cancel, or reorder a message before dispatch',
-  },
   importNativeSession: {
     method: 'POST',
     path: '/api/sessions/import-native',
@@ -191,113 +162,12 @@ export const sessionsContract = {
     },
     summary: 'Restore archived session worktree',
   },
-  cancelSession: {
-    method: 'POST',
-    path: '/api/sessions/:id/cancel',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: emptyBodySchema,
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Cancel session run',
-  },
-  approveEvent: {
-    method: 'POST',
-    path: '/api/sessions/:id/approve',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      eventId: z.number(),
-      optionId: z.string().optional(),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Approve pending session event',
-  },
-  denyEvent: {
-    method: 'POST',
-    path: '/api/sessions/:id/deny',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      eventId: z.number(),
-    }),
-    responses: {
-      200: z.object({ success: z.boolean() }),
-    },
-    summary: 'Deny pending session event',
-  },
-  sendInput: {
-    method: 'POST',
-    path: '/api/sessions/:id/input',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      input: z.string(),
-      clientMessageId: z.uuid().optional(),
-      attachmentIds: z.array(z.string()).optional(),
-    }),
-    responses: {
-      200: z.object({ success: z.literal(true), eventId: z.number() }),
-      409: z.object({ success: z.literal(false), message: z.string() }),
-    },
-    summary: 'Send user input to session',
-  },
   undoDiscard: {
     method: 'POST',
     path: '/api/sessions/:id/undo-discard',
     pathParams: z.object({ id: z.uuid() }),
     body: emptyBodySchema,
     responses: { 200: z.object({ success: z.boolean() }), 400: z.object({ message: z.string() }) },
-  },
-  rewindSession: {
-    method: 'POST',
-    path: '/api/sessions/:id/rewind',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      eventId: z.number(),
-      mode: z.enum(['conversation', 'files', 'fork']),
-    }),
-    responses: {
-      200: z.object({
-        success: z.boolean(),
-        forkSessionId: z.string().optional(),
-        undoSnapshotHash: z.string().optional(),
-        restoredFiles: z
-          .array(
-            z.object({
-              path: z.string(),
-              status: z.enum(['added', 'modified', 'deleted']),
-              additions: z.number().optional(),
-              deletions: z.number().optional(),
-            }),
-          )
-          .optional(),
-      }),
-    },
-    summary: 'Rewind session to a past event',
-  },
-  undoRewind: {
-    method: 'POST',
-    path: '/api/sessions/:id/undo-rewind',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: emptyBodySchema,
-    responses: {
-      200: z.object({
-        success: z.boolean(),
-      }),
-    },
-    summary: 'Undo session rewind, restoring both messages and files',
   },
   handoffSession: {
     method: 'POST',
@@ -312,43 +182,6 @@ export const sessionsContract = {
       409: z.object({ message: z.string() }),
     },
     summary: 'Handoff the current workspace and conversation context to another agent',
-  },
-  restoreSnapshot: {
-    method: 'POST',
-    path: '/api/sessions/:id/restore-snapshot',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: z.object({
-      snapshotHash: z.string(),
-    }),
-    responses: {
-      200: z.object({
-        success: z.boolean(),
-        backupHash: z.string().optional(),
-      }),
-    },
-    summary: 'Restore workspace files to a specific snapshot hash',
-  },
-  previewSnapshotDiff: {
-    method: 'GET',
-    path: '/api/sessions/:id/snapshots/:eventId/preview',
-    pathParams: z.object({
-      id: z.uuid(),
-      eventId: z.coerce.number(),
-    }),
-    responses: {
-      200: z.object({
-        hasSnapshot: z.boolean(),
-        files: z.array(
-          z.object({
-            path: z.string(),
-            status: z.enum(['added', 'modified', 'deleted']),
-          }),
-        ),
-      }),
-    },
-    summary: 'Preview files changed since a turn snapshot',
   },
   spawnParallelAgent: {
     method: 'POST',

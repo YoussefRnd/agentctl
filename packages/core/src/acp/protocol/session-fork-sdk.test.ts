@@ -6,7 +6,7 @@ import {
   type Agent,
 } from '@agentclientprotocol/sdk';
 import { forkProviderSession } from './session-fork.js';
-import { parseAcpCapabilities } from '../transport/capabilities-cache.js';
+import { parseAcpCapabilities } from '../v1/capabilities.js';
 
 test('the installed SDK dispatches a fork request with the destination workspace and returns its independent session id', async () => {
   const outgoing = new TransformStream<Uint8Array>();

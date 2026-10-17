@@ -11,7 +11,7 @@ export type {
 } from './capabilities/types.js';
 export { parsePorcelainWorktrees } from './capabilities/worktree-lifecycle.js';
 export { parseGitHubRemoteUrl } from '../forge/github-pull-requests.js';
-/** Compatibility facade. Implementations and state belong to focused capabilities. */
+/** Public Git facade; focused capabilities own the implementations and state. */
 export class WorkspaceManager {
   readonly capabilities: GitCapabilities;
   constructor(

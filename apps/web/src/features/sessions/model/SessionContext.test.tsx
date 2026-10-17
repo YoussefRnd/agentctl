@@ -34,7 +34,7 @@ import {
   useSessionQueue,
   useSessionPromptEvents,
   useSessionResponseState,
-} from './SessionContext';
+} from './SessionStreamContext';
 
 const mockedSendInput = vi.mocked(api.sendInput);
 const mockedToastError = vi.mocked(toast.error);

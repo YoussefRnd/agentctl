@@ -34,3 +34,6 @@ export * from './provider-error.js';
 export * from './schemas/chat-error.js';
 
 export * from './fuzzy-search.js';
+
+export * from './schemas/context.js';
+export * from './schemas/attachments.js';

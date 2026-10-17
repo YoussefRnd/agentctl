@@ -1,11 +1,18 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { packageSurfaces, publicImportErrors } from './architecture/public-api.mjs';
 import { ownershipErrors } from './architecture/ownership.mjs';
-import { importSpecifiers, topLevelCalls } from './architecture/dependencies.mjs';
+import { importSpecifiers, topLevelCalls, cycleEdges } from './architecture/dependencies.mjs';
 
 const workspace = resolve(import.meta.dirname, '..');
 const errors = [];
 const coreFiles = [];
+const contractFiles = [];
+const contractGraph = new Map();
+const surfaces = await packageSurfaces(workspace);
+const publicApi = JSON.parse(await readFile(join(workspace, 'docs/public-api.json'), 'utf8'));
+if (JSON.stringify(surfaces) !== JSON.stringify(publicApi.packages))
+  errors.push('Declared package surfaces changed; update the reviewed public API map.');
 async function scan(directory) {
   for (const entry of await readdir(join(workspace, directory), { withFileTypes: true })) {
     const file = join(directory, entry.name);
@@ -22,6 +29,22 @@ async function scan(directory) {
     if (!/\.[jt]sx?$/.test(file) || /\.(test|spec)\.[jt]sx?$/.test(file)) continue;
     const source = await readFile(join(workspace, file), 'utf8');
     const imports = importSpecifiers(source, file);
+    errors.push(...publicImportErrors(file, imports, surfaces));
+    if (/^packages\/(?:shared|api-client)\/src\//.test(file)) {
+      contractFiles.push(file);
+      contractGraph.set(
+        file,
+        new Set(
+          imports
+            .filter((value) => value.startsWith('.'))
+            .map((value) =>
+              resolve(workspace, file, '..', value)
+                .slice(workspace.length + 1)
+                .replace(/\.js$/, '.ts'),
+            ),
+        ),
+      );
+    }
     const forbid = (pattern, reason) => {
       for (const dependency of imports) {
         if (pattern.test(dependency)) errors.push(`${file}: ${reason} (${dependency})`);
@@ -35,6 +58,10 @@ async function scan(directory) {
       if (/\bfetch\s*\(/.test(source)) errors.push(`${file}: HTTP transport belongs in api-client`);
     }
     if (file.startsWith('packages/api-client/')) {
+      forbid(
+        /^(?:sonner|react-router(?:-dom)?)(?:\/|$)/,
+        'client transport cannot own toast or navigation policy',
+      );
       forbid(
         /^(?:node:|@agentctl\/(?:core|web|server|desktop))/,
         'the browser API client cannot depend on host implementations',
@@ -199,9 +226,9 @@ for (const root of [
   'packages/shared/src',
   'packages/api-client/src',
   'packages/core/src',
-  'apps/server/src/plugins/ts-rest',
-  'apps/server/src/routes',
-  'apps/server/src/services',
+  'apps/server/src',
+  'apps/web/src',
+  'apps/desktop/src',
 ])
   await scan(root);
 const ledger = JSON.parse(await readFile(join(workspace, 'docs/core-ownership.json'), 'utf8'));
@@ -209,6 +236,12 @@ errors.push(...ownershipErrors(coreFiles, ledger.areas));
 for (const area of ledger.areas) {
   await readFile(join(workspace, area.evidence), 'utf8');
 }
+const contracts = JSON.parse(
+  await readFile(join(workspace, 'docs/contracts-ownership.json'), 'utf8'),
+);
+errors.push(...ownershipErrors(contractFiles, contracts.areas));
+for (const area of contracts.areas) await readFile(join(workspace, area.evidence), 'utf8');
+for (const edge of cycleEdges(contractGraph)) errors.push(`Contract/client module cycle: ${edge}`);
 if (errors.length) {
   console.error(
     'Architecture boundary violations:\n' + errors.map((error) => `- ${error}`).join('\n'),
@@ -216,5 +249,5 @@ if (errors.length) {
   process.exitCode = 1;
 } else
   console.log(
-    `Package and server architecture boundaries are valid; ${coreFiles.length} core files have recorded owners.`,
+    `Package and server architecture boundaries are valid; ${coreFiles.length} core and ${contractFiles.length} contract/client files have recorded owners.`,
   );

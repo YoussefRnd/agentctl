@@ -38,14 +38,11 @@
         "packages/core/src/acp/protocol/terminals.ts",
         "packages/core/src/acp/protocol/tool-call-utils.ts",
         "packages/core/src/acp/protocol/usage.ts",
-        "packages/core/src/acp/runtime.ts",
         "packages/core/src/acp/testing/smoke-peer.mjs",
         "packages/core/src/acp/transport/acp-process-lifecycle.ts",
-        "packages/core/src/acp/transport/capabilities-cache.ts",
         "packages/core/src/acp/transport/client-connection.ts",
         "packages/core/src/acp/transport/connection-lease.ts",
         "packages/core/src/acp/transport/limits.ts",
-        "packages/core/src/acp/transport/path-security.ts",
         "packages/core/src/acp/transport/persistent-connection.ts",
         "packages/core/src/acp/transport/process-transport.ts",
         "packages/core/src/acp/transport/session-requests.ts",
@@ -65,7 +62,6 @@
         "packages/core/src/acp/v2/driver.ts",
         "packages/core/src/acp/v2/events.ts",
         "packages/core/src/acp/v2/permissions.ts",
-        "packages/core/src/acp/v2/runtime.ts",
         "packages/core/src/acp/v2/session.ts",
         "packages/core/src/acp/v2/terminals.ts"
       ]

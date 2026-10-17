@@ -1,0 +1,138 @@
+{
+  "areas": [
+    {
+      "area": "api-client/http",
+      "owner": "In-memory transport configuration and host-supplied unauthorized notification",
+      "evidence": "docs/contracts-architecture.md",
+      "files": ["packages/api-client/src/http/configuration.ts"]
+    },
+    {
+      "area": "api-client/root",
+      "owner": "Shared JSON request policy, typed API adapter, errors, query factory and public entry",
+      "evidence": "docs/contracts-architecture.md",
+      "files": [
+        "packages/api-client/src/api-client.ts",
+        "packages/api-client/src/api-error.ts",
+        "packages/api-client/src/api.ts",
+        "packages/api-client/src/index.ts",
+        "packages/api-client/src/query-client.ts",
+        "packages/api-client/src/vite-env.d.ts"
+      ]
+    },
+    {
+      "area": "api-client/services",
+      "owner": "Capability HTTP helpers, typed contract requests and binary uploads/downloads",
+      "evidence": "docs/contracts-architecture.md",
+      "files": [
+        "packages/api-client/src/services/attachments.ts",
+        "packages/api-client/src/services/context.ts",
+        "packages/api-client/src/services/editors.ts",
+        "packages/api-client/src/services/projects.ts",
+        "packages/api-client/src/services/providers.ts",
+        "packages/api-client/src/services/search.ts",
+        "packages/api-client/src/services/session-git.ts",
+        "packages/api-client/src/services/session-history.ts",
+        "packages/api-client/src/services/sessions.ts",
+        "packages/api-client/src/services/terminals.ts"
+      ]
+    },
+    {
+      "area": "api-client/stream",
+      "owner": "Incremental SSE framing, session/state subscriptions and event coalescing",
+      "evidence": "docs/contracts-architecture.md",
+      "files": [
+        "packages/api-client/src/stream/coalesce-events.ts",
+        "packages/api-client/src/stream/session-engine.ts",
+        "packages/api-client/src/stream/sse-decoder.ts",
+        "packages/api-client/src/stream/state-stream.ts"
+      ]
+    },
+    {
+      "area": "shared/contracts",
+      "owner": "HTTP route contracts composed from capability validators",
+      "evidence": "docs/contracts-architecture.md",
+      "files": [
+        "packages/shared/src/contracts/contract-common.ts",
+        "packages/shared/src/contracts/diagnostics.contract.ts",
+        "packages/shared/src/contracts/index.ts",
+        "packages/shared/src/contracts/mcp.contract.ts",
+        "packages/shared/src/contracts/projects.contract.ts",
+        "packages/shared/src/contracts/providers.contract.ts",
+        "packages/shared/src/contracts/repository.contract.ts",
+        "packages/shared/src/contracts/search.contract.ts",
+        "packages/shared/src/contracts/session-execution.contract.ts",
+        "packages/shared/src/contracts/session-git.contract.ts",
+        "packages/shared/src/contracts/session-history.contract.ts",
+        "packages/shared/src/contracts/sessions.contract.ts",
+        "packages/shared/src/contracts/settings.contract.ts"
+      ]
+    },
+    {
+      "area": "shared/policies",
+      "owner": "Portable configuration, environment validation, errors, file-change and workspace policies",
+      "evidence": "docs/contracts-architecture.md",
+      "files": [
+        "packages/shared/src/agent-config.ts",
+        "packages/shared/src/agent-defaults.ts",
+        "packages/shared/src/api-contract.ts",
+        "packages/shared/src/approval-behavior.ts",
+        "packages/shared/src/conversation-preview.ts",
+        "packages/shared/src/custom-models.ts",
+        "packages/shared/src/elicitation-validation.ts",
+        "packages/shared/src/env-server.ts",
+        "packages/shared/src/env-web.ts",
+        "packages/shared/src/file-changes.ts",
+        "packages/shared/src/fuzzy-search.ts",
+        "packages/shared/src/index.ts",
+        "packages/shared/src/provider-error.ts",
+        "packages/shared/src/utils.ts",
+        "packages/shared/src/workspace-policy.ts"
+      ]
+    },
+    {
+      "area": "shared/schemas",
+      "owner": "Portable validation, inferred DTOs, persisted record normalization and capability aggregates",
+      "evidence": "docs/contracts-architecture.md",
+      "files": [
+        "packages/shared/src/schemas/agent-capabilities.ts",
+        "packages/shared/src/schemas/attachments.ts",
+        "packages/shared/src/schemas/auth-methods.ts",
+        "packages/shared/src/schemas/chat-error.ts",
+        "packages/shared/src/schemas/context.ts",
+        "packages/shared/src/schemas/diagnostics.ts",
+        "packages/shared/src/schemas/elicitation.ts",
+        "packages/shared/src/schemas/file-change.ts",
+        "packages/shared/src/schemas/index.ts",
+        "packages/shared/src/schemas/mcp.ts",
+        "packages/shared/src/schemas/permissions.ts",
+        "packages/shared/src/schemas/plan.ts",
+        "packages/shared/src/schemas/project-list.ts",
+        "packages/shared/src/schemas/projects.ts",
+        "packages/shared/src/schemas/providers.ts",
+        "packages/shared/src/schemas/registry.ts",
+        "packages/shared/src/schemas/repository.ts",
+        "packages/shared/src/schemas/review.ts",
+        "packages/shared/src/schemas/session-event-page.ts",
+        "packages/shared/src/schemas/session-event-payloads.ts",
+        "packages/shared/src/schemas/session-event.ts",
+        "packages/shared/src/schemas/session-execution.ts",
+        "packages/shared/src/schemas/session-model.ts",
+        "packages/shared/src/schemas/session-notice.ts",
+        "packages/shared/src/schemas/session-options.ts",
+        "packages/shared/src/schemas/session.ts",
+        "packages/shared/src/schemas/settings.ts",
+        "packages/shared/src/schemas/state-change.ts"
+      ]
+    },
+    {
+      "area": "shared/types",
+      "owner": "Portable editor and inferred font types with display defaults",
+      "evidence": "docs/contracts-architecture.md",
+      "files": [
+        "packages/shared/src/types/editors.ts",
+        "packages/shared/src/types/font-config.ts",
+        "packages/shared/src/types/index.ts"
+      ]
+    }
+  ]
+}

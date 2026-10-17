@@ -1,3 +1,5 @@
+import type { ClientInferResponseBody } from '@ts-rest/core';
+import type { apiContract } from '@agentctl/shared';
 import { api } from '../api.js';
 import { assertApiStatus } from '../api-error.js';
 
@@ -5,17 +7,7 @@ export async function rewindSession(
   sessionId: string,
   eventId: number,
   mode: 'conversation' | 'files' | 'fork',
-): Promise<{
-  success: boolean;
-  forkSessionId?: string;
-  undoSnapshotHash?: string;
-  restoredFiles?: Array<{
-    path: string;
-    status: 'added' | 'modified' | 'deleted';
-    additions?: number;
-    deletions?: number;
-  }>;
-}> {
+): Promise<ClientInferResponseBody<typeof apiContract.rewindSession, 200>> {
   const res = await api.rewindSession({
     params: { id: sessionId },
     body: { eventId, mode },
@@ -38,12 +30,7 @@ export async function handoffSession(
   targetProvider: string,
   targetModel?: string,
   nextSessionFocus?: string,
-): Promise<{
-  sessionId: string;
-  handoffFilePath: string;
-  initialPrompt: string;
-  handoffSource: 'skill' | 'generated';
-}> {
+): Promise<ClientInferResponseBody<typeof apiContract.handoffSession, 200>> {
   const res = await api.handoffSession({
     params: { id: sessionId },
     body: {
@@ -59,7 +46,7 @@ export async function handoffSession(
 export async function restoreSnapshot(
   sessionId: string,
   snapshotHash: string,
-): Promise<{ success: boolean; backupHash?: string }> {
+): Promise<ClientInferResponseBody<typeof apiContract.restoreSnapshot, 200>> {
   const res = await api.restoreSnapshot({
     params: { id: sessionId },
     body: { snapshotHash },
@@ -71,10 +58,7 @@ export async function restoreSnapshot(
 export async function previewSnapshotDiff(
   sessionId: string,
   eventId: number,
-): Promise<{
-  hasSnapshot: boolean;
-  files: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
-}> {
+): Promise<ClientInferResponseBody<typeof apiContract.previewSnapshotDiff, 200>> {
   const res = await api.previewSnapshotDiff({
     params: { id: sessionId, eventId },
   });

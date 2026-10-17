@@ -1,18 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SessionEventRow } from '@agentctl/shared';
-import { SessionEngine } from '@agentctl/api-client';
+import { SessionEngine, getDesktopCapability, getApiBaseUrl } from '@agentctl/api-client';
 import { toast } from 'sonner';
 
-import { getDesktopCapability } from '@agentctl/api-client';
-import { getApiBaseUrl } from '@/shared/lib/api-base-url';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { observePromptPerformance, cancelPromptPerformance } from '@/shared/lib/promptPerformance';
 import { reconcileOptimisticMessages } from './reconcileOptimisticMessages';
 import { useMessageQueueStore } from '@/shared/stores/useMessageQueueStore';
 
 import { useSessionHistory, mergeEventHistory } from './useSessionHistory';
-export { mergeEventHistory } from './useSessionHistory';
 
 export function useSessionEvents(sessionId: string | null) {
   const queryClient = useQueryClient();

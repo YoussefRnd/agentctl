@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { openInEditor } from '@agentctl/api-client';
 import { toast } from 'sonner';
-import { useSession } from './SessionContext';
+import { useSession } from './SessionConfigContext';
 
 export function useOpenWorkspaceFile() {
   const { sessionData } = useSession();

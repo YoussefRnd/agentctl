@@ -1,5 +1,4 @@
 import { useReducer, useCallback } from 'react';
-import type { FileState } from '../ui/ReviewHeader';
 
 export type StatusFilter = 'all' | 'modified' | 'untracked' | 'staged' | 'deleted';
 
@@ -10,7 +9,6 @@ export interface ReviewViewState {
   commitMessage: string;
   isSummaryCollapsed: boolean;
   collapsedFiles: Record<string, boolean>;
-  collapsedSections: Record<FileState, boolean>;
   viewMode: 'inline' | 'split';
   wrapLines: boolean;
   searchQuery: string;
@@ -24,7 +22,6 @@ export type ReviewViewAction =
   | { type: 'SET_COMMIT_MESSAGE'; payload: string }
   | { type: 'TOGGLE_SUMMARY_COLLAPSE' }
   | { type: 'TOGGLE_FILE_COLLAPSE'; filePath: string }
-  | { type: 'TOGGLE_SECTION'; section: FileState }
   | { type: 'EXPAND_FILE'; filePath: string }
   | { type: 'TOGGLE_VIEW_MODE' }
   | { type: 'TOGGLE_WRAP_LINES' }
@@ -52,16 +49,6 @@ function reviewViewReducer(state: ReviewViewState, action: ReviewViewAction): Re
         collapsedFiles: {
           ...state.collapsedFiles,
           [action.filePath]: !isCurrentlyCollapsed,
-        },
-      };
-    }
-    case 'TOGGLE_SECTION': {
-      const section = action.section;
-      return {
-        ...state,
-        collapsedSections: {
-          ...state.collapsedSections,
-          [section]: !state.collapsedSections[section],
         },
       };
     }
@@ -112,14 +99,6 @@ export function useReviewViewState() {
     commitMessage: '',
     isSummaryCollapsed: false,
     collapsedFiles: {},
-    collapsedSections: {
-      conflicted: false,
-      untracked: false,
-      staged: false,
-      modified: false,
-      deleted: false,
-      committed: false,
-    },
     viewMode: 'inline',
     wrapLines: false,
     searchQuery: '',
@@ -130,10 +109,6 @@ export function useReviewViewState() {
     dispatch({ type: 'TOGGLE_FILE_COLLAPSE', filePath });
   }, []);
 
-  const toggleSection = useCallback((section: FileState) => {
-    dispatch({ type: 'TOGGLE_SECTION', section });
-  }, []);
-
   const expandAll = useCallback((paths: string[]) => {
     dispatch({ type: 'EXPAND_ALL', payload: paths });
   }, []);
@@ -142,5 +117,5 @@ export function useReviewViewState() {
     dispatch({ type: 'COLLAPSE_ALL' });
   }, []);
 
-  return { state, dispatch, toggleFileCollapse, toggleSection, expandAll, collapseAll };
+  return { state, dispatch, toggleFileCollapse, expandAll, collapseAll };
 }

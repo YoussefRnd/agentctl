@@ -2,7 +2,7 @@ import { agent, methods, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprot
 import { expect, it, vi } from 'vitest';
 import { connectAcpClient } from './client-connection.js';
 import { wrapDebug } from './stream-debug.js';
-import { AGENTCTL_CLIENT_CAPABILITIES } from './capabilities-cache.js';
+import { AGENTCTL_CLIENT_CAPABILITIES } from '../v1/capabilities.js';
 import type { SubagentNotification } from '../protocol/subagent-sessions.js';
 import { noopLogger } from '../../logger.js';
 import { TerminalManager } from '../protocol/terminal-manager.js';

@@ -12,8 +12,6 @@ export * from './services/attachments.js';
 export * from './services/context.js';
 export * from './services/providers.js';
 export { api } from './api.js';
-export {
-  SessionEngine,
-  coalesceBufferedEvents,
-  type SessionEngineOptions,
-} from './stream/session-engine.js';
+export { SessionEngine, type SessionEngineOptions } from './stream/session-engine.js';
+
+export { subscribeStateChanges } from './stream/state-stream.js';

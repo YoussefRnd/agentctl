@@ -7,7 +7,7 @@ order, acceptance criteria, and evidence needed to declare the migration complet
 
 ## Status and completion rules
 
-Baseline: **2026-10-16**. **10 of 16 checkpoints are complete locally; 6 remain open.**
+Baseline: **2026-10-16**. **12 of 16 checkpoints are complete locally; 4 remain open.**
 This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03
 is committed as `e1fc843`; subsequent completed checkpoints are recorded in descriptive
 implementation commits. No merge or release is implied.
@@ -30,24 +30,24 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 
 ## Checkpoint dashboard
 
-| ID   | Checkpoint                                                    | Status      | Depends on             |
-| ---- | ------------------------------------------------------------- | ----------- | ---------------------- |
-| CP00 | Scope, coverage, and acceptance baseline                      | Done        | —                      |
-| CP01 | Initial boundaries and maintainability foundation             | Done        | CP00                   |
-| CP02 | Remaining server workflows and transport boundaries           | Done        | CP01                   |
-| CP03 | Session execution, persistence, and runtime ownership         | Done        | CP02                   |
-| CP04 | Git capability and forge separation                           | Done        | CP01                   |
-| CP05 | Repository-neutral session workspace and checkpoint workflows | Done        | CP03, CP04             |
-| CP06 | Provider lifecycle and agent protocol composition             | Done        | CP03                   |
-| CP07 | Remaining core domains and infrastructure ownership           | Done        | CP03, CP06             |
-| CP08 | Composer, review, and session dependency cycles               | Done        | CP01                   |
-| CP09 | Conversation and subagent dependency cycle                    | Done        | CP01                   |
-| CP10 | Complete frontend state, effects, and rendering audit         | In progress | CP02, CP08, CP09       |
-| CP11 | Shared contracts, client APIs, and public exports             | Planned     | CP05, CP06, CP07, CP10 |
-| CP12 | Desktop lifecycle, server ownership, and IPC                  | Planned     | CP02, CP03, CP06       |
-| CP13 | Design system and UI ownership                                | Planned     | CP10                   |
-| CP14 | Complete architecture enforcement and delivery tooling        | Planned     | CP07, CP11, CP12, CP13 |
-| CP15 | Repository-wide acceptance and migration closure              | Planned     | CP00–CP14              |
+| ID   | Checkpoint                                                    | Status  | Depends on             |
+| ---- | ------------------------------------------------------------- | ------- | ---------------------- |
+| CP00 | Scope, coverage, and acceptance baseline                      | Done    | —                      |
+| CP01 | Initial boundaries and maintainability foundation             | Done    | CP00                   |
+| CP02 | Remaining server workflows and transport boundaries           | Done    | CP01                   |
+| CP03 | Session execution, persistence, and runtime ownership         | Done    | CP02                   |
+| CP04 | Git capability and forge separation                           | Done    | CP01                   |
+| CP05 | Repository-neutral session workspace and checkpoint workflows | Done    | CP03, CP04             |
+| CP06 | Provider lifecycle and agent protocol composition             | Done    | CP03                   |
+| CP07 | Remaining core domains and infrastructure ownership           | Done    | CP03, CP06             |
+| CP08 | Composer, review, and session dependency cycles               | Done    | CP01                   |
+| CP09 | Conversation and subagent dependency cycle                    | Done    | CP01                   |
+| CP10 | Complete frontend state, effects, and rendering audit         | Done    | CP02, CP08, CP09       |
+| CP11 | Shared contracts, client APIs, and public exports             | Done    | CP05, CP06, CP07, CP10 |
+| CP12 | Desktop lifecycle, server ownership, and IPC                  | Planned | CP02, CP03, CP06       |
+| CP13 | Design system and UI ownership                                | Planned | CP10                   |
+| CP14 | Complete architecture enforcement and delivery tooling        | Planned | CP07, CP11, CP12, CP13 |
+| CP15 | Repository-wide acceptance and migration closure              | Planned | CP00–CP14              |
 
 Recommended execution order: CP02 → CP03 → CP04 → CP05 → CP06 → CP07 → CP08 → CP09 →
 CP10 → CP11 → CP12 → CP13 → CP14 → CP15. Each checkpoint may use multiple reviewable
@@ -69,12 +69,12 @@ until the full audit, even where initial work has already landed locally.
 | Core Git, repository, and forge modules                                                                    | CP04, CP05           | Accepted                    |
 | Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Accepted                    |
 | Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Accepted                    |
-| Web composer, review, and session features                                                                 | CP08, CP10           | CP08 accepted; CP10 pending |
-| Web conversation and subagent features                                                                     | CP09, CP10           | CP09 accepted; CP10 pending |
-| Web projects, providers, settings, workbench, updates, command palette, and retained feature directories   | CP10                 | Pending                     |
-| Web app/shell/routes, shared capabilities, performance lab, and test utilities                             | CP10, CP14           | Pending                     |
-| Shared schemas, contracts, types, policies, utilities, and environment definitions                         | CP11                 | Pending                     |
-| API-client services, HTTP errors/configuration, SSE engine, and query integration                          | CP11                 | Pending                     |
+| Web composer, review, and session features                                                                 | CP08, CP10           | Accepted                    |
+| Web conversation and subagent features                                                                     | CP09, CP10           | Accepted                    |
+| Web projects, providers, settings, workbench, updates, command palette, and retained feature directories   | CP10                 | Accepted                    |
+| Web app/shell/routes, shared capabilities, performance lab, and test utilities                             | CP10, CP14           | CP10 accepted; CP14 pending |
+| Shared schemas, contracts, types, policies, utilities, and environment definitions                         | CP11                 | Accepted                    |
+| API-client services, HTTP errors/configuration, SSE engine, and query integration                          | CP11                 | Accepted                    |
 | Electron main process, embedded server, windows/tray, updates, preload, and IPC contracts                  | CP12                 | Pending                     |
 | UI components, primitives, patterns, foundations, exports, and app UI adapters                             | CP13                 | Pending                     |
 | TS configuration package, root workspace configuration, package manifests, patches, and build/test tooling | CP14                 | Pending                     |
@@ -423,8 +423,7 @@ focus restoration and history transitions keep their existing owners.
 
 Both cycle exceptions are deleted. The [parsed graph](frontend-feature-graph.json) has zero
 cycles and an empty baseline; the checker rejects adding exceptions or hiding reverse imports
-through shared barrels. Conversation depends on subagents in one direction only. Existing
-compatibility display exports remain for the public API audit in CP11.
+through shared barrels. Conversation depends on subagents in one direction only. Compatibility display exports retained at this acceptance are removed by CP11.
 
 Verification: **135 tests / 21 focused files** include live updates/tool grouping, parent approval
 routing, cancellation/history transitions, selection scope, focus/follower cleanup, bounded
@@ -445,53 +444,82 @@ The CI built-desktop-renderer markdown worker smoke passed against that fresh ou
 Scope: every web feature plus app/shell/routes/shared, including projects, providers, settings,
 workbench/terminals, updates, command palette, retained empty directories, and performance/test helpers.
 
-- [ ] Audit every feature and composition entry. Split remaining mixed responsibilities in
+- [x] Audit every feature and composition entry. Split remaining mixed responsibilities in
       `MainFeed`, `EventFeed`, `ReviewGitActions`, `useComposerState`, terminal panes, provider auth UI,
       and shell/dialog orchestration where justified by ownership rather than line count.
-- [ ] Keep remote data in React Query, client UI/drafts in deliberately owned stores, and accepted
+- [x] Keep remote data in React Query, client UI/drafts in deliberately owned stores, and accepted
       queue/execution state on the server. Extract pure derived policy from effects and rendering.
-- [ ] Give networking, subscriptions, keyboard/window listeners, timers, workers, and terminal
+- [x] Give networking, subscriptions, keyboard/window listeners, timers, workers, and terminal
       resources explicit owners and cleanup. Preserve high-frequency streaming update isolation.
-- [ ] Consolidate duplicated query keys/invalidation/error handling where they express the same
+- [x] Consolidate duplicated query keys/invalidation/error handling where they express the same
       behavior; split broad contexts/hooks only along meaningful capabilities.
-- [ ] Review shared modules for real reuse and app-independent direction; keep route composition
+- [x] Review shared modules for real reuse and app-independent direction; keep route composition
       out of leaf features and avoid introducing new generic store/helper dumping grounds.
 
 Exit evidence: acceptance record for every web area in the ledger; targeted interaction and
 cleanup tests; empty cycle baseline; production navigation/deferred-worker checks and existing
 performance safeguards without unsupported performance claims.
 
-Implementation (2026-10-17): [frontend state/effects audit](frontend-state-architecture.md)
-and [web ownership ledger](web-ownership.json) cover all 276 non-test files across 29 owners.
-History/handoff/viewport, Git operation state, draft/file interactions, terminal resources and
-workspace drop resolution have separate owners. Query identities are centralized; cancelled
-focus/copy/layout work, native update snapshot ordering and stale auth callbacks have explicit
-lifetimes. Image upload cancellation now follows attachment/session ownership.
+Acceptance (2026-10-17): [frontend state/effects audit](frontend-state-architecture.md)
+and [web ownership ledger](web-ownership.json) cover all **275 current non-test files across 29
+owners**. History/handoff/viewport, Git operation state, draft/file interactions, terminal
+resources and workspace drop resolution have separate owners. Query identities are centralized.
+Cancelled focus/copy/layout work, native update snapshot ordering and stale auth callbacks have
+explicit lifetimes. Image upload cancellation follows attachment/session ownership. The final
+contracts cleanup removes temporary aliases and gives app query/navigation policy explicit owners.
 
-Verification so far: 507 frontend tests/94 files before the final upload-lifetime regression;
-terminal/frame/updates/auth/drop regressions, workspace types/lint, both fresh renderer builds,
-production architecture browser journeys and desktop worker smoke passed. All six performance safeguard suites passed, including streaming isolation and production
-asset budgets (`/tmp/agentctl-frontend-audit-performance/checks.json`). Final upload regressions
-passed 8 tests/2 files. The combined contracts/workspace gate remains pending before acceptance.
+Verification: initial frontend suite **507 tests / 94 files** and final upload suite **8 tests /
+2 files** passed; the final combined acceptance below verifies all changes together. The graph is
+acyclic with no exceptions. Production architecture journeys retain drafts, composer/feed nodes,
+review actions, child/sibling navigation and selection scope. All six performance safeguard suites
+pass, including queue/turn subscriber isolation and startup asset budgets; timings remain trends.
+Implementation is committed as `148ef06`; follow-up API integration is in the contracts commit.
 
 ## CP11 — Shared contracts, client APIs, and public exports
 
 Scope: all shared and API-client source, all package/feature public entries, and their consumers.
 
-- [ ] Review large session/event/registry schema and contract files; group them by stable
+- [x] Review large session/event/registry schema and contract files; group them by stable
       capability and infer types from schemas without circular re-exports or duplicate transport shapes.
-- [ ] Verify shared owns portable contracts/policies only, client owns HTTP/SSE, and application
+- [x] Verify shared owns portable contracts/policies only, client owns HTTP/SSE, and application
       defaults, error normalization, and state policy have one intended source of truth.
-- [ ] Audit HTTP configuration/errors/authorization, abort propagation, SSE parsing/reconnect,
+- [x] Audit HTTP configuration/errors/authorization, abort propagation, SSE parsing/reconnect,
       query integration, and all capability helper modules. Preserve their public behavior.
-- [ ] Narrow public package/feature exports and eliminate cross-module internal imports. Classify
+- [x] Narrow public package/feature exports and eliminate cross-module internal imports. Classify
       compatibility barrels individually: migrate/remove temporary shims, or document/test an intentional
       permanent public alias and remove its migration/deprecation status.
-- [ ] Reconcile source-level API changes, historical database/protocol compatibility, and published
+- [x] Reconcile source-level API changes, historical database/protocol compatibility, and published
       package surfaces with explicit migration notes. No unknown internal consumers remain.
 
 Exit evidence: accepted public API/dependency map, client/contract compatibility and cancellation
 regressions, and a resolved list for every temporary shim/legacy entry in this migration.
+
+Acceptance (2026-10-17): [contracts/public API audit](contracts-architecture.md),
+[80-file contract/client ledger](contracts-ownership.json) and [public entries](public-api.json)
+record schema capability leaves, inferred helper results, one HTTP policy, app-owned query/
+navigation policy, shared SSE framing and independent state streaming. Temporary ACP/frontend/
+client aliases are removed; permanent Git constructors and DTO/schema aliases are documented and
+tested. All **77 typed HTTP methods/paths/status sets** and established shared runtime exports
+are preserved. Historical database/revision decoding and ACP v1/v2 wire behavior remain covered.
+
+Final combined acceptance on unchanged source fingerprints: **1,511 tests / 259 files** with
+`pnpm exec vitest run --maxWorkers=2`, **6 architecture regressions** with `pnpm architecture:test`,
+and **9 budget-checker regressions** within the six performance suites. Workspace `pnpm typecheck`
+(**12/12**), `pnpm lint`, `pnpm architecture:check`, formatting and whitespace checks passed.
+`pnpm build` (**7/7**), direct `pnpm --filter @agentctl/desktop build`, and
+`pnpm --filter @agentctl/web perf:build` passed. The direct desktop build avoids the external-input
+cache issue assigned to CP14.
+
+Production verification passed with:
+
+- `node apps/web/scripts/performance-browser.mjs /tmp/agentctl-migration-browser-final.json --journeys --verify-deferred --architecture-journeys`
+- `AGENTCTL_PERF_DIST=apps/desktop/out/renderer node apps/web/scripts/performance-browser.mjs /tmp/agentctl-migration-desktop-worker-final.json --production --worker-smoke`
+- `node apps/web/scripts/performance-check.mjs /tmp/agentctl-migration-performance-final`
+
+All six performance suites passed: budget tests, both workers, component workloads, session stream
+and navigation. Local Git/database/server/ACP peers are included in the full suite; synthetic
+browser fixtures do not claim paid-provider or native Electron lifecycle acceptance. Dependency
+reconciliation completed with the frozen lockfile and package policy checks enabled.
 
 ## CP12 — Desktop lifecycle, server ownership, and IPC
 
@@ -603,7 +631,9 @@ misrepresented as implemented backend support.
 | CP07       | `a117a46`, accepted 2026-10-17                                  | 1,489 tests/248 files; 5 architecture tests; types/lint/format/builds; 214-file ownership ledger                                                       | None within remaining-core scope                                                  |
 | CP08       | `d3b0869`, accepted 2026-10-17                                  | Focused 239/36 and injected-action 7/1; types/lint/architecture/format/web build; production screen journeys                                           | Broader frontend audit remains CP10                                               |
 | CP09       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,491 tests/249 files; focused 135/21; 5 architecture and 9 performance tests; types/lint/format/builds; parent/child browser and desktop worker smoke | Broader frontend audit remains CP10                                               |
-| CP10–CP15  | Not accepted                                                    | Pending                                                                                                                                                | See each checkpoint                                                               |
+| CP10       | `148ef06`, accepted with contracts integration 2026-10-17       | 275-file web ledger; initial frontend 507/94; final combined 1,511/259; cleanup regressions, production journeys, six performance suites               | None in frontend scope; delivery tooling remains CP14                             |
+| CP11       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,511 tests/259 files; 6 architecture regressions; 80-file ledger; unchanged 77-route surface; types/lint/format/builds/browser/worker/performance     | Source API release communication remains CP15                                     |
+| CP12–CP15  | Not accepted                                                    | Pending                                                                                                                                                | See each checkpoint                                                               |
 
 For each checkpoint, replace the aggregate pending row with its own evidence entry when work
 starts. Include execution date, actual commands/results, accepted paths, unresolved issues, and

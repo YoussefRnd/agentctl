@@ -7,7 +7,7 @@ export function getDefaultCredentialVault(): CredentialVault {
   return (vault ??= new CredentialVault());
 }
 
-/** Compatibility defaults for standalone read models resolve the same store only on use. */
+/** Standalone read models share this explicit lazy credential resolver. */
 export const defaultCredentialResolver: Pick<CredentialStore, 'resolveEnvSync'> = {
   resolveEnvSync: (env) => getDefaultCredentialVault().resolveEnvSync(env),
 };

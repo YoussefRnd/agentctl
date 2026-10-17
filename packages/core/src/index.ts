@@ -7,8 +7,6 @@ export * from './security/index.js';
 export * from './auth/index.js';
 export * from './mcp/index.js';
 export * from './db/index.js';
-export * from './db/schema.js';
-export * from './db/zod-schemas.js';
 export * from './git/index.js';
 export * from './repository/index.js';
 export * from './config/index.js';

@@ -36,14 +36,14 @@ by line count. The ledger distinguishes these accepted owners from extracted wor
 ## Query and compatibility decisions
 
 `shared/lib/queryKeys.ts` supplies detail/events/review/execution/project/MCP identities to all
-matching query writers and invalidators. The unused alternate session detail factory is corrected
-to the same identity, so a consumer cannot silently create a second detail cache. Filtered project
+matching query writers and invalidators. The unused alternate session detail factory is removed, so a consumer cannot silently create
+a second detail cache. Filtered project
 lists keep filter values in their keys. Workspace mutation invalidation remains centralized in
 `workspaceQueries`; it does not invalidate unrelated streaming data on every tool update.
 
-The current settings response interface, client query singleton, transport helpers and compatibility
-entries are explicitly in the next contracts/public API checkpoint. Their final disposition is
-recorded there; frontend extraction does not introduce a second transport or state owner.
+The settings response derives from shared schemas; app composition owns the query singleton
+and delegates HTTP/SSE to the client. The [contracts audit](contracts-architecture.md) records
+all public API and alias decisions. There is no second transport or state owner.
 
 ## Verification
 

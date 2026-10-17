@@ -1,33 +1,14 @@
+import type { ClientInferResponseBody } from '@ts-rest/core';
+import type { apiContract } from '@agentctl/shared';
 import { type SessionRow, type SessionMode, createTaskSlug } from '@agentctl/shared';
 import { api } from '../api.js';
 import { ApiError, assertApiStatus } from '../api-error.js';
 
-export interface SidebarProject {
-  id: string;
-  name: string;
-  path: string;
-  isGitRepo: boolean;
-  sessions: Pick<
-    SessionRow,
-    | 'id'
-    | 'title'
-    | 'taskSlug'
-    | 'branch'
-    | 'status'
-    | 'lastActivityAt'
-    | 'updatedAt'
-    | 'createdAt'
-    | 'mode'
-    | 'worktreePath'
-    | 'hasUserActivity'
-  >[];
-}
-
-export interface OpenProjectResponse {
-  project: { id: string; name: string; path: string };
-  session: SessionRow;
-  created: boolean;
-}
+export type { SidebarProject } from '@agentctl/shared';
+export type OpenProjectResponse = Omit<
+  ClientInferResponseBody<typeof apiContract.openProject, 200>,
+  'session'
+> & { session: SessionRow };
 
 export async function openProjectSession(
   path: string,

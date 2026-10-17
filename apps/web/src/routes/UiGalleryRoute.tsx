@@ -5,27 +5,25 @@ import { Inbox } from 'lucide-react';
 import { SessionConfigProvider } from '@/features/sessions';
 import { useSettingsOverlayStore } from '@/features/settings';
 import {
-  StreamingMarkdown,
   TextCard,
   TurnErrorCard,
   ApprovalCard,
   ElicitationCard,
   CommandResultCard,
-  ToolOutput,
-  ToolDiffBlock,
   TurnMinimap,
   type ConversationTurn,
 } from '@/features/conversation';
+import { StreamingMarkdown, ToolOutput, ToolDiffBlock } from '@/shared/transcript';
 import { CommandInputComposer } from '@/features/composer';
-import { MessageQueue } from '../features/composer/ui/QueuedMessagesPillStack';
+import { MessageQueue } from '@/features/composer/gallery';
 import type { QueuedMessage } from '@/shared/stores/useMessageQueueStore';
-import { RewindConfirmDialog } from '../features/sessions/ui/RewindConfirmDialog';
-import type { RewindMode } from '../features/sessions/ui/RewindMenu';
+import { RewindConfirmDialog } from '@/features/sessions';
+import type { RewindMode } from '@/features/sessions';
 // Gallery-only screens stay outside the eager settings feature entry.
-import { McpServerForm } from '../features/settings/ui/McpServerForm';
-import { McpServerCard } from '../features/settings/ui/McpServerCard';
-import { FontSettingsPanel } from '../features/settings/ui/FontSettingsPanel';
-import { initialFormState } from '../features/settings/ui/McpUtils';
+import { McpServerForm } from '@/features/settings/gallery';
+import { McpServerCard } from '@/features/settings/gallery';
+import { FontSettingsPanel } from '@/features/settings/gallery';
+import { initialFormState } from '@/features/settings/gallery';
 import {
   Button,
   Card,

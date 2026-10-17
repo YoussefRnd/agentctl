@@ -1,12 +1,7 @@
-export interface FontContextConfig {
-  family: string;
-  size: number;
-}
-
-export interface FontConfig {
-  ui: FontContextConfig; // UI chrome and chat prose (Default: Geist 13px)
-  code: FontContextConfig; // Code editor diffs, blocks, and terminal (Default: JetBrains Mono 13px)
-}
+import type { z } from 'zod';
+import type { fontContextSchema, settingsResponseSchema } from '../schemas/settings.js';
+export type FontContextConfig = z.infer<typeof fontContextSchema>;
+export type FontConfig = z.infer<typeof settingsResponseSchema>['fontConfig'];
 
 export const DEFAULT_FONT_CONFIG: FontConfig = {
   ui: { family: 'Geist', size: 13 },

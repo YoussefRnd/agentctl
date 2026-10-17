@@ -1,20 +1,19 @@
+import { apiClient } from '../api-client.js';
+import type { ClientInferRequest } from '@ts-rest/core';
+import type { apiContract } from '@agentctl/shared';
 import {
   type SessionRow,
   type SessionWithCapabilities,
   type SessionMode,
-  type ThinkingEffort,
   createTaskSlug,
 } from '@agentctl/shared';
 import { api } from '../api.js';
 import { assertApiStatus } from '../api-error.js';
 
-export interface InitialSessionSettings {
-  taskSlug?: string;
-  selectedModel?: string;
-  selectedThinkingEffort?: ThinkingEffort;
-  approvalMode?: 'review' | 'auto_approve' | 'yolo';
-  agentPersona?: string;
-}
+export type InitialSessionSettings = Pick<
+  ClientInferRequest<typeof apiContract.createSession>['body'],
+  'taskSlug' | 'selectedModel' | 'selectedThinkingEffort' | 'approvalMode' | 'agentPersona'
+>;
 
 export async function createProjectSession(
   projectId: string,
@@ -37,18 +36,7 @@ export async function createProjectSession(
 
 export async function patchSession(
   sessionId: string,
-  data: {
-    title?: string;
-    mode?: SessionMode;
-    approvalMode?: 'review' | 'auto_approve' | 'yolo';
-    persona?: string;
-    providerId?: string;
-    modelId?: string;
-    thinkingEffort?: ThinkingEffort;
-    configId?: string;
-    configValue?: string;
-    branch?: string;
-  },
+  data: NonNullable<ClientInferRequest<typeof apiContract.patchSession>['body']>,
 ): Promise<SessionWithCapabilities> {
   const res = await api.patchSession({
     params: { id: sessionId },
@@ -60,13 +48,7 @@ export async function patchSession(
 
 export async function spawnParallelAgent(
   parentSessionId: string,
-  params: {
-    prompt: string;
-    title?: string;
-    taskSlug?: string;
-    providerId?: string;
-    modelId?: string;
-  },
+  params: ClientInferRequest<typeof apiContract.spawnParallelAgent>['body'],
 ): Promise<{ session: SessionRow }> {
   const res = await api.spawnParallelAgent({
     params: { id: parentSessionId },
@@ -180,4 +162,17 @@ export async function undoDiscardSession(sessionId: string): Promise<{ success: 
   const res = await api.undoDiscard({ params: { id: sessionId }, body: {} });
   assertApiStatus(res, 200, 'Failed to undo discard');
   return res.body;
+}
+
+/** Uses configured credentials and backend even when the renderer runs in native mode. */
+export async function respondToElicitation(
+  sessionId: string,
+  elicitationId: string,
+  response: import('@agentctl/shared').ElicitationResponse,
+  signal?: AbortSignal,
+): Promise<void> {
+  await apiClient.fetch(
+    `/api/sessions/${encodeURIComponent(sessionId)}/elicitations/${encodeURIComponent(elicitationId)}/respond`,
+    { method: 'POST', body: JSON.stringify(response), signal },
+  );
 }

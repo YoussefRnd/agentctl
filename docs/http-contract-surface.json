@@ -1,0 +1,387 @@
+{
+  "searchEvents": {
+    "method": "GET",
+    "path": "/api/search/events",
+    "responses": ["200"]
+  },
+  "getProjects": {
+    "method": "GET",
+    "path": "/api/projects",
+    "responses": ["200"]
+  },
+  "openProject": {
+    "method": "POST",
+    "path": "/api/projects/open",
+    "responses": ["200"]
+  },
+  "getAvailableEditors": {
+    "method": "GET",
+    "path": "/api/editor/available",
+    "responses": ["200"]
+  },
+  "openInEditor": {
+    "method": "POST",
+    "path": "/api/editor/open",
+    "responses": ["200", "400", "500"]
+  },
+  "deleteProject": {
+    "method": "DELETE",
+    "path": "/api/projects/:id",
+    "responses": ["204"]
+  },
+  "exploreFs": {
+    "method": "GET",
+    "path": "/api/fs",
+    "responses": ["200"]
+  },
+  "createProfile": {
+    "method": "POST",
+    "path": "/api/providers/:id/profiles",
+    "responses": ["200"]
+  },
+  "listNativeSessions": {
+    "method": "GET",
+    "path": "/api/providers/:id/native-sessions",
+    "responses": ["200"]
+  },
+  "getProviders": {
+    "method": "GET",
+    "path": "/api/providers",
+    "responses": ["200"]
+  },
+  "getRegistry": {
+    "method": "GET",
+    "path": "/api/registry",
+    "responses": ["200"]
+  },
+  "installProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/install",
+    "responses": ["200"]
+  },
+  "cancelInstallProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/install/cancel",
+    "responses": ["200"]
+  },
+  "removeProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/remove",
+    "responses": ["200"]
+  },
+  "loginProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/login",
+    "responses": ["200"]
+  },
+  "respondAuthInteraction": {
+    "method": "POST",
+    "path": "/api/providers/:id/auth/respond",
+    "responses": ["200"]
+  },
+  "cancelLoginProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/login/cancel",
+    "responses": ["200"]
+  },
+  "verifyProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/verify",
+    "responses": ["200"]
+  },
+  "logoutProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/logout",
+    "responses": ["200"]
+  },
+  "activateProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/activate",
+    "responses": ["200"]
+  },
+  "refreshProvider": {
+    "method": "POST",
+    "path": "/api/providers/:id/refresh",
+    "responses": ["200"]
+  },
+  "setProviderConfig": {
+    "method": "POST",
+    "path": "/api/providers/:id/config",
+    "responses": ["200"]
+  },
+  "syncProviders": {
+    "method": "POST",
+    "path": "/api/providers/sync",
+    "responses": ["200"]
+  },
+  "getSessionRepository": {
+    "method": "GET",
+    "path": "/api/sessions/:id/repository",
+    "responses": ["200"]
+  },
+  "getRepositoryReview": {
+    "method": "GET",
+    "path": "/api/sessions/:id/repository/review",
+    "responses": ["200"]
+  },
+  "getSessionBranches": {
+    "method": "GET",
+    "path": "/api/sessions/:id/branches",
+    "responses": ["200"]
+  },
+  "getSessionMergePreview": {
+    "method": "GET",
+    "path": "/api/sessions/:id/merge-preview",
+    "responses": ["200", "400"]
+  },
+  "getSessionReview": {
+    "method": "GET",
+    "path": "/api/sessions/:id/review",
+    "responses": ["200"]
+  },
+  "stageFile": {
+    "method": "POST",
+    "path": "/api/sessions/:id/review/stage",
+    "responses": ["200"]
+  },
+  "revertFile": {
+    "method": "POST",
+    "path": "/api/sessions/:id/review/revert",
+    "responses": ["200"]
+  },
+  "unstageFile": {
+    "method": "POST",
+    "path": "/api/sessions/:id/review/unstage",
+    "responses": ["200"]
+  },
+  "stageAllFiles": {
+    "method": "POST",
+    "path": "/api/sessions/:id/review/stage-all",
+    "responses": ["200"]
+  },
+  "unstageAllFiles": {
+    "method": "POST",
+    "path": "/api/sessions/:id/review/unstage-all",
+    "responses": ["200"]
+  },
+  "commitChanges": {
+    "method": "POST",
+    "path": "/api/sessions/:id/review/commit",
+    "responses": ["200", "400"]
+  },
+  "pushChanges": {
+    "method": "POST",
+    "path": "/api/sessions/:id/review/push",
+    "responses": ["200", "400"]
+  },
+  "pullChanges": {
+    "method": "POST",
+    "path": "/api/sessions/:id/review/pull",
+    "responses": ["200", "400"]
+  },
+  "fetchChanges": {
+    "method": "POST",
+    "path": "/api/sessions/:id/git/fetch",
+    "responses": ["200", "400"]
+  },
+  "createSessionBranch": {
+    "method": "POST",
+    "path": "/api/sessions/:id/git/branches",
+    "responses": ["200", "400"]
+  },
+  "getGitStatus": {
+    "method": "GET",
+    "path": "/api/sessions/:id/git/status",
+    "responses": ["200"]
+  },
+  "generateGitDraft": {
+    "method": "POST",
+    "path": "/api/sessions/:id/git/generate-draft",
+    "responses": ["200", "400"]
+  },
+  "createPullRequest": {
+    "method": "POST",
+    "path": "/api/sessions/:id/git/pull-request",
+    "responses": ["200", "400"]
+  },
+  "mergeSessionBranch": {
+    "method": "POST",
+    "path": "/api/sessions/:id/merge-branch",
+    "responses": ["200"]
+  },
+  "checkMergeBranch": {
+    "method": "GET",
+    "path": "/api/sessions/:id/check-merge",
+    "responses": ["200"]
+  },
+  "resumeSessionQueue": {
+    "method": "POST",
+    "path": "/api/sessions/:id/queue/resume",
+    "responses": ["200", "409"]
+  },
+  "getSessionExecution": {
+    "method": "GET",
+    "path": "/api/sessions/:id/execution",
+    "responses": ["200"]
+  },
+  "changeQueuedMessage": {
+    "method": "POST",
+    "path": "/api/sessions/:id/queue/:commandId",
+    "responses": ["200", "409"]
+  },
+  "importNativeSession": {
+    "method": "POST",
+    "path": "/api/sessions/import-native",
+    "responses": ["200"]
+  },
+  "getSessions": {
+    "method": "GET",
+    "path": "/api/sessions",
+    "responses": ["200"]
+  },
+  "createSession": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "responses": ["201"]
+  },
+  "getSessionById": {
+    "method": "GET",
+    "path": "/api/sessions/:id",
+    "responses": ["200"]
+  },
+  "sendTerminalInput": {
+    "method": "POST",
+    "path": "/api/sessions/:id/terminal/:terminalId/input",
+    "responses": ["200"]
+  },
+  "mergeSession": {
+    "method": "POST",
+    "path": "/api/sessions/:id/merge",
+    "responses": ["200", "400"]
+  },
+  "discardSession": {
+    "method": "POST",
+    "path": "/api/sessions/:id/discard",
+    "responses": ["200", "400"]
+  },
+  "patchSession": {
+    "method": "PATCH",
+    "path": "/api/sessions/:id",
+    "responses": ["200"]
+  },
+  "deleteSession": {
+    "method": "DELETE",
+    "path": "/api/sessions/:id",
+    "responses": ["204"]
+  },
+  "archiveSession": {
+    "method": "POST",
+    "path": "/api/sessions/:id/archive",
+    "responses": ["200"]
+  },
+  "restoreSession": {
+    "method": "POST",
+    "path": "/api/sessions/:id/restore",
+    "responses": ["200"]
+  },
+  "cancelSession": {
+    "method": "POST",
+    "path": "/api/sessions/:id/cancel",
+    "responses": ["200"]
+  },
+  "approveEvent": {
+    "method": "POST",
+    "path": "/api/sessions/:id/approve",
+    "responses": ["200"]
+  },
+  "denyEvent": {
+    "method": "POST",
+    "path": "/api/sessions/:id/deny",
+    "responses": ["200"]
+  },
+  "sendInput": {
+    "method": "POST",
+    "path": "/api/sessions/:id/input",
+    "responses": ["200", "409"]
+  },
+  "undoDiscard": {
+    "method": "POST",
+    "path": "/api/sessions/:id/undo-discard",
+    "responses": ["200", "400"]
+  },
+  "rewindSession": {
+    "method": "POST",
+    "path": "/api/sessions/:id/rewind",
+    "responses": ["200"]
+  },
+  "undoRewind": {
+    "method": "POST",
+    "path": "/api/sessions/:id/undo-rewind",
+    "responses": ["200"]
+  },
+  "handoffSession": {
+    "method": "POST",
+    "path": "/api/sessions/:id/handoff",
+    "responses": ["200", "404", "409"]
+  },
+  "restoreSnapshot": {
+    "method": "POST",
+    "path": "/api/sessions/:id/restore-snapshot",
+    "responses": ["200"]
+  },
+  "previewSnapshotDiff": {
+    "method": "GET",
+    "path": "/api/sessions/:id/snapshots/:eventId/preview",
+    "responses": ["200"]
+  },
+  "spawnParallelAgent": {
+    "method": "POST",
+    "path": "/api/sessions/:id/agents",
+    "responses": ["201"]
+  },
+  "getSettings": {
+    "method": "GET",
+    "path": "/api/settings",
+    "responses": ["200"]
+  },
+  "patchSettings": {
+    "method": "PATCH",
+    "path": "/api/settings",
+    "responses": ["200", "400"]
+  },
+  "getMcpServers": {
+    "method": "GET",
+    "path": "/api/mcp-servers",
+    "responses": ["200"]
+  },
+  "createMcpServer": {
+    "method": "POST",
+    "path": "/api/mcp-servers",
+    "responses": ["201"]
+  },
+  "updateMcpServer": {
+    "method": "PATCH",
+    "path": "/api/mcp-servers/:id",
+    "responses": ["200"]
+  },
+  "deleteMcpServer": {
+    "method": "DELETE",
+    "path": "/api/mcp-servers/:id",
+    "responses": ["204"]
+  },
+  "getMcpTools": {
+    "method": "GET",
+    "path": "/api/mcp/tools",
+    "responses": ["200"]
+  },
+  "callMcpTool": {
+    "method": "POST",
+    "path": "/api/mcp/tool/call",
+    "responses": ["200"]
+  },
+  "getTransportDiagnostics": {
+    "method": "GET",
+    "path": "/api/diagnostics/transport",
+    "responses": ["200"]
+  }
+}

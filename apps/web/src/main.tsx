@@ -1,14 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import {
-  extractPairingTokenFromUrl,
-  setApiBaseUrl,
-  setDesktopCapability,
-} from '@agentctl/api-client';
+import { setDesktopCapability } from '@agentctl/api-client';
 import { AppProviders } from './app/AppProviders.js';
 import { App } from './app/App.js';
 import './index.css';
-import { initApiBaseUrl } from './shared/lib/api-base-url.js';
+import { extractPairingTokenFromUrl, initApiEnvironment } from './app/apiEnvironment.js';
 import { journeyPerformance } from './shared/lib/performanceRecorder.js';
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
@@ -60,8 +56,7 @@ if (rootElement) {
     }
 
     const pairingToken = extractPairingTokenFromUrl();
-    const baseUrl = await initApiBaseUrl();
-    setApiBaseUrl(baseUrl);
+    const baseUrl = await initApiEnvironment();
 
     // Electron keeps its per-launch capability in memory only.
     if (isElectron && window.electronAPI?.getServerSecret) {

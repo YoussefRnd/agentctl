@@ -1,3 +1,5 @@
+import { coalesceBufferedEvents } from './coalesce-events.js';
+import { SseDecoder, type SseFrame } from './sse-decoder.js';
 import {
   sessionEventSnapshotSchema,
   sessionEventRowSchema,
@@ -19,45 +21,6 @@ export interface SessionEngineOptions {
   onNotice?: (notice: SessionNotice) => void;
 }
 
-export function coalesceBufferedEvents(events: SessionEventRow[]): SessionEventRow[] {
-  const coalesced: SessionEventRow[] = [];
-
-  for (const event of events) {
-    const previous = coalesced[coalesced.length - 1];
-    const canMergeText =
-      previous?.id === event.id &&
-      previous.type === 'text' &&
-      event.type === 'text' &&
-      previous.data.role === event.data.role;
-
-    if (!canMergeText) {
-      coalesced.push(event);
-      continue;
-    }
-
-    if (event.delta === undefined) {
-      // A persisted snapshot contains the complete value and supersedes buffered deltas.
-      coalesced[coalesced.length - 1] = event;
-    } else if (previous.delta !== undefined) {
-      coalesced[coalesced.length - 1] = {
-        ...event,
-        delta: previous.delta + event.delta,
-      };
-    } else {
-      // Fold a delta arriving after a full row into that row before React sees it.
-      coalesced[coalesced.length - 1] = {
-        ...previous,
-        data: {
-          ...previous.data,
-          content: previous.data.content + event.delta,
-        },
-      };
-    }
-  }
-
-  return coalesced;
-}
-
 export class SessionEngine {
   private active = false;
   private isConnected = false;
@@ -71,11 +34,6 @@ export class SessionEngine {
   private buffer: SessionEventRow[] = [];
   private flushTimeout: ReturnType<typeof setTimeout> | null = null;
   private streamingTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  // SSE fields accumulator
-  private currentEventId: string | null = null;
-  private currentEventName: string | null = null;
-  private currentEventData = '';
 
   constructor(private options: SessionEngineOptions) {}
 
@@ -103,9 +61,6 @@ export class SessionEngine {
     }
 
     this.handleDisconnect();
-    this.currentEventId = null;
-    this.currentEventName = null;
-    this.currentEventData = '';
   }
 
   public getIsConnected() {
@@ -198,31 +153,17 @@ export class SessionEngine {
           throw new Error('No readable stream reader in response body');
         }
 
-        this.currentEventId = null;
-        this.currentEventName = null;
-        this.currentEventData = '';
         const decoder = new TextDecoder();
-        let leftover = '';
-
+        const frames = new SseDecoder();
         while (this.readActive(runId)) {
           const { value, done } = await reader.read();
-          if (done || !this.readActive(runId)) {
-            break;
-          }
-
-          const chunk = decoder.decode(value, { stream: true });
-          const text = leftover + chunk;
-          const lines = text.split(/\r\n|\r|\n/);
-          leftover = lines.pop() ?? '';
-
-          for (const line of lines) {
-            this.processLine(line);
+          if (done || !this.readActive(runId)) break;
+          for (const frame of frames.push(decoder.decode(value, { stream: true }))) {
+            if (!this.readActive(runId)) break;
+            this.dispatchEvent(frame);
           }
         }
-
-        if (leftover && this.readActive(runId)) {
-          this.processLine(leftover);
-        }
+        if (this.readActive(runId)) for (const frame of frames.finish()) this.dispatchEvent(frame);
       } catch (error: unknown) {
         const err = error as { name?: string; message?: string };
         if (err.name === 'AbortError' || !this.readActive(runId)) {
@@ -258,53 +199,7 @@ export class SessionEngine {
     }
   }
 
-  private processLine(line: string) {
-    if (line.startsWith(':')) {
-      return;
-    }
-
-    if (line.trim() === '') {
-      this.dispatchEvent();
-      return;
-    }
-
-    const colonIndex = line.indexOf(':');
-    let field = line;
-    let value = '';
-
-    if (colonIndex !== -1) {
-      field = line.substring(0, colonIndex);
-      value = line.substring(colonIndex + 1);
-      if (value.startsWith(' ')) {
-        value = value.substring(1);
-      }
-    }
-
-    switch (field) {
-      case 'id':
-        this.currentEventId = value;
-        break;
-      case 'event':
-        this.currentEventName = value;
-        break;
-      case 'data':
-        this.currentEventData = this.currentEventData
-          ? `${this.currentEventData}\n${value}`
-          : value;
-        break;
-      default:
-        break;
-    }
-  }
-
-  private dispatchEvent() {
-    const eventName = this.currentEventName ?? 'message';
-    const dataStr = this.currentEventData;
-
-    this.currentEventId = null;
-    this.currentEventName = null;
-    this.currentEventData = '';
-
+  private dispatchEvent({ event: eventName, data: dataStr }: SseFrame) {
     if (!dataStr) {
       return;
     }

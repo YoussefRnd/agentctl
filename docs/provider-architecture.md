@@ -56,7 +56,7 @@ as part of this acceptance; existing cohesive owners are retained.
   and usage. These reducers/adapters do not construct application default services.
 - Every `acp/transport/` production module: owned process groups, connection facade/leases,
   persistent pooling, request deadlines, update draining, subagent streams, turn control,
-  stderr/debug redaction, limits and path-security/cache compatibility exports. Generation and
+  stderr/debug redaction and limits. Temporary path-security/cache forwarding modules are removed; consumers import the capability owner directly. Generation and
   exact resource identity protect replacements from stale close/unregister/terminal callbacks.
   Final manager disposal additionally drains pending creation, terminals and process exit.
 - `acp/cache/launch-identity.ts`, `provider-descriptor.ts`, `writer-lock.ts`: credential-sensitive

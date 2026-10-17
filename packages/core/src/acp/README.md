@@ -36,7 +36,8 @@ outside this directory.
   256 entries / 4 MiB, with a 512 KiB maximum per entry.
 
 The public entry point exports the selecting driver and connection-coordinator type.
-`runtime.ts`, `v2/runtime.ts`, and `transport/capabilities-cache.ts` are compatibility imports.
+Versioned drivers, configuration and capability policy have direct internal imports. Temporary
+runtime/cache/path forwarding modules have been removed; public ACP users import `@agentctl/core/acp`.
 
 ## Protocol boundaries
 

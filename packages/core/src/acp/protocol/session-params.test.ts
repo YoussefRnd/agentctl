@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { buildBaseSessionParams } from './session-params.js';
-import { parseAcpCapabilities } from '../transport/capabilities-cache.js';
+import { parseAcpCapabilities } from '../v1/capabilities.js';
 
 test('rejects relative session paths before sending them to the provider', () => {
   expect(() => buildBaseSessionParams({ cwd: 'relative' })).toThrow('must be absolute');

@@ -1,23 +1,25 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 
 /** Schedules DOM work within one owner lifetime; disposed frames cannot target another session. */
 export function useFrameScheduler(scope?: string) {
-  const frames = useRef(new Set<number>());
-  const active = useRef(true);
+  const owner = useMemo(() => ({ active: true, frames: new Set<number>() }), [scope]);
   useEffect(() => {
-    active.current = true;
+    owner.active = true;
     return () => {
-      active.current = false;
-      for (const frame of frames.current) cancelAnimationFrame(frame);
-      frames.current.clear();
+      owner.active = false;
+      for (const frame of owner.frames) cancelAnimationFrame(frame);
+      owner.frames.clear();
     };
-  }, [scope]);
-  return useCallback((callback: FrameRequestCallback) => {
-    if (!active.current) return;
-    const frame = requestAnimationFrame((time) => {
-      frames.current.delete(frame);
-      if (active.current) callback(time);
-    });
-    frames.current.add(frame);
-  }, []);
+  }, [owner]);
+  return useCallback(
+    (callback: FrameRequestCallback) => {
+      if (!owner.active) return;
+      const frame = requestAnimationFrame((time) => {
+        owner.frames.delete(frame);
+        if (owner.active) callback(time);
+      });
+      owner.frames.add(frame);
+    },
+    [owner],
+  );
 }

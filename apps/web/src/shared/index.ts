@@ -11,7 +11,6 @@ export type { ThemeMode } from './hooks/useThemePreferences';
 export { useAppVersion } from './hooks/useAppVersion';
 
 // Libraries & Utilities
-export * from './lib/api-base-url';
 export * from './lib/diff-parser';
 export * from './lib/toolColors';
 export * from './lib/theme-registry';

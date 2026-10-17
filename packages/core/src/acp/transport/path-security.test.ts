@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { resolveAllowedPath } from './path-security.js';
+import { resolveAllowedPath } from '../../security/path-security.js';
 
 describe('resolveAllowedPath', () => {
   let root: string;

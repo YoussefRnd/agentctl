@@ -5,10 +5,10 @@ import { EventEmitter } from 'node:events';
 import { expect, test, vi } from 'vitest';
 import { noopLogger } from '../logger.js';
 import { createCompactionProjector } from './protocol/compaction.js';
-import { AcpV1AgentDriver } from './runtime.js';
-import { parseAcpCapabilities } from './transport/capabilities-cache.js';
+import { AcpV1AgentDriver } from './v1/driver.js';
+import { parseAcpCapabilities } from './v1/capabilities.js';
 import { PersistentAgentConnectionManager } from './transport/persistent-connection.js';
-import { AcpV2AgentDriver } from './v2/runtime.js';
+import { AcpV2AgentDriver } from './v2/driver.js';
 
 // Exercise the regressions identified during the ACP audit through SDK peers.
 function streams() {

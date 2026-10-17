@@ -12,7 +12,7 @@ import {
 import type { AgentMcpGateway, AgentSessionCallbacks } from '../../agent/types.js';
 import type { Logger } from '../../logger.js';
 import { createExtensionRouter } from '../extensions/agentctl.js';
-import { resolveAllowedPath } from '../transport/path-security.js';
+import { resolveAllowedPath } from '../../security/path-security.js';
 import { authorizeClientOperation } from './client-authorization.js';
 import { createCompactionProjector } from './compaction.js';
 import { formatElicitationResponse, projectElicitationRequest } from './elicitations.js';

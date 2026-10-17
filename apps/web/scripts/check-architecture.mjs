@@ -20,6 +20,8 @@ const legacyRoots = [
 ];
 const errors = [];
 const featureGraph = new Map();
+const publicApi = JSON.parse(await readFile(join(workspaceRoot, 'docs/public-api.json'), 'utf8'));
+const publicFeatures = new Map(publicApi.features.map((item) => [item.feature, item.entries]));
 const cycleBaseline = JSON.parse(await readFile(join(webRoot, 'architecture-cycles.json'), 'utf8'));
 
 if (Object.keys(cycleBaseline).length)
@@ -118,21 +120,35 @@ for (const path of sourceFiles.filter((path) => sourceExtensions.has(extname(pat
     }
     const aliasFeature = featureFromSpecifier(specifier);
     recordDependency(aliasFeature?.name);
-    if (aliasFeature && aliasFeature.name !== ownerFeature && aliasFeature.internalPath) {
+    if (
+      aliasFeature &&
+      aliasFeature.name !== ownerFeature &&
+      aliasFeature.internalPath &&
+      !(publicFeatures.get(aliasFeature.name) ?? []).includes(
+        aliasFeature.internalPath.replace(/\.[jt]sx?$/, ''),
+      )
+    ) {
       report(path, `cross-feature import must use @/features/${aliasFeature.name}`);
     }
 
-    if (ownerFeature && specifier.startsWith('.')) {
+    if (specifier.startsWith('.')) {
       const target = normalize(resolve(dirname(path), specifier));
       const targetFeature = featureName(target);
       recordDependency(targetFeature);
       const targetArea = relative(sourceRoot, target).split(sep)[0];
-      if (targetArea === 'app' || targetArea === 'routes') {
+      if (ownerFeature && (targetArea === 'app' || targetArea === 'routes')) {
         report(path, `feature code cannot depend on ${targetArea}`);
       }
       if (targetFeature && targetFeature !== ownerFeature) {
-        const publicEntry = join(sourceRoot, 'features', targetFeature, 'index');
-        if (target !== publicEntry && target !== `${publicEntry}.js`) {
+        const entries = (publicFeatures.get(targetFeature) ?? []).map((entry) =>
+          join(sourceRoot, 'features', targetFeature, entry),
+        );
+        if (
+          ![
+            ...entries,
+            ...entries.flatMap((entry) => [entry + '.js', entry + '.ts', entry + '.tsx']),
+          ].includes(target)
+        ) {
           report(path, `relative import crosses into feature "${targetFeature}" internals`);
         }
       }

@@ -1,8 +1,7 @@
-import { groupFeedEvents } from '../features/conversation/lib/eventFeedGrouping';
-import { groupConversationTurns } from '../features/conversation/lib/turnMinimapGrouping';
+import { groupFeedEvents, groupConversationTurns } from '@/features/conversation';
 import { splitStreamingContent } from '../shared/markdown/ui/streamingMarkdownUtils';
 import { splitGraphemes } from '../shared/markdown/ui/StreamingMarkdown';
-import { mergeEventHistory } from '../features/sessions/model/useSessionHistory';
+import { mergeEventHistory } from '@/features/sessions';
 import { conversationFixture, markdownFixture } from './fixtures';
 
 export function summarize(values: number[]) {

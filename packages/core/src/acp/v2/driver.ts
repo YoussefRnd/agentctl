@@ -42,7 +42,7 @@ import {
   ProcessStreamTransport,
   spawnManagedProcess,
 } from '../transport/acp-process-lifecycle.js';
-import { withTimeout } from '../transport/capabilities-cache.js';
+import { withTimeout } from '../transport/acp-process-lifecycle.js';
 import {
   ACP_MAX_PENDING_UPDATE_BYTES,
   ACP_MAX_PENDING_UPDATES,

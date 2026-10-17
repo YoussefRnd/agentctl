@@ -2,7 +2,8 @@ import { test, describe, expect, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { FileCacheStorage, getCacheKey } from './capabilities-cache.js';
+import { FileCacheStorage } from '../cache/provider-descriptor.js';
+import { getCacheKey } from '../cache/launch-identity.js';
 import type { AgentDescriptor } from '../../agent/types.js';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 
@@ -140,7 +141,7 @@ describe('FileCacheStorage', () => {
 });
 
 test('v1 rejects every unnegotiated protocol version even with a v1-shaped response', async () => {
-  const { initializeAcpConnection } = await import('./capabilities-cache.js');
+  const { initializeAcpConnection } = await import('../v1/capabilities.js');
   const { vi } = await import('vitest');
   const { PROTOCOL_VERSION } = await import('@agentclientprotocol/sdk');
   const initialize = vi

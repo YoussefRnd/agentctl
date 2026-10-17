@@ -30,8 +30,7 @@ cyclic edges. The feature graph is acyclic and the checker rejects any nonempty 
 
 The existing session configuration subscription still owns its original state. Typed capability
 views intentionally do not claim new render isolation; streaming/queue/prompt boundaries remain
-separate and retain their regression coverage. Compatibility exports for workspace status/editor
-presentation forward to the shared owner; the moved page components are no longer re-exported
+separate and retain their regression coverage. Workspace status/editor presentation imports use the shared owner directly; the moved page components are no longer re-exported
 from sessions, so feature barrels cannot reintroduce page composition.
 
 Verification includes configuration, draft persistence, context insertion/quotation through an
@@ -62,9 +61,9 @@ session, draft store, settings query or approval API.
 | `features/conversation/ui/MainFeed.tsx`                                | Retains mounted parent feed/composer, inert state, focus restoration, session-scoped child selection, history/cancellation transitions and parent approval control.                                                                                        |
 | Subagent group utilities/store and `SubagentChatView.tsx`              | Child identity, event grouping, status/connectivity, sibling selection, read-only transcript and observer cleanup. Activity completion derives from the child, independently of parent turn context. Approval notices invoke the parent's review callback. |
 
-Compatibility exports from conversation forward shared display components during migration;
-shared owners never import those barrels. Broader feature/effect auditing and public export
-cleanup remain assigned to the later frontend/contracts checkpoints.
+Conversation and review no longer forward shared display components. Consumers import the shared
+owner directly; shared modules never import feature barrels. The complete frontend and public API
+audits are recorded in frontend-state-architecture.md and contracts-architecture.md.
 
 Verification covers child streaming/tool grouping, approval routing, cancellation/disconnect,
 session-scoped selection, focus and follower cleanup. A standalone child render test uses no

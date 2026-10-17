@@ -160,7 +160,7 @@ test('createAgentConnection throws if stdio is missing', () => {
 });
 
 test('AcpV1AgentDriver.probe uses cache and skips spawn on cache hit', async () => {
-  const { AcpV1AgentDriver } = await import('../runtime.js');
+  const { AcpV1AgentDriver } = await import('../v1/driver.js');
 
   const cacheMap = new Map<string, AgentDescriptor>();
   const mockCache: CacheStorage = {

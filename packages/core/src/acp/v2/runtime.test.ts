@@ -15,7 +15,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { runAgentDriverConformance } from '../../agent/conformance.js';
 import type { AgentUpdate } from '../../agent/types.js';
 import type { AgentStreamTransport } from '../types.js';
-import { AcpV2AgentDriver } from './runtime.js';
+import { AcpV2AgentDriver } from './driver.js';
 
 function harness(
   configOptions: SessionConfigOption[] = [],

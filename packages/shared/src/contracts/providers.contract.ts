@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { providerDiscoverySchema, thinkingEffortSchema } from '../schemas/session.js';
 import { environmentVariableNameSchema } from '../schemas/registry.js';
 
-const emptyBodySchema = z.record(z.string(), z.unknown()).optional().default({});
+import { emptyBodySchema } from './contract-common.js';
 
 export const providersContract = {
   createProfile: {

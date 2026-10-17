@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { parsePermissionRequest, formatPermissionOutcome } from './permissions.js';
-import { toPermissionRequest } from '../v2/runtime.js';
+import { toPermissionRequest } from '../v2/permissions.js';
 import { getBestPermissionOption } from '../../security/permission-options.js';
 
 test('v1 keeps every structured path and raw input without turning a title into a path', () => {

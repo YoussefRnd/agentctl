@@ -1,3 +1,4 @@
+import { respondToElicitation } from '@agentctl/api-client';
 import { CommandResultCard } from './cards/CommandResultCard';
 import { ElicitationCard } from './cards/ElicitationCard';
 import { AgentResponse } from './cards/AgentResponse';
@@ -99,22 +100,7 @@ export function EventFeedItem({
           elicitation={data.elicitation}
           onRespond={async (id, resp) => {
             if (!sessionId) return;
-            const response = await fetch(`/api/sessions/${sessionId}/elicitations/${id}/respond`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(resp),
-            });
-            if (!response.ok) {
-              const data: unknown = await response.json().catch(() => null);
-              const message =
-                data &&
-                typeof data === 'object' &&
-                'message' in data &&
-                typeof data.message === 'string'
-                  ? data.message
-                  : 'Could not submit the response. Try again.';
-              throw new Error(message);
-            }
+            await respondToElicitation(sessionId, id, resp);
           }}
         />
       </div>

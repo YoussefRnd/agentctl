@@ -4,13 +4,13 @@ export { EventFeedItem } from './ui/EventFeedItem.js';
 export { TurnMinimap } from './ui/TurnMinimap.js';
 export type { ConversationTurn } from './lib/turnMinimapGrouping.js';
 export { UnifiedActivityBlock } from './ui/cards/UnifiedActivityBlock.js';
-export { StreamingMarkdown } from '../../shared/markdown/ui/StreamingMarkdown.js';
 export { TextCard } from './ui/cards/TextCard.js';
 export { TurnErrorCard } from './ui/cards/TurnErrorCard.js';
 export { ApprovalCard } from './ui/cards/ApprovalCard.js';
 export { ElicitationCard } from './ui/cards/ElicitationCard.js';
 export { CommandResultCard } from './ui/cards/CommandResultCard.js';
-export { ToolOutput, ToolDiffBlock } from '../../shared/transcript';
-export { AgentTerminals } from '../../shared/transcript';
 export { NewSessionEmptyState } from './ui/NewSessionEmptyState.js';
 export { SessionMessage } from './ui/cards/SessionMessage.js';
+
+export { groupFeedEvents } from './lib/eventFeedGrouping';
+export { groupConversationTurns } from './lib/turnMinimapGrouping';

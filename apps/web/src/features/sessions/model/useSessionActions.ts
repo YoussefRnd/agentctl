@@ -1,5 +1,6 @@
 import { projectKeys } from '@/shared/lib/queryKeys';
-import { useSession, useSessionQueue } from './SessionContext';
+import { useSession } from './SessionConfigContext';
+import { useSessionQueue } from './SessionStreamContext';
 import { api, type SidebarProject } from '@agentctl/api-client';
 import {
   nextOptimisticEventId,

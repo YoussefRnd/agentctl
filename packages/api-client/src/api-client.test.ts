@@ -54,3 +54,48 @@ describe.each(['getProviders', 'getRegistry'] as const)('%s contract validation'
     ]);
   });
 });
+
+describe.each(['fetch', 'fetchWithStatus'] as const)('%s request policy', (method) => {
+  it('uses configured credentials, explicit authorization and the exact abort signal', async () => {
+    const { setApiBaseUrl, setDesktopCapability } = await import('./api-client.js');
+    setApiBaseUrl('https://backend.local');
+    setDesktopCapability('desktop');
+    const controller = new AbortController();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+    try {
+      await apiClient[method]('/api/test', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer explicit' },
+        signal: controller.signal,
+      });
+      const [url, options] = fetch.mock.calls[0];
+      expect(url).toBe('https://backend.local/api/test');
+      expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer explicit');
+      expect(options).toMatchObject({
+        credentials: 'include',
+        body: '{}',
+        signal: controller.signal,
+      });
+      const aborted = new DOMException('Cancelled', 'AbortError');
+      fetch.mockRejectedValue(aborted);
+      await expect(apiClient[method]('/api/test', { signal: controller.signal })).rejects.toBe(
+        aborted,
+      );
+    } finally {
+      setApiBaseUrl('');
+      setDesktopCapability('');
+    }
+  });
+  it('notifies the injected unauthorized policy and preserves the HTTP error', async () => {
+    const { setUnauthorizedHandler } = await import('./api-client.js');
+    const unauthorized = vi.fn();
+    setUnauthorizedHandler(unauthorized);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 401 }));
+    try {
+      await expect(apiClient[method]('/api/test')).rejects.toMatchObject({ status: 401 });
+      expect(unauthorized).toHaveBeenCalledOnce();
+    } finally {
+      setUnauthorizedHandler();
+    }
+  });
+});

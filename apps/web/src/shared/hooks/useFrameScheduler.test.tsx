@@ -20,9 +20,12 @@ test('cancels pending focus work when switching sessions or disposing its owner'
   const focus = vi.fn();
   try {
     act(() => root.render(<Harness session="a" />));
+    const previousSession = schedule!;
     schedule!(focus);
     expect(frames.size).toBe(1);
     act(() => root.render(<Harness session="b" />));
+    expect(frames.size).toBe(0);
+    previousSession(focus);
     expect(frames.size).toBe(0);
     schedule!(focus);
     act(() => root.unmount());

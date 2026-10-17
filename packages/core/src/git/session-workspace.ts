@@ -5,7 +5,7 @@ import { createDefaultRepositoryService } from '../default-repository-service.js
 import { SessionWorkspace as RepositorySessionWorkspace } from '../workspace/session-workspace.js';
 export * from '../workspace/session-workspace.js';
 
-/** Compatibility construction for the historical Git entry point. New composition supplies repositories. */
+/** Permanent Git-specific constructor; repository-neutral composition uses @agentctl/core/workspace. */
 export class SessionWorkspace extends RepositorySessionWorkspace {
   constructor(
     db: DbClient,
