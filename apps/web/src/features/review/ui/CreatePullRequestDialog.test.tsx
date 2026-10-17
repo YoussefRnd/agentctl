@@ -11,7 +11,7 @@ vi.mock('@agentctl/api-client', async (original) => ({
   ...(await original<object>()),
   generateGitDraft: mocks.generate,
 }));
-vi.mock('../model/useGitStatus', () => ({
+vi.mock('@/shared/workspace/useGitStatus', () => ({
   useGitStatus: () => ({
     gitStatus: { remoteName: 'origin', branch: mocks.branch },
     createPullRequest: mocks.create,

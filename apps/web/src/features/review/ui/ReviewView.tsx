@@ -1,3 +1,4 @@
+import type { ReviewComposerActions } from '../model/composer-actions';
 import { canMutateWorkspace } from '@agentctl/shared';
 import { useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ReviewHeader } from './ReviewHeader';
@@ -7,10 +8,10 @@ import { useReviewDiffs } from '../model/useReviewDiffs';
 import { ReviewClosedState, ReviewLoadingState, ReviewEmptyState } from './ReviewStates';
 import { ReviewFileList } from './ReviewFileList';
 import { ReviewGitActions } from './ReviewGitActions';
-import { useOpenWorkspaceFile, useSession, useSessionStream } from '@/features/sessions';
+import { useOpenWorkspaceFile, useSessionWorkspace, useSessionStream } from '@/features/sessions';
 import { extractLatestTurnTouchedFiles, resolveTurnReviewFiles } from '../lib/turnChanges';
 import { useReviewUIStore, type ReviewScope } from '../model/useReviewUIStore';
-import { useGitStatus } from '../model/useGitStatus';
+import { useGitStatus } from '@/shared/workspace/useGitStatus';
 import {
   useMutation,
   useQueries,
@@ -33,7 +34,7 @@ function combineDetails(results: UseQueryResult<ReviewFileItem | undefined>[]) {
   return results.map(({ data, isError }) => ({ data, isError }));
 }
 
-export function ReviewView() {
+export function ReviewView({ composerActions }: { composerActions: ReviewComposerActions }) {
   const openWorkspaceFile = useOpenWorkspaceFile();
   const {
     reviewData,
@@ -56,7 +57,7 @@ export function ReviewView() {
     mergeSession: onMerge,
     discardSession: onDiscard,
     isDiscardingSession: isDiscarding,
-  } = useSession();
+  } = useSessionWorkspace();
 
   const { events } = useSessionStream();
 
@@ -462,6 +463,7 @@ export function ReviewView() {
         />
       ) : (
         <ReviewFileList
+          composerActions={composerActions}
           files={parsedFiles}
           collapsedFiles={state.collapsedFiles}
           onToggleFile={(p) => {

@@ -72,6 +72,35 @@ for (const path of await walk(sourceRoot)) {
   }
 
   for (const specifier of imports) {
+    const resolvedTarget = specifier.startsWith('@/')
+      ? resolve(sourceRoot, specifier.slice(2))
+      : specifier.startsWith('.')
+        ? resolve(dirname(path), specifier)
+        : undefined;
+    const targetArea = resolvedTarget
+      ? relative(sourceRoot, resolvedTarget).split(sep)[0]
+      : undefined;
+    const targetFeature = resolvedTarget ? featureName(resolvedTarget) : undefined;
+    if (
+      relative(sourceRoot, path).split(sep)[0] === 'shared' &&
+      ['app', 'routes', 'features'].includes(targetArea)
+    ) {
+      report(
+        path,
+        'shared capabilities cannot depend on application or feature code, including relative barrels',
+      );
+    }
+    if (
+      production &&
+      ((ownerFeature === 'sessions' && ['composer', 'review'].includes(targetFeature)) ||
+        (ownerFeature === 'composer' && targetFeature === 'review') ||
+        (ownerFeature === 'review' && targetFeature === 'composer'))
+    ) {
+      report(
+        path,
+        'session, composer and review composition must follow their accepted dependency direction',
+      );
+    }
     const aliasFeature = featureFromSpecifier(specifier);
     recordDependency(aliasFeature?.name);
     if (aliasFeature && aliasFeature.name !== ownerFeature && aliasFeature.internalPath) {
@@ -118,5 +147,19 @@ if (errors.length > 0) {
   for (const error of errors) console.error(`- ${error}`);
   process.exitCode = 1;
 } else {
-  console.log('Architecture boundaries are valid.');
+  if (process.argv.includes('--json'))
+    console.log(
+      JSON.stringify(
+        {
+          features: Object.fromEntries(
+            [...featureGraph].sort().map(([key, values]) => [key, [...values].sort()]),
+          ),
+          cycles: cycleEdges(featureGraph),
+          baseline: cycleBaseline,
+        },
+        null,
+        2,
+      ),
+    );
+  else console.log('Architecture boundaries are valid.');
 }

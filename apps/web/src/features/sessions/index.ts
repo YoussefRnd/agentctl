@@ -1,5 +1,3 @@
-export { SessionHeader } from './ui/SessionHeader.js';
-export { QuickLaunchSessionDialog } from './ui/QuickLaunchSessionDialog.js';
 export { RewindConfirmDialog } from './ui/RewindConfirmDialog.js';
 export { RewindMenu } from './ui/RewindMenu.js';
 export type { RewindMode } from './ui/RewindMenu.js';
@@ -29,3 +27,10 @@ export { sessionQueries } from './api/sessionQueries.js';
 export { useSessionTurnIndex } from './model/useSessionTurnIndex.js';
 
 export { prefetchSessionNavigation } from './api/sessionNavigation.js';
+export { NativeSessionImport } from './ui/NativeSessionImport.js';
+export {
+  useSessionWorkspace,
+  useSessionConfiguration,
+  type SessionWorkspaceModel,
+  type SessionConfigurationModel,
+} from './model/SessionConfigContext.js';

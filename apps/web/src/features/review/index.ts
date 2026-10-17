@@ -2,8 +2,8 @@ export { ReviewView } from './ui/ReviewView.js';
 export { ReviewHeader, type ReviewFile } from './ui/ReviewHeader.js';
 export { ReviewGitActions } from './ui/ReviewGitActions.js';
 export { ReviewFileList } from './ui/ReviewFileList.js';
-export { EditorBrandIcon } from './ui/EditorIcons.js';
-export { useGitStatus } from './model/useGitStatus.js';
+export { EditorBrandIcon } from '../../shared/editors/EditorIcons.js';
+export { useGitStatus } from '../../shared/workspace/useGitStatus.js';
 export {
   extractLatestTurnTouchedFiles,
   extractTurnChanges,
@@ -16,3 +16,4 @@ export {
   type ReviewTurnSelection,
   type ReviewUIState,
 } from './model/useReviewUIStore.js';
+export type { ReviewComposerActions } from './model/composer-actions.js';

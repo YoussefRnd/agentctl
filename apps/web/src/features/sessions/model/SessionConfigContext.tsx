@@ -87,3 +87,60 @@ export function useSession() {
   }
   return context;
 }
+
+/** Typed capability views over the existing configuration subscription; no new state owner. */
+export type SessionWorkspaceModel = Pick<
+  SessionConfigContextValue,
+  | 'sessionId'
+  | 'sessionData'
+  | 'isLoadingSession'
+  | 'reviewData'
+  | 'isLoadingReview'
+  | 'stageFile'
+  | 'revertFile'
+  | 'unstageFile'
+  | 'stageAll'
+  | 'unstageAll'
+  | 'commitChanges'
+  | 'pushChanges'
+  | 'pullChanges'
+  | 'mergeBranch'
+  | 'isMergingBranch'
+  | 'isPushing'
+  | 'isPulling'
+  | 'isCommitting'
+  | 'isStagingAll'
+  | 'isUnstagingAll'
+  | 'refetchReview'
+  | 'branches'
+  | 'switchBranch'
+  | 'isSwitchingBranch'
+  | 'switchMode'
+  | 'isSwitchingMode'
+  | 'mergeSession'
+  | 'isMergingSession'
+  | 'discardSession'
+  | 'isDiscardingSession'
+>;
+export type SessionConfigurationModel = Pick<
+  SessionConfigContextValue,
+  | 'sessionId'
+  | 'sessionData'
+  | 'isLoadingSession'
+  | 'capabilities'
+  | 'setApprovalMode'
+  | 'isUpdatingApprovalMode'
+  | 'setAgentPersona'
+  | 'isUpdatingAgentPersona'
+  | 'updateProvider'
+  | 'isUpdatingProvider'
+  | 'setSessionConfigOption'
+  | 'isUpdatingConfigOption'
+>;
+
+export function useSessionWorkspace(): SessionWorkspaceModel {
+  return useSession();
+}
+export function useSessionConfiguration(): SessionConfigurationModel {
+  return useSession();
+}

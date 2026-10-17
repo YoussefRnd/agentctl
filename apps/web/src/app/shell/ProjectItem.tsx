@@ -16,7 +16,8 @@ import type { SidebarProject } from '@agentctl/api-client';
 import { Dropdown, Tooltip } from '@agentctl/ui';
 import { RepoForkedIcon } from '@primer/octicons-react';
 import { RelativeTime } from '@/shared';
-import { QuickLaunchSessionDialog, prefetchSessionNavigation } from '@/features/sessions';
+import { prefetchSessionNavigation } from '@/features/sessions';
+import { QuickLaunchSessionDialog } from '@/app/session/QuickLaunchSessionDialog';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface ConfirmConfig {

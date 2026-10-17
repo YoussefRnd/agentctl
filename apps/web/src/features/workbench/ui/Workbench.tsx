@@ -1,3 +1,4 @@
+import type { ReviewComposerActions } from '@/features/review';
 import { useState, useRef, useEffect, Suspense, lazy } from 'react';
 import { StatusPane } from './StatusPane';
 import { useSession } from '@/features/sessions';
@@ -46,6 +47,7 @@ const STATIC_TABS: TabDefinition[] = [
 ];
 
 interface WorkbenchProps {
+  composerActions: ReviewComposerActions;
   isOpen: boolean;
   tab: WorkbenchTab | null;
   openTabs?: WorkbenchTab[];
@@ -58,6 +60,7 @@ interface WorkbenchProps {
 }
 
 export function Workbench({
+  composerActions,
   isOpen: _isOpen,
   tab,
   openTabs,
@@ -392,7 +395,7 @@ export function Workbench({
                 }
               >
                 {tab === 'status' && <StatusPane />}
-                {tab === 'changes' && <ReviewView />}
+                {tab === 'changes' && <ReviewView composerActions={composerActions} />}
                 {tab === 'terminal' && <InteractiveTerminal />}
               </Suspense>
             )}

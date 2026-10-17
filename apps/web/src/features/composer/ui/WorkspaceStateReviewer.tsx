@@ -3,8 +3,8 @@ import { Monitor } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent, cn } from '@agentctl/ui';
 import { GitBranchIcon, RepoPullIcon, RepoPushIcon } from '@primer/octicons-react';
 import { toast } from 'sonner';
-import { useSession } from '@/features/sessions';
-import { useGitStatus } from '@/features/review';
+import { useSessionWorkspace } from '@/features/sessions';
+import { useGitStatus } from '@/shared/workspace/useGitStatus';
 import type { SessionWithCapabilities } from '@agentctl/shared';
 import { CommandDropdown } from './CommandDropdown';
 import { formatTokenCount } from '@/shared/lib/formatTokenCount';
@@ -250,7 +250,7 @@ export function CommandBarFooter({
   branches: string[];
   approvalControl: ReactNode;
 }) {
-  const { pushChanges, pullChanges, isPushing, isPulling, reviewData } = useSession();
+  const { pushChanges, pullChanges, isPushing, isPulling, reviewData } = useSessionWorkspace();
   const { gitStatus } = useGitStatus(sessionData?.session.id ?? '');
   const currentBranch = gitStatus.branch ?? sessionData?.session.branch ?? '';
   const hasUncommittedChanges = reviewData.files.some((file) => file.state !== 'committed');

@@ -17,7 +17,7 @@ import { Dropdown, cn } from '@agentctl/ui';
 import { toast } from 'sonner';
 import type { parseDiff } from '@/shared/lib/diff-parser';
 import { FileIcon } from '@/shared';
-import { useDraftStore } from '@/features/composer';
+import type { ReviewComposerActions } from '../model/composer-actions';
 
 const STATE_BADGE: Record<FileState, { letter: string; color: string; label: string }> = {
   modified: {
@@ -53,6 +53,7 @@ const STATE_BADGE: Record<FileState, { letter: string; color: string; label: str
 };
 
 export interface ReviewFileListProps {
+  composerActions: ReviewComposerActions;
   files?: (ReviewFile & { hunks: ReturnType<typeof parseDiff> })[];
   groupedFiles?: Record<FileState, (ReviewFile & { hunks: ReturnType<typeof parseDiff> })[]>;
   collapsedSections?: Record<string, boolean>;
@@ -77,6 +78,7 @@ export interface ReviewFileListProps {
 }
 
 export function ReviewFileList({
+  composerActions,
   files,
   groupedFiles,
   collapsedFiles,
@@ -303,7 +305,7 @@ export function ReviewFileList({
                         <Dropdown.Item
                           className="gap-2"
                           onSelect={() => {
-                            useDraftStore.getState().attachContextToComposer({
+                            composerActions.attachContextToComposer({
                               id: `file:${file.path}`,
                               type: 'file',
                               title: fileName,
@@ -376,6 +378,7 @@ export function ReviewFileList({
                     </p>
                   )}
                   <DiffBlock
+                    composerActions={composerActions}
                     path={file.path}
                     hunks={file.hunks}
                     isCollapsed={collapsed}

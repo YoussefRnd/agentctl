@@ -24,9 +24,10 @@ import { DiffLine } from './DiffLine';
 
 import { Tooltip } from '@agentctl/ui';
 import { toast } from 'sonner';
-import { useDraftStore } from '@/features/composer';
+import type { ReviewComposerActions } from '../../model/composer-actions';
 
 interface DiffBlockProps {
+  composerActions: ReviewComposerActions;
   scrollElement: RefObject<HTMLDivElement | null>;
   scrollOffset: number;
   path: string;
@@ -41,7 +42,15 @@ interface DiffBlockProps {
   wrapLines?: boolean;
 }
 
-function HunkHeader({ hunk, path }: { hunk: DiffHunk; path: string }) {
+function HunkHeader({
+  hunk,
+  path,
+  composerActions,
+}: {
+  hunk: DiffHunk;
+  path: string;
+  composerActions: ReviewComposerActions;
+}) {
   return (
     <div className="group/hunk bg-surface-secondary/10 text-text-muted/30 border-border/10 flex items-center justify-between border-y px-4 py-1.5 font-mono text-[9px] select-none">
       <span className="text-text-muted/60 font-mono text-[10.5px] font-medium">{hunk.header}</span>
@@ -59,11 +68,9 @@ function HunkHeader({ hunk, path }: { hunk: DiffHunk; path: string }) {
               );
             if (hunk.lines.length > maxLines)
               rawLines.push(`... (${hunk.lines.length - maxLines} more lines)`);
-            useDraftStore
-              .getState()
-              .insertIntoComposer(
-                `@${path} \`${hunk.header}\`:\n\`\`\`diff\n${rawLines.join('\n')}\n\`\`\``,
-              );
+            composerActions.insertIntoComposer(
+              `@${path} \`${hunk.header}\`:\n\`\`\`diff\n${rawLines.join('\n')}\n\`\`\``,
+            );
             toast.success('Quoted hunk in chat');
           }}
           className="text-text-muted hover:text-text-main flex h-5 cursor-pointer items-center gap-1 rounded px-1.5 text-[8px] font-medium hover:bg-white/10"
@@ -77,6 +84,7 @@ function HunkHeader({ hunk, path }: { hunk: DiffHunk; path: string }) {
 }
 
 function DiffBody({
+  composerActions,
   scrollElement,
   scrollOffset,
   hunks,
@@ -90,6 +98,7 @@ function DiffBody({
   scrollElement: RefObject<HTMLDivElement | null>;
   scrollOffset: number;
   hunks: DiffHunk[];
+  composerActions: ReviewComposerActions;
   path: string;
   language?: string;
   hideOldLineNumber: boolean;
@@ -164,7 +173,8 @@ function DiffBody({
     : `calc(${longestLine * columns}ch + ${gutterWidth * columns}px)`;
   function renderRow(index: number) {
     const row = rows[index];
-    if (row.hunk) return <HunkHeader hunk={row.hunk} path={path} />;
+    if (row.hunk)
+      return <HunkHeader hunk={row.hunk} path={path} composerActions={composerActions} />;
     if (row.line)
       return (
         <DiffLine
@@ -218,6 +228,7 @@ function DiffBody({
 }
 
 export const DiffBlock = memo(function DiffBlock({
+  composerActions,
   scrollElement,
   scrollOffset,
   path,
@@ -336,7 +347,7 @@ export const DiffBlock = memo(function DiffBlock({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  useDraftStore.getState().attachContextToComposer({
+                  composerActions.attachContextToComposer({
                     id: `file:${path}`,
                     type: 'file',
                     title: fileName,
@@ -388,6 +399,7 @@ export const DiffBlock = memo(function DiffBlock({
 
       {!isCollapsed && (
         <DiffBody
+          composerActions={composerActions}
           scrollElement={scrollElement}
           scrollOffset={scrollOffset}
           path={path}

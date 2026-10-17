@@ -1,13 +1,10 @@
+import { SessionHeader } from '@/app/session/SessionHeader';
+import { useDraftStore } from '@/features/composer';
 import { useEffect, useMemo } from 'react';
 
 import { AppShell, Sidebar } from '@/app/shell';
 import { useShellStore } from '@/app/shell';
-import {
-  SessionHeader,
-  useSession,
-  useSessionActions,
-  useDoubleEscToStop,
-} from '@/features/sessions';
+import { useSession, useSessionActions, useDoubleEscToStop } from '@/features/sessions';
 import { Workbench } from '@/features/workbench';
 import { MainFeed } from '@/features/conversation';
 import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
@@ -15,6 +12,12 @@ import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
 const sidebarElement = <Sidebar />;
 
 export function SessionWorkspace() {
+  const attachContextToComposer = useDraftStore((state) => state.attachContextToComposer);
+  const insertIntoComposer = useDraftStore((state) => state.insertIntoComposer);
+  const composerActions = useMemo(
+    () => ({ attachContextToComposer, insertIntoComposer }),
+    [attachContextToComposer, insertIntoComposer],
+  );
   const workbenchTab = useWorkbenchStore((s) => s.workbenchTab);
   const openWorkbenchTabs = useWorkbenchStore((s) => s.openWorkbenchTabs);
   const isWorkbenchOpen = useWorkbenchStore((s) => s.isWorkbenchOpen);
@@ -77,6 +80,7 @@ export function SessionWorkspace() {
   const workbenchElement = useMemo(
     () => (
       <Workbench
+        composerActions={composerActions}
         isOpen={isWorkbenchOpen}
         tab={workbenchTab}
         openTabs={openWorkbenchTabs}
@@ -89,6 +93,7 @@ export function SessionWorkspace() {
       />
     ),
     [
+      composerActions,
       isWorkbenchOpen,
       workbenchTab,
       openWorkbenchTabs,

@@ -5,7 +5,7 @@ import { AgentIcon } from '@/shared';
 import { ProviderPicker } from '@/features/providers';
 import { CommandDropdown } from './CommandDropdown';
 import { ThinkingEffortControl } from './ThinkingEffortControl';
-import { ConfigOptionsPanel, useSession } from '@/features/sessions';
+import { ConfigOptionsPanel, useSessionConfiguration } from '@/features/sessions';
 import {
   findAgentConfigOption,
   getAgentConfigCategory,
@@ -197,7 +197,7 @@ export function AgentPersonaSelector({
   isUpdating: boolean;
   setAgentPersona: (persona: string) => Promise<void>;
 }) {
-  const { setSessionConfigOption } = useSession();
+  const { setSessionConfigOption } = useSessionConfiguration();
   if (isLoading || !sessionData?.session) return null;
 
   const { agentPersona, availableAgentPersonas } = sessionData.session;
@@ -236,7 +236,7 @@ export function AgentPersonaSelector({
 }
 
 export function AdvancedSettingsPopover({ isLoading }: { isLoading: boolean }) {
-  const { sessionData } = useSession();
+  const { sessionData } = useSessionConfiguration();
   const [isOpen, setIsOpen] = useState(false);
 
   if (isLoading || !sessionData?.session) return null;

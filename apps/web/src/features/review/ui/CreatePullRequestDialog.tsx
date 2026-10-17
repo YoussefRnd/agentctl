@@ -11,7 +11,7 @@ import {
 import { GitPullRequestIcon, SyncIcon, ArrowRightIcon } from '@primer/octicons-react';
 
 import type { CreatePullRequestResult } from '@agentctl/shared';
-import { useGitStatus } from '../model/useGitStatus';
+import { useGitStatus } from '@/shared/workspace/useGitStatus';
 
 interface CreatePullRequestDialogProps {
   open: boolean;

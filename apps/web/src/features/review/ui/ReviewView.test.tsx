@@ -40,12 +40,11 @@ vi.mock('@agentctl/api-client', async (original) => ({
   api: { getRepositoryReview: fixture.getRepositoryReview },
 }));
 vi.mock('@/features/sessions', () => ({
-  useSession: () => fixture.session,
+  useSessionWorkspace: () => fixture.session,
   useSessionStream: () => ({ events: [] }),
   useOpenWorkspaceFile: () => vi.fn(),
 }));
-vi.mock('@/features/composer', () => ({ useDraftStore: { getState: vi.fn() } }));
-vi.mock('../model/useGitStatus', () => ({
+vi.mock('@/shared/workspace/useGitStatus', () => ({
   useGitStatus: () => ({
     gitStatus: {
       isRepo: true,
@@ -101,7 +100,9 @@ it('expands all without fetching off-screen patches, and cancels requests when s
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <ReviewView />
+        <ReviewView
+          composerActions={{ attachContextToComposer: vi.fn(), insertIntoComposer: vi.fn() }}
+        />
       </QueryClientProvider>,
     ),
   );
@@ -149,7 +150,9 @@ async function renderReview(scope: ReviewScope) {
   act(() =>
     root.render(
       <QueryClientProvider client={client}>
-        <ReviewView />
+        <ReviewView
+          composerActions={{ attachContextToComposer: vi.fn(), insertIntoComposer: vi.fn() }}
+        />
       </QueryClientProvider>,
     ),
   );
@@ -198,7 +201,9 @@ it('uses opaque revision references and reloads expanded files when the capture 
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        <ReviewView />
+        <ReviewView
+          composerActions={{ attachContextToComposer: vi.fn(), insertIntoComposer: vi.fn() }}
+        />
       </QueryClientProvider>,
     );
   });

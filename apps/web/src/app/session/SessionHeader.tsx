@@ -14,12 +14,11 @@ import {
   type SidebarProject,
 } from '@agentctl/api-client';
 import { toast } from 'sonner';
-import { useGitStatus } from '@/features/review';
+import { useGitStatus } from '@/shared/workspace/useGitStatus';
 import { useProjectExpansionStore } from '@/shared/stores/useProjectExpansionStore';
-import { useSession } from '../model/SessionContext';
+import { useSessionWorkspace, OpenInPicker } from '@/features/sessions';
 import { projectKeys, sessionKeys } from '@/shared/lib/queryKeys';
 import { formatShortcut } from '@/shared/lib/platform';
-import { OpenInPicker } from './OpenInPicker';
 import { SessionHeaderTitle } from './SessionHeaderTitle';
 import { SessionHeaderDialogs } from './SessionHeaderDialogs';
 import type { WorkbenchTab } from '@/shared/stores/useWorkbenchStore';
@@ -38,7 +37,7 @@ export function SessionHeader({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const keepProjectExpanded = useProjectExpansionStore((state) => state.keepProjectExpanded);
-  const { sessionId, sessionData, reviewData } = useSession();
+  const { sessionId, sessionData, reviewData } = useSessionWorkspace();
   const { gitStatus } = useGitStatus(sessionId);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);

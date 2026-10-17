@@ -1,4 +1,4 @@
-import { NativeSessionImport } from './NativeSessionImport';
+import { NativeSessionImport } from '@/features/sessions';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {

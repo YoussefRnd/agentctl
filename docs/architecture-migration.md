@@ -7,7 +7,7 @@ order, acceptance criteria, and evidence needed to declare the migration complet
 
 ## Status and completion rules
 
-Baseline: **2026-10-16**. **8 of 16 checkpoints are complete locally; 8 remain open.**
+Baseline: **2026-10-16**. **9 of 16 checkpoints are complete locally; 7 remain open.**
 This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03
 is committed as `e1fc843`; subsequent completed checkpoints are recorded in descriptive
 implementation commits. No merge or release is implied.
@@ -40,7 +40,7 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 | CP05 | Repository-neutral session workspace and checkpoint workflows | Done    | CP03, CP04             |
 | CP06 | Provider lifecycle and agent protocol composition             | Done    | CP03                   |
 | CP07 | Remaining core domains and infrastructure ownership           | Done    | CP03, CP06             |
-| CP08 | Composer, review, and session dependency cycles               | Planned | CP01                   |
+| CP08 | Composer, review, and session dependency cycles               | Done    | CP01                   |
 | CP09 | Conversation and subagent dependency cycle                    | Planned | CP01                   |
 | CP10 | Complete frontend state, effects, and rendering audit         | Planned | CP02, CP08, CP09       |
 | CP11 | Shared contracts, client APIs, and public exports             | Planned | CP05, CP06, CP07, CP10 |
@@ -69,7 +69,7 @@ until the full audit, even where initial work has already landed locally.
 | Core Git, repository, and forge modules                                                                    | CP04, CP05           | Accepted                    |
 | Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Accepted                    |
 | Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Accepted                    |
-| Web composer, review, and session features                                                                 | CP08, CP10           | Pending                     |
+| Web composer, review, and session features                                                                 | CP08, CP10           | CP08 accepted; CP10 pending |
 | Web conversation and subagent features                                                                     | CP09, CP10           | Pending                     |
 | Web projects, providers, settings, workbench, updates, command palette, and retained feature directories   | CP10                 | Pending                     |
 | Web app/shell/routes, shared capabilities, performance lab, and test utilities                             | CP10, CP14           | Pending                     |
@@ -368,18 +368,34 @@ context, MCP local SDK peers, protocol and server integration coverage. No paid-
 Baseline edges in `apps/web/architecture-cycles.json`: composer → review, composer → sessions,
 review → composer, review → sessions, sessions → composer, sessions → review.
 
-- [ ] Move screen-level composition such as session headers and launch/workspace review dialogs
+- [x] Move screen-level composition such as session headers and launch/workspace review dialogs
       to the appropriate page/composition owner; expose narrow session model APIs to leaf features.
-- [ ] Replace review's direct composer-store access with explicit draft/context actions supplied
+- [x] Replace review's direct composer-store access with explicit draft/context actions supplied
       through composition or a deliberately owned capability. Avoid a hidden global event bus.
-- [ ] Give Git status/editor presentation and workspace state a suitable owner so session models
+- [x] Give Git status/editor presentation and workspace state a suitable owner so session models
       do not depend back on review or composer UI.
-- [ ] Remove all six listed cycle exceptions; verify that no indirect replacement cycle exists.
-- [ ] Preserve drafts, comment/context insertion, provider configuration, queued sends, review
+- [x] Remove all six listed cycle exceptions; verify that no indirect replacement cycle exists.
+- [x] Preserve drafts, comment/context insertion, provider configuration, queued sends, review
       captures, and session navigation behavior and update-isolation characteristics.
 
 Exit evidence: dependency graph diff, six deleted baseline entries, relevant component/hook tests,
 and production browser journeys covering the composed session screen.
+
+Acceptance (2026-10-17): [frontend composition audit](frontend-architecture.md) and the
+[parsed feature graph](frontend-feature-graph.json) record the resulting owners. Header/title/
+lifecycle dialogs and quick launch moved above features into app/session composition. Composer
+and review consume typed session workspace/configuration capabilities. Git status and editor
+presentation have shared owners with no feature dependency. Page-supplied draft actions flow
+through Workbench/ReviewView/file/diff rendering; review no longer selects the composer store.
+All six listed cyclic edges are removed; the only remaining cycle is conversation/subagents.
+Relative shared-barrel imports cannot conceal application/feature dependencies.
+
+Verification: **239 tests / 36 focused files**, plus **7 tests / 1 file** after the injected-action
+regression; all five architecture regressions, workspace typechecks, lint, formatting/whitespace
+and the web production build passed. Production browser fixture navigation/deferred-asset checks
+and draft restoration, context attachment, hunk quotation and launch-dialog cancellation passed
+(`/tmp/agentctl-screen-browser.json`). These are synthetic browser journeys, not live-provider or
+native Electron checks. Full workspace/build verification follows the conversation acceptance.
 
 ## CP09 — Conversation and subagent dependency cycle
 

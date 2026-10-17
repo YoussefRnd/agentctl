@@ -1,3 +1,4 @@
+import { createArchitectureFixture, runArchitectureJourneys } from './architecture-journeys.mjs';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -10,7 +11,10 @@ import { createJourneyApi, runJourneys } from './performance-journeys.mjs';
 const journeys = process.argv.includes('--journeys');
 const workerSmoke = process.argv.includes('--worker-smoke');
 const production = journeys || process.argv.includes('--production');
-const journeyApi = journeys ? createJourneyApi() : null;
+const architectureJourneys = process.argv.includes('--architecture-journeys');
+const journeyApi = journeys
+  ? createJourneyApi(120, architectureJourneys ? createArchitectureFixture() : {})
+  : null;
 const entryHtml = production ? 'index.html' : 'performance.html';
 const webRoot = resolve(import.meta.dirname, '..');
 const dist = process.env.AGENTCTL_PERF_DIST
@@ -232,6 +236,14 @@ try {
     let report = journeys
       ? await runJourneys({ send, evaluate, origin, api: journeyApi, errors })
       : undefined;
+    if (report && architectureJourneys)
+      report.architecture = await runArchitectureJourneys({
+        send,
+        evaluate,
+        origin,
+        api: journeyApi,
+        errors,
+      });
     while (!report && Date.now() < deadline) {
       await sleep(1000);
       const state = await evaluate(

@@ -10,7 +10,6 @@ const composer = vi.hoisted(() => ({
   attachContextToComposer: vi.fn(),
   insertIntoComposer: vi.fn(),
 }));
-vi.mock('@/features/composer', () => ({ useDraftStore: { getState: () => composer } }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn() } }));
 
 const roots: Root[] = [];
@@ -21,7 +20,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function renderFile(overrides: Partial<ReviewFile> = {}) {
+function renderFile(overrides: Partial<ReviewFile> = {}, composerActions = composer) {
   mockVirtualViewport();
   const path = 'terraform-examples/terraform.tfvars.example';
   const diff = '@@ -1,1 +1,1 @@\n-old\n+new\n@@ -5,1 +5,1 @@\n-other\n+updated';
@@ -40,6 +39,7 @@ function renderFile(overrides: Partial<ReviewFile> = {}) {
   act(() =>
     root.render(
       <ReviewFileList
+        composerActions={composerActions}
         files={[{ ...file, hunks: parseDiff(diff) }]}
         collapsedFiles={{ [path]: false }}
         fileStats={new Map()}
@@ -64,6 +64,25 @@ function renderFile(overrides: Partial<ReviewFile> = {}) {
 }
 
 describe('review file actions', () => {
+  it('routes context and quotes to the actions supplied by its containing page', async () => {
+    const target = { attachContextToComposer: vi.fn(), insertIntoComposer: vi.fn() };
+    const { container, openMenu, select, file } = renderFile({}, target);
+    openMenu();
+    select('Add to chat');
+    expect(target.attachContextToComposer).toHaveBeenCalledWith(
+      expect.objectContaining({ value: file.path, type: 'file' }),
+    );
+    act(() =>
+      [...container.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Quote')
+        ?.click(),
+    );
+    expect(target.insertIntoComposer).toHaveBeenCalledWith(
+      expect.stringContaining(`@${file.path}`),
+    );
+    expect(composer.attachContextToComposer).not.toHaveBeenCalled();
+    expect(composer.insertIntoComposer).not.toHaveBeenCalled();
+  });
   it('virtualizes many small hunks together and keeps split scrolling bounded', async () => {
     mockVirtualViewport();
     const path = 'src/large.ts';
@@ -79,6 +98,7 @@ describe('review file actions', () => {
     const render = (viewMode: 'inline' | 'split', wrapLines = false) =>
       root.render(
         <ReviewFileList
+          composerActions={composer}
           files={[file]}
           collapsedFiles={{ [path]: false }}
           fileStats={new Map()}
@@ -130,6 +150,7 @@ describe('review file actions', () => {
     await act(async () =>
       root.render(
         <ReviewFileList
+          composerActions={composer}
           files={files}
           collapsedFiles={collapsedFiles}
           fileStats={new Map()}
@@ -146,6 +167,7 @@ describe('review file actions', () => {
       const [target, setTarget] = useState<string | null>('src/file-180.ts');
       return (
         <ReviewFileList
+          composerActions={composer}
           files={files}
           collapsedFiles={collapsedFiles}
           fileStats={new Map()}

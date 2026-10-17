@@ -14,9 +14,11 @@ const gitState = vi.hoisted(() => ({
   aheadCount: 0,
   behindCount: 0,
 }));
-vi.mock('@/features/review', () => ({ useGitStatus: () => ({ gitStatus: gitState }) }));
+vi.mock('@/shared/workspace/useGitStatus', () => ({
+  useGitStatus: () => ({ gitStatus: gitState }),
+}));
 vi.mock('@/features/sessions', () => ({
-  useSession: () => ({ reviewData: { files: [] }, isPushing: false, isPulling: false }),
+  useSessionWorkspace: () => ({ reviewData: { files: [] }, isPushing: false, isPulling: false }),
 }));
 
 afterEach(() => {

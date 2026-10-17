@@ -4,7 +4,7 @@ import { ChevronDown, FolderClosed, Copy, Check } from 'lucide-react';
 import { Dropdown, Tooltip, cn } from '@agentctl/ui';
 import { openInEditor, getAvailableEditors, EDITORS } from '@agentctl/api-client';
 import { toast } from 'sonner';
-import { EditorBrandIcon } from '@/features/review';
+import { EditorBrandIcon } from '@/shared/editors/EditorIcons';
 
 const PREFERRED_EDITOR_KEY = 'agentctl:preferred-editor';
 
