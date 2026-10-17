@@ -61,6 +61,10 @@ provider.
 | `packages/api-client` | Typed browser and desktop API client                                         |
 | `packages/ui`         | Shared design system primitives and patterns                                 |
 
+The source architecture migration is complete: **16/16 checkpoints**. The
+[acceptance record](docs/architecture-migration.md#final-acceptance--2026-10-17) identifies the verified
+revision, complete file coverage, test/build/browser/native results and product/platform limits.
+
 Run `pnpm architecture:check` to enforce package, server, and frontend boundaries.
 See [Code architecture](docs/code-architecture.md) for design patterns, file ownership,
 state conventions and compatibility changes. The [architecture migration record](docs/architecture-migration.md) contains the ownership

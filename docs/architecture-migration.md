@@ -1,13 +1,13 @@
 # AgentCtl architecture migration tracker
 
-This is the source of truth for completing the architecture migration across AgentCtl.
+This records the completed architecture migration across AgentCtl.
 The design rules live in [Code architecture](code-architecture.md); repository semantics live
 in [Repository architecture](repository-architecture.md). This tracker defines the work,
 order, acceptance criteria, and evidence needed to declare the migration complete.
 
 ## Status and completion rules
 
-Baseline: **2026-10-16**. **15 of 16 checkpoints are complete locally; 1 remains open.**
+Baseline: **2026-10-16**. **16 of 16 checkpoints are complete locally; none remain open.**
 This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03
 is committed as `e1fc843`; subsequent completed checkpoints are recorded in descriptive
 implementation commits. No merge or release is implied.
@@ -30,24 +30,24 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 
 ## Checkpoint dashboard
 
-| ID   | Checkpoint                                                    | Status      | Depends on             |
-| ---- | ------------------------------------------------------------- | ----------- | ---------------------- |
-| CP00 | Scope, coverage, and acceptance baseline                      | Done        | —                      |
-| CP01 | Initial boundaries and maintainability foundation             | Done        | CP00                   |
-| CP02 | Remaining server workflows and transport boundaries           | Done        | CP01                   |
-| CP03 | Session execution, persistence, and runtime ownership         | Done        | CP02                   |
-| CP04 | Git capability and forge separation                           | Done        | CP01                   |
-| CP05 | Repository-neutral session workspace and checkpoint workflows | Done        | CP03, CP04             |
-| CP06 | Provider lifecycle and agent protocol composition             | Done        | CP03                   |
-| CP07 | Remaining core domains and infrastructure ownership           | Done        | CP03, CP06             |
-| CP08 | Composer, review, and session dependency cycles               | Done        | CP01                   |
-| CP09 | Conversation and subagent dependency cycle                    | Done        | CP01                   |
-| CP10 | Complete frontend state, effects, and rendering audit         | Done        | CP02, CP08, CP09       |
-| CP11 | Shared contracts, client APIs, and public exports             | Done        | CP05, CP06, CP07, CP10 |
-| CP12 | Desktop lifecycle, server ownership, and IPC                  | Done        | CP02, CP03, CP06       |
-| CP13 | Design system and UI ownership                                | Done        | CP10                   |
-| CP14 | Complete architecture enforcement and delivery tooling        | Done        | CP07, CP11, CP12, CP13 |
-| CP15 | Repository-wide acceptance and migration closure              | In progress | CP00–CP14              |
+| ID   | Checkpoint                                                    | Status | Depends on             |
+| ---- | ------------------------------------------------------------- | ------ | ---------------------- |
+| CP00 | Scope, coverage, and acceptance baseline                      | Done   | —                      |
+| CP01 | Initial boundaries and maintainability foundation             | Done   | CP00                   |
+| CP02 | Remaining server workflows and transport boundaries           | Done   | CP01                   |
+| CP03 | Session execution, persistence, and runtime ownership         | Done   | CP02                   |
+| CP04 | Git capability and forge separation                           | Done   | CP01                   |
+| CP05 | Repository-neutral session workspace and checkpoint workflows | Done   | CP03, CP04             |
+| CP06 | Provider lifecycle and agent protocol composition             | Done   | CP03                   |
+| CP07 | Remaining core domains and infrastructure ownership           | Done   | CP03, CP06             |
+| CP08 | Composer, review, and session dependency cycles               | Done   | CP01                   |
+| CP09 | Conversation and subagent dependency cycle                    | Done   | CP01                   |
+| CP10 | Complete frontend state, effects, and rendering audit         | Done   | CP02, CP08, CP09       |
+| CP11 | Shared contracts, client APIs, and public exports             | Done   | CP05, CP06, CP07, CP10 |
+| CP12 | Desktop lifecycle, server ownership, and IPC                  | Done   | CP02, CP03, CP06       |
+| CP13 | Design system and UI ownership                                | Done   | CP10                   |
+| CP14 | Complete architecture enforcement and delivery tooling        | Done   | CP07, CP11, CP12, CP13 |
+| CP15 | Repository-wide acceptance and migration closure              | Done   | CP00–CP14              |
 
 Recommended execution order: CP02 → CP03 → CP04 → CP05 → CP06 → CP07 → CP08 → CP09 →
 CP10 → CP11 → CP12 → CP13 → CP14 → CP15. Each checkpoint may use multiple reviewable
@@ -58,8 +58,8 @@ changes; keep a complete workflow working between changes.
 A checkpoint is responsible for every source file and its relevant tests/configuration under
 its listed area, including files absent from the hotspot list. New files must be added explicitly to their owning
 file ledger with acceptance evidence; automated checks reject missing assignments. Add a coverage row before introducing a new package or product domain.
-Acceptance is recorded at the checkpoint that closes the area; this ledger remains open
-until the full audit, even where initial work has already landed locally.
+Acceptance is recorded at the checkpoint that closes the area. Every row is accepted after
+the full audit; later additions require ownership and evidence rather than inheriting an unreviewed completion claim.
 
 | Area                                                                                                       | Owning checkpoint(s) | Acceptance |
 | ---------------------------------------------------------------------------------------------------------- | -------------------- | ---------- |
@@ -79,7 +79,7 @@ until the full audit, even where initial work has already landed locally.
 | UI components, primitives, patterns, foundations, exports, and app UI adapters                             | CP13                 | Accepted   |
 | TS configuration package, root workspace configuration, package manifests, patches, and build/test tooling | CP14                 | Accepted   |
 | CI/release workflows, hooks, scripts, browser/performance tooling, and architecture checks                 | CP14                 | Accepted   |
-| Architecture docs, migration notes, compatibility decisions, and release communication                     | CP15                 | Pending    |
+| Architecture docs, migration notes, compatibility decisions, and release communication                     | CP15                 | Accepted   |
 
 Generated bundles, dependency installations, local databases/credentials, downloaded binaries,
 and personal tool directories are outside the source migration. Their application ownership
@@ -643,20 +643,19 @@ Architecture checks, **11** regressions, **12/12** typecheck tasks with no pre-e
 empty generated outputs (**7/7 tasks, zero cached**, including web/UI/API-client dependencies),
 real native smoke and cache-hash changes after reversible web and UI edits. The application code
 covered by the full suite stayed unchanged. Final delivery logs: `/tmp/agentctl-clean-targeted-desktop-build.log`
-and `/tmp/agentctl-final-delivery-native.json`. Cache proof: `/tmp/agentctl-final-cache-proof.json`. CP15 remains open for final revision closure and
-repository/release documentation acceptance.
+and `/tmp/agentctl-final-delivery-native.json`. Cache proof: `/tmp/agentctl-final-cache-proof.json`. Final revision closure and repository/release documentation acceptance are recorded below in CP15.
 
 ## CP15 — Repository-wide acceptance and migration closure
 
 - [x] CP00–CP14 are Done with file coverage, test evidence, and resolved compatibility decisions.
-- [ ] Re-audit every coverage row against the final source tree. Record accepted, refactored, or
+- [x] Re-audit every coverage row against the final source tree. Record accepted, refactored, or
       deliberately removed modules; verify new files since CP00 are covered. Mark every row Accepted.
 - [x] Verify zero frontend cycles, no unresolved architecture violations/migration TODOs, no
       temporary migration shims, and accurate docs/public exports. Retain justified permanent aliases
       only with their explicit contract and tests.
-- [ ] Run the final verification gate below against one exact revision; record commit SHA, date,
+- [x] Run the final verification gate below against one exact revision; record commit SHA, date,
       command/results, browser/native evidence, remaining product limitations, and any source API changes.
-- [ ] Update README/design/repository/session docs to describe the completed implementation,
+- [x] Update README/design/repository/session docs to describe the completed implementation,
       replace this dashboard's statuses, and announce 16/16 complete only after the gate passes.
 
 Preflight audit (2026-10-17): all **1,163** repository files have exactly one owner across
@@ -666,8 +665,7 @@ The parsed feature graph matches its committed snapshot, has zero cycles and an 
 All permanent aliases have explicit compatibility decisions; removed forwarding paths are absent.
 Historical SQL migrations are unchanged from `2867b13`, before the architecture commits.
 README, design/repository/session guides and unreleased source compatibility notes now describe
-the implemented architecture. Final gate execution and closure are pending; no release or push
-is implied.
+the implemented architecture. All final gates passed on the exact clean revision below. No merge, push or release is implied.
 
 Final verification gate:
 
@@ -694,26 +692,88 @@ folder checkpoints, pagination, microservices, multiple server owners per databa
 features, and unrelated redesigns are separate follow-up scopes. Their absence must not be
 misrepresented as implemented backend support.
 
+## Final acceptance — 2026-10-17
+
+The accepted implementation/documentation revision is **`03994d93c13a6712e9c6884bfeed48f3e4229a4c`**.
+Every command below ran with that revision checked out and a clean working tree. All **1,163**
+committed file SHA256 values matched both before and after the gate. The closure commit changes
+only README and this acceptance record; runtime code, dependency/configuration files, public API
+fixtures and ownership ledgers remain byte-identical to the verified revision.
+
+The source architecture migration is **16/16 complete (100% of the defined migration scope)**.
+Every coverage row is Accepted. The **61** ownership areas cover **210** core source/assets,
+**81** shared/client production files, **276** web production files and **596** remaining
+server/native/UI/test/tooling/documentation files. New, stale and duplicate assignments fail
+normal checks. Retained cohesive modules are accepted without artificial splits; removed
+forwarding modules are recorded in the contracts audit. Public facades, permanent schema/type
+aggregates and lazy composition factories have explicit decisions and regression coverage.
+
+| Exact gate / acceptance command                                                                          | Result                                                                                                                                      | Local evidence                                                                |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `pnpm architecture:check`                                                                                | All files owned; package/module/public-entry policies valid; no contract/client cycles                                                      | `/tmp/agentctl-closure-quality.log`                                           |
+| `pnpm architecture:test`                                                                                 | **11/11** regressions, including actual-checker violation fixtures                                                                          | `/tmp/agentctl-closure-quality.log`                                           |
+| `pnpm lint`                                                                                              | Passed without warnings                                                                                                                     | `/tmp/agentctl-closure-quality.log`                                           |
+| `pnpm build --force`                                                                                     | **7/7** tasks, **zero cached**                                                                                                              | `/tmp/agentctl-closure-quality.log`                                           |
+| `pnpm typecheck --force`                                                                                 | **12/12** tasks, **zero cached**                                                                                                            | `/tmp/agentctl-closure-quality.log`                                           |
+| `pnpm test`                                                                                              | **1,532 tests/267 files**, **279.54 s**, no failures; architecture regressions also run by this command                                     | `/tmp/agentctl-closure-tests.log`                                             |
+| `pnpm --filter @agentctl/web perf:build`                                                                 | Profiling fixtures built separately from production output                                                                                  | `/tmp/agentctl-closure-quality.log`                                           |
+| `pnpm ui:check /tmp/agentctl-closure-gallery.json`                                                       | Gallery build; desktop/narrow containment; dialog name/focus/Escape/return; screenshots reviewed                                            | `/tmp/agentctl-closure-gallery*`                                              |
+| `XVFB_PATH=/tmp/agentctl-native-tools/usr/bin/Xvfb pnpm desktop:smoke /tmp/agentctl-closure-native.json` | Real Linux Electron main/preload/server; normal exit **0** and startup-failure exit **1**; one server; awaited cleanup; outsider IPC denied | `/tmp/agentctl-closure-native.json`                                           |
+| `pnpm --filter @agentctl/web perf:check /tmp/agentctl-closure-performance`                               | All **six** safeguard suites passed, including nine budget regressions                                                                      | `/tmp/agentctl-closure-performance/`, `/tmp/agentctl-closure-performance.log` |
+| Production browser architecture journeys, command below                                                  | All **nine** interactions, production navigation and deferred loading passed                                                                | `/tmp/agentctl-closure-journeys.json`                                         |
+| Built desktop Markdown worker, command below                                                             | Syntax highlighting and named entities passed                                                                                               | `/tmp/agentctl-closure-desktop-worker.json`                                   |
+| Prettier on the complete migration diff from `2867b13`                                                   | **500** changed-file candidates; all matched files passed, honoring lockfile/generated exclusions                                           | `/tmp/agentctl-closure-migration-format.log`                                  |
+| `git diff --check 2867b13 HEAD` and local documentation/source link audit                                | Passed; graph snapshot matches actual imports, zero frontend cycles and empty baseline                                                      | `/tmp/agentctl-closure-feature-graph.json`                                    |
+
+Additional browser commands:
+
+```sh
+node apps/web/scripts/performance-browser.mjs /tmp/agentctl-closure-journeys.json --journeys --verify-deferred --architecture-journeys
+AGENTCTL_PERF_DIST=apps/desktop/out/renderer node apps/web/scripts/performance-browser.mjs /tmp/agentctl-closure-desktop-worker.json --production --worker-smoke
+```
+
+Browser/gallery/performance commands set `GITHUB_SHA` to the full accepted revision above.
+Reports record that revision and their built HTML hash; both were checked against the accepted
+builds. Native JSON records actual platform, scenario, individual checks and exit status.
+`XVFB_PATH` selects a locally extracted Xvfb on this host; normal Linux CI uses installed Xvfb.
+Local execution does not claim a remote GitHub Actions run or a published release occurred.
+
+Compatibility acceptance is included in the full suite: populated SQLite upgrades from every
+historical migration boundary; preserved session/event records and foreign keys; legacy Git
+baseline/checkpoint/recovery import; opaque non-Git IDs and cross-scope rejection; ACP v1/v2
+boundaries; inert database/default imports; **183** established shared runtime values and schema
+identity; and the unchanged **77-route** typed HTTP method/path/status surface. Historical SQL
+files are unchanged from before the architecture commits. The source import changes and retained
+aliases are communicated in [architecture release notes](releases/architecture-migration.md).
+
+Remaining product/platform work is outside this completed source migration: production VCS
+backends beyond Git, ordinary-folder history/checkpoint storage, distributed ownership and
+multi-server databases, sparse checkout and new pagination APIs. Linux x64 native integration
+is verified; macOS/Windows native runtime, signing, OS protocol association and downloaded update
+installation remain explicit platform/release checks. Synthetic journeys do not establish live
+provider/network latency promises. No version bump, tag, push, merge, publication or deployment
+was performed. These limits do not hide unresolved migration aliases, cycles or unowned source.
+
 ## Checkpoint evidence log
 
-| Checkpoint | Revision / delivery                                       | Verification                                                                                                                                                 | Follow-up at acceptance (historical)                                              |
-| ---------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| CP00       | `e1fc843` (CP03 baseline)                                 | Coverage inventory; tracker/link/format checks                                                                                                               | None within planning scope                                                        |
-| CP01       | `e1fc843` (CP03 baseline)                                 | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide                                                    | Follow-up work assigned to CP02–CP14                                              |
-| CP02       | `e1fc843`, accepted 2026-10-16                            | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory                                            | None in server application/transport scope; native integration remains CP12       |
-| CP03       | `e1fc843`, accepted 2026-10-16                            | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit                                                  | None within CP03; neutral workspace remains CP05, provider lifecycle CP06         |
-| CP04       | `a628a08`, accepted 2026-10-16                            | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit                                                  | None within CP04; neutral session workflows remain CP05                           |
-| CP05       | `2789c9c`, accepted 2026-10-16                            | 1,467 tests/243 files; combined 348/41; follow-up 55/5; 4 architecture tests; typechecks/lint/format/builds; 41-module and 36-session audits                 | None within CP05; additional production VCS/folder history remains separate scope |
-| CP06       | `5d60524`, accepted 2026-10-17                            | Provider/agent 367 tests/58 files; disposal 6/1; typechecks/lint/architecture checks                                                                         | None within provider/protocol composition scope                                   |
-| CP07       | `a117a46`, accepted 2026-10-17                            | 1,489 tests/248 files; 5 architecture tests; types/lint/format/builds; 214-file ownership ledger                                                             | None within remaining-core scope                                                  |
-| CP08       | `d3b0869`, accepted 2026-10-17                            | Focused 239/36 and injected-action 7/1; types/lint/architecture/format/web build; production screen journeys                                                 | Broader frontend audit remains CP10                                               |
-| CP09       | `4ba6b0e`, accepted 2026-10-17                            | 1,491 tests/249 files; focused 135/21; 5 architecture and 9 performance tests; types/lint/format/builds; parent/child browser and desktop worker smoke       | Broader frontend audit remains CP10                                               |
-| CP10       | `148ef06`, accepted with contracts integration 2026-10-17 | 275-file web ledger; initial frontend 507/94; final combined 1,511/259; cleanup regressions, production journeys, six performance suites                     | None in frontend scope; delivery tooling remains CP14                             |
-| CP11       | `f158004`, accepted 2026-10-17                            | 1,511 tests/259 files; 6 architecture regressions; 80-file ledger; unchanged 77-route surface; types/lint/format/builds/browser/worker/performance           | Source API release communication remains CP15                                     |
-| CP12       | `b62954c`, accepted 2026-10-17                            | Final 1,532/267; lifecycle/IPC/navigation regressions; Linux Electron normal/failure smoke on final and clean builds; worker smoke                           | macOS/Windows runtime and OS release integration remain platform checks           |
-| CP13       | `b62954c`, accepted 2026-10-17                            | UI acceptance inventory; public-export interaction tests; gallery screenshots and focus/keyboard review; renderer builds/journeys/performance                | No open UI architecture work; exhaustive assistive-technology audit is separate   |
-| CP14       | `b62954c`, accepted 2026-10-17                            | 1,162-file coverage; 11 enforcement regressions; full tests/types/lint/format/build; clean install/build/native verification; cache proof; CI/release wiring | Final repository/release documentation closure remains CP15                       |
-| CP15       | Not accepted                                              | Pending                                                                                                                                                      | See each checkpoint                                                               |
+| Checkpoint | Revision / delivery                                               | Verification                                                                                                                                                    | Follow-up at acceptance (historical)                                              |
+| ---------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| CP00       | `e1fc843` (CP03 baseline)                                         | Coverage inventory; tracker/link/format checks                                                                                                                  | None within planning scope                                                        |
+| CP01       | `e1fc843` (CP03 baseline)                                         | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide                                                       | Follow-up work assigned to CP02–CP14                                              |
+| CP02       | `e1fc843`, accepted 2026-10-16                                    | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory                                               | None in server application/transport scope; native integration remains CP12       |
+| CP03       | `e1fc843`, accepted 2026-10-16                                    | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit                                                     | None within CP03; neutral workspace remains CP05, provider lifecycle CP06         |
+| CP04       | `a628a08`, accepted 2026-10-16                                    | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit                                                     | None within CP04; neutral session workflows remain CP05                           |
+| CP05       | `2789c9c`, accepted 2026-10-16                                    | 1,467 tests/243 files; combined 348/41; follow-up 55/5; 4 architecture tests; typechecks/lint/format/builds; 41-module and 36-session audits                    | None within CP05; additional production VCS/folder history remains separate scope |
+| CP06       | `5d60524`, accepted 2026-10-17                                    | Provider/agent 367 tests/58 files; disposal 6/1; typechecks/lint/architecture checks                                                                            | None within provider/protocol composition scope                                   |
+| CP07       | `a117a46`, accepted 2026-10-17                                    | 1,489 tests/248 files; 5 architecture tests; types/lint/format/builds; 214-file ownership ledger                                                                | None within remaining-core scope                                                  |
+| CP08       | `d3b0869`, accepted 2026-10-17                                    | Focused 239/36 and injected-action 7/1; types/lint/architecture/format/web build; production screen journeys                                                    | Broader frontend audit remains CP10                                               |
+| CP09       | `4ba6b0e`, accepted 2026-10-17                                    | 1,491 tests/249 files; focused 135/21; 5 architecture and 9 performance tests; types/lint/format/builds; parent/child browser and desktop worker smoke          | Broader frontend audit remains CP10                                               |
+| CP10       | `148ef06`, accepted with contracts integration 2026-10-17         | 275-file web ledger; initial frontend 507/94; final combined 1,511/259; cleanup regressions, production journeys, six performance suites                        | None in frontend scope; delivery tooling remains CP14                             |
+| CP11       | `f158004`, accepted 2026-10-17                                    | 1,511 tests/259 files; 6 architecture regressions; 80-file ledger; unchanged 77-route surface; types/lint/format/builds/browser/worker/performance              | Source API release communication remains CP15                                     |
+| CP12       | `b62954c`, accepted 2026-10-17                                    | Final 1,532/267; lifecycle/IPC/navigation regressions; Linux Electron normal/failure smoke on final and clean builds; worker smoke                              | macOS/Windows runtime and OS release integration remain platform checks           |
+| CP13       | `b62954c`, accepted 2026-10-17                                    | UI acceptance inventory; public-export interaction tests; gallery screenshots and focus/keyboard review; renderer builds/journeys/performance                   | No open UI architecture work; exhaustive assistive-technology audit is separate   |
+| CP14       | `b62954c`, accepted 2026-10-17                                    | 1,162-file coverage; 11 enforcement regressions; full tests/types/lint/format/build; clean install/build/native verification; cache proof; CI/release wiring    | Final repository/release documentation closure remains CP15                       |
+| CP15       | `03994d9`, accepted 2026-10-17; documentation-only closure commit | 1,163 files/61 owners; 1,532 tests/267 files; 11 architecture regressions; forced 7/7 builds and 12/12 typechecks; all browser/gallery/native/performance gates | None within source migration; explicit product/platform scope below               |
 
 Earlier rows retain their original verification counts and follow-ups as historical evidence.
 Current completion and remaining product/platform scope are stated in the dashboard and final
