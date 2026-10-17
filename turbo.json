@@ -6,13 +6,20 @@
       "outputs": ["dist/**"]
     },
     "@agentctl/desktop#build": {
-      "dependsOn": ["^build"],
-      "outputs": ["out/**", "release/**"]
+      "dependsOn": ["^build", "@agentctl/web#build"],
+      "outputs": ["out/**", "release/**", "drizzle/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/web/src/**",
+        "$TURBO_ROOT$/apps/web/index.html",
+        "$TURBO_ROOT$/apps/web/package.json",
+        "$TURBO_ROOT$/packages/core/drizzle/**"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build"],
       "outputs": [],
-      "inputs": ["src/**", "tsconfig.json", "tsconfig.*.json"]
+      "inputs": ["$TURBO_DEFAULT$"]
     },
     "dev": {
       "cache": false,
@@ -34,7 +41,11 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*", "tests/**/*", "vitest.config.*", "vitest.workspace.*", "tsconfig.json"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/vitest.config.js",
+        "$TURBO_ROOT$/apps/web/src/test-setup.ts"
+      ]
     },
     "clean": {
       "cache": false
@@ -42,5 +53,11 @@
     "format": {
       "cache": false
     }
-  }
+  },
+  "globalDependencies": [
+    "tsconfig.json",
+    "vitest.config.js",
+    "packages/tsconfig/**",
+    "scripts/architecture/**"
+  ]
 }

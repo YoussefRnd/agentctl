@@ -1,36 +1,59 @@
 import { app } from 'electron';
 import { initAppLifecycle, setupApplicationMenu } from './lifecycle/appLifecycle';
+import { createDesktopRuntime } from './lifecycle/desktopRuntime';
 import { registerIpcHandlers } from './ipc/registerIpcHandlers';
 import { createMainWindow } from './windows/mainWindow';
-import { createTray } from './tray/trayManager';
-import { startServer } from './server/serverManager';
+import { createTray, destroyTray } from './tray/trayManager';
+import { startServer, stopServer, getServerPort } from './server/serverManager';
 import { setupAutoUpdater, registerUpdateIpc } from './updates/updateManager';
 import { reportDesktopPerformance } from './performance';
 
-// Register IPC handlers early so the renderer can query window controls upon connect
-registerIpcHandlers();
-
-if (initAppLifecycle()) {
-  void app.whenReady().then(async () => {
-    reportDesktopPerformance('desktop-process-to-app-ready');
-    setupApplicationMenu();
-
-    try {
-      const serverStartedAt = performance.now();
-      const serverPort = await startServer();
-      reportDesktopPerformance('desktop-server-start-to-ready', serverStartedAt);
-      process.stdout.write(`Server started on port ${serverPort.toString()}\n`);
-    } catch (err) {
-      process.stderr.write(`Failed to start server: ${String(err)}\n`);
+const runtime = createDesktopRuntime({
+  startServer: async () => {
+    const startedAt = performance.now();
+    const port = await startServer((error) => {
+      process.stderr.write(`${error.message}\n`);
+      process.exitCode = 1;
       app.quit();
-      return;
-    }
-
+    });
+    reportDesktopPerformance('desktop-server-start-to-ready', startedAt);
+    process.stdout.write(`Server started on port ${String(port)}\n`);
+    return port;
+  },
+  stopServer,
+  openWindow: () => {
     createMainWindow();
+  },
+  setupResources: () => {
+    const disposeIpc = registerIpcHandlers();
+    const disposeUpdates = registerUpdateIpc();
+    const disposeUpdater = setupAutoUpdater();
     createTray();
+    return () => {
+      destroyTray();
+      disposeUpdater();
+      disposeUpdates();
+      disposeIpc();
+    };
+  },
+});
 
-    // Auto-updater — listeners always active; initial check only in production builds
-    registerUpdateIpc();
-    setupAutoUpdater();
-  });
+if (
+  initAppLifecycle(
+    () => runtime.stop(),
+    () => getServerPort() > 0,
+  )
+) {
+  void app
+    .whenReady()
+    .then(async () => {
+      reportDesktopPerformance('desktop-process-to-app-ready');
+      setupApplicationMenu();
+      await runtime.start();
+    })
+    .catch((error: unknown) => {
+      process.stderr.write(`Desktop startup failed: ${String(error)}\n`);
+      process.exitCode = 1;
+      app.quit();
+    });
 }

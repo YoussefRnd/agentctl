@@ -1,23 +1,29 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
-import type { ElectronAPI, UpdateState } from './contracts';
+import type { ElectronAPI, UpdateState } from '@agentctl/shared';
 
-export type { ElectronAPI, UpdateState } from './contracts';
+export type { ElectronAPI, UpdateState } from '@agentctl/shared';
+
+function subscribe(channel: string, callback: (value: string) => void): () => void {
+  const listener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+    if (typeof value === 'string') callback(value);
+  };
+  ipcRenderer.on(channel, listener);
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
 
 const api: ElectronAPI = {
   getServerPort: () => ipcRenderer.invoke('server:get-port'),
   getServerSecret: () => ipcRenderer.invoke('server:get-secret'),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
-  onNavigate: (callback) => {
-    ipcRenderer.on('navigate', (_event, path: string) => {
-      callback(path);
-    });
-  },
+  onNavigate: (callback) => subscribe('navigate', callback),
   onDeepLink: (callback) => {
-    ipcRenderer.on('deep-link', (_event, url: string) => {
-      callback(url);
-    });
+    const dispose = subscribe('deep-link', callback);
+    ipcRenderer.send('navigation:ready');
+    return dispose;
   },
   platform: process.platform,
   getWindowControls: () => ipcRenderer.invoke('win:get-controls'),

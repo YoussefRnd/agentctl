@@ -11,7 +11,7 @@ const webRoot = resolve(import.meta.dirname, '..');
 const sourceRoot = join(webRoot, 'src');
 const workspaceRoot = resolve(webRoot, '../..');
 const uiRoot = join(workspaceRoot, 'packages/ui/src');
-const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs']);
+const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts']);
 const legacyRoots = [
   'features/session',
   'features/shell',
@@ -33,7 +33,7 @@ async function walk(directory, includeAssets = false) {
   for (const entry of entries) {
     if (entry.name === 'node_modules' || entry.name === 'dist') continue;
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await walk(path, includeAssets)));
+    if (entry.isDirectory()) files.push(...(await walk(path)));
     else if (includeAssets || sourceExtensions.has(extname(entry.name))) files.push(path);
   }
   return files;
@@ -58,7 +58,7 @@ for (const legacyRoot of legacyRoots) {
   try {
     const info = await stat(path);
     if (info.isFile()) report(path, 'legacy architecture entry must be removed');
-    if (info.isDirectory() && (await walk(path, includeAssets)).length > 0) {
+    if (info.isDirectory() && (await walk(path)).length > 0) {
       report(path, 'legacy feature directory must remain empty or be removed');
     }
   } catch (error) {
@@ -72,7 +72,7 @@ errors.push(
   ...ownershipErrors(
     sourceFiles
       .filter((path) => !/\.(test|spec)\.[jt]sx?$/.test(path))
-      .map((path) => relative(workspaceRoot, path)),
+      .map((path) => relative(workspaceRoot, path).replaceAll('\\', '/')),
     ledger.areas,
   ),
 );

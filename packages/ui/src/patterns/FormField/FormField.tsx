@@ -45,7 +45,7 @@ export function FormField({
 }: FormFieldProps) {
   const generatedId = React.useId();
   const id = explicitId ?? generatedId;
-  const descriptionId = description ? `${id}-desc` : undefined;
+  const descriptionId = description && !error ? `${id}-desc` : undefined;
   const errorId = error ? `${id}-error` : undefined;
   const childId = children.props.id ?? id;
   const describedBy =

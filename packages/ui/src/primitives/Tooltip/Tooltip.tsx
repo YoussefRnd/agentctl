@@ -24,6 +24,7 @@ export function Tooltip({
   delayDuration = 150,
 }: TooltipProps) {
   const [open, setOpen] = React.useState(false);
+  const tooltipId = React.useId();
   const timerRef = React.useRef<number | null>(null);
 
   const handleOpen = () => {
@@ -35,11 +36,10 @@ export function Tooltip({
       activeTooltipCount > 0 || Date.now() - lastTooltipClosedAt < SKIP_DELAY_THRESHOLD_MS;
     const delay = isRecentOrActive ? 0 : delayDuration;
     if (delay === 0) {
-      activeTooltipCount++;
       setOpen(true);
     } else {
       timerRef.current = window.setTimeout(() => {
-        activeTooltipCount++;
+        timerRef.current = null;
         setOpen(true);
       }, delay);
     }
@@ -50,35 +50,29 @@ export function Tooltip({
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    setOpen((wasOpen) => {
-      if (wasOpen) {
-        activeTooltipCount = Math.max(0, activeTooltipCount - 1);
-        lastTooltipClosedAt = Date.now();
-      }
-      return false;
-    });
+    setOpen(false);
   };
 
-  const isOpenRef = React.useRef(false);
-  isOpenRef.current = open;
-
   React.useEffect(() => {
+    if (!open) return;
+    activeTooltipCount++;
     return () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-      }
-      if (isOpenRef.current) {
-        activeTooltipCount = Math.max(0, activeTooltipCount - 1);
-        lastTooltipClosedAt = Date.now();
-      }
+      activeTooltipCount = Math.max(0, activeTooltipCount - 1);
+      lastTooltipClosedAt = Date.now();
     };
-  }, []);
+  }, [open]);
+  React.useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
 
   if (!content) return <>{children}</>;
 
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen} modal={false}>
-      <PopoverPrimitive.Trigger asChild>
+      <PopoverPrimitive.Anchor asChild>
         <span
           role="presentation"
           className="inline-flex"
@@ -93,11 +87,20 @@ export function Tooltip({
             }
           }}
         >
-          {children}
+          {React.isValidElement<{ 'aria-describedby'?: string }>(children)
+            ? React.cloneElement(children, {
+                'aria-describedby':
+                  [children.props['aria-describedby'], open ? tooltipId : undefined]
+                    .filter(Boolean)
+                    .join(' ') || undefined,
+              })
+            : children}
         </span>
-      </PopoverPrimitive.Trigger>
+      </PopoverPrimitive.Anchor>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
+          role="tooltip"
+          id={tooltipId}
           side={side}
           align={align}
           sideOffset={6}

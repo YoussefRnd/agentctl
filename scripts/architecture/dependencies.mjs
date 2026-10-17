@@ -7,20 +7,21 @@ export function importSpecifiers(source, fileName = 'module.ts') {
     if (
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
       node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
+      ts.isStringLiteralLike(node.moduleSpecifier)
     )
       imports.add(node.moduleSpecifier.text);
     if (
       ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === 'require')) &&
       node.arguments.length === 1 &&
-      ts.isStringLiteral(node.arguments[0])
+      ts.isStringLiteralLike(node.arguments[0])
     )
       imports.add(node.arguments[0].text);
     if (
       ts.isImportTypeNode(node) &&
       ts.isLiteralTypeNode(node.argument) &&
-      ts.isStringLiteral(node.argument.literal)
+      ts.isStringLiteralLike(node.argument.literal)
     )
       imports.add(node.argument.literal.text);
     ts.forEachChild(node, visit);

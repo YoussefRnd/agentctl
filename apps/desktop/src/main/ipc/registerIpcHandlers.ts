@@ -1,16 +1,17 @@
 import { app, ipcMain, shell } from 'electron';
-import type { TrayStatus } from '../../shared/platform-types';
+import { isExternalUrl } from '../windows/navigationPolicy';
+import { isTrustedSender } from './sender';
 import { getServerPort, getServerSecret } from '../server/serverManager';
-import { getMainWindow } from '../windows/mainWindow';
+import { getMainWindow, rendererNavigationReady } from '../windows/mainWindow';
 import { resolveWindowControls } from '../windowControls';
 import { updateTrayStatus } from '../tray/trayManager';
 
-export function registerWindowIpcHandlers(): void {
-  ipcMain.on('win:minimize', () => {
+function registerWindowIpcHandlers(on: typeof ipcMain.on, handle: typeof ipcMain.handle): void {
+  on('win:minimize', () => {
     getMainWindow()?.minimize();
   });
 
-  ipcMain.on('win:maximize', () => {
+  on('win:maximize', () => {
     const win = getMainWindow();
     if (!win) return;
     if (win.isMaximized()) {
@@ -20,83 +21,100 @@ export function registerWindowIpcHandlers(): void {
     }
   });
 
-  ipcMain.on('win:close', () => {
+  on('win:close', () => {
     getMainWindow()?.close();
   });
 
-  ipcMain.handle('win:is-maximized', () => {
+  handle('win:is-maximized', () => {
     const win = getMainWindow();
     return win ? win.isMaximized() : false;
   });
 
-  ipcMain.on('win:open-external', (_event, url: string) => {
-    try {
-      const parsed = new URL(url);
-      if (
-        parsed.protocol === 'http:' ||
-        parsed.protocol === 'https:' ||
-        parsed.protocol === 'mailto:'
-      ) {
-        void shell.openExternal(url);
-      }
-    } catch {
-      // ignore invalid URLs
-    }
+  on('win:open-external', (_event, url: unknown) => {
+    if (isExternalUrl(url)) void shell.openExternal(url).catch(() => undefined);
   });
 
-  ipcMain.on('win:toggle-devtools', () => {
+  on('win:toggle-devtools', () => {
     getMainWindow()?.webContents.toggleDevTools();
   });
 
-  ipcMain.on('win:reload', () => {
+  on('win:reload', () => {
     getMainWindow()?.reload();
   });
 
-  ipcMain.on('win:toggle-fullscreen', () => {
+  on('win:toggle-fullscreen', () => {
     const win = getMainWindow();
     if (win) win.setFullScreen(!win.isFullScreen());
   });
 
-  ipcMain.on('edit:undo', () => {
+  on('edit:undo', () => {
     getMainWindow()?.webContents.undo();
   });
-  ipcMain.on('edit:redo', () => {
+  on('edit:redo', () => {
     getMainWindow()?.webContents.redo();
   });
-  ipcMain.on('edit:cut', () => {
+  on('edit:cut', () => {
     getMainWindow()?.webContents.cut();
   });
-  ipcMain.on('edit:copy', () => {
+  on('edit:copy', () => {
     getMainWindow()?.webContents.copy();
   });
-  ipcMain.on('edit:paste', () => {
+  on('edit:paste', () => {
     getMainWindow()?.webContents.paste();
   });
-  ipcMain.on('edit:select-all', () => {
+  on('edit:select-all', () => {
     getMainWindow()?.webContents.selectAll();
   });
 
-  ipcMain.on('app:quit', () => {
+  on('app:quit', () => {
     app.quit();
   });
 }
 
-export function registerIpcHandlers(): void {
-  ipcMain.handle('server:get-port', () => getServerPort());
-  ipcMain.handle('server:get-secret', (event) => {
+export function registerIpcHandlers(): () => void {
+  const disposers: (() => void)[] = [];
+  const on: typeof ipcMain.on = (channel, listener) => {
+    const guarded: typeof listener = (event, ...args) => {
+      if (isTrustedSender(event)) listener(event, ...args);
+    };
+    ipcMain.on(channel, guarded);
+    disposers.push(() => {
+      ipcMain.removeListener(channel, guarded);
+    });
+    return ipcMain;
+  };
+  const handle: typeof ipcMain.handle = (channel, listener) => {
+    ipcMain.handle(channel, (event, ...args) => {
+      if (!isTrustedSender(event)) throw new Error('Unauthorized IPC sender');
+      return listener(event, ...args);
+    });
+    disposers.push(() => {
+      ipcMain.removeHandler(channel);
+    });
+  };
+  on('navigation:ready', () => rendererNavigationReady());
+  handle('server:get-port', () => getServerPort());
+  handle('server:get-secret', () => getServerSecret());
+  handle('app:get-version', () => app.getVersion());
+  on('tray:update-status', (_event, status: unknown) => {
+    if (!status || typeof status !== 'object') return;
+    const { runningCount, needsAttentionCount } = status as Record<string, unknown>;
     if (
-      event.sender !== getMainWindow()?.webContents ||
-      event.senderFrame !== event.sender.mainFrame
+      Number.isSafeInteger(runningCount) &&
+      Number(runningCount) >= 0 &&
+      Number.isSafeInteger(needsAttentionCount) &&
+      Number(needsAttentionCount) >= 0
     ) {
-      throw new Error('Unauthorized IPC sender');
+      updateTrayStatus({
+        runningCount: Number(runningCount),
+        needsAttentionCount: Number(needsAttentionCount),
+      });
     }
-    return getServerSecret();
   });
-  ipcMain.handle('app:get-version', () => app.getVersion());
-  ipcMain.on('tray:update-status', (_event, status: TrayStatus) => {
-    updateTrayStatus(status);
-  });
-  ipcMain.handle('win:get-controls', () => resolveWindowControls(getMainWindow()));
+  handle('win:get-controls', () => resolveWindowControls(getMainWindow()));
 
-  registerWindowIpcHandlers();
+  registerWindowIpcHandlers(on, handle);
+  return () => {
+    for (const dispose of disposers.splice(0).reverse()) dispose();
+  };
 }

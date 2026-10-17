@@ -1,8 +1,6 @@
 import { app, Menu, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { getMainWindow, createMainWindow, handleDeepLink } from '../windows/mainWindow';
-import { stopServer } from '../server/serverManager';
-import { destroyTray } from '../tray/trayManager';
 
 export const PROTOCOL = 'agentctl';
 
@@ -60,7 +58,7 @@ export function setupApplicationMenu(): void {
   Menu.setApplicationMenu(menu);
 }
 
-export function initAppLifecycle(): boolean {
+export function initAppLifecycle(stop: () => Promise<void>, isReady: () => boolean): boolean {
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return false;
@@ -69,6 +67,9 @@ export function initAppLifecycle(): boolean {
   if (process.platform === 'linux') {
     app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
   }
+
+  const initialLink = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}:`));
+  if (initialLink) handleDeepLink(initialLink);
 
   // Handle second-instance (deep links on Windows/Linux)
   app.on('second-instance', (_event, argv) => {
@@ -100,7 +101,7 @@ export function initAppLifecycle(): boolean {
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!shutdownStarted && isReady() && BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });
@@ -118,11 +119,19 @@ export function initAppLifecycle(): boolean {
     event.preventDefault();
     if (shutdownStarted) return;
     shutdownStarted = true;
-    destroyTray();
-    void stopServer().finally(() => {
-      shutdownComplete = true;
-      app.quit();
-    });
+    void stop()
+      .catch((error: unknown) => {
+        process.stderr.write(`Desktop shutdown failed: ${String(error)}\n`);
+        process.exitCode = 1;
+      })
+      .finally(() => {
+        shutdownComplete = true;
+        app.quit();
+      });
+  });
+
+  app.on('will-quit', () => {
+    if (typeof process.exitCode === 'number' && process.exitCode !== 0) app.exit(process.exitCode);
   });
 
   process.once('SIGINT', () => app.quit());

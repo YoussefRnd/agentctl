@@ -34,11 +34,12 @@ export function Tabs({ value, onValueChange, children, className }: TabsProps) {
 
 export interface TabsListProps extends React.HTMLAttributes<HTMLDivElement> {}
 
-export function TabsList({ className, children, ...props }: TabsListProps) {
+export function TabsList({ className, children, onKeyDown, ...props }: TabsListProps) {
   const listRef = React.useRef<HTMLDivElement>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!listRef.current) return;
+    onKeyDown?.(e);
+    if (e.defaultPrevented || !listRef.current) return;
     const tabs = Array.from(
       listRef.current.querySelectorAll<HTMLButtonElement>('[role="tab"]:not([disabled])'),
     );
@@ -88,7 +89,14 @@ export interface TabsTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonE
   value: string;
 }
 
-export function TabsTrigger({ value, className, children, disabled, ...props }: TabsTriggerProps) {
+export function TabsTrigger({
+  value,
+  className,
+  children,
+  disabled,
+  onClick,
+  ...props
+}: TabsTriggerProps) {
   const context = React.useContext(TabsContext);
   if (!context) throw new Error('TabsTrigger must be used within Tabs');
 
@@ -105,7 +113,10 @@ export function TabsTrigger({ value, className, children, disabled, ...props }: 
       aria-controls={panelId}
       tabIndex={isSelected ? 0 : -1}
       disabled={disabled}
-      onClick={() => context.onChange(value)}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) context.onChange(value);
+      }}
       className={cn(
         'inline-flex cursor-pointer items-center justify-center rounded-md px-2.5 py-1 text-[11px] font-semibold transition-[color,background-color,box-shadow] duration-150 outline-none select-none',
         'focus-visible:ring-accent/40 focus-visible:ring-2 focus-visible:outline-none',

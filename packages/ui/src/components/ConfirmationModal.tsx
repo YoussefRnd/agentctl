@@ -4,6 +4,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
   DialogFooter,
 } from '../primitives/Dialog/index.js';
@@ -57,7 +58,9 @@ export const ConfirmationModal = memo(function ConfirmationModal({
           <DialogTitle className={typeColorClass}>{title}</DialogTitle>
         </DialogHeader>
 
-        <p className="text-text-main/80 my-2 text-xs leading-relaxed font-normal">{message}</p>
+        <DialogDescription className="text-text-main/80 my-2 text-xs leading-relaxed font-normal">
+          {message}
+        </DialogDescription>
 
         <DialogFooter className="mt-4 flex items-center justify-end gap-2">
           <Button

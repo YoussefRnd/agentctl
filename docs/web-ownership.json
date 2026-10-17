@@ -10,6 +10,7 @@
         "apps/web/src/app/AppRouter.tsx",
         "apps/web/src/app/apiEnvironment.ts",
         "apps/web/src/app/queryClient.ts",
+        "apps/web/src/app/useNativeNavigation.ts",
         "apps/web/src/app/useServerStateSync.ts"
       ]
     },

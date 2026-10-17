@@ -1,3 +1,4 @@
+import { runGalleryReview } from './gallery-review.mjs';
 import { createArchitectureFixture, runArchitectureJourneys } from './architecture-journeys.mjs';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -8,18 +9,20 @@ import { dirname, extname, join, resolve, sep } from 'node:path';
 
 import { createJourneyApi, runJourneys } from './performance-journeys.mjs';
 
+const gallery = process.argv.includes('--gallery');
 const journeys = process.argv.includes('--journeys');
 const workerSmoke = process.argv.includes('--worker-smoke');
-const production = journeys || process.argv.includes('--production');
+const production = gallery || journeys || process.argv.includes('--production');
 const architectureJourneys = process.argv.includes('--architecture-journeys');
-const journeyApi = journeys
-  ? createJourneyApi(120, architectureJourneys ? createArchitectureFixture() : {})
-  : null;
+const journeyApi =
+  journeys || gallery
+    ? createJourneyApi(120, architectureJourneys ? createArchitectureFixture() : {})
+    : null;
 const entryHtml = production ? 'index.html' : 'performance.html';
 const webRoot = resolve(import.meta.dirname, '..');
 const dist = process.env.AGENTCTL_PERF_DIST
   ? resolve(process.env.AGENTCTL_PERF_DIST)
-  : join(webRoot, production ? 'dist' : 'dist-performance');
+  : join(webRoot, gallery ? 'dist-gallery' : production ? 'dist' : 'dist-performance');
 const output = resolve(
   process.argv.slice(2).find((arg) => !arg.startsWith('--')) ??
     join(webRoot, `../../performance-results/${journeys ? 'journeys' : 'baseline'}.json`),
@@ -42,7 +45,10 @@ try {
       response.end('<!doctype html><title>Markdown worker smoke</title>');
       return;
     }
-    const file = resolve(dist, journeys && !extname(pathname) ? 'index.html' : `.${pathname}`);
+    const file = resolve(
+      dist,
+      (journeys || gallery) && !extname(pathname) ? 'index.html' : `.${pathname}`,
+    );
     if (!file.startsWith(dist + sep)) {
       response.writeHead(403).end();
       return;
@@ -164,7 +170,8 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   if (workerSmoke) await send('Page.navigate', { url: `${origin}/_performance-worker-smoke.html` });
-  else if (!journeys) await send('Page.navigate', { url: `${origin}/performance.html` });
+  else if (!journeys && !gallery)
+    await send('Page.navigate', { url: `${origin}/performance.html` });
   await send('Page.bringToFront');
   const environment = {
     runner: 'Chrome headless, real-time frames, fresh browser profile',
@@ -178,7 +185,7 @@ try {
   };
   const deadline = Date.now() + 180_000;
   while (
-    (workerSmoke || !journeys) &&
+    (workerSmoke || (!journeys && !gallery)) &&
     !(await evaluate(
       workerSmoke
         ? `document.title === 'Markdown worker smoke'`
@@ -226,16 +233,26 @@ try {
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, JSON.stringify({ passed: true, environment }, null, 2) + '\n');
   } else {
-    if (!journeys)
+    if (!journeys && !gallery)
       await evaluate(
         process.argv.includes('--stream-probe')
           ? `[...document.querySelectorAll('button')].find(button => button.textContent === 'Run stream probe').click()`
           : `document.querySelector('button').click()`,
       );
     let previousStatus = '';
-    let report = journeys
-      ? await runJourneys({ send, evaluate, origin, api: journeyApi, errors })
-      : undefined;
+    const screenshot = async (name) => {
+      await mkdir(dirname(output), { recursive: true });
+      const { data } = await send('Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: false,
+      });
+      await writeFile(output.replace(/\.json$/, '') + `-${name}.png`, Buffer.from(data, 'base64'));
+    };
+    let report = gallery
+      ? await runGalleryReview({ send, evaluate, origin, errors, screenshot })
+      : journeys
+        ? await runJourneys({ send, evaluate, origin, api: journeyApi, errors })
+        : undefined;
     if (report && architectureJourneys)
       report.architecture = await runArchitectureJourneys({
         send,

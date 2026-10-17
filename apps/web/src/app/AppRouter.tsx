@@ -4,7 +4,8 @@ import { HomeRoute } from '../routes/HomeRoute.js';
 import { LoginRoute } from '../routes/LoginRoute.js';
 import { SettingsRoute } from '../routes/SettingsRoute.js';
 // Keep the development gallery out of the production module graph.
-const UiGalleryRoute = import.meta.env.DEV
+const galleryEnabled = import.meta.env.DEV || import.meta.env.MODE === 'gallery';
+const UiGalleryRoute = galleryEnabled
   ? lazy(() => import('../routes/UiGalleryRoute.js').then((m) => ({ default: m.UiGalleryRoute })))
   : () => null;
 import { Spinner } from '@agentctl/ui';
@@ -27,7 +28,7 @@ export function AppRouter() {
         <Route path="/" element={<HomeRoute />} />
         <Route path="/settings" element={<SettingsRoute />} />
         <Route path="/sessions/:sessionId" element={<SessionRoute />} />
-        {import.meta.env.DEV && <Route path="/_dev/ui" element={<UiGalleryRoute />} />}
+        {galleryEnabled && <Route path="/_dev/ui" element={<UiGalleryRoute />} />}
       </Routes>
     </Suspense>
   );

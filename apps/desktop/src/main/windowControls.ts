@@ -1,10 +1,6 @@
 import type { BrowserWindow } from 'electron';
 
-export interface WindowControlFlags {
-  minimize: boolean;
-  maximize: boolean;
-  close: boolean;
-}
+import type { WindowControlFlags } from '@agentctl/shared';
 
 // Compositors that don't expose minimize/maximize controls.
 const TILING_COMPOSITORS = ['niri', 'sway', 'hyprland', 'river', 'dwl'];

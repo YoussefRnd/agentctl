@@ -7,7 +7,7 @@ order, acceptance criteria, and evidence needed to declare the migration complet
 
 ## Status and completion rules
 
-Baseline: **2026-10-16**. **12 of 16 checkpoints are complete locally; 4 remain open.**
+Baseline: **2026-10-16**. **15 of 16 checkpoints are complete locally; 1 remains open.**
 This is a checkpoint count, not an estimate of engineering effort. Implementation through CP03
 is committed as `e1fc843`; subsequent completed checkpoints are recorded in descriptive
 implementation commits. No merge or release is implied.
@@ -44,9 +44,9 @@ gate passes against the exact accepted revision.** It does not mean the applicat
 | CP09 | Conversation and subagent dependency cycle                    | Done    | CP01                   |
 | CP10 | Complete frontend state, effects, and rendering audit         | Done    | CP02, CP08, CP09       |
 | CP11 | Shared contracts, client APIs, and public exports             | Done    | CP05, CP06, CP07, CP10 |
-| CP12 | Desktop lifecycle, server ownership, and IPC                  | Planned | CP02, CP03, CP06       |
-| CP13 | Design system and UI ownership                                | Planned | CP10                   |
-| CP14 | Complete architecture enforcement and delivery tooling        | Planned | CP07, CP11, CP12, CP13 |
+| CP12 | Desktop lifecycle, server ownership, and IPC                  | Done    | CP02, CP03, CP06       |
+| CP13 | Design system and UI ownership                                | Done    | CP10                   |
+| CP14 | Complete architecture enforcement and delivery tooling        | Done    | CP07, CP11, CP12, CP13 |
 | CP15 | Repository-wide acceptance and migration closure              | Planned | CP00–CP14              |
 
 Recommended execution order: CP02 → CP03 → CP04 → CP05 → CP06 → CP07 → CP08 → CP09 →
@@ -61,25 +61,25 @@ area automatically. Add a coverage row before introducing a new package or produ
 Acceptance is recorded at the checkpoint that closes the area; this ledger remains open
 until the full audit, even where initial work has already landed locally.
 
-| Area                                                                                                       | Owning checkpoint(s) | Acceptance                  |
-| ---------------------------------------------------------------------------------------------------------- | -------------------- | --------------------------- |
-| Server routes, routers, services, events, authentication, terminals, and app composition                   | CP02, CP12           | CP02 accepted; CP12 pending |
-| Core session commands, execution, requests, projection, persistence, runtime, and services                 | CP03, CP05           | Accepted                    |
-| Core repository-neutral workspace lifecycle and handoff context                                            | CP05                 | Accepted                    |
-| Core Git, repository, and forge modules                                                                    | CP04, CP05           | Accepted                    |
-| Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Accepted                    |
-| Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Accepted                    |
-| Web composer, review, and session features                                                                 | CP08, CP10           | Accepted                    |
-| Web conversation and subagent features                                                                     | CP09, CP10           | Accepted                    |
-| Web projects, providers, settings, workbench, updates, command palette, and retained feature directories   | CP10                 | Accepted                    |
-| Web app/shell/routes, shared capabilities, performance lab, and test utilities                             | CP10, CP14           | CP10 accepted; CP14 pending |
-| Shared schemas, contracts, types, policies, utilities, and environment definitions                         | CP11                 | Accepted                    |
-| API-client services, HTTP errors/configuration, SSE engine, and query integration                          | CP11                 | Accepted                    |
-| Electron main process, embedded server, windows/tray, updates, preload, and IPC contracts                  | CP12                 | Pending                     |
-| UI components, primitives, patterns, foundations, exports, and app UI adapters                             | CP13                 | Pending                     |
-| TS configuration package, root workspace configuration, package manifests, patches, and build/test tooling | CP14                 | Pending                     |
-| CI/release workflows, hooks, scripts, browser/performance tooling, and architecture checks                 | CP14                 | Pending                     |
-| Architecture docs, migration notes, compatibility decisions, and release communication                     | CP15                 | Pending                     |
+| Area                                                                                                       | Owning checkpoint(s) | Acceptance |
+| ---------------------------------------------------------------------------------------------------------- | -------------------- | ---------- |
+| Server routes, routers, services, events, authentication, terminals, and app composition                   | CP02, CP12           | Accepted   |
+| Core session commands, execution, requests, projection, persistence, runtime, and services                 | CP03, CP05           | Accepted   |
+| Core repository-neutral workspace lifecycle and handoff context                                            | CP05                 | Accepted   |
+| Core Git, repository, and forge modules                                                                    | CP04, CP05           | Accepted   |
+| Core providers, agent contracts/diagnostics, ACP v1/v2, transport, cache, and extensions                   | CP06                 | Accepted   |
+| Core security, auth, MCP, context, skills, config, database, logger, and root factories                    | CP07                 | Accepted   |
+| Web composer, review, and session features                                                                 | CP08, CP10           | Accepted   |
+| Web conversation and subagent features                                                                     | CP09, CP10           | Accepted   |
+| Web projects, providers, settings, workbench, updates, command palette, and retained feature directories   | CP10                 | Accepted   |
+| Web app/shell/routes, shared capabilities, performance lab, and test utilities                             | CP10, CP14           | Accepted   |
+| Shared schemas, contracts, types, policies, utilities, and environment definitions                         | CP11                 | Accepted   |
+| API-client services, HTTP errors/configuration, SSE engine, and query integration                          | CP11                 | Accepted   |
+| Electron main process, embedded server, windows/tray, updates, preload, and IPC contracts                  | CP12                 | Accepted   |
+| UI components, primitives, patterns, foundations, exports, and app UI adapters                             | CP13                 | Accepted   |
+| TS configuration package, root workspace configuration, package manifests, patches, and build/test tooling | CP14                 | Accepted   |
+| CI/release workflows, hooks, scripts, browser/performance tooling, and architecture checks                 | CP14                 | Accepted   |
+| Architecture docs, migration notes, compatibility decisions, and release communication                     | CP15                 | Pending    |
 
 Generated bundles, dependency installations, local databases/credentials, downloaded binaries,
 and personal tool directories are outside the source migration. Their application ownership
@@ -526,13 +526,13 @@ reconciliation completed with the frozen lockfile and package policy checks enab
 Scope: all `apps/desktop` main/preload/shared code and packaging configuration, plus relevant
 server start/stop APIs and browser desktop integration.
 
-- [ ] Audit native lifecycle, server process start/restart/stop, windows, tray, deep links,
+- [x] Audit native lifecycle, server process start/restart/stop, windows, tray, deep links,
       window controls, and updater ownership. Confirm suitable existing separation where present.
-- [ ] Keep startup/shutdown construction explicit and idempotent; await owned resources and
+- [x] Keep startup/shutdown construction explicit and idempotent; await owned resources and
       propagate startup failure without duplicate server/process ownership.
-- [ ] Keep preload capabilities and IPC contracts narrow, validated, and independent of renderer
+- [x] Keep preload capabilities and IPC contracts narrow, validated, and independent of renderer
       internals; ensure listener cleanup and unavailable-native-feature behavior are explicit.
-- [ ] Verify browser and desktop modes share product workflows while native integration stays
+- [x] Verify browser and desktop modes share product workflows while native integration stays
       behind its declared boundary; review packaging/build paths as part of acceptance.
 
 Exit evidence: desktop ownership map, process/lifecycle and IPC tests, web/desktop builds,
@@ -540,47 +540,111 @@ built-renderer worker smoke, and native lifecycle smoke on the available support
 Unavailable platform checks remain explicitly open or use a named verified CI job; a browser
 fixture alone cannot close native-runtime acceptance.
 
+Accepted 2026-10-17. [Desktop ownership and lifecycle](desktop-architecture.md) records every
+native area and retained packaging boundary. `desktopRuntime` owns startup/shutdown, including
+activation before readiness and cancellation during startup. The utility manager coalesces starts,
+validates readiness, clears capabilities, rejects early exits, kills timed-out startup and supports
+an explicit restart. IPC verifies main-window/main-frame senders; window navigation stays within
+the renderer, and only approved external protocols leave the app. Update/IPC/preload listeners
+have disposers. Native DTOs moved to shared contracts; the web adapter owns validated navigation.
+
+The focused desktop/UI/navigation run passed **26 tests/11 files**. Final verification passed
+**1,532 tests/267 files**, both renderer builds and the desktop Markdown worker. Real Electron
+Linux x64 smoke passed on the final build and a clean-checkout build: one server, capability IPC,
+HTTP readiness, deep-link delivery, listener cleanup, denied outsider IPC and server exit before
+quit. The separate real utility-process startup failure opened no window and exited with status
+**1**; normal startup/shutdown exited **0**. Reports: `/tmp/agentctl-final-native.json`,
+`/tmp/agentctl-clean-native.json`, `/tmp/agentctl-final-desktop-worker.json`. The exact native command
+was `XVFB_PATH=/tmp/agentctl-native-tools/usr/bin/Xvfb pnpm desktop:smoke <report.json>`.
+macOS/Windows native checks remain explicitly open platform checks; Linux evidence does not
+verify OS protocol registration, signing or a downloaded updater install.
+
 ## CP13 — Design system and UI ownership
 
 Scope: all `packages/ui` foundations/primitives/components/patterns, exports, tests, and consuming UI adapters.
 
-- [ ] Confirm generic design-system code has no product/session/provider dependencies or hidden
+- [x] Confirm generic design-system code has no product/session/provider dependencies or hidden
       application networking/state; move any product composition to its owning app feature.
-- [ ] Review reusable contracts, accessibility/keyboard/focus behavior, styling/token ownership,
+- [x] Review reusable contracts, accessibility/keyboard/focus behavior, styling/token ownership,
       and meaningful duplication across primitives/components/patterns.
-- [ ] Keep feature-specific UI and interaction policy local; consolidate generic components only
+- [x] Keep feature-specific UI and interaction policy local; consolidate generic components only
       when their responsibilities and behavior actually match.
-- [ ] Accept the existing gallery/test fixtures and public exports against the final consumers;
+- [x] Accept the existing gallery/test fixtures and public exports against the final consumers;
       record areas that already meet the conventions without unnecessary rewrites.
 
 Exit evidence: UI acceptance list, affected accessibility/interaction tests, gallery review,
 both renderer builds, and package import-boundary enforcement.
+
+Accepted 2026-10-17. [UI acceptance inventory](ui-architecture.md) records foundations, every
+primitive/component/pattern, exports and consuming adapters; the workspace ledger covers all
+**63 UI area files**, including configuration and tests. Existing product-independent composition
+is retained. Fixed dangling field descriptions, Select validation/selection semantics,
+confirmation descriptions, consumer tab-handler composition and tooltip focus/description lifetime.
+Product workflows remain in features; there is no new design framework or duplicate overlay owner.
+
+The final public-export interaction tests and full suite passed. The explicit gallery build and
+real Chrome review passed desktop/narrow containment, dialog naming, initial focus, Escape and
+focus restoration. Screenshots of stress layouts, controls, surfaces and feedback were reviewed;
+reports/screenshots use `/tmp/agentctl-final-gallery*`. Production journeys passed all nine
+architecture interactions in `/tmp/agentctl-final-journeys.json`. Both renderer builds and all
+six performance safeguard suites passed. The gallery remains outside normal production builds.
 
 ## CP14 — Complete architecture enforcement and delivery tooling
 
 Scope: architecture scripts, root/package configuration, TS config package, all build/test/dev
 and browser/performance scripts, patches, hooks, and CI/release workflows.
 
-- [ ] Enforce final package/module dependency directions across aliases, relative imports,
+- [x] Enforce final package/module dependency directions across aliases, relative imports,
       re-exports, type/lazy imports, and package exports. Include server/core/desktop boundaries,
       not just the initial project router and selected modules.
-- [ ] Remove the need for the cycle exception mechanism or keep only an empty, tested baseline;
+- [x] Remove the need for the cycle exception mechanism or keep only an empty, tested baseline;
       ensure fixtures/tests do not accidentally introduce production exceptions.
-- [ ] Keep migration-coverage enforcement and boundary regression tests wired into normal CI;
+- [x] Keep migration-coverage enforcement and boundary regression tests wired into normal CI;
       ensure every source area/file maps to an accepted ledger owner and new modules cannot be missed.
-- [ ] Review manifests, TS references, Turbo tasks, test fixtures, scripts/hooks, patches, and
+- [x] Review manifests, TS references, Turbo tasks, test fixtures, scripts/hooks, patches, and
       dev/release composition for clear ownership and repeatable clean-checkout behavior.
-- [ ] Run the final checks in CI/release with usable failure diagnostics and retained artifacts;
+- [x] Run the final checks in CI/release with usable failure diagnostics and retained artifacts;
       validate import rules against deliberate violation fixtures, including relative-path bypasses.
 
 Exit evidence: enforcement coverage matrix, regression tests, normal CI wiring, clean-checkout
 verification results, and no migration-only allowlists, dead compatibility files, or unowned tooling.
 
-Observed during frontend acceptance: the desktop renderer consumes `apps/web/src` through its
-Vite configuration, but the current Turbo desktop task can reuse its cache after only web source
-changes. Include those external inputs/dependencies in the tooling audit. Frontend acceptance
-uses a direct `pnpm --filter @agentctl/desktop build` plus the CI built-renderer worker smoke to
-verify current sources instead of accepting the cached desktop artifact.
+Resolved the frontend acceptance cache issue: the desktop Turbo task depends on the web build (and therefore its
+UI/API-client dependency builds), explicitly hashes web source/index/manifest and migration inputs, and restores copied `drizzle/` output alongside
+`out/`. A reversible web source edit changed the desktop task hash; both clean and normal builds
+and their native/worker smoke checks passed. The earlier direct-build workaround is no longer
+needed to account for missing web inputs.
+
+Accepted 2026-10-17. [Enforcement and tooling matrix](tooling-architecture.md) records package/module
+rules, ledgers, manifests, TS references, hooks, patches and CI/release composition. Combined ledgers
+cover **1,162 repository files**: **210 core**, **81 contract/client**, **276 web** production files
+and **595** remaining server/native/UI/test/configuration/tooling/documentation files. New, duplicate
+and stale assignments fail the root check. The empty frontend cycle baseline is enforced. Package
+surfaces include server composition exports; parsed type/re-export/lazy/require imports and canonical
+relative/alias targets share boundary policy. An isolated deliberate-violation repository exercises
+the actual checker, including core workflow, server, UI, preload, import-time initialization,
+contract cycles and missing ownership. Architecture regressions passed **11/11**.
+
+The root test command now runs consolidated Vitest projects with two workers; focused package
+scripts remain available. CI/release run native and gallery acceptance and retain diagnostics.
+Local results are not presented as remote Actions executions. Dependency versions and lockfile are
+unchanged. The application source was frozen for the full test run, and `pnpm test`
+passed **1,532 tests/267 files** in **407.02 s**. `pnpm typecheck` passed **12/12**, `pnpm build`
+**7/7**, lint/format/whitespace passed, and browser/native/worker plus all six performance suites
+passed. Logs/reports use `/tmp/agentctl-final-*`.
+
+Clean-checkout evidence: copied the tracked/non-ignored snapshot without generated outputs into
+`/tmp/agentctl-clean-checkout-t8tkyu6d`, initialized an isolated Git repository and installed with
+`pnpm install --frozen-lockfile --ignore-scripts --store-dir /home/youssef/.local/share/pnpm/store/v11 --package-import-method=copy`.
+Copy mode reused the verified cache across filesystems; supply-chain checks remained enabled.
+Architecture checks, **11** regressions, **12/12** typecheck tasks with no pre-existing Turbo cache,
+**7/7** build tasks and real native smoke passed. Logs: `/tmp/agentctl-clean-install-cached.log`,
+`/tmp/agentctl-clean-verification.log`, `/tmp/agentctl-clean-native.json`. The final delivery configuration was additionally verified by a targeted desktop build from
+empty generated outputs (**7/7 tasks, zero cached**, including web/UI/API-client dependencies),
+real native smoke and cache-hash changes after reversible web and UI edits. The application code
+covered by the full suite stayed unchanged. Final delivery logs: `/tmp/agentctl-clean-targeted-desktop-build.log`
+and `/tmp/agentctl-final-delivery-native.json`. Cache proof: `/tmp/agentctl-final-cache-proof.json`. CP15 remains open for final revision closure and
+repository/release documentation acceptance.
 
 ## CP15 — Repository-wide acceptance and migration closure
 
@@ -604,6 +668,9 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm --filter @agentctl/web perf:build
+pnpm ui:check
+pnpm desktop:smoke
 pnpm --filter @agentctl/web perf:check
 ```
 
@@ -619,21 +686,24 @@ misrepresented as implemented backend support.
 
 ## Checkpoint evidence log
 
-| Checkpoint | Revision / delivery                                             | Verification                                                                                                                                           | Open work                                                                         |
-| ---------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| CP00       | `e1fc843` (CP03 baseline)                                       | Coverage inventory; tracker/link/format checks                                                                                                         | None within planning scope                                                        |
-| CP01       | `e1fc843` (CP03 baseline)                                       | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide                                              | Follow-up work assigned to CP02–CP14                                              |
-| CP02       | `e1fc843`, accepted 2026-10-16                                  | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory                                      | None in server application/transport scope; native integration remains CP12       |
-| CP03       | `e1fc843`, accepted 2026-10-16                                  | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit                                            | None within CP03; neutral workspace remains CP05, provider lifecycle CP06         |
-| CP04       | `a628a08`, accepted 2026-10-16                                  | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit                                            | None within CP04; neutral session workflows remain CP05                           |
-| CP05       | Checkpoint commit containing this evidence, accepted 2026-10-16 | 1,467 tests/243 files; combined 348/41; follow-up 55/5; 4 architecture tests; typechecks/lint/format/builds; 41-module and 36-session audits           | None within CP05; additional production VCS/folder history remains separate scope |
-| CP06       | `5d60524`, accepted 2026-10-17                                  | Provider/agent 367 tests/58 files; disposal 6/1; typechecks/lint/architecture checks                                                                   | None within provider/protocol composition scope                                   |
-| CP07       | `a117a46`, accepted 2026-10-17                                  | 1,489 tests/248 files; 5 architecture tests; types/lint/format/builds; 214-file ownership ledger                                                       | None within remaining-core scope                                                  |
-| CP08       | `d3b0869`, accepted 2026-10-17                                  | Focused 239/36 and injected-action 7/1; types/lint/architecture/format/web build; production screen journeys                                           | Broader frontend audit remains CP10                                               |
-| CP09       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,491 tests/249 files; focused 135/21; 5 architecture and 9 performance tests; types/lint/format/builds; parent/child browser and desktop worker smoke | Broader frontend audit remains CP10                                               |
-| CP10       | `148ef06`, accepted with contracts integration 2026-10-17       | 275-file web ledger; initial frontend 507/94; final combined 1,511/259; cleanup regressions, production journeys, six performance suites               | None in frontend scope; delivery tooling remains CP14                             |
-| CP11       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,511 tests/259 files; 6 architecture regressions; 80-file ledger; unchanged 77-route surface; types/lint/format/builds/browser/worker/performance     | Source API release communication remains CP15                                     |
-| CP12–CP15  | Not accepted                                                    | Pending                                                                                                                                                | See each checkpoint                                                               |
+| Checkpoint | Revision / delivery                                             | Verification                                                                                                                                                 | Open work                                                                         |
+| ---------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| CP00       | `e1fc843` (CP03 baseline)                                       | Coverage inventory; tracker/link/format checks                                                                                                               | None within planning scope                                                        |
+| CP01       | `e1fc843` (CP03 baseline)                                       | 1,429 Vitest tests; 4 architecture tests; typechecks/lint/builds/browser checks, recorded in design guide                                                    | Follow-up work assigned to CP02–CP14                                              |
+| CP02       | `e1fc843`, accepted 2026-10-16                                  | 1,434 tests/239 files; focused 270/49; 4 architecture tests; typechecks/lint/format/builds; 98 endpoint inventory                                            | None in server application/transport scope; native integration remains CP12       |
+| CP03       | `e1fc843`, accepted 2026-10-16                                  | 1,447 tests/241 files; session 163/24; 4 architecture tests; typechecks/lint/format/builds; 35-module audit                                                  | None within CP03; neutral workspace remains CP05, provider lifecycle CP06         |
+| CP04       | `a628a08`, accepted 2026-10-16                                  | 1,454 tests/241 files; focused 177/15; 4 architecture tests; typechecks/lint/format/builds; 34-module audit                                                  | None within CP04; neutral session workflows remain CP05                           |
+| CP05       | Checkpoint commit containing this evidence, accepted 2026-10-16 | 1,467 tests/243 files; combined 348/41; follow-up 55/5; 4 architecture tests; typechecks/lint/format/builds; 41-module and 36-session audits                 | None within CP05; additional production VCS/folder history remains separate scope |
+| CP06       | `5d60524`, accepted 2026-10-17                                  | Provider/agent 367 tests/58 files; disposal 6/1; typechecks/lint/architecture checks                                                                         | None within provider/protocol composition scope                                   |
+| CP07       | `a117a46`, accepted 2026-10-17                                  | 1,489 tests/248 files; 5 architecture tests; types/lint/format/builds; 214-file ownership ledger                                                             | None within remaining-core scope                                                  |
+| CP08       | `d3b0869`, accepted 2026-10-17                                  | Focused 239/36 and injected-action 7/1; types/lint/architecture/format/web build; production screen journeys                                                 | Broader frontend audit remains CP10                                               |
+| CP09       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,491 tests/249 files; focused 135/21; 5 architecture and 9 performance tests; types/lint/format/builds; parent/child browser and desktop worker smoke       | Broader frontend audit remains CP10                                               |
+| CP10       | `148ef06`, accepted with contracts integration 2026-10-17       | 275-file web ledger; initial frontend 507/94; final combined 1,511/259; cleanup regressions, production journeys, six performance suites                     | None in frontend scope; delivery tooling remains CP14                             |
+| CP11       | Checkpoint commit containing this evidence, accepted 2026-10-17 | 1,511 tests/259 files; 6 architecture regressions; 80-file ledger; unchanged 77-route surface; types/lint/format/builds/browser/worker/performance           | Source API release communication remains CP15                                     |
+| CP12       | Commit containing this evidence, accepted 2026-10-17            | Final 1,532/267; lifecycle/IPC/navigation regressions; Linux Electron normal/failure smoke on final and clean builds; worker smoke                           | macOS/Windows runtime and OS release integration remain platform checks           |
+| CP13       | Commit containing this evidence, accepted 2026-10-17            | UI acceptance inventory; public-export interaction tests; gallery screenshots and focus/keyboard review; renderer builds/journeys/performance                | No open UI architecture work; exhaustive assistive-technology audit is separate   |
+| CP14       | Commit containing this evidence, accepted 2026-10-17            | 1,162-file coverage; 11 enforcement regressions; full tests/types/lint/format/build; clean install/build/native verification; cache proof; CI/release wiring | Final repository/release documentation closure remains CP15                       |
+| CP15       | Not accepted                                                    | Pending                                                                                                                                                      | See each checkpoint                                                               |
 
 For each checkpoint, replace the aggregate pending row with its own evidence entry when work
 starts. Include execution date, actual commands/results, accepted paths, unresolved issues, and

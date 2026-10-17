@@ -45,6 +45,12 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Native desktop lifecycle smoke
+        run: pnpm desktop:smoke performance-results/native-smoke.json
+
+      - name: Design system gallery review
+        run: pnpm ui:check
+
       - name: Check the built desktop Markdown worker
         run: node apps/web/scripts/performance-browser.mjs "$GITHUB_WORKSPACE/performance-results/desktop-worker.json" --production --worker-smoke
         env:
@@ -55,7 +61,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-worker-${{ github.sha }}
-          path: performance-results/desktop-worker*
+          path: performance-results/
           retention-days: 14
           if-no-files-found: warn
 

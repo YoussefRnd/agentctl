@@ -27,3 +27,15 @@ test('rejects undeclared package entries and relative source bypasses while reta
     [],
   );
 });
+
+test('public entries normalize Windows separators without treating a drive as a repository root', () => {
+  assert.equal(
+    publicImportErrors('apps\\web\\src\\main.ts', ['../../../packages/shared/src/utils'], surfaces)
+      .length,
+    1,
+  );
+  assert.deepEqual(
+    publicImportErrors('packages\\shared\\src\\schemas\\plan.ts', ['../utils.js'], surfaces),
+    [],
+  );
+});

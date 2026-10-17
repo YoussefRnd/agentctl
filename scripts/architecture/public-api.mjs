@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { dirname, resolve, sep } from 'node:path';
+import { posix, resolve } from 'node:path';
 
 export async function packageSurfaces(workspace) {
   const result = [];
@@ -12,11 +12,18 @@ export async function packageSurfaces(workspace) {
       entries: Object.keys(manifest.exports ?? { '.': manifest.main }).sort(),
     });
   }
+  const server = JSON.parse(await readFile(resolve(workspace, 'apps/server/package.json'), 'utf8'));
+  result.push({
+    package: server.name,
+    root: 'apps/server',
+    entries: Object.keys(server.exports).sort(),
+  });
   return result;
 }
 
 /** Public import policy applies to application consumers as well as other packages. */
 export function publicImportErrors(file, imports, surfaces) {
+  file = file.replaceAll('\\', '/');
   const errors = [];
   for (const specifier of imports) {
     const surface = surfaces.find(
@@ -29,7 +36,9 @@ export function publicImportErrors(file, imports, surfaces) {
         errors.push(`${file}: undeclared package entry ${specifier}`);
     }
     if (specifier.startsWith('.')) {
-      const target = resolve('/', dirname(file), specifier).slice(1).split(sep).join('/');
+      const target = posix.normalize(
+        posix.join(posix.dirname(file.replaceAll('\\', '/')), specifier.replaceAll('\\', '/')),
+      );
       for (const owner of surfaces)
         if (target.startsWith(owner.root + '/src/') && !file.startsWith(owner.root + '/'))
           errors.push(

@@ -23,6 +23,11 @@ export interface SelectProps {
   align?: 'start' | 'center' | 'end';
   side?: 'top' | 'right' | 'bottom' | 'left';
   'aria-label'?: string;
+  'aria-describedby'?: string;
+  'aria-errormessage'?: string;
+  'aria-invalid'?: React.AriaAttributes['aria-invalid'];
+  'aria-required'?: React.AriaAttributes['aria-required'];
+  required?: boolean;
 }
 
 export function Select({
@@ -38,6 +43,11 @@ export function Select({
   align = 'start',
   side = 'bottom',
   'aria-label': ariaLabel,
+  'aria-describedby': describedBy,
+  'aria-errormessage': errorMessage,
+  'aria-invalid': invalid,
+  'aria-required': ariaRequired,
+  required,
 }: SelectProps) {
   const selectedOption = options.find((opt) => opt.value === value);
 
@@ -52,6 +62,10 @@ export function Select({
             type="button"
             disabled={disabled}
             aria-label={ariaLabel}
+            aria-describedby={describedBy}
+            aria-errormessage={errorMessage}
+            aria-invalid={invalid}
+            aria-required={ariaRequired ?? required}
             title={selectedOption?.label}
             className={cn(
               'motion-disclosure border-border/30 bg-surface/40 hover:bg-surface/60 text-text-main focus:border-accent/30 focus:ring-accent/20 data-[state=open]:border-accent/40 data-[state=open]:bg-accent/10 control-default group relative flex w-full min-w-0 cursor-pointer items-center justify-between border pr-8 outline-none select-none focus:ring-1 disabled:cursor-not-allowed disabled:opacity-40',
@@ -90,6 +104,8 @@ export function Select({
               return (
                 <Dropdown.Item
                   key={opt.value}
+                  role="menuitemradio"
+                  aria-checked={isSelected}
                   className={cn(
                     'flex w-full cursor-pointer items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[11px] font-medium transition-colors',
                     isSelected

@@ -1,7 +1,7 @@
 import { app, Menu, Tray, nativeImage } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { TrayStatus } from '../../shared/platform-types';
+import type { TrayStatus } from '@agentctl/shared';
 import { getMainWindow, createMainWindow } from '../windows/mainWindow';
 
 let tray: Tray | null = null;
@@ -90,6 +90,7 @@ export function updateTrayStatus(status: TrayStatus): void {
 }
 
 export function createTray(): void {
+  if (tray) return;
   try {
     const icon = createTrayIcon();
     tray = new Tray(icon);

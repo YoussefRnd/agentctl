@@ -40,8 +40,23 @@ jobs:
       - name: Build Core packages & Web App
         run: pnpm build
 
+      - name: Native desktop lifecycle smoke
+        run: pnpm desktop:smoke performance-results/native-smoke.json
+
+      - name: Design system gallery review
+        run: pnpm ui:check
+
       - name: Package Desktop App for Linux (AppImage)
         run: pnpm --filter @agentctl/desktop package:linux
+
+      - name: Upload native and gallery diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-native-ui-diagnostics
+          path: performance-results/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Create GitHub Release and Upload AppImage
         uses: softprops/action-gh-release@v2

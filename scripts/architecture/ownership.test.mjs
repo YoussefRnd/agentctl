@@ -10,11 +10,11 @@ test('core coverage rejects missing, stale and duplicate module ownership', () =
   };
   assert.deepEqual(ownershipErrors(['index.ts'], [area]), []);
   assert.deepEqual(ownershipErrors(['index.ts', 'new.ts'], [area]), [
-    'Core file needs an owner and acceptance evidence: new.ts',
+    'File needs an owner and acceptance evidence: new.ts',
   ]);
-  assert.deepEqual(ownershipErrors([], [area]), ['Remove stale core ownership entry: index.ts']);
-  assert.deepEqual(ownershipErrors(['index.ts'], [area, area]), ['Duplicate core owner: index.ts']);
+  assert.deepEqual(ownershipErrors([], [area]), ['Remove stale ownership entry: index.ts']);
+  assert.deepEqual(ownershipErrors(['index.ts'], [area, area]), ['Duplicate owner: index.ts']);
   assert.deepEqual(ownershipErrors([], [{ owner: '', evidence: '', files: [] }]), [
-    'Core ownership area requires an owner and evidence',
+    'Ownership area requires an owner and evidence',
   ]);
 });

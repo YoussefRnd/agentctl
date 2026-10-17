@@ -38,7 +38,11 @@ export default defineConfig(({ mode, command }) => ({
     ],
   },
   build: {
-    ...(mode === 'performance' ? { outDir: 'dist-performance' } : {}),
+    ...(mode === 'performance'
+      ? { outDir: 'dist-performance' }
+      : mode === 'gallery'
+        ? { outDir: 'dist-gallery' }
+        : {}),
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       ...(mode === 'performance'

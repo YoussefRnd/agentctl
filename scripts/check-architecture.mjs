@@ -1,10 +1,14 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { workspaceCoverageErrors } from './architecture/workspace.mjs';
+import { boundaryErrors, dependencyTarget } from './architecture/boundaries.mjs';
 import { packageSurfaces, publicImportErrors } from './architecture/public-api.mjs';
 import { ownershipErrors } from './architecture/ownership.mjs';
 import { importSpecifiers, topLevelCalls, cycleEdges } from './architecture/dependencies.mjs';
 
-const workspace = resolve(import.meta.dirname, '..');
+const fixtureIndex = process.argv.indexOf('--root');
+const workspace =
+  fixtureIndex >= 0 ? resolve(process.argv[fixtureIndex + 1]) : resolve(import.meta.dirname, '..');
 const errors = [];
 const coreFiles = [];
 const contractFiles = [];
@@ -15,21 +19,23 @@ if (JSON.stringify(surfaces) !== JSON.stringify(publicApi.packages))
   errors.push('Declared package surfaces changed; update the reviewed public API map.');
 async function scan(directory) {
   for (const entry of await readdir(join(workspace, directory), { withFileTypes: true })) {
-    const file = join(directory, entry.name);
+    const file = join(directory, entry.name).replaceAll('\\', '/');
     if (entry.isDirectory()) {
       await scan(file);
       continue;
     }
     if (
       file.startsWith('packages/core/src/') &&
-      !/\.(test|spec)\.[jt]sx?$/.test(file) &&
-      (/\.(?:[jt]sx?|mjs)$/.test(file) || file.includes('/skills/builtin/'))
+      !/\.(test|spec)\.[cm]?[jt]sx?$/.test(file) &&
+      (/\.[cm]?[jt]sx?$/.test(file) || file.includes('/skills/builtin/'))
     )
       coreFiles.push(file);
-    if (!/\.[jt]sx?$/.test(file) || /\.(test|spec)\.[jt]sx?$/.test(file)) continue;
+    if (!/\.[cm]?[jt]sx?$/.test(file) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(file)) continue;
     const source = await readFile(join(workspace, file), 'utf8');
     const imports = importSpecifiers(source, file);
-    errors.push(...publicImportErrors(file, imports, surfaces));
+    errors.push(...publicImportErrors(file, imports, surfaces), ...boundaryErrors(file, imports));
+    if (file.startsWith('packages/ui/') && /\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(/.test(source))
+      errors.push(`${file}: UI cannot own networking`);
     if (/^packages\/(?:shared|api-client)\/src\//.test(file)) {
       contractFiles.push(file);
       contractGraph.set(
@@ -40,13 +46,17 @@ async function scan(directory) {
             .map((value) =>
               resolve(workspace, file, '..', value)
                 .slice(workspace.length + 1)
+                .replaceAll('\\', '/')
                 .replace(/\.js$/, '.ts'),
             ),
         ),
       );
     }
     const forbid = (pattern, reason) => {
-      for (const dependency of imports) {
+      for (const dependency of new Set([
+        ...imports,
+        ...imports.map((value) => dependencyTarget(file, value)).filter(Boolean),
+      ])) {
         if (pattern.test(dependency)) errors.push(`${file}: ${reason} (${dependency})`);
       }
     };
@@ -229,6 +239,7 @@ for (const root of [
   'apps/server/src',
   'apps/web/src',
   'apps/desktop/src',
+  'packages/ui/src',
 ])
   await scan(root);
 const ledger = JSON.parse(await readFile(join(workspace, 'docs/core-ownership.json'), 'utf8'));
@@ -242,6 +253,8 @@ const contracts = JSON.parse(
 errors.push(...ownershipErrors(contractFiles, contracts.areas));
 for (const area of contracts.areas) await readFile(join(workspace, area.evidence), 'utf8');
 for (const edge of cycleEdges(contractGraph)) errors.push(`Contract/client module cycle: ${edge}`);
+const coverage = await workspaceCoverageErrors(workspace);
+errors.push(...coverage.errors);
 if (errors.length) {
   console.error(
     'Architecture boundary violations:\n' + errors.map((error) => `- ${error}`).join('\n'),
@@ -249,5 +262,5 @@ if (errors.length) {
   process.exitCode = 1;
 } else
   console.log(
-    `Package and server architecture boundaries are valid; ${coreFiles.length} core and ${contractFiles.length} contract/client files have recorded owners.`,
+    `Package and server architecture boundaries are valid; ${coreFiles.length} core and ${contractFiles.length} contract/client files have recorded owners; ${coverage.count} repository files are covered.`,
   );

@@ -126,9 +126,10 @@
     },
     {
       "area": "shared/types",
-      "owner": "Portable editor and inferred font types with display defaults",
+      "owner": "Portable editor, font and native renderer capability contracts with display defaults",
       "evidence": "docs/contracts-architecture.md",
       "files": [
+        "packages/shared/src/types/desktop.ts",
         "packages/shared/src/types/editors.ts",
         "packages/shared/src/types/font-config.ts",
         "packages/shared/src/types/index.ts"

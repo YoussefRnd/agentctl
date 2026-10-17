@@ -1,3 +1,4 @@
+import { useNativeNavigation } from './useNativeNavigation.js';
 import { useEffect } from 'react';
 import { FontZoomIndicator, FontConfigApplier, ShortcutsDialog } from './shell/index.js';
 import {
@@ -12,6 +13,7 @@ import { useServerStateSync } from './useServerStateSync.js';
 
 export function App() {
   useServerStateSync();
+  useNativeNavigation();
   const { settings } = useSettings();
   const toggleSettings = useSettingsOverlayStore((s) => s.toggleSettings);
   const toggleCommandPalette = useCommandPaletteStore((s) => s.toggle);
