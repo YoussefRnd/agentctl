@@ -1,3 +1,4 @@
+import { observeProviderPrompt, captureTraceparent } from '../../observability/index.js';
 import {
   methods,
   RequestError,
@@ -82,61 +83,66 @@ export function createV2Session(context: SessionContext): AgentSession {
     onError: processEvents.onError,
     onClose: processEvents.onClose,
     async prompt(text, attachments, embeddedContext) {
-      if (!this.id) throw new AgentError('invalid_request', 'Agent session has no ID');
-      const active = sessions.get(this.id);
-      if (!active) throw new AgentError('transport_lost', 'Agent session is not active');
-      const blocks = await buildPromptBlocks({
-        text,
-        attachments,
-        embeddedContext,
-        supportsImage: capabilities().image,
-        supportsAudio: capabilities().audio,
-        supportsEmbeddedContext: capabilities().embeddedContext,
-      });
-      const stopPromise = new Promise<TurnStop>((resolve, reject) => {
-        active.waiters.push({ resolve, reject });
-      });
-      void stopPromise.catch(() => undefined);
-      active.pendingInsertion = [];
-      active.pendingInsertionBytes = 0;
-      let inserted = false;
-      try {
-        const accepted = await connection.agent.request(methods.agent.session.prompt, {
-          sessionId: this.id,
-          prompt: blocks,
+      return observeProviderPrompt('acp-v2', async () => {
+        const traceparent = captureTraceparent();
+        if (!this.id) throw new AgentError('invalid_request', 'Agent session has no ID');
+        const active = sessions.get(this.id);
+        if (!active) throw new AgentError('transport_lost', 'Agent session is not active');
+        const blocks = await buildPromptBlocks({
+          text,
+          attachments,
+          embeddedContext,
+          supportsImage: capabilities().image,
+          supportsAudio: capabilities().audio,
+          supportsEmbeddedContext: capabilities().embeddedContext,
         });
-        inserted = true;
-        await updates.enqueue(async () => {
-          await active.callbacks.onUpdate({
-            type: 'user_message_accepted',
-            messageId: accepted.messageId,
+        const stopPromise = new Promise<TurnStop>((resolve, reject) => {
+          active.waiters.push({ resolve, reject });
+        });
+        void stopPromise.catch(() => undefined);
+        active.pendingInsertion = [];
+        active.pendingInsertionBytes = 0;
+        let inserted = false;
+        try {
+          const accepted = await connection.agent.request(methods.agent.session.prompt, {
+            sessionId: this.id,
+            prompt: blocks,
+            ...(traceparent ? { _meta: { traceparent } } : {}),
           });
-          for (const event of active.pendingInsertion ?? []) await active.callbacks.onUpdate(event);
+          inserted = true;
+          await updates.enqueue(async () => {
+            await active.callbacks.onUpdate({
+              type: 'user_message_accepted',
+              messageId: accepted.messageId,
+            });
+            for (const event of active.pendingInsertion ?? [])
+              await active.callbacks.onUpdate(event);
+            active.pendingInsertion = undefined;
+            active.pendingInsertionBytes = 0;
+          });
+          const stop = await stopPromise;
+          await updates.drain();
+          return { ...stop, userMessageId: accepted.messageId };
+        } catch (error) {
+          // An unconfirmed insertion must not attach observed messages to local input.
+          const buffered = active.pendingInsertion ?? [];
           active.pendingInsertion = undefined;
           active.pendingInsertionBytes = 0;
-        });
-        const stop = await stopPromise;
-        await updates.drain();
-        return { ...stop, userMessageId: accepted.messageId };
-      } catch (error) {
-        // An unconfirmed insertion must not attach observed messages to local input.
-        const buffered = active.pendingInsertion ?? [];
-        active.pendingInsertion = undefined;
-        active.pendingInsertionBytes = 0;
-        await updates
-          .enqueue(async () => {
-            if (!inserted) await active.callbacks.onUpdate({ type: 'user_message_unconfirmed' });
-            for (const event of buffered) await active.callbacks.onUpdate(event);
-          })
-          .catch(() => undefined);
-        const waiter = active.waiters.shift();
-        waiter?.reject(error);
-        await updates.drain().catch(() => undefined);
-        const failure = withProcessDiagnostics(error, child);
-        if (!inserted && !connection.signal.aborted && error instanceof RequestError)
-          throw withProcessDiagnostics(new AgentPromptRejectedError(error), child);
-        throw normalizeAgentError(failure, inserted ? 'accepted' : 'unknown');
-      }
+          await updates
+            .enqueue(async () => {
+              if (!inserted) await active.callbacks.onUpdate({ type: 'user_message_unconfirmed' });
+              for (const event of buffered) await active.callbacks.onUpdate(event);
+            })
+            .catch(() => undefined);
+          const waiter = active.waiters.shift();
+          waiter?.reject(error);
+          await updates.drain().catch(() => undefined);
+          const failure = withProcessDiagnostics(error, child);
+          if (!inserted && !connection.signal.aborted && error instanceof RequestError)
+            throw withProcessDiagnostics(new AgentPromptRejectedError(error), child);
+          throw normalizeAgentError(failure, inserted ? 'accepted' : 'unknown');
+        }
+      });
     },
     async authenticate(methodId) {
       await withTimeout(

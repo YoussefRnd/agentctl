@@ -11,6 +11,7 @@ catalog:
   vitest: 5.0.5
   vite-plus: 1.3.0
 allowBuilds:
+  protobufjs: false
   better-sqlite3: false
   electron-winstaller: true
   electron: true

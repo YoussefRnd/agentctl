@@ -118,6 +118,7 @@ test('dependency-cruiser enforces internal workflow, adapter and transport direc
       ['client-no-host-runtime', 'packages/api-client/src/invalid.ts', 'node:fs'],
       ['client-no-ui-policy', 'packages/api-client/src/toast.ts', 'sonner'],
       ['core-no-transports', 'packages/core/src/transport.ts', 'fastify'],
+      ['core-no-telemetry-sdk', 'packages/core/src/telemetry-sdk.ts', '@opentelemetry/sdk-trace'],
       ['shared-no-react', 'packages/shared/src/ui.ts', 'react'],
     ];
     const { posix } = await import('node:path');

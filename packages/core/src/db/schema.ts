@@ -103,6 +103,7 @@ export const sessionOperations = sqliteTable(
     commandId: text('command_id').notNull(),
     kind: text('kind').notNull(),
     fingerprint: text('fingerprint').notNull(),
+    traceparent: text('traceparent'),
     payload: text('payload').notNull(),
     status: text('status')
       .$type<'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'>()

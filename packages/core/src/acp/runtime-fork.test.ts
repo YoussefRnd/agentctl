@@ -3,6 +3,8 @@ import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { afterEach, expect, test, vi } from 'vite-plus/test';
+import { context as telemetryContext } from '@opentelemetry/api';
+import { restoreTraceContext } from '../observability/index.js';
 import { runAgentDriverConformance } from '../agent/conformance.js';
 import { AcpV1AgentDriver } from './v1/driver.js';
 import { parseAcpCapabilities } from './v1/capabilities.js';
@@ -65,6 +67,24 @@ function setup(supported = true, extraSessionCapabilities: Record<string, unknow
 }
 
 afterEach(() => vi.unstubAllEnvs());
+
+test('v1 forwards only W3C traceparent metadata with the provider prompt', async () => {
+  const traceparent = '00-11111111111111111111111111111111-1111111111111111-01';
+  const active = vi
+    .spyOn(telemetryContext, 'active')
+    .mockReturnValue(restoreTraceContext(traceparent));
+  const { execute, connection } = setup(false);
+  const session = await execute();
+  try {
+    await session.prompt('private prompt');
+    expect(connection.prompt).toHaveBeenCalledWith(
+      expect.objectContaining({ _meta: { traceparent } }),
+    );
+  } finally {
+    await session.close();
+    active.mockRestore();
+  }
+});
 
 test('v1 marks explicit authentication rejections as known failed delivery, not a lost connection', async () => {
   const { execute, connection } = setup(false);

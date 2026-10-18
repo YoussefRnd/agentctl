@@ -20,6 +20,7 @@
         "./db",
         "./git",
         "./mcp",
+        "./observability",
         "./providers",
         "./repository",
         "./security",
@@ -35,7 +36,7 @@
     {
       "package": "@agentctl/server",
       "root": "apps/server",
-      "entries": [".", "./app", "./lifecycle"]
+      "entries": [".", "./app", "./lifecycle", "./telemetry"]
     }
   ],
   "features": [

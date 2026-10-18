@@ -1,15 +1,18 @@
 import { buildApp } from './app.js';
 import { Config } from '@agentctl/core/config';
 import { registerGracefulShutdown } from './utils/lifecycle.js';
+import { startTelemetry } from './observability/runtime.js';
 
 const start = async () => {
   const env = Config.load();
-  const fastify = await buildApp({ env });
-
-  // Standardized, leak-proof graceful shutdown with 5s watchdog
-  registerGracefulShutdown(fastify, { timeoutMs: 5000 });
-
+  const telemetry = await startTelemetry('server');
+  let fastify: Awaited<ReturnType<typeof buildApp>> | undefined;
   try {
+    fastify = await buildApp({ env });
+    registerGracefulShutdown(fastify, {
+      timeoutMs: 5000,
+      onAfterClose: () => telemetry.shutdown(),
+    });
     const port = env.PORT;
     const host = process.env.AGENTCTL_HOST ?? '127.0.0.1';
 
@@ -21,7 +24,10 @@ const start = async () => {
       `Pairing URL: http://${host}:${String(port)}/#pairing=${encodeURIComponent(startupToken)}`,
     );
   } catch (err) {
-    fastify.log.error(err);
+    fastify?.log.error(err);
+    await fastify?.close().catch(() => undefined);
+    await telemetry.shutdown();
+    if (!fastify) process.stderr.write('AgentCtl server startup failed.\n');
     process.exit(1);
   }
 };

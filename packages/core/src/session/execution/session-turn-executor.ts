@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { sessions, providers, sessionTurnAttempts, sessionOperations } from '../../db/schema.js';
 import { randomUUID } from 'node:crypto';
 import { TurnDiagnostics } from './turn-diagnostics.js';
+import { TurnObservation, type TurnOutcome } from '../../observability/index.js';
 import type { DbClient } from '../../db/index.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
 import type { Logger } from '../../logger.js';
@@ -28,7 +29,12 @@ interface TurnRuntimeState {
 export class SessionTurnExecutor {
   private running = false;
   private skillCatalog: SkillCatalogDelivery;
-  private diagnosticTurn?: { attemptId: string; eventId?: number; diagnostics: TurnDiagnostics };
+  private diagnosticTurn?: {
+    attemptId: string;
+    eventId?: number;
+    diagnostics: TurnDiagnostics;
+    observation: TurnObservation;
+  };
   constructor(
     private sessionId: string,
     private runtimeHandle: AgentSession,
@@ -50,6 +56,7 @@ export class SessionTurnExecutor {
     const turn = this.diagnosticTurn;
     const phase = turn?.diagnostics.observe(event);
     if (!phase || !turn) return;
+    turn.observation.phase(phase);
     await this.eventRepository.append(
       this.sessionId,
       'status',
@@ -162,12 +169,42 @@ export class SessionTurnExecutor {
   ): Promise<void> {
     if (this.deps.isStopped()) throw new Error('Session runtime is closed');
     if (this.running) throw new Error('prompt already in progress');
+    const observation = new TurnObservation();
+    return observation.run(async () => {
+      try {
+        await this.executeTurn(
+          observation,
+          text,
+          attachmentIds,
+          embeddedContext,
+          skillActivation,
+          onAccepted,
+          clientMessageId,
+          accepted,
+        );
+      } finally {
+        observation.finish('error', {});
+      }
+    });
+  }
+
+  private async executeTurn(
+    observation: TurnObservation,
+    text: string,
+    attachmentIds?: string[],
+    embeddedContext?: string,
+    skillActivation?: SkillActivation,
+    onAccepted?: (eventId: number) => void,
+    clientMessageId?: string,
+    accepted?: { eventId: number; attemptId: string },
+  ): Promise<void> {
     this.running = true;
     const attemptId = accepted?.attemptId ?? randomUUID();
     const diagnostics = new TurnDiagnostics();
-    this.diagnosticTurn = { attemptId, eventId: accepted?.eventId, diagnostics };
+    this.diagnosticTurn = { attemptId, eventId: accepted?.eventId, diagnostics, observation };
     this.deps.beginAttempt(attemptId);
     this.permissionEngine.clearTurn();
+    let outcome: TurnOutcome = 'error';
     try {
       const sessionRecord = await this.db.query.sessions.findFirst({
         where: eq(sessions.id, this.sessionId),
@@ -303,6 +340,7 @@ export class SessionTurnExecutor {
 
       await this.deps.markDispatched();
       diagnostics.dispatch();
+      observation.phase('dispatched');
       const promptResult = await this.runtimeHandle.prompt(
         promptText,
         resolvedAttachmentFiles,
@@ -470,6 +508,12 @@ export class SessionTurnExecutor {
           .set({ status: 'idle', updatedAt: new Date() })
           .where(eq(sessions.id, this.sessionId));
       }
+      outcome =
+        promptResult.stopReason === 'cancelled'
+          ? 'cancelled'
+          : foregroundFailure
+            ? 'error'
+            : 'success';
     } catch (error: unknown) {
       if (
         this.runtimeRegistry?.ownsRuntime &&
@@ -532,6 +576,7 @@ export class SessionTurnExecutor {
       });
       throw error;
     } finally {
+      observation.finish(this.deps.isStopped() ? 'cancelled' : outcome, diagnostics.finish());
       this.permissionEngine.clearTurn();
       this.diagnosticTurn = undefined;
       this.deps.endAttempt();

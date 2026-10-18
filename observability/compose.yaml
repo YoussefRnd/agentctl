@@ -1,0 +1,29 @@
+name: agentctl-observability
+
+services:
+  telemetry:
+    image: grafana/otel-lgtm:0.37.0
+    ports:
+      - '127.0.0.1:${AGENTCTL_GRAFANA_PORT:-3001}:3000'
+      - '127.0.0.1:${AGENTCTL_OTLP_PORT:-4318}:4318'
+    environment:
+      TEMPO_EXTRA_ARGS: '-reporting.enabled=false'
+      LOKI_EXTRA_ARGS: '-reporting.enabled=false'
+      PYROSCOPE_EXTRA_ARGS: '-usage-stats.enabled=false'
+      PROMETHEUS_EXTRA_ARGS: '--storage.tsdb.retention.time=7d --storage.tsdb.retention.size=512MB'
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: 'false'
+    volumes:
+      - telemetry-data:/data
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  telemetry-data:

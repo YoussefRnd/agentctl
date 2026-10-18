@@ -20,6 +20,7 @@ interface AcceptedMessage {
   attachmentIds: string[];
   commandId: string;
   fingerprint: string;
+  traceparent?: string;
   operationId: string;
   attemptId: string;
   providerId: string;
@@ -39,6 +40,7 @@ export class SessionOperationStore {
     attachmentIds,
     commandId,
     fingerprint,
+    traceparent,
     operationId,
     attemptId,
     attachments,
@@ -67,6 +69,7 @@ export class SessionOperationStore {
           commandId,
           kind: 'message.send',
           fingerprint,
+          traceparent,
           payload: JSON.stringify({ text, attachmentIds }),
           status: 'pending',
           eventId: accepted.id,

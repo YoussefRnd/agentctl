@@ -1,3 +1,4 @@
+import { observeProviderPrompt, captureTraceparent } from '../../observability/index.js';
 import { RequestError } from '@agentclientprotocol/sdk';
 import { findAgentConfigOption, withCustomModels, type AgentConfigOption } from '@agentctl/shared';
 import type { ChildProcess } from 'node:child_process';
@@ -69,42 +70,46 @@ export function createV1Session(context: SessionContext): AgentSession {
       attachments?: { filePath: string; mimeType: string }[],
       embeddedContext?: string,
     ): Promise<AgentPromptResult> {
-      const promptParts = await buildPromptBlocks({
-        text,
-        attachments,
-        embeddedContext,
-        supportsImage: capabilities().supportsImage,
-        supportsAudio: capabilities().supportsAudio,
-        supportsEmbeddedContext: capabilities().supportsEmbeddedContext,
-      });
-
-      const response = await connection
-        .prompt({
-          sessionId: this.id ?? '',
-          prompt: promptParts,
-        })
-        .catch(async (error: unknown) => {
-          await connection.drainSessionUpdates?.(this.id ?? '').catch(() => undefined);
-          await updates.drain().catch(() => undefined);
-          const failure = withProcessDiagnostics(error, child);
-          // v1's response spans the whole turn. Only its explicit auth code proves rejection;
-          // output observed before this response will still override rejection downstream.
-          throw normalizeAgentError(
-            failure,
-            error instanceof RequestError && error.code === -32000 ? 'rejected' : 'unknown',
-          );
+      return observeProviderPrompt('acp-v1', async () => {
+        const traceparent = captureTraceparent();
+        const promptParts = await buildPromptBlocks({
+          text,
+          attachments,
+          embeddedContext,
+          supportsImage: capabilities().supportsImage,
+          supportsAudio: capabilities().supportsAudio,
+          supportsEmbeddedContext: capabilities().supportsEmbeddedContext,
         });
-      try {
-        await connection.drainSessionUpdates?.(this.id ?? '');
-      } catch (error) {
-        await updates.drain().catch(() => undefined);
-        throw error;
-      }
-      await updates.drain();
-      return {
-        stopReason: response.stopReason,
-        usage: normalizeAcpUsage(response.usage),
-      };
+
+        const response = await connection
+          .prompt({
+            sessionId: this.id ?? '',
+            prompt: promptParts,
+            ...(traceparent ? { _meta: { traceparent } } : {}),
+          })
+          .catch(async (error: unknown) => {
+            await connection.drainSessionUpdates?.(this.id ?? '').catch(() => undefined);
+            await updates.drain().catch(() => undefined);
+            const failure = withProcessDiagnostics(error, child);
+            // v1's response spans the whole turn. Only its explicit auth code proves rejection;
+            // output observed before this response will still override rejection downstream.
+            throw normalizeAgentError(
+              failure,
+              error instanceof RequestError && error.code === -32000 ? 'rejected' : 'unknown',
+            );
+          });
+        try {
+          await connection.drainSessionUpdates?.(this.id ?? '');
+        } catch (error) {
+          await updates.drain().catch(() => undefined);
+          throw error;
+        }
+        await updates.drain();
+        return {
+          stopReason: response.stopReason,
+          usage: normalizeAcpUsage(response.usage),
+        };
+      });
     },
     async authenticate(methodId: string): Promise<void> {
       await withTimeout(

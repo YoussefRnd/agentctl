@@ -1,3 +1,8 @@
+import {
+  observeQueueSend,
+  observeQueueProcess,
+  markQueueFailure,
+} from '../../observability/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import { z } from 'zod';
@@ -98,17 +103,20 @@ export class SessionOperationWorker {
         const attachments = await resolveMessageAttachments(sessionId, attachmentIds);
         const operationId = randomUUID();
         const attemptId = randomUUID();
-        const event = this.store.accept({
-          sessionId,
-          text,
-          attachmentIds,
-          commandId,
-          fingerprint,
-          operationId,
-          attemptId,
-          attachments: attachments.metadata,
-          providerId: row.selectedProvider,
-        });
+        const event = observeQueueSend((traceparent) =>
+          this.store.accept({
+            traceparent,
+            sessionId,
+            text,
+            attachmentIds,
+            commandId,
+            fingerprint,
+            operationId,
+            attemptId,
+            attachments: attachments.metadata,
+            providerId: row.selectedProvider,
+          }),
+        );
         this.events.publishCommitted(event);
         this.wake(sessionId);
         return event.id;
@@ -148,100 +156,109 @@ export class SessionOperationWorker {
       if (!attempt || !operation.eventId) throw new Error('Incomplete session operation');
       const claimed = this.store.claim(operation.id, sessionId, attempt.id);
       if (!claimed) return;
-      try {
-        await this.events.update(operation.eventId, { deliveryStatus: 'accepted' });
-        await this.execute(sessionId, {
-          ...messageSchema.parse(JSON.parse(operation.payload)),
-          operationId: operation.id,
-          attemptId: attempt.id,
-          eventId: operation.eventId,
-        });
-        const ended = this.db
-          .select()
-          .from(sessionTurnAttempts)
-          .where(eq(sessionTurnAttempts.id, attempt.id))
-          .get();
-        this.db
-          .update(sessionOperations)
-          .set({
-            status:
-              ended?.status === 'cancelled'
-                ? 'cancelled'
-                : ended?.status === 'failed'
-                  ? 'failed'
-                  : 'succeeded',
-          })
-          .where(
-            and(eq(sessionOperations.id, operation.id), eq(sessionOperations.status, 'running')),
-          )
-          .run();
-        this.db
-          .update(sessionTurnAttempts)
-          .set({ status: 'completed', endedAt: new Date() })
-          .where(
-            and(
-              eq(sessionTurnAttempts.id, attempt.id),
-              inArray(sessionTurnAttempts.status, ['running', 'waiting']),
-            ),
-          )
-          .run();
-        if (ended?.status === 'failed') {
-          // An accepted turn can fail without throwing (notably ACP v2 foreground errors).
-          // Keep its runtime available, but do not drain more input into a failing provider.
-          this.db.update(sessions).set({ status: 'error' }).where(eq(sessions.id, sessionId)).run();
-          return;
-        }
-      } catch (error) {
-        if (
-          this.db
-            .select()
-            .from(sessionOperations)
-            .where(eq(sessionOperations.id, operation.id))
-            .get()?.status !== 'running'
+      const eventId = operation.eventId;
+      const stop = await observeQueueProcess(claimed.traceparent, claimed.createdAt, () =>
+        this.processClaimed(claimed, attempt, eventId),
+      );
+      if (stop) return;
+    }
+  }
+
+  private async processClaimed(
+    operation: typeof sessionOperations.$inferSelect,
+    attempt: typeof sessionTurnAttempts.$inferSelect,
+    eventId: number,
+  ): Promise<boolean> {
+    const sessionId = operation.sessionId;
+    try {
+      await this.events.update(eventId, { deliveryStatus: 'accepted' });
+      await this.execute(sessionId, {
+        ...messageSchema.parse(JSON.parse(operation.payload)),
+        operationId: operation.id,
+        attemptId: attempt.id,
+        eventId,
+      });
+      const ended = this.db
+        .select()
+        .from(sessionTurnAttempts)
+        .where(eq(sessionTurnAttempts.id, attempt.id))
+        .get();
+      this.db
+        .update(sessionOperations)
+        .set({
+          status:
+            ended?.status === 'cancelled'
+              ? 'cancelled'
+              : ended?.status === 'failed'
+                ? 'failed'
+                : 'succeeded',
+        })
+        .where(and(eq(sessionOperations.id, operation.id), eq(sessionOperations.status, 'running')))
+        .run();
+      this.db
+        .update(sessionTurnAttempts)
+        .set({ status: 'completed', endedAt: new Date() })
+        .where(
+          and(
+            eq(sessionTurnAttempts.id, attempt.id),
+            inArray(sessionTurnAttempts.status, ['running', 'waiting']),
+          ),
         )
-          return;
-        const failure = normalizeChatError(error, {
-          stage: readSessionFailureStage(this.db, attempt.id),
-          providerId: attempt.providerId,
-          attemptId: attempt.id,
-          eventId: operation.eventId,
-        });
-        const message = failure.message;
-        const deliveryUnknown = failure.delivery === 'unknown';
-        this.db
-          .update(sessionOperations)
-          .set({ status: deliveryUnknown ? 'unknown' : 'failed', error: message })
-          .where(
-            and(eq(sessionOperations.id, operation.id), eq(sessionOperations.status, 'running')),
-          )
-          .run();
-        this.db
-          .update(sessionTurnAttempts)
-          .set({ status: deliveryUnknown ? 'unknown' : 'failed', endedAt: new Date() })
-          .where(
-            and(
-              eq(sessionTurnAttempts.id, attempt.id),
-              inArray(sessionTurnAttempts.status, ['queued', 'running', 'waiting', 'interrupted']),
-            ),
-          )
-          .run();
-        await this.events.update(operation.eventId, {
-          deliveryStatus:
-            failure.delivery === 'accepted' ? 'accepted' : deliveryUnknown ? 'unknown' : 'failed',
-          deliveryError: message,
-          deliveryFailure: failure,
-        });
-        await this.events.append(
-          sessionId,
-          'status',
-          { status: 'prompt_failed', message, error: failure, operationId: operation.id },
-          operation.eventId,
-          { attemptId: attempt.id },
-        );
+        .run();
+      if (ended?.status === 'failed') {
+        markQueueFailure();
+        // An accepted turn can fail without throwing (notably ACP v2 foreground errors).
+        // Keep its runtime available, but do not drain more input into a failing provider.
         this.db.update(sessions).set({ status: 'error' }).where(eq(sessions.id, sessionId)).run();
-        this.logger.error(error, 'Accepted session message failed');
-        return;
+        return true;
       }
+      return false;
+    } catch (error) {
+      markQueueFailure();
+      if (
+        this.db.select().from(sessionOperations).where(eq(sessionOperations.id, operation.id)).get()
+          ?.status !== 'running'
+      )
+        return true;
+      const failure = normalizeChatError(error, {
+        stage: readSessionFailureStage(this.db, attempt.id),
+        providerId: attempt.providerId,
+        attemptId: attempt.id,
+        eventId,
+      });
+      const message = failure.message;
+      const deliveryUnknown = failure.delivery === 'unknown';
+      this.db
+        .update(sessionOperations)
+        .set({ status: deliveryUnknown ? 'unknown' : 'failed', error: message })
+        .where(and(eq(sessionOperations.id, operation.id), eq(sessionOperations.status, 'running')))
+        .run();
+      this.db
+        .update(sessionTurnAttempts)
+        .set({ status: deliveryUnknown ? 'unknown' : 'failed', endedAt: new Date() })
+        .where(
+          and(
+            eq(sessionTurnAttempts.id, attempt.id),
+            inArray(sessionTurnAttempts.status, ['queued', 'running', 'waiting', 'interrupted']),
+          ),
+        )
+        .run();
+      await this.events.update(eventId, {
+        deliveryStatus:
+          failure.delivery === 'accepted' ? 'accepted' : deliveryUnknown ? 'unknown' : 'failed',
+        deliveryError: message,
+        deliveryFailure: failure,
+      });
+      await this.events.append(
+        sessionId,
+        'status',
+        { status: 'prompt_failed', message, error: failure, operationId: operation.id },
+        eventId,
+        { attemptId: attempt.id },
+      );
+      this.db.update(sessions).set({ status: 'error' }).where(eq(sessions.id, sessionId)).run();
+      this.logger.error(error, 'Accepted session message failed');
+      return true;
     }
   }
 

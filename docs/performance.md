@@ -234,7 +234,7 @@ window.agentctlPerformance.snapshot();
 window.agentctlPerformance.clear();
 ```
 
-Samples are held locally in memory, capped at 200, and contain only a metric name, relative start time, and duration. Internal correlation scopes, message text, paths, and tool arguments are not exported. Nothing is sent to a telemetry service.
+Browser samples are held locally in memory, capped at 200, and contain only a metric name, relative start time, and duration. Internal correlation scopes, message text, paths, and tool arguments are not exported. This browser recorder sends nothing to a telemetry service. The separate, opt-in server/desktop pipeline is described in [OpenTelemetry](observability.md).
 
 | Metric                           | Start                                            | End                                                         |
 | -------------------------------- | ------------------------------------------------ | ----------------------------------------------------------- |

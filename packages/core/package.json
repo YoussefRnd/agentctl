@@ -48,6 +48,10 @@
     "./workspace": {
       "types": "./dist/workspace/index.d.ts",
       "default": "./dist/workspace/index.js"
+    },
+    "./observability": {
+      "types": "./dist/observability/index.d.ts",
+      "default": "./dist/observability/index.js"
     }
   },
   "scripts": {
@@ -74,6 +78,8 @@
     "@agentclientprotocol/sdk": "1.8.0",
     "@agentctl/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.1",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api-logs": "0.223.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.3",
     "drizzle-zod": "^0.8.3",

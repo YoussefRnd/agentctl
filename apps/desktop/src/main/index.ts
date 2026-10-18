@@ -7,6 +7,9 @@ import { createTray, destroyTray } from './tray/trayManager';
 import { startServer, stopServer, getServerPort } from './server/serverManager';
 import { setupAutoUpdater, registerUpdateIpc } from './updates/updateManager';
 import { reportDesktopPerformance } from './performance';
+import { startTelemetry, type TelemetryRuntime } from '@agentctl/server/telemetry';
+
+let telemetry: TelemetryRuntime | undefined;
 
 const runtime = createDesktopRuntime({
   startServer: async () => {
@@ -40,20 +43,28 @@ const runtime = createDesktopRuntime({
 
 if (
   initAppLifecycle(
-    () => runtime.stop(),
+    async () => {
+      try {
+        await runtime.stop();
+      } finally {
+        await telemetry?.shutdown();
+      }
+    },
     () => getServerPort() > 0,
   )
 ) {
   void app
     .whenReady()
     .then(async () => {
+      telemetry = await startTelemetry('desktop');
       reportDesktopPerformance('desktop-process-to-app-ready');
       setupApplicationMenu();
       await runtime.start();
     })
-    .catch((error: unknown) => {
+    .catch(async (error: unknown) => {
       process.stderr.write(`Desktop startup failed: ${String(error)}\n`);
       process.exitCode = 1;
+      await telemetry?.shutdown();
       app.quit();
     });
 }

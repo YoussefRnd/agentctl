@@ -31,6 +31,8 @@ import { InteractiveTerminalService } from './services/terminal-service.js';
 import { terminalRoutes } from './routes/terminal.js';
 import { contextRoutes } from './routes/context.js';
 import { attachmentsRoutes } from './routes/attachments.js';
+import { instrumentHttp } from './observability/http.js';
+import { emitApplicationLog } from './observability/logs.js';
 
 export interface AppDependencies {
   db?: DbClient;
@@ -75,12 +77,20 @@ export async function buildApp(deps: AppDependencies = {}) {
   const fastify = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
+      hooks: {
+        logMethod(args, method, level) {
+          emitApplicationLog(level, args);
+          method.apply(this, args);
+        },
+      },
       transport:
         process.env.NODE_ENV !== 'production'
           ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss' } }
           : undefined,
     },
   });
+
+  instrumentHttp(fastify);
 
   const db = deps.db ?? getDefaultDatabase();
   const gitMutex = new GitMutex();

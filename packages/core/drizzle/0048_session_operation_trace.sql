@@ -1,0 +1,1 @@
+ALTER TABLE `session_operations` ADD `traceparent` text;

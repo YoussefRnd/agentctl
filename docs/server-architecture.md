@@ -217,3 +217,9 @@ all-workspace typechecks, lint, formatting, and web/desktop builds passed. Endpo
 local document links, and whitespace checks passed. This includes the initial CP03 workflow
 composition extraction. Later session/native acceptance is recorded in the final migration
 gate; these original server checks do not claim native-runtime or live-provider acceptance.
+
+The process entry point explicitly owns the optional [OpenTelemetry SDK](observability.md).
+Fastify hooks instrument requests using route templates and bridge sanitized application logs.
+Core uses API-only turn/provider observations and persists traceparent with durable operations.
+SDK shutdown follows server/session disposal, with a bounded flush. SDK construction is absent
+from `buildApp()` and ordinary imports.

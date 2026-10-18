@@ -321,6 +321,18 @@
         "packages/core/src/workspace/session-workspace.ts",
         "packages/core/src/workspace/workspace-context.ts"
       ]
+    },
+    {
+      "area": "observability",
+      "owner": "Operational telemetry APIs, trace propagation and bounded event observations",
+      "evidence": "docs/observability.md",
+      "files": [
+        "packages/core/src/observability/connections.ts",
+        "packages/core/src/observability/context.ts",
+        "packages/core/src/observability/index.ts",
+        "packages/core/src/observability/logs.ts",
+        "packages/core/src/observability/turn.ts"
+      ]
     }
   ]
 }

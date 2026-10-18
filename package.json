@@ -21,7 +21,10 @@
     "ui:check": "pnpm --filter @agentctl/web exec vp build --mode gallery && node apps/web/scripts/performance-browser.mjs --gallery",
     "format:check": "vp fmt --check",
     "check": "pnpm architecture:check && vp check && vp run --filter '@agentctl/*' types",
-    "architecture:graph": "node scripts/check-dependencies.mjs --json"
+    "architecture:graph": "node scripts/check-dependencies.mjs --json",
+    "telemetry:up": "docker compose -f observability/compose.yaml up -d --wait --wait-timeout 120",
+    "telemetry:down": "docker compose -f observability/compose.yaml down",
+    "telemetry:logs": "docker compose -f observability/compose.yaml logs --tail=100"
   },
   "keywords": [],
   "author": "",

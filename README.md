@@ -284,3 +284,8 @@ Commit messages follow the Conventional Commits format and use lowercase subject
 
 The session command, runtime, execution and persistence boundaries are described in
 [Session architecture](packages/core/src/session/README.md).
+
+## OpenTelemetry
+
+Optional traces, metrics and logs, with a local Collector/Grafana development stack, are described in
+[the observability guide](docs/observability.md). Telemetry is disabled by default.

@@ -4,6 +4,7 @@ import { buildApp } from '@agentctl/server/app';
 import { registerGracefulShutdown } from '@agentctl/server/lifecycle';
 import { Config } from '@agentctl/core/config';
 import { randomBytes } from 'node:crypto';
+import { startTelemetry } from '@agentctl/server/telemetry';
 
 async function startServer() {
   process.env.NODE_ENV = 'production';
@@ -15,10 +16,20 @@ async function startServer() {
   // Dynamic port allocation
   env.PORT = 0;
 
-  const fastify = await buildApp({ env, embedded: true, desktopCapability });
+  const telemetry = await startTelemetry('desktop-server');
+  let fastify: Awaited<ReturnType<typeof buildApp>>;
+  try {
+    fastify = await buildApp({ env, embedded: true, desktopCapability });
+  } catch (error) {
+    await telemetry.shutdown();
+    throw error;
+  }
 
   // Standardized graceful shutdown for desktop embedded server
-  const shutdown = registerGracefulShutdown(fastify, { timeoutMs: 4000 });
+  const shutdown = registerGracefulShutdown(fastify, {
+    timeoutMs: 4000,
+    onAfterClose: () => telemetry.shutdown(),
+  });
 
   if (process.parentPort) {
     process.parentPort.on('message', (msg: { data?: { type?: string } }) => {
@@ -29,7 +40,13 @@ async function startServer() {
   }
 
   const host = '127.0.0.1';
-  await fastify.listen({ port: env.PORT, host });
+  try {
+    await fastify.listen({ port: env.PORT, host });
+  } catch (error) {
+    await fastify.close().catch(() => undefined);
+    await telemetry.shutdown();
+    throw error;
+  }
 
   const address = fastify.server.address();
   const port = typeof address === 'object' && address ? address.port : env.PORT;

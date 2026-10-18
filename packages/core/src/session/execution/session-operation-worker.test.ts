@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { context as telemetryContext, ROOT_CONTEXT, type Context } from '@opentelemetry/api';
+import { captureTraceparent, restoreTraceContext } from '../../observability/index.js';
 import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions, sessionEvents } from '../../db/index.js';
 import { sessionOperations, sessionTurnAttempts, sessionRuntimeBindings } from '../../db/schema.js';
@@ -60,6 +63,66 @@ async function pauseQueue(context: ReturnType<typeof fixture>) {
 }
 
 describe('SessionOperationWorker', () => {
+  it('retains the original trace through duplicates and recovery and isolates legacy/corrupt rows', async () => {
+    const storage = new AsyncLocalStorage<Context>();
+    const active = vi
+      .spyOn(telemetryContext, 'active')
+      .mockImplementation(() => storage.getStore() ?? ROOT_CONTEXT);
+    const bound = vi
+      .spyOn(telemetryContext, 'with')
+      .mockImplementation((ctx, fn, thisArg, ...args) =>
+        storage.run(ctx, () => fn.apply(thisArg, args)),
+      );
+    const first = '00-11111111111111111111111111111111-1111111111111111-01';
+    const second = '00-22222222222222222222222222222222-2222222222222222-00';
+    const unrelated = '00-33333333333333333333333333333333-3333333333333333-01';
+    const seen: Array<string | undefined> = [];
+    const context = fixture();
+    let recovered: SessionOperationWorker | undefined;
+    try {
+      await pauseQueue(context);
+      await telemetryContext.with(restoreTraceContext(first), () =>
+        context.worker.acceptMessage('s', 'private first prompt', [], 'first'),
+      );
+      await telemetryContext.with(restoreTraceContext(second), () =>
+        context.worker.acceptMessage('s', 'private first prompt', [], 'first'),
+      );
+      await telemetryContext.with(restoreTraceContext(second), () =>
+        context.worker.acceptMessage('s', 'private second prompt', [], 'second'),
+      );
+      await context.worker.acceptMessage('s', 'legacy', [], 'legacy');
+      await context.worker.acceptMessage('s', 'corrupt', [], 'corrupt');
+      context.db
+        .update(sessionOperations)
+        .set({ traceparent: 'private-corrupt-context' })
+        .where(eq(sessionOperations.commandId, 'corrupt'))
+        .run();
+      expect(context.operations().find((row) => row.commandId === 'first')?.traceparent).toBe(
+        first,
+      );
+      context.worker.stop();
+      recovered = new SessionOperationWorker(
+        context.db,
+        context.events,
+        async () => {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          seen.push(captureTraceparent());
+        },
+        noopLogger,
+      );
+      context.db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, 's')).run();
+      await telemetryContext.with(restoreTraceContext(unrelated), () => recovered!.recover());
+      await recovered.idle('s');
+      expect(seen).toEqual([first, second, undefined, undefined]);
+    } finally {
+      recovered?.stop();
+      await recovered?.idle('s');
+      active.mockRestore();
+      bound.mockRestore();
+      storage.disable();
+    }
+  });
+
   it('retires rewound operations atomically and dispatches the next send', async () => {
     const context = fixture();
     await pauseQueue(context);

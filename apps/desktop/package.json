@@ -26,6 +26,7 @@
     "@agentctl/core": "workspace:*",
     "@agentctl/server": "workspace:*",
     "@agentctl/shared": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
     "electron-updater": "^6.8.9",
     "sodium-native": "^5.1.0"
   },

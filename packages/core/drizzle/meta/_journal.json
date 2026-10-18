@@ -337,6 +337,13 @@
       "when": 1792110250812,
       "tag": "0047_session_skill_catalogs",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1792349609464,
+      "tag": "0048_session_operation_trace",
+      "breakpoints": true
     }
   ]
 }

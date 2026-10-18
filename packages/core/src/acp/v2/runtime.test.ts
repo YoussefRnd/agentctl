@@ -12,6 +12,8 @@ import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import type { ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { describe, expect, test, vi } from 'vite-plus/test';
+import { context as telemetryContext } from '@opentelemetry/api';
+import { restoreTraceContext } from '../../observability/index.js';
 import { runAgentDriverConformance } from '../../agent/conformance.js';
 import type { AgentUpdate } from '../../agent/types.js';
 import type { AgentStreamTransport } from '../types.js';
@@ -34,6 +36,7 @@ function harness(
   const child = new EventEmitter() as ChildProcess;
   let killed = false;
   const controls = {
+    prompt: vi.fn(),
     initialize: vi.fn(),
     elicitation: vi.fn(),
     cancel: vi.fn(),
@@ -78,6 +81,7 @@ function harness(
     return { sessionId: 'v2-session', configOptions, availableCommands };
   });
   app.onRequest(methods.agent.session.prompt, async ({ params, client, requestId }) => {
+    controls.prompt(params);
     if (elicitation) {
       const request =
         typeof elicitation === 'function' ? elicitation(requestId ?? -1) : elicitation;
@@ -191,6 +195,38 @@ function harness(
 }
 
 describe('AcpV2AgentDriver', () => {
+  test('forwards traceparent metadata across the v2 protocol without baggage or extra fields', async () => {
+    const traceparent = '00-22222222222222222222222222222222-2222222222222222-00';
+    const active = vi
+      .spyOn(telemetryContext, 'active')
+      .mockReturnValue(restoreTraceContext(traceparent));
+    const setup = harness();
+    const driver = new AcpV2AgentDriver(setup.fakeSpawn, undefined, () => setup.transport);
+    try {
+      const session = await driver.startSession(
+        'agent',
+        [],
+        {
+          cwd: '/tmp',
+          features: EMPTY_AGENT_FEATURES,
+          intent: { kind: 'new' },
+        },
+        { onUpdate() {}, onRequestPermission: async () => ({ allowed: false }) },
+      );
+      try {
+        await session.prompt('private prompt');
+        expect(setup.controls.prompt).toHaveBeenCalledWith(
+          expect.objectContaining({ _meta: { traceparent } }),
+        );
+      } finally {
+        await session.close();
+      }
+    } finally {
+      setup.agentConnection.close();
+      active.mockRestore();
+    }
+  });
+
   test.each(['new', 'resume', 'fork'] as const)(
     'publishes command snapshots from %s setup, including an empty list',
     async (kind) => {

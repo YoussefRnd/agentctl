@@ -103,6 +103,14 @@ export async function dependencyConfig(workspace) {
     external('fastify|@fastify/[^/]+|react'),
     'Core cannot depend on app transports or UI',
   );
+  forbid(
+    'core-no-telemetry-sdk',
+    '^packages/core/src/',
+    external(
+      '@opentelemetry/(?:sdk-[^/]+|exporter-[^/]+|context-[^/]+|resources|core|instrumentation[^/]*)',
+    ),
+    'Core instrumentation uses the OpenTelemetry API; hosts own SDKs and exporters',
+  );
 
   for (const [name, from, to, comment] of [
     [

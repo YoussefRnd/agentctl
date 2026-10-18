@@ -5,6 +5,7 @@ import {
   type AgentDiagnosticEvent,
   type AgentDiagnosticsSnapshot,
 } from '@agentctl/shared';
+import { recordConnectionEvent } from '../observability/index.js';
 /*
  * Keep these re-exports here so transport implementations do not need to
  * depend on the shared schema package directly.
@@ -28,9 +29,12 @@ export class AgentDiagnosticsRecorder {
   constructor(private readonly capacity = 250) {}
 
   record(event: Omit<AgentDiagnosticEvent, 'timestamp'>): void {
-    this.events.push(
-      agentDiagnosticEventSchema.parse({ timestamp: new Date().toISOString(), ...event }),
-    );
+    const recorded = agentDiagnosticEventSchema.parse({
+      timestamp: new Date().toISOString(),
+      ...event,
+    });
+    this.events.push(recorded);
+    recordConnectionEvent(recorded);
     if (this.events.length > this.capacity) {
       this.events.splice(0, this.events.length - this.capacity);
     }
