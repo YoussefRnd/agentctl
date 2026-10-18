@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { contextByteBudget, selectContextEntries } from './context-budget.js';
 
 test('reserves context for instructions, tools, prompts, and output', () => {

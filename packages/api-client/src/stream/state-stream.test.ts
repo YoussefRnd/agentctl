@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vite-plus/test';
 import { subscribeStateChanges } from './state-stream.js';
 import { setApiBaseUrl, setDesktopCapability } from '../api-client.js';
 

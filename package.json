@@ -4,28 +4,31 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "dev:web": "turbo dev --filter=@agentctl/web... --filter=@agentctl/server...",
-    "dev:desktop": "turbo dev --filter=@agentctl/desktop... --filter=!@agentctl/server --filter=@agentctl/ui... --filter=@agentctl/api-client...",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "format": "prettier --write .",
-    "typecheck": "pnpm architecture:check && turbo typecheck",
-    "test": "pnpm architecture:test && vitest run --maxWorkers=2",
-    "clean": "find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name dist -type d -exec rm -rf {} + 2>/dev/null; find packages apps -name .turbo -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name 'tsconfig.tsbuildinfo' -type f -delete 2>/dev/null; rm -rf .turbo",
+    "build": "vp run --filter '@agentctl/*' compile",
+    "dev": "vp run --filter '@agentctl/*' compile && vp run --parallel --filter '@agentctl/*' dev",
+    "dev:web": "vp run --filter '@agentctl/web...' --filter '@agentctl/server...' compile && vp run --parallel --filter '@agentctl/web...' --filter '@agentctl/server...' dev",
+    "dev:desktop": "vp run --filter '@agentctl/desktop...' --filter '@agentctl/ui...' --filter '@agentctl/api-client...' compile && vp run --parallel --filter '@agentctl/desktop...' --filter '!@agentctl/server' --filter '@agentctl/ui...' --filter '@agentctl/api-client...' dev",
+    "lint": "vp lint",
+    "lint:fix": "vp lint --fix",
+    "format": "vp fmt .",
+    "typecheck": "pnpm architecture:check && vp run --filter '@agentctl/*' types",
+    "test": "pnpm architecture:test && vp test run --maxWorkers=2",
+    "clean": "find . -name node_modules -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name dist -type d -exec rm -rf {} + 2>/dev/null; find packages apps -type d -name .vite-plus -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name 'tsconfig.tsbuildinfo' -type f -delete 2>/dev/null; rm -rf .vite-plus",
     "prepare": "husky",
-    "architecture:check": "node scripts/check-architecture.mjs && pnpm --filter @agentctl/web architecture:check",
+    "architecture:check": "node scripts/check-architecture.mjs && node scripts/check-dependencies.mjs",
     "architecture:test": "node --test --test-isolation=none scripts/architecture/*.test.mjs",
     "desktop:smoke": "node scripts/desktop-smoke.mjs",
-    "ui:check": "pnpm --filter @agentctl/web exec vite build --mode gallery && node apps/web/scripts/performance-browser.mjs --gallery"
+    "ui:check": "pnpm --filter @agentctl/web exec vp build --mode gallery && node apps/web/scripts/performance-browser.mjs --gallery",
+    "format:check": "vp fmt --check",
+    "check": "pnpm architecture:check && vp check && vp run --filter '@agentctl/*' types",
+    "architecture:graph": "node scripts/check-dependencies.mjs --json"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@12.10.1",
   "engines": {
-    "node": ">=24.0.0"
+    "node": "^24.11.0 || >=26.0.0"
   },
   "type": "module",
   "devDependencies": {
@@ -33,21 +36,10 @@
     "@commitlint/config-conventional": "^21.2.3",
     "@types/node": "^25.9.8",
     "@typescript/native": "catalog:",
+    "dependency-cruiser": "18.6.0",
     "husky": "^9.1.7",
-    "lint-staged": "^16.4.0",
-    "oxlint": "^1.85.0",
-    "prettier": "^3.9.9",
-    "prettier-plugin-tailwindcss": "^0.8.1",
-    "turbo": "^2.11.4",
     "typescript": "catalog:",
-    "vitest": "^4.1.11"
-  },
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx,mjs,cjs}": [
-      "oxlint --fix"
-    ],
-    "*.{ts,tsx,js,jsx,mjs,cjs,json,md,css}": [
-      "prettier --write"
-    ]
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
   }
 }

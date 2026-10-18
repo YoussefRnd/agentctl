@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, expect, it, vi } from 'vite-plus/test';
 import type { SessionEventRow } from '@agentctl/shared';
 import { PerformanceRecorder } from './performanceRecorder';
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vite-plus/test';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { SubagentBlock } from './SubagentBlock';

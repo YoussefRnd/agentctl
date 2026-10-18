@@ -1,6 +1,6 @@
 import { createDatabase, projects, sessions, sessionEvents } from '../../db/index.js';
 import { SessionEventRepository } from '../persistence/session-event-repository.js';
-import { describe, it, test, expect, vi } from 'vitest';
+import { describe, it, test, expect, vi } from 'vite-plus/test';
 import { ConversationProjector } from './conversation-projector.js';
 import type { SessionEventRepositoryLike } from '../contracts.js';
 

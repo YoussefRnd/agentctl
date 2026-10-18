@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { useFrameScheduler } from './useFrameScheduler';
 
 test('cancels pending focus work when switching sessions or disposing its owner', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vite-plus/test';
 import { parseDiff, computeWordDiff, buildSplitRows, type DiffLine } from './diff-parser';
 
 describe('diff-parser', () => {

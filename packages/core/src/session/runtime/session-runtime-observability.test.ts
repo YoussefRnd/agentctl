@@ -1,4 +1,4 @@
-import { test, expect, describe } from 'vitest';
+import { test, expect, describe } from 'vite-plus/test';
 import { createDatabase } from '../../db/index.js';
 import { projects, sessions, sessionEvents } from '../../db/schema.js';
 import { SessionRuntime } from './session-runtime.js';

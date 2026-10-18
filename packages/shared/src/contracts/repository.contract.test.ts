@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { repositoryContract } from './repository.contract.js';
 import { repositoryInfoSchema } from '../schemas/repository.js';
 

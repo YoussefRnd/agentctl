@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { ToolDiffBlock, ToolOutput } from './ToolOutputContent';
 
 test('keeps output keyboard accessible and actions outside the scrolling text', () => {

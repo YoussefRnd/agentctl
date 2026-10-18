@@ -1,6 +1,6 @@
 import { act, useEffect, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vite-plus/test';
 import { AppShell } from './AppShell';
 
 vi.mock('./TitleBar', () => ({ TitleBar: () => null }));

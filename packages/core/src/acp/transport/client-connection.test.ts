@@ -1,5 +1,5 @@
 import { agent, methods, ndJsonStream } from '@agentclientprotocol/sdk';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { connectAcpClient } from './client-connection.js';
 import { TerminalManager } from '../protocol/terminal-manager.js';
 import { noopLogger } from '../../logger.js';

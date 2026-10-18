@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, afterEach, vi } from 'vitest';
+import { test, expect, describe, beforeEach, afterEach, vi } from 'vite-plus/test';
 import { buildApp } from '../app.js';
 import { createDatabase, projects, sessions } from '@agentctl/core/db';
 import type { SessionManager } from '@agentctl/core/session';

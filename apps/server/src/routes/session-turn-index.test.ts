@@ -5,7 +5,7 @@ import {
   sessionEvents,
   sessionEventChanges,
 } from '@agentctl/core/db';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { eq, gte } from 'drizzle-orm';
 import { readTurnIndex } from '../services/session-turn-index.js';
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { getSystemSkillsDirectory, SkillRegistry } from './registry.js';
 
 const originalAgentctlHome = process.env.AGENTCTL_HOME;

@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vite-plus/test';
 import { ReviewView } from './ReviewView';
 import { useReviewUIStore, type ReviewScope } from '../model/useReviewUIStore';
 import { mockVirtualViewport } from '@/test-utils/virtualViewport';

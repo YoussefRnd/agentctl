@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vite-plus/test';
 import type { ElicitationFormField, ElicitationItem } from '@agentctl/shared';
 import { ElicitationCard, type ElicitationCardProps } from './ElicitationCard';
 

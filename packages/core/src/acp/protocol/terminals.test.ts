@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { handleBuiltinBash, handleTerminalCreate } from './terminals.js';
 import { TerminalManager } from './terminal-manager.js';
 import { noopLogger } from '../../logger.js';

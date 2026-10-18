@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import { AcpV1AgentDriver } from '../v1/driver.js';
 import { PersistentAgentConnectionManager } from './persistent-connection.js';

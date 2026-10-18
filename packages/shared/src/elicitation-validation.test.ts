@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { getElicitationValidationError } from './elicitation-validation.js';
 import type { ElicitationFormField, ElicitationRequest } from './schemas/session.js';
 

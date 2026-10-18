@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import type { AgentSessionCallbacks, AgentUpdate } from '../../agent/types.js';
 import { AcpSubagentSessions, type SubagentNotification } from './subagent-sessions.js';
 

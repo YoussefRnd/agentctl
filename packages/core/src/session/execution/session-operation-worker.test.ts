@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions, sessionEvents } from '../../db/index.js';
 import { sessionOperations, sessionTurnAttempts, sessionRuntimeBindings } from '../../db/schema.js';

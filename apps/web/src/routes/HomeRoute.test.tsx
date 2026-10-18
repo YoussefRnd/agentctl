@@ -2,7 +2,7 @@ import { act, type ReactNode, type ChangeEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, afterEach, it, expect, vi } from 'vitest';
+import { beforeEach, afterEach, it, expect, vi } from 'vite-plus/test';
 import { HomeRoute } from './HomeRoute';
 import { useDraftStore, type ComposerState } from '@/features/composer';
 import type { ProviderDiscovery } from '@agentctl/shared';

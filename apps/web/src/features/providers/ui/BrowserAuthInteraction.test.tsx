@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { BrowserAuthInteraction } from './BrowserAuthInteraction';
 const respond = vi.hoisted(() => vi.fn().mockResolvedValue({ success: true }));
 vi.mock('@agentctl/api-client', () => ({ providerService: { respondAuthInteraction: respond } }));

@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { test, expect } from 'vite-plus/test';
 import { Provider } from './provider.js';
 import { resolveNpxPackageSpec } from './registry/provider-launcher.js';
 import type { providers } from '../db/schema.js';

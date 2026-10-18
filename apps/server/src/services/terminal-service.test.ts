@@ -1,5 +1,5 @@
 import os from 'node:os';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vite-plus/test';
 import { InteractiveTerminalService } from './terminal-service.js';
 
 describe('InteractiveTerminalService', () => {

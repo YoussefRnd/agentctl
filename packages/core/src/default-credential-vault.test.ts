@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 const constructed = vi.hoisted(() => vi.fn());
 vi.mock('./security/credential-vault.js', async (original) => {
   const actual = await original<typeof import('./security/credential-vault.js')>();

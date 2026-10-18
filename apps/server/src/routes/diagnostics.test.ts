@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import type { ProviderRegistry } from '@agentctl/core/providers';
 import type { AgentDiagnosticsSnapshot } from '@agentctl/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { diagnosticsRoutes } from './diagnostics.js';
 
 describe('transport diagnostics route', () => {

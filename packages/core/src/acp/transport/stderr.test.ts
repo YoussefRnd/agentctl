@@ -1,7 +1,7 @@
 import { PassThrough } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import {
   observeAcpStderr,
   sanitizeStderr,

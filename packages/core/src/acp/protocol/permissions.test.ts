@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { parsePermissionRequest, formatPermissionOutcome } from './permissions.js';
 import { toPermissionRequest } from '../v2/permissions.js';
 import { getBestPermissionOption } from '../../security/permission-options.js';

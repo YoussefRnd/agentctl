@@ -11,7 +11,7 @@ const execute = promisify(execFile);
 const run = (file, args) => execute(file, args, { env: childEnv });
 const checker = resolve(import.meta.dirname, '../check-architecture.mjs');
 
-test('the real checker accepts a clean fixture and diagnoses deliberate module and coverage violations', async () => {
+test('repository governance accepts a clean fixture and rejects ownership, export and baseline drift', async () => {
   const root = await mkdtemp(join(tmpdir(), 'agentctl-boundaries-'));
   const files = new Set();
   async function write(file, value) {
@@ -42,31 +42,20 @@ test('the real checker accepts a clean fixture and diagnoses deliberate module a
       areas: [{ owner: 'Fixture', evidence: 'docs/evidence.md', files: [...files] }],
     });
     const clean = await run(process.execPath, [checker, '--root', root]);
-    assert.match(clean.stdout, /architecture boundaries are valid/);
-    await write(
-      'packages/core/src/workspace/invalid.ts',
-      "export * from '.././git/capabilities/history.js'",
-    );
-    await write('apps/server/src/routes/invalid.ts', "import fs from 'node:fs'");
-    await write('packages/ui/src/invalid.ts', "import '@agentctl/shared'; fetch('/api/product')");
-    await write('apps/desktop/src/preload/invalid.ts', "const main = import('../main/index.js')");
-    await write('packages/core/src/db/invalid.ts', 'const vault = new CredentialVault()');
-    await write(
-      'packages/shared/src/invalid.ts',
-      "import type { X } from '../../../apps/web/src/app/App.js'",
-    );
-    await write('packages/shared/src/a.ts', "export * from './b.js'");
-    await write('packages/shared/src/b.ts', "export * from './a.js'");
+    assert.match(clean.stdout, /architecture governance is valid/);
+    await write('packages/core/src/workspace/unowned.ts', 'export const unowned = true;');
+    await write('packages/core/package.json', {
+      name: '@agentctl/core',
+      exports: { '.': './src/index.ts', './private': './src/private.ts' },
+    });
+    await write('apps/web/architecture-cycles.json', { 'alpha -> beta': 'exception' });
+    await write('apps/web/src/features/session/old.ts', 'export const legacy = true;');
     await assert.rejects(run(process.execPath, [checker, '--root', root]), (error) => {
       for (const expected of [
-        'workflows cannot depend on concrete VCS',
-        'server transports must delegate',
-        'UI cannot own networking',
-        'preload must use the shared IPC contract',
-        'runtime initialization must be called explicitly',
-        'packages/shared cannot depend on apps/web',
-        'Contract/client module cycle',
+        'Declared package surfaces changed',
         'File needs an owner',
+        'legacy architecture entries',
+        'cycle exceptions cannot be added',
       ])
         assert.ok(error.stderr.includes(expected), `${expected}\n${error.stderr}`);
       return true;

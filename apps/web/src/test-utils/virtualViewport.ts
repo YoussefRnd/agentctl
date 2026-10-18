@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { vi } from 'vite-plus/test';
 
 /** Give jsdom the layout and asynchronous scroll events used by virtual lists. */
 export function mockVirtualViewport() {

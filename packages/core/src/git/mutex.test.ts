@@ -1,4 +1,4 @@
-import { test, expect, describe } from 'vitest';
+import { test, expect, describe } from 'vite-plus/test';
 import { GitMutex } from './mutex.js';
 
 describe('GitMutex Tests', () => {

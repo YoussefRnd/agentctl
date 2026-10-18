@@ -348,7 +348,8 @@ export class SessionHistoryService {
 
     let undoSnapshotHash: string | undefined;
     let restoredFiles:
-      Array<{ path: string; status: 'added' | 'modified' | 'deleted' }> | undefined;
+      | Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>
+      | undefined;
     if (mode !== 'fork') {
       const event = await this.deps.eventRepository.getEventWithMetadata(sessionId, eventId);
       if (!event) {

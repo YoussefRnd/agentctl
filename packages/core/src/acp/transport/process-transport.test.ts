@@ -8,7 +8,7 @@ import {
 import assert from 'node:assert/strict';
 import type { ChildProcess, spawn as spawnFn } from 'node:child_process';
 import { PassThrough, Readable, Writable } from 'node:stream';
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import type { AgentDescriptor, AgentUpdate } from '../../agent/types.js';
 import type { CacheStorage } from '../types.js';
 import { cleanEnv, createAgentConnection } from './process-transport.js';

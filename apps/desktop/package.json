@@ -11,15 +11,15 @@
   "homepage": "https://github.com/YoussefRnd/agentctl",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "pnpm exec install-electron && electron-vite dev",
-    "build": "pnpm exec install-electron && electron-vite build",
+    "dev": "vp run watch",
+    "build": "vp run compile",
     "preview": "electron-vite preview",
-    "package": "pnpm exec install-electron && electron-vite build && electron-builder --config electron-builder.yml --publish never",
-    "package:linux": "pnpm exec install-electron && electron-vite build && electron-builder --linux --config electron-builder.yml --publish never",
-    "package:mac": "pnpm exec install-electron && electron-vite build && electron-builder --mac --config electron-builder.yml --publish never",
-    "package:win": "pnpm exec install-electron && electron-vite build && electron-builder --win --config electron-builder.yml --publish never",
-    "test": "vitest run --root ../.. apps/desktop --passWithNoTests",
-    "typecheck": "tsc -b --noEmit"
+    "package": "vp run compile && electron-builder --config electron-builder.yml --publish never",
+    "package:linux": "vp run compile && electron-builder --linux --config electron-builder.yml --publish never",
+    "package:mac": "vp run compile && electron-builder --mac --config electron-builder.yml --publish never",
+    "package:win": "vp run compile && electron-builder --win --config electron-builder.yml --publish never",
+    "test": "vp test run --root ../.. apps/desktop --passWithNoTests",
+    "typecheck": "vp run types"
   },
   "type": "commonjs",
   "dependencies": {
@@ -39,6 +39,7 @@
     "electron-vite": "^5.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "catalog:",
-    "vite": "^8.3.1"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

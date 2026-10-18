@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { it, afterAll } from 'vitest';
+import { it, afterAll } from 'vite-plus/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';

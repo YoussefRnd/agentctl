@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import type { SidebarProject } from '@agentctl/api-client';
 import { resolveDroppedWorkspace } from './droppedWorkspace';
 

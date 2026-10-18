@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { EmbeddedAuthTerminal } from './EmbeddedAuthTerminal';
 const terminal = vi.hoisted(() => ({ write: vi.fn(), dispose: vi.fn() }));
 vi.mock('@xterm/xterm', () => ({

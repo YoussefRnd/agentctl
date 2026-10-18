@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import { createSessionRepositoryRouter } from '../plugins/ts-rest/session-repository.router.js';
 import { createSessionGitRouter } from '../plugins/ts-rest/session-git.router.js';
 import { AppError } from '../errors/app-error.js';

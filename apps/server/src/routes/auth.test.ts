@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, afterEach } from 'vitest';
+import { test, expect, describe, beforeEach, afterEach } from 'vite-plus/test';
 import { buildApp } from '../app.js';
 import { createDatabase } from '@agentctl/core/db';
 import type { FastifyInstance } from 'fastify';

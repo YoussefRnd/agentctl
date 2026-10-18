@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { SessionLauncher, type SessionLauncherDependencies } from './session-launcher.js';
 import type { SessionRuntime } from '../runtime/session-runtime.js';
 import { noopLogger } from '../../logger.js';

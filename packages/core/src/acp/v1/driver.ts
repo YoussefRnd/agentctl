@@ -255,7 +255,10 @@ export class AcpV1AgentDriver implements AgentDriver {
         });
       }
       let newSessionResult:
-        NewSessionResponse | ResumeSessionResponse | LoadSessionResponse | null = null;
+        | NewSessionResponse
+        | ResumeSessionResponse
+        | LoadSessionResponse
+        | null = null;
 
       const baseSessionParams = buildBaseSessionParams({
         cwd: options.cwd,

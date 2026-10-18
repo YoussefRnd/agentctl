@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vite-plus/test';
 import { initializeAuthConnection, authenticateConnection } from './auth.js';
 import { PROTOCOL_VERSION, type ClientSideConnection } from '@agentclientprotocol/sdk';
 import { AGENTCTL_CLIENT_CAPABILITIES } from '../v1/capabilities.js';

@@ -1,4 +1,4 @@
-import { expect, it, vi, afterEach } from 'vitest';
+import { expect, it, vi, afterEach } from 'vite-plus/test';
 import { access } from 'node:fs/promises';
 import { generateGitText, parseGitTextOutput } from './text-generation.js';
 import type {

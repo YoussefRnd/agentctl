@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { useNativeNavigation } from './useNativeNavigation.js';
 it('navigates local native session links and removes subscriptions on unmount', () => {
   let onLink!: (url: string) => void;

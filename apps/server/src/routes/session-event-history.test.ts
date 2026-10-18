@@ -1,5 +1,5 @@
 import { SessionEventRepository } from '@agentctl/core/session';
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, expect, it } from 'vite-plus/test';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
 import {
   EVENT_HISTORY_BYTE_BUDGET,

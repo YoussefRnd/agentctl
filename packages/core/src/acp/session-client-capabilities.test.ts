@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect } from 'vite-plus/test';
 import { parseAcpCapabilities } from './v1/capabilities.js';
 
 describe('parseAcpCapabilities', () => {

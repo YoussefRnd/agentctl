@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 
 it('deduplicates worker jobs, drops off-screen work, caches results and degrades safely on failure', async () => {
   vi.resetModules();

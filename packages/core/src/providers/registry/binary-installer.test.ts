@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { RegistryAgent } from '@agentctl/shared';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { BinaryInstaller } from './binary-installer.js';
 
 const originalAgentctlHome = process.env.AGENTCTL_HOME;

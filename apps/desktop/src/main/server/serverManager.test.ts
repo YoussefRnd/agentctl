@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 const { forkMock } = vi.hoisted(() => ({ forkMock: vi.fn() }));
 vi.mock('electron', () => ({ utilityProcess: { fork: forkMock } }));

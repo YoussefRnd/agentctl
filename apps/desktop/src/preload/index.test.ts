@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 const state = vi.hoisted(() => ({
   api: undefined as unknown,
   listeners: new Map<string, (...args: unknown[]) => void>(),

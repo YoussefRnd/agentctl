@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { chatErrorSchema } from '@agentctl/shared';
 import { AgentError, AgentPromptRejectedError, normalizeAgentError } from './errors.js';
 import { chatRecoveryActions, normalizeChatError } from './chat-error.js';

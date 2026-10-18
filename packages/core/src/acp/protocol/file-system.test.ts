@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { handleFsReadTextFile, handleFsWriteTextFile } from './file-system.js';
 
 test('requires absolute ACP paths and validates one-based line ranges', async () => {

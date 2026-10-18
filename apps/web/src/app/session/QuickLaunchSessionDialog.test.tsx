@@ -1,7 +1,7 @@
 import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { beforeEach, afterEach, it, expect, vi } from 'vitest';
+import { beforeEach, afterEach, it, expect, vi } from 'vite-plus/test';
 import { QuickLaunchSessionDialog } from './QuickLaunchSessionDialog';
 import { useDraftStore } from '@/features/composer';
 const mocks = vi.hoisted(() => ({

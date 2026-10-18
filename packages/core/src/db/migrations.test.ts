@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { sql } from 'drizzle-orm';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { createDatabase, projects, sessions, sessionEvents } from './index.js';
 
 const migrations = readMigrationFiles({

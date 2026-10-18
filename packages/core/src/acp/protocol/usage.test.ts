@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { normalizeAcpUsage } from './usage.js';
 
 test('normalizes legacy usage aliases at the ACP boundary', () => {

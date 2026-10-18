@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { createDatabase } from '../db/index.js';
 import { projects, sessionEvents, sessions } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';

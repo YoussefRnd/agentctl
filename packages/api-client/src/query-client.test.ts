@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createApiQueryClient } from './query-client.js';
 
 test('creates isolated host-owned caches and accepts host error policy', async () => {

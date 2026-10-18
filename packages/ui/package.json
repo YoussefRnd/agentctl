@@ -13,10 +13,10 @@
     "./theme.css": "./src/theme.css"
   },
   "scripts": {
-    "build": "tsc -b",
-    "dev": "tsc -b --watch",
-    "test": "vitest run --root ../.. packages/ui --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "build": "vp run compile",
+    "dev": "vp run watch",
+    "test": "vp test run --root ../.. packages/ui --passWithNoTests",
+    "typecheck": "vp run types"
   },
   "files": [
     "dist",

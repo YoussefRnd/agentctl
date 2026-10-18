@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { normalizeFileChanges } from './file-changes.js';
 
 test('assigns hunk counts to their files and splits a move between its source and destination', () => {

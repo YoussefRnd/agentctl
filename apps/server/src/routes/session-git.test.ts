@@ -15,7 +15,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import { createSessionsRouter } from '../plugins/ts-rest/sessions.router.js';
 import { SessionService } from '../services/session-service.js';
 import { ProviderRegistry } from '@agentctl/core/providers';

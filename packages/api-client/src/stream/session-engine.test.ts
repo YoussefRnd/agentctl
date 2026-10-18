@@ -1,5 +1,5 @@
 import { coalesceBufferedEvents } from './coalesce-events.js';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import { SessionEngine } from './session-engine.js';
 import type { SessionEventRow } from '@agentctl/shared';
 

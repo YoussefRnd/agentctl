@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import type { SessionEventRow } from '@agentctl/shared';
 import { MainFeed } from './MainFeed';
 import { useSubagentStore } from '@/features/subagents';
@@ -18,7 +18,8 @@ const state = vi.hoisted(() => ({
   send: vi.fn(),
   undo: vi.fn(),
   rewindHandler: null as
-    null | ((eventId: number, mode: 'conversation' | 'files' | 'fork') => void),
+    | null
+    | ((eventId: number, mode: 'conversation' | 'files' | 'fork') => void),
   editHandler: null as null | ((eventId: number, content: string) => Promise<boolean>),
 }));
 vi.mock('@agentctl/api-client', async (importOriginal) => ({

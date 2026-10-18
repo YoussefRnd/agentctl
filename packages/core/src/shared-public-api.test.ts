@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import * as shared from '@agentctl/shared';
 import * as schemas from '@agentctl/shared/schemas';
 

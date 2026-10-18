@@ -51,11 +51,11 @@
     }
   },
   "scripts": {
-    "build": "tsc -b && node ./scripts/copy-skills.mjs",
+    "build": "vp run compile",
     "predev": "node ./scripts/copy-skills.mjs",
-    "dev": "tsc -b --watch",
-    "test": "vitest run --root ../.. packages/core",
-    "typecheck": "tsc --noEmit",
+    "dev": "vp run watch",
+    "test": "vp test run --root ../.. packages/core",
+    "typecheck": "vp run types",
     "acp:smoke": "node scripts/acp-smoke.mjs",
     "acp:benchmark": "node scripts/acp-benchmark.mjs",
     "db:generate": "drizzle-kit generate",

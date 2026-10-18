@@ -1,4 +1,4 @@
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect } from 'vite-plus/test';
 import { eq } from 'drizzle-orm';
 import { createDatabase } from '../../db/index.js';
 import { projects, sessions, mcpServers, sessionEvents } from '../../db/schema.js';

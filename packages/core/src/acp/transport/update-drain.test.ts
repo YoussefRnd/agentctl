@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { AcpUpdateQueue, drainableCallbacks } from './update-drain.js';
 
 test('drain waits for ordered persistence rather than just notification receipt', async () => {

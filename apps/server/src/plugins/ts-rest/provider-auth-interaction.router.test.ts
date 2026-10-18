@@ -2,7 +2,7 @@ import { createServerServices } from '../../composition/server-services.js';
 import Fastify from 'fastify';
 import { initServer } from '@ts-rest/fastify';
 import { providersContract } from '@agentctl/shared';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createProvidersRouter } from './providers.router.js';
 import { AppError } from '../../errors/app-error.js';
 

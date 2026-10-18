@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { formatRelativeTime, getRelativeTimeRefreshDelay } from './RelativeTime';
 
 const NOW = new Date('2026-09-14T12:00:00.000Z').getTime();

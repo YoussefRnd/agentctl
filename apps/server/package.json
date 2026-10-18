@@ -3,10 +3,10 @@
   "version": "0.3.0",
   "private": true,
   "scripts": {
-    "build": "tsc -b",
-    "dev": "tsx watch src/index.ts",
-    "test": "vitest run --root ../.. apps/server",
-    "typecheck": "tsc --noEmit"
+    "build": "vp run compile",
+    "dev": "vp run watch",
+    "test": "vp test run --root ../.. apps/server",
+    "typecheck": "vp run types"
   },
   "type": "module",
   "exports": {

@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
+import { beforeEach, afterEach, describe, it, expect, vi } from 'vite-plus/test';
 import type { SessionRow } from '@agentctl/shared';
 import { useHomeSessionStart, type HomeSessionSelection } from './useHomeSessionStart';
 import { useDraftStore } from './useDraftStore';

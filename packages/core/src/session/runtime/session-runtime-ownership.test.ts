@@ -1,5 +1,5 @@
 import { composeRepositoryResources } from '../composition/repository-resources.js';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vite-plus/test';
 import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions, sessionRuntimeBindings } from '../../db/index.js';
 import type { AgentDriver, AgentSession } from '../../agent/types.js';

@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeAll, afterAll } from 'vitest';
+import { test, expect, describe, beforeAll, afterAll } from 'vite-plus/test';
 import {
   WorkspaceManager,
   parseGitHubRemoteUrl,

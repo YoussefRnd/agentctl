@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vite-plus/test';
 import { PermissionEngine, type PermissionPolicy } from './permission-engine.js';
 import type { AgentPermissionRequest } from '../agent/types.js';
 

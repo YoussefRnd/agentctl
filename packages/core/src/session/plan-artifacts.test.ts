@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { createDatabase, projects, sessions } from '../db/index.js';
 import { SessionStateProjector } from './projection/session-state-projector.js';
 import { SessionEventRepository } from './persistence/session-event-repository.js';

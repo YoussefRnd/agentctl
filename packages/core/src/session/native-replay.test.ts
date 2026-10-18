@@ -1,5 +1,5 @@
 import { composeRepositoryResources } from './composition/repository-resources.js';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createDatabase, projects, sessions, sessionEvents } from '../db/index.js';
 import type { AgentDriver, AgentSession } from '../agent/types.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';

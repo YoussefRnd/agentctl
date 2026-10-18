@@ -2,7 +2,7 @@ import * as api from '@agentctl/api-client';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { RewindConfirmDialog } from './RewindConfirmDialog';
 
 it('keeps the dialog and focus stable while rewinding, then allows dismissal again', async () => {
@@ -76,15 +76,16 @@ it.each([false, true])(
           </QueryClientProvider>,
         ),
       );
-      await act(async () => {
-        await vi.waitFor(() => expect(client.isFetching()).toBe(0));
-      });
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      // A settled query can still have a pending observer notification and React commit.
+      await vi.waitFor(async () => {
+        await act(async () => {});
+        expect(dialog.textContent).toMatch(/restoration is unavailable|Could not inspect/);
+      });
       const button = [...dialog.querySelectorAll('button')].find((button) =>
         button.textContent?.includes('Rewind & Restore Files'),
       )!;
       expect(button.disabled).toBe(true);
-      expect(dialog.textContent).toMatch(/restoration is unavailable|Could not inspect/);
       expect(dialog.textContent).not.toContain('No file changes detected');
       act(() => button.click());
       expect(confirm).not.toHaveBeenCalled();

@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import type { SessionEventRow, SessionExecution } from '@agentctl/shared';
 import { getSessionTurnState } from './sessionTurnState';
 

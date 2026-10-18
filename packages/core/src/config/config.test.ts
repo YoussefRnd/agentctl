@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { findWorkspaceRoot, loadWorkspaceEnv } from './workspace.js';
 import { DEFAULT_CONTEXT_TURN_LIMIT, getContextTurnLimit } from './runtime-defaults.js';
 

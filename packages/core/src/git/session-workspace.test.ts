@@ -1,6 +1,6 @@
 import { createDefaultRepositoryService } from '../default-repository-service.js';
 import { legacyGitRevision } from './legacy-revisions.js';
-import { test, expect, describe, beforeAll, afterEach, beforeEach } from 'vitest';
+import { test, expect, describe, beforeAll, afterEach, beforeEach } from 'vite-plus/test';
 import { SessionWorkspace } from './session-workspace.js';
 import { WorkspaceManager } from './worktree-manager.js';
 import { GitMutex } from './mutex.js';

@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import type { SessionEventRow, SessionTurnAnchor } from '@agentctl/shared';
 import type { ConversationTurn } from '../lib/turnMinimapGrouping';
 import { EventFeed } from './EventFeed';

@@ -177,7 +177,7 @@ Validation: all 346 web tests across 78 files passed, including pending-prefetch
 Run the same checks locally as CI, after building both versions:
 
 ```sh
-pnpm exec turbo build --filter=@agentctl/web...
+pnpm exec vp run --filter '@agentctl/web...' compile
 pnpm --filter @agentctl/web perf:build
 pnpm --filter @agentctl/web perf:check
 # Optional explicit artifact directory (relative to your current directory):

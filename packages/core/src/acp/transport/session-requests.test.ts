@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { cancellableCallbacks } from './session-requests.js';
 import type { AgentSessionCallbacks } from '../../agent/types.js';
 

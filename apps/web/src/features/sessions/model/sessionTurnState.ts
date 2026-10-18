@@ -6,7 +6,13 @@ import {
 } from '@agentctl/shared';
 
 export type SessionTurnPhase =
-  'sending' | 'queued' | 'starting' | 'waiting' | 'active' | 'approval' | 'retrying';
+  | 'sending'
+  | 'queued'
+  | 'starting'
+  | 'waiting'
+  | 'active'
+  | 'approval'
+  | 'retrying';
 export interface SessionTurnState {
   phase: SessionTurnPhase;
   startedAt: Date;

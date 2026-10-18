@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { PerformanceRecorder, afterPaint } from './performanceRecorder';
 
 it('is inactive unless opted in', () => {

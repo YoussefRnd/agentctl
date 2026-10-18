@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import type { SessionEventRow, SessionEventSnapshot } from '@agentctl/shared';
 import { initialHistoryOptions } from '../api/sessionNavigation';
 import { useSessionEvents } from './useSessionEvents';

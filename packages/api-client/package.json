@@ -6,10 +6,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b",
-    "dev": "tsc -b --watch",
-    "test": "vitest run --root ../.. packages/api-client --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "build": "vp run compile",
+    "dev": "vp run watch",
+    "test": "vp test run --root ../.. packages/api-client --passWithNoTests",
+    "typecheck": "vp run types"
   },
   "files": [
     "dist",

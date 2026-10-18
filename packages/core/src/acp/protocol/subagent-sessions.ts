@@ -24,7 +24,8 @@ type NativeSubagentNotification<T> = {
 };
 
 export type SubagentNotification =
-  NativeSubagentNotification<SessionUpdate> | NativeSubagentNotification<V2SessionUpdate>;
+  | NativeSubagentNotification<SessionUpdate>
+  | NativeSubagentNotification<V2SessionUpdate>;
 
 export function isSubagentNotification(
   notification: SessionNotification | UpdateSessionNotification,

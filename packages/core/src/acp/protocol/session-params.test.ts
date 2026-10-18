@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { buildBaseSessionParams } from './session-params.js';
 import { parseAcpCapabilities } from '../v1/capabilities.js';
 

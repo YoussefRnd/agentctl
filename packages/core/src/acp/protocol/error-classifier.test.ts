@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { isAcpAuthenticationRequired } from './error-classifier.js';
 
 test('recognizes the standard authentication error code independently of its message', () => {

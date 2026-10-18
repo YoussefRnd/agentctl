@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { createV2SessionProjector } from './events.js';
 
 test('preserves Markdown, file plans, identities, and removal notices', () => {

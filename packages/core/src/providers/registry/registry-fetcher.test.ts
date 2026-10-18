@@ -2,7 +2,7 @@ import { ProviderSync } from './provider-sync.js';
 import { ProviderStore } from './provider-store.js';
 import { ProviderLauncher } from './provider-launcher.js';
 import { BinaryInstaller } from './binary-installer.js';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vite-plus/test';
 import { createDatabase } from '../../db/index.js';
 import { RegistryFetcher } from './registry-fetcher.js';
 

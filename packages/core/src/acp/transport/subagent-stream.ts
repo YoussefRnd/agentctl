@@ -64,7 +64,8 @@ export function withSessionSetupTracking<T>(
             frames.flatMap((frame) => {
               const msg = packet(frame);
               const params = packet(msg?.params) as
-                { update?: { sessionUpdate?: string; sessionId?: string } } | undefined;
+                | { update?: { sessionUpdate?: string; sessionId?: string } }
+                | undefined;
               return params?.update?.sessionUpdate === 'subagent_update' && params.update.sessionId
                 ? [params.update.sessionId]
                 : [];

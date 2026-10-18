@@ -4,12 +4,12 @@ AgentCtl is a local-first control plane for AI coding agents. It runs agents ins
 workspaces, keeps their work isolated with Git worktrees, streams their activity into a unified
 conversation, and provides review, terminal, permission, rewind, handoff, and pull-request tools.
 
-The repository is a pnpm and Turborepo monorepo containing a Fastify server, React web client,
+The repository is a pnpm and Vite+ monorepo containing a Fastify server, React web client,
 Electron desktop application, and shared agent/runtime packages.
 
 ## Requirements
 
-- Node.js 24 or newer
+- Node.js 24.11 or newer in the 24.x line, or Node.js 26+
 - pnpm 12
 - Git
 
@@ -42,12 +42,20 @@ provider.
 | `pnpm dev:web`            | Run the web client and server in development mode  |
 | `pnpm dev:desktop`        | Run the Electron desktop application               |
 | `pnpm lint`               | Run the repository linter                          |
+| `pnpm format`             | Format sources with Vite+                          |
+| `pnpm format:check`       | Check source formatting without changing files     |
+| `pnpm check`              | Check architecture, formatting, lint, and types    |
 | `pnpm typecheck`          | Typecheck every workspace package                  |
 | `pnpm test`               | Run the complete test suite                        |
 | `pnpm build`              | Build all packages and applications                |
 | `pnpm architecture:check` | Check dependency directions and ownership coverage |
 | `pnpm ui:check`           | Build and review the isolated UI gallery in Chrome |
 | `pnpm desktop:smoke`      | Exercise built native startup, IPC and shutdown    |
+
+Vite+ runs the web toolchain, tests, linting, and formatting. The commands above use the
+project-local CLI; no global installation is required. Use `pnpm exec vp run <script>`
+to run a workspace script, or `pnpm exec vp test` for the consolidated test projects.
+`pnpm test` also runs the architecture regression tests.
 
 ## Architecture
 
@@ -266,6 +274,7 @@ request:
 
 ```bash
 pnpm lint
+pnpm format:check
 pnpm typecheck
 pnpm test
 pnpm build

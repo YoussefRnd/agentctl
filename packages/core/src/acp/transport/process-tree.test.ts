@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import {
   spawnManagedProcess,
   terminateChildProcess,

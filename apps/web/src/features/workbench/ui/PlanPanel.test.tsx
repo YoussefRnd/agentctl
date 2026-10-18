@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { PlanPanel } from './PlanPanel';
 vi.mock('@/features/sessions', () => ({
   useSession: () => ({ sessionData: { session: { status: 'idle' } } }),

@@ -1,5 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { sessionKeys, projectKeys } from './queryKeys';
 import { invalidateWorkspaceQueries } from './workspaceQueries';
 

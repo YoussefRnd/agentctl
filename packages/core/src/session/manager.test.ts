@@ -1,7 +1,7 @@
 import { SourceRepository } from '../repository/source-repository.js';
 import { DirectoryBackend } from '../repository/directory-backend.js';
 import { eq } from 'drizzle-orm';
-import { test, it, expect, describe, vi } from 'vitest';
+import { test, it, expect, describe, vi } from 'vite-plus/test';
 import { SessionManager, resolveAgentSessionId, type IEventBus } from './manager.js';
 import type { SessionRuntime } from './runtime/session-runtime.js';
 import type { DbClient } from '../db/index.js';

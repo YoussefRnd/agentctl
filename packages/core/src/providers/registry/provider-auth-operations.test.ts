@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { ProviderAuthOperations } from './provider-auth-operations.js';
 
 test('cancellation settles the caller but retains the credential lane until adapter cleanup', async () => {

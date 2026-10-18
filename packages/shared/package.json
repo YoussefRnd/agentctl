@@ -19,10 +19,10 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
-    "dev": "tsc -b --watch",
-    "test": "vitest run --root ../.. packages/shared",
-    "typecheck": "tsc --noEmit"
+    "build": "vp run compile",
+    "dev": "vp run watch",
+    "test": "vp test run --root ../.. packages/shared",
+    "typecheck": "vp run types"
   },
   "keywords": [],
   "author": "",

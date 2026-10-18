@@ -2,7 +2,7 @@ import { createServerServices } from '../composition/server-services.js';
 import Fastify from 'fastify';
 import { validatorCompiler } from '@fastify/type-provider-zod';
 import http from 'node:http';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
 import { sessionEventSnapshotSchema, type SessionEventRow } from '@agentctl/shared';
 import { eventsRoutes } from './events.js';

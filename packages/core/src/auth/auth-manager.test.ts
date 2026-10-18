@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vite-plus/test';
 import { AuthManager } from './auth-manager.js';
 import { createDatabase } from '../db/index.js';
 

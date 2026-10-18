@@ -2,7 +2,7 @@ import { createServerServices } from '../../composition/server-services.js';
 import Fastify from 'fastify';
 import { initServer } from '@ts-rest/fastify';
 import { DEFAULT_FONT_CONFIG, settingsContract } from '@agentctl/shared';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createSettingsRouter } from './settings.router.js';
 
 async function settingsApp(initial: Record<string, string> = {}) {

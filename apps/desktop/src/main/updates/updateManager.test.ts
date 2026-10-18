@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vite-plus/test';
 const state = vi.hoisted(() => ({
   handlers: new Map<string, (...args: any[]) => any>(),
   callbacks: new Map<string, (...args: any[]) => any>(),

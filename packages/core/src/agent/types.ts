@@ -21,7 +21,12 @@ export type { AgentConfigOption } from '@agentctl/shared';
 export type { AgentFeatures } from '@agentctl/shared';
 
 export type AgentStopReason =
-  'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refusal' | 'cancelled' | (string & {});
+  | 'end_turn'
+  | 'max_tokens'
+  | 'max_turn_requests'
+  | 'refusal'
+  | 'cancelled'
+  | (string & {});
 
 export type AgentSessionIntent =
   | { kind: 'new' }

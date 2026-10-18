@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { GraphemeRevealBuffer, splitGraphemes } from './graphemeRevealBuffer';
 
 it.each(['👩🏽‍💻', '🇺🇸🇫🇷', 'e\u0301', '\r\n', '각', 'क्‍ष'])(

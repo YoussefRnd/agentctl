@@ -96,7 +96,9 @@ export class McpService {
       type: created.type as 'local' | 'remote',
       url: created.url,
       status: (created.enabled ? (isConnected ? 'connected' : 'disconnected') : 'disabled') as
-        'connected' | 'disconnected' | 'disabled',
+        | 'connected'
+        | 'disconnected'
+        | 'disabled',
     };
   }
   async updateMcpServer(
@@ -158,7 +160,9 @@ export class McpService {
       url: updated.url,
       headers: updated.headers,
       status: (updated.enabled ? (isConnected ? 'connected' : 'disconnected') : 'disabled') as
-        'connected' | 'disconnected' | 'disabled',
+        | 'connected'
+        | 'disconnected'
+        | 'disabled',
     };
   }
   async deleteMcpServer(id: string) {

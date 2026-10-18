@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { registerContextFile } from '../../session/context-files.js';
 import { handleFsReadTextFile, handleFsWriteTextFile } from './file-system.js';
 

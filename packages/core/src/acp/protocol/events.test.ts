@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { parseNotificationToEvents } from './events.js';
 import { projectV2SessionUpdate } from '../v2/events.js';
 

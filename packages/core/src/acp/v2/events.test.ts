@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vite-plus/test';
 import { projectV2SessionUpdate } from './events.js';
 
 describe('ACP v2 event projection', () => {

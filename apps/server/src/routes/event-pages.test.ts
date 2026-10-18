@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import { validatorCompiler } from '@fastify/type-provider-zod';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
 import { sessionEventPageSchema, sessionTurnIndexSchema } from '@agentctl/shared';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { eventsRoutes } from './events.js';
 
 it('returns bounded chronological pages, with turn anchors and session-scoped cursors', async () => {

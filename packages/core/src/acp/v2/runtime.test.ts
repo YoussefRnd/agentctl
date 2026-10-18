@@ -11,7 +11,7 @@ import {
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import type { ChildProcess, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from 'vite-plus/test';
 import { runAgentDriverConformance } from '../../agent/conformance.js';
 import type { AgentUpdate } from '../../agent/types.js';
 import type { AgentStreamTransport } from '../types.js';
@@ -22,7 +22,8 @@ function harness(
   rejectOnKill = false,
   browserAuth = false,
   elicitation?:
-    CreateElicitationRequest | ((requestId: string | number) => CreateElicitationRequest),
+    | CreateElicitationRequest
+    | ((requestId: string | number) => CreateElicitationRequest),
   capabilities: AgentCapabilities = { session: { delete: {}, fork: {} } },
   stopReason: 'end_turn' | null = 'end_turn',
   availableCommands?: NewSessionResponse['availableCommands'],

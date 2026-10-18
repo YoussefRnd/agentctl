@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vite-plus/test';
 import { resolveRepositoryContext } from './repository-context.js';
 import { WorkspaceManager } from './worktree-manager.js';
 import { GitMutex } from './mutex.js';

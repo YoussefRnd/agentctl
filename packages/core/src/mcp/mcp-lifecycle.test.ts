@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createDatabase, mcpServers } from '../db/index.js';
 import { noopLogger } from '../logger.js';
 import { McpGateway } from './mcp-gateway.js';

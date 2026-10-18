@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions } from '@agentctl/core/db';
 import { SessionQueries } from './session-queries.js';

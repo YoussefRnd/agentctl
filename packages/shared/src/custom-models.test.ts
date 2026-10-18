@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { customModelsSchema, withCustomModels } from './custom-models.js';
 
 test('appends custom models while preserving agent IDs and advertised metadata', () => {

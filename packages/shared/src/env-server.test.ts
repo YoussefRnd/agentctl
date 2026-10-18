@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { DEVELOPMENT_SESSION_KEY, DEVELOPMENT_SESSION_SALT, parseServerEnv } from './env-server.js';
 
 describe('parseServerEnv', () => {

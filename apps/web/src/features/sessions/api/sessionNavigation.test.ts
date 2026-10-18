@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { QueryClient } from '@tanstack/react-query';
 import { initialHistoryOptions, prefetchSessionNavigation } from './sessionNavigation';
 import { sessionKeys } from '@/shared/lib/queryKeys';

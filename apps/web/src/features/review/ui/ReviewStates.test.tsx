@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { ReviewEmptyState } from './ReviewStates';
 
 it('explains unavailable change history instead of reporting an ordinary folder as clean', () => {

@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { createV2SessionProjector } from './events.js';
 import { MAX_TERMINAL_FRAME_BYTES, terminalFrame } from './terminals.js';
 

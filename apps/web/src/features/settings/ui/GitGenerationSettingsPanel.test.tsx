@@ -1,6 +1,6 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vite-plus/test';
 import type { GitTextGenerationSettings, ProviderDiscovery } from '@agentctl/shared';
 import { GitGenerationSettingsPanel } from './GitGenerationSettingsPanel';
 vi.mock('@agentctl/ui', async (original) => ({

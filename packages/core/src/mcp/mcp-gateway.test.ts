@@ -1,4 +1,4 @@
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect } from 'vite-plus/test';
 import { McpGateway } from './mcp-gateway.js';
 import { createDatabase } from '../db/index.js';
 import { mcpServers } from '../db/schema.js';

@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { TurnDiagnostics } from './turn-diagnostics.js';
 
 test('records each phase once and allows output before the acceptance response', () => {

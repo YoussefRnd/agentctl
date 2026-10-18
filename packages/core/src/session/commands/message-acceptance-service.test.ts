@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { createDatabase, projects, sessions, sessionEvents } from '../../db/index.js';
 import { MessageAcceptanceService } from './message-acceptance-service.js';
 import { SessionEventRepository } from '../persistence/session-event-repository.js';

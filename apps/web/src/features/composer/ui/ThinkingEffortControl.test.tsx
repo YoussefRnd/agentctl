@@ -1,6 +1,6 @@
 import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { beforeEach, afterEach, it, expect, vi } from 'vitest';
+import { beforeEach, afterEach, it, expect, vi } from 'vite-plus/test';
 import type { AgentConfigOption } from '@agentctl/shared';
 import { ThinkingEffortControl } from './ThinkingEffortControl';
 vi.mock('@agentctl/ui', async (original) => ({

@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 
 const opened = vi.hoisted(() => vi.fn());
 vi.mock('node:sqlite', async (original) => {

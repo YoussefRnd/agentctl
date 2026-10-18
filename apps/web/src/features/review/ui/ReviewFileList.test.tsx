@@ -1,6 +1,6 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { ReviewFileList } from './ReviewFileList';
 import { mockVirtualViewport } from '@/test-utils/virtualViewport';
 import { parseDiff } from '@/shared/lib/diff-parser';

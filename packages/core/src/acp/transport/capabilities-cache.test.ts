@@ -1,4 +1,4 @@
-import { test, describe, expect, beforeEach } from 'vitest';
+import { test, describe, expect, beforeEach } from 'vite-plus/test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -142,7 +142,7 @@ describe('FileCacheStorage', () => {
 
 test('v1 rejects every unnegotiated protocol version even with a v1-shaped response', async () => {
   const { initializeAcpConnection } = await import('../v1/capabilities.js');
-  const { vi } = await import('vitest');
+  const { vi } = await import('vite-plus/test');
   const { PROTOCOL_VERSION } = await import('@agentclientprotocol/sdk');
   const initialize = vi
     .fn()

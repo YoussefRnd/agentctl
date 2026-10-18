@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { requestBrowserAuthentication } from './browser-auth.js';
 
 test('declines unsafe URLs and unknown modes without presenting them', async () => {

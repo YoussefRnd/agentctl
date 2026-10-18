@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createDatabase, projects, sessions, providers } from '../../db/index.js';
 import { Provider } from '../../providers/provider.js';
 import { noopLogger } from '../../logger.js';

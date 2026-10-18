@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createDatabase } from '../db/index.js';
 import { ProviderRegistry } from './provider-registry.js';
 import { ProviderStore } from './registry/provider-store.js';

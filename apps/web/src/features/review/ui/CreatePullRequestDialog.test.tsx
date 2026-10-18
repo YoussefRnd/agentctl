@@ -1,6 +1,6 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import { CreatePullRequestDialog } from './CreatePullRequestDialog';
 const mocks = vi.hoisted(() => ({
   generate: vi.fn(),

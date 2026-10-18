@@ -2,7 +2,7 @@ import { describeWorkspace } from './workspace-context.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions } from '../db/index.js';
 import { RepositoryService } from '../repository/repository-service.js';

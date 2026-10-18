@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import * as core from './index.js';
 import { WorkspaceManager, SessionWorkspace as GitSessionWorkspace } from './git/index.js';
 import { SessionWorkspace } from './workspace/index.js';

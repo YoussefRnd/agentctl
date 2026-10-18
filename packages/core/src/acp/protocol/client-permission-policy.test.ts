@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi, type Mock } from 'vite-plus/test';
 import { eq } from 'drizzle-orm';
 import type { Client } from '@agentclientprotocol/sdk';
 import { createDatabase } from '../../db/index.js';

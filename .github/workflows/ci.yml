@@ -36,6 +36,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Check formatting
+        run: pnpm format:check
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -90,7 +93,7 @@ jobs:
         run: google-chrome --version
 
       - name: Build production web app and workspace dependencies
-        run: pnpm exec turbo build --filter=@agentctl/web...
+        run: pnpm exec vp run --filter '@agentctl/web...' compile
 
       - name: Build profiling fixtures
         run: pnpm --filter @agentctl/web perf:build

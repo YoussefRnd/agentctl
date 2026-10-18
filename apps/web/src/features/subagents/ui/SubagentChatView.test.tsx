@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import type { SessionEventRow } from '@agentctl/shared';
 import { SubagentChatView } from './SubagentChatView';
 import type { SubagentGroup } from '../lib/subagentBlockUtils';

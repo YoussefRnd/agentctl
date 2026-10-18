@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it } from 'vite-plus/test';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { useShellStore } from './model/useShellStore';
 import { MODIFIER_KEY } from '@/shared/lib/platform';

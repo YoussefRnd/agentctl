@@ -7,7 +7,6 @@ node_modules
 dist
 dist-performance
 performance-results
-.turbo
 *.db
 *.db-wal
 *.db-shm
@@ -24,3 +23,6 @@ GEMINI.md
 .impeccable/
 
 dist-gallery
+.vitest/
+
+.vite-plus

@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, expect, it } from 'vite-plus/test';
 import { createDatabase, providers } from '../db/index.js';
 import { ProviderRegistry } from '../providers/provider-registry.js';
 import {

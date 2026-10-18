@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { ApiError, assertApiStatus } from './api-error.js';
 
 it('preserves server errors and their status, including snapshot recovery details', () => {

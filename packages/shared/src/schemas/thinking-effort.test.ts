@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { createSessionSchema, sessionRowSchema, thinkingEffortSchema } from './session.js';
 import { sessionsContract } from '../contracts/sessions.contract.js';
 import { providersContract } from '../contracts/providers.contract.js';

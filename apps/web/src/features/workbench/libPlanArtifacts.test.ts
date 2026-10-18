@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import type { SessionEventRow } from '@agentctl/shared';
 import { latestPlanArtifacts } from './libPlanArtifacts';
 

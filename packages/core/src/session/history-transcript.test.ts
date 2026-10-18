@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vite-plus/test';
 import { createDatabase } from '../db/index.js';
 import { SessionEventRepository } from './persistence/session-event-repository.js';
 import { projects, sessions } from '../db/schema.js';

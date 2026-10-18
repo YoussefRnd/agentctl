@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { createDatabase, projects } from './index.js';
 
 it('commits synchronous transactions in every supported mode and returns their result', () => {

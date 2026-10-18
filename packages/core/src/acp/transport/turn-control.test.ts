@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import type { AgentSession } from '../../agent/types.js';
 import { guardAcpTurns } from './turn-control.js';
 

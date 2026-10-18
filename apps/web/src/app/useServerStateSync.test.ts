@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { QueryClient } from '@tanstack/react-query';
 import { applyStateChange } from './useServerStateSync';
 import { mcpKeys, projectKeys, providerKeys, sessionKeys } from '@/shared/lib/queryKeys';

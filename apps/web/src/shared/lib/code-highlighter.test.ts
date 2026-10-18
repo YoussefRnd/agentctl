@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import hljs from 'highlight.js';
 import { highlightLine } from './code-highlighter';
 

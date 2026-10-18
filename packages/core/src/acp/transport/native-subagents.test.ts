@@ -1,5 +1,5 @@
 import { agent, methods, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { connectAcpClient } from './client-connection.js';
 import { wrapDebug } from './stream-debug.js';
 import { AGENTCTL_CLIENT_CAPABILITIES } from '../v1/capabilities.js';

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import { RepositoryService } from './repository-service.js';
 import { RepositoryError } from './errors.js';
 import { DirectoryBackend } from './directory-backend.js';

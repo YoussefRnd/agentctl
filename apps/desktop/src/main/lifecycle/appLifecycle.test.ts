@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vite-plus/test';
 const state = vi.hoisted(() => ({ create: vi.fn(), quit: vi.fn() }));
 const application = Object.assign(new EventEmitter(), {
   requestSingleInstanceLock: () => true,

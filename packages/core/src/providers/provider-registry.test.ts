@@ -1,4 +1,4 @@
-import { test, describe, expect, vi } from 'vitest';
+import { test, describe, expect, vi } from 'vite-plus/test';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import path from 'node:path';

@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vite-plus/test';
 import { McpServerCard } from './McpServerCard';
 
 vi.mock('../api/useMcpServers', () => ({ useMcpTools: () => ({ tools: [] }) }));

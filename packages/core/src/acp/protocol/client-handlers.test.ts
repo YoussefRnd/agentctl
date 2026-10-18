@@ -2,7 +2,7 @@ import { CLIENT_METHODS, type Client } from '@agentclientprotocol/sdk';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vite-plus/test';
 import type { AgentSessionCallbacks } from '../../agent/types.js';
 import { noopLogger } from '../../logger.js';
 import { createClientHandlers } from './client-handlers.js';

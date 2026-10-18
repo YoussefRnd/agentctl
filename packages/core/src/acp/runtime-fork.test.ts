@@ -2,7 +2,7 @@ import { RequestError, type ClientSideConnection } from '@agentclientprotocol/sd
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vite-plus/test';
 import { runAgentDriverConformance } from '../agent/conformance.js';
 import { AcpV1AgentDriver } from './v1/driver.js';
 import { parseAcpCapabilities } from './v1/capabilities.js';

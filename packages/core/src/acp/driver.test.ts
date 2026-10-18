@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vite-plus/test';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import type { AgentDescriptor, AgentDriver } from '../agent/types.js';
 import { AcpAgentDriver, selectAcpProtocol } from './driver.js';

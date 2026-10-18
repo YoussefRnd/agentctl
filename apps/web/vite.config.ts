@@ -1,4 +1,5 @@
-import { defineConfig } from 'vite';
+import { createWorkspaceTasks } from '../../scripts/workspace-tasks.mjs';
+import { defineConfig, lazyPlugins } from 'vite-plus';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -14,7 +15,12 @@ const packageJson = JSON.parse(
 ) as { version: string };
 
 export default defineConfig(({ mode, command }) => ({
-  plugins: [react(), tailwindcss()],
+  run: createWorkspaceTasks(import.meta.dirname, {
+    build: 'node ../../scripts/run-build-steps.mjs tsc -b -- vp build',
+    dev: 'vp dev',
+    typecheck: 'tsc --noEmit',
+  }),
+  plugins: lazyPlugins(() => [react(), tailwindcss()]),
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
   },

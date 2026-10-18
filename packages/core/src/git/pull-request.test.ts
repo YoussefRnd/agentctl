@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vite-plus/test';
 import { WorkspaceManager } from './worktree-manager.js';
 import { GitMutex } from './mutex.js';
 import { GitHubPullRequests } from '../forge/github-pull-requests.js';

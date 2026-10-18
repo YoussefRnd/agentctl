@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 
 it('keeps the repository domain independent of concrete backends and session orchestration', () => {
   const directory = fileURLToPath(new URL('./', import.meta.url));

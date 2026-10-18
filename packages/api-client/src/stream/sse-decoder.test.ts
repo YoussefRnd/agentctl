@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { SseDecoder } from './sse-decoder.js';
 
 test('preserves frames across every CRLF/field chunk boundary and multiline data', () => {

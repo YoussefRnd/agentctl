@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it } from 'vite-plus/test';
 import { isExternalUrl, isRendererNavigation } from './navigationPolicy';
 it('keeps native capabilities within the renderer while allowing local hash routing', () => {
   expect(

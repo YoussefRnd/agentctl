@@ -2,7 +2,7 @@ import { agent, methods, ndJsonStream, RequestError } from '@agentclientprotocol
 import * as v2 from '@agentclientprotocol/sdk/experimental/v2';
 import { authMethodSchema, EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import { EventEmitter } from 'node:events';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { noopLogger } from '../logger.js';
 import { createCompactionProjector } from './protocol/compaction.js';
 import { AcpV1AgentDriver } from './v1/driver.js';

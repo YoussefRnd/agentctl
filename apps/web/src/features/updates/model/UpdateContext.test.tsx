@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { UpdateProvider, useUpdateContext } from './UpdateContext';
 import type { UpdateState } from '@/electron';
 

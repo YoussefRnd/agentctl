@@ -1,7 +1,7 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vite-plus/test';
 import { ApplySessionDialog } from './ApplySessionDialog';
 
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), generate: vi.fn() }));

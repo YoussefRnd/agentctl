@@ -9,7 +9,7 @@ import { SessionOperationWorker } from '../../../../../packages/core/src/session
 import { SessionEventRepository } from '@agentctl/core/session';
 import { noopLogger } from '../../../../../packages/core/src/logger.js';
 import { randomUUID } from 'node:crypto';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createSessionsRouter } from './sessions.router.js';
 import { normalizeAgentError } from '../../../../../packages/core/src/agent/errors.js';
 

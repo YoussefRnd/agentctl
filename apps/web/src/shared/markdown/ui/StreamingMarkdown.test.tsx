@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vite-plus/test';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { StreamingMarkdown, getAdaptiveRevealRate, splitGraphemes } from './StreamingMarkdown';

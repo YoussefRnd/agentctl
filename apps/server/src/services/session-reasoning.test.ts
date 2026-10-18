@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test } from 'vitest';
+import { expect, test } from 'vite-plus/test';
 import { createDatabase, projects, sessions } from '@agentctl/core/db';
 import { SessionService } from './session-service.js';
 

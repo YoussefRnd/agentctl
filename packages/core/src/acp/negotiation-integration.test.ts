@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { ChildProcess, spawn } from 'node:child_process';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import type { AgentDriver } from '../agent/types.js';
 import { AcpAgentDriver } from './driver.js';
 import { AcpV2AgentDriver } from './v2/driver.js';

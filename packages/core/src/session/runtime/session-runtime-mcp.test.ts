@@ -1,4 +1,4 @@
-import { test, describe, expect } from 'vitest';
+import { test, describe, expect } from 'vite-plus/test';
 import { SessionRuntime } from './session-runtime.js';
 import { McpGateway } from '../../mcp/mcp-gateway.js';
 import { SessionEventRepository } from '../persistence/session-event-repository.js';

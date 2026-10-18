@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from 'vite-plus/test';
 import type { RegistryAgent } from '@agentctl/shared';
 import type { AgentDriver } from '../../agent/types.js';
 import { createDatabase } from '../../db/index.js';

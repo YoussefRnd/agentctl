@@ -2,7 +2,13 @@ import type { ReactNode } from 'react';
 import { cn } from '../utils';
 
 export type BadgeVariant =
-  'default' | 'accent' | 'success' | 'warning' | 'danger' | 'outline' | 'surface';
+  | 'default'
+  | 'accent'
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'outline'
+  | 'surface';
 
 export type BadgeSize = 'sm' | 'md';
 

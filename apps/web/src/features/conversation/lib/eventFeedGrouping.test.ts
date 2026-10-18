@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vite-plus/test';
 import { groupFeedEvents, hasCurrentChatFailure } from './eventFeedGrouping';
 import { providerErrorCopy, type ChatError, type SessionEventRow } from '@agentctl/shared';
 

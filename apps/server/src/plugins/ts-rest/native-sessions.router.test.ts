@@ -4,7 +4,7 @@ import { initServer } from '@ts-rest/fastify';
 import { providersContract } from '@agentctl/shared';
 import { createDatabase, projects, sessions, nativeSessionImports } from '@agentctl/core/db';
 import { randomUUID } from 'node:crypto';
-import { expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vite-plus/test';
 import { createProvidersRouter } from './providers.router.js';
 
 test('native listing scopes cwd to the project and import annotations to the configured profile', async () => {

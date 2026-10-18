@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach } from 'vite-plus/test';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { FormField } from './FormField.js';

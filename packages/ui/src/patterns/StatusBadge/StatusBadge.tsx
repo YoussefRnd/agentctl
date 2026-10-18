@@ -2,7 +2,14 @@ import type { ReactNode } from 'react';
 import { Badge, type BadgeSize, type BadgeVariant } from '../../components/Badge.js';
 
 export type StatusType =
-  'active' | 'running' | 'idle' | 'success' | 'warning' | 'error' | 'archived' | 'neutral';
+  | 'active'
+  | 'running'
+  | 'idle'
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'archived'
+  | 'neutral';
 
 export interface StatusBadgeProps {
   status: StatusType;

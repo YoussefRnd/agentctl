@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vite-plus/test';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useSmoothedText } from './StreamingMarkdown';
