@@ -253,3 +253,63 @@ Local ignored artifacts: `performance-results/prepared-comparison/before/`, `aft
 `before-profile/`, `after-profile/`, `comparison.json`, `variant-manifest.json` and `report.md`.
 The manifest records immutable runtime hashes; profiling helpers/snapshots are local diagnostic
 artifacts. The baseline command and isolated client implementation are tracked in the repository.
+
+## History-page statement reuse — October 19, 2026
+
+This compares commit `9491f6f` with a connection-owned history-page reader. Both variants retain
+the isolated-client version 2 fixture and the prior prepared event/queue writes. Server and core
+compiled snapshots were frozen before captures; the benchmark JavaScript and core runtime were
+identical between variants. Runs alternated before/after order within each workload, repetition
+and telemetry mode. There were no concurrent builds or tests during measurement; the existing
+desktop development session was left running.
+
+Each value below is the median of three fresh-process measurements for 20 sessions with 200
+seeded events and five measured turns/history requests per session. The provider remains synthetic.
+
+| Telemetry | History reads | Window ms | History HTTP p95 ms | First output p95 ms | Completion p95 ms | Server CPU ms |
+| --------- | ------------- | --------: | ------------------: | ------------------: | ----------------: | ------------: |
+| disabled  | before        |      1457 |                 152 |                 879 |               990 |          1800 |
+| disabled  | prepared      |      1337 |                 130 |                 773 |               875 |          1645 |
+| enabled   | before        |      1622 |                 146 |                 938 |              1086 |          2016 |
+| enabled   | prepared      |      1477 |                 141 |                 831 |               972 |          1850 |
+
+History HTTP p95 improved about 14% disabled and 3% enabled; workload duration improved 8% and 9%,
+and completion p95 about 12% and 11%. Disabled window ranges were 1379–1535 ms before and
+1321–1369 ms after; enabled ranges were 1576–1693 ms and 1476–1510 ms. These small local captures
+show trends, not production SLOs or statistical significance. Not every metric improved: enabled
+input p95 moved from 145 to 149 ms, window p99 loop delay was approximately unchanged/slightly
+higher (124 to 126 ms disabled, 158 to 162 ms enabled), and peak RSS rose roughly 3 MiB. Event-loop
+utilization stayed near 0.994. RSS does not measure live-object retention.
+
+Separate CPU/SQL captures isolate the history work:
+
+| 100 history reads within the 20-session burst    |  Before |   After |
+| ------------------------------------------------ | ------: | ------: |
+| History service method p95                       | 5.40 ms | 3.84 ms |
+| History service method total                     |  363 ms |  274 ms |
+| Sampled inclusive history-page CPU time          |  358 ms |  271 ms |
+| Native prepares for history queries after warmup |     200 |       0 |
+| Whole-workload native statement prepares         |    2000 |    1800 |
+| Whole-workload statement executions              |    6120 |    6120 |
+| Whole-workload transaction-control calls         |    2000 |    2000 |
+
+History processing p95 fell about 29%, total method time and inclusive CPU about 24%. Instrumented
+method timings locate costs; the HTTP table uses uninstrumented controls. The payload query now
+uses two bound values for a 200-row page, replacing 201, through a parameterized `json_each` ID
+list. Its diagnostic plan retains `session_events_session_id_idx (session_id=? AND rowid=?)`;
+the virtual-table scan is over the bound JSON list. Plans used NULL placeholder bindings and are
+structural diagnostics, not exact request-parameter plans. Both database-row and shared wire
+schemas still validate every returned row. Row decoding remained around 126–135 sampled ms and
+accounts for roughly half the optimized page path; no result/validation cache was introduced.
+
+All 48 measured controls across the four canonical workloads and both telemetry modes, plus 12
+20-session CPU/SQL captures, passed. The full server suite passed 151 tests across 33 files,
+including eight new regressions covering prepared-shape reuse, fresh updates/deletions, sparse
+session-scoped IDs, cursor/high-water bounds, oversized-parent preflight, extended metadata,
+corrupt row rejection and independent database connections. Workspace types, lint/formatting,
+builds and architecture checks passed. No schema, pagination contract or telemetry setup changed.
+
+Local ignored captures are under `performance-results/history-comparison/`: `before/`, `after/`,
+`before-profile/`, `after-profile/`, `comparison.json`, `variant-manifest.json` and `report.md`.
+The manifest verifies identical core and benchmark code. Snapshot selection and alternating-run
+helpers are local diagnostic scripts; `pnpm perf:backend` remains the tracked baseline command.

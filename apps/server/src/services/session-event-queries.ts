@@ -3,14 +3,15 @@ import { sessionEvents, type DbClient } from '@agentctl/core/db';
 import {
   EVENT_REPLAY_LIMIT,
   parseEventRow,
-  readEventPage,
   readEventWindow,
   readEventReplay,
   readSessionChangeCatchUp,
 } from './session-event-history.js';
+import { SessionEventPageReader, type EventPageOptions } from './session-event-page-reader.js';
 import { readTurnIndex } from './session-turn-index.js';
 
 export class SessionEventQueries {
+  private pageReader?: SessionEventPageReader;
   constructor(private readonly db: DbClient) {}
   async list(sessionId: string) {
     const rows = await this.db
@@ -23,8 +24,8 @@ export class SessionEventQueries {
   turns(sessionId: string) {
     return readTurnIndex(this.db, sessionId);
   }
-  page(sessionId: string, options: Parameters<typeof readEventPage>[2]) {
-    return readEventPage(this.db, sessionId, options);
+  page(sessionId: string, options: EventPageOptions) {
+    return (this.pageReader ??= new SessionEventPageReader(this.db)).read(sessionId, options);
   }
   window(sessionId: string, options: Parameters<typeof readEventWindow>[2]) {
     return readEventWindow(this.db, sessionId, options);

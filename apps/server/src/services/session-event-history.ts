@@ -1,94 +1,25 @@
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, sql } from 'drizzle-orm';
-import {
-  sessionEvents,
-  sessionEventChanges,
-  sessionEventDbRowSchema,
-  type DbClient,
-} from '@agentctl/core/db';
-import {
-  sessionEventRowSchema,
-  type SessionEventPage,
-  type SessionEventRow,
-} from '@agentctl/shared';
+import { and, asc, eq, gt, gte, inArray, lt, lte, sql } from 'drizzle-orm';
+import { sessionEvents, sessionEventChanges, type DbClient } from '@agentctl/core/db';
+import { type SessionEventPage, type SessionEventRow } from '@agentctl/shared';
 
-export const EVENT_HISTORY_BYTE_BUDGET = 1_048_576;
+import {
+  SessionEventPageReader,
+  payloadBytes,
+  EVENT_HISTORY_BYTE_BUDGET,
+  type EventPageOptions,
+} from './session-event-page-reader.js';
+import { parseEventRow } from './session-event-row.js';
+export { EVENT_HISTORY_BYTE_BUDGET } from './session-event-page-reader.js';
+export { parseEventRow } from './session-event-row.js';
+
 export const EVENT_REPLAY_LIMIT = 128;
-
-export function parseEventRow(raw: typeof sessionEvents.$inferSelect): SessionEventRow {
-  const row = sessionEventDbRowSchema.parse(raw);
-  return sessionEventRowSchema.parse({
-    ...row,
-    data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
-    metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : undefined,
-  });
-}
-
-// Inspect payload sizes before fetching/decoding bodies. The allowance covers row fields.
-const payloadBytes = sql<number>`length(cast(${sessionEvents.data} as blob)) + coalesce(length(cast(${sessionEvents.metadata} as blob)), 0) + 512`;
 
 export function readEventPage(
   db: Pick<DbClient, 'select'>,
   sessionId: string,
-  options: { beforeId?: number; throughId?: number; limit: number },
+  options: EventPageOptions,
 ): SessionEventPage {
-  const candidates = db
-    .select({ id: sessionEvents.id, payloadBytes })
-    .from(sessionEvents)
-    .where(
-      and(
-        eq(sessionEvents.sessionId, sessionId),
-        options.beforeId !== undefined ? lt(sessionEvents.id, options.beforeId) : undefined,
-        options.throughId !== undefined ? lte(sessionEvents.id, options.throughId) : undefined,
-      ),
-    )
-    .orderBy(desc(sessionEvents.id))
-    .limit(options.limit + 1)
-    .all();
-  const ids: number[] = [];
-  let bytes = 0;
-  for (const candidate of candidates) {
-    if (ids.length === options.limit) break;
-    // Keep at least one complete row so even an oversized item can be paginated.
-    if (ids.length > 0 && bytes + candidate.payloadBytes > EVENT_HISTORY_BYTE_BUDGET) break;
-    ids.push(candidate.id);
-    bytes += candidate.payloadBytes;
-  }
-  if (ids.length === 0) return { events: [], nextBeforeId: null };
-  const rows = db
-    .select()
-    .from(sessionEvents)
-    .where(and(eq(sessionEvents.sessionId, sessionId), inArray(sessionEvents.id, ids)))
-    .orderBy(asc(sessionEvents.id))
-    .all();
-  const page = rows.map(parseEventRow);
-  // IDs follow the selected window, not an optional earlier turn anchor.
-  const nextBeforeId = candidates.length > ids.length ? ids[ids.length - 1] : null;
-  const parentId = rows[0]?.parentEventId;
-  if (parentId && !ids.includes(parentId)) {
-    const [parentSize] = db
-      .select({ payloadBytes })
-      .from(sessionEvents)
-      .where(and(eq(sessionEvents.sessionId, sessionId), eq(sessionEvents.id, parentId)))
-      .limit(1)
-      .all();
-    if (parentSize && bytes + parentSize.payloadBytes <= EVENT_HISTORY_BYTE_BUDGET) {
-      const [parent] = db
-        .select()
-        .from(sessionEvents)
-        .where(
-          and(
-            eq(sessionEvents.sessionId, sessionId),
-            eq(sessionEvents.id, parentId),
-            eq(sessionEvents.type, 'text'),
-            sql`json_extract(${sessionEvents.data}, '$.role') = 'user'`,
-          ),
-        )
-        .limit(1)
-        .all();
-      if (parent) page.unshift(parseEventRow(parent));
-    }
-  }
-  return { events: page, nextBeforeId };
+  return new SessionEventPageReader(db).read(sessionId, options);
 }
 
 /** Read forward from a targeted turn instead of walking every preceding page. */

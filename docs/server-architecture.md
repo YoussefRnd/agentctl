@@ -40,6 +40,20 @@ surface and coordinates multi-field patches in the established order. It does no
 | `services/server-lifecycle.ts`           | Recovery, credential-change retirement, background provider refresh and awaited shutdown                                              |
 | `services/session-state-events.ts`       | Session/workspace notification topics independent of Fastify                                                                          |
 
+## History page reads
+
+`SessionEventQueries` lazily owns one `SessionEventPageReader` per connection/app. The reader
+prepares four cursor-filter shapes, one payload query and two optional parent queries, as needed.
+Statement reuse is bounded independently of sessions, ID values and page lengths; it does not
+cache event rows or pages. Snapshot reads construct a reader on their existing transaction view.
+
+The payload query binds the exact preflight IDs as one JSON array through SQLite `json_each`,
+keeping its SQL/parameter shape stable without widening the selection to an ID range. Candidate
+and parent byte checks still precede payload decoding; oversized rows retain pagination progress.
+Session filters, cursor/high-water bounds, chronological order and optional parent anchors remain.
+`session-event-row.ts` keeps both persisted-row and shared wire validation and JSON decoding for
+page, window, replay and full-list consumers. Queries select only the history columns it consumes.
+
 ## Preserved workflow semantics
 
 Session detail still loads the existing session record, explicitly reconciles it, then builds
