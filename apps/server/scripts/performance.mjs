@@ -38,8 +38,8 @@ for (const file of [...new Set(sources)].sort())
     .update(await readFile(join(workspace, file)))
     .update('\0');
 const report = {
-  schemaVersion: 1,
-  fixtureVersion: 1,
+  schemaVersion: 2,
+  fixtureVersion: 2,
   generatedAt: new Date().toISOString(),
   passed: false,
   metadata: {
@@ -57,7 +57,7 @@ const report = {
   },
   limitations: [
     'Synthetic provider; no ACP process or model/network latency.',
-    'Loopback clients and server share a process; CPU and RSS include the load generator.',
+    'HTTP/SSE clients run in a child process; CPU/RSS/event-loop metrics cover the server and local telemetry receiver only.',
     'One discarded warmup and three fresh-process measured repetitions per workload and telemetry mode.',
     'Each process also discards one turn and history request per session before measurement.',
     'RSS peaks are sampled every 20ms; timings and memory are trends, not CI thresholds.',
@@ -106,7 +106,7 @@ async function runSample(scenario, telemetry, repetition) {
     await writeFile(join(output, `${name}.log`), logs);
     if (code !== 0) throw new Error(`${name} exited ${code}: ${logs.slice(-3000)}`);
     const sample = JSON.parse(await readFile(file, 'utf8'));
-    if (!sample.passed || sample.schemaVersion !== 1) throw new Error(`Invalid sample: ${name}`);
+    if (!sample.passed || sample.schemaVersion !== 2) throw new Error(`Invalid sample: ${name}`);
     if (repetition >= 0) samples.push({ ...sample, repetition });
     console.log(`Passed ${name} (${Math.round(sample.elapsedMs)}ms)`);
   } finally {
@@ -142,7 +142,7 @@ const lines = [
   '',
   `Result: ${report.passed ? 'passed' : 'failed'}. Commit: ${report.metadata.commit}${report.metadata.dirty ? ' (working tree changes)' : ''}.`,
   '',
-  'Each row is the median of three fresh-process runs. Completion p95 is within-run synthetic turn latency, not real-provider tail latency.',
+  'Each row is the median of three fresh-process runs. Completion p95 ends when the client parses SSE turn_end; CPU and RSS cover the server process. Values are synthetic workload trends, not real-provider tail latency.',
   '',
   '| Sessions | History/session | Telemetry | Turns/s | Accept p95 ms | History p95 ms | First output p95 ms | Completion p95 ms | Peak RSS MiB |',
   '| ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |',

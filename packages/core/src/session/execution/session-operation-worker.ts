@@ -433,7 +433,6 @@ export class SessionOperationWorker {
           if (!updated) throw new Error('Message is already running or is no longer queued');
           if (!item.eventId) throw new Error('Message event is missing');
           const event = this.events.updateInTransaction(
-            tx,
             item.eventId,
             { content: text },
             { promptTokens: Math.ceil(text.length / 4) },

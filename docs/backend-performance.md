@@ -57,20 +57,27 @@ Per-run JSON includes:
 - Process user/system CPU, RSS before/after, sampled peak RSS/heap, event-loop utilization and delay.
 - Workload dimensions and telemetry signal delivery counts.
 
-Completion starts at client submission and ends after runtime execution/finalization. First output
-ends when the loopback SSE client parses the first provider text for that prompt. It is not paint
+Completion starts at client submission and ends when the client parses the SSE `turn_end` event.
+First output ends when that client parses the first provider text for the prompt. It is not paint
 latency. SSE batches may combine chunks; the harness reconstructs and verifies complete output
 instead of assuming one network frame per chunk. It also requires usable bounded history pages,
 unique durable receipts, completed operations and listener cleanup before accepting a sample.
 
-Loopback clients share the server process. CPU, memory and event-loop measurements therefore
-include the load generator, SSE parsing and the in-process telemetry receiver. These are comparative
-application-workload measurements, not isolated server resource costs or a maximum-capacity claim.
+HTTP requests, response decoding and SSE parsing run in a separate Node child process. Server
+CPU, memory and event-loop measurements exclude that load generator but still include the local
+telemetry receiver when enabled. The client imports only its protocol/SSE helpers and Node APIs.
+IPC coordinates warmup, measurement start, results and shutdown; clients exit if their parent dies,
+and the server bounds waits and terminates a client that fails to close. Durable rows, receipt IDs,
+FIFO, non-overlapping per-session dispatch, complete streamed text and listener cleanup must all
+pass before a sample is accepted. These are loopback workload measurements, not a capacity claim.
 Peak memory is sampled every 20 ms and can miss short spikes. No forced garbage collection is used;
 RSS is not a live-object or leak measurement. Within-run p95 from five turns is usually the maximum;
 it must not be presented as a production p95. Compare the three-run distributions as well as medians.
 
-Reports include Node/OS/CPU, commit, dirty state and a source/lockfile hash. `summary.md` contains
+Sample/report schema version 2 and fixture version 2 identify this process boundary and completion
+end point; do not compare their latency/CPU/RSS values directly with version 1 shared-process
+captures. Resource fields cover the server process, and each sample includes explicit `measurement`
+labels. Reports include Node/OS/CPU, commit, dirty state and a source/lockfile hash. `summary.md` contains
 medians across the three runs; `report.json` retains every sample. Timing and memory values are
 trends. Functional timeouts, incomplete runs and invariant violations fail the command. Establish
 variance over repeated comparable captures before adding elapsed-time or RSS budgets.
@@ -147,7 +154,9 @@ justify replacing SQLite, adding worker threads or changing scheduling policy.
 
 ## Reference capture — October 18, 2026
 
-Verified locally on Linux x64, Node v24.22.0, Intel Core i3-8130U with four logical CPUs.
+Historical **version 1, shared-process** capture, retained for provenance; it is not directly
+comparable with the current isolated-client fixture. Verified locally on Linux x64, Node v24.22.0,
+Intel Core i3-8130U with four logical CPUs.
 All 24 measured backend samples passed. The following are medians across three runs per row;
 first output and completion include queue waiting. CPU/RSS include the loopback clients and
 receiver. No builds or tests ran during these measured workloads.
@@ -178,10 +187,9 @@ and `performance-results/desktop/report.json`, `summary.md`, per-launch JSON/log
 files are ignored; the tables above preserve the reference values. Both captures include build/source
 provenance for this working tree based on commit `993f7bd`.
 
-The next profiling target is the increased acceptance/history/turn latency under the 20-session
-workload. These measurements do not isolate SQL, validation, serialization or client-side load
-generation as the cause. Collect CPU profiles and comparable repeat captures before selecting
-an optimization or setting a latency budget.
+This capture motivated the 20-session profiling and isolated-client comparison below. These
+original measurements alone did not isolate SQL, validation, serialization or client load
+generation as the cause.
 
 Validation: the full suite passed 1,560 tests across 274 files. Final focused checks passed all
 23 observability/concurrency tests and all eight concurrency cases again after rebuilding the
@@ -189,3 +197,59 @@ fixture. All 11 architecture regressions (including fixture cache invalidation),
 lint/formatting and builds passed. All 15 provisioned dashboard queries executed successfully
 against the local stack with recent metric data. Native startup, IPC, shutdown and startup-failure
 cleanup also passed with telemetry enabled. Hosted CI has been configured but was not triggered.
+
+## Isolated-client prepared-query comparison — October 19, 2026
+
+Version 2 uses a separate HTTP/SSE client process. The before/after rows below both use that same
+fixture, including client-received completion timing. They compare the committed runtime at
+`1b854a4` with connection-scoped prepared event/queue statements and a narrower queue status read.
+The original runtime was reconstructed from committed sources into an immutable compiled snapshot;
+the optimized runtime was frozen separately. Both used the same built server/client harness and
+installed dependencies. This prevents background rebuilds from changing the runtime between samples.
+Earlier captures with mutable build artifacts were discarded from this comparison.
+
+The host and workload dimensions match the previous reference. Each row below covers 20 sessions,
+200 seeded events per session and 100 measured turns, with three fresh-process repetitions after
+warmup. CPU/RSS exclude the client; telemetry-enabled runs use the local discard receiver.
+
+| Telemetry | Query implementation | Window ms | Accept p95 ms | History p95 ms | First output p95 ms | Completion p95 ms | Server CPU ms |
+| --------- | -------------------- | --------: | ------------: | -------------: | ------------------: | ----------------: | ------------: |
+| disabled  | before               |      1700 |           153 |            155 |                 927 |              1017 |          1991 |
+| disabled  | prepared             |      1262 |           129 |            130 |                 759 |               860 |          1590 |
+| enabled   | before               |      1813 |           162 |            163 |                 971 |              1083 |          2196 |
+| enabled   | prepared             |      1385 |           132 |            137 |                 805 |               939 |          1780 |
+
+Median elapsed time fell about 26% with telemetry disabled and 24% enabled; client completion p95
+fell about 15% and 13%. Server CPU fell about 20% and 19%. Disabled window p99 event-loop delay
+fell from 161 to 106 ms. Peak server RSS stayed around 297 MiB disabled and 302 MiB enabled.
+Disabled elapsed ranges were 1693–1722 ms before and 1254–1266 ms after. These are three-run local
+synthetic trends, not production SLOs, sustained capacity or a statistical significance claim.
+
+Separate CPU/SQL captures explain the change: native preparation fell from 6120 to 2000 calls per
+100-turn workload (67% fewer), while statement executions stayed at 6120 and transaction-control
+calls stayed at 2000 (1000 transactions). No retention, acceptance/claim or uncertain-delivery policy
+was relaxed. Median sampled Drizzle time fell from 711 to 423 ms, and native SQLite time from 424
+to 307 ms. Self-sample shares changed from 39.5% to 32.7% and 23.6% to 23.0%, respectively; percentages
+alone conceal the absolute reduction. Diagnostic acceptance transaction p95 fell from 1.37 to
+0.43 ms, claim p95 from 0.66 to 0.13 ms, and queue selection p95 from 1.09 to 0.09 ms. History-page
+method p95 stayed near 5 ms; its query construction/decoding remains a candidate for another profile.
+
+All 48 uninstrumented measured samples across four workloads and both telemetry modes passed, as
+did 12 separate 20-session CPU/SQL captures. Profiling startup frames were excluded from CPU
+attribution; remaining sampled windows agreed with measured elapsed windows within 5 ms.
+Latency tables use controls, not instrumented runs. Captures ran sequentially without concurrent
+builds or tests; the existing desktop development session was left running. No real provider/model
+or external network was involved.
+
+Validation covered 1564 tests across 275 files. The first full run found query-builder stubs in the
+manager test that lacked prepared statements and hit worker startup timeouts in 13 files. The one
+manager test that exercises persistence now uses a real database; statement sets initialize lazily
+for owners that do not use persistence. All affected/skipped files passed targeted reruns, including
+the final eight concurrency cases. All 11 architecture regressions, workspace types, lint,
+formatting and server/core builds passed. A forced failed-client check verified prompt error
+propagation and child cleanup; successful captures require a zero client exit status.
+
+Local ignored artifacts: `performance-results/prepared-comparison/before/`, `after/`,
+`before-profile/`, `after-profile/`, `comparison.json`, `variant-manifest.json` and `report.md`.
+The manifest records immutable runtime hashes; profiling helpers/snapshots are local diagnostic
+artifacts. The baseline command and isolated client implementation are tracked in the repository.

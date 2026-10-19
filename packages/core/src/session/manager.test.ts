@@ -688,49 +688,25 @@ describe('SessionManager tests', () => {
       discover: () => mockProviderRegistry.discover(),
     } as unknown as ProviderRegistry;
 
-    const sessionRecordVal = {
-      id: 'sess-1',
-      projectId: 'proj-1',
-      selectedProvider: 'provider-dynamic',
-      selectedModel: 'model-1',
-      selectedThinkingEffort: 'medium',
-      sessionConfigOptions: '',
-      mode: 'local' as const,
-      project: {
-        id: 'proj-1',
-        path: '/tmp',
-        repoRoot: '/tmp',
-      },
-    };
-
-    const localDb = {
-      ...mockDb,
-      transaction: (callback: (tx: DbClient) => unknown) => callback(mockDb),
-      select: () => mockDb.select(),
-      insert: (table: Parameters<typeof mockDb.insert>[0]) => mockDb.insert(table),
-      update: () => ({
-        set: (fields: Record<string, unknown>) => {
-          Object.assign(sessionRecordVal, fields);
-          return {
-            where: () => {
-              const p = Promise.resolve([sessionRecordVal]);
-              return Object.assign(p, {
-                returning: () => Promise.resolve([sessionRecordVal]),
-                run: () => undefined,
-              });
-            },
-          };
-        },
-      }),
-      query: {
-        providers: mockDb.query.providers,
-        projects: mockDb.query.projects,
-        sessions: {
-          findFirst: () => Promise.resolve({ ...sessionRecordVal }),
-          findMany: () => Promise.resolve([]),
-        },
-      },
-    } as unknown as DbClient;
+    const localDb = createDatabase(':memory:');
+    localDb.insert(projects).values({ id: 'proj-1', name: 'Project', path: '/tmp' }).run();
+    localDb
+      .insert(sessions)
+      .values({
+        id: 'sess-1',
+        projectId: 'proj-1',
+        branch: 'main',
+        worktreePath: '/tmp',
+        taskSlug: 'dynamic',
+        baseCommit: 'none',
+        agent: 'provider-dynamic',
+        selectedProvider: 'provider-dynamic',
+        selectedModel: 'model-1',
+        selectedThinkingEffort: 'medium',
+        mode: 'local',
+      })
+      .run();
+    const sessionRecord = () => localDb.select().from(sessions).get()!;
 
     const initialLiveOptions: AgentConfigOption[] = [
       {
@@ -784,7 +760,7 @@ describe('SessionManager tests', () => {
       },
     );
 
-    expect(JSON.parse(sessionRecordVal.sessionConfigOptions)).toEqual(initialLiveOptions);
+    expect(JSON.parse(sessionRecord().sessionConfigOptions)).toEqual(initialLiveOptions);
 
     let modelUpdated = '';
     let configUpdated: [string, string] | null = null;
@@ -820,7 +796,7 @@ describe('SessionManager tests', () => {
       selectedThinkingEffort: 'medium',
     });
 
-    expect(JSON.parse(sessionRecordVal.sessionConfigOptions)).toEqual(updatedLiveOptions);
+    expect(JSON.parse(sessionRecord().sessionConfigOptions)).toEqual(updatedLiveOptions);
     expect(modelUpdated).toBe('model-2');
     expect(configUpdated).toBeNull();
     expect(restarted).toBe(false);
@@ -835,7 +811,7 @@ describe('SessionManager tests', () => {
 
     expect(modelUpdated).toBe('');
     expect(configUpdated).toEqual(['effort', 'high']);
-    expect(JSON.parse(sessionRecordVal.sessionConfigOptions)).toEqual(updatedLiveOptions);
+    expect(JSON.parse(sessionRecord().sessionConfigOptions)).toEqual(updatedLiveOptions);
     expect(restarted).toBe(false);
 
     configUpdated = null;
@@ -844,7 +820,7 @@ describe('SessionManager tests', () => {
       selectedModel: 'model-2',
     });
     expect(configUpdated).toBeNull();
-    expect(sessionRecordVal.selectedThinkingEffort).toBe('high');
+    expect(sessionRecord().selectedThinkingEffort).toBe('high');
 
     // 3. Provider changed -> restarts the session
     configUpdated = null;

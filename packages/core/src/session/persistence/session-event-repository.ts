@@ -1,5 +1,5 @@
-import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
-import { sessionEvents, sessions, sessionEventChanges } from '../../db/schema.js';
+import { eq, and, desc, gte, sql } from 'drizzle-orm';
+import { sessionEvents, sessions } from '../../db/schema.js';
 import type { DbClient } from '../../db/index.js';
 import type { IEventBus } from '../contracts.js';
 import type {
@@ -12,8 +12,9 @@ import type { SessionEventDbRow } from '../../db/zod-schemas.js';
 import { sessionEventCodecs } from '../../db/json-codecs.js';
 import { cancelRemovedMessageOperations } from './session-operation-reconciliation.js';
 
+import { prepareEventStatements } from './session-event-statements.js';
+
 export const SESSION_CHANGE_RETENTION = 10_000;
-type EventTransaction = Pick<DbClient, 'select' | 'insert' | 'update' | 'delete'>;
 
 interface TokenMetadata {
   promptTokens?: number;
@@ -38,6 +39,11 @@ function extractTokens(metadata: unknown): number {
 }
 
 export class SessionEventRepository {
+  private prepared?: ReturnType<typeof prepareEventStatements>;
+
+  private get statements() {
+    return (this.prepared ??= prepareEventStatements(this.db, SESSION_CHANGE_RETENTION));
+  }
   publishNotice(notice: SessionNotice): void {
     this.eventBus.publish(notice);
   }
@@ -91,22 +97,15 @@ export class SessionEventRepository {
       data as SessionEventPayload<SessionEvent['type']>,
     );
     const validatedMetadata = sessionEventCodecs.validateMetadata(metadata);
-    const committed = this.db.transaction((tx) =>
-      this.insertInTransaction(
-        tx,
-        sessionId,
-        type,
-        validatedData,
-        parentEventId,
-        validatedMetadata,
-      ),
+    const committed = this.db.transaction(() =>
+      this.insertInTransaction(sessionId, type, validatedData, parentEventId, validatedMetadata),
     );
     this.publishCommitted(committed);
     return committed.id;
   }
 
+  /** Uses this repository's connection; caller must own its synchronous transaction. */
   insertInTransaction(
-    tx: EventTransaction,
     sessionId: string,
     type: string,
     data: unknown,
@@ -118,51 +117,29 @@ export class SessionEventRepository {
       data as SessionEventPayload<SessionEvent['type']>,
     );
     const value = validated as Record<string, unknown>;
-    const first = tx
-      .insert(sessionEvents)
-      .values({
-        sessionId,
-        type: type as SessionEvent['type'],
-        clientMessageId:
-          type === 'text' && value.role === 'user' && typeof value.clientMessageId === 'string'
-            ? value.clientMessageId
-            : null,
-        data: JSON.stringify(validated),
-        parentEventId: parentEventId ?? null,
-        metadata: metadata ? JSON.stringify(metadata) : null,
-      })
-      .returning()
-      .get();
-    const change = this.recordChange(tx, sessionId, first.id);
-    tx.update(sessions)
-      .set({
-        ...(type === 'text' ? { lastActivityAt: new Date(first.createdAt) } : {}),
-        totalTokens: sql`MAX(0, ${sessions.totalTokens} + ${extractTokens(metadata)})`,
-      })
-      .where(eq(sessions.id, sessionId))
-      .run();
+    const first = this.statements.insert.get({
+      sessionId,
+      type,
+      clientMessageId:
+        type === 'text' && value.role === 'user' && typeof value.clientMessageId === 'string'
+          ? value.clientMessageId
+          : null,
+      data: JSON.stringify(validated),
+      parentEventId: parentEventId ?? null,
+      metadata: metadata ? JSON.stringify(metadata) : null,
+    });
+    const change = this.recordChange(sessionId, first.id);
+    const values = { sessionId, tokens: extractTokens(metadata), now: new Date() };
+    if (type === 'text')
+      this.statements.textActivity.run({ ...values, activityAt: new Date(first.createdAt) });
+    else this.statements.tokens.run(values);
     return { ...first, createdAt: new Date(first.createdAt), sequence: change.sequence };
   }
 
-  private recordChange(tx: EventTransaction, sessionId: string, eventId: number) {
-    const change = tx.insert(sessionEventChanges).values({ sessionId, eventId }).returning().get();
-    const cutoff = tx
-      .select({ sequence: sessionEventChanges.sequence })
-      .from(sessionEventChanges)
-      .where(eq(sessionEventChanges.sessionId, sessionId))
-      .orderBy(desc(sessionEventChanges.sequence))
-      .offset(SESSION_CHANGE_RETENTION - 1)
-      .limit(1)
-      .get();
-    if (cutoff)
-      tx.delete(sessionEventChanges)
-        .where(
-          and(
-            eq(sessionEventChanges.sessionId, sessionId),
-            lt(sessionEventChanges.sequence, cutoff.sequence),
-          ),
-        )
-        .run();
+  private recordChange(sessionId: string, eventId: number) {
+    const change = this.statements.change.get({ sessionId, eventId });
+    const cutoff = this.statements.cutoff.get({ sessionId });
+    if (cutoff) this.statements.prune.run({ sessionId, sequence: cutoff.sequence });
     return change;
   }
 
@@ -194,20 +171,20 @@ export class SessionEventRepository {
     shouldPublish = true,
     clearFields: readonly string[] = [],
   ): Promise<void> {
-    const committed = this.db.transaction((tx) =>
-      this.updateInTransaction(tx, eventId, data, metadata, clearFields),
+    const committed = this.db.transaction(() =>
+      this.updateInTransaction(eventId, data, metadata, clearFields),
     );
     if (shouldPublish && committed) this.publishCommitted(committed);
   }
 
+  /** Uses this repository's connection; caller must own its synchronous transaction. */
   updateInTransaction(
-    tx: EventTransaction,
     eventId: number,
     data: unknown,
     metadata?: SessionEventMetadata | null,
     clearFields: readonly string[] = [],
   ): (SessionEventDbRow & { sequence: number }) | undefined {
-    const row = tx.select().from(sessionEvents).where(eq(sessionEvents.id, eventId)).get();
+    const row = this.statements.event.get({ eventId });
     if (!row) return undefined;
     const existingData = sessionEventCodecs.parseData(row.type, row.data);
     const existingMetadata = sessionEventCodecs.parseMetadata(row.metadata);
@@ -233,22 +210,15 @@ export class SessionEventRepository {
       mergedData as SessionEventPayload<SessionEvent['type']>,
     );
     const validatedMetadata = sessionEventCodecs.validateMetadata(mergedMetadata);
-    const first = tx
-      .update(sessionEvents)
-      .set({
-        data: JSON.stringify(validatedData),
-        metadata: validatedMetadata ? JSON.stringify(validatedMetadata) : null,
-      })
-      .where(eq(sessionEvents.id, eventId))
-      .returning()
-      .get()!;
-    const change = this.recordChange(tx, row.sessionId, eventId);
+    const first = this.statements.update.get({
+      eventId,
+      data: JSON.stringify(validatedData),
+      metadata: validatedMetadata ? JSON.stringify(validatedMetadata) : null,
+    })!;
+    const change = this.recordChange(row.sessionId, eventId);
     const delta = extractTokens(validatedMetadata) - extractTokens(existingMetadata);
     if (delta)
-      tx.update(sessions)
-        .set({ totalTokens: sql`MAX(0, ${sessions.totalTokens} + ${delta})` })
-        .where(eq(sessions.id, row.sessionId))
-        .run();
+      this.statements.tokens.run({ sessionId: row.sessionId, tokens: delta, now: new Date() });
     return { ...first, createdAt: new Date(first.createdAt), sequence: change.sequence };
   }
 
@@ -340,7 +310,7 @@ export class SessionEventRepository {
         .run();
       cancelRemovedMessageOperations(tx, sessionId);
       // Deleted pointers force a reconnect snapshot, including an empty history.
-      this.recordChange(tx, sessionId, eventId);
+      this.recordChange(sessionId, eventId);
       const tokens = rows.reduce((sum, row) => sum + extractTokens(row.metadata), 0);
       tx.update(sessions)
         .set({ totalTokens: sql`MAX(0, ${sessions.totalTokens} - ${tokens})` })
@@ -368,7 +338,7 @@ export class SessionEventRepository {
             createdAt: new Date(row.createdAt),
           })
           .run();
-        this.recordChange(tx, sessionId, row.id);
+        this.recordChange(sessionId, row.id);
       }
       const tokens = rows.reduce((sum, row) => sum + extractTokens(row.metadata), 0);
       tx.update(sessions)

@@ -103,6 +103,15 @@ and attention remain independent dimensions in `readSessionExecutionState`.
 
 ## Resource and persistence invariants
 
+The event repository and operation store own fixed, prepared query sets in
+`persistence/session-event-statements.ts` and `persistence/session-operation-statements.ts`.
+Each set belongs to its owner's database connection; no global SQL-string cache is used.
+Values, nullable fields and update timestamps are rebound on execution. Date placeholders use
+column encoders. Caller-owned synchronous transactions on that same connection include prepared
+writes, preserving acceptance/claim rollback boundaries; event publication still follows commit.
+Retention policy and uncertain-delivery checks are unchanged. Tests cover reuse without additional
+native preparation, rollback/retry, rebinding and independent database connections.
+
 Permissions and elicitations belong to a single runtime and request. Stop, provider close,
 replacement, and cancellation release their waiters. A failed elicitation publication also
 settles its waiter. Abort listeners are disposed. Terminal input is accepted only by the

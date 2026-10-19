@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { sessionEvents } from '@agentctl/core/db';
 import { startTelemetry } from '../../src/observability/runtime.js';
 import { createBackendFixture, waitUntil } from './fixture.js';
+import { BenchmarkClient } from './client-process.js';
 
 const [output, count, mode, historySize, collector, directory] = process.argv.slice(2);
 const sessionCount = Number(count);
@@ -37,6 +38,7 @@ assert.equal(telemetry.enabled, mode === 'enabled');
 let fixture: Awaited<ReturnType<typeof createBackendFixture>> | undefined;
 let memoryTimer: ReturnType<typeof setInterval> | undefined;
 const lag = monitorEventLoopDelay({ resolution: 10 });
+let client: BenchmarkClient | undefined;
 try {
   fixture = await createBackendFixture({
     sessions: sessionCount,
@@ -61,29 +63,12 @@ try {
           .run();
       }
   });
-  const streams = await Promise.all(context.ids.map((id) => context.stream(id)));
+  client = new BenchmarkClient();
+  await client.setup(context.url, context.ids);
+  await context.worker.idleAll();
   await waitUntil(() => context.ids.every((id) => context.app.eventBus.listenerCount(id) === 1));
-  // Warm lazy/JIT paths in this process, then discard the turn and its SSE frames.
-  await Promise.all(
-    context.ids.map(async (id) => {
-      await context.send(id, 'discarded warmup turn');
-      const response = await fetch(`${context.url}/api/sessions/${id}/events/page?limit=200`);
-      assert.equal(response.status, 200);
-      await response.arrayBuffer();
-    }),
-  );
-  await waitUntil(() => context.operations().every((row) => row.status === 'succeeded'));
-  await waitUntil(() =>
-    streams.every((stream) =>
-      stream.events.some((event) => (event.data.data as { status?: string }).status === 'turn_end'),
-    ),
-  );
   const dispatchOffset = context.dispatches.length;
-  for (const stream of streams) stream.events.length = 0;
   const setupMs = performance.now() - setupStarted;
-  const acceptMs: number[] = [];
-  const historyMs: number[] = [];
-  const started = new Map<string, number>();
   const memoryBefore = process.memoryUsage();
   let peakRss = memoryBefore.rss;
   let peakHeap = memoryBefore.heapUsed;
@@ -99,75 +84,9 @@ try {
   const utilization = performance.eventLoopUtilization();
   const start = performance.now();
   const turnsPerSession = 5;
-  await Promise.all(
-    context.ids.map(async (id) => {
-      for (let turn = 0; turn < turnsPerSession; turn++) {
-        const text = `synthetic turn ${turn}`;
-        const sent = performance.now();
-        started.set(`${id}:${text}`, sent);
-        await context.send(id, text);
-        acceptMs.push(performance.now() - sent);
-        const historyStart = performance.now();
-        const response = await fetch(`${context.url}/api/sessions/${id}/events/page?limit=200`, {
-          signal: AbortSignal.timeout(15_000),
-        });
-        const page = (await response.json()) as { events: unknown[]; nextBeforeId: number | null };
-        assert.equal(response.status, 200);
-        assert(page.events.length > 0 && page.events.length <= 201);
-        assert(page.nextBeforeId !== null, 'Large history must retain a usable cursor');
-        historyMs.push(performance.now() - historyStart);
-      }
-    }),
-  );
   const turns = sessionCount * turnsPerSession;
-  await waitUntil(
-    () =>
-      context.operations().length === turns + sessionCount &&
-      context.operations().every((row) => row.status === 'succeeded'),
-    'all accepted turns completed',
-    30_000,
-  );
-  await waitUntil(
-    () =>
-      streams.every(
-        (stream) =>
-          stream.events.filter(
-            (event) => (event.data.data as { status?: string }).status === 'turn_end',
-          ).length === turnsPerSession,
-      ),
-    'all turn completions reached SSE',
-    15_000,
-  );
-  const firstOutputMs: number[] = [];
-  for (const [index, stream] of streams.entries()) {
-    const prompts = new Map<number, string>();
-    const text = new Map<number, string>();
-    for (const event of stream.events) {
-      const payload = event.data.data as { role?: string; content?: string };
-      if (payload.role === 'user') prompts.set(event.id, payload.content!);
-      if (payload.role !== 'provider') continue;
-      if (!text.has(event.id))
-        firstOutputMs.push(
-          event.receivedAt -
-            started.get(
-              `${context.ids[index]}:${prompts.get(event.data.parentEventId as number)}`,
-            )!,
-        );
-      text.set(
-        event.id,
-        event.data.delta === undefined
-          ? payload.content!
-          : (text.get(event.id) ?? '') + String(event.data.delta),
-      );
-    }
-    assert.equal(text.size, turnsPerSession);
-    for (const content of text.values())
-      assert.equal(
-        content,
-        'synthetic output '.repeat(20),
-        'SSE must reconstruct the entire batched response',
-      );
-  }
+  const result = await client.run();
+  await context.worker.idleAll();
   const elapsedMs = performance.now() - start;
   const cpuUsage = process.cpuUsage(cpu);
   const eventLoopUtilization = performance.eventLoopUtilization(utilization).utilization;
@@ -188,18 +107,24 @@ try {
     activeTurns += point.delta;
     maxConcurrentTurns = Math.max(maxConcurrentTurns, activeTurns);
   }
-  const durations = dispatches.map(
-    (dispatch) => dispatch.ended! - started.get(`${dispatch.sessionId}:${dispatch.command}`)!,
-  );
   assert.equal(dispatches.length, turns);
-  assert.equal(new Set(context.operations().map((row) => row.eventId)).size, turns + sessionCount);
-  assert(firstOutputMs.every((value) => Number.isFinite(value) && value >= 0));
-  for (const id of context.ids)
+  const operations = context.operations();
+  assert.equal(operations.length, turns + sessionCount);
+  assert(operations.every((row) => row.status === 'succeeded'));
+  assert.equal(new Set(operations.map((row) => row.eventId)).size, operations.length);
+  const eventIds = new Set(operations.map((row) => row.eventId));
+  assert.equal(result.receipts.length, turns);
+  assert(result.receipts.every((id) => eventIds.has(id)));
+  for (const id of context.ids) {
+    const dispatched = dispatches.filter((row) => row.sessionId === id);
     assert.deepEqual(
-      dispatches.filter((row) => row.sessionId === id).map((row) => row.command),
+      dispatched.map((row) => row.command),
       Array.from({ length: turnsPerSession }, (_, turn) => `synthetic turn ${turn}`),
     );
-  for (const stream of streams) stream.close();
+    assert(dispatched.every((row, i) => i === 0 || dispatched[i - 1].ended! <= row.started));
+  }
+  assert.equal(await client.close(), 0, 'Benchmark client must exit cleanly');
+  client = undefined;
   await waitUntil(
     () => context.ids.every((id) => context.app.eventBus.listenerCount(id) === 0),
     'SSE cleanup',
@@ -212,19 +137,16 @@ try {
       Object.values(received).every((value) => value > 0),
       'Every telemetry signal must reach the receiver',
     );
-  const percentile = (values: number[], p: number) =>
-    [...values].sort((a, b) => a - b)[Math.max(0, Math.ceil(values.length * p) - 1)];
-  const summarize = (values: number[]) => ({
-    count: values.length,
-    p50: percentile(values, 0.5),
-    p95: percentile(values, 0.95),
-    max: Math.max(...values),
-  });
   await writeFile(
     output,
     JSON.stringify(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
+        measurement: {
+          clients: 'separate-process',
+          resources: 'server-process',
+          completion: 'client-sse-turn-end',
+        },
         passed: true,
         workload: {
           sessionCount,
@@ -237,10 +159,10 @@ try {
         elapsedMs,
         turnsPerSecond: turns / (elapsedMs / 1000),
         maxConcurrentTurns,
-        acceptMs: summarize(acceptMs),
-        historyMs: summarize(historyMs),
-        firstOutputMs: summarize(firstOutputMs),
-        completionMs: summarize(durations),
+        acceptMs: result.acceptMs,
+        historyMs: result.historyMs,
+        firstOutputMs: result.firstOutputMs,
+        completionMs: result.completionMs,
         cpuMs: { user: cpuUsage.user / 1000, system: cpuUsage.system / 1000 },
         memoryBytes: { beforeRss: memoryBefore.rss, afterRss: memoryAfter.rss, peakRss, peakHeap },
         eventLoop: {
@@ -257,6 +179,7 @@ try {
 } finally {
   clearInterval(memoryTimer);
   lag.disable();
+  await client?.close();
   await fixture?.close();
   await telemetry.shutdown();
   receiver.closeAllConnections();
