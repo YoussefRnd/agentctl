@@ -66,7 +66,7 @@ test('workspace tasks order dependencies, restore artifacts, invalidate sources 
 export default { run: createWorkspaceTasks(import.meta.dirname, {
   build: 'node ../../scripts/run-build-steps.mjs node build.mjs -- node finalize.mjs',
   typecheck: 'node --version', dev: 'node dev.mjs',
-  ${name === 'app' ? "buildDependencies: ['@fixture/renderer#compile']," : ''}
+  ${name === 'app' ? "buildDependencies: ['@fixture/renderer#compile'], inputs: ['packages/app/fixtures/**']," : ''}
 }) };`,
       );
       await write(`packages/${name}/src/value.txt`, `${name}-a`);
@@ -101,6 +101,7 @@ appendFileSync('runs.log', 'build\\n');`,
       (await readFile(join(root, `packages/${name}/runs.log`), 'utf8')).trim().split('\n').length;
     const artifact = () => readFile(join(root, 'packages/app/dist/value.txt'), 'utf8');
 
+    await write('packages/app/fixtures/value.txt', 'fixture-a');
     await build();
     assert.equal(await artifact(), 'dep-a+app-a');
     await build();
@@ -131,6 +132,15 @@ appendFileSync('runs.log', 'build\\n');`,
     await write('packages/unrelated/src/value.txt', 'unrelated-b');
     await build();
     assert.equal(await count('app'), 4);
+
+    // Compiled fixtures outside src must invalidate their owner's output, without rebuilding deps.
+    await write('packages/app/fixtures/value.txt', 'fixture-b');
+    await build();
+    assert.equal(await count('app'), 5);
+    assert.equal(await count('dep'), 3);
+    assert.equal(await count('renderer'), 2);
+    await build();
+    assert.equal(await count('app'), 5);
 
     const dev = await run(['--parallel', '--filter', '@fixture/app', 'dev'], {
       AGENTCTL_DEV_PROBE: 'preserved',

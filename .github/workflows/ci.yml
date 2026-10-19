@@ -51,6 +51,9 @@ jobs:
       - name: Native desktop lifecycle smoke
         run: pnpm desktop:smoke performance-results/native-smoke.json
 
+      - name: Native desktop startup baseline
+        run: node scripts/performance/desktop.mjs
+
       - name: Design system gallery review
         run: pnpm ui:check
 
@@ -59,11 +62,11 @@ jobs:
         env:
           AGENTCTL_PERF_DIST: ${{ github.workspace }}/apps/desktop/out/renderer
 
-      - name: Upload desktop worker diagnostics
+      - name: Upload desktop diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-worker-${{ github.sha }}
+          name: desktop-diagnostics-${{ github.sha }}
           path: performance-results/
           retention-days: 14
           if-no-files-found: warn
@@ -107,5 +110,39 @@ jobs:
         with:
           name: web-performance-${{ github.sha }}
           path: performance-results/ci/
+          retention-days: 14
+          if-no-files-found: warn
+
+  backend-performance:
+    name: Backend baseline and concurrency safeguards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build server and workspace dependencies
+        run: pnpm exec vp run --filter '@agentctl/server...' compile
+      - name: Concurrency, backpressure and process recovery
+        run: pnpm exec vp test run apps/server/tests/performance/concurrency.test.ts
+        env:
+          NODE_ENV: test
+          LOG_LEVEL: silent
+      - name: Collect isolated backend baselines
+        run: pnpm --filter @agentctl/server perf:baseline
+      - name: Upload backend baseline and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-performance-${{ github.sha }}
+          path: performance-results/backend/
           retention-days: 14
           if-no-files-found: warn

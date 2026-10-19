@@ -23,7 +23,17 @@ utilityProcess.fork = (entry, args, options) => {
 app.setPath('userData', path.join(process.cwd(), 'electron-profile'));
 // Protocol registration is an OS setting, outside this isolated smoke's scope.
 app.setAsDefaultProtocolClient = () => true;
-const report = { platform: process.platform, failureScenario: failure, checks: {} };
+const report = {
+  platform: process.platform,
+  runtime: {
+    node: process.versions.node,
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    arch: process.arch,
+  },
+  failureScenario: failure,
+  checks: {},
+};
 let completed = false;
 const timer = setTimeout(() => fail(new Error('Native smoke timed out')), 45000);
 function fail(error) {

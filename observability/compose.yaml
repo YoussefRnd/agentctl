@@ -18,6 +18,8 @@ services:
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: 'false'
     volumes:
       - telemetry-data:/data
+      - ./grafana/provisioning/agentctl.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/agentctl.yaml:ro,z
+      - ./grafana/dashboards:/agentctl-dashboards:ro,z
     mem_limit: 2g
     logging:
       driver: json-file

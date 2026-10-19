@@ -6,7 +6,8 @@
     "build": "vp run compile",
     "dev": "vp run watch",
     "test": "vp test run --root ../.. apps/server",
-    "typecheck": "vp run types"
+    "typecheck": "vp run types",
+    "perf:baseline": "node scripts/performance.mjs"
   },
   "type": "module",
   "exports": {

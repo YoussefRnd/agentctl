@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 const workspace = resolve(import.meta.dirname, '..');
 const output = resolve(process.argv[2] ?? 'performance-results/native-smoke.json');
+const startupOnly = process.argv.includes('--startup-only');
 const require = createRequire(join(workspace, 'apps/desktop/package.json'));
 const electron = require('electron');
 const temporary = await mkdtemp(join(tmpdir(), 'agentctl-native-'));
@@ -38,7 +39,7 @@ try {
     });
   }
   const reports = [];
-  for (const failure of [false, true]) {
+  for (const failure of startupOnly ? [false] : [false, true]) {
     const scenario = join(temporary, failure ? 'failure' : 'startup');
     await mkdir(scenario);
     const scenarioOutput = join(scenario, 'report.json');
@@ -54,6 +55,7 @@ try {
           AGENTCTL_SMOKE_OUTPUT: scenarioOutput,
           AGENTCTL_SMOKE_BUILD: join(workspace, 'apps/desktop/out'),
           AGENTCTL_SMOKE_FAILURE: failure ? '1' : '0',
+          AGENTCTL_PERF: '1',
           DATABASE_URL: join(scenario, 'agentctl.db'),
           AGENTCTL_HOME: join(scenario, 'home'),
           ELECTRON_RENDERER_URL: '',
@@ -78,7 +80,15 @@ try {
     } catch {
       throw new Error(`Native smoke exited ${code} without a report.\n${logs}`);
     }
-    reports.push({ ...report, exitCode: code });
+    const startup = logs.split('\n').flatMap((line) => {
+      try {
+        const value = JSON.parse(line);
+        return value.type === 'agentctl_performance' ? [value] : [];
+      } catch {
+        return [];
+      }
+    });
+    reports.push({ ...report, startup, exitCode: code });
     await mkdir(dirname(output), { recursive: true });
     await writeFile(
       output,
@@ -89,7 +99,7 @@ try {
       throw new Error(`Native smoke failed. See ${output}\n${logs}`);
   }
   console.log(
-    `Native Electron startup, IPC, server shutdown and startup-failure smoke passed: ${output}`,
+    `Native Electron startup, IPC, server shutdown${startupOnly ? '' : ' and startup-failure'} smoke passed: ${output}`,
   );
 } finally {
   if (child && child.exitCode === null) child.kill('SIGKILL');

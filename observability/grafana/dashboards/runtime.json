@@ -1,0 +1,284 @@
+{
+  "uid": "agentctl-runtime",
+  "title": "AgentCtl runtime and startup",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "tags": ["agentctl"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(agentctl_process_memory_bytes{service_name=~\"agentctl-.*\"}, service_name)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": "agentctl-.*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "instance",
+        "label": "Process instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(agentctl_process_memory_bytes{service_name=~\"$service\"}, service_instance_id)",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Resident memory by process",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentctl_process_memory_bytes{service_name=~\"$service\",service_instance_id=~\"$instance\",agentctl_process_memory_kind=\"rss\"}",
+          "legendFormat": "{{service_name}} {{service_instance_id}}",
+          "range": true
+        }
+      ],
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "title": "Heap and external memory",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentctl_process_memory_bytes{service_name=~\"$service\",service_instance_id=~\"$instance\",agentctl_process_memory_kind!=\"rss\"}",
+          "legendFormat": "{{service_name}} {{service_instance_id}} {{agentctl_process_memory_kind}}",
+          "range": true
+        }
+      ],
+      "id": 2,
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "title": "CPU use (one unit = one core)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service_name,service_instance_id,agentctl_process_cpu_mode) (rate(agentctl_process_cpu_time_seconds_total{service_name=~\"$service\",service_instance_id=~\"$instance\"}[$__rate_interval]))",
+          "legendFormat": "{{service_name}} {{service_instance_id}} {{agentctl_process_cpu_mode}}",
+          "range": true
+        }
+      ],
+      "id": 3,
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "title": "Event loop utilization",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentctl_process_event_loop_utilization_ratio{service_name=~\"$service\",service_instance_id=~\"$instance\"}",
+          "legendFormat": "{{service_name}} {{service_instance_id}}",
+          "range": true
+        }
+      ],
+      "id": 4,
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "title": "Event loop delay (collection window)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "p99 and maximum within each collection interval; these are gauges, not fleet-wide percentiles. Resolution is 20ms; do not treat this as sub-millisecond accuracy.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "agentctl_process_event_loop_delay_seconds{service_name=~\"$service\",service_instance_id=~\"$instance\"}",
+          "legendFormat": "{{service_name}} {{service_instance_id}} {{agentctl_process_event_loop_statistic}}",
+          "range": true
+        }
+      ],
+      "id": 5,
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 9
+      }
+    },
+    {
+      "title": "Recorded desktop startup mean",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "One-shot startup records for selected processes still present in Prometheus. Not a rolling startup percentile or a renderer-ready measurement.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (agentctl_desktop_phase) (agentctl_desktop_startup_duration_seconds_sum{service_name=~\"$service\",service_instance_id=~\"$instance\"}) / sum by (agentctl_desktop_phase) (agentctl_desktop_startup_duration_seconds_count{service_name=~\"$service\",service_instance_id=~\"$instance\"})",
+          "legendFormat": "{{agentctl_desktop_phase}}",
+          "range": true
+        }
+      ],
+      "id": 6,
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 9
+      }
+    }
+  ]
+}

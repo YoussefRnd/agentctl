@@ -22,9 +22,12 @@
     "format:check": "vp fmt --check",
     "check": "pnpm architecture:check && vp check && vp run --filter '@agentctl/*' types",
     "architecture:graph": "node scripts/check-dependencies.mjs --json",
+    "perf:backend": "pnpm exec vp run --filter '@agentctl/server...' compile && pnpm --filter @agentctl/server perf:baseline",
+    "perf:desktop": "pnpm exec vp run --filter '@agentctl/desktop...' compile && node scripts/performance/desktop.mjs",
     "telemetry:up": "docker compose -f observability/compose.yaml up -d --wait --wait-timeout 120",
     "telemetry:down": "docker compose -f observability/compose.yaml down",
-    "telemetry:logs": "docker compose -f observability/compose.yaml logs --tail=100"
+    "telemetry:logs": "docker compose -f observability/compose.yaml logs --tail=100",
+    "telemetry:check": "node scripts/performance/observability.mjs"
   },
   "keywords": [],
   "author": "",

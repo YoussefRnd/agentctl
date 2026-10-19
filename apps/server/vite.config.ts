@@ -6,5 +6,6 @@ export default defineConfig({
     build: 'tsc -b',
     dev: 'tsx watch src/index.ts',
     typecheck: 'tsc --noEmit',
+    inputs: ['apps/server/tests/**'],
   }),
 });

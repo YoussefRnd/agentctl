@@ -222,6 +222,11 @@ Validation on October 7, 2026: all nine budget checker tests passed, including r
 
 ## Remaining work
 
+The [backend and native baseline guide](backend-performance.md) adds repeatable backend workloads,
+concurrency/recovery checks, dashboards and fresh-profile Electron startup captures. The statements
+about unmeasured native startup above describe the October 7 milestone environment, rather than
+the current measurement tooling.
+
 1. Collect native process/server/window timings and production journeys against representative real backend latency before changing desktop startup order or shell/composer lifetime.
 2. Investigate large history mount stalls and remaining final React/DOM work using representative conversations. Keep noisy wall-clock timings as trends until their variability is understood.
 

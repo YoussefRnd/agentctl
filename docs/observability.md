@@ -60,18 +60,26 @@ Host/process/environment resource detection is deliberately disabled, including
 
 ## Signals and data policy
 
-| Signal                                | Exported data                                                                                                                                                  |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP server spans                     | Method, registered route template, status code, duration and trace context. No raw URL or query.                                                               |
-| `agent.turn` spans                    | Dispatch, acceptance and first-output events; success/error/cancelled outcome and total duration.                                                              |
-| `http.server.request.duration`        | Histogram in seconds, with method, route template and status code.                                                                                             |
-| Queue send/process and provider spans | SQLite queue acceptance/processing and ACP v1/v2 prompt calls, linked to the originating HTTP trace; bounded operation/adapter classifications.                |
-| Operational logs                      | Severity, fixed event names, bounded outcome/connection classifications, and trace/span IDs.                                                                   |
-| `agentctl.queue.wait.duration`        | Time since the persisted operation creation timestamp at claim, in seconds.                                                                                    |
-| `agentctl.turn.duration`              | Total executor duration in seconds, including finalization, grouped by outcome.                                                                                |
-| `agentctl.turn.phase.duration`        | Existing preparation, acceptance, first-output and completion timings in seconds. Unknown phases stay absent. Completion measures dispatch-to-provider-result. |
-| `agentctl.agent.connection.events`    | Connection lifecycle/fallback counts with bounded adapter, reason, path and intent classifications; no provider IDs.                                           |
-| `agentctl.desktop.startup.duration`   | Existing process/app-ready, server-ready and window-ready milestones in seconds.                                                                               |
+The local stack now provisions AgentCtl operations and runtime/startup dashboards. See the
+[backend performance guide](backend-performance.md) for dashboard verification, synthetic captures
+and interpretation. `pnpm telemetry:check` executes every provisioned panel query against the stack.
+
+| Signal                                    | Exported data                                                                                                                                                  |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP server spans                         | Method, registered route template, status code, duration and trace context. No raw URL or query.                                                               |
+| `agent.turn` spans                        | Dispatch, acceptance and first-output events; success/error/cancelled outcome and total duration.                                                              |
+| `http.server.request.duration`            | Histogram in seconds, with method, route template and status code.                                                                                             |
+| Queue send/process and provider spans     | SQLite queue acceptance/processing and ACP v1/v2 prompt calls, linked to the originating HTTP trace; bounded operation/adapter classifications.                |
+| Operational logs                          | Severity, fixed event names, bounded outcome/connection classifications, and trace/span IDs.                                                                   |
+| `agentctl.queue.wait.duration`            | Time since the persisted operation creation timestamp at claim, in seconds.                                                                                    |
+| `agentctl.turn.duration`                  | Total executor duration in seconds, including finalization, grouped by outcome.                                                                                |
+| `agentctl.turn.phase.duration`            | Existing preparation, acceptance, first-output and completion timings in seconds. Unknown phases stay absent. Completion measures dispatch-to-provider-result. |
+| `agentctl.agent.connection.events`        | Connection lifecycle/fallback counts with bounded adapter, reason, path and intent classifications; no provider IDs.                                           |
+| `agentctl.desktop.startup.duration`       | Existing process/app-ready, server-ready and window-ready milestones in seconds.                                                                               |
+| `agentctl.process.memory`                 | RSS, heap used/total and external memory in bytes, with four fixed kind labels.                                                                                |
+| `agentctl.process.cpu.time`               | Cumulative user/system CPU time in seconds; the rate is CPU cores consumed.                                                                                    |
+| `agentctl.process.event_loop.utilization` | Event-loop utilization since the previous metric collection, as a ratio.                                                                                       |
+| `agentctl.process.event_loop.delay`       | Collection-window p99/max delay in seconds, sampled at 20 ms resolution. No value before the first delay sample.                                               |
 
 Prometheus translates metric names to underscores and adds unit/bucket suffixes; for example,
 `http_server_request_duration_seconds_bucket` and `agentctl_turn_duration_seconds_bucket`.

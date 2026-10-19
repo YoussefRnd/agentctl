@@ -18,6 +18,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
 import type { TelemetryConfig } from './config.js';
+import { startProcessMetrics } from './process-metrics.js';
 
 const batchOptions = {
   maxQueueSize: 512,
@@ -124,12 +125,13 @@ export async function createSdk(
       ],
     });
     providers.push(logger);
+    const stopProcessMetrics = startProcessMetrics(meter);
     return {
       tracer,
       meter,
       logger,
       manager: new AsyncLocalStorageContextManager(),
-      shutdown: () => shutdownProviders(providers),
+      shutdown: () => shutdownProviders(providers).finally(stopProcessMetrics),
     };
   } catch (error) {
     await shutdownProviders(providers);
