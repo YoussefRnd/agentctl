@@ -2,7 +2,13 @@ import { openEventStream } from './event-stream.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay, setImmediate as yieldLoop } from 'node:timers/promises';
 import assert from 'node:assert/strict';
-import { createDatabase, projects, sessions, sessionOperations } from '@agentctl/core/db';
+import {
+  createDatabase,
+  projects,
+  sessions,
+  sessionOperations,
+  sessionEvents,
+} from '@agentctl/core/db';
 import { ProviderRegistry } from '@agentctl/core/providers';
 import { createAgentRuntimeServices, noopLogger } from '@agentctl/core';
 import type { SessionManager } from '@agentctl/core/session';
@@ -211,4 +217,28 @@ export async function waitUntil(check: () => boolean, message = 'condition', tim
     assert(performance.now() < deadline, `Timed out waiting for ${message}`);
     await delay(5);
   }
+}
+
+/** Seed outside measurement; pages retain a cursor even after repeated batches. */
+export function seedHistory(
+  context: Awaited<ReturnType<typeof createBackendFixture>>,
+  count: number,
+) {
+  context.db.transaction((tx) => {
+    for (const id of context.ids)
+      for (let start = 0; start < count; start += 100) {
+        tx.insert(sessionEvents)
+          .values(
+            Array.from({ length: Math.min(100, count - start) }, (_, offset) => ({
+              sessionId: id,
+              type: 'text' as const,
+              data: JSON.stringify({
+                role: (start + offset) % 2 ? 'provider' : 'user',
+                content: 'Synthetic history '.repeat(16),
+              }),
+            })),
+          )
+          .run();
+      }
+  });
 }

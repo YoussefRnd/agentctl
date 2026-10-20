@@ -8,6 +8,8 @@ different parts of AgentCtl; their durations must not be added together.
 ```sh
 pnpm perf:backend
 pnpm perf:desktop
+pnpm perf:decoding
+pnpm perf:soak
 pnpm exec vp test run apps/server/tests/performance/concurrency.test.ts
 ```
 
@@ -81,6 +83,50 @@ labels. Reports include Node/OS/CPU, commit, dirty state and a source/lockfile h
 medians across the three runs; `report.json` retains every sample. Timing and memory values are
 trends. Functional timeouts, incomplete runs and invariant violations fail the command. Establish
 variance over repeated comparable captures before adding elapsed-time or RSS budgets.
+
+## Decoder regression guard and sustained load
+
+`pnpm perf:decoding` measures database validation, data/metadata JSON parsing, object construction,
+wire validation and full decoding for text-only and mixed event pages (200/500 rows). Each process
+discards two stage passes, measures seven passes of 20,000 rows, and alternates stage order. It
+checks every fixture row against a preserved intersection-based reference decoder. Results escape
+into a bounded ring so the harness does not retain every allocation.
+
+The runner discards one process and collects three fresh-process samples. CI requires the median
+full candidate/reference ratio to be at most 1.25 for every scenario. This coarse relative limit
+detects substantial regressions without hardcoding this laptop's nanoseconds. It is not a promise
+that decoding is 25% faster, nor an application latency SLO. Tighten it only with repeated runner
+history. Acceptance/output differential tests separately cover all event variants, invalid fields,
+legacy text transforms, loose metadata/tool fields, and TypeScript discriminant narrowing. Error
+issue ordering may change; accepted values and parsed contracts remain the compatibility target.
+
+`pnpm perf:soak` runs for five minutes by default. Use an explicit output directory and duration:
+
+```sh
+pnpm perf:soak /tmp/agentctl-soak 300
+# After building, without another compile:
+node scripts/performance/backend-checks.mjs soak /tmp/agentctl-soak 60
+node scripts/performance/backend-checks.mjs decoding /tmp/agentctl-decoding
+pnpm perf:test
+```
+
+The soak keeps one server/database, 20 sessions and 20 SSE connections alive while submitting
+successive batches of five turns per session. It seeds 200 history rows per session once and
+discards one warmup turn per session. The isolated client clears its event buffers each batch,
+and the server fixture clears dispatch bookkeeping; neither retains all generated payloads.
+Every batch checks FIFO, no overlapping per-session dispatch, complete streamed output, receipts,
+listeners and queue drain. Final persisted success counts include all batches and warmup turns.
+An indexed outstanding-status query samples queue depth alongside server RSS/heap/external memory
+once per second. Thirty-second natural-GC low-water windows, batch latency summaries, CPU and
+event-loop metrics are recorded. All listeners must close at the end.
+
+This is a closed-loop synthetic saturation test: the next batch begins after the previous batch
+finishes, and durable history grows throughout. Telemetry is disabled for the soak; the ordinary
+baseline covers both modes. The first/last 20% batch summaries describe drift, not production
+percentiles. Five minutes cannot prove absence of leaks. CI runs a 60-second functional smoke,
+uploads both reports, and fails on timeouts/invariants; memory and sustained latency remain trends
+until comparable CI history supports stable budgets. New reports live in ignored
+`performance-results/decoding/` and `performance-results/soak/`, with source/lockfile provenance.
 
 ## Telemetry comparison and dashboards
 
@@ -313,3 +359,73 @@ Local ignored captures are under `performance-results/history-comparison/`: `bef
 `before-profile/`, `after-profile/`, `comparison.json`, `variant-manifest.json` and `report.md`.
 The manifest verifies identical core and benchmark code. Snapshot selection and alternating-run
 helpers are local diagnostic scripts; `pnpm perf:backend` remains the tracked baseline command.
+
+## Row decoding and sustained load — October 20, 2026
+
+This compares `5c4bfde` with shared event schemas built from one variant factory. Each row variant
+validates envelope and payload together, avoiding the previous intersection's extra object pass and
+merge. Database validation, JSON decoding, wire validation, defaults, transforms and loose metadata
+remain. No row cache, database schema, retention policy or pagination contract changes.
+
+Server/core compiled hashes, including the client harness, match between frozen variants; only the
+shared runtime differs. Captures ran sequentially without concurrent builds/tests on Node 24.22.0,
+an Intel i3-8130U Linux desktop with four logical CPUs. Normal desktop applications remained running.
+Before/after order alternated within canonical workload/repetition/telemetry groups. Values below
+are medians of three fresh-process controls, after discarded warmups, for 20 sessions and 100 turns.
+
+| Telemetry | Runtime | Window ms | History HTTP p95 ms | Completion p95 ms | Server CPU ms |
+| --------- | ------- | --------: | ------------------: | ----------------: | ------------: |
+| disabled  | before  |      1320 |               130.3 |               875 |          1641 |
+| disabled  | after   |      1315 |               129.2 |               850 |          1686 |
+| enabled   | before  |      1445 |               134.7 |               954 |          1834 |
+| enabled   | after   |      1427 |               133.6 |               934 |          1779 |
+
+Decoder full candidate/reference ratios were 0.857 for 200 text rows, 0.766 for 200 mixed rows and
+0.807 for 500 mixed rows: 14–23% less decoding time against the same-process reference. Database
+validation remained about 0.4–0.5 μs/row; data/metadata JSON roughly 0.8 μs combined; construction
+was negligible. Separate CPU profiles show inclusive row decoding 143→95 ms, inclusive history
+272→237 ms and validation self samples 192→125 ms. Drizzle/SQLite remained about 389/348 sampled ms
+afterward. These sample categories do not all represent disjoint intervals.
+
+The end-to-end effect is modest: history p95 changes less than 1%, completion about 2–3%, and
+elapsed time less than 2%. Disabled elapsed ranges overlap (1317–1349 ms before, 1271–1541 after).
+Disabled CPU and sampled RSS rose slightly, enabled CPU fell, and loop p99 stayed near 133/144 ms
+for disabled/enabled runs. Do not present the decoder improvement as an equivalent request-latency
+improvement or a statistically established capacity gain. Instrumented history method total fell
+280→255 ms while method p95 rose 3.93→4.08 ms. SQL counts matched: 1800 prepares, 6120 statement
+executions and 2000 transaction-control calls per workload. Profiler startup frames were excluded;
+remaining sampled windows agreed with measured windows within 5 ms.
+
+Both five-minute soaks completed 19,900 measured turns with 20 persistent SSE connections,
+drained every batch, and released all listeners. First/last values summarize the first/last
+39 batches out of 199, rather than production request percentiles.
+
+| Runtime | Batch median ms, early→late | History p95 median ms, early→late | Completion p95 median ms, early→late | Peak RSS MiB |
+| ------- | --------------------------: | --------------------------------: | -----------------------------------: | -----------: |
+| before  |                   1215→1833 |                           119→159 |                             778→1191 |          445 |
+| after   |                   1193→1784 |                           114→155 |                             754→1149 |          444 |
+
+Both show sustained latency drift. Complete 30-second heap low-water windows stayed around
+55–76 MiB before and 50–89 MiB after, without monotonic growth; partial final windows are excluded.
+RSS plateaued after early growth. This five-minute evidence does not prove absence of leaks.
+Sampled queue maxima were 80 pending, 20 running and zero unknown; final work/listener counts
+were zero. Event-loop utilization remained near 0.996 and delay p99 near 180/182 ms.
+
+Three additional diagnostics held history at 200 events/session while preloading 10,000 valid
+change references per session outside measurement, using the optimized runtime. The instrumented
+100-turn window rose 1430→2091 ms. Its 800 retention-cutoff lookups rose from 25→557 ms total;
+pruning added only about 13 ms. The deep-offset cutoff lookup runs for every recorded change and
+walks up to 9999 entries. This strongly supports retention bookkeeping as a major contributor to
+the sustained drift. The next optimization target is bounded/amortized retention work, with replay
+gap handling, cursor safety, transactional writes and retention bounds preserved.
+
+All 48 measured controls, 12 ordinary CPU/SQL captures, three retention diagnostics and both soaks
+passed. The full suite passed 1575/1576 tests across 276 files; the sole 5-second ReviewView UI
+timeout passed immediately in isolation (5/5). Decoder differential tests, two budget regressions,
+all 11 architecture regressions, workspace types, lint/formatting and dependency builds passed.
+CI now checks a coarse relative decoder budget and a 60-second functional soak; application timing
+and memory remain trends pending historical runner variance.
+
+Local ignored evidence is in `performance-results/decoding-comparison/`: `report.md`, `comparison.json`,
+`variant-manifest.json`, controls, profiles, decoder-stage reports and both soak reports. The tracked
+commands are `pnpm perf:decoding`, `pnpm perf:soak` and `pnpm perf:test`.

@@ -184,6 +184,7 @@
         "apps/server/src/services/session-event-history.ts",
         "apps/server/src/services/session-event-page-reader.ts",
         "apps/server/src/services/session-event-queries.ts",
+        "apps/server/src/services/session-event-row.test.ts",
         "apps/server/src/services/session-event-row.ts",
         "apps/server/src/services/session-git-operations.ts",
         "apps/server/src/services/session-git-service.ts",
@@ -212,7 +213,10 @@
         "apps/server/tests/performance/event-stream.ts",
         "apps/server/tests/performance/fixture.ts",
         "apps/server/tests/performance/recovery.ts",
+        "apps/server/tests/performance/row-decoding-fixture.ts",
+        "apps/server/tests/performance/row-decoding.ts",
         "apps/server/tests/performance/sample.ts",
+        "apps/server/tests/performance/soak.ts",
         "apps/server/tsconfig.json"
       ]
     },
@@ -640,6 +644,9 @@
         "scripts/check-dependencies.mjs",
         "scripts/desktop-smoke.mjs",
         "scripts/oxlint/architecture.mjs",
+        "scripts/performance/backend-checks.mjs",
+        "scripts/performance/decoding-budget.mjs",
+        "scripts/performance/decoding-budget.test.mjs",
         "scripts/performance/desktop.mjs",
         "scripts/performance/observability.mjs",
         "scripts/run-build-steps.mjs",

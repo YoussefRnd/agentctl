@@ -14,68 +14,73 @@ import {
   sessionEventCompactDataSchema,
 } from './session-event-payloads.js';
 export * from './session-event-payloads.js';
-export const sessionEventSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('text'),
-    data: sessionEventTextDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('tool_call'),
-    data: sessionEventToolCallDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('approval_request'),
-    data: sessionEventApprovalRequestDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('plan_update'),
-    data: sessionEventPlanDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('mode_update'),
-    data: sessionEventModeDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('terminal_created'),
-    data: sessionEventTerminalCreatedDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('terminal_output'),
-    data: sessionEventTerminalOutputDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('terminal_exit'),
-    data: sessionEventTerminalExitDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('diff'),
-    data: sessionEventDiffDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('status'),
-    data: sessionEventStatusDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('compact'),
-    data: sessionEventCompactDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-  z.object({
-    type: z.literal('subagent_update'),
-    data: sessionEventSubagentUpdateDataSchema,
-    createdAt: z.coerce.date(),
-  }),
-]);
+function createSessionEventSchema<T extends z.ZodRawShape>(fields: T) {
+  const common = { createdAt: z.coerce.date(), ...fields };
+  return z.discriminatedUnion('type', [
+    z.object({
+      ...common,
+      type: z.literal('text'),
+      data: sessionEventTextDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('tool_call'),
+      data: sessionEventToolCallDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('approval_request'),
+      data: sessionEventApprovalRequestDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('plan_update'),
+      data: sessionEventPlanDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('mode_update'),
+      data: sessionEventModeDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('terminal_created'),
+      data: sessionEventTerminalCreatedDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('terminal_output'),
+      data: sessionEventTerminalOutputDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('terminal_exit'),
+      data: sessionEventTerminalExitDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('diff'),
+      data: sessionEventDiffDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('status'),
+      data: sessionEventStatusDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('compact'),
+      data: sessionEventCompactDataSchema,
+    }),
+    z.object({
+      ...common,
+      type: z.literal('subagent_update'),
+      data: sessionEventSubagentUpdateDataSchema,
+    }),
+  ]);
+}
+
+export const sessionEventSchema = createSessionEventSchema({});
 
 export type SessionEvent = z.infer<typeof sessionEventSchema>;
 
@@ -113,22 +118,21 @@ export const sessionEventMetadataSchema = z
 
 export type SessionEventMetadata = z.infer<typeof sessionEventMetadataSchema>;
 
-export const sessionEventRowSchema = z.intersection(
-  sessionEventSchema,
-  z.object({
-    id: z.number(),
-    sequence: z.number().int().nonnegative().optional(),
-    sessionId: z.uuid(),
-    parentEventId: z.number().nullable().optional(),
-    metadata: sessionEventMetadataSchema.optional(),
-    /**
-     * Wire-only field carried on transient (non-persisted) streaming events.
-     * When present, the client appends `delta` to the existing event content
-     * instead of replacing it. Persisted rows never include this field.
-     */
-    delta: z.string().optional(),
-  }),
-);
+// Each variant validates its envelope and payload in one object pass. The factory keeps
+// event/row contracts and discriminant narrowing aligned without an intersection merge.
+export const sessionEventRowSchema = createSessionEventSchema({
+  id: z.number(),
+  sequence: z.number().int().nonnegative().optional(),
+  sessionId: z.uuid(),
+  parentEventId: z.number().nullable().optional(),
+  metadata: sessionEventMetadataSchema.optional(),
+  /**
+   * Wire-only field carried on transient (non-persisted) streaming events.
+   * When present, the client appends `delta` to the existing event content
+   * instead of replacing it. Persisted rows never include this field.
+   */
+  delta: z.string().optional(),
+});
 
 export type SessionEventRow = z.infer<typeof sessionEventRowSchema>;
 

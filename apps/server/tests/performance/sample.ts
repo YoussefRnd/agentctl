@@ -4,9 +4,8 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { sessionEvents } from '@agentctl/core/db';
 import { startTelemetry } from '../../src/observability/runtime.js';
-import { createBackendFixture, waitUntil } from './fixture.js';
+import { createBackendFixture, seedHistory, waitUntil } from './fixture.js';
 import { BenchmarkClient } from './client-process.js';
 
 const [output, count, mode, historySize, collector, directory] = process.argv.slice(2);
@@ -46,23 +45,7 @@ try {
   });
   const context = fixture;
   // Seed outside the measured window. This exercises history queries without timing fixture construction.
-  context.db.transaction((tx) => {
-    for (const id of context.ids)
-      for (let start = 0; start < historyEvents; start += 100) {
-        tx.insert(sessionEvents)
-          .values(
-            Array.from({ length: Math.min(100, historyEvents - start) }, (_, offset) => ({
-              sessionId: id,
-              type: 'text' as const,
-              data: JSON.stringify({
-                role: (start + offset) % 2 ? 'provider' : 'user',
-                content: 'Synthetic history '.repeat(16),
-              }),
-            })),
-          )
-          .run();
-      }
-  });
+  seedHistory(context, historyEvents);
   client = new BenchmarkClient();
   await client.setup(context.url, context.ids);
   await context.worker.idleAll();

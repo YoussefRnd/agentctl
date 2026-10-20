@@ -136,6 +136,10 @@ jobs:
         env:
           NODE_ENV: test
           LOG_LEVEL: silent
+      - name: Check relative decoder regression budget
+        run: pnpm perf:test && node scripts/performance/backend-checks.mjs decoding
+      - name: Sustained 20-session concurrency smoke
+        run: node scripts/performance/backend-checks.mjs soak performance-results/soak 60
       - name: Collect isolated backend baselines
         run: pnpm --filter @agentctl/server perf:baseline
       - name: Upload backend baseline and diagnostics
@@ -143,6 +147,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-performance-${{ github.sha }}
-          path: performance-results/backend/
+          path: |
+            performance-results/backend/
+            performance-results/decoding/
+            performance-results/soak/
           retention-days: 14
           if-no-files-found: warn

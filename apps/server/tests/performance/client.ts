@@ -50,19 +50,8 @@ async function history(id: string) {
 const ended = (stream: (typeof streams)[number]) =>
   stream.events.filter((event) => (event.data.data as { status?: string }).status === 'turn_end');
 
-try {
-  await Promise.all(
-    ids.map(async (id) => {
-      await send(id, 'discarded warmup turn');
-      await history(id);
-    }),
-  );
-  await until(() => streams.every((stream) => ended(stream).length === 1));
+async function measure() {
   for (const stream of streams) stream.events.length = 0;
-  const go = once(process, 'message');
-  process.send!({ type: 'ready' });
-  const [command] = await go;
-  assert.equal((command as { type: string }).type, 'start');
   const acceptMs: number[] = [];
   const historyMs: number[] = [];
   const receipts: number[] = [];
@@ -119,17 +108,36 @@ try {
       max: values.at(-1)!,
     };
   };
-  const close = once(process, 'message');
-  process.send!({
-    type: 'done',
+  return {
+    type: 'done' as const,
     acceptMs: summarize(acceptMs),
     historyMs: summarize(historyMs),
     firstOutputMs: summarize(firstOutputMs),
     completionMs: summarize(completionMs),
     receipts,
-  } satisfies ClientResult);
-  const [commandClose] = await close;
-  assert.equal((commandClose as { type: string }).type, 'close');
+  } satisfies ClientResult;
+}
+
+try {
+  await Promise.all(
+    ids.map(async (id) => {
+      await send(id, 'discarded warmup turn');
+      await history(id);
+    }),
+  );
+  await until(() => streams.every((stream) => ended(stream).length === 1));
+  let command = once(process, 'message');
+  process.send!({ type: 'ready' });
+  while (true) {
+    const [message] = await command;
+    const type = (message as { type: string }).type;
+    if (type === 'close') break;
+    assert.equal(type, 'start');
+    watchdog.refresh();
+    const result = await measure();
+    command = once(process, 'message');
+    process.send!(result);
+  }
 } finally {
   clearTimeout(watchdog);
   for (const stream of streams) stream.close();

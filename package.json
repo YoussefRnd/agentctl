@@ -27,7 +27,10 @@
     "telemetry:up": "docker compose -f observability/compose.yaml up -d --wait --wait-timeout 120",
     "telemetry:down": "docker compose -f observability/compose.yaml down",
     "telemetry:logs": "docker compose -f observability/compose.yaml logs --tail=100",
-    "telemetry:check": "node scripts/performance/observability.mjs"
+    "telemetry:check": "node scripts/performance/observability.mjs",
+    "perf:decoding": "pnpm exec vp run --filter '@agentctl/server...' compile && node scripts/performance/backend-checks.mjs decoding",
+    "perf:soak": "pnpm exec vp run --filter '@agentctl/server...' compile && node scripts/performance/backend-checks.mjs soak",
+    "perf:test": "node --test --test-isolation=none scripts/performance/*.test.mjs"
   },
   "keywords": [],
   "author": "",
