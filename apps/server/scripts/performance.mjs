@@ -27,7 +27,7 @@ const sources = execFileSync(
   .split('\0')
   .filter(
     (file) =>
-      /^(?:apps\/server\/(?:src|tests\/performance|scripts)|packages\/(?:core|shared)\/src)\//.test(
+      /^(?:apps\/server\/(?:src|tests\/performance|scripts)|packages\/(?:core|shared)\/src|packages\/core\/drizzle)\//.test(
         file,
       ) || file === 'pnpm-lock.yaml',
   );

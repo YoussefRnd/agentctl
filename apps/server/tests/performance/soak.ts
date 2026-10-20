@@ -3,13 +3,15 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import { and, count, eq, inArray } from 'drizzle-orm';
-import { sessionOperations } from '@agentctl/core/db';
+import { sessionOperations, sessionEventChanges } from '@agentctl/core/db';
 import { BenchmarkClient } from './client-process.js';
-import { createBackendFixture, seedHistory, waitUntil } from './fixture.js';
+import { createBackendFixture, seedHistory, seedChangeHistory, waitUntil } from './fixture.js';
 
-const [output, duration, directory] = process.argv.slice(2);
+const [output, duration, directory, initialChanges = '0'] = process.argv.slice(2);
 const seconds = Number(duration);
+const initialChangesPerSession = Number(initialChanges);
 assert(output && directory && Number.isFinite(seconds) && seconds >= 1 && seconds <= 3600);
+assert([0, 10000].includes(initialChangesPerSession));
 process.env.AGENTCTL_HOME = join(directory, 'home');
 process.env.AGENTCTL_TELEMETRY = '0';
 const fixture = await createBackendFixture({ sessions: 20, database: join(directory, 'soak.db') });
@@ -18,6 +20,7 @@ const lag = monitorEventLoopDelay({ resolution: 10 });
 let timer: ReturnType<typeof setInterval> | undefined;
 try {
   seedHistory(fixture, 200);
+  if (initialChangesPerSession) seedChangeHistory(fixture, initialChangesPerSession);
   await client.setup(fixture.url, fixture.ids);
   await fixture.worker.idleAll();
   // Fixture bookkeeping must not become a load-generator memory leak.
@@ -115,6 +118,14 @@ try {
     delayP99Ms: lag.count ? lag.percentile(99) / 1e6 : null,
     delayMaxMs: lag.count ? lag.max / 1e6 : null,
   };
+  const retainedChanges = fixture.db
+    .select({ sessionId: sessionEventChanges.sessionId, count: count() })
+    .from(sessionEventChanges)
+    .where(inArray(sessionEventChanges.sessionId, fixture.ids))
+    .groupBy(sessionEventChanges.sessionId)
+    .all();
+  assert.equal(retainedChanges.length, 20);
+  assert(retainedChanges.every((row) => row.count > 0 && row.count <= 10000));
   assert.equal(await client.close(), 0);
   await waitUntil(() => fixture.ids.every((id) => fixture.app.eventBus.listenerCount(id) === 0));
   // Natural-GC low-water marks show retained-memory trends without forcing collection.
@@ -139,6 +150,7 @@ try {
           sessionCount: 20,
           seconds,
           historyEventsPerSession: 200,
+          initialChangesPerSession,
           telemetry: 'disabled',
           clients: 'separate-process',
           persistentSseConnections: 20,
@@ -150,6 +162,7 @@ try {
         eventLoop,
         finalOutstanding: 0,
         finalListeners: 0,
+        retainedChanges,
         samples,
         windows,
         waves,

@@ -138,8 +138,7 @@ export class SessionEventRepository {
 
   private recordChange(sessionId: string, eventId: number) {
     const change = this.statements.change.get({ sessionId, eventId });
-    const cutoff = this.statements.cutoff.get({ sessionId });
-    if (cutoff) this.statements.prune.run({ sessionId, sequence: cutoff.sequence });
+    this.statements.prune.run({ sessionId });
     return change;
   }
 

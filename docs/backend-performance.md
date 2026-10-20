@@ -106,6 +106,8 @@ issue ordering may change; accepted values and parsed contracts remain the compa
 pnpm perf:soak /tmp/agentctl-soak 300
 # After building, without another compile:
 node scripts/performance/backend-checks.mjs soak /tmp/agentctl-soak 60
+# Start at the retention cap to exercise steady-state pruning throughout:
+pnpm perf:soak /tmp/agentctl-retention-soak 60 --full-retention
 node scripts/performance/backend-checks.mjs decoding /tmp/agentctl-decoding
 pnpm perf:test
 ```
@@ -123,7 +125,8 @@ event-loop metrics are recorded. All listeners must close at the end.
 This is a closed-loop synthetic saturation test: the next batch begins after the previous batch
 finishes, and durable history grows throughout. Telemetry is disabled for the soak; the ordinary
 baseline covers both modes. The first/last 20% batch summaries describe drift, not production
-percentiles. Five minutes cannot prove absence of leaks. CI runs a 60-second functional smoke,
+percentiles. Five minutes cannot prove absence of leaks. CI runs a 60-second functional smoke
+preloaded with 10,000 journal entries per session,
 uploads both reports, and fails on timeouts/invariants; memory and sustained latency remain trends
 until comparable CI history supports stable budgets. New reports live in ignored
 `performance-results/decoding/` and `performance-results/soak/`, with source/lockfile provenance.
@@ -305,8 +308,8 @@ artifacts. The baseline command and isolated client implementation are tracked i
 This compares commit `9491f6f` with a connection-owned history-page reader. Both variants retain
 the isolated-client version 2 fixture and the prior prepared event/queue writes. Server and core
 compiled snapshots were frozen before captures; the benchmark JavaScript and core runtime were
-identical between variants. Runs alternated before/after order within each workload, repetition
-and telemetry mode. There were no concurrent builds or tests during measurement; the existing
+identical between variants. Telemetry mode order alternated by repetition; variant order was fixed
+within each mode and reversed for the other mode. There were no concurrent builds or tests during measurement; the existing
 desktop development session was left running.
 
 Each value below is the median of three fresh-process measurements for 20 sessions with 200
@@ -370,7 +373,8 @@ remain. No row cache, database schema, retention policy or pagination contract c
 Server/core compiled hashes, including the client harness, match between frozen variants; only the
 shared runtime differs. Captures ran sequentially without concurrent builds/tests on Node 24.22.0,
 an Intel i3-8130U Linux desktop with four logical CPUs. Normal desktop applications remained running.
-Before/after order alternated within canonical workload/repetition/telemetry groups. Values below
+Telemetry mode order alternated by repetition; variant order was fixed within each mode and
+reversed for the other mode. Values below
 are medians of three fresh-process controls, after discarded warmups, for 20 sessions and 100 turns.
 
 | Telemetry | Runtime | Window ms | History HTTP p95 ms | Completion p95 ms | Server CPU ms |
@@ -429,3 +433,84 @@ and memory remain trends pending historical runner variance.
 Local ignored evidence is in `performance-results/decoding-comparison/`: `report.md`, `comparison.json`,
 `variant-manifest.json`, controls, profiles, decoder-stage reports and both soak reports. The tracked
 commands are `pnpm perf:decoding`, `pnpm perf:soak` and `pnpm perf:test`.
+
+## Retention bookkeeping — October 20, 2026
+
+The decoder/safeguard work was committed as `e0b80ae`. This comparison replaces the per-change
+deep-offset retention lookup with a transactionally maintained per-session count. Migration
+`0049_session_change_counts` backfills existing journals once and installs INSERT/DELETE count
+triggers. The repository prunes only excess oldest entries through the existing session/sequence
+index. Below the cap, LIMIT 0 reads no journal entries; normal overflow removes one entry. The
+exact 10,000-entry limit, global cursor sequencing, snapshot fallback and publication-after-commit
+behavior remain. There is no process-local count cache to reconcile after rollback or restart.
+
+Each runtime uses its own frozen compiled code **and copied migration directory**. Snapshot checks
+verify the original has no count table/triggers and the optimized version has both. Server/shared
+JavaScript hashes match. Captures ran sequentially without concurrent builds/tests on the same
+Node 24.22.0 / i3-8130U desktop. The 48 canonical controls retained the prior ordering pattern.
+Because short-burst results were mixed, an additional 20-session comparison explicitly alternated
+variant order and telemetry mode order between repetitions, with one discarded process and five
+measured processes per variant/mode. All initial results and outliers remain in the local reports.
+
+| Telemetry | Runtime | Burst median ms | Range ms  | History p95 median ms | Completion p95 median ms |
+| --------- | ------- | --------------: | --------- | --------------------: | -----------------------: |
+| disabled  | before  |            1352 | 1289–1461 |                 131.4 |                      890 |
+| disabled  | after   |            1296 | 1272–1587 |                 129.8 |                      852 |
+| enabled   | before  |            1424 | 1391–1551 |                 134.6 |                      931 |
+| enabled   | after   |            1451 | 1400–1525 |                 139.4 |                      947 |
+
+Short bursts show roughly 4% improvement disabled and 2% regression enabled, with overlapping
+ranges; no universal short-request latency improvement is established. The initial three-run
+disabled burst medians were 1280→1423 ms and enabled 1448→1412 ms. The follow-up preserves that
+uncertainty rather than substituting only favorable captures.
+
+Separate native CPU/SQL profiles preload 10,000 valid journal references per session while keeping
+event histories at 200 rows/session. Seeding/warmup are outside measurement. Medians of three
+100-turn captures across 20 sessions show the isolated retention effect:
+
+| Instrumented metric        |  Before |   After |
+| -------------------------- | ------: | ------: |
+| Workload window            | 2074 ms | 1474 ms |
+| Deep-offset cutoff calls   |     800 |       0 |
+| Cutoff SQLite time         |  547 ms |       0 |
+| Pruning SQLite time        |   13 ms |   20 ms |
+| Journal insert SQLite time | 18.5 ms | 20.4 ms |
+
+The full-retention window improved about 29%; application-issued cutoff/prune work fell from
+roughly 560→20 ms. Insert timings include the new counter trigger. Wrapper counts do not enumerate
+SQLite statements executed internally by triggers; they are not total engine instruction counts.
+Transaction-control calls remain 2000 per workload. Structural query plans use the existing
+`session_event_changes_cursor` covering index and counter primary-key index, with no OFFSET.
+
+| Five-minute soak                         |       Before |        After |
+| ---------------------------------------- | -----------: | -----------: |
+| Completed measured turns                 |       19,900 |       23,400 |
+| Batch median, first→last fifth           | 1194→1780 ms | 1145→1426 ms |
+| Completion p95 median, first→last fifth  |  759→1160 ms |   741→905 ms |
+| History p95 median, first→last fifth     |   113→153 ms |   113→130 ms |
+| Retained entries per session at shutdown |         7968 |         9368 |
+| Peak sampled server RSS                  |      450 MiB |      443 MiB |
+| Event-loop delay p99                     |       182 ms |       150 ms |
+
+The optimized closed-loop soak completed about 18% more turns and its late batch median was 20%
+lower. Different throughput means different history sizes; these are synthetic observations,
+not production capacity SLOs. Residual within-run batch drift remains (+49% before, +25% after),
+so another late-run profile is needed before choosing the next change. Complete 30-second heap
+low-water windows stayed about 48–79/48–78 MiB without monotonic growth; partial final windows are
+excluded. Both runs drained every batch, sampled at most 80 pending/20 running/0 unknown, released
+all listeners and stayed near 0.996 loop utilization. Five minutes does not prove absence of leaks.
+
+A separate 60-second optimized run started with 10,000 journal entries per session, completed
+5100 turns, and retained exactly 10,000 entries in all 20 sessions. Early/late batch medians were
+1188/1176 ms. This is now CI's functional smoke; the parent rejects over-pruning as well as exceeding
+the cap. Source fingerprints now include migration files. Reproduce with
+`pnpm perf:soak /tmp/agentctl-retention-soak 60 --full-retention`.
+
+All 1049 Node tests across 173 files passed, including upgrades from every migration boundary,
+interleaved session cursors, oversized journals, independent deletes, failed pruning, full rollback,
+nested savepoints, independent connections and replay gap recovery. Workspace types, architecture
+checks and lint/formatting passed. All 48 canonical controls, 20 balanced follow-up controls,
+12 short CPU/SQL captures, six full-retention profiles, two five-minute soaks and the full-retention
+smoke passed. No real database/provider was used. Local ignored evidence is under
+`performance-results/retention-comparison/`, including `report.md`, `variant-manifest.json`,
+`full-retention-comparison.json`, `confirmation-20/` and all raw profiles/soak reports.

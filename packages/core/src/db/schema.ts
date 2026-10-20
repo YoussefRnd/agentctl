@@ -6,6 +6,7 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  check,
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
@@ -190,6 +191,18 @@ export const sessionEventChanges = sqliteTable(
     ...eventTimestamps,
   },
   (table) => [index('session_event_changes_cursor').on(table.sessionId, table.sequence)],
+);
+
+/** Migration-owned INSERT/DELETE triggers keep this count transactional across connections. */
+export const sessionEventChangeCounts = sqliteTable(
+  'session_event_change_counts',
+  {
+    sessionId: text('session_id')
+      .primaryKey()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    retainedCount: integer('retained_count').notNull().default(0),
+  },
+  (table) => [check('session_event_change_counts_nonnegative', sql`${table.retainedCount} >= 0`)],
 );
 
 export const providers = sqliteTable('providers', {

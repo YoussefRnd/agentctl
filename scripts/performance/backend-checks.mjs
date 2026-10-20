@@ -10,6 +10,9 @@ const [kind, destination, ...args] = process.argv.slice(2);
 if (!['decoding', 'soak'].includes(kind)) throw new Error('Expected decoding or soak');
 const output = resolve(destination ?? join(workspace, 'performance-results', kind));
 const seconds = args.length ? Number(args[0]) : 300;
+const fullRetention = args.slice(1).includes('--full-retention');
+if (args.slice(1).some((arg) => arg !== '--full-retention'))
+  throw new Error('Unknown benchmark option');
 if (kind === 'soak' && (!Number.isInteger(seconds) || seconds < 1 || seconds > 3600))
   throw new Error('Soak duration must be 1–3600 seconds');
 await mkdir(output, { recursive: true });
@@ -21,8 +24,9 @@ for (const file of [
       .split('\0')
       .filter(
         (file) =>
-          /^(apps\/server\/|packages\/(core|shared)\/src\/|scripts\/performance\/)/.test(file) ||
-          file === 'pnpm-lock.yaml',
+          /^(apps\/server\/|packages\/(core|shared)\/src\/|packages\/core\/drizzle\/|scripts\/performance\/)/.test(
+            file,
+          ) || file === 'pnpm-lock.yaml',
       ),
   ),
 ].sort()) {
@@ -69,7 +73,7 @@ async function capture(name) {
       [
         `dist/tests/performance/${kind === 'decoding' ? 'row-decoding' : 'soak'}.js`,
         file,
-        ...(kind === 'soak' ? [String(seconds), temporary] : []),
+        ...(kind === 'soak' ? [String(seconds), temporary, fullRetention ? '10000' : '0'] : []),
       ],
       { cwd: join(workspace, 'apps/server'), env, stdio: ['ignore', 'pipe', 'pipe'] },
     );
@@ -85,6 +89,16 @@ async function capture(name) {
     if (code !== 0) throw new Error(`${name} exited ${code}: ${logs.slice(-3000)}`);
     const sample = JSON.parse(await readFile(file, 'utf8'));
     if (!sample.passed || sample.schemaVersion !== 1) throw new Error(`Invalid sample: ${name}`);
+    if (
+      kind === 'soak' &&
+      fullRetention &&
+      (sample.workload.initialChangesPerSession !== 10000 ||
+        sample.retainedChanges?.length !== 20 ||
+        sample.retainedChanges.some((row) => row.count !== 10000))
+    )
+      throw new Error(
+        'Full-retention soak must preserve exactly 10000 journal entries per session',
+      );
     console.log(`Passed ${kind}/${name}`);
     return sample;
   } finally {
@@ -137,6 +151,7 @@ if (kind === 'decoding') {
   const late = sample.waves.slice(-size);
   lines.push(
     `${sample.turns} turns over ${(sample.elapsedMs / 1000).toFixed(1)}s across 20 sessions with persistent SSE connections. Queue drained; listeners closed.`,
+    `Initial journal entries per session: ${sample.workload.initialChangesPerSession ?? 0}.`,
     '',
     '| Metric | First 20% of batches | Last 20% of batches |',
     '| --- | ---: | ---: |',

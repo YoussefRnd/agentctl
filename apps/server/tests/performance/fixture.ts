@@ -8,6 +8,7 @@ import {
   sessions,
   sessionOperations,
   sessionEvents,
+  sessionEventChanges,
 } from '@agentctl/core/db';
 import { ProviderRegistry } from '@agentctl/core/providers';
 import { createAgentRuntimeServices, noopLogger } from '@agentctl/core';
@@ -240,5 +241,28 @@ export function seedHistory(
           )
           .run();
       }
+  });
+}
+
+/** Preload the retained journal outside measurement, with valid session-scoped references. */
+export function seedChangeHistory(
+  context: Awaited<ReturnType<typeof createBackendFixture>>,
+  count: number,
+) {
+  context.db.transaction((tx) => {
+    for (const sessionId of context.ids) {
+      const eventId = tx
+        .select({ id: sessionEvents.id })
+        .from(sessionEvents)
+        .where(eq(sessionEvents.sessionId, sessionId))
+        .limit(1)
+        .get()!.id;
+      for (let start = 0; start < count; start += 100)
+        tx.insert(sessionEventChanges)
+          .values(
+            Array.from({ length: Math.min(100, count - start) }, () => ({ sessionId, eventId })),
+          )
+          .run();
+    }
   });
 }

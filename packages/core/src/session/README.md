@@ -98,6 +98,14 @@ increasing cursor entries pointing to those rows. It is a change journal, not a 
 history of every previous body. Body, metadata, token accounting and cursor changes commit together.
 The journal retains 10,000 entries per session; older clients receive a fresh bounded snapshot.
 
+`session_event_change_counts` stores the retained row count per session. Migration-owned SQLite
+AFTER INSERT/DELETE triggers maintain it in the same transaction as the journal, including direct
+writes, rollback and session cascades. Repository writes prune only the excess oldest entries via
+the session/sequence index; below the limit, the selection reads zero journal entries. Counts live
+in the database so independent repositories/connections and restarts share the same state. Use
+versioned migrations for this invariant; a migration rebuilding the journal must recreate its
+custom triggers. Migration regressions verify backfill against the actual upgraded journal.
+
 A snapshot and its cursor are read from the same transaction. Corrections to an older message
 or tool row receive a new cursor, so reconnects can discover them. Legacy row-ID replay remains
 supported. Streaming deltas are transient; persisted full rows and live full snapshots restore

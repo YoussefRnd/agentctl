@@ -3,9 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
-import { sql } from 'drizzle-orm';
+import { count as countRows, sql } from 'drizzle-orm';
 import { expect, it } from 'vite-plus/test';
-import { createDatabase, projects, sessions, sessionEvents } from './index.js';
+import {
+  createDatabase,
+  projects,
+  sessions,
+  sessionEvents,
+  sessionEventChangeCounts,
+  sessionEventChanges,
+} from './index.js';
 
 const migrations = readMigrationFiles({
   migrationsFolder: path.resolve(import.meta.dirname, '../../drizzle'),
@@ -63,6 +70,17 @@ it('upgrades populated databases from every migration boundary without losing se
         sqlite
           .prepare(`INSERT INTO ${eventsTable} (session_id, type, data) VALUES (?, ?, ?)`)
           .run('session', 'text', JSON.stringify({ role: 'user', content: 'Keep my history' }));
+        if (
+          sqlite
+            .prepare("SELECT name FROM sqlite_master WHERE name = 'session_event_changes'")
+            .get()
+        ) {
+          const eventId = sqlite.prepare(`SELECT id FROM ${eventsTable} LIMIT 1`).get()!.id;
+          for (let i = 0; i < 3; i++)
+            sqlite
+              .prepare('INSERT INTO session_event_changes (session_id, event_id) VALUES (?, ?)')
+              .run('session', eventId);
+        }
         if (sqlite.prepare("SELECT name FROM sqlite_master WHERE name = 'project_checks'").get()) {
           sqlite.exec(
             "INSERT INTO project_checks (id, project_id, name, command) VALUES ('check', 'project', 'Old check', 'true')",
@@ -94,6 +112,9 @@ it('upgrades populated databases from every migration boundary without losing se
         );
       }
       expect(db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
+      expect(db.select().from(sessionEventChangeCounts).get()?.retainedCount ?? 0).toBe(
+        db.select({ count: countRows() }).from(sessionEventChanges).get()!.count,
+      );
       expect(
         db
           .all<{ name: string; notnull: number; dflt_value: string | null }>(

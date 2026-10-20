@@ -1,6 +1,11 @@
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { DbClient } from '../../db/index.js';
-import { sessionEventChanges, sessionEvents, sessions } from '../../db/schema.js';
+import {
+  sessionEventChangeCounts,
+  sessionEventChanges,
+  sessionEvents,
+  sessions,
+} from '../../db/schema.js';
 
 /** Fixed query shapes, owned by one repository/connection; values are bound per execution. */
 export function prepareEventStatements(db: DbClient, retention: number) {
@@ -40,20 +45,21 @@ export function prepareEventStatements(db: DbClient, retention: number) {
       })
       .returning()
       .prepare(),
-    cutoff: db
-      .select({ sequence: sessionEventChanges.sequence })
-      .from(sessionEventChanges)
-      .where(eq(sessionEventChanges.sessionId, sql.placeholder('sessionId')))
-      .orderBy(desc(sessionEventChanges.sequence))
-      .offset(retention - 1)
-      .limit(1)
-      .prepare(),
     prune: db
       .delete(sessionEventChanges)
       .where(
         and(
           eq(sessionEventChanges.sessionId, sql.placeholder('sessionId')),
-          lt(sessionEventChanges.sequence, sql.placeholder('sequence')),
+          // LIMIT 0 reads no journal entries below the cap; normal overflow selects one
+          // oldest entry via the session/sequence index, never walks the retention window.
+          sql`${sessionEventChanges.sequence} in (
+            select sequence from session_event_changes
+            where session_id = ${sql.placeholder('sessionId')}
+            order by sequence asc
+            limit (select max(0, ${sessionEventChangeCounts.retainedCount} - ${retention})
+              from ${sessionEventChangeCounts}
+              where ${sessionEventChangeCounts.sessionId} = ${sql.placeholder('sessionId')})
+          )`,
         ),
       )
       .prepare(),
