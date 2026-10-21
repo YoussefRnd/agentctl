@@ -351,6 +351,13 @@
       "when": 1792463182872,
       "tag": "0049_session_change_counts",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1792546904592,
+      "tag": "0050_session_attempt_operation_index",
+      "breakpoints": true
     }
   ]
 }

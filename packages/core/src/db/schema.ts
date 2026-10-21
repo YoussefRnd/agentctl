@@ -149,7 +149,10 @@ export const sessionTurnAttempts = sqliteTable(
     endedAt: integer('ended_at', { mode: 'timestamp' }),
     ...timestamps,
   },
-  (table) => [index('session_turn_attempts_session').on(table.sessionId)],
+  (table) => [
+    index('session_turn_attempts_session').on(table.sessionId),
+    index('session_turn_attempts_operation').on(table.operationId),
+  ],
 );
 
 export const sessionRuntimeBindings = sqliteTable('session_runtime_bindings', {

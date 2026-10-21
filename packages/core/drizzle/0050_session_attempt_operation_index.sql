@@ -1,0 +1,1 @@
+CREATE INDEX `session_turn_attempts_operation` ON `session_turn_attempts` (`operation_id`);

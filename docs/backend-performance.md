@@ -514,3 +514,200 @@ checks and lint/formatting passed. All 48 canonical controls, 20 balanced follow
 smoke passed. No real database/provider was used. Local ignored evidence is under
 `performance-results/retention-comparison/`, including `report.md`, `variant-manifest.json`,
 `full-retention-comparison.json`, `confirmation-20/` and all raw profiles/soak reports.
+
+## Remaining sustained-run drift — October 20, 2026
+
+Retention work is committed as `986481f` (`perf: bound session change retention bookkeeping`).
+The follow-up uses that exact runtime: frozen server/core/shared JavaScript, copied migrations,
+Node 24.22.0 and the same i3-8130U desktop. No application optimization is included in this
+investigation. Twenty sessions use separate-process clients, persistent SSE connections,
+200 initial events/session, 100 turns/batch and disabled telemetry. Captures, builds and tests
+run sequentially. All data and providers are synthetic.
+
+A five-minute run completed 21,500 measured turns. CPU sampling at 1 ms and native SQL timings
+cover five consecutive batches early (starting at 12.5 seconds) and late (271.5 seconds).
+Consistent SQLite backups are taken after each window, outside its timings. Profiling/export
+and backup overhead affect overall throughput; compare normalized windows and the separate
+uninstrumented controls below, rather than treating this run as a new capacity baseline.
+
+| Metric                                    | Early window | Late window |
+| ----------------------------------------- | -----------: | ----------: |
+| Attempts in database at window end        |        1,520 |      20,120 |
+| Batch median                              |     1,316 ms |    1,680 ms |
+| Average elapsed per 100 turns             |     1,392 ms |    1,652 ms |
+| Server CPU per 100 turns                  |     1,526 ms |    1,675 ms |
+| Attempt lookup native time per 100 turns  |      17.9 ms |    323.2 ms |
+| Retention prune native time per 100 turns |      10.4 ms |     10.5 ms |
+| History page method time per 100 turns    |       276 ms |      301 ms |
+| Client CPU per 500-turn window            |     1,590 ms |    1,530 ms |
+
+`SessionOperationWorker.drain()` reads `session_turn_attempts` by `operation_id` once per turn.
+The table has a primary-key index on `id` and an index on `session_id`, but no index on
+`operation_id`. Plans with actual captured bindings show `SCAN session_turn_attempts`. These
+lookups scan attempts across all sessions, so accumulated work elsewhere also increases their
+cost. The same 500 lookups take roughly 90→1,616 ms across the two windows. This is the dominant
+growing SQL cost; retention pruning remains bounded. History's two page reads grow about
+11 ms/100 turns combined, far less than the attempt lookup's 305 ms increase.
+
+SQLite self CPU samples rise about 398→720 ms/100 turns. Drizzle falls 408→370 ms and validation
+stays near 122/121 ms; GC falls 32→27 ms. Categories describe leaf samples, while method totals
+include their callees and must not be added to those categories. Server logical read bytes rise
+about 70 MB→2.07 GB per window with SQLite's unchanged 2 MiB cache setting; OS-accounted physical
+reads rise 0→13 MB. These measurements support repeated database scanning, without establishing
+production disk behavior. Client CPU and RSS (143→146 MiB) stay similar. Complete 30-second server
+heap low-water windows range 55–77 MiB without monotonic growth; five minutes cannot exclude leaks.
+
+To test causality independently of process age, fresh processes reopen disposable copies of the
+early/late backups. Each process performs the normal 20-turn warmup, then measures 100 turns.
+The candidate adds only a non-unique index on `session_turn_attempts(operation_id)`, on the
+late database copy before warmup. Five unprofiled processes per condition alternate forward and
+reverse condition order. No samples are discarded, including the slower first early-state run.
+
+| Database state                  |   Burst median (range) | Server CPU median | History p95 median | Completion p95 median |
+| ------------------------------- | ---------------------: | ----------------: | -----------------: | --------------------: |
+| Early snapshot                  | 1,448 ms (1,342–2,034) |          1,799 ms |             149 ms |                967 ms |
+| Late snapshot                   | 1,725 ms (1,652–1,740) |          2,060 ms |             161 ms |              1,089 ms |
+| Late snapshot, diagnostic index | 1,363 ms (1,325–1,667) |          1,654 ms |             145 ms |                909 ms |
+
+On the same late state, the diagnostic index lowers median elapsed time about 21%, CPU 20% and
+completion p95 17%. Ranges overlap slightly and five processes do not establish a production SLO.
+The early-state range is wide; the useful causal comparison is the same late snapshot with and
+without the index. Restored early-like performance in a fresh process also supports database
+size as the primary cause of this observed drift, rather than process age alone.
+
+Three additional CPU/SQL processes per condition confirm the mechanism. Median attempt lookup
+time per 100 turns is 19.1 ms on early state, 297.5 ms on late state and 1.85 ms on indexed late
+state. Separate EXPLAIN checks on disposable late-state copies confirm the indexed plan:
+`SEARCH session_turn_attempts USING INDEX diagnostic_attempt_operation (operation_id=?)`.
+Total native SQL time falls 708→390 ms on late state. Instrumented elapsed
+medians are 1795→1450 ms; these are diagnostic timings and remain separate from unprofiled results.
+The index's insertion/update overhead is included in both end-to-end comparisons.
+
+The next production change should add a **non-unique** operation-id index through the schema and
+a migration, validate upgraded databases and retry/recovery semantics, then repeat a sustained
+run. This investigation does not add that index to application databases. Afterward, repeated
+Drizzle query construction and the remaining history read/decoding work are candidates for a new
+profile; this workload does not justify adding speculative execution-state indexes. Real provider
+latency, UI rendering, much longer uptime and other workloads remain unmeasured here.
+
+The soak, smoke, 15 unprofiled comparisons and nine CPU/SQL comparisons passed their existing
+operation-success, per-session ordering/non-overlap and listener-cleanup assertions. The soak
+ended with zero outstanding work/listeners and 8,608 retained changes/session. Both backup
+journals match their persisted retention counters and pass SQLite integrity checks. No application
+code changed after the retention commit, so this step adds only profiling documentation.
+
+Ignored local evidence is in `performance-results/long-session-profile/`: `manifest.json` records
+the frozen runtime hashes, `comparison.json` summarizes results, `validation.json` records backup
+integrity/counter checks and index plans, `detailed-300s/` contains both
+profiles/SQL plans/backups and the soak, and `control-states/` / `diagnostic-states/` contain every
+comparison. The local drivers are `profile-long.mjs`, `compare-states.mjs` and `analyze.py`.
+Re-run against the frozen artifacts sequentially:
+
+```sh
+node performance-results/long-session-profile/profile-long.mjs detailed-300s 300 1
+node performance-results/long-session-profile/compare-states.mjs detailed-300s control 5
+node performance-results/long-session-profile/compare-states.mjs detailed-300s diagnostic 3
+python performance-results/long-session-profile/analyze.py
+```
+
+## Indexed turn-attempt lookup — October 21, 2026
+
+The production schema now declares the non-unique `session_turn_attempts_operation` index on
+`session_turn_attempts(operation_id)`. Migration `0050_session_attempt_operation_index` adds it
+without rebuilding tables or rewriting attempts. Multiple attempts can still refer to the same
+operation. The migration regression seeds interrupted/completed attempts for one operation at
+historical schema boundaries, checks their preservation and the index's non-unique definition,
+and verifies that the worker's lookup uses the index. Existing retry/recovery behavior is unchanged.
+
+This comparison uses separate frozen compiled runtimes and **copied** migration directories:
+before has 50 migrations through `0049`, after has 51 through `0050`. Server/shared hashes match;
+production core JavaScript differs only in `db/schema.js`. Dependencies, client, synthetic provider
+and workload are held constant. Node 24.22.0 / i3-8130U captures run sequentially without concurrent
+builds or tests. Both versions get fresh five-minute captures with 20 sessions, 200 initial history
+events/session, 100 turns/batch, persistent SSE connections and disabled telemetry. CPU/SQL windows
+cover five batches after the first ten batches and after 270 seconds. Exports and database backups
+happen outside those windows; whole-run throughput includes profiling overhead.
+
+| Five-minute diagnostic metric           |         Before |          After |
+| --------------------------------------- | -------------: | -------------: |
+| Completed turns                         |         23,000 |         26,400 |
+| Batch median, first→last fifth          | 1,164→1,421 ms | 1,136→1,109 ms |
+| Completion p95 median, first→last fifth |     756→903 ms |     739→730 ms |
+| History p95 median, first→last fifth    |     113→130 ms |     115→111 ms |
+| Event-loop delay p99                    |         152 ms |         107 ms |
+| Final retained changes/session          |          9,208 |         10,000 |
+
+Elapsed time was 300.1/301.0 seconds, yielding about 14% more turns/second after indexing. The
+before run's batch drift was +22%; the indexed run's late batches were slightly faster than its
+early batches. Different throughput produces different database sizes, and the two runs have a
+fixed before/after order. These are diagnostic observations rather than production capacity SLOs.
+
+| CPU/SQL capture metric, per 100 turns | Before early | Before late | After early | After late |
+| ------------------------------------- | -----------: | ----------: | ----------: | ---------: |
+| Average elapsed                       |     1,223 ms |    1,492 ms |    1,233 ms |   1,196 ms |
+| Server CPU                            |     1,389 ms |    1,582 ms |    1,400 ms |   1,272 ms |
+| Attempt lookup native time            |      14.9 ms |    307.4 ms |     1.43 ms |    1.87 ms |
+| Retention prune native time           |      8.35 ms |     8.18 ms |     8.49 ms |    8.37 ms |
+| Attempts at window end                |        1,520 |      21,520 |       1,520 |     24,420 |
+
+All windows make the same 500 attempt lookups. Captured plans change from
+`SCAN session_turn_attempts` to `SEARCH session_turn_attempts USING INDEX session_turn_attempts_operation
+(operation_id=?)`. The indexed late capture stays near early lookup cost despite a larger table.
+SQLite self CPU samples fall 667→353 ms/100 turns between late windows; Drizzle remains near
+345/347 ms and validation near 107/108 ms. Profiler-start frames are excluded and sampled durations
+agree with measured windows within 5 ms. No broad short-session speedup is established: early
+end-to-end timings differ by less than 1%.
+
+Fresh-process comparisons use copies of the **same pre-index late snapshot** (21,520 attempts).
+The after runtime applies its actual `0050` migration during setup; the before runtime retains
+`0049`. No diagnostic indexes or SQL overrides are injected. Both get the normal 20-turn warmup
+before each 100-turn measurement. Variant order alternates by repetition, with one predeclared
+discarded process per variant followed by five unprofiled measurements and three separate CPU/SQL
+measurements per variant. Index creation is outside the timed workload; index maintenance is included.
+
+| Unprofiled metric, five-process median |         Before |          After |
+| -------------------------------------- | -------------: | -------------: |
+| 100-turn elapsed                       |       1,706 ms |       1,363 ms |
+| Elapsed range                          | 1,660–1,789 ms | 1,330–1,375 ms |
+| Server CPU                             |       2,035 ms |       1,672 ms |
+| History p95                            |         164 ms |         144 ms |
+| Completion p95                         |       1,062 ms |         910 ms |
+
+At equal database size, elapsed time improves 20%, CPU 18%, history p95 12% and completion p95
+14%. All measured samples are retained; only the declared warmup processes are excluded. Five
+processes on one desktop do not establish production confidence intervals. The separate three-run
+CPU/SQL medians show attempt lookup time 315.3→1.95 ms/100 turns and total native SQL time
+720→403 ms. Their instrumented elapsed medians are 1808→1490 ms; those timings are kept separate
+from the unprofiled table. Actual migration/index maintenance therefore reproduces the earlier
+diagnostic-index result.
+
+Both five-minute runs drained every batch and released all listeners. The indexed run reached
+exactly 10,000 retained entries in all 20 sessions, while completing more turns. Peak sampled RSS
+was 485/490 MiB and complete 30-second heap low-water windows ranged 56–91/57–86 MiB; profiling
+exports affect these samples and this run does not establish a memory improvement or leak freedom.
+Both late-window database snapshots and both early snapshots pass SQLite integrity/foreign-key
+checks, preserve exact journal/counter agreement and contain the expected migration/index state.
+
+All 1049 Node tests across 173 files and all 11 architecture regression tests passed. Workspace
+types, architecture governance and lint/formatting passed. Architecture regressions were rerun
+with normal child-process permissions after sandboxed fixture commands returned empty output.
+The two five-minute captures, ten measured unprofiled comparisons and six
+measured CPU/SQL comparisons passed operation success, FIFO/non-overlap and listener cleanup
+assertions. Four additional comparison processes were predeclared warmups and also passed. No
+real provider or developer database was used. Remaining CPU work is largely steady Drizzle query
+construction/mapping and history reading/decoding; other workloads and longer production uptime
+need their own profiles before choosing another change.
+
+Local ignored evidence is under `performance-results/attempt-index-comparison/`: `manifest.json`
+pins the two runtimes/migration sets, `comparison.json` summarizes every capture, `validation.json`
+records database/index checks, and `before-profile/`, `after-profile/`, `control/` and `diagnostic/`
+retain raw samples, query plans and profiles. Reproduce sequentially against those frozen artifacts:
+
+```sh
+node performance-results/attempt-index-comparison/profile-long.mjs before-profile 300 1 before
+node performance-results/attempt-index-comparison/profile-long.mjs after-profile 300 1 after
+node performance-results/attempt-index-comparison/compare-state.mjs control 5
+node performance-results/attempt-index-comparison/compare-state.mjs diagnostic 3
+python performance-results/attempt-index-comparison/analyze.py
+node performance-results/attempt-index-comparison/validate.mjs
+```

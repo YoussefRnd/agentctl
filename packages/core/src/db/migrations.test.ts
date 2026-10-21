@@ -12,6 +12,8 @@ import {
   sessionEvents,
   sessionEventChangeCounts,
   sessionEventChanges,
+  sessionOperations,
+  sessionTurnAttempts,
 } from './index.js';
 
 const migrations = readMigrationFiles({
@@ -24,6 +26,7 @@ it('upgrades populated databases from every migration boundary without losing se
     // Exercise each historical schema, including the temporarily shipped checks feature.
     for (let count = 0; count <= migrations.length; count++) {
       let hasSavedEffort = false;
+      let hasSavedAttempts = false;
       const databasePath = path.join(directory, `${count}.db`);
       const sqlite = new DatabaseSync(databasePath);
       sqlite.exec('PRAGMA foreign_keys = OFF;');
@@ -89,6 +92,21 @@ it('upgrades populated databases from every migration boundary without losing se
             "INSERT INTO check_runs (id, session_id, check_id, name, command, status, started_at) VALUES ('run', 'session', 'check', 'Old check', 'true', 'passed', 1)",
           );
         }
+        if (
+          sqlite
+            .prepare("SELECT name FROM sqlite_master WHERE name = 'session_turn_attempts'")
+            .get()
+        ) {
+          hasSavedAttempts = true;
+          sqlite.exec(`
+            INSERT INTO session_operations
+              (id, session_id, command_id, kind, fingerprint, payload, status)
+            VALUES ('operation', 'session', 'command', 'message.send', 'fingerprint', '{}', 'succeeded');
+            INSERT INTO session_turn_attempts (id, session_id, operation_id, provider_id, status)
+            VALUES ('first-attempt', 'session', 'operation', 'agent', 'interrupted'),
+                   ('retry-attempt', 'session', 'operation', 'agent', 'completed');
+          `);
+        }
       }
       sqlite.close();
 
@@ -111,6 +129,49 @@ it('upgrades populated databases from every migration boundary without losing se
           'Keep my history',
         );
       }
+      if (hasSavedAttempts) {
+        expect(db.select().from(sessionOperations).get()).toMatchObject({
+          id: 'operation',
+          status: 'succeeded',
+        });
+        expect(db.select().from(sessionTurnAttempts).all()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: 'first-attempt',
+              operationId: 'operation',
+              status: 'interrupted',
+            }),
+            expect.objectContaining({
+              id: 'retry-attempt',
+              operationId: 'operation',
+              status: 'completed',
+            }),
+          ]),
+        );
+        expect(db.select().from(sessionTurnAttempts).all()).toHaveLength(2);
+      }
+      expect(
+        db.all<{ name: string; unique: number }>(sql`PRAGMA index_list(session_turn_attempts)`),
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'session_turn_attempts_operation', unique: 0 }),
+        ]),
+      );
+      expect(
+        db
+          .all<{ name: string }>(sql`PRAGMA index_info(session_turn_attempts_operation)`)
+          .map((column) => column.name),
+      ).toEqual(['operation_id']);
+      expect(
+        db.all<{ detail: string }>(sql`EXPLAIN QUERY PLAN SELECT * FROM ${sessionTurnAttempts}
+          WHERE ${sessionTurnAttempts.operationId} = ${'operation'}`),
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            detail: expect.stringContaining('USING INDEX session_turn_attempts_operation'),
+          }),
+        ]),
+      );
       expect(db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
       expect(db.select().from(sessionEventChangeCounts).get()?.retainedCount ?? 0).toBe(
         db.select({ count: countRows() }).from(sessionEventChanges).get()!.count,
