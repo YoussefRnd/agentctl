@@ -118,15 +118,28 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
           ),
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const { id } = request.params;
       const { beforeId, aroundId, afterId, limit } = request.query;
-      if (aroundId !== undefined || afterId !== undefined) {
-        const page = fastify.services.events.window(id, { aroundId, afterId, limit });
-        if (!page) throw new AppError('Event not found', 404);
-        return page;
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      request.raw.once('aborted', abort);
+      reply.raw.once('close', abort);
+      try {
+        const body = await fastify.services.events.pageResponse(
+          id,
+          { beforeId, aroundId, afterId, limit },
+          controller.signal,
+        );
+        if (body === undefined) throw new AppError('Event not found', 404);
+        return reply.type('application/json; charset=utf-8').send(body);
+      } catch (error) {
+        if (!controller.signal.aborted) throw error;
+        return reply;
+      } finally {
+        request.raw.off('aborted', abort);
+        reply.raw.off('close', abort);
       }
-      return fastify.services.events.page(id, { beforeId, limit });
     },
   );
 

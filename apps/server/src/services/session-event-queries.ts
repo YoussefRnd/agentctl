@@ -6,12 +6,16 @@ import {
   readEventWindow,
   readEventReplay,
   readSessionChangeCatchUp,
+  captureEventWindow,
 } from './session-event-history.js';
 import { SessionEventPageReader, type EventPageOptions } from './session-event-page-reader.js';
+import { prepareEventPageResponse } from './session-event-page-response.js';
+import { SessionHistoryWorkQueue } from './session-history-work-queue.js';
 import { readTurnIndex } from './session-turn-index.js';
 
 export class SessionEventQueries {
   private pageReader?: SessionEventPageReader;
+  private readonly historyWork = new SessionHistoryWorkQueue();
   constructor(private readonly db: DbClient) {}
   async list(sessionId: string) {
     const rows = await this.db
@@ -29,6 +33,20 @@ export class SessionEventQueries {
   }
   window(sessionId: string, options: Parameters<typeof readEventWindow>[2]) {
     return readEventWindow(this.db, sessionId, options);
+  }
+  pageResponse(
+    sessionId: string,
+    options: { beforeId?: number; aroundId?: number; afterId?: number; limit: number },
+    signal?: AbortSignal,
+  ) {
+    return this.historyWork.run(
+      prepareEventPageResponse(() =>
+        options.aroundId !== undefined || options.afterId !== undefined
+          ? captureEventWindow(this.db, sessionId, options)
+          : (this.pageReader ??= new SessionEventPageReader(this.db)).capture(sessionId, options),
+      ),
+      signal,
+    );
   }
   replay(sessionId: string, afterId: number, throughId: number) {
     return readEventReplay(this.db, sessionId, afterId, throughId);

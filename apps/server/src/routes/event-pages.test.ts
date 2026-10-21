@@ -155,3 +155,47 @@ it('indexes every foreground turn independently of message pages with bounded pr
     await app.close();
   }
 });
+
+it('returns a complete error for a corrupt later row without sending earlier event payloads', async () => {
+  const app = Fastify();
+  const db = createDatabase(':memory:');
+  app.decorate('db', db);
+  app.setValidatorCompiler(validatorCompiler);
+  app.decorate('services', createServerServices(app));
+  await app.register(eventsRoutes, { prefix: '/api' });
+  const id = '11111111-1111-4111-8111-111111111111';
+  db.insert(projects).values({ id: 'p', name: 'Project', path: '/tmp/project' }).run();
+  db.insert(sessions)
+    .values({
+      id,
+      projectId: 'p',
+      branch: 'main',
+      worktreePath: '/tmp/project',
+      taskSlug: 'task',
+      baseCommit: 'none',
+      agent: 'agent',
+      selectedProvider: 'agent',
+    })
+    .run();
+  for (const eventId of [1, 2])
+    db.insert(sessionEvents)
+      .values({
+        id: eventId,
+        sessionId: id,
+        type: 'text',
+        data: JSON.stringify({ role: 'provider', content: 'must not leak in an error' }),
+        metadata: eventId === 2 ? '{' : null,
+      })
+      .run();
+  try {
+    const response = await app.inject(`/api/sessions/${id}/events/page`);
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toMatchObject({ statusCode: 500 });
+    expect(response.body).not.toContain('must not leak in an error');
+    const healthy = await app.inject(`/api/sessions/${id}/events/page?beforeId=2`);
+    expect(healthy.statusCode).toBe(200);
+    expect(sessionEventPageSchema.parse(healthy.json()).events.map((row) => row.id)).toEqual([1]);
+  } finally {
+    await app.close();
+  }
+});

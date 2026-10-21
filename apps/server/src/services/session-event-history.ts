@@ -7,6 +7,7 @@ import {
   payloadBytes,
   EVENT_HISTORY_BYTE_BUDGET,
   type EventPageOptions,
+  type CapturedEventPage,
 } from './session-event-page-reader.js';
 import { parseEventRow } from './session-event-row.js';
 export { EVENT_HISTORY_BYTE_BUDGET } from './session-event-page-reader.js';
@@ -28,6 +29,17 @@ export function readEventWindow(
   sessionId: string,
   options: { aroundId?: number; afterId?: number; limit: number },
 ): SessionEventPage | undefined {
+  const page = captureEventWindow(db, sessionId, options);
+  if (!page) return undefined;
+  const { rows, ...cursors } = page;
+  return { events: rows.map(parseEventRow), ...cursors };
+}
+
+export function captureEventWindow(
+  db: Pick<DbClient, 'select'>,
+  sessionId: string,
+  options: { aroundId?: number; afterId?: number; limit: number },
+): CapturedEventPage | undefined {
   const start = options.aroundId ?? options.afterId;
   if (start === undefined) return undefined;
   if (options.aroundId !== undefined) {
@@ -61,7 +73,7 @@ export function readEventWindow(
     ids.push(candidate.id);
     bytes += candidate.payloadBytes;
   }
-  if (!ids.length) return { events: [], nextBeforeId: null, nextAfterId: null };
+  if (!ids.length) return { rows: [], nextBeforeId: null, nextAfterId: null };
   const rows = db
     .select()
     .from(sessionEvents)
@@ -75,7 +87,7 @@ export function readEventWindow(
     .limit(1)
     .get();
   return {
-    events: rows.map(parseEventRow),
+    rows,
     nextBeforeId: older ? ids[0] : null,
     nextAfterId: candidates.length > ids.length ? ids[ids.length - 1] : null,
   };

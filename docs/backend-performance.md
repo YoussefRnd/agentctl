@@ -829,3 +829,252 @@ node performance-results/drizzle-comparison/profile-long.mjs after-profile 300 1
 python performance-results/drizzle-comparison/analyze.py
 node performance-results/drizzle-comparison/validate.mjs
 ```
+
+## Event-loop delay investigation — October 21, 2026
+
+The delay maxima in the preceding diagnostic soaks include measurement overhead. The CPU
+analysis excludes profiler startup, but the soak's `monitorEventLoopDelay()` stays enabled during
+startup, profile export, SQL diagnostics and database snapshots. Do not use those whole-run
+maxima as application-only latency measurements.
+
+This investigation leaves application code unchanged. Captures reopen disposable copies of the
+same populated, indexed database (24,420 attempts and 126,100 events, or 6,305 events/session),
+using the frozen optimized runtime committed as `53a6b27`. Each process warms 20 turns before
+measurement. The workload retains 20 sessions, persistent SSE, 20 synthetic provider chunks/turn
+and disabled telemetry. The client runs in another process. Legacy soak report metadata still
+says 200 initial history events; the investigation manifest records the actual imported state.
+No real provider or developer database participates.
+
+A 45-second diagnostic explicitly times profiler startup, stop, export and database snapshots.
+`Profiler.start` takes 282/246 ms and overlaps timer intervals of 286/255 ms: profiler startup
+itself demonstrably stalls the loop. However, the run's 532 ms histogram maximum occurs later,
+during the profiled workload, outside those startup/export/snapshot phases. Startup alone cannot
+explain all the maxima, and the older 329/544 ms maxima cannot be assigned exact causes
+retrospectively. Snapshot phases last 381/414 ms in total, including asynchronous backup; those
+elapsed durations are not equivalent to continuous loop stalls.
+
+Separate controls use no Inspector profiler or SQL/method wrappers, retaining only the ordinary
+soak monitor, a 10 ms heartbeat and a GC observer. Three 30-second repetitions per condition
+alternate the order of 200-row and 50-row history requests. Both conditions issue one history
+request per input; only its requested row limit changes. All measured samples are retained.
+
+| Three-process result    | 200-row history pages | 50-row history pages |
+| ----------------------- | --------------------: | -------------------: |
+| Loop-delay p99 median   |                101 ms |                57 ms |
+| Loop-delay p99 range    |             93–113 ms |             56–60 ms |
+| Maximum delay range     |            155–305 ms |           109–199 ms |
+| Completed turns/process |           3,300–3,800 |          5,400–5,500 |
+
+The smaller-page workload reduces median p99 about 43%, while completing more turns. This is
+an attribution experiment, not an application change or a comparison at equal rows delivered:
+50-row pages deliberately do less work. It establishes that concurrent history processing
+materially affects loop delay; it does not select a new API/UI page size. Occasional larger
+outliers remain in both conditions.
+
+A separate 60-second capture instruments synchronous history, queue and event methods, native
+SQL and history-response `JSON.stringify`. It also samples Linux main-thread runtime/runqueue
+counters and GC entries. It completes 7,900 turns with delay p99/max of 101/147 ms. Among its 461
+heartbeat intervals lasting at least 50 ms (30.17 seconds combined):
+
+| Inclusive wall-time attribution       |    Time | Share of those intervals |
+| ------------------------------------- | ------: | -----------------------: |
+| History page reading/mapping/decoding | 17.44 s |                      58% |
+| History response JSON serialization   |  4.51 s |                      15% |
+| Both history stages                   | 21.94 s |                      73% |
+
+Those intervals contain 6,498 history requests. Individual pages average about 2.62 ms for
+reading/decoding and 0.68 ms for serialization across the full capture; bursts of many pages
+accumulate before timers run again. For example, one 115 ms interval handles 20 pages, spending
+83 ms in page processing and 22 ms serializing responses. The synchronous path includes prepared
+SQLite reads, Drizzle row mapping, JSON decoding and both DB-row and wire-schema validation in
+`parseEventRow`. Fastify falls back to `JSON.stringify` for this route's response. CPU samples
+from the separate diagnostic also show row decoding/validation, native reads and serialization.
+The attribution table contains inclusive wall times, including any GC or scheduler wait inside
+those methods; native SQL and GC totals must not be added to it as disjoint CPU categories.
+
+GC is a secondary contribution in this capture: 251 entries total 829 ms and the longest is
+13 ms. No measured native SQL call reaches 10 ms. These observations do not support blaming a
+single slow query, retention write or large GC pause for its 147 ms maximum. Scheduler contention
+also matters: that maximum heartbeat interval includes 98 ms of main-thread runtime and 47 ms
+waiting runnable for CPU. This does not identify which competing process caused the wait. The
+unprofiled 305 ms outlier has no scheduler/method trace, so its precise decomposition remains
+unknown. An interactive desktop and finite samples do not establish production worst-case bounds.
+
+A separate five-minute control, with 200-row pages and no CPU/SQL profiler, completes 44,900
+turns in 300.3 seconds. Loop-delay p99/max are 74.6/159.6 ms. The independent heartbeat's first
+versus last minute has p99 of 83/70 ms and maxima of 160/87 ms; these are heartbeat statistics,
+not reset-window values from the whole-run histogram. First/last fifth batch medians are
+687/653 ms. No upward latency trend appears in this run as history grows. The longest GC entry
+is 12.3 ms. All 20 sessions finish at exactly 10,000 retained changes, with no outstanding work
+or leaked listeners. This provides an application baseline without the diagnostic phases; it
+is a separate run, so the lower maximum cannot be attributed entirely to removing the profiler.
+All nine measured captures pass the existing success, per-session FIFO/non-overlap and listener
+cleanup assertions. Application source is unchanged, so no application test-suite rerun is
+necessary for this documentation-only investigation.
+
+The current UI already receives ordinary turn updates through SSE; it does not request a full
+history page after every input. These captures intentionally stress history traffic. The finding
+therefore applies most directly to concurrent history loads, scrolling and navigation, rather
+than proving that every normal streamed turn incurs this cost. Snapshot/reconnect
+serialization, telemetry-enabled operation, larger event bodies and real providers need their
+own measurements.
+
+The next application target is bounded history decoding and response serialization under
+concurrent requests, preserving validation, fresh reads, ordering and cursor/parent semantics.
+Evaluate work budgeting/yielding and codec/mapping cost before introducing workers or caches.
+The 50-row control is evidence for that priority, not approval to reduce the user's history
+window. Future baseline reports should keep CPU/SQL/snapshot diagnostics separate from the
+application loop-delay window and report scheduler/GC context alongside large outliers.
+
+Local ignored evidence and helpers are under `performance-results/event-loop-investigation/`:
+`manifest.json`, `comparison.json`, `validation.json`, raw `trace.json`/`soak.json` per process,
+and the separate `diagnostic/` CPU profiles and database backups. Both backups pass SQLite
+integrity and foreign-key checks; the frozen executable JavaScript matches the current build. Reproduce sequentially with the existing frozen
+runtime and database artifacts:
+
+```sh
+node performance-results/event-loop-investigation/run.mjs diagnostic 45 diagnostic 200
+node performance-results/event-loop-investigation/sequence.mjs
+python performance-results/event-loop-investigation/analyze.py
+node performance-results/event-loop-investigation/validate.mjs
+```
+
+## Cooperative HTTP history responses — October 21, 2026
+
+HTTP `/api/sessions/:id/events/page` now shares a cooperative work queue across requests within
+one server's `SessionEventQueries` instance. This covers latest/backward pages and the
+`aroundId`/`afterId` navigation windows. Each loop slice runs for roughly 2 ms or at most 128
+iterator steps, then schedules another `setImmediate`. Jobs rotate between steps, so concurrent
+requests share the budget rather than each claiming a full slice in the same turn.
+
+The first step captures rows, parent anchors and cursors synchronously using the existing query
+policy. No transaction, statement iterator or database view is held across an asynchronous yield.
+Subsequent steps retain the same DB-row and wire-schema validation and encode events in batches
+of at most eight events or 8,192 serialized UTF-16 code units before yielding. The character
+threshold bounds normal encoded batches to roughly 24 KiB worst-case UTF-8, plus any final
+indivisible event. This amortizes scheduler/request-context entry overhead across small batches. The final step assembles the already encoded events and cursor envelope.
+Fastify sends that completed JSON string with the normal JSON content type. Validation or encoding
+failure occurs before response headers/body are sent, preventing partially successful pages.
+Disconnects cancel queued work and release their abort listeners and captured rows. Each job
+uses an `AsyncResource` to preserve its submitting request context across shared scheduler slices;
+completion/cancellation destroys that resource.
+
+The synchronous query APIs remain available for transactional catch-up/snapshot consumers. This
+change bounds the HTTP page endpoint; it does not convert SSE snapshot/replay or the legacy
+unpaged history endpoint to cooperative processing. Live SSE/provider work benefits when page
+requests stop monopolizing the shared loop. There is no result cache, worker, migration, reduced
+page limit or truncated event. Cursor, UTF-8 byte-budget, parent-anchor and oversized-single-event
+progress rules are preserved. The slice budget is cooperative rather than a hard latency limit:
+a native SQLite call, one large JSON value, final string assembly, socket encoding, GC or OS
+scheduling can exceed it. Other application work has its own event-loop costs.
+
+The before runtime is committed `53a6b27`; the candidate freezes the application code described
+above. Core/shared executable JavaScript, dependencies and all 51 copied migrations are identical.
+All captures reopen disposable copies of the same indexed database with 24,420 attempts and
+6,305 history events/session, warm 20 turns, then measure 20 concurrent sessions with persistent
+SSE and 20 synthetic provider chunks/turn. Both versions request 200-row pages after each input,
+with telemetry disabled. Unlike the earlier attribution experiment, this comparison delivers the
+same page size in both conditions. The UI normally receives ordinary turn updates through SSE,
+so this remains a stress workload for concurrent history traffic.
+
+Initial prototype captures are archived and excluded after adding per-request async-context
+preservation and then amortizing that overhead with bounded batches. Both variants receive fresh final short comparisons and fresh CPU profiles. The earlier
+unchanged five-minute baseline is retained as a reference; host timing varied between stages,
+so capacity comparisons use the fresh paired controls. Two five-second pilots are also excluded. Three fresh 30-second
+processes per version alternate variant order by repetition; all measured samples, including
+outliers, are retained. A separate five-minute candidate control checks sustained behavior. Additional
+CPU profiles start before the measurement window and stop after the loop monitor and CPU/elapsed
+counters have been captured; profiler startup/export are excluded from those counters. Controls
+have no CPU profiler or SQL/method wrappers, only the soak monitor, 10 ms heartbeat and GC observer.
+No builds or tests run concurrently with these captures.
+
+The full 1,062-test Node suite across 176 files passes after the context correction. After the
+final batching change, all 167 server tests across 37 files pass, including shared-budget fairness,
+batch size/large-event yielding, cancellation/listener
+cleanup, error isolation, exact JSON for every persisted event variant, page/window equivalence,
+captured-row consistency across yields, fresh subsequent reads, UTF-8/oversized-event progress,
+and corrupt-row HTTP errors without partial payloads. Workspace types, architecture governance,
+all 11 architecture regressions and lint pass. Ownership records include the new queue/response
+modules and their tests.
+
+| Final three-process median                  | Before |  After |
+| ------------------------------------------- | -----: | -----: |
+| Loop-delay p99                              |  85 ms |  45 ms |
+| Loop-delay maximum                          | 138 ms |  80 ms |
+| First-output p95, median across batches     | 480 ms |  80 ms |
+| Turn-completion p95, median across batches  | 523 ms | 106 ms |
+| Acceptance p95, median across batches       |  81 ms |  38 ms |
+| History-response p95, median across batches |  86 ms | 143 ms |
+| Turns/second                                |    138 |    130 |
+| Server CPU per 100 turns                    | 761 ms | 810 ms |
+
+In these samples, loop-delay p99 falls about 47%, completion p95 80%, and first-output p95 83%.
+History-response p95 increases about 66%, median throughput decreases 5%, and CPU per turn rises
+6%. Spreading history work across loop turns lets acceptance/provider/SSE work progress sooner,
+while history callers wait longer for a complete page. This is a responsiveness tradeoff, not a
+uniform request-latency or capacity improvement. Batch p95 values are summarized by their median
+across batches and then across processes, not pooled request p95s.
+
+All final samples are retained. Baseline throughput ranges 110–141 turns/second versus 129–131
+for the candidate; host conditions varied considerably across stages. The first final baseline
+process is slower than the other two and remains included. Loop p99 ranges are 81–147/44–46 ms;
+maximum ranges are 117–204/58–92 ms. The repeated runs support lower loop/request contention in
+this workload, not precise production capacity estimates. Earlier per-row prototypes and their
+counterexamples remain in the local evidence; they are excluded because application code changed,
+not because individual measurements were inconvenient. One obsolete sustained capture was
+explicitly terminated before completion and is not a successful measured run.
+
+The client is closed loop: each session waits for its history response before sending the next
+input. Longer history responses also pace subsequent inputs, so the completion/first-output gains
+combine improved loop fairness with changed queue arrival timing. They do not mean 100 turns
+finish 80% sooner; aggregate throughput is slightly lower in the median. Fixed-arrival-rate tests
+and real provider workloads would be needed to isolate that effect or predict production gains.
+
+The final five-minute candidate run completes 41,100 turns in 300.4 seconds with loop-delay
+p99/max of 42.6/104.5 ms. First/last fifth batch medians are 735/710 ms. Every batch drains;
+all 20 sessions end at exactly 10,000 retained changes, with zero outstanding work/listeners.
+The earlier unchanged baseline completes 36,800 turns with p99/max of 123.6/232.1 ms and batch
+medians of 727/1,207 ms in its first/last fifth. Because those sustained captures span different
+host conditions, the higher candidate turn count is not evidence of a capacity gain or proof
+that the baseline's late slowdown was database growth. Use the fresh paired controls for the
+throughput/CPU tradeoff. The candidate's own run shows no upward latency trend over five minutes.
+
+Memory remains a limitation. Periodic sampled RSS peaks at 505 MiB in the candidate versus
+442 MiB in the earlier baseline; these omit the final sample after heartbeat-trace export.
+Complete 30-second natural-GC heap low-water windows range 55–103 MiB versus 52–74 MiB. The
+candidate's last two windows rise to 95/103 MiB despite major GC activity, so this is not evidence
+of leak freedom or a memory improvement. Sampled heap includes in-flight responses, changing
+history state and diagnostic buffers; the cause of the higher late heap is not isolated by
+this capture. Queue cleanup assertions pass, but retained-heap analysis and longer runs remain
+follow-up work. The candidate's largest GC entry is 16.4 ms.
+
+Separate fresh 10-second CPU profiles cover 1,400 baseline turns and 1,200 candidate turns.
+Normalized leaf samples retain similar native SQLite/validation costs (245/76 versus 263/81 ms
+per 100 turns). Fastify serialization self samples fall 64→0.4 ms/100 turns because JSON encoding
+moves into the cooperative response pipeline; that pipeline accounts for 90 ms/100 turns,
+including encoding, generator/scheduler work. This is relocated work, not eliminated serialization
+CPU. GC self samples rise 12→22 ms/100 turns in these diagnostics. These are wall-time samples
+from separate instrumented processes, not disjoint additions to inclusive method timings or a
+replacement for the unprofiled CPU comparison. Recorded profile windows exclude profiler startup
+and export; sample coverage agrees with their recorded measurement spans.
+
+All ten final measured captures pass existing receipt/content, FIFO/non-overlap, queue-drain and
+listener-cleanup assertions, totaling 104,300 turns. An independent HTTP comparison reopens the
+same database without submitting new turns and verifies identical status, JSON content type,
+body length and SHA-256 for 24 latest/backward/forward/empty/missing-target cases across three
+sessions. These compare the frozen baseline with the final implementation, independently of
+refactored helper reuse in unit tests.
+
+Local ignored evidence is under `performance-results/bounded-history-comparison/`:
+`manifest.json`, `comparison.json`, `validation.json`, frozen runtimes/copied migrations,
+`control-*`, `long-*`, `cpu-*`, wire-response fingerprints and check logs. Superseded captures
+and code remain in `prototype/`, `context-per-row/`, `variants/prototype/` and
+`variants/context-per-row/`; they are excluded from the final summary. To repeat against the
+frozen artifacts sequentially (without overlapping builds/tests):
+
+```sh
+node performance-results/bounded-history-comparison/run.mjs long-before 300 before control
+node performance-results/bounded-history-comparison/batched-sequence.mjs
+python performance-results/bounded-history-comparison/analyze.py
+node performance-results/bounded-history-comparison/validate.mjs
+```

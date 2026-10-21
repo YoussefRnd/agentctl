@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, lt, lte, sql } from 'drizzle-orm';
-import { sessionEvents, type DbClient } from '@agentctl/core/db';
+import { sessionEvents, type DbClient, type SessionEventDbRow } from '@agentctl/core/db';
 import type { SessionEventPage } from '@agentctl/shared';
 import { parseEventRow } from './session-event-row.js';
 
@@ -13,6 +13,12 @@ export interface EventPageOptions {
   throughId?: number;
   limit: number;
 }
+export interface CapturedEventPage {
+  rows: SessionEventDbRow[];
+  nextBeforeId: number | null;
+  nextAfterId?: number | null;
+}
+
 type HistoryDatabase = Pick<DbClient, 'select'>;
 
 // Only fields used by the DB/wire codecs; the separate receipt column is not history data.
@@ -98,6 +104,12 @@ export class SessionEventPageReader {
   constructor(private readonly db: HistoryDatabase) {}
 
   read(sessionId: string, options: EventPageOptions): SessionEventPage {
+    const { rows, ...cursors } = this.capture(sessionId, options);
+    return { events: rows.map(parseEventRow), ...cursors };
+  }
+
+  // Capture rows and cursors synchronously; decoding may then yield without holding a DB view.
+  capture(sessionId: string, options: EventPageOptions): CapturedEventPage {
     // Four possible cursor shapes; avoid optional-parameter ORs that weaken index range scans.
     const before = options.beforeId !== undefined;
     const through = options.throughId !== undefined;
@@ -117,9 +129,8 @@ export class SessionEventPageReader {
       ids.push(candidate.id);
       bytes += candidate.payloadBytes;
     }
-    if (ids.length === 0) return { events: [], nextBeforeId: null };
+    if (ids.length === 0) return { rows: [], nextBeforeId: null };
     const rows = (this.rows ??= prepareRows(this.db)).all({ sessionId, ids: JSON.stringify(ids) });
-    const events = rows.map(parseEventRow);
     const nextBeforeId = candidates.length > ids.length ? ids[ids.length - 1] : null;
     const parentId = rows[0]?.parentEventId;
     if (parentId && !ids.includes(parentId)) {
@@ -127,9 +138,9 @@ export class SessionEventPageReader {
       const size = (this.parentSize ??= prepareParentSize(this.db)).get(values);
       if (size && bytes + size.payloadBytes <= EVENT_HISTORY_BYTE_BUDGET) {
         const parent = (this.parent ??= prepareParent(this.db)).get(values);
-        if (parent) events.unshift(parseEventRow(parent));
+        if (parent) rows.unshift(parent);
       }
     }
-    return { events, nextBeforeId };
+    return { rows, nextBeforeId };
   }
 }
