@@ -17,7 +17,6 @@ import { resolveMessageAttachments } from '../commands/message-attachments.js';
 import { MessageAcceptanceService } from '../commands/message-acceptance-service.js';
 import { SessionOperationStore } from '../persistence/session-operation-store.js';
 import { SessionCommandCoordinator } from '../commands/session-command-coordinator.js';
-import { cancelRemovedMessageOperations } from '../persistence/session-operation-reconciliation.js';
 
 const messageSchema = z.object({
   text: z.string(),
@@ -63,16 +62,7 @@ export class SessionOperationWorker {
         const fingerprint = createHash('sha256')
           .update(JSON.stringify([text, attachmentIds]))
           .digest('hex');
-        const previous = this.db
-          .select()
-          .from(sessionOperations)
-          .where(
-            and(
-              eq(sessionOperations.sessionId, sessionId),
-              eq(sessionOperations.commandId, commandId),
-            ),
-          )
-          .get();
+        const previous = this.store.previous(sessionId, commandId);
         if (previous) {
           if (previous.fingerprint !== fingerprint || previous.kind !== 'message.send')
             throw new Error('Message ID was reused with different content');
@@ -85,20 +75,11 @@ export class SessionOperationWorker {
           attachmentIds,
         );
         if (receipt !== undefined) return receipt;
-        const row = this.db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+        const row = this.store.session(sessionId);
         if (!row || ['archived', 'merged', 'discarded'].includes(row.status))
           throw new Error('Session is unavailable');
-        this.db.transaction((tx) => cancelRemovedMessageOperations(tx, sessionId));
-        const pending = this.db
-          .select({ id: sessionOperations.id })
-          .from(sessionOperations)
-          .where(
-            and(
-              eq(sessionOperations.sessionId, sessionId),
-              eq(sessionOperations.status, 'pending'),
-            ),
-          )
-          .all();
+        this.store.reconcile(sessionId);
+        const pending = this.store.pending(sessionId);
         if (pending.length >= 100) throw new Error('Session queue is full');
         const attachments = await resolveMessageAttachments(sessionId, attachmentIds);
         const operationId = randomUUID();
@@ -148,11 +129,7 @@ export class SessionOperationWorker {
     while (this.accepting) {
       const operation = this.next(sessionId);
       if (!operation) return;
-      const attempt = this.db
-        .select()
-        .from(sessionTurnAttempts)
-        .where(eq(sessionTurnAttempts.operationId, operation.id))
-        .get();
+      const attempt = this.store.attempt(operation.id);
       if (!attempt || !operation.eventId) throw new Error('Incomplete session operation');
       const claimed = this.store.claim(operation.id, sessionId, attempt.id);
       if (!claimed) return;
@@ -178,34 +155,8 @@ export class SessionOperationWorker {
         attemptId: attempt.id,
         eventId,
       });
-      const ended = this.db
-        .select()
-        .from(sessionTurnAttempts)
-        .where(eq(sessionTurnAttempts.id, attempt.id))
-        .get();
-      this.db
-        .update(sessionOperations)
-        .set({
-          status:
-            ended?.status === 'cancelled'
-              ? 'cancelled'
-              : ended?.status === 'failed'
-                ? 'failed'
-                : 'succeeded',
-        })
-        .where(and(eq(sessionOperations.id, operation.id), eq(sessionOperations.status, 'running')))
-        .run();
-      this.db
-        .update(sessionTurnAttempts)
-        .set({ status: 'completed', endedAt: new Date() })
-        .where(
-          and(
-            eq(sessionTurnAttempts.id, attempt.id),
-            inArray(sessionTurnAttempts.status, ['running', 'waiting']),
-          ),
-        )
-        .run();
-      if (ended?.status === 'failed') {
+      const ended = this.store.finish(operation.id, attempt.id);
+      if (ended === 'failed') {
         markQueueFailure();
         // An accepted turn can fail without throwing (notably ACP v2 foreground errors).
         // Keep its runtime available, but do not drain more input into a failing provider.
@@ -485,7 +436,7 @@ export class SessionOperationWorker {
   async resumeQueue(sessionId: string): Promise<void> {
     await this.commands.run(sessionId, async () => {
       if (!this.accepting) throw new Error('Server is stopping');
-      this.db.transaction((tx) => cancelRemovedMessageOperations(tx, sessionId));
+      this.store.reconcile(sessionId);
       if (this.running.has(sessionId)) throw new Error('A turn is still running');
       if (
         this.db
@@ -500,7 +451,7 @@ export class SessionOperationWorker {
           .get()
       )
         throw new Error('Resolve uncertain delivery before resuming the queue');
-      const row = this.db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
+      const row = this.store.session(sessionId);
       if (!row || ['archived', 'merged', 'discarded'].includes(row.status))
         throw new Error('Session is unavailable');
       if (row.status === 'error')

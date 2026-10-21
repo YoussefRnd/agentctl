@@ -433,6 +433,7 @@
         "packages/core/src/session/persistence/session-event-repository.test.ts",
         "packages/core/src/session/persistence/session-event-retention.test.ts",
         "packages/core/src/session/persistence/session-operation-store.test.ts",
+        "packages/core/src/session/persistence/session-turn-store.test.ts",
         "packages/core/src/session/plan-artifacts.test.ts",
         "packages/core/src/session/projection/conversation-projector.test.ts",
         "packages/core/src/session/projection/session-state-projector.test.ts",

@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { expect, it, vi } from 'vite-plus/test';
 import { createDatabase, projects, sessions, sessionEvents } from '../../db/index.js';
 import { MessageAcceptanceService } from './message-acceptance-service.js';
@@ -51,4 +52,47 @@ it('does not turn unaccepted sends into receipts', async () => {
   );
   expect(await service.accept('session', 'hello', undefined, 'receipt', deliver)).toBe(42);
   expect(deliver).toHaveBeenCalledTimes(2);
+});
+
+it('reuses receipt queries across misses and newly committed receipts without caching results', async () => {
+  const db = createDatabase(':memory:');
+  db.insert(projects).values({ id: 'p', name: 'Project', path: '/synthetic' }).run();
+  for (const id of ['a', 'b'])
+    db.insert(sessions)
+      .values({
+        id,
+        projectId: 'p',
+        branch: 'main',
+        worktreePath: '/synthetic',
+        taskSlug: id,
+        baseCommit: 'none',
+        agent: 'agent',
+        selectedProvider: 'agent',
+      })
+      .run();
+  const service = new MessageAcceptanceService(db);
+  expect(await service.findReceipt('a', 'same', 'first')).toBeUndefined();
+  const events = new SessionEventRepository(db, { publish() {} });
+  const first = await events.append('a', 'text', {
+    role: 'user',
+    content: 'first',
+    clientMessageId: 'same',
+  });
+  const second = await events.append('b', 'text', {
+    role: 'user',
+    content: 'second',
+    clientMessageId: 'same',
+  });
+  const prepare = vi.spyOn(DatabaseSync.prototype, 'prepare');
+  try {
+    expect(await service.findReceipt('a', 'same', 'first')).toBe(first);
+    expect(await service.findReceipt('b', 'same', 'second')).toBe(second);
+    expect(await service.findReceipt('a', 'missing', 'first')).toBeUndefined();
+    await expect(service.findReceipt('a', 'same', 'different')).rejects.toThrow(
+      'different content',
+    );
+    expect(prepare).not.toHaveBeenCalled();
+  } finally {
+    prepare.mockRestore();
+  }
 });

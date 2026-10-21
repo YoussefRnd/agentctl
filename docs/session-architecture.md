@@ -103,8 +103,13 @@ and attention remain independent dimensions in `readSessionExecutionState`.
 
 ## Resource and persistence invariants
 
-The event repository and operation store own fixed, prepared query sets in
-`persistence/session-event-statements.ts` and `persistence/session-operation-statements.ts`.
+The event repository, operation store, turn store and acceptance service own fixed prepared query
+sets in `persistence/session-event-statements.ts`, `persistence/session-operation-statements.ts`,
+`persistence/session-turn-statements.ts` and `persistence/session-receipt-statements.ts`.
+`SessionRuntime` shares one turn store with dispatch, turn execution and skill-catalog delivery.
+Only query shapes are retained: session/provider settings, receipts and compaction state are read
+fresh each time, with projections limited to fields the workflow needs. Scoped rewind reconciliation
+also reuses its statement, with the same transaction and attempt-cancellation policy as recovery.
 Each set belongs to its owner's database connection; no global SQL-string cache is used.
 Values, nullable fields and update timestamps are rebound on execution. Date placeholders use
 column encoders. Caller-owned synchronous transactions on that same connection include prepared

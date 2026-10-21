@@ -1,5 +1,5 @@
-import { and, eq, inArray } from 'drizzle-orm';
-import { sessions, providers, sessionTurnAttempts, sessionOperations } from '../../db/schema.js';
+import { and, eq } from 'drizzle-orm';
+import { sessions, sessionTurnAttempts, sessionOperations } from '../../db/schema.js';
 import { randomUUID } from 'node:crypto';
 import { TurnDiagnostics } from './turn-diagnostics.js';
 import { TurnObservation, type TurnOutcome } from '../../observability/index.js';
@@ -14,6 +14,7 @@ import { SkillRegistry, type SkillActivation } from '../../skills/registry.js';
 import { isDefaultSessionTitle, type TurnTimings, type ChatError } from '@agentctl/shared';
 import { resolveMessageAttachments } from '../commands/message-attachments.js';
 import { normalizeChatError } from '../../agent/chat-error.js';
+import type { SessionTurnStore } from '../persistence/session-turn-store.js';
 import { SkillCatalogDelivery } from './skill-catalog-delivery.js';
 
 interface TurnRuntimeState {
@@ -39,6 +40,7 @@ export class SessionTurnExecutor {
     private sessionId: string,
     private runtimeHandle: AgentSession,
     private db: DbClient,
+    private store: SessionTurnStore,
     private eventRepository: SessionEventRepositoryLike,
     private cwd: string,
     private projector: SessionStateProjector,
@@ -48,7 +50,7 @@ export class SessionTurnExecutor {
     private runtimeRegistry?: SessionStatusTransitioner,
     private mcpGateway?: AgentMcpGateway,
   ) {
-    this.skillCatalog = new SkillCatalogDelivery(db, sessionId, runtimeHandle);
+    this.skillCatalog = new SkillCatalogDelivery(store, sessionId, runtimeHandle);
   }
 
   async observeUpdate(event: AgentUpdate): Promise<void> {
@@ -206,9 +208,7 @@ export class SessionTurnExecutor {
     this.permissionEngine.clearTurn();
     let outcome: TurnOutcome = 'error';
     try {
-      const sessionRecord = await this.db.query.sessions.findFirst({
-        where: eq(sessions.id, this.sessionId),
-      });
+      const sessionRecord = await this.store.session(this.sessionId);
 
       if (sessionRecord && isDefaultSessionTitle(sessionRecord.title, sessionRecord.taskSlug)) {
         const summary = text.trim();
@@ -225,10 +225,7 @@ export class SessionTurnExecutor {
           runtimeId: this.deps.runtimeId,
         });
       } else {
-        await this.db
-          .update(sessions)
-          .set({ status: 'running', updatedAt: new Date() })
-          .where(eq(sessions.id, this.sessionId));
+        await this.store.setSessionStatus(this.sessionId, 'running');
       }
 
       const { metadata: resolvedAttachmentsMeta, files: resolvedAttachmentFiles } =
@@ -279,15 +276,7 @@ export class SessionTurnExecutor {
             providerId: sessionRecord?.selectedProvider,
           });
           const timings = diagnostics.finish();
-          await this.db
-            .update(sessionTurnAttempts)
-            .set({ status: 'failed', endedAt: new Date() })
-            .where(
-              and(
-                eq(sessionTurnAttempts.id, attemptId),
-                inArray(sessionTurnAttempts.status, ['running', 'waiting']),
-              ),
-            );
+          await this.store.finishAttempt(attemptId, 'failed');
           await this.eventRepository.append(
             this.sessionId,
             'status',
@@ -302,10 +291,7 @@ export class SessionTurnExecutor {
               runtimeId: this.deps.runtimeId,
             });
           } else {
-            await this.db
-              .update(sessions)
-              .set({ status: 'idle', updatedAt: new Date() })
-              .where(eq(sessions.id, this.sessionId));
+            await this.store.setSessionStatus(this.sessionId, 'idle');
           }
           return; // Do not call the model if direct execution failed
         }
@@ -313,12 +299,7 @@ export class SessionTurnExecutor {
 
       let nativelyLoadsSkills = false;
       if (sessionRecord?.selectedProvider) {
-        const providerRecord = await this.db.query.providers.findFirst({
-          where: eq(providers.id, sessionRecord.selectedProvider),
-        });
-        if (providerRecord) {
-          nativelyLoadsSkills = providerRecord.nativelyLoadsSkills;
-        }
+        nativelyLoadsSkills = await this.store.providerLoadsSkills(sessionRecord.selectedProvider);
       }
 
       const requestedSkill = /^\/([a-z0-9-]+)(?:\s|$)/i.exec(text)?.[1]?.toLowerCase();
@@ -411,9 +392,7 @@ export class SessionTurnExecutor {
         if (metrics) {
           turnData.usage = metrics;
 
-          const sessionRecord = await this.db.query.sessions.findFirst({
-            where: eq(sessions.id, this.sessionId),
-          });
+          const sessionRecord = await this.store.session(this.sessionId);
           if (sessionRecord) {
             const existingMetrics = jsonCodecs.unknownRecord(sessionRecord.sessionMetrics);
 
@@ -470,23 +449,14 @@ export class SessionTurnExecutor {
         }
       }
       if (accepted) {
-        await this.db
-          .update(sessionTurnAttempts)
-          .set({
-            status:
-              promptResult.stopReason === 'cancelled'
-                ? 'cancelled'
-                : promptResult.stopReason === 'error'
-                  ? 'failed'
-                  : 'completed',
-            endedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(sessionTurnAttempts.id, accepted.attemptId),
-              inArray(sessionTurnAttempts.status, ['running', 'waiting']),
-            ),
-          );
+        await this.store.finishAttempt(
+          accepted.attemptId,
+          promptResult.stopReason === 'cancelled'
+            ? 'cancelled'
+            : promptResult.stopReason === 'error'
+              ? 'failed'
+              : 'completed',
+        );
       }
       if (promptResult.userMessageId) {
         await this.eventRepository.update(turn.eventId, { messageId: promptResult.userMessageId });
@@ -503,10 +473,7 @@ export class SessionTurnExecutor {
           runtimeId: this.deps.runtimeId,
         });
       } else {
-        await this.db
-          .update(sessions)
-          .set({ status: 'idle', updatedAt: new Date() })
-          .where(eq(sessions.id, this.sessionId));
+        await this.store.setSessionStatus(this.sessionId, 'idle');
       }
       outcome =
         promptResult.stopReason === 'cancelled'

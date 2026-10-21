@@ -3,7 +3,10 @@ import type { SessionEventPayload } from '@agentctl/shared';
 import type { DbClient } from '../../db/index.js';
 import { sessionOperations, sessionTurnAttempts, sessionRuntimeBindings } from '../../db/schema.js';
 import type { SessionEventRepository } from './session-event-repository.js';
-import { cancelRemovedMessageOperations } from './session-operation-reconciliation.js';
+import {
+  cancelRemovedMessageOperations,
+  prepareMessageReconciliation,
+} from './session-operation-reconciliation.js';
 
 import { prepareOperationStatements } from './session-operation-statements.js';
 
@@ -23,6 +26,7 @@ interface AcceptedMessage {
 
 /** Synchronous transactions only: no provider callbacks, filesystem work or publication. */
 export class SessionOperationStore {
+  private reconciliation?: ReturnType<typeof prepareMessageReconciliation>;
   private prepared?: ReturnType<typeof prepareOperationStatements>;
 
   private get statements() {
@@ -32,6 +36,38 @@ export class SessionOperationStore {
     private db: DbClient,
     private events: SessionEventRepository,
   ) {}
+
+  previous(sessionId: string, commandId: string) {
+    return this.statements.previous.get({ sessionId, commandId });
+  }
+  session(sessionId: string) {
+    return this.statements.session.get({ sessionId });
+  }
+  pending(sessionId: string) {
+    return this.statements.pending.all({ sessionId });
+  }
+  attempt(operationId: string) {
+    return this.statements.byOperation.get({ operationId });
+  }
+  reconcile(sessionId: string): void {
+    const reconcile = (this.reconciliation ??= prepareMessageReconciliation(this.db));
+    this.db.transaction(() => reconcile(sessionId));
+  }
+  finish(operationId: string, attemptId: string) {
+    const ended = this.statements.ended.get({ attemptId });
+    this.statements.complete.run({
+      operationId,
+      status:
+        ended?.status === 'cancelled'
+          ? 'cancelled'
+          : ended?.status === 'failed'
+            ? 'failed'
+            : 'succeeded',
+      now: new Date(),
+    });
+    this.statements.finish.run({ attemptId, now: new Date() });
+    return ended?.status;
+  }
 
   accept({
     sessionId,

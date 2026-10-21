@@ -1,11 +1,13 @@
-import { and, eq } from 'drizzle-orm';
-import { sessionEvents } from '../../db/schema.js';
-import { sessionOperations } from '../../db/schema.js';
 import { createHash } from 'node:crypto';
 import type { DbClient } from '../../db/index.js';
+import { prepareReceiptStatements } from '../persistence/session-receipt-statements.js';
 
 /** Stable acceptance receipts survive server restarts and lost HTTP responses. */
 export class MessageAcceptanceService {
+  private prepared?: ReturnType<typeof prepareReceiptStatements>;
+  private get statements() {
+    return (this.prepared ??= prepareReceiptStatements(this.db));
+  }
   private pending = new Map<string, { fingerprint: string; promise: Promise<number> }>();
   constructor(private db: DbClient) {}
 
@@ -51,13 +53,7 @@ export class MessageAcceptanceService {
     input: string,
     attachmentIds?: string[],
   ): Promise<number | undefined> {
-    const row = await this.db.query.sessionEvents.findFirst({
-      where: and(
-        eq(sessionEvents.sessionId, sessionId),
-        eq(sessionEvents.type, 'text'),
-        eq(sessionEvents.clientMessageId, id),
-      ),
-    });
+    const row = await this.statements.receipt.get({ sessionId, commandId: id });
     if (!row) return undefined;
     const data = JSON.parse(row.data) as { content: string; attachmentIds?: string[] };
     if (
@@ -66,9 +62,7 @@ export class MessageAcceptanceService {
     ) {
       // Queue edits change the dispatch payload, but the original acceptance
       // receipt must still acknowledge retries of a lost HTTP response.
-      const operation = await this.db.query.sessionOperations.findFirst({
-        where: and(eq(sessionOperations.sessionId, sessionId), eq(sessionOperations.commandId, id)),
-      });
+      const operation = await this.statements.operation.get({ sessionId, commandId: id });
       const fingerprint = createHash('sha256')
         .update(JSON.stringify([input, attachmentIds ?? []]))
         .digest('hex');

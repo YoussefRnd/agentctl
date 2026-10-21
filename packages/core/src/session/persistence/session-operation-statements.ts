@@ -5,6 +5,67 @@ import { messageEventExists } from './session-operation-reconciliation.js';
 
 export function prepareOperationStatements(db: DbClient) {
   return {
+    previous: db
+      .select({
+        kind: sessionOperations.kind,
+        fingerprint: sessionOperations.fingerprint,
+        eventId: sessionOperations.eventId,
+      })
+      .from(sessionOperations)
+      .where(
+        and(
+          eq(sessionOperations.sessionId, sql.placeholder('sessionId')),
+          eq(sessionOperations.commandId, sql.placeholder('commandId')),
+        ),
+      )
+      .prepare(),
+    pending: db
+      .select({ id: sessionOperations.id })
+      .from(sessionOperations)
+      .where(
+        and(
+          eq(sessionOperations.sessionId, sql.placeholder('sessionId')),
+          eq(sessionOperations.status, 'pending'),
+        ),
+      )
+      .prepare(),
+    byOperation: db
+      .select()
+      .from(sessionTurnAttempts)
+      .where(eq(sessionTurnAttempts.operationId, sql.placeholder('operationId')))
+      .prepare(),
+    ended: db
+      .select({ status: sessionTurnAttempts.status })
+      .from(sessionTurnAttempts)
+      .where(eq(sessionTurnAttempts.id, sql.placeholder('attemptId')))
+      .prepare(),
+    complete: db
+      .update(sessionOperations)
+      .set({
+        status: sql`${sql.placeholder('status')}`,
+        updatedAt: sql`${sql.param(sql.placeholder('now'), sessionOperations.updatedAt)}`,
+      })
+      .where(
+        and(
+          eq(sessionOperations.id, sql.placeholder('operationId')),
+          eq(sessionOperations.status, 'running'),
+        ),
+      )
+      .prepare(),
+    finish: db
+      .update(sessionTurnAttempts)
+      .set({
+        status: 'completed',
+        endedAt: sql`${sql.param(sql.placeholder('now'), sessionTurnAttempts.endedAt)}`,
+        updatedAt: sql`${sql.param(sql.placeholder('now'), sessionTurnAttempts.updatedAt)}`,
+      })
+      .where(
+        and(
+          eq(sessionTurnAttempts.id, sql.placeholder('attemptId')),
+          inArray(sessionTurnAttempts.status, ['running', 'waiting']),
+        ),
+      )
+      .prepare(),
     blocked: db
       .select({ id: sessionOperations.id })
       .from(sessionOperations)
@@ -17,7 +78,7 @@ export function prepareOperationStatements(db: DbClient) {
       )
       .prepare(),
     session: db
-      .select({ status: sessions.status })
+      .select({ status: sessions.status, selectedProvider: sessions.selectedProvider })
       .from(sessions)
       .where(eq(sessions.id, sql.placeholder('sessionId')))
       .prepare(),

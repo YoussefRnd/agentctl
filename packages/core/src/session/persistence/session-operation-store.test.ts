@@ -58,12 +58,18 @@ describe('Prepared session writes', () => {
     const secondTime = new Date('2030-01-02T00:00:00Z');
     vi.setSystemTime(firstTime);
     const first = store.accept({ ...message('first'), traceparent: 'first-trace' });
+    store.reconcile('s');
     const prepare = vi.spyOn(DatabaseSync.prototype, 'prepare');
     expect(store.next('s')?.id).toBe('first');
     expect(store.claim('first', 's', 'attempt-first')?.updatedAt).toEqual(firstTime);
     expect(store.next('s')).toBeUndefined();
     vi.setSystemTime(secondTime);
+    expect(store.finish('first', 'attempt-first')).toBe('running');
     const second = store.accept(message('second'));
+    expect(store.previous('s', 'first')?.eventId).toBe(first.id);
+    expect(store.attempt('second')?.id).toBe('attempt-second');
+    expect(store.pending('s')).toHaveLength(1);
+    store.reconcile('s');
     db.transaction(() => events.updateInTransaction(second.id, { content: 'edited' }));
     expect(prepare).not.toHaveBeenCalled();
     prepare.mockRestore();

@@ -711,3 +711,121 @@ node performance-results/attempt-index-comparison/compare-state.mjs diagnostic 3
 python performance-results/attempt-index-comparison/analyze.py
 node performance-results/attempt-index-comparison/validate.mjs
 ```
+
+## Prepared turn and acceptance queries — October 21, 2026
+
+Starting from indexed runtime `0f13ed8`, the remaining ordinary queued-turn SQL shapes now use
+connection-owned prepared statements. The operation store handles duplicate checks, acceptance
+session/queue reads, attempt lookup and guarded completion. Scoped rewind reconciliation reuses
+its query while retaining the existing transaction and cancellation policy. Acceptance receipts
+have their own statement factory. One `SessionTurnStore` per runtime is shared by dispatch, turn
+execution and skill-catalog delivery. Session/provider/receipt projections contain only required
+fields; statements retain no result cache. Compaction and provider settings remain fresh reads.
+Every update rebinds its values and column-encoded timestamps. No schema or migration changes.
+
+The before/after snapshots have identical migration directories (51 migrations), dependencies,
+server JavaScript and shared JavaScript. The server's incremental build metadata differs and is
+excluded from the executable-code equality check. Captures use Node 24.22.0 on the same i3-8130U
+and run sequentially without concurrent builds/tests. The synthetic workload uses 20 sessions,
+20 chunks/turn, persistent SSE connections and disabled telemetry.
+
+Five unprofiled processes per version reopen disposable copies of the same indexed database
+with 24,420 attempts. Each warms 20 turns and measures 100. Variant order alternates independently
+by repetition; one predeclared warmup process per version is discarded, with all measured samples
+retained. Three additional CPU/SQL processes per version use the same snapshot and ordering rule.
+
+| Unprofiled metric, five-process median |         Before |      After |
+| -------------------------------------- | -------------: | ---------: |
+| 100-turn elapsed                       |       1,349 ms |     917 ms |
+| Elapsed range                          | 1,332–1,716 ms | 913–965 ms |
+| Server CPU                             |       1,699 ms |   1,110 ms |
+| History p95                            |         141 ms |     115 ms |
+| Completion p95                         |         909 ms |     683 ms |
+
+Elapsed time improves 32%, CPU 35%, history p95 18% and completion p95 25% at equal database size.
+The slower before sample is retained. Five processes on one desktop do not establish production
+SLOs or confidence intervals. These gains include prepared queries **and** narrower projections;
+there is no separate ablation establishing the contribution of each.
+
+| Separate CPU/SQL diagnostic, three-process median |   Before |    After |
+| ------------------------------------------------- | -------: | -------: |
+| Native prepares per 100 turns                     |    1,802 |        2 |
+| Drizzle self CPU samples                          |   421 ms |    94 ms |
+| SQLite self CPU samples                           |   369 ms |   283 ms |
+| Validation self CPU samples                       |   152 ms |   150 ms |
+| Total native SQL time, including prepare          |   410 ms |   295 ms |
+| Instrumented elapsed                              | 1,525 ms | 1,046 ms |
+
+The two residual prepares are bounded first-use history parent/size queries. Application query
+construction in the optimized paths no longer repeats per turn. Native execution counts match
+in every measured short diagnostic: 3,680 get, 400 all, 2,200 run and 2,000 transaction-control exec
+calls per workload. Query plans retain the operation-id index. CPU categories are leaf samples,
+not disjoint additions to inclusive application method totals. Instrumented timings remain
+separate from the unprofiled table; validation/decoding policy is unchanged.
+
+Fresh five-minute runs use the same 20 sessions and 200 initial history events/session. CPU/SQL
+profiles cover five consecutive batches after the first ten batches and after 270 seconds.
+Profile export and SQLite backups happen outside those windows; whole-run time includes them.
+
+| Five-minute diagnostic metric           |         Before |        After |
+| --------------------------------------- | -------------: | -----------: |
+| Completed turns                         |         26,000 |       39,000 |
+| Elapsed seconds                         |          300.3 |        301.3 |
+| Batch median, first→last fifth          | 1,154→1,119 ms |   757→709 ms |
+| Completion p95 median, first→last fifth |     755→735 ms |   560→517 ms |
+| History p95 median, first→last fifth    |     114→114 ms |     92→85 ms |
+| Event-loop delay p99 / max              |   109 / 329 ms | 118 / 544 ms |
+| Peak sampled RSS                        |        480 MiB |      458 MiB |
+| Final retained changes/session          |         10,000 |       10,000 |
+
+The optimized run completes about 49% more turns/second, with lower typical batch and request
+latency. The fixed before/after order, profiling overhead and different accumulated history sizes
+limit capacity claims. Loop-delay p99/max increased in this capture: this is not an across-the-board
+tail-latency improvement. All outliers remain in the report. Complete 30-second heap low-water
+windows range about 59–88/58–73 MiB without monotonic growth; five minutes does not establish
+leak freedom, and profiling exports contribute to memory measurements.
+
+| Profile-window metric, per 100 turns | Before early | Before late | After early | After late |
+| ------------------------------------ | -----------: | ----------: | ----------: | ---------: |
+| Average elapsed                      |     1,230 ms |    1,181 ms |    1,127 ms |     840 ms |
+| Server CPU                           |     1,408 ms |    1,275 ms |    1,059 ms |     853 ms |
+| Native prepares                      |        1,800 |       1,800 |           0 |          0 |
+| Drizzle self CPU samples             |       350 ms |      341 ms |      118 ms |      82 ms |
+| Retention prune native time          |      8.00 ms |     8.05 ms |    10.04 ms |   17.79 ms |
+| Attempts at window end               |        1,520 |      24,120 |       1,520 |     35,820 |
+
+The after early window includes two slower batches (1,577/1,590 ms, versus 769–861 ms for its
+other three); its 861 ms batch median and 1,127 ms normalized mean are both retained. This timing
+variation is not assigned to a cause by these captures. Late indexed lookups remain cheap in
+both variants. Retention pruning costs more in the optimized late window because its journal is
+already at the cap and performs deletes; the before late window is still below the cap. Both
+end with exactly 10,000 entries/session. Each window makes the same 500 attempt lookups. Native
+preparation assertions verify 9,000→0 prepares per 500-turn window. CPU analysis excludes profiler
+startup frames. Sampled durations agree with measured windows within 9 ms; the profiler remains
+active during post-window process-resource sampling, adding about 8 ms in the after late capture.
+These small margins remain in the diagnostic CPU samples.
+
+All 1052 Node tests across 174 files passed, including new fresh-value/date, rollback, catalog
+scope and receipt reuse checks. After compilation, all eight HTTP/SSE concurrency tests passed
+again against the built runtime. Workspace types, architecture governance, all 11 architecture regression tests, lint and formatting
+passed. Both soaks, ten measured unprofiled comparisons, six measured CPU/SQL comparisons and
+four discarded warmup processes passed success, FIFO/non-overlap and listener cleanup assertions.
+All four database backups pass SQLite integrity/foreign-key checks and exact retention-counter
+agreement; both variants retain the same non-unique operation index and 51 migrations.
+
+This measures the normal queued-turn/history workload with a synthetic provider and telemetry
+disabled. Usage-dependent writes, exceptional recovery/configuration paths, execution-state
+polling, provider latency and UI rendering need separate measurements. Remaining Drizzle time
+includes row mapping and prepared-statement execution; this change does not remove all ORM cost.
+Local ignored evidence is under `performance-results/drizzle-comparison/`: frozen variants,
+`manifest.json`, `comparison.json`, `validation.json`, raw profiles and paired samples. Reproduce
+sequentially against the frozen artifacts:
+
+```sh
+node performance-results/drizzle-comparison/compare-state.mjs control 5 performance-results/attempt-index-comparison/after-profile/late.db
+node performance-results/drizzle-comparison/compare-state.mjs diagnostic 3 performance-results/attempt-index-comparison/after-profile/late.db
+node performance-results/drizzle-comparison/profile-long.mjs before-profile 300 1 before
+node performance-results/drizzle-comparison/profile-long.mjs after-profile 300 1 after
+python performance-results/drizzle-comparison/analyze.py
+node performance-results/drizzle-comparison/validate.mjs
+```

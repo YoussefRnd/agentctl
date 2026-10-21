@@ -1,5 +1,6 @@
 import { RequestCancellation } from '../requests/request-cancellation.js';
 import { randomUUID } from 'node:crypto';
+import { SessionTurnStore } from '../persistence/session-turn-store.js';
 import { SessionTurnExecutor } from '../execution/session-turn-executor.js';
 import { normalizeChatError } from '../../agent/chat-error.js';
 import { sessions, sessionTurnAttempts, sessionRuntimeBindings } from '../../db/schema.js';
@@ -46,6 +47,7 @@ export class SessionRuntime {
 
   private projector: SessionStateProjector;
   private turnExecutor: SessionTurnExecutor;
+  private turnStore: SessionTurnStore;
 
   private canReceive(): boolean {
     return (
@@ -112,16 +114,7 @@ export class SessionRuntime {
 
   private async markAttemptDispatched(): Promise<void> {
     if (!this.canReceive()) throw new Error('Session runtime is closed');
-    if (this.activeAttemptId)
-      await this.db
-        .update(sessionTurnAttempts)
-        .set({ dispatchedAt: new Date() })
-        .where(
-          and(
-            eq(sessionTurnAttempts.id, this.activeAttemptId),
-            inArray(sessionTurnAttempts.status, ['running', 'waiting']),
-          ),
-        );
+    if (this.activeAttemptId) this.turnStore.markDispatched(this.activeAttemptId);
   }
 
   private async closeBinding(connectionState: 'closed' | 'lost'): Promise<void> {
@@ -162,6 +155,7 @@ export class SessionRuntime {
     private logger: Logger = noopLogger,
     mcpGateway?: AgentMcpGateway,
   ) {
+    this.turnStore = new SessionTurnStore(db);
     this.needsHistoryContext = runtimeHandle.history === 'fresh';
     this.projector = new SessionStateProjector(
       sessionId,
@@ -193,6 +187,7 @@ export class SessionRuntime {
       sessionId,
       runtimeHandle,
       db,
+      this.turnStore,
       eventRepository,
       cwd,
       this.projector,
