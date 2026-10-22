@@ -1521,3 +1521,94 @@ captures; `release-baselines.mjs` records the refreshed history baselines; earli
 `validate.py` regenerate the comparison and assertions. The reused soak template still labels seed
 history as 200 rows; actual late-seed size and the disabled seeding step are pinned in the runner
 and manifest. Forced collection remains diagnostic-only; application code does not force GC.
+
+## Cold structured-diff parsing (2026-10-22)
+
+The compact-history feature is committed as `0d6cd9d` (`feat: load history output on demand`).
+This comparison uses that commit as the baseline, with compact history enabled for **both**
+versions. It isolates the shared patch-statistics parser change; the earlier full-versus-compact
+comparison above measures a different change.
+
+A CPU profile of the first 20 concurrent requests identified `patchStats` as a significant part
+of cold projection work: splitting patches into line arrays, inspecting lines and matching hunk
+headers. The parser now walks newline offsets, inspects the first character for ordinary hunk
+lines and uses a sticky regular expression only at potential hunk headers. Only file headers
+need line substrings. Path matching, structured operations, actual line counting, incomplete-hunk
+handling and quoted Git path decoding retain their existing semantics. The shared implementation
+also serves review summaries in the web client. Cache limits, response scheduling and database
+storage are unchanged.
+
+### Method and results
+
+Five fresh processes/version run sequentially in alternating pair order on the same desktop
+(Node 24.22.0), without overlapping tests/builds. Each uses a disposable synthetic database,
+20 sessions, 300 mixed events/session and distinct per-session paths with 600-hunk tool patches.
+The isolated client measures the first 20 concurrent compact requests before any history warmup,
+including connection setup, lazy preparation, server decoding/projection and client JSON parsing.
+The complete first-batch server CPU is measured separately; it is not CPU per request.
+
+Each process then performs two warmup waves and 600 repeated reads, followed by a separate
+400-request expanded-detail measurement. Seed/warmup GC is outside measured load. Inspector
+profiles and retained-heap diagnostics are separate from these primary captures. All five pairs
+are included; host activity and garbage-collection timing still affect small differences.
+
+Values below are medians of five process measurements, with request p95 computed per process.
+
+| Metric                           | Committed compact history | Streaming patch parser |
+| -------------------------------- | ------------------------: | ---------------------: |
+| Cold first-batch p95 (ms)        |                    496.63 |                 453.89 |
+| Cold first-batch server CPU (ms) |                    662.64 |                 611.67 |
+| Repeated history p95 (ms)        |                    294.64 |                 277.16 |
+| Repeated CPU/request (ms)        |                     13.34 |                  13.07 |
+| Server peak RSS (MiB)            |                    378.25 |                 411.32 |
+| Server event-loop delay p99 (ms) |                     14.92 |                  14.56 |
+| Expanded-detail p95 (ms)         |                     20.64 |                  20.94 |
+| Response bytes/page              |                    18,368 |                 18,368 |
+
+Cold p95 improves **8.6%** (42.74 ms), and cold-batch CPU improves **7.7%**. Baseline cold p95s
+span 492.48–530.91 ms; optimized p95s span 448.05–466.56 ms. Each of the five paired cold
+comparisons improves. Repeated p95 is 5.9% lower by median, but ranges overlap substantially
+(266.81–362.99 versus 269.69–349.38 ms); the summary cache already avoids patch scanning there,
+so this is not evidence of a consistent warm-path speedup. Detail timing is essentially unchanged.
+
+Peak RSS is **8.7% higher** by median, with baseline 361.53–411.42 MiB and optimized
+401.52–413.29 MiB. This is not a memory improvement. The parser introduces no additional retained
+cache or read model; a separate post-load forced-GC diagnostic is retained alongside the primary
+captures to distinguish retained heap from process high-water allocation: one fresh process per
+version, after the same read/detail workload, retains 43.09 versus 43.04 MiB of used heap after
+three forced collections. RSS still differs (390.02 versus 409.85 MiB). This diagnostic does not
+establish long-running memory behavior. Full-body validation and content-revision hashing remain cold-load
+costs, and a single very large event remains indivisible within the existing history scheduler.
+
+### Verification and artifacts
+
+All 200 cold-page hashes, selections/cursors for 6,000 repeated reads, and 200 sampled expanded-detail
+hashes match the committed baseline. All 4,000 detail requests validate event identity and revision.
+Every capture drains history work to zero.
+A deterministic differential check compares 20,000 generated patch cases against the frozen
+committed parser, including malformed sections, quoted paths, mixed line endings and missing
+final newlines. Regression tests additionally exercise a 600-hunk mixed-ending patch and
+incomplete hunks at file boundaries. The full suite passes 1,623 tests across 284 files, plus
+11 architecture regression checks. Workspace types, dependency/ownership checks, lint, formatting
+and server/web production builds pass. The rebuilt production parser matches the benchmarked
+optimized executable byte for byte.
+
+Ignored artifacts live in `performance-results/cold-diff-comparison/`. `variants/before` freezes
+the committed compact-history executable and `variants/after` freezes the optimized executable;
+node_modules links resolve dependencies while migration directories are copied. `manifest.json`
+records source/executable hashes, `order.json` records alternating run order, and all primary JSON
+captures are retained. `comparison.json` contains values, medians and ranges; `validation.json`
+records wire/selection/detail invariants. Separate `profile-*.json.cpuprofile`, `memory-*.json`
+and `equivalence.json` retain diagnostics. `checks/` retains verification output.
+
+With the local snapshots, run a fresh individual capture and regenerate the original comparison:
+
+```sh
+AGENTCTL_PROFILE_VARIANT=after NODE_ENV=test LOG_LEVEL=silent AGENTCTL_TELEMETRY=0 node --expose-gc --import ./performance-results/cold-diff-comparison/variant-hook.mjs performance-results/cold-diff-comparison/diff-reader.mjs /tmp/cold-diff-reader.json
+python3 performance-results/cold-diff-comparison/analyze.py
+node performance-results/cold-diff-comparison/equivalence.mjs
+```
+
+`run-pairs.mjs` reproduces the original fixed labels; preserve existing captures before running it
+again. Both variants deliberately use `compact=true`. Forced collection is diagnostic-only and
+is not added to application code.

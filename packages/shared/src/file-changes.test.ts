@@ -120,3 +120,51 @@ test('does not assign statistics using malformed quoted paths', () => {
     ).toEqual([{ operation: 'modify', path: '/file' }]);
   }
 });
+
+test('counts a large patch with mixed line endings and no trailing newline', () => {
+  const hunks = Array.from({ length: 600 }, (_, index) =>
+    ['@@ -1,2 +1,3 @@', '-old', ' context', '+new', '+extra'].join(index % 2 ? '\r\n' : '\n'),
+  );
+  expect(
+    normalizeFileChanges({
+      changes: [{ operation: 'modify', path: '/workspace/file' }],
+      patch: { format: 'git_patch', text: ['--- a/file', '+++ b/file', ...hunks].join('\n') },
+    }),
+  ).toEqual([
+    { operation: 'modify', path: '/workspace/file', stats: { additions: 1200, deletions: 600 } },
+  ]);
+});
+
+test('resets incomplete hunks at file boundaries and ignores metadata outside hunks', () => {
+  expect(
+    normalizeFileChanges({
+      changes: [
+        { operation: 'modify', path: '/first' },
+        { operation: 'add', path: '/second' },
+      ],
+      patch: {
+        format: 'git_patch',
+        text: [
+          'diff --git a/first b/first',
+          '--- a/first',
+          '+++ b/first',
+          '@@ -1,10 +1,10 @@',
+          '-old',
+          '+new',
+          'diff --git a/second b/second',
+          '--- /dev/null',
+          '+++ b/second',
+          '+metadata is not a hunk',
+          '@@ malformed @@',
+          '+ignored',
+          '@@ -0,0 +1 @@',
+          '+added',
+          '\\ No newline at end of file',
+        ].join('\r\n'),
+      },
+    }),
+  ).toEqual([
+    { operation: 'modify', path: '/first', stats: { additions: 1, deletions: 1 } },
+    { operation: 'add', path: '/second', stats: { additions: 1, deletions: 0 } },
+  ]);
+});

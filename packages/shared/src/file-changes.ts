@@ -59,41 +59,53 @@ function patchStats(patch?: FilePatch | null) {
   let file: (typeof files)[number] | undefined;
   let oldRemaining = 0;
   let newRemaining = 0;
-  for (const line of patch.text.split(/\r?\n/)) {
-    if (
-      line.startsWith('diff --git ') ||
-      (line.startsWith('--- ') && !oldRemaining && !newRemaining)
-    ) {
-      if (line.startsWith('diff --git ') || !file || file.hasNewHeader) {
+  const text = patch.text;
+  const hunkHeader = /@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/y;
+  // Scan offsets instead of splitting the whole patch into an array of line strings.
+  // Only file headers need a substring; ordinary hunk lines need their first character.
+  for (let start = 0; start <= text.length;) {
+    const newline = text.indexOf('\n', start);
+    const next = newline === -1 ? text.length + 1 : newline + 1;
+    const end = newline === -1 ? text.length : newline;
+    const lineEnd =
+      newline !== -1 && end > start && text.charCodeAt(end - 1) === 13 ? end - 1 : end;
+    const first = text.charCodeAt(start);
+    const preamble = first === 100 && text.startsWith('diff --git ', start);
+    const oldHeader = first === 45 && text.startsWith('--- ', start);
+    if (preamble || (oldHeader && !oldRemaining && !newRemaining)) {
+      if (preamble || !file || file.hasNewHeader) {
         file = { stats: { additions: 0, deletions: 0 } };
         files.push(file);
       }
       oldRemaining = newRemaining = 0;
     }
-    if (!file) continue;
-    if (!oldRemaining && !newRemaining) {
-      if (line.startsWith('--- ')) file.oldPath = patchPath(line.slice(4));
-      else if (line.startsWith('+++ ')) {
-        file.path = patchPath(line.slice(4));
-        file.hasNewHeader = true;
-      }
-      const hunk = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(line);
-      if (hunk) {
-        oldRemaining = Number(hunk[1] ?? 1);
-        newRemaining = Number(hunk[2] ?? 1);
-      }
-      continue;
+    if (file) {
+      if (!oldRemaining && !newRemaining) {
+        if (oldHeader) file.oldPath = patchPath(text.slice(start + 4, lineEnd));
+        else if (first === 43 && text.startsWith('+++ ', start)) {
+          file.path = patchPath(text.slice(start + 4, lineEnd));
+          file.hasNewHeader = true;
+        }
+        if (first === 64) {
+          hunkHeader.lastIndex = start;
+          const hunk = hunkHeader.exec(text);
+          if (hunk) {
+            oldRemaining = Number(hunk[1] ?? 1);
+            newRemaining = Number(hunk[2] ?? 1);
+          }
+        }
+      } else if (first === 43 && newRemaining > 0) {
+        file.stats.additions++;
+        newRemaining--;
+      } else if (first === 45 && oldRemaining > 0) {
+        file.stats.deletions++;
+        oldRemaining--;
+      } else if (first === 32 && oldRemaining > 0 && newRemaining > 0) {
+        oldRemaining--;
+        newRemaining--;
+      } else if (first !== 92) oldRemaining = newRemaining = 0;
     }
-    if (line.startsWith('+') && newRemaining > 0) {
-      file.stats.additions++;
-      newRemaining--;
-    } else if (line.startsWith('-') && oldRemaining > 0) {
-      file.stats.deletions++;
-      oldRemaining--;
-    } else if (line.startsWith(' ') && oldRemaining > 0 && newRemaining > 0) {
-      oldRemaining--;
-      newRemaining--;
-    } else if (!line.startsWith('\\')) oldRemaining = newRemaining = 0;
+    start = next;
   }
   return files;
 }
