@@ -46,7 +46,9 @@ it('preserves the exact JSON representation of all event variants, metadata and 
   const rows = decodingRows(36, true);
   const queue = new SessionHistoryWorkQueue();
   for (const cursors of [{ nextBeforeId: 1 }, { nextBeforeId: null, nextAfterId: 99 }]) {
-    const body = await queue.run(prepareEventPageResponse(() => ({ rows, ...cursors })));
+    const body = await queue.run(
+      prepareEventPageResponse(() => ({ rows: rows.slice(), ...cursors })),
+    );
     expect(body).toBe(JSON.stringify({ events: rows.map(parseEventRow), ...cursors }));
   }
 });
@@ -59,21 +61,51 @@ it('yields after bounded row batches and immediately after an individual large e
         ...source[0],
         data: JSON.stringify({ role: 'provider', content: 'x'.repeat(20_000) }),
       };
-    const visited: number[] = [];
-    const rows = new Proxy(source, {
-      get(target, key, receiver) {
-        if (typeof key === 'string' && /^\d+$/.test(key)) visited.push(Number(key));
-        return Reflect.get(target, key, receiver);
+    const visited = new Set<number>();
+    const rows = source.map((row, index) => ({
+      ...row,
+      get data() {
+        visited.add(index);
+        return row.data;
       },
-    });
+    }));
     const work = prepareEventPageResponse(() => ({ rows, nextBeforeId: null }));
     expect(work.next().done).toBe(false);
-    expect(visited).toEqual([]);
+    expect([...visited]).toEqual([]);
     expect(work.next().done).toBe(false);
-    expect(visited.length).toBeGreaterThan(0);
-    expect(visited.length).toBeLessThanOrEqual(8);
-    if (large) expect(visited).toEqual([0]);
+    expect(visited.size).toBeGreaterThan(0);
+    expect(visited.size).toBeLessThanOrEqual(8);
+    if (large) expect([...visited]).toEqual([0]);
     work.return(undefined);
+  }
+});
+
+it('releases encoded rows between slices and consumes its snapshot without changing wire order', async () => {
+  const rows = decodingRows(20, false);
+  const expected = JSON.stringify({ events: rows.map(parseEventRow), nextBeforeId: 42 });
+  const work = prepareEventPageResponse(() => ({ rows, nextBeforeId: 42 }));
+  expect(work.next().done).toBe(false);
+  expect(rows).toHaveLength(20);
+  expect(work.next().done).toBe(false);
+  expect(rows).toHaveLength(12);
+  expect(work.next().done).toBe(false);
+  expect(rows).toHaveLength(4);
+  expect(work.next().done).toBe(false);
+  expect(rows).toHaveLength(0);
+  expect(await new SessionHistoryWorkQueue().run(work)).toBe(expected);
+});
+
+it('releases unprocessed rows when a captured response is canceled or fails validation', () => {
+  for (const fail of [false, true]) {
+    const rows = decodingRows(20, false);
+    if (fail) rows[10] = { ...rows[10], metadata: '{' };
+    const work = prepareEventPageResponse(() => ({ rows, nextBeforeId: null }));
+    expect(work.next().done).toBe(false);
+    expect(work.next().done).toBe(false);
+    expect(rows).toHaveLength(12);
+    if (fail) expect(() => work.next()).toThrow();
+    else work.return(undefined);
+    expect(rows).toHaveLength(0);
   }
 });
 

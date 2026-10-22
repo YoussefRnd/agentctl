@@ -1078,3 +1078,276 @@ node performance-results/bounded-history-comparison/batched-sequence.mjs
 python performance-results/bounded-history-comparison/analyze.py
 node performance-results/bounded-history-comparison/validate.mjs
 ```
+
+## History memory investigation — October 21, 2026
+
+The cooperative history implementation was committed as `4a3edb4` (`perf: bound history
+response work across requests`). The follow-up investigation compares that executable with
+`53a6b27`, using the frozen runtime and copied migrations from the preceding experiment.
+No application changes were made during this investigation.
+
+The higher resident memory is reproducible, but an accumulating application heap was not
+reproduced over 40,000 turns. The evidence points to more temporary allocation, substantially
+more promotion into old space, and V8 retaining memory capacity for reuse. These observations
+apply to the synthetic workload below; they do not establish leak freedom for arbitrary
+providers, payloads, telemetry configurations, or longer runs.
+
+### Controls and retained heap
+
+Each main capture starts from a fresh copy of the same database: 20 sessions with 6,305 events
+per session, 200-row history requests, 20 provider chunks per turn, and 20 persistent SSE
+connections. HTTP/JSON/SSE clients run in a separate process; telemetry is disabled. Each
+version completes exactly 40,000 measured turns, rather than comparing different turn counts
+within a time limit. The original FIFO, receipt, content, non-overlap, operation drain, journal
+retention, and listener checks remain enabled.
+
+The new probe appends one-second memory/heap-space samples and drained-batch samples to JSONL.
+It keeps aggregate GC counters, rather than retaining a ten-millisecond trace array. The
+previous sustained traces contained 9,018 baseline timer records and 21,473 candidate records,
+with three additional objects per record. That adds unequal diagnostic overhead; it does not
+explain the entire resident-memory increase.
+
+The equal-turn controls have no snapshots or forced GC during load. At the final drained
+checkpoint, three explicit collections separated by loop turns measure the surviving heap.
+A separate candidate capture uses the same collection protocol at warmup and every 10,000
+turns, with heap snapshots at warmup and completion.
+
+| Measurement                                     |     Before | Cooperative history |
+| ----------------------------------------------- | ---------: | ------------------: |
+| Peak periodic RSS, natural-GC control           | 446.81 MiB |          468.51 MiB |
+| Peak periodic used heap, natural-GC control     | 257.74 MiB |          246.99 MiB |
+| Final drained heap after explicit collection    |  45.13 MiB |           45.22 MiB |
+| Collected heap after clients close              |  44.18 MiB |           44.24 MiB |
+| Peak old-space capacity during periodic samples | 196.92 MiB |          212.67 MiB |
+| Peak allocated glibc arena bytes (`uordblks`)   |  22.02 MiB |           22.19 MiB |
+
+The candidate's separate collected checkpoints were 45.72 MiB after warmup, then 44.59,
+44.86, 44.93, and 45.11 MiB after 10,000, 20,000, 30,000, and 40,000 turns. Raw heap samples
+between collections were much higher. The two final 95/103 MiB low-water windows in the
+previous experiment were not reproduced as growing retained heap. In the fresh candidate
+natural-GC control, minimum sampled heap across successive 10,000-turn windows was 71.42,
+52.26, 49.63, and 63.72 MiB. A timed low-water sample remains sensitive to GC phase and active
+requests, including when major collections occur within the same window.
+
+Warm and late candidate heap snapshots contain 803 nodes named `Promise`, 21 named
+`IncomingMessage`, 21 named `ServerResponse`, and seven named `AsyncResource` in both captures.
+These are snapshot name cohorts, including relevant constructors/prototypes, rather than
+counts of active requests. Persistent SSE requests account for the HTTP objects' retaining
+paths. The snapshot's total node self size increases by 829,129 bytes (0.79 MiB), including
+V8 weak metadata and ordinary objects/numbers retained by the benchmark entry module. The
+new HTTP history work has drained; the report does not interpret runtime metadata as a
+request leak. Snapshot self size includes native backing stores and differs from
+`process.memoryUsage().heapUsed`.
+
+### Allocation lifetime and resident capacity
+
+Separate, sequential 5,000-turn diagnostic captures enable V8 `--trace-gc-nvp` only during
+measured load. Main-isolate GC records are delimited by explicit start/end markers. These
+instrumented runs explain allocation behavior; their latency and throughput are not compared
+with the normal benchmark.
+
+| V8-reported load diagnostic                         |     Before | Cooperative history |
+| --------------------------------------------------- | ---------: | ------------------: |
+| Allocated bytes, normalized to 100 turns            | 186.93 MiB |          207.93 MiB |
+| Bytes promoted by minor collections, per 100 turns  |   5.52 MiB |           16.28 MiB |
+| Mean surviving new-space bytes per minor collection |   2.00 MiB |            5.43 MiB |
+| Minor / major collection count, 5,000 turns         |    151 / 3 |             218 / 6 |
+| Peak reported V8 pooled chunk count                 |        201 |                 331 |
+
+Reported allocation rises about 11%, while minor-GC promotion rises about 2.95 times.
+These counters include application, runtime, and probe allocations and stop at the final
+reported collection; they are not precise allocation totals for an individual function.
+Together with the source structure, they support the explanation that spreading work across
+loop turns keeps temporary objects alive through more collections. Several requests can
+hold captured raw rows and encoded fragments simultaneously. The shared queue bounds CPU
+work per slice, but does not impose an active-page or byte admission limit.
+
+At 20,000 drained turns, old-space capacity was 154.17 MiB before and 185.42 MiB after,
+while total used heap was similar (124.90 versus 127.74 MiB). This is consistent with the
+additional RSS being substantially runtime capacity, rather than additional permanently
+reachable session history. The snapshots and GC counters establish the retained-heap and
+promotion behavior; they do not attribute every promoted object to the history helper.
+
+A local diagnostic addon reads glibc `mallinfo2()` and calls `malloc_trim(0)` only after the
+load ends. In the equal-turn controls, trimming reduces RSS by 8.50 MiB before and 8.69 MiB
+after, leaving most of the difference intact. These allocator statistics exclude V8 mappings
+and other allocations; SQLite's global memory counter is unavailable because its symbol is
+not exported by this Node executable.
+
+The short diagnostics also inspect the Pino transport worker. Its used heap stays near
+6.9–7.0 MiB from warmup to completion in both versions. After ordinary explicit GC and
+native trimming, Inspector `HeapProfiler.collectGarbage` reduces resident memory from
+429.62 to 143.66 MiB before and from 462.23 to 143.79 MiB after. Main-isolate heap capacity
+also contracts from roughly 183 MiB to 46–47 MiB. This demonstrates substantial reclaimable
+runtime capacity; it is not a reason to add forced GC or native allocator trimming to the
+server. The separate snapshot capture is excluded from RSS comparison because snapshots
+alter collection, heap capacity, and resident memory substantially.
+
+### Next optimization and validation
+
+The next change should control the amount of active history work, preserving the existing
+shared CPU budget. Evaluate an active-page or byte admission budget before capturing rows,
+then release consumed raw-row references as batches finish where ownership permits. Keep
+the response validation/error contract intact. Compare several limits under the same
+20-session workload to choose the responsiveness/memory tradeoff; a fixed limit has not yet
+been selected or implemented. Pending-request admission and individual oversized events
+also need explicit behavior when defining a strict total memory bound.
+
+Five completed captures cover 130,000 turns and 1,300 drained-batch checkpoints. Every
+checkpoint has zero history jobs and no scheduled history slice; SSE listeners remain at
+20 during load and return to zero after clients close. Every completed capture passes the
+existing operation/content checks and retains 10,000 journal entries per session. The
+fixture/database remains owned during the final close sample, so this is a steady-state
+retention investigation rather than a database-disposal test.
+
+Artifacts are in ignored `performance-results/history-memory-investigation/`: runtime/seed
+provenance in `manifest.json`, streamed samples in each run's `memory.jsonl`, natural controls
+in `natural-before/` and `natural-after/`, snapshot diagnostics in `retained-after/`, GC traces
+in `gc-before/` and `gc-after/`, and summaries/validation in `analysis.json`, `gc-summary.json`,
+and `validation.json`. Failed diagnostic attempts are retained and explicitly excluded:
+one requested statistics from a closing worker, one output directory was moved before its
+process exited, and an overlapping restart was stopped. All short diagnostics used above
+were rerun sequentially and exited successfully.
+
+Reproduction on this Linux/glibc host, using the frozen executable snapshots and original
+seed database retained from the preceding experiment:
+
+```sh
+cc -shared -fPIC -O2 -I "$NVM_DIR/versions/node/v24.22.0/include/node" performance-results/history-memory-investigation/allocator.c -o performance-results/history-memory-investigation/allocator.node -ldl
+node performance-results/history-memory-investigation/run.mjs <fresh-before-label> before 40000 natural
+node performance-results/history-memory-investigation/run.mjs <fresh-after-label> after 40000 natural
+node performance-results/history-memory-investigation/sequence.mjs
+python performance-results/history-memory-investigation/analyze.py
+python performance-results/history-memory-investigation/gc-summary.py
+python performance-results/history-memory-investigation/validate.py
+```
+
+Use fresh output directories and run captures sequentially. `sequence.mjs` uses the
+`gc-before`/`gc-after` labels, so preserve those existing artifacts elsewhere before rerunning.
+The reused soak JSON template still reports `historyEventsPerSession: 200` and a nominal
+`seconds: 3600`; actual seed size and fixed-turn termination are pinned in the manifest and
+runner. Diagnostic GC, snapshot, and probe I/O costs make these timings unsuitable for new
+latency or capacity claims. Current native-allocator measurements require Linux/glibc and
+matching Node headers; they introduce no application dependency.
+
+## History row lifetime — October 22, 2026
+
+The cooperative HTTP response builder now consumes its private captured rows as it encodes
+them. One in-place reversal lets it pop rows in wire order without copying the remaining
+array on each batch. Completed rows no longer stay referenced behind unfinished batches.
+A `finally` block clears remaining rows and encoded fragments on completion, cancellation,
+or validation failure. Captured-row ownership is explicit in the helper's contract.
+
+The API, pagination/parent/cursor behavior, per-page byte budget, eight-event/8,192-code-unit
+batch bounds, shared CPU budget, request async context, and complete-error-before-headers
+behavior remain. Synchronous history/SSE readers keep their existing behavior. This change
+reduces temporary-data lifetime; it does not add request admission limits or compact payloads.
+
+Frozen baseline `4a3edb4` and the candidate differ in one production JavaScript file, plus
+its test file. Core/shared JavaScript, copied migrations, dependencies and client code match.
+Every ordinary capture uses a fresh copy of the same late database (6,305 events/session),
+20 sessions, 200-row history requests, 20 synthetic provider chunks/turn and 20 persistent
+SSE connections. Clients run separately; telemetry is disabled. Builds and tests finish
+before captures begin. No production database/provider is used.
+
+### Responsiveness and allocation diagnostics
+
+Three fresh 30-second controls per version alternate order by repetition. They use common
+one-second streamed memory probes and aggregate GC counters, with no CPU profiler or forced
+collection. Values are medians across processes; request metrics are medians of each batch's
+p95 values, not fleet percentiles.
+
+| Control metric                       |    Before |     After |
+| ------------------------------------ | --------: | --------: |
+| Completed turns/second               |    134.05 |    135.01 |
+| CPU per 100 turns                    | 786.95 ms | 779.64 ms |
+| History response p95                 | 134.57 ms | 133.85 ms |
+| First output p95                     |  75.48 ms |  74.70 ms |
+| Completion p95                       | 101.34 ms | 101.08 ms |
+| Event-loop delay p99                 |  44.04 ms |  42.21 ms |
+| Event-loop delay max, process median |  59.47 ms |  61.18 ms |
+
+These results show broadly unchanged throughput and request latency. Throughput ranges overlap
+(120.22–136.21 before; 133.83–138.23 after), as do loop-p99 ranges (41.98–48.33 ms before;
+41.55–43.32 ms after). All samples, including the slower first baseline, are retained. Short-run
+peak periodic RSS also overlaps: 447.07–469.63 MiB before and 445.13–462.38 MiB after.
+
+Separate 5,000-turn diagnostics enable main-isolate V8 NVP tracing during load. Reported
+allocated bytes are nearly unchanged: 207.56→206.72 MiB per 100 turns. Bytes promoted by minor
+collections fall 16.28→12.87 MiB per 100 turns, about 21%. Mean surviving new-space bytes per
+minor collection fall 5.41→4.54 MiB. This supports shorter temporary-object lifetimes rather
+than a substantial reduction in object construction. The trace counters include application,
+runtime and probe work, end at the last reported collection, and come from one process per
+version; these instrumented timings are excluded from ordinary latency comparisons.
+
+### Sustained and paused-page memory
+
+One 40,000-turn capture per version uses natural GC throughout load, followed by explicit
+collection after latency/CPU counters have stopped. The candidate runs first, then the
+baseline; ordering and single-process sampling limit capacity/memory conclusions.
+
+| Equal-turn memory metric            |     Before |      After |
+| ----------------------------------- | ---------: | ---------: |
+| Measured turns                      |     40,000 |     40,000 |
+| Peak periodic RSS                   | 468.42 MiB | 469.05 MiB |
+| Peak periodic used heap             | 263.65 MiB | 252.49 MiB |
+| Peak periodic old-space capacity    | 213.67 MiB | 205.92 MiB |
+| Final drained heap after collection |  45.19 MiB |  45.16 MiB |
+| Collected heap after clients close  |  44.21 MiB |  44.21 MiB |
+
+RSS is effectively unchanged in this workload. Lower promotion and sampled heap do not
+establish an overall resident-memory improvement. V8's capacity/pooling behavior still
+matters, and one-second samples can miss brief peaks. Both runs drain every batch, retain
+exactly 10,000 journal entries/session and release all SSE listeners. Neither shows growing
+collected heap at the final checkpoint. These captures do not establish leak freedom for
+other providers, payloads or longer sessions.
+
+A separate paused-page diagnostic isolates live data from resident capacity. In three fresh
+processes per version with alternating order, it creates 20 response generators, each owning
+100 text rows with 8 KiB ASCII content per row. It pauses after 50 encoded rows/page and
+collects between phases. The large encoded rows each consume a batch, so both versions have
+identical progress and retain the same encoded output at the midpoint.
+
+Median collected heap after capturing all rows is effectively equal (29.82 MiB each). At the
+half-encoded checkpoint it is 38.27 MiB before and 30.23 MiB after, about 8.03 MiB less live
+heap. The original keeps raw rows alongside their encoded replacements; the candidate has
+released the processed rows. This is an artificial paused-generator ownership diagnostic,
+not an HTTP latency, provider-throughput or application RSS claim. It demonstrates why the
+change can matter more for large pages even when ordinary-workload peak RSS barely moves.
+
+### Validation and artifacts
+
+All 1,065 Node tests across 176 files, 11 architecture regressions, workspace type/dependency
+checks, changed-file lint/formatting and dependency/server builds pass. Tests cover incremental
+snapshot consumption, output order, batch limits and cleanup after cancellation or a corrupt
+later row. Twenty-four real HTTP cases are byte-identical between frozen versions, including
+parent/cursor/window/empty/not-found cases.
+
+Ten completed ordinary/GC/sustained captures cover 114,300 measured turns and 1,143 drained-batch
+checkpoints; the 100-turn harness smoke is excluded. Six additional paused-page processes
+pass. No measured captures are discarded. All successful workload runs verify receipt/content,
+FIFO/non-overlap, operation drain, retention and listener cleanup. Production executables still
+match the frozen candidate after verification.
+
+Ignored artifacts live in `performance-results/history-row-lifetime-comparison/`. The manifest
+pins source, runtime and seed provenance; `comparison.json` contains every completed run,
+control medians/ranges and GC summaries; `validation.json` records invariants, paused-page
+medians and tool hashes. `checks/` preserves test/type/build/architecture output. Both runtime
+snapshots contain copied migration directories, with dependency links only for node_modules.
+
+With those retained local snapshots and seed database, run captures sequentially using fresh
+labels (the runner rejects existing directories):
+
+```sh
+node performance-results/history-row-lifetime-comparison/run.mjs rerun-before before control 30
+node performance-results/history-row-lifetime-comparison/run.mjs rerun-after after control 30
+node performance-results/history-row-lifetime-comparison/run.mjs rerun-memory-before before memory 40000
+node performance-results/history-row-lifetime-comparison/run.mjs rerun-memory-after after memory 40000
+```
+
+`sequence.mjs` records the original alternating controls, GC diagnostics and sustained captures;
+`paused-sequence.mjs` records the ownership diagnostic. Preserve their existing fixed-label
+outputs before rerunning. The reused soak template still labels initial history as 200 rows
+and fixed-turn modes as 3,600 seconds; actual seed size, termination and instrumentation are
+pinned in `manifest.json` and `run.mjs`. `analyze.py` and `validate.py` regenerate the original
+comparison and invariants. No forced collection is added to application code.
