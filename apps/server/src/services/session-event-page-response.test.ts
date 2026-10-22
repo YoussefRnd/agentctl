@@ -170,3 +170,22 @@ it('preserves UTF-8 byte limits and a complete oversized event without losing cu
     );
   }
 });
+
+it('yields after large original payloads even when their compact representations are small', () => {
+  const rows = decodingRows(20, false).map((row) => ({
+    ...row,
+    type: 'tool_call' as const,
+    data: JSON.stringify({
+      name: 'read',
+      kind: 'read',
+      status: 'completed',
+      rawOutput: 'x'.repeat(20000),
+    }),
+  }));
+  const work = prepareEventPageResponse(() => ({ rows, nextBeforeId: null }), true);
+  expect(work.next().done).toBe(false);
+  expect(work.next().done).toBe(false);
+  expect(rows).toHaveLength(19);
+  work.return(undefined);
+  expect(rows).toHaveLength(0);
+});

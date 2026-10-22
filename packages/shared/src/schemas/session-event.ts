@@ -126,6 +126,13 @@ export const sessionEventRowSchema = createSessionEventSchema({
   sessionId: z.uuid(),
   parentEventId: z.number().nullable().optional(),
   metadata: sessionEventMetadataSchema.optional(),
+  /** Wire-only marker: omitted output is available from the session-scoped detail endpoint. */
+  details: z
+    .object({
+      revision: z.string().regex(/^[a-f0-9]{64}$/),
+      outputBytes: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
   /**
    * Wire-only field carried on transient (non-persisted) streaming events.
    * When present, the client appends `delta` to the existing event content

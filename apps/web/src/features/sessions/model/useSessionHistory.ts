@@ -52,7 +52,7 @@ export function useSessionHistory(sessionId: string | null) {
     [client],
   );
   const fetchPage = useCallback(async (id: string, operation?: Operation, signal?: AbortSignal) => {
-    const query = new URLSearchParams({ limit: '200' });
+    const query = new URLSearchParams({ limit: '200', compact: 'true' });
     if (operation)
       for (const [key, value] of Object.entries(operation)) query.set(key, String(value));
     const url = `/api/sessions/${id}/events/page?${query}`;

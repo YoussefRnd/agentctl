@@ -109,6 +109,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
             aroundId: z.coerce.number().int().positive().optional(),
             afterId: z.coerce.number().int().positive().optional(),
             limit: z.coerce.number().int().min(1).max(500).default(200),
+            compact: z.enum(['true']).optional(),
           })
           .refine(
             (query) =>
@@ -120,7 +121,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { beforeId, aroundId, afterId, limit } = request.query;
+      const { beforeId, aroundId, afterId, limit, compact } = request.query;
       const controller = new AbortController();
       const abort = () => controller.abort();
       request.raw.once('aborted', abort);
@@ -128,11 +129,42 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       try {
         const body = await fastify.services.events.pageResponse(
           id,
-          { beforeId, aroundId, afterId, limit },
+          { beforeId, aroundId, afterId, limit, compact: compact === 'true' },
           controller.signal,
         );
         if (body === undefined) throw new AppError('Event not found', 404);
         return reply.type('application/json; charset=utf-8').send(body);
+      } catch (error) {
+        if (!controller.signal.aborted) throw error;
+        return reply;
+      } finally {
+        request.raw.off('aborted', abort);
+        reply.raw.off('close', abort);
+      }
+    },
+  );
+
+  fastify.withTypeProvider<ZodTypeProvider>().get(
+    '/sessions/:id/events/:eventId/detail',
+    {
+      schema: { params: z.object({ id: z.uuid(), eventId: z.coerce.number().int().positive() }) },
+    },
+    async (request, reply) => {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      request.raw.once('aborted', abort);
+      reply.raw.once('close', abort);
+      try {
+        const body = await fastify.services.events.detailResponse(
+          request.params.id,
+          request.params.eventId,
+          controller.signal,
+        );
+        if (body === undefined) throw new AppError('Event not found', 404);
+        return reply
+          .header('Cache-Control', 'no-store')
+          .type('application/json; charset=utf-8')
+          .send(body);
       } catch (error) {
         if (!controller.signal.aborted) throw error;
         return reply;
@@ -155,6 +187,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
           snapshots: z.enum(['true']).optional(),
           changes: z.enum(['true']).optional(),
           afterSequence: z.coerce.number().int().nonnegative().optional(),
+          compact: z.enum(['true']).optional(),
         }),
       },
     },
@@ -186,7 +219,14 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       reply.raw.write(':\n\n');
 
       const useChangeSequence = request.query.changes === 'true';
-      const sendEvent = (event: SessionEventRow) => write(formatSSEEvent(event, useChangeSequence));
+      const project = (event: SessionEventRow) =>
+        request.query.compact === 'true' ? fastify.services.events.compact(event) : event;
+      const projectSnapshot = <T extends { events: SessionEventRow[] }>(snapshot: T): T => ({
+        ...snapshot,
+        events: snapshot.events.map(project),
+      });
+      const sendEvent = (event: SessionEventRow) =>
+        write(formatSSEEvent(project(event), useChangeSequence));
       let catchingUp = true;
       let pendingBytes = 0;
       const pending: SessionEventRow[] = [];
@@ -241,7 +281,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
           const result = fastify.services.events.changes(id, request.query.afterSequence);
           if (result.snapshot)
             write(
-              `id: ${result.snapshot.changeSequence}\nevent: session_snapshot\ndata: ${JSON.stringify(result.snapshot)}\n\n`,
+              `id: ${result.snapshot.changeSequence}\nevent: session_snapshot\ndata: ${JSON.stringify(projectSnapshot(result.snapshot))}\n\n`,
             );
           for (const event of result.events) sendEvent(event);
         } else {
@@ -255,7 +295,7 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
                   throughId: highWaterId,
                 });
                 write(
-                  `id: ${highWaterId}\nevent: session_snapshot\ndata: ${JSON.stringify({ ...page, highWaterId })}\n\n`,
+                  `id: ${highWaterId}\nevent: session_snapshot\ndata: ${JSON.stringify(projectSnapshot({ ...page, highWaterId }))}\n\n`,
                 );
               } else {
                 for (const event of replay) sendEvent(event);

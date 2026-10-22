@@ -174,3 +174,60 @@ it('delivers live updates received during catch-up and retains legacy replay', a
     expect(body).not.toContain('event: session_snapshot');
   }
 });
+
+it('projects snapshot, replay and live tool output only for compact streams', async () => {
+  const { SessionEventRepository } = await import('@agentctl/core/session');
+  const repository = new SessionEventRepository(db, bus);
+  const toolId = await repository.append(sessionId, 'tool_call', {
+    name: 'read',
+    kind: 'read',
+    status: 'completed',
+    rawOutput: 'deferred snapshot output',
+  });
+  const readSnapshot = async (query: string) => {
+    const body = await readStream(query, (body) => body.includes('event: session_snapshot'));
+    return sessionEventSnapshotSchema.parse(
+      JSON.parse(
+        body
+          .split('\n')
+          .find((line) => line.startsWith('data: '))!
+          .slice(6),
+      ),
+    );
+  };
+  const initial = await readSnapshot('changes=true&compact=true');
+  expect(initial.events[0]).toMatchObject({
+    id: toolId,
+    details: { revision: expect.any(String) },
+  });
+  expect(JSON.stringify(initial)).not.toContain('deferred snapshot output');
+  const legacy = await readSnapshot('changes=true');
+  expect(legacy.events[0]).toMatchObject({ data: { rawOutput: 'deferred snapshot output' } });
+  expect(legacy.events[0].details).toBeUndefined();
+  await repository.updateSilently(toolId, { rawOutput: 'deferred replay output' });
+  const replay = await readStream(
+    `changes=true&compact=true&afterSequence=${initial.changeSequence}`,
+    (body) => body.includes('event: session_event'),
+  );
+  expect(replay).toContain('"details"');
+  expect(replay).not.toContain('deferred replay output');
+  const cursor = app.services.events.changes(sessionId).snapshot!.changeSequence;
+  const subscribe = bus.subscribe.bind(bus);
+  vi.spyOn(bus, 'subscribe').mockImplementation((id, listener) => {
+    const release = subscribe(id, listener);
+    setTimeout(() => {
+      void repository.append(sessionId, 'tool_call', {
+        name: 'bash',
+        kind: 'execute',
+        status: 'completed',
+        rawOutput: 'deferred live output',
+      });
+    }, 10);
+    return release;
+  });
+  const live = await readStream(`changes=true&compact=true&afterSequence=${cursor}`, (body) =>
+    body.includes('event: session_event'),
+  );
+  expect(live).toContain('"details"');
+  expect(live).not.toContain('deferred live output');
+});

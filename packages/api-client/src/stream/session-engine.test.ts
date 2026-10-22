@@ -82,6 +82,7 @@ describe('SessionEngine', () => {
       }),
     );
 
+    expect(fetchMock.mock.calls[0][0]).not.toContain('compact=true');
     expect(onStatusChange).toHaveBeenCalledWith(true);
     expect(engine.getIsConnected()).toBe(true);
   });
@@ -368,6 +369,7 @@ describe('SessionEngine', () => {
       sessionId,
       sseUrl: 'http://localhost/stream',
       onHistorySnapshot,
+      compactHistory: true,
       onEventsUpdate,
       onStatusChange,
       onStreamingChange,
@@ -376,6 +378,7 @@ describe('SessionEngine', () => {
     engine.connect(1);
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchMock.mock.calls[0][0]).toContain('snapshots=true');
+    expect(fetchMock.mock.calls[0][0]).toContain('compact=true');
     const event = {
       id: 100,
       sessionId,

@@ -40,6 +40,7 @@ export function ActivityTimeline({ events, isStreaming = false }: ActivityTimeli
             position={isOnly ? 'only' : isFirst ? 'first' : isLast ? 'last' : 'middle'}
           >
             <ToolCallCard
+              event={e}
               tool={toolName}
               payload={payload}
               isStreaming={isLastStreaming}

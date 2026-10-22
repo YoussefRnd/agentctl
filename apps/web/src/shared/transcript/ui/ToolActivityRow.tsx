@@ -21,6 +21,7 @@ import {
 } from './ToolOutputContent';
 import { StreamingDots } from '@/shared/ui/StreamingDots';
 import { getCleanOutputText, getToolDisplayInfo, formatDuration } from '../lib/tool-presentation';
+import { EventDetailContent } from './EventDetailContent';
 
 function StepIcon({ icon, className }: { icon: string; color?: string; className?: string }) {
   const cn = className ?? 'h-3.5 w-3.5';
@@ -144,6 +145,7 @@ export const ToolStepRow = memo(function ToolStepRow({
   const info = getToolDisplayInfo(toolName, payload);
   const cleanOutput = getCleanOutputText(payload.rawOutput);
   const hasDetails =
+    event.details !== undefined ||
     (Array.isArray(payload.content) && payload.content.length > 0) ||
     (payload.locations && payload.locations.length > 0) ||
     (cleanOutput !== null && cleanOutput.length > 0);
@@ -208,7 +210,9 @@ export const ToolStepRow = memo(function ToolStepRow({
 
       {isOpen && hasDetails && (
         <div className="pr-1 pl-5">
-          <ToolOutputDetails call={payload} />
+          <EventDetailContent event={event}>
+            {(full) => <ToolOutputDetails call={full.type === 'tool_call' ? full.data : payload} />}
+          </EventDetailContent>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { expect, test } from 'vite-plus/test';
 import type { SessionEventRow } from '@agentctl/shared';
-import { collectAgentTerminals } from './agentTerminals';
+import { collectAgentTerminals, terminalDetailEvents, boundedTerminalText } from './agentTerminals';
 
 test('terminal snapshots replace output and chunks append without mixing terminals', () => {
   const events = [
@@ -15,4 +15,17 @@ test('terminal snapshots replace output and chunks append without mixing termina
     { id: 'a', command: 'test', output: 'new chunk', exited: true, code: 0 },
     { id: 'b', command: '', output: 'other', exited: false, code: null },
   ]);
+});
+
+test('selects only the output required for the visible tail, including a partial UTF-8 boundary', () => {
+  const events: SessionEventRow[] = [1, 2, 3].map((id) => ({
+    id,
+    sessionId: 's',
+    type: 'terminal_output',
+    createdAt: new Date(),
+    details: { revision: 'a'.repeat(64), outputBytes: 40000 },
+    data: { terminalId: 'a', data: '' },
+  }));
+  expect(terminalDetailEvents(events).map((event) => event.id)).toEqual([2, 3]);
+  expect(boundedTerminalText('界'.repeat(30000))).toBe('界'.repeat(Math.floor(65536 / 3)));
 });

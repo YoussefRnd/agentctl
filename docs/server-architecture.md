@@ -197,7 +197,7 @@ All paths below are relative to the app root, including the `/api` registration 
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `routes/auth.ts`        | `GET /api/auth/status`, `POST /api/auth/pairing/consume`, `POST /api/auth/pairing/create`, `GET /api/auth/sessions`, `DELETE /api/auth/sessions/:id`, `POST /api/logout` | Core AuthManager; per-app attempt limiter                                                     |
 | `routes/events.ts`      | `GET /api/events/stream`                                                                                                                                                 | EventBus state subscription; transport owns heartbeat/cleanup                                 |
-| `routes/events.ts`      | `GET /api/sessions/:id/events`, `GET /api/sessions/:id/events/turns`, `GET /api/sessions/:id/events/page`                                                                | SessionEventQueries and bounded history/turn read models                                      |
+| `routes/events.ts`      | `GET /api/sessions/:id/events`, `GET /api/sessions/:id/events/turns`, `GET /api/sessions/:id/events/page`, `GET /api/sessions/:id/events/:eventId/detail`                | SessionEventQueries and bounded history/turn read models                                      |
 | `routes/events.ts`      | `GET /api/sessions/:id/events/stream`                                                                                                                                    | Core session resuscitation plus event-query catch-up; transport owns framing and flow control |
 | `routes/events.ts`      | `POST /api/sessions/:id/elicitations/:elicitationId/respond`                                                                                                             | SessionService → SessionCommands → active core session                                        |
 | `routes/terminal.ts`    | `GET /api/sessions/:id/terminal/ws`                                                                                                                                      | WorkspaceQueries and InteractiveTerminalService                                               |
@@ -237,3 +237,22 @@ Fastify hooks instrument requests using route templates and bridge sanitized app
 Core uses API-only turn/provider observations and persists traceparent with durable operations.
 SDK shutdown follows server/session disposal, with a bounded flush. SDK construction is absent
 from `buildApp()` and ordinary imports.
+
+History pages and session SSE streams accept opt-in `compact=true`. The event projection service
+preserves conversation/control data and file-change summaries while deferring ordinary finished
+tool bodies and terminal output. Legacy clients keep full rows. The detail endpoint reads a
+current event by both session ID and event ID using a reused prepared statement, and validates
+and encodes it through the same cancellable history work queue. It returns `{ event, revision }`,
+where `event` is complete; absent/deleted rows return 404. Detail responses use `Cache-Control: no-store`. Revisions identify row content rather
+than SSE sequence numbers, so repeated delivery shares client detail queries while updates
+invalidate them. Page selection still uses the original 1 MiB payload budget, and decoding work
+still yields according to original payload size even when the encoded compact row is small.
+No new persisted representation, migration, server output cache or history provider dependency
+is introduced.
+
+`SessionEventQueries` owns one `SessionEventProjection` shared by HTTP and SSE. Its diff-summary
+LRU stores SHA-256 keys and encoded normalized file summaries, with at most 1,024 entries,
+262,144 UTF-16 summary characters total and 4,096 characters per entry. It never stores event rows,
+raw outputs or patches; oversized summaries are recomputed. This avoids parsing the same patch
+on repeated history reads while bounding retained server state. Changed content invalidates the
+key, and callers receive independent summary objects. Cold loads still derive statistics.

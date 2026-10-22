@@ -55,6 +55,7 @@ export function useSessionEvents(sessionId: string | null) {
       sessionId,
       sseUrl,
       token,
+      compactHistory: true,
       onNotice: (notice) => {
         const options = { description: notice.description };
         if (notice.severity === 'error') toast.error(notice.title, options);

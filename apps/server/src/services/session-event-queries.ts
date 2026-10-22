@@ -12,10 +12,14 @@ import { SessionEventPageReader, type EventPageOptions } from './session-event-p
 import { prepareEventPageResponse } from './session-event-page-response.js';
 import { SessionHistoryWorkQueue } from './session-history-work-queue.js';
 import { readTurnIndex } from './session-turn-index.js';
+import { eventDetailRevision, SessionEventProjection } from './session-event-projection.js';
 
 export class SessionEventQueries {
+  private readonly projection = new SessionEventProjection();
+  compact = this.projection.compact;
   private pageReader?: SessionEventPageReader;
   private readonly historyWork = new SessionHistoryWorkQueue();
+  private detailStatement?: ReturnType<SessionEventQueries['prepareDetail']>;
   constructor(private readonly db: DbClient) {}
   async list(sessionId: string) {
     const rows = await this.db
@@ -36,15 +40,51 @@ export class SessionEventQueries {
   }
   pageResponse(
     sessionId: string,
-    options: { beforeId?: number; aroundId?: number; afterId?: number; limit: number },
+    options: {
+      beforeId?: number;
+      aroundId?: number;
+      afterId?: number;
+      limit: number;
+      compact?: boolean;
+    },
     signal?: AbortSignal,
   ) {
     return this.historyWork.run(
-      prepareEventPageResponse(() =>
-        options.aroundId !== undefined || options.afterId !== undefined
-          ? captureEventWindow(this.db, sessionId, options)
-          : (this.pageReader ??= new SessionEventPageReader(this.db)).capture(sessionId, options),
+      prepareEventPageResponse(
+        () =>
+          options.aroundId !== undefined || options.afterId !== undefined
+            ? captureEventWindow(this.db, sessionId, options)
+            : (this.pageReader ??= new SessionEventPageReader(this.db)).capture(sessionId, options),
+        options.compact,
+        this.compact,
       ),
+      signal,
+    );
+  }
+  private prepareDetail() {
+    return this.db
+      .select()
+      .from(sessionEvents)
+      .where(
+        and(
+          eq(sessionEvents.sessionId, sql.placeholder('sessionId')),
+          eq(sessionEvents.id, sql.placeholder('eventId')),
+        ),
+      )
+      .limit(1)
+      .prepare();
+  }
+  detailResponse(sessionId: string, eventId: number, signal?: AbortSignal) {
+    const capture = () =>
+      (this.detailStatement ??= this.prepareDetail()).get({ sessionId, eventId });
+    return this.historyWork.run(
+      (function* () {
+        const row = capture();
+        if (!row) return undefined;
+        yield;
+        const event = parseEventRow(row);
+        return JSON.stringify({ event, revision: eventDetailRevision(event) });
+      })(),
       signal,
     );
   }

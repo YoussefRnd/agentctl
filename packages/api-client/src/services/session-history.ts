@@ -2,6 +2,24 @@ import type { ClientInferResponseBody } from '@ts-rest/core';
 import type { apiContract } from '@agentctl/shared';
 import { api } from '../api.js';
 import { assertApiStatus } from '../api-error.js';
+import { sessionEventDetailSchema } from '@agentctl/shared';
+import { apiClient } from '../api-client.js';
+
+export async function fetchSessionEventDetail(
+  sessionId: string,
+  eventId: number,
+  signal?: AbortSignal,
+) {
+  const result = sessionEventDetailSchema.parse(
+    await apiClient.fetch(
+      `/api/sessions/${encodeURIComponent(sessionId)}/events/${eventId}/detail`,
+      { signal },
+    ),
+  );
+  if (result.event.sessionId !== sessionId || result.event.id !== eventId || result.event.details)
+    throw new Error('Invalid event detail response');
+  return result.event;
+}
 
 export async function rewindSession(
   sessionId: string,

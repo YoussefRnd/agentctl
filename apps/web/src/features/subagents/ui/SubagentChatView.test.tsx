@@ -17,7 +17,7 @@ const event = (id: number, type: string, data: unknown): SessionEventRow =>
     createdAt: new Date(1700000000000 + id * 1000),
   }) as SessionEventRow;
 
-test('renders live child activity, terminals and sibling navigation without parent providers or control APIs', () => {
+test('renders live child activity, terminals and sibling navigation without parent providers or control APIs', async () => {
   const sibling: SubagentGroup = {
     subagentEvent: event(9, 'subagent_update', {
       subagentId: 'sibling',
@@ -100,6 +100,11 @@ test('renders live child activity, terminals and sibling navigation without pare
     act(() => container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click());
     expect(container.textContent).toContain('Read /src/module.ts');
     expect(container.textContent).toContain('Child response');
+    expect(container.textContent).not.toContain('check output');
+    await act(async () => {
+      container.querySelector('details')!.open = true;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
     expect(container.textContent).toContain('check output');
     expect(container.textContent).toContain('Exit 0');
     expect(container.querySelector('textarea, input')).toBeNull();

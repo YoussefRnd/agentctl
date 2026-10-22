@@ -98,7 +98,7 @@ it('loads only the latest page, preserves live updates during pagination, and de
   );
   await settle();
   expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith(
-    `/api/sessions/${sessionId}/events/page?limit=200`,
+    `/api/sessions/${sessionId}/events/page?limit=200&compact=true`,
   );
   expect(mocks.connect).toHaveBeenCalledWith(6);
   let resolve!: (page: unknown) => void;
@@ -205,7 +205,7 @@ it('resets paged history on reconnect while preserving unsent messages and ignor
     await hook.loadOlder();
   });
   expect(mocks.fetch).toHaveBeenLastCalledWith(
-    `/api/sessions/${sessionId}/events/page?limit=200&beforeId=100`,
+    `/api/sessions/${sessionId}/events/page?limit=200&compact=true&beforeId=100`,
     { signal: expect.any(AbortSignal) },
   );
   expect(mocks.connect).toHaveBeenCalledTimes(1);
@@ -253,7 +253,7 @@ it('jumps directly to an older window, pages forward without gaps, and keeps liv
   });
   await settle();
   expect(mocks.fetch).toHaveBeenLastCalledWith(
-    `/api/sessions/${sessionId}/events/page?limit=200&aroundId=10`,
+    `/api/sessions/${sessionId}/events/page?limit=200&compact=true&aroundId=10`,
     { signal: expect.any(AbortSignal) },
   );
   expect(hook.visibleEvents.map((row) => row.id)).toEqual([10, 11]);
@@ -403,7 +403,7 @@ it('initializes an intent-prefetched page without losing its older cursor or tur
   mocks.fetch.mockResolvedValueOnce({ events: [event(500)], nextBeforeId: 500 });
   await act(async () => hook.loadOlder());
   expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith(
-    `/api/sessions/${sessionId}/events/page?limit=200&beforeId=900`,
+    `/api/sessions/${sessionId}/events/page?limit=200&compact=true&beforeId=900`,
     { signal: expect.any(AbortSignal) },
   );
 });
@@ -426,7 +426,7 @@ it('fetches fresh history on an explicit refetch even while the intent page is s
     await hook.refetch();
   });
   expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith(
-    `/api/sessions/${sessionId}/events/page?limit=200`,
+    `/api/sessions/${sessionId}/events/page?limit=200&compact=true`,
   );
   expect(hook.events.map((row) => row.id)).toEqual([5]);
   expect(hook.events[0].data).toMatchObject({ content: 'rewound' });

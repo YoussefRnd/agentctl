@@ -13,6 +13,7 @@ export interface SessionEngineOptions {
   sessionId: string;
   sseUrl: string;
   token?: string;
+  compactHistory?: boolean;
   onEventsUpdate: (events: SessionEventRow[]) => void;
   onHistorySnapshot?: (snapshot: SessionEventSnapshot) => void;
   onStatusChange: (isConnected: boolean) => void;
@@ -111,6 +112,7 @@ export class SessionEngine {
 
       try {
         let url = this.options.sseUrl;
+        if (this.options.compactHistory) url += `${url.includes('?') ? '&' : '?'}compact=true`;
         if (this.options.onHistorySnapshot) {
           const separator = url.includes('?') ? '&' : '?';
           url = `${url}${separator}snapshots=true&changes=true`;

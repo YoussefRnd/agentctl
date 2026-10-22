@@ -8,6 +8,12 @@ export const sessionEventPageSchema = z.object({
 });
 export type SessionEventPage = z.infer<typeof sessionEventPageSchema>;
 
+export const sessionEventDetailSchema = z.object({
+  event: sessionEventRowSchema,
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type SessionEventDetail = z.infer<typeof sessionEventDetailSchema>;
+
 export const sessionTurnIndexSchema = z.array(
   z.object({
     eventId: z.number().int().positive(),

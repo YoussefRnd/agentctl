@@ -42,3 +42,22 @@ export function collectAgentTerminals(events: SessionEventRow[]) {
   }
   return [...terminals.values()];
 }
+
+/** Select only output contributing to the visible 64 KiB tail, after the last replacement. */
+export function terminalDetailEvents(events: SessionEventRow[]): SessionEventRow[] {
+  const selected = new Set<number>();
+  let bytes = 0;
+  let replaced = false;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.type !== 'terminal_output') {
+      selected.add(event.id);
+      continue;
+    }
+    if (replaced || bytes >= 65536) continue;
+    selected.add(event.id);
+    bytes += event.details?.outputBytes ?? new TextEncoder().encode(event.data.data).length;
+    replaced = event.data.operation === 'replace';
+  }
+  return events.filter((event) => selected.has(event.id));
+}

@@ -315,6 +315,21 @@ export function isFileModificationToolCall(data: {
 }
 
 function fileChangeReports(data: SessionEventToolCallData): SessionEventToolCallData[] {
+  if (data.fileChanges !== undefined)
+    return data.fileChanges.map(({ path, operation, stats }) => ({
+      toolCallId: data.toolCallId,
+      status: data.status,
+      name: operation === 'add' ? 'create' : operation,
+      kind: operation === 'delete' ? 'delete' : 'edit',
+      locations: [{ path }],
+      effects: [
+        {
+          type: operation === 'delete' ? 'file_deleted' : 'file_modified',
+          path,
+          ...(stats ? { stats } : {}),
+        },
+      ],
+    }));
   const diffs = (data.content ?? []).flatMap((content) => {
     if (content.type !== 'diff') return [];
     const parsed = structuredDiffSchema.safeParse(content);
@@ -399,8 +414,14 @@ function getToolCallStats(data: Record<string, unknown>): {
       type?: string;
       oldText?: string | null;
       newText?: string;
+      stats?: { additions: number; deletions: number };
     }[]) {
       if (item.type !== 'diff') continue;
+      if (item.stats) {
+        additions += item.stats.additions;
+        deletions += item.stats.deletions;
+        continue;
+      }
       if (typeof item.newText === 'string' && item.newText.length > 0) {
         additions += item.newText.split('\n').length;
       }

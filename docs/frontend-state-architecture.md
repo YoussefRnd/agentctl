@@ -55,3 +55,29 @@ ordering/unsubscription. The production browser fixture covers navigation/deferr
 review-to-composer actions and parent/child/sibling retained drafts. Both renderer builds and the
 built-desktop markdown worker smoke validate the shared sources. Exact acceptance results live
 in the migration tracker.
+
+### Compact history and expanded output
+
+The web client opts into `compact=true` on history pages and session streams. Completed ordinary
+read/search/execute/edit tool output, file bodies and terminal output are replaced with a
+revision marker. Conversation messages, approvals, active tool inputs and delegation results
+remain complete. File paths, operations, statistics, routing metadata and terminal identity
+stay in the compact row so collapsed views and review summaries need no detail requests.
+Unknown tool shapes are kept complete rather than guessing which fields drive their display.
+This is a transport projection; persisted events and pagination selection are unchanged.
+
+`shared/transcript/ui/EventDetailContent` owns expanded output loading through the API client's
+session-scoped detail service. Queries are keyed by session, event ID and observed revision;
+concurrent expanded views share a request. Full rows never replace compact rows in the history
+cache. Closing the last view cancels in-flight work and immediately makes its detail cache
+eligible for collection (`gcTime: 0`). Reopening fetches again. An updated revision cancels the
+old subscription, and late responses cannot replace the newly displayed revision. Errors offer
+explicit retry. The endpoint reads the current persisted event, so it can return a newer version
+than the revision observed by the history page; it does not promise an immutable historical copy.
+Deleted or rewound-away rows return 404.
+
+Terminal expansion loads only events contributing to its existing 64 KiB tail, stopping at the
+last replacement or enough UTF-8 output bytes. Complete detail responses can still be large;
+this design reduces default transfer and retained client data rather than imposing a hard global
+memory limit or truncating persisted output. Expanding every output trades those savings for
+additional requests and full bodies while the views remain open.

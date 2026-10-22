@@ -1,8 +1,13 @@
 import { createServerServices } from '../composition/server-services.js';
 import Fastify from 'fastify';
+import { eq } from 'drizzle-orm';
 import { validatorCompiler } from '@fastify/type-provider-zod';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
-import { sessionEventPageSchema, sessionTurnIndexSchema } from '@agentctl/shared';
+import {
+  sessionEventPageSchema,
+  sessionTurnIndexSchema,
+  sessionEventRowSchema,
+} from '@agentctl/shared';
 import { expect, it } from 'vite-plus/test';
 import { eventsRoutes } from './events.js';
 
@@ -195,6 +200,97 @@ it('returns a complete error for a corrupt later row without sending earlier eve
     const healthy = await app.inject(`/api/sessions/${id}/events/page?beforeId=2`);
     expect(healthy.statusCode).toBe(200);
     expect(sessionEventPageSchema.parse(healthy.json()).events.map((row) => row.id)).toEqual([1]);
+  } finally {
+    await app.close();
+  }
+});
+
+it('returns compact pages with unchanged cursors and retrieves complete, session-scoped current details', async () => {
+  const app = Fastify();
+  const db = createDatabase(':memory:');
+  app.decorate('db', db);
+  app.setValidatorCompiler(validatorCompiler);
+  app.decorate('services', createServerServices(app));
+  await app.register(eventsRoutes, { prefix: '/api' });
+  const id = '11111111-1111-4111-8111-111111111111';
+  const other = '22222222-2222-4222-8222-222222222222';
+  db.insert(projects).values({ id: 'project', name: 'Project', path: '/tmp/project' }).run();
+  for (const sessionId of [id, other])
+    db.insert(sessions)
+      .values({
+        id: sessionId,
+        projectId: 'project',
+        branch: 'main',
+        worktreePath: '/tmp/project',
+        taskSlug: sessionId,
+        baseCommit: 'none',
+        agent: 'agent',
+        selectedProvider: 'agent',
+      })
+      .run();
+  db.insert(sessionEvents)
+    .values({
+      id: 1,
+      sessionId: id,
+      type: 'text',
+      data: JSON.stringify({ role: 'user', content: 'keep conversation complete' }),
+    })
+    .run();
+  db.insert(sessionEvents)
+    .values({
+      id: 2,
+      parentEventId: 1,
+      sessionId: id,
+      type: 'tool_call',
+      data: JSON.stringify({
+        name: 'read',
+        kind: 'read',
+        status: 'completed',
+        rawOutput: 'full output '.repeat(1000),
+        arguments: { path: '/file' },
+      }),
+      metadata: JSON.stringify({ nativeSessionId: 'child' }),
+    })
+    .run();
+  try {
+    const full = sessionEventPageSchema.parse(
+      (await app.inject(`/api/sessions/${id}/events/page?limit=1`)).json(),
+    );
+    const compact = sessionEventPageSchema.parse(
+      (await app.inject(`/api/sessions/${id}/events/page?limit=1&compact=true`)).json(),
+    );
+    expect(compact.events.map((event) => event.id)).toEqual(full.events.map((event) => event.id));
+    expect(compact.nextBeforeId).toBe(full.nextBeforeId);
+    expect(compact.events[0]).toEqual(full.events[0]);
+    expect(compact.events[1]).toMatchObject({
+      parentEventId: 1,
+      metadata: { nativeSessionId: 'child' },
+      details: { revision: expect.any(String) },
+    });
+    expect(JSON.stringify(compact)).not.toContain('full output');
+    const detail = await app.inject(`/api/sessions/${id}/events/2/detail`);
+    expect(detail.statusCode).toBe(200);
+    expect(detail.headers['cache-control']).toBe('no-store');
+    expect(sessionEventRowSchema.parse(detail.json().event)).toEqual(full.events[1]);
+    expect(detail.json().revision).toBe(compact.events[1].details?.revision);
+    expect((await app.inject(`/api/sessions/${other}/events/2/detail`)).statusCode).toBe(404);
+    expect((await app.inject(`/api/sessions/${id}/events/0/detail`)).statusCode).toBe(400);
+    db.update(sessionEvents)
+      .set({
+        data: JSON.stringify({
+          name: 'read',
+          kind: 'read',
+          status: 'completed',
+          rawOutput: 'updated output',
+        }),
+      })
+      .where(eq(sessionEvents.id, 2))
+      .run();
+    const updated = await app.inject(`/api/sessions/${id}/events/2/detail`);
+    expect(updated.json().event.data.rawOutput).toBe('updated output');
+    expect(updated.json().revision).not.toBe(detail.json().revision);
+    db.delete(sessionEvents).where(eq(sessionEvents.id, 2)).run();
+    expect((await app.inject(`/api/sessions/${id}/events/2/detail`)).statusCode).toBe(404);
   } finally {
     await app.close();
   }

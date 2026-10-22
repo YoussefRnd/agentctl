@@ -437,6 +437,7 @@
         "apps/web/src/shared/transcript/lib/tool-presentation.ts",
         "apps/web/src/shared/transcript/ui/ActivityBlock.tsx",
         "apps/web/src/shared/transcript/ui/AgentTerminals.tsx",
+        "apps/web/src/shared/transcript/ui/EventDetailContent.tsx",
         "apps/web/src/shared/transcript/ui/ToolActivityRow.tsx",
         "apps/web/src/shared/transcript/ui/ToolOutputContent.tsx",
         "apps/web/src/shared/transcript/ui/TranscriptMessage.tsx"

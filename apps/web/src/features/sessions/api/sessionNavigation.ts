@@ -24,7 +24,7 @@ export const initialHistoryOptions = (sessionId: string) =>
     queryKey: sessionKeys.initialHistory(sessionId),
     queryFn: async () =>
       sessionEventPageSchema.parse(
-        await apiClient.fetch(`/api/sessions/${sessionId}/events/page?limit=200`),
+        await apiClient.fetch(`/api/sessions/${sessionId}/events/page?limit=200&compact=true`),
       ),
     staleTime: INITIAL_HISTORY_FRESH_MS,
     gcTime: 30_000,

@@ -470,3 +470,53 @@ it('uses per-file patch statistics instead of repeating the total across every c
     totalDeletions: 2,
   });
 });
+
+it('preserves per-file operations and stats using compact history summaries without detail requests', () => {
+  const base = { id: 1, sessionId: 's', createdAt: new Date(), type: 'tool_call' as const };
+  const full: SessionEventRow = {
+    ...base,
+    data: {
+      name: 'edit',
+      kind: 'edit',
+      content: [
+        {
+          type: 'diff',
+          changes: [
+            { operation: 'move', oldPath: '/old', path: '/new' },
+            { operation: 'modify', path: '/same' },
+          ],
+          patch: {
+            format: 'git_patch',
+            text: '--- a/old\n+++ b/new\n@@ -1 +1 @@\n-before\n+after\n--- a/same\n+++ b/same\n@@ -1 +1 @@\n-a\n+b',
+          },
+        },
+      ],
+    },
+  };
+  const compact: SessionEventRow = {
+    ...base,
+    details: { revision: 'a'.repeat(64) },
+    data: {
+      name: 'edit',
+      kind: 'edit',
+      fileChanges: [
+        { operation: 'delete', path: '/old', stats: { additions: 0, deletions: 1 } },
+        { operation: 'add', path: '/new', stats: { additions: 1, deletions: 0 } },
+        { operation: 'modify', path: '/same', stats: { additions: 1, deletions: 1 } },
+      ],
+    },
+  };
+  expect(extractTurnChanges([compact])).toEqual(extractTurnChanges([full]));
+  expect(extractLatestTurnTouchedFiles([compact])).toEqual(extractLatestTurnTouchedFiles([full]));
+});
+
+it('does not infer an edit from arguments when a compact structured summary is empty', () => {
+  const event: SessionEventRow = {
+    id: 1,
+    sessionId: 's',
+    createdAt: new Date(),
+    type: 'tool_call',
+    data: { name: 'edit', kind: 'edit', arguments: { path: '/file' }, fileChanges: [] },
+  };
+  expect(extractTurnChanges([event]).files).toEqual([]);
+});

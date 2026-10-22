@@ -77,6 +77,7 @@ export const sessionEventToolCallDataSchema = z
             path: z.string(),
             oldText: z.string().nullable().optional(),
             newText: z.string().optional(),
+            stats: fileChangeStatsSchema.optional(),
           }),
           z.object({
             type: z.literal('file_deleted'),
@@ -85,6 +86,16 @@ export const sessionEventToolCallDataSchema = z
           }),
           z.object({ type: z.literal('terminal'), terminalId: z.string() }),
         ]),
+      )
+      .optional(),
+    /** Compact history summary of structured diffs; complete patches stay in event details. */
+    fileChanges: z
+      .array(
+        z.object({
+          operation: z.enum(['add', 'modify', 'delete']),
+          path: z.string(),
+          stats: fileChangeStatsSchema.optional(),
+        }),
       )
       .optional(),
     rawInput: z.unknown().optional(),

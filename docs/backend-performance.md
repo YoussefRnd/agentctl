@@ -1351,3 +1351,173 @@ outputs before rerunning. The reused soak template still labels initial history 
 and fixed-turn modes as 3,600 seconds; actual seed size, termination and instrumentation are
 pinned in `manifest.json` and `run.mjs`. `analyze.py` and `validate.py` regenerate the original
 comparison and invariants. No forced collection is added to application code.
+
+## Compact history and on-demand output (2026-10-22)
+
+History pages and session streams support opt-in `compact=true`; the web client uses it for
+initial loads, prefetches, older/around/forward pages, reconnect snapshots, replay and live updates.
+The projection omits ordinary finished tool output, file bodies and terminal text while preserving
+routing, inputs, headers, status, file operations/statistics and terminal identity. Messages,
+approvals, active tools, delegation and unknown tool shapes stay complete. Large tool arguments
+and arbitrary provider extensions can therefore still make a row large.
+
+Expanded tool and terminal views load complete persisted rows from
+`GET /api/sessions/:id/events/:eventId/detail`. This uses a session-scoped prepared query and the
+cancellable history scheduler; responses carry a content revision and `Cache-Control: no-store`.
+Shared transcript components deduplicate requests by session/event/revision, cancel abandoned work
+and discard full detail cache entries after the last view closes. Full results never hydrate the
+long-lived history cache. Terminal expansion loads only chunks contributing to its existing
+64 KiB tail, stopping at the last replacement or enough UTF-8 bytes. The endpoint reads the current
+persisted version, not a historical copy of the requested marker.
+
+This changes the wire representation without a database migration or truncating persisted output.
+Legacy requests still return full rows. Page selection, turn anchors, cursors and the original
+1 MiB database payload budget are unchanged. Encoding releases raw rows incrementally, and
+scheduler yield accounting uses original payload size even when compact JSON is small. Detail
+decoding can still process one large indivisible event; this is not a strict global memory bound.
+SQLite still reads and the server still validates the original bodies.
+
+A per-app derived-summary LRU avoids reparsing the same structured patch on repeated reads. It
+stores SHA-256 keys and JSON-encoded normalized file summaries, never rows or output/patch bodies.
+Limits are 1,024 entries, 262,144 UTF-16 summary characters in total and 4,096 per entry; map/key
+object overhead is additionally bounded by the entry limit. Oversized summaries are not cached.
+Returned objects are independent, and changed patch content invalidates the key. Cold reads
+still derive statistics. A preliminary diff probe exposed a regression from recalculating these
+statistics on every request; both that capture and its frozen pre-cache executable are retained.
+
+### Comparison method
+
+The baseline is `c2e9a17`; the candidate is the final working implementation including the
+JSON-encoded delegation guard and bounded summary cache. All captures use Node 24.22.0 on the
+same local desktop, copied migrations and isolated client processes. Telemetry is disabled,
+all providers/data are synthetic, and benchmarks run sequentially without overlapping tests/builds.
+
+The existing workload uses 20 active sessions/SSE connections and the coherent late seed
+(6,305 events/session). The primary comparison uses three alternating 15-second processes per
+version, totaling 11,000 measured turns. They check receipt/content correctness,
+FIFO/non-overlap, drained operations, retained changes and listener cleanup. Earlier 30-second
+captures remain in the artifacts. One final 30-second candidate control slowed while a new Chrome
+process was consuming CPU; the subsequent alternating controls compare both versions under the
+then-current desktop conditions. Host load and run order still limit small timing claims.
+
+A verbose-history workload uses 20 concurrent readers, 300 mixed events/session, complete
+conversation text, 16,800-byte ordinary bodies duplicated in raw/structured tool output, and terminal
+chunks. Three processes/version perform 600 requests each (3,600 total), with identical
+selections/cursors. It measures server CPU/lag/peak memory and client latency through JSON decoding.
+Fresh baseline reader captures were repeated immediately after final candidate captures to check
+the same CPU conditions; all earlier baselines/candidates and execution order are retained. Seed/warmup collection happens before timing;
+no GC is forced during measured load.
+
+Opening one tool/session is measured separately: 20 concurrent detail readers, 20 waves/process,
+1,200 final-candidate requests. Sixty complete tool-detail hashes match baseline inline rows.
+Client retention is a separate six-process diagnostic: parse and hold one page/session, allow HTTP
+cleanup and collect, release those pages, then collect again. This measures retained JSON page data
+in a Node client, excluding application/React/DOM and server memory. Original pre/post-HTTP heap
+deltas were noisy for small compact pages, including negative values; these remain in raw artifacts
+and are not used as retained-page memory estimates.
+
+### Verbose read/terminal history
+
+Values are medians of three processes; p95 is each process's request p95. Sizes are UTF-8 JSON
+body bytes before compression. MiB uses 1,048,576 bytes.
+
+| Metric                                  | Full history | Compact history |
+| --------------------------------------- | -----------: | --------------: |
+| Response bytes/page                     |    1,003,243 |          12,340 |
+| Retained parsed pages, 20 clients (MiB) |        18.59 |            0.32 |
+| History request p95 (ms)                |       245.86 |          214.74 |
+| Server CPU/request (ms)                 |        11.52 |           10.45 |
+| Server peak RSS (MiB)                   |       588.07 |          377.57 |
+| Server peak used heap (MiB)             |       376.53 |          170.37 |
+| Server event-loop delay p99 (ms)        |        21.00 |           14.32 |
+
+Default transfer falls **98.8%**, and retained parsed-page
+heap falls **98.3%**. Median server peak RSS falls
+**35.8%** in this synthetic verbose workload. These
+are not reductions in total browser memory or guarantees about long-running server RSS.
+
+Median history p95 improves 12.7%, with variability: baseline
+process p95s span 240.00–259.42 ms
+and candidate p95s span 214.49–228.93 ms.
+Every completed capture is included. The stronger result is transfer and retained payload size;
+these timings do not establish a consistently lower tail-latency bound.
+
+Expanding an output adds a request. The sampled complete read-tool detail is 35,212 bytes,
+with median process p95 **22.71 ms** on localhost at 20 concurrent readers. Its cost is
+excluded from default page timing. Expanding every entry adds requests and full bodies; reopening
+after collapse fetches again.
+
+### Structured diff history
+
+A separate three-process comparison/version uses the same 20-reader shape with
+600-hunk structured patches and distinct per-session paths. Each process records a cold first batch
+of 20 requests before two warmup waves, then 600 repeated history reads. Fresh baseline diff captures follow the final candidate captures; original alternating comparisons are also retained. The summary cache is warm
+during repeated-load measurements. Selections and full-detail hashes match across versions.
+
+| Metric                           | Full history | Compact history |
+| -------------------------------- | -----------: | --------------: |
+| Response bytes/page              |    1,011,607 |          18,368 |
+| Cold first-batch p95 (ms)        |       360.92 |          511.35 |
+| Repeated history p95 (ms)        |       278.93 |          274.63 |
+| Server CPU/request (ms)          |        12.25 |           12.80 |
+| Server peak RSS (MiB)            |       582.25 |          379.57 |
+| Server event-loop delay p99 (ms) |        21.28 |           14.72 |
+
+This case demonstrates the remaining tradeoff. Transfer falls 98.2%
+and median server peak RSS falls 34.8%, but cold p95 is
+**41.7% slower**, and repeated p95 is
+1.5% lower. Candidate repeated p95s span
+267.31–326.05 ms;
+no outlier is discarded. Compact output still requires full-body reading/validation, hashing and
+projection, and cold requests must derive accurate statistics. The cache avoids repeated patch
+scanning but does not remove that initial work. Persisting a small compact read model/summary on
+write is a possible next step if cold diff latency is the priority; it is outside this migration.
+
+### Existing text-oriented workload
+
+The following medians use the short alternating controls described above.
+
+| Metric                           | Full history | Compact history |
+| -------------------------------- | -----------: | --------------: |
+| Turns/second                     |       118.52 |          117.84 |
+| CPU ms/100 turns                 |       891.66 |          898.58 |
+| Median batch history p95 (ms)    |       151.42 |          152.73 |
+| Median batch completion p95 (ms) |       115.20 |          113.71 |
+| Server event-loop delay p99 (ms) |        47.68 |           48.04 |
+
+This feature primarily reduces default transfer/retention for verbose outputs. It does not speed
+up provider inference or reduce complete conversation text. Small control differences should be
+read against host activity and the per-run ranges in `comparison.json`.
+
+### Verification and retained artifacts
+
+The 1,614-test full Node/browser suite passed before final backend refinements. Subsequent focused
+checks cover the added empty-summary/delegation cases, cache reuse/invalidation/mutation isolation,
+entry/character eviction and oversized-summary bypass, plus page encoding/scheduling, session
+scoping and HTTP/SSE replay. The final backend set passes 40 checks across five files; workspace
+types, architecture/dependency checks, 11 architecture regressions, lint/formatting and server/web
+builds pass. Twenty-four legacy HTTP cases remain byte-identical. Real workload assertions verify
+complete text, unique receipts, FIFO/non-overlap, drained operations/history jobs and listener
+cleanup. Production source/executables match the final frozen candidate.
+
+Ignored artifacts are in `performance-results/compact-history-comparison/`: `manifest.json` pins
+source/runtime/seed provenance and cache limits; `comparison.json` includes all process results and
+final comparison medians/ranges; `validation.json` records invariants. `variants/after` is the final
+candidate; `after-initial`, `after-guard` and `after-cache` preserve earlier candidates. Original and intermediate
+captures, including the pre-cache diff probe and noisy memory diagnostics, remain available.
+`checks/` retains verification output. All snapshots contain copied migration directories and
+link only node_modules dependencies.
+
+With the retained local snapshots/seed, run individual captures sequentially with fresh labels:
+
+```sh
+node performance-results/compact-history-comparison/run.mjs rerun-before before control 15
+node performance-results/compact-history-comparison/run.mjs rerun-after after control 15
+AGENTCTL_PROFILE_VARIANT=after NODE_OPTIONS=--import=./performance-results/compact-history-comparison/variant-hook.mjs node --expose-gc performance-results/compact-history-comparison/reader.mjs /tmp/compact-history-reader.json
+```
+
+`release-sequence.mjs` records the final text controls, ordinary history, retention and diff
+captures; `release-baselines.mjs` records the refreshed history baselines; earlier sequences and snapshots remain available. Preserve their fixed-label outputs before rerunning. `analyze.py` and
+`validate.py` regenerate the comparison and assertions. The reused soak template still labels seed
+history as 200 rows; actual late-seed size and the disabled seeding step are pinned in the runner
+and manifest. Forced collection remains diagnostic-only; application code does not force GC.

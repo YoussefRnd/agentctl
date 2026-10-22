@@ -2,6 +2,7 @@ import {
   ToolDiffBlock as DiffBlock,
   ToolLocations as LocationsView,
   ToolOutput,
+  EventDetailContent,
 } from '@/shared/transcript';
 import { useState, useEffect, useRef, memo, type ReactElement } from 'react';
 import {
@@ -14,7 +15,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { StreamingDots, getToolMeta } from '@/shared';
-import type { SessionEventToolCallData } from '@agentctl/shared';
+import type { SessionEventToolCallData, SessionEventRow } from '@agentctl/shared';
 
 function formatDuration(durationMs: number): string {
   if (durationMs < 1000) return `${String(durationMs)}ms`;
@@ -157,11 +158,13 @@ export const ToolCallCard = memo(function ToolCallCard({
   payload,
   isStreaming = false,
   durationMs,
+  event,
 }: {
   tool: string;
   payload: SessionEventToolCallData;
   isStreaming?: boolean;
   durationMs?: number | null;
+  event?: SessionEventRow;
 }) {
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -186,7 +189,7 @@ export const ToolCallCard = memo(function ToolCallCard({
   const open = userToggled ?? isStreaming;
 
   const args = payload.arguments ?? {};
-  const hasDetails = hasToolCallDetails(payload);
+  const hasDetails = event?.details !== undefined || hasToolCallDetails(payload);
 
   const status = payload.status;
   const isFailed = status === 'failed';
@@ -267,7 +270,15 @@ export const ToolCallCard = memo(function ToolCallCard({
 
         {open && hasDetails && (
           <div className="border-border/20 border-t px-3 py-2.5">
-            <ToolCallDetails call={payload} />
+            {event ? (
+              <EventDetailContent event={event}>
+                {(full) => (
+                  <ToolCallDetails call={full.type === 'tool_call' ? full.data : payload} />
+                )}
+              </EventDetailContent>
+            ) : (
+              <ToolCallDetails call={payload} />
+            )}
           </div>
         )}
       </div>
