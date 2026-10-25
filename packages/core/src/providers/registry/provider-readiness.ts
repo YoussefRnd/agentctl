@@ -1,23 +1,19 @@
 import type { CredentialStore } from '../../security/credential-store.js';
 import type { AgentDriver } from '../../agent/types.js';
-import type { Logger } from '../../logger.js';
 import { Provider, type ProviderData } from '../provider.js';
 import type { ProviderStore } from './provider-store.js';
 import type { ProviderLauncher } from './provider-launcher.js';
 import type { ProviderAuthCoordinator } from './provider-auth-coordinator.js';
-import type { BinaryInstaller } from './binary-installer.js';
 import type { RegistryAgent, ProviderDiscovery } from '@agentctl/shared';
 import { findAgentConfigOption } from '@agentctl/shared';
 import { jsonCodecs } from '../../db/json-codecs.js';
 
 interface Dependencies {
   credentials: Pick<CredentialStore, 'resolveEnvSync'>;
-  store: Pick<ProviderStore, 'get' | 'setInstallState' | 'setAuthState'>;
+  store: Pick<ProviderStore, 'get'>;
   authCoordinator: Pick<ProviderAuthCoordinator, 'waitForCredentialOperation'>;
-  installer: Pick<BinaryInstaller, 'isInstalledCommand'>;
-  launcher: Pick<ProviderLauncher, 'invalidateProbe' | 'resolveLaunch'>;
+  launcher: Pick<ProviderLauncher, 'invalidateProbe' | 'resolveLaunch' | 'prepareLaunch'>;
   runtime: AgentDriver;
-  logger: Logger;
   sync: () => Promise<void>;
   install: (id: string) => Promise<ProviderDiscovery>;
   getAgent: (id: string, fallback?: ProviderData) => RegistryAgent | undefined;
@@ -46,25 +42,18 @@ export class ProviderReadiness {
 
     const agent = this.deps.getAgent(providerId, row);
 
-    if (
-      row.installState === 'installed_local' &&
-      !this.deps.installer.isInstalledCommand(row.registryAgentId ?? providerId, row.command)
-    ) {
-      this.deps.logger.warn(
-        { providerId, command: row.command, version: agent?.version ?? row.version },
-        'Managed provider executable is missing; reinstalling',
-      );
-      this.deps.store.setInstallState(providerId, 'not_installed');
-      this.deps.store.setAuthState(providerId, 'unknown');
-      row = this.deps.store.get(providerId) ?? row;
-    }
-
     if (row.installState === 'not_installed') {
       await this.deps.install(providerId);
       const updated = this.deps.store.get(providerId);
       if (!updated) throw new Error(`Provider ${providerId} vanished after install`);
       return new Provider(updated, this.deps.credentials);
     }
+
+    await this.deps.launcher.prepareLaunch(
+      providerId,
+      this.deps.launcher.resolveLaunch(row, agent),
+    );
+    row = this.deps.store.get(providerId) ?? row;
 
     if (!options.force && row.authState === 'required') {
       return new Provider(row, this.deps.credentials);

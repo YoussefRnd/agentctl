@@ -204,6 +204,9 @@ export class PersistentAgentConnectionManager {
     epoch: number,
     mcpGateway?: AgentMcpGateway,
   ): Promise<PersistentConnection> {
+    launch = await this.launcher.prepareLaunch(providerId, launch);
+    if (this.disposed || (this.providerEpochs.get(providerId) ?? 0) !== epoch)
+      throw new Error('Provider connection was closed during preparation');
     const generation = this.nextGeneration++;
     this.diagnostics?.record({
       kind: 'connection_starting',

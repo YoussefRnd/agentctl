@@ -25,6 +25,7 @@ describe('ProviderLauncher', () => {
       })
       .run();
     const launcher = new ProviderLauncher(new ProviderStore(db), new BinaryInstaller());
+    vi.spyOn(launcher, 'prepareLaunch').mockImplementation(async (_id, launch) => launch);
     const inspectProvider = vi.fn().mockRejectedValue(new Error('temporary transport failure'));
     const runtime = { inspectProvider } as unknown as AgentDriver;
     const agent: RegistryAgent = {
@@ -49,6 +50,7 @@ describe('ProviderLauncher', () => {
   test('pins plain uvx packages while preserving explicit specifications', () => {
     expect(resolveUvxPackageSpec('agent-pkg', '1.2.3')).toBe('agent-pkg==1.2.3');
     expect(resolveUvxPackageSpec('agent-pkg==2.0.0', '1.2.3')).toBe('agent-pkg==2.0.0');
+    expect(resolveUvxPackageSpec('agent-pkg@2.0.0', '1.2.3')).toBe('agent-pkg==2.0.0');
   });
 
   test('keeps persisted package-runner args pinned when registry metadata advances', () => {

@@ -36,6 +36,54 @@ final disposal rejects new connections. Auth attempt listeners/timers are remove
 Adapters must settle credential-changing work after abort; returning cancellation does not release
 the credential family lane early. Install rollback retains the last working executable and auth.
 
+## Provider failure diagnostics
+
+`agent/operation-diagnostics.ts` records stage durations without changing deadlines or retry
+behavior. Install stages distinguish package preparation, download, verification, extraction,
+activation and connection. Both ACP control adapters record process launch, initialization and
+probe-session creation/closure; a timeout retains the stage that was active at the deadline.
+
+`registry/provider-diagnostics.ts` saves failed installations and connection checks locally under
+`$AGENTCTL_HOME/diagnostics/providers/` (default `~/.agentctl/diagnostics/providers/`). Each failure
+has a `report.json` containing provider/version, stage timings, Node/platform information, nested
+network/provider causes, exit details and the bounded stderr excerpt when available. The local
+server log includes the report path. These files are separate from exportable agent diagnostics
+and are never sent through telemetry.
+
+Before discarding an npm candidate cache, copy its five latest regular `.log` files, retaining
+at most the last 256 KiB per file. Connection checks also capture logs from their configured npm
+cache or the platform default. `npmLogSources` maps retained filenames to the original names.
+Records redact known environment secrets, credential patterns, private home paths and URL query
+parameters; they omit raw launch arguments, environment maps and protocol frames. Failure folders
+are private (`0700`), files are `0600`, and only the latest 20 failure folders are retained.
+Failure to collect or write diagnostics must not prevent cleanup, replace the original error,
+or change rollback. Successful updates and manual retries leave earlier evidence available
+until normal retention removes it.
+
+`registry/provider-preparation.ts` is the shared launch gate before probes, sessions and
+authentication for every ACP provider. It dispatches by installation format, never provider ID:
+
+- npm: validate the completed manifest, lockfile, installed version and executable links;
+  rebuild incomplete trees in a fresh cache using the pinned package specification.
+- uvx: install the Python tool in a dedicated tool directory/cache, validate its environment
+  and executable, then launch that prepared executable directly. Python-style and registry
+  `name@version` package specifications are normalized without changing the requested version.
+- Managed archives: validate the executable against the installation receipt; repair missing
+  or changed artifacts from the original release metadata. New activations write receipts
+  containing the download target and executable fingerprint before removing their backup.
+  Valid legacy installations remain usable; a damaged older release without its original
+  metadata requires selecting a release through Update/Install rather than guessing a URL.
+- System/user-managed executables: validate the configured path or PATH command and report
+  an actionable missing-executable error. AgentCTL never rewrites an external installation.
+
+Preparation has its own ten-minute deadline and completes before the ACP deadline starts.
+Concurrent repairs of a shared installation are coalesced, and shutdown cancels and awaits
+them. Only validated candidates are committed; versions, credentials and other environment
+settings remain intact. Installation/update candidates use the same gate without publishing
+their launch until verification. Failed preparation preserves npm/CLI diagnostics before
+candidate cleanup. Old npm and uvx caches follow the same orphan retention policy. Healthy
+installations are not rebuilt in response to authentication, network or protocol errors.
+
 ## Accepted protocol implementation
 
 The existing adapter already separates version drivers, running sessions, control operations,

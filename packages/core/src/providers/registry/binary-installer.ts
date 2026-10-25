@@ -4,7 +4,11 @@ import path from 'node:path';
 import os from 'node:os';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import type { RegistryAgent, RegistryDistributionBinaryTarget } from '@agentctl/shared';
+import {
+  registryDistributionBinaryTargetSchema,
+  type RegistryAgent,
+  type RegistryDistributionBinaryTarget,
+} from '@agentctl/shared';
 import { type Logger, noopLogger } from '../../logger.js';
 import { ProviderLifecycleError } from './provider-lifecycle-error.js';
 
@@ -124,6 +128,94 @@ export async function resolveGitHubSha256(
 }
 
 export class BinaryInstaller {
+  managedVersionDir(providerId: string, command: string): string | undefined {
+    const root = path.resolve(this.getInstallDir(providerId));
+    const relative = path.relative(root, path.resolve(command));
+    const segment = relative.split(path.sep)[0];
+    return /^v_[a-f0-9]{16}_[a-f0-9]{16}$/.test(segment) && !path.isAbsolute(relative)
+      ? path.join(root, segment)
+      : undefined;
+  }
+
+  async readReceipt(providerId: string, command: string) {
+    const directory = this.managedVersionDir(providerId, command);
+    if (!directory) return undefined;
+    let raw: string;
+    try {
+      raw = await fs.promises.readFile(path.join(directory, '.agentctl-install.json'), 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw error;
+    }
+    const value = JSON.parse(raw);
+    const target = registryDistributionBinaryTargetSchema.parse(value.target);
+    if (
+      value.providerId !== providerId ||
+      typeof value.version !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(value.binarySha256) ||
+      typeof value.binarySize !== 'number' ||
+      typeof value.binaryMtimeMs !== 'number' ||
+      this.getVersionedInstallDir(providerId, value.version, target.archive) !== directory ||
+      path.resolve(directory, target.cmd) !== path.resolve(command)
+    )
+      throw new Error('Invalid managed installation receipt');
+    return {
+      version: value.version as string,
+      target,
+      binarySha256: value.binarySha256 as string,
+      binarySize: value.binarySize as number,
+      binaryMtimeMs: value.binaryMtimeMs as number,
+    };
+  }
+
+  async isPreparedCommand(
+    providerId: string,
+    command: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    if (!this.isInstalledCommand(providerId, command)) return false;
+    try {
+      const receipt = await this.readReceipt(providerId, command);
+      // Legacy installations were activated atomically before receipts existed.
+      if (!receipt) return true;
+      const stat = await fs.promises.stat(command);
+      if (stat.size === receipt.binarySize && stat.mtimeMs === receipt.binaryMtimeMs) return true;
+      return (await computeSha256(command, signal)) === receipt.binarySha256;
+    } catch {
+      signal?.throwIfAborted();
+      return false;
+    }
+  }
+
+  private async recordReceipt(
+    agent: RegistryAgent,
+    target: RegistryDistributionBinaryTarget,
+    directory: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const command = path.resolve(directory, target.cmd);
+    const binarySha256 = await computeSha256(command, signal);
+    const stat = await fs.promises.stat(command);
+    const temporary = path.join(directory, `.agentctl-install-${crypto.randomUUID()}.tmp`);
+    try {
+      await fs.promises.writeFile(
+        temporary,
+        JSON.stringify({
+          providerId: agent.id,
+          version: agent.version,
+          target,
+          binarySha256,
+          binarySize: stat.size,
+          binaryMtimeMs: stat.mtimeMs,
+        }),
+        { mode: 0o600 },
+      );
+      signal?.throwIfAborted();
+      await fs.promises.rename(temporary, path.join(directory, '.agentctl-install.json'));
+    } finally {
+      await fs.promises.rm(temporary, { force: true }).catch(() => {});
+    }
+  }
   getInstallDir(providerId: string): string {
     assertSafePathSegment(providerId, 'Provider id');
     return path.join(getHome(), 'bin', providerId);
@@ -151,7 +243,11 @@ export class BinaryInstaller {
     if (!binaryPath.startsWith(`${base}${path.sep}`)) return false;
     try {
       const stats = fs.statSync(binaryPath);
-      return stats.isFile() && (process.platform === 'win32' || (stats.mode & 0o111) !== 0);
+      return (
+        stats.isFile() &&
+        stats.size > 0 &&
+        (process.platform === 'win32' || (stats.mode & 0o111) !== 0)
+      );
     } catch {
       return false;
     }
@@ -166,7 +262,11 @@ export class BinaryInstaller {
       const binaryPath = path.resolve(versionedDir, target.cmd);
       try {
         const stats = fs.statSync(binaryPath);
-        return stats.isFile() && (process.platform === 'win32' || (stats.mode & 0o111) !== 0);
+        return (
+          stats.isFile() &&
+          stats.size > 0 &&
+          (process.platform === 'win32' || (stats.mode & 0o111) !== 0)
+        );
       } catch {
         return false;
       }
@@ -306,8 +406,9 @@ export class BinaryInstaller {
       );
     }
     try {
-      const existing = await fs.promises.stat(existingBinary);
-      if (existing.isFile() && (process.platform === 'win32' || (existing.mode & 0o111) !== 0)) {
+      if (await this.isPreparedCommand(agent.id, existingBinary, options.signal)) {
+        if (!(await this.readReceipt(agent.id, existingBinary)))
+          await this.recordReceipt(agent, target, versionedDir, options.signal);
         return {
           command: existingBinary,
           args: target.args ?? [],
@@ -329,14 +430,20 @@ export class BinaryInstaller {
           cause: error,
         });
       }
-      throw new ProviderLifecycleError('DOWNLOAD_FAILED', 'Failed to download provider archive', {
-        cause: error,
-      });
+      throw Object.assign(
+        new ProviderLifecycleError('DOWNLOAD_FAILED', 'Failed to download provider archive', {
+          cause: error,
+        }),
+        { downloadUrl: archiveUrl },
+      );
     }
     if (!response.ok || !response.body) {
-      throw new ProviderLifecycleError(
-        'DOWNLOAD_FAILED',
-        `Failed to download binary archive: ${String(response.status)} ${response.statusText}`,
+      throw Object.assign(
+        new ProviderLifecycleError(
+          'DOWNLOAD_FAILED',
+          `Failed to download binary archive: ${String(response.status)} ${response.statusText}`,
+        ),
+        { downloadUrl: archiveUrl, status: response.status },
       );
     }
     if (response.url && new URL(response.url).protocol !== 'https:') {
@@ -408,7 +515,11 @@ export class BinaryInstaller {
               cause: error,
             });
           }
-          throw error;
+          throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
+            downloadUrl: archiveUrl,
+            downloadedBytes,
+            totalBytes,
+          });
         }
 
         options.onProgress?.({ downloadedBytes, totalBytes });
@@ -464,7 +575,7 @@ export class BinaryInstaller {
         );
       }
       const stagedStats = await fs.promises.lstat(stagedBinary);
-      if (!stagedStats.isFile() || stagedStats.isSymbolicLink()) {
+      if (!stagedStats.isFile() || stagedStats.isSymbolicLink() || stagedStats.size === 0) {
         throw new ProviderLifecycleError(
           'UNSAFE_ARCHIVE',
           `Provider executable is not a regular file: ${target.cmd}`,
@@ -507,6 +618,7 @@ export class BinaryInstaller {
         ) {
           throw new Error('Activated provider executable is not runnable');
         }
+        await this.recordReceipt(agent, target, versionedDir, options.signal);
         if (hadPreviousTarget) {
           await removeDirWithRetry(backupDir, { logger }).catch((error: unknown) => {
             logger.warn({ error }, `Failed to remove provider backup directory: ${backupDir}`);

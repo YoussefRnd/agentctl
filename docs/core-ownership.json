@@ -78,6 +78,7 @@
         "packages/core/src/agent/error-redaction.ts",
         "packages/core/src/agent/errors.ts",
         "packages/core/src/agent/index.ts",
+        "packages/core/src/agent/operation-diagnostics.ts",
         "packages/core/src/agent/runtime-services.ts",
         "packages/core/src/agent/text-generation.ts",
         "packages/core/src/agent/tool-effects.ts",
@@ -209,14 +210,17 @@
         "packages/core/src/providers/provider.ts",
         "packages/core/src/providers/registry/binary-archive.ts",
         "packages/core/src/providers/registry/binary-installer.ts",
+        "packages/core/src/providers/registry/npx-cache.ts",
         "packages/core/src/providers/registry/provider-auth-coordinator.ts",
         "packages/core/src/providers/registry/provider-auth-operations.ts",
         "packages/core/src/providers/registry/provider-configuration.ts",
         "packages/core/src/providers/registry/provider-data.ts",
+        "packages/core/src/providers/registry/provider-diagnostics.ts",
         "packages/core/src/providers/registry/provider-installation-service.ts",
         "packages/core/src/providers/registry/provider-launcher.ts",
         "packages/core/src/providers/registry/provider-lifecycle-error.ts",
         "packages/core/src/providers/registry/provider-operation-coordinator.ts",
+        "packages/core/src/providers/registry/provider-preparation.ts",
         "packages/core/src/providers/registry/provider-probing-service.ts",
         "packages/core/src/providers/registry/provider-queries.ts",
         "packages/core/src/providers/registry/provider-readiness.ts",
@@ -225,7 +229,8 @@
         "packages/core/src/providers/registry/provider-sync.ts",
         "packages/core/src/providers/registry/provider-updates.ts",
         "packages/core/src/providers/registry/registry-fetcher.ts",
-        "packages/core/src/providers/registry/registry-parser.ts"
+        "packages/core/src/providers/registry/registry-parser.ts",
+        "packages/core/src/providers/registry/uvx-cache.ts"
       ]
     },
     {

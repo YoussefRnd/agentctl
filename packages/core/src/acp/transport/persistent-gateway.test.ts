@@ -29,7 +29,7 @@ test('persistent sessions retain the requested MCP gateway and its permission po
   const manager = new PersistentAgentConnectionManager(
     { get: () => row, listAll: () => [row] } as never,
     { getSnapshot: () => ({ data: JSON.stringify(registry) }) } as never,
-    { resolveLaunch: () => launch } as never,
+    { resolveLaunch: () => launch, prepareLaunch: async () => launch } as never,
   );
   const runtime = new AcpV1AgentDriver();
   runtime.setConnectionManager(manager);

@@ -4,8 +4,54 @@ import path from 'node:path';
 import type { RegistryAgent } from '@agentctl/shared';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { BinaryInstaller } from './binary-installer.js';
+import { diagnosticError } from '../../agent/operation-diagnostics.js';
 
 const originalAgentctlHome = process.env.AGENTCTL_HOME;
+
+describe('BinaryInstaller failure diagnostics', () => {
+  const agent: RegistryAgent = {
+    id: 'diagnostic-agent',
+    name: 'Diagnostic Agent',
+    version: '1.0.0',
+    description: '',
+    authors: [],
+    distribution: {
+      binary: {
+        'linux-x86_64': {
+          archive: 'https://example.com/agent.tar.gz?signature=private-signature',
+          cmd: 'agent',
+          env: {},
+        },
+      },
+    },
+  };
+
+  it('retains the underlying connection error and redacts the download query', async () => {
+    const cause = Object.assign(new Error('connect timed out'), {
+      code: 'ETIMEDOUT',
+      syscall: 'connect',
+    });
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed', { cause }));
+    vi.stubGlobal('fetch', fetchMock);
+    const error = await new BinaryInstaller()
+      .install(agent, 'linux-x86_64')
+      .catch((e: unknown) => e);
+    expect(diagnosticError(error)).toMatchObject({
+      code: 'DOWNLOAD_FAILED',
+      downloadUrl: 'https://example.com/agent.tar.gz?[redacted query]',
+      cause: { cause: { code: 'ETIMEDOUT', syscall: 'connect' } },
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('retains the HTTP status when the archive server rejects a request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 503 })));
+    const error = await new BinaryInstaller()
+      .install(agent, 'linux-x86_64')
+      .catch((e: unknown) => e);
+    expect(diagnosticError(error)).toMatchObject({ code: 'DOWNLOAD_FAILED', status: 503 });
+  });
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

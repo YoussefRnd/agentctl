@@ -45,5 +45,10 @@ export function withProcessDiagnostics(error: unknown, child: ChildProcess): Err
   const excerpt = stderrExcerpt(child);
   // Diagnostics belong in logs, not in the protocol/user-facing error message.
   if (excerpt) Object.assign(result, { processDiagnostics: excerpt });
+  Object.assign(result, {
+    processPid: child.pid,
+    processExitCode: child.exitCode,
+    processSignal: child.signalCode,
+  });
   return result;
 }

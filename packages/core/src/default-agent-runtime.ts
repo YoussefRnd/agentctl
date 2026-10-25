@@ -44,7 +44,8 @@ export function createAgentRuntimeServices(
   const fetcher = options.fetcher ?? new RegistryFetcher(db!, options.logger);
   const installer = options.installer ?? new BinaryInstaller();
   const credentials = options.credentials ?? getDefaultCredentialVault();
-  const launcher = options.launcher ?? new ProviderLauncher(store, installer, credentials);
+  const launcher =
+    options.launcher ?? new ProviderLauncher(store, installer, credentials, options.logger);
 
   const connections = new PersistentAgentConnectionManager(
     store,

@@ -17,6 +17,7 @@ import type {
   AgentInspectionOptions,
 } from '../../agent/types.js';
 import { applicationInfo } from '../../config/application-info.js';
+import { OperationDiagnostics } from '../../agent/operation-diagnostics.js';
 import {
   DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
   getAgentRequestTimeoutMs,
@@ -61,18 +62,28 @@ export class AcpV1ProviderControls {
       connection: AcpAgentConnection,
       initialization: InitializeResponse,
       capabilities: AcpParsedCapabilities,
+      trace: OperationDiagnostics,
     ) => Promise<T>,
     options: AgentAuthenticationOptions & { inspect?: boolean; auth?: boolean } = {},
   ): Promise<T> {
-    const { child, transport } = spawnManagedProcess({
-      command,
-      args,
-      env,
-      cwd: os.tmpdir(),
-      spawnImpl: this.spawnImpl,
-      logger: this.logger,
-      createTransport: this.createTransport,
-    });
+    const trace = new OperationDiagnostics(name, this.logger, { adapter: 'v1' });
+    trace.stage('spawning');
+    const { child, transport } = (() => {
+      try {
+        return spawnManagedProcess({
+          command,
+          args,
+          env,
+          cwd: os.tmpdir(),
+          spawnImpl: this.spawnImpl,
+          logger: this.logger,
+          createTransport: this.createTransport,
+        });
+      } catch (error) {
+        trace.fail(error);
+        throw error;
+      }
+    })();
     void transport.closed.catch(() => undefined);
     const abort = () => transport.kill();
     options.signal?.addEventListener('abort', abort, { once: true });
@@ -97,19 +108,29 @@ export class AcpV1ProviderControls {
     };
     try {
       options.signal?.throwIfAborted();
-      return await withTimeout(
+      trace.stage('initializing');
+      const result = await withTimeout(
         (async () => {
           const initialized = await initializeAcpConnection(connection, {
             transport,
             clientInfo: applicationInfo(name),
             clientCapabilities: capabilities,
           });
-          return operation(connection, initialized.initResult, initialized.parsedCapabilities);
+          if (name !== 'agentctl-probe') trace.stage('operation');
+          return operation(
+            connection,
+            initialized.initResult,
+            initialized.parsedCapabilities,
+            trace,
+          );
         })(),
         options.timeoutMs ?? ACP_SESSION_OPERATION_TIMEOUT_MS,
         `performing ${name} operation`,
       );
+      trace.finish('success');
+      return result;
     } catch (error) {
+      trace.fail(error);
       throw withProcessDiagnostics(error, child);
     } finally {
       options.signal?.removeEventListener('abort', abort);
@@ -136,20 +157,23 @@ export class AcpV1ProviderControls {
       args,
       env,
       'agentctl-probe',
-      async (connection, init, capabilities) => {
+      async (connection, init, capabilities, trace) => {
         let configOptions: AgentConfigOption[] = [];
         let modes: string[] | undefined;
         let status: AgentDescriptor['status'] = 'ready';
         try {
+          trace.stage('opening-session');
           const session = await connection.newSession({ cwd: os.tmpdir(), mcpServers: [] });
           configOptions = extractConfigOptionsFromSessionResult(session);
           modes = session.modes?.availableModes.map((mode) => mode.id);
-          if (capabilities.supportsCloseSession)
+          if (capabilities.supportsCloseSession) {
+            trace.stage('closing-session');
             await withTimeout(
               connection.closeSession({ sessionId: session.sessionId }),
               ACP_SESSION_CLOSE_TIMEOUT_MS,
               'closing provider probe',
             ).catch(() => undefined);
+          }
         } catch (error) {
           if (!isAcpAuthenticationRequired(error)) throw error;
           status = 'needs_auth';

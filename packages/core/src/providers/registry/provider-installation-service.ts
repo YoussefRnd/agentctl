@@ -2,13 +2,13 @@ import { ProviderUpdates } from './provider-updates.js';
 import { registryProviderMetadata } from './provider-data.js';
 import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
 import path from 'node:path';
-import os from 'node:os';
-import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { Logger } from '../../logger.js';
 import type { AgentDriver } from '../../agent/types.js';
+import { OperationDiagnostics } from '../../agent/operation-diagnostics.js';
+import { preserveProviderFailure } from './provider-diagnostics.js';
+import { createNpxCache, prepareNpxPackage } from './npx-cache.js';
+import { preparationEnvironment } from './provider-preparation.js';
 import { Provider, type ProviderData } from '../provider.js';
 import type { ProviderStore } from './provider-store.js';
 import { getHome, getPlatformKey, type BinaryInstaller } from './binary-installer.js';
@@ -24,7 +24,6 @@ import {
   type ProviderLifecycleErrorCode,
 } from './provider-lifecycle-error.js';
 
-const execFileAsync = promisify(execFile);
 export interface ProviderInstallOptions {
   prewarmNpx?: boolean;
 }
@@ -113,7 +112,24 @@ export class ProviderInstallationService {
     let installedVersion: string | null;
     let managedVersionDir: string | undefined;
     let managedVersionDiscarded = false;
-    let candidateNpxCache: string | undefined;
+    let candidatePackageCache: string | undefined;
+    let diagnosticEnvironment: Record<string, string> = {};
+    const trace = new OperationDiagnostics('install', this.deps.logger, {
+      providerId,
+      version: agent.version,
+    });
+    trace.stage('preparing');
+    const preserveFailure = (error: unknown) =>
+      preserveProviderFailure({
+        trace,
+        providerId,
+        version: agent.version,
+        installSource,
+        error,
+        npmCache: installSource === 'npx' ? candidatePackageCache : undefined,
+        environment: diagnosticEnvironment,
+        logger: this.deps.logger,
+      });
 
     const discardManagedCandidate = async () => {
       if (!managedVersionDir || managedVersionDiscarded) return;
@@ -139,12 +155,14 @@ export class ProviderInstallationService {
         });
     };
 
-    const discardNpxCandidate = async () => {
-      if (!candidateNpxCache) return;
-      await fs.rm(candidateNpxCache, { recursive: true, force: true }).catch((error: unknown) => {
-        this.deps.logger.warn({ error, providerId }, 'Failed to discard rejected npx cache');
-      });
-      candidateNpxCache = undefined;
+    const discardPackageCandidate = async () => {
+      if (!candidatePackageCache) return;
+      await fs
+        .rm(candidatePackageCache, { recursive: true, force: true })
+        .catch((error: unknown) => {
+          this.deps.logger.warn({ error, providerId }, 'Failed to discard rejected package cache');
+        });
+      candidatePackageCache = undefined;
     };
 
     const restorePreviousInstall = (installError: string | null): boolean => {
@@ -167,6 +185,7 @@ export class ProviderInstallationService {
     const setStage = (
       stage: 'preparing' | 'downloading' | 'verifying' | 'extracting' | 'activating' | 'connecting',
     ) => {
+      trace.stage(stage);
       this.deps.store.setInstallDetails(providerId, { stage });
       this.deps.onStateChange();
     };
@@ -193,6 +212,8 @@ export class ProviderInstallationService {
                     : agent.distribution.uvx
                       ? 'uvx'
                       : null;
+
+      if (desiredSource) installSource = desiredSource;
 
       if (desiredSource === 'system' && detected) {
         this.deps.logger.info(
@@ -239,31 +260,13 @@ export class ProviderInstallationService {
         if (options.prewarmNpx) {
           // Finish npm's cold download before the short ACP handshake probe.
           // Each attempt gets its own cache, so an interrupted install cannot poison retries.
-          const cacheKey = crypto
-            .createHash('sha256')
-            .update(`${providerId}\0${agent.version}`)
-            .digest('hex')
-            .slice(0, 20);
-          const cacheRoot = path.join(getHome(), 'provider-npx-cache');
-          await fs.mkdir(cacheRoot, { recursive: true });
-          candidateNpxCache = await fs.mkdtemp(path.join(cacheRoot, `${cacheKey}-`));
-          launchEnv = { ...launchEnv, npm_config_cache: candidateNpxCache };
           const packageSpec = launchArgs[1];
-          if (!packageSpec || !/^[a-zA-Z0-9@/._+~-]+$/.test(packageSpec)) {
-            throw new Error(`Unsafe npx package spec for provider ${providerId}`);
-          }
-          await execFileAsync(
-            process.platform === 'win32' ? 'npm.cmd' : 'npm',
-            ['exec', '--yes', `--package=${packageSpec}`, '--', 'node', '--version'],
-            {
-              cwd: os.tmpdir(),
-              env: { ...process.env, ...launchEnv },
-              signal: controller.signal,
-              timeout: 10 * 60_000,
-              maxBuffer: 1024 * 1024,
-              shell: process.platform === 'win32',
-            },
-          );
+          if (!packageSpec) throw new Error(`Missing npx package spec for provider ${providerId}`);
+          candidatePackageCache = await createNpxCache(providerId, packageSpec);
+          launchEnv = { ...launchEnv, npm_config_cache: candidatePackageCache };
+          diagnosticEnvironment = launchEnv;
+          trace.stage('package-preparation');
+          await prepareNpxPackage(packageSpec, candidatePackageCache, launchEnv, controller.signal);
         }
       } else if (desiredSource === 'uvx' && agent.distribution.uvx) {
         const onPath = await this.deps.launcher.isBinaryOnPath('uvx');
@@ -295,23 +298,56 @@ export class ProviderInstallationService {
         installStage: null,
         installSource,
         installedVersion,
-      } as const;
+      };
 
-      setStage('connecting');
+      setStage('preparing');
       this.deps.launcher.invalidateProbe(providerId, this.deps.runtime, agent);
       let probeSucceeded = false;
-      try {
-        const rowForProbe = this.deps.store.get(providerId);
-        if (!rowForProbe) throw new Error(`Provider ${providerId} vanished during install`);
-        const candidateRow: ProviderData = {
-          ...rowForProbe,
-          ...candidateValues,
-        };
-        const candidateLaunch = this.deps.launcher.resolveLaunchFromBase(candidateRow, {
+      const rowForProbe = this.deps.store.get(providerId);
+      if (!rowForProbe) throw new Error(`Provider ${providerId} vanished during install`);
+      const candidateRow: ProviderData = {
+        ...rowForProbe,
+        ...candidateValues,
+      };
+      const candidateLaunch = await this.deps.launcher.prepareLaunch(
+        providerId,
+        this.deps.launcher.resolveLaunchFromBase(candidateRow, {
           command,
           args: launchArgs,
           env: launchEnv,
-        });
+        }),
+        controller.signal,
+        candidateRow,
+        false,
+      );
+      candidateValues.command = candidateLaunch.command;
+      candidateValues.launchArgs = JSON.stringify(candidateLaunch.args);
+      candidateValues.launchEnv = JSON.stringify({
+        ...launchEnv,
+        ...preparationEnvironment(candidateLaunch.env),
+      });
+      diagnosticEnvironment = candidateLaunch.env;
+      const preparedCache =
+        installSource === 'npx'
+          ? candidateLaunch.env.npm_config_cache
+          : installSource === 'uvx'
+            ? candidateLaunch.env.AGENTCTL_UVX_ROOT
+            : undefined;
+      const packageCacheRoot = path.resolve(
+        getHome(),
+        installSource === 'npx' ? 'provider-npx-cache' : 'provider-uvx-cache',
+      );
+      const previousEnv = previous ? JSON.parse(previous.launchEnv ?? '{}') : {};
+      if (
+        preparedCache &&
+        path.dirname(path.resolve(preparedCache)) === packageCacheRoot &&
+        /^[a-f0-9]{20}-[a-zA-Z0-9]{6}$/.test(path.basename(preparedCache)) &&
+        preparedCache !== previousEnv.npm_config_cache &&
+        preparedCache !== previousEnv.AGENTCTL_UVX_ROOT
+      )
+        candidatePackageCache = preparedCache;
+      setStage('connecting');
+      try {
         const probeResult = await this.deps.launcher.inspectLaunch(
           providerId,
           this.deps.runtime,
@@ -325,6 +361,7 @@ export class ProviderInstallationService {
         });
         probeSucceeded = true;
       } catch (probeErr) {
+        await preserveFailure(probeErr);
         if (controller.signal.aborted) {
           throw controller.signal.reason;
         }
@@ -335,7 +372,7 @@ export class ProviderInstallationService {
         );
         if (hadWorkingInstall) {
           await discardManagedCandidate();
-          await discardNpxCandidate();
+          await discardPackageCandidate();
           restorePreviousInstall(`ACP_HANDSHAKE_FAILED: ${message}`);
         } else {
           // The first installation succeeded. Report connection/auth health independently.
@@ -363,14 +400,16 @@ export class ProviderInstallationService {
 
       if (probeSucceeded) {
         this.deps.store.setInstallDetails(providerId, { stage: null, error: null });
+        trace.finish('success');
       }
 
       const row = this.deps.store.get(providerId);
       if (!row) throw new Error(`Provider ${providerId} vanished`);
       return new Provider(row).toDiscovery();
     } catch (err) {
+      await preserveFailure(err);
       await discardManagedCandidate();
-      await discardNpxCandidate();
+      await discardPackageCandidate();
       const msg = err instanceof Error ? err.message : String(err);
       const code: ProviderLifecycleErrorCode =
         err instanceof ProviderLifecycleError

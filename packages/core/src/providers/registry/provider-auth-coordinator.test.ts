@@ -30,6 +30,7 @@ describe('ProviderAuthCoordinator', () => {
     db = createDatabase(dbPath);
     store = new ProviderStore(db);
     launcher = new ProviderLauncher(store, new BinaryInstaller());
+    vi.spyOn(launcher, 'prepareLaunch').mockImplementation(async (_id, launch) => launch);
     stateChanges = 0;
 
     // Seed test provider in store

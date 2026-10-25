@@ -194,13 +194,17 @@ export class ProviderAuthCoordinator {
         );
       }
 
+      const launch = await this.launcher.prepareLaunch(
+        providerId,
+        this.launcher.resolveLaunch(row, agent),
+        options?.signal,
+      );
       await this.runAuthentication(
         providerId,
         options?.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
         options?.signal,
         'AUTH_FAILED',
         async (signal, timeoutMs) => {
-          const launch = this.launcher.resolveLaunch(row, agent);
           if (!this.runtime.authenticateProvider)
             throw new Error('Agent adapter does not support authentication');
           await this.runtime.authenticateProvider(
@@ -247,13 +251,17 @@ export class ProviderAuthCoordinator {
         );
       }
 
+      const launch = await this.launcher.prepareLaunch(
+        providerId,
+        this.launcher.resolveLaunch(row, agent),
+        options?.signal,
+      );
       await this.runAuthentication(
         providerId,
         options?.timeoutMs ?? DEFAULT_TERMINAL_AUTH_TIMEOUT_MS,
         options?.signal,
         'TERMINAL_AUTH_FAILED',
         async (signal) => {
-          const launch = this.launcher.resolveLaunch(row, agent);
           const { exitCode } = await executeCommand(
             launch.command,
             [...launch.args, ...(targetMethod.args ?? [])],
@@ -439,7 +447,10 @@ export class ProviderAuthCoordinator {
       await this.invalidateCredentialPeers(providerId);
 
       try {
-        const launch = this.launcher.resolveLaunch(row, agent);
+        const launch = await this.launcher.prepareLaunch(
+          providerId,
+          this.launcher.resolveLaunch(row, agent),
+        );
         if (this.runtime.logoutProvider) {
           await this.runtime.logoutProvider(launch.command, launch.args, launch.env);
         }

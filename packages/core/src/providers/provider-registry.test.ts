@@ -1,10 +1,10 @@
-import { test, describe, expect, vi } from 'vite-plus/test';
+import { test, describe, expect, vi, beforeEach, afterEach } from 'vite-plus/test';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { ProviderRegistry } from './provider-registry.js';
-import type { ProviderLauncher } from './registry/provider-launcher.js';
+import { ProviderLauncher } from './registry/provider-launcher.js';
 import type { BinaryInstaller } from './registry/binary-installer.js';
 import { noopLogger } from '../logger.js';
 import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
@@ -13,6 +13,13 @@ import { providers, registrySnapshots } from '../db/schema.js';
 import { getDefaultCredentialVault } from '../default-credential-vault.js';
 
 describe('ProviderRegistry', () => {
+  // Lifecycle tests use fictitious packages/executables; preparation has its own integration tests.
+  beforeEach(() => {
+    vi.spyOn(ProviderLauncher.prototype, 'prepareLaunch').mockImplementation(
+      async (_id, launch) => launch,
+    );
+  });
+  afterEach(() => vi.restoreAllMocks());
   test('automatic updates target only enabled, installed, app-managed providers and continue after a failure', async () => {
     const db = createDatabase(':memory:');
     await db.insert(providers).values([
@@ -194,13 +201,15 @@ describe('ProviderRegistry', () => {
     });
 
     const registry = new ProviderRegistry(db, noopLogger);
-    const { installer } = registry as unknown as { installer: BinaryInstaller };
-    const isInstalledCommand = vi.spyOn(installer, 'isInstalledCommand').mockReturnValue(true);
+    const { launcher } = registry as unknown as { launcher: ProviderLauncher };
     const install = vi.spyOn(registry, 'install');
 
     const provider = await registry.ensureProviderReady(agent.id);
 
-    expect(isInstalledCommand).toHaveBeenCalledWith(agent.id, '/managed/old/managed-ready');
+    expect(launcher.prepareLaunch).toHaveBeenCalledWith(
+      agent.id,
+      expect.objectContaining({ command: '/managed/old/managed-ready' }),
+    );
     expect(install).not.toHaveBeenCalled();
     expect(provider.installState).toBe('installed_local');
     expect(registry.getProvider(agent.id)?.toDiscovery().updateAvailable).toBe(true);
@@ -469,10 +478,14 @@ describe('ProviderRegistry', () => {
     });
     const internals = registry as unknown as { launcher: ProviderLauncher };
     const probe = vi.spyOn(internals.launcher, 'probe');
+    const prepare = vi
+      .spyOn(internals.launcher, 'prepareLaunch')
+      .mockImplementation(async (_id, launch) => launch);
 
     await registry.ensureProviderReady(agent.id);
 
     expect(probe).not.toHaveBeenCalled();
+    expect(prepare).toHaveBeenCalledOnce();
   });
 
   test('startup recovery clears interrupted install and auth states', async () => {

@@ -127,10 +127,8 @@ export class ProviderRegistry {
       credentials: this.credentials,
       store: this.store,
       authCoordinator: this.authCoordinator,
-      installer: this.installer,
       launcher: this.launcher,
       runtime: this.runtime,
-      logger,
       sync: () => this.sync(),
       install: (id) => this.install(id),
       getAgent: (id, row) => this.getAgent(id, row),
@@ -407,12 +405,15 @@ export class ProviderRegistry {
     this.coordinator.stop();
     this.fetcher.dispose?.();
     this.installation.dispose();
+    const preparation = this.launcher.dispose();
     const authentication = this.authCoordinator.dispose();
     this.connectionManager.closeAll();
-    this.disposal = Promise.allSettled([authentication, this.coordinator.idle()]).then(async () => {
-      this.connectionManager.closeAll();
-      await this.connectionManager.dispose?.();
-    });
+    this.disposal = Promise.allSettled([preparation, authentication, this.coordinator.idle()]).then(
+      async () => {
+        this.connectionManager.closeAll();
+        await this.connectionManager.dispose?.();
+      },
+    );
     return this.disposal;
   }
   private getAgent(providerId: string, fallback?: ProviderData): RegistryAgent | undefined {

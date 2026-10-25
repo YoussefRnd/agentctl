@@ -15,6 +15,7 @@ import type {
   AgentInspectionOptions,
 } from '../../agent/types.js';
 import { applicationInfo } from '../../config/application-info.js';
+import { OperationDiagnostics } from '../../agent/operation-diagnostics.js';
 import {
   DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
   getAgentRequestTimeoutMs,
@@ -48,10 +49,11 @@ export class AcpV2ProviderControls {
         args,
         env,
         'agentctl-probe',
-        async (connection, response) => {
+        async (connection, response, trace) => {
           initialization = response;
           let configOptions: AgentConfigOption[] = [];
           if (advertised(response.capabilities).sessions) {
+            trace.stage('opening-session');
             const created = await withTimeout(
               connection.agent.request(methods.agent.session.new, {
                 cwd: os.tmpdir(),
@@ -61,6 +63,7 @@ export class AcpV2ProviderControls {
               'opening provider probe session',
             );
             configOptions = productConfigOptions(created.configOptions);
+            trace.stage('closing-session');
             await connection.agent
               .request(methods.agent.session.close, { sessionId: created.sessionId })
               .catch(() => undefined);
@@ -181,18 +184,31 @@ export class AcpV2ProviderControls {
     args: string[],
     env: Record<string, string> | undefined,
     name: string,
-    operation: (connection: ClientConnection, initialization: InitializeResponse) => Promise<T>,
+    operation: (
+      connection: ClientConnection,
+      initialization: InitializeResponse,
+      trace: OperationDiagnostics,
+    ) => Promise<T>,
     options: AgentAuthenticationOptions & { browserAuth?: boolean } = {},
   ): Promise<T> {
-    const managed = spawnManagedProcess({
-      command,
-      args,
-      env,
-      cwd: os.tmpdir(),
-      spawnImpl: this.spawnImpl,
-      logger: this.logger,
-      createTransport: this.createTransport,
-    });
+    const trace = new OperationDiagnostics(name, this.logger, { adapter: 'v2' });
+    trace.stage('spawning');
+    const managed = (() => {
+      try {
+        return spawnManagedProcess({
+          command,
+          args,
+          env,
+          cwd: os.tmpdir(),
+          spawnImpl: this.spawnImpl,
+          logger: this.logger,
+          createTransport: this.createTransport,
+        });
+      } catch (error) {
+        trace.fail(error);
+        throw error;
+      }
+    })();
     const { transport } = managed;
     // Control connections are intentionally killed after their operation finishes.
     void transport.closed.catch(() => undefined);
@@ -211,6 +227,7 @@ export class AcpV2ProviderControls {
     const connection = app.connect(ndJsonStream(transport.stdin, transport.stdout));
     try {
       if (options.signal?.aborted) throw new Error('Authentication cancelled');
+      trace.stage('initializing');
       const initialization = await withTimeout(
         negotiateV2(
           connection.agent.request(methods.agent.initialize, {
@@ -225,12 +242,16 @@ export class AcpV2ProviderControls {
         options.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
         'initializing provider control connection',
       );
-      return await withTimeout(
-        operation(connection, initialization),
+      if (name !== 'agentctl-probe') trace.stage('operation');
+      const result = await withTimeout(
+        operation(connection, initialization, trace),
         options.timeoutMs ?? DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
         'performing provider control operation',
       );
+      trace.finish('success');
+      return result;
     } catch (error) {
+      trace.fail(error);
       throw withProcessDiagnostics(error, managed.child);
     } finally {
       options.signal?.removeEventListener('abort', abort);

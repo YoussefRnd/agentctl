@@ -1,4 +1,6 @@
 export type ProviderLifecycleErrorCode =
+  | 'PREPARATION_FAILED'
+  | 'EXECUTABLE_NOT_FOUND'
   | 'INSTALL_CANCELLED'
   | 'INSTALL_INTERRUPTED'
   | 'DOWNLOAD_FAILED'

@@ -4,9 +4,13 @@ import type { BinaryInstaller } from './binary-installer.js';
 import type { ProviderStore } from './provider-store.js';
 import type { AgentDescriptor, AgentDriver } from '../../agent/types.js';
 import { isAgentAuthenticationRequiredError } from '../../agent/errors.js';
+import { OperationDiagnostics } from '../../agent/operation-diagnostics.js';
+import { getNpmCache, preserveProviderFailure } from './provider-diagnostics.js';
+import { noopLogger, type Logger } from '../../logger.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
 import { defaultCredentialResolver } from '../../default-credential-vault.js';
 import type { CredentialStore } from '../../security/credential-store.js';
+import { ProviderPreparation, preparationEnvironment } from './provider-preparation.js';
 export function resolveNpxPackageSpec(pkg: string, version?: string): string {
   if (!pkg) return '';
   const lastAtIndex = pkg.lastIndexOf('@');
@@ -20,6 +24,7 @@ export function resolveNpxPackageSpec(pkg: string, version?: string): string {
 }
 
 export function resolveUvxPackageSpec(pkg: string, version?: string): string {
+  pkg = pkg.replace(/^([a-zA-Z0-9][a-zA-Z0-9._-]*(?:\[[a-zA-Z0-9,._-]+\])?)@([^/\s]+)$/, '$1==$2');
   if (!pkg || !version || /(?:==|~=|>=|<=|!=|\s@\s|https?:\/\/)/.test(pkg)) return pkg;
   const extrasIndex = pkg.indexOf('[');
   if (extrasIndex > 0) {
@@ -83,6 +88,7 @@ export class ProviderLauncher {
     { promise: Promise<AgentDescriptor>; expiresAt: number; fingerprint: string }
   >();
   private readonly probeTtlMs = 30_000;
+  private readonly preparation: ProviderPreparation;
 
   constructor(
     private store: ProviderStore,
@@ -91,7 +97,10 @@ export class ProviderLauncher {
       CredentialStore,
       'resolveEnvSync'
     > = defaultCredentialResolver,
-  ) {}
+    private readonly logger: Logger = noopLogger,
+  ) {
+    this.preparation = new ProviderPreparation(store, installer, logger);
+  }
 
   invalidateProbe(providerId: string, runtime?: AgentDriver, agent?: RegistryAgent): void {
     this.probeCache.delete(providerId);
@@ -170,11 +179,27 @@ export class ProviderLauncher {
         ...proxy,
         ...base.env,
         ...resolvedCustomEnv,
+        ...preparationEnvironment(base.env),
         ...(provider.protocol && provider.protocol !== 'auto'
           ? { AGENTCTL_ACP_PROTOCOL: provider.protocol }
           : {}),
       },
     };
+  }
+
+  /** Prepare any ACP distribution before starting its protocol deadline. */
+  prepareLaunch(
+    providerId: string,
+    launch: LaunchResolved,
+    signal?: AbortSignal,
+    candidateRow?: ProviderData,
+    publish = true,
+  ): Promise<LaunchResolved> {
+    return this.preparation.prepare(providerId, launch, signal, candidateRow, publish);
+  }
+
+  dispose(): Promise<void> {
+    return this.preparation.dispose();
   }
 
   async inspectLaunch(
@@ -186,12 +211,36 @@ export class ProviderLauncher {
     const row = this.store.get(providerId);
     if (!row) throw new Error(`Provider ${providerId} not found`);
 
+    const trace = new OperationDiagnostics('probe', this.logger, {
+      providerId,
+      version: providerVersion,
+    });
     try {
-      return await runtime.inspectProvider(launch.command, launch.args, launch.env, {
+      trace.stage('package-preparation');
+      launch = await this.prepareLaunch(providerId, launch);
+      trace.stage('connecting');
+      const result = await runtime.inspectProvider(launch.command, launch.args, launch.env, {
         providerVersion,
       });
+      trace.finish('success');
+      return result;
     } catch (err: unknown) {
-      if (!isAgentAuthenticationRequiredError(err)) throw err;
+      if (!isAgentAuthenticationRequiredError(err)) {
+        await preserveProviderFailure({
+          trace,
+          providerId,
+          version: providerVersion,
+          installSource: row.installSource,
+          error: err,
+          npmCache: /(?:^|[/\\])npx(?:\.cmd)?$/i.test(launch.command)
+            ? getNpmCache(launch.env)
+            : undefined,
+          environment: launch.env,
+          logger: this.logger,
+        });
+        throw err;
+      }
+      trace.finish('success');
       return {
         status: 'needs_auth',
         configOptions: jsonCodecs.agentConfigOptions(row.configOptions),
