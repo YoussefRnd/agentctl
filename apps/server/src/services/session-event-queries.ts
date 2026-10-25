@@ -12,11 +12,13 @@ import { SessionEventPageReader, type EventPageOptions } from './session-event-p
 import { prepareEventPageResponse } from './session-event-page-response.js';
 import { SessionHistoryWorkQueue } from './session-history-work-queue.js';
 import { readTurnIndex } from './session-turn-index.js';
+import { SessionEventCompactReader } from './session-event-compact-reader.js';
 import { eventDetailRevision, SessionEventProjection } from './session-event-projection.js';
 
 export class SessionEventQueries {
   private readonly projection = new SessionEventProjection();
   compact = this.projection.compact;
+  private readonly compactReader = new SessionEventCompactReader(this.compact);
   private pageReader?: SessionEventPageReader;
   private readonly historyWork = new SessionHistoryWorkQueue();
   private detailStatement?: ReturnType<SessionEventQueries['prepareDetail']>;
@@ -56,7 +58,7 @@ export class SessionEventQueries {
             ? captureEventWindow(this.db, sessionId, options)
             : (this.pageReader ??= new SessionEventPageReader(this.db)).capture(sessionId, options),
         options.compact,
-        this.compact,
+        this.compactReader.encode,
       ),
       signal,
     );
@@ -77,13 +79,18 @@ export class SessionEventQueries {
   detailResponse(sessionId: string, eventId: number, signal?: AbortSignal) {
     const capture = () =>
       (this.detailStatement ??= this.prepareDetail()).get({ sessionId, eventId });
+    const cachedRevision = (row: Parameters<typeof parseEventRow>[0]) =>
+      this.compactReader.revision(row);
     return this.historyWork.run(
       (function* () {
         const row = capture();
         if (!row) return undefined;
         yield;
         const event = parseEventRow(row);
-        return JSON.stringify({ event, revision: eventDetailRevision(event) });
+        return JSON.stringify({
+          event,
+          revision: cachedRevision(row) ?? eventDetailRevision(event),
+        });
       })(),
       signal,
     );

@@ -1612,3 +1612,267 @@ node performance-results/cold-diff-comparison/equivalence.mjs
 `run-pairs.mjs` reproduces the original fixed labels; preserve existing captures before running it
 again. Both variants deliberately use `compact=true`. Forced collection is diagnostic-only and
 is not added to application code.
+
+## Parser peak-RSS investigation (2026-10-22)
+
+The streaming parser is committed as `32b5962` (`perf: stream patch statistics parsing`). The
+preceding +8.7% peak-RSS observation prompted this investigation against the same frozen
+`0d6cd9d` and `32b5962` executables. No application code or runtime tuning changes are included.
+
+The evidence points to different GC timing and unused V8/native allocator pages remaining
+resident, rather than additional retained history output. The original +33 MiB delta is not a
+stable increase across longer or separately seeded controls. RSS is still real resident memory;
+these observations do not make it equivalent to live JavaScript heap or establish a strict bound.
+
+### Attribution method
+
+Three alternating fresh-process pairs use the same synthetic 20-session, 300-event/session,
+600-hunk diff fixture. Each process records the cold batch and two warmup waves, performs the
+existing warmup collection, then runs **three successive 600-request pulses** with one second
+between them. No forced GC occurs during those pulses. Twenty-millisecond samples record V8
+heap/space statistics, process RSS/external memory and glibc `mallinfo2` counters. GC events record
+when collections occur. Phase boundaries capture Linux `smaps_rollup` and SQLite per-connection
+cache/schema/statement counters. These are diagnostic captures, not new latency benchmarks.
+
+After requests drain, each process performs three normal full collections, then a separate
+`malloc_trim(0)` diagnostic, then SQLite `PRAGMA shrink_memory` and another trim. A separate
+one-process/version mapping experiment records full Linux memory maps and invokes V8's public
+`LowMemoryNotification()` before one final trim. Small local native probes expose these diagnostic
+APIs; a loader hook instruments only the frozen benchmark database constructor to load the SQLite
+counter extension. Application sources, runtime configuration and dependencies are unchanged.
+
+The SQLite build reports `DEFAULT_MEMSTATUS=0`, so a zero global `sqlite3_memory_used()` result is
+not used as an allocation estimate. The reported SQLite figures come from per-connection
+`sqlite3_db_status` cache/schema/statement counters. Native counters, V8 capacity and RSS measure
+different things and are not summed as interchangeable live bytes. Probe sample/GC records also
+contribute a small, variable amount of retained JavaScript heap.
+
+### Results
+
+Medians of the three primary processes/version, in MiB:
+
+| Observation                                   | Previous parser | Streaming parser |
+| --------------------------------------------- | --------------: | ---------------: |
+| First 600-request pulse peak RSS              |          412.17 |           410.18 |
+| Highest RSS across all three pulses           |          467.34 |           475.13 |
+| RSS after normal full collections             |          466.80 |           473.68 |
+| Used JS heap after normal full collections    |           45.26 |            46.38 |
+| V8 heap capacity after full collections       |          179.94 |           178.19 |
+| Native allocated arena bytes after collection |           19.38 |            19.47 |
+| Native free arena bytes after collection      |           38.49 |            35.94 |
+| SQLite page cache after collection            |            2.01 |             2.01 |
+| RSS after native allocator trim               |          433.27 |           440.81 |
+| RSS after SQLite shrink and another trim      |          431.29 |           438.70 |
+
+The first-pulse RSS medians now differ by **-0.5%**, and the longer-load peaks differ by **+1.7%**.
+This does not erase the earlier captures; it shows how much the reported delta depends on the
+observation window and collection timing. One earlier-parser process has two major collections
+in the first measured pulse and peaks at 373.78 MiB; the other two have none and peak at
+412.17–413.41 MiB. The streaming captures have zero or one in that pulse. Removing line-array
+allocation changes GC pressure; the evidence supports allocation/collection history as the
+explanation for the shifting peak, rather than a new fixed-size retained object graph.
+
+Allocator trimming releases roughly 33–36 MiB in both versions, while SQLite shrinking accounts
+for only about another 2 MiB. Native allocated bytes and external memory are similar. Ordinary
+full GC reclaims dead objects but leaves substantial V8 capacity and resident anonymous pages.
+
+The separate mapping pair makes the larger component visible:
+
+| Diagnostic stage                       | Previous RSS | Streaming RSS |
+| -------------------------------------- | -----------: | ------------: |
+| After normal full collections          |       469.22 |        478.82 |
+| After allocator trim and SQLite shrink |       440.29 |        448.75 |
+| After V8 low-memory notification       |       150.81 |        149.82 |
+| After final allocator trim             |       137.28 |        135.91 |
+
+The V8 notification reduces RSS by 289–299 MiB while used heap changes only about 1.4 MiB,
+to 44.28 MiB in both processes. V8 physical heap statistics fall from 175.71/179.41 to
+46.05/46.29 MiB; the earlier process's resident anonymous writable mappings fall from roughly
+357 to 65 MiB. This identifies unused V8-managed pages as the dominant remaining component.
+Full-map capture itself introduces temporary allocation, so this pair is kept separate from the
+three clean attribution pairs and is not a production memory-floor estimate.
+
+This interpretation agrees with the matching Node/V8 source: its
+[page pool keeps pages allocated and accessible for reuse](https://github.com/nodejs/node/blob/v24.22.0/deps/v8/src/heap/page-pool.h#L16),
+and the [allocator caches freed chunks until a memory-reducing collection](https://github.com/nodejs/node/blob/v24.22.0/deps/v8/src/heap/memory-allocator.cc#L345).
+[`LowMemoryNotification()` requests all-available-garbage collection](https://github.com/nodejs/node/blob/v24.22.0/deps/v8/src/api/api.cc#L9820),
+which [uses the reduce-memory-footprint flag](https://github.com/nodejs/node/blob/v24.22.0/deps/v8/src/heap/heap.cc#L1268).
+The notification, native trim and SQLite shrink are diagnostic interventions only.
+
+An additional streaming-parser process idles for 30 seconds after the third load pulse, before
+any forced post-load collection. No GC event occurs in that interval: RSS stays at 480.02 MiB,
+and used heap remains near 143 MiB, including uncollected temporary objects. The later normal
+collection reduces used heap to 45.26 MiB while RSS remains 480.02 MiB; the memory-reducing
+notification and final trim bring RSS to 138.85 MiB. This distinguishes reusable resident pages
+from live data, but also shows that a short idle period does not guarantee RSS will fall.
+
+### Fixture isolation and practical implication
+
+Creating the verbose history inside the measured server also influences its allocation history.
+A separate seed process writes and checkpoints the same database, then fresh servers read copies
+without constructing those 6,000 event bodies. In this additional one-pair diagnostic, first-pulse
+peaks are 381.13 versus 379.16 MiB, and three-pulse peaks are 434.06 versus 405.16 MiB. Outputs and
+cursors match the original fixture. One pair is not evidence of a general RSS improvement; it
+confirms that fixture allocation history changes the result. Future memory comparisons should
+use independent seed processes, multiple load windows, and retained-heap/V8-capacity diagnostics
+alongside RSS.
+
+The current compact path still loads and validates full stored output and builds full-content
+revision hashes before omitting bodies. Those temporary allocations can grow reusable heap/page
+capacity even when the compact response is small. Reducing that full-body read/decode/hash work
+is the next application-level optimization to investigate. The captures provide no evidence of
+new long-lived history bodies from the parser change, but finite synthetic tests cannot rule out
+all long-running leaks or bound resident memory under other workloads.
+
+### Artifacts
+
+Ignored artifacts are in `performance-results/patch-parser-rss-investigation/`. `run.mjs` records
+the three alternating attribution pairs; `diagnostic.mjs` captures their phase/GC/counter data.
+`mapping.mjs`, `isolated.mjs`, `seed.mjs` and `idle.mjs` retain the follow-up experiments.
+`native-probe.c`, `sqlite-probe.c` and `low-memory.cc` retain diagnostic probe sources, with their
+locally compiled binaries. `variants/` references the prior frozen executables and their copied
+migrations. `seed.db` is a checkpointed synthetic database, not user data. `manifest.json` records
+runtime, source/probe/seed hashes and execution order; `comparison.json` records all process
+values, and `validation.json` records page/selection/job invariants. Across all 11 reader processes,
+220 cold-page hashes and selections/cursors for 19,800 repeated reads match; all history jobs drain
+to zero. There are no production source changes to retest; the committed parser retains the
+preceding 1,623-test/11-architecture-check verification. Fixed-label captures must be
+preserved before reusing a runner.
+
+With the retained snapshots, a fresh individual diagnostic can be run with:
+
+```sh
+AGENTCTL_PROFILE_VARIANT=after NODE_ENV=test LOG_LEVEL=silent AGENTCTL_TELEMETRY=0 node --expose-gc --import ./performance-results/patch-parser-rss-investigation/variant-hook.mjs performance-results/patch-parser-rss-investigation/diagnostic.mjs /tmp/parser-rss-diagnostic.json
+python3 performance-results/patch-parser-rss-investigation/analyze.py
+```
+
+## Compact-row decoding and revision reuse (2026-10-22)
+
+The baseline is `32b5962`; the candidate adds an app-owned compact-row LRU in
+`SessionEventCompactReader`. Compact HTTP page hits reuse validated encoded JSON, avoiding
+full-output JSON parsing, wire-schema cloning, projection and canonical reserialization.
+The original raw row is still fetched and fingerprinted on each lookup. This is an optimization
+for repeated compact-page reads, not a persisted compact read model or an elimination of all
+full-body work. SSE and legacy full-history decoding retain their existing paths.
+
+The cache retains at most 1,024 entries, 524,288 UTF-16 characters total (at most 1 MiB of encoded
+payloads), and 8,192 characters per entry. Entry/key/digest/envelope bookkeeping adds bounded
+count-based overhead. Entries contain compact JSON and primitive identity data, not decoded
+rows, original output strings or patches. Unknown/live tools and oversized compact inputs/extensions
+are not cached. Entries are independent of database writes: every lookup validates its database
+envelope and verifies current content, lengths/nullness, parent, session/event identity, type and
+time. Changed or corrupt rows cannot reuse earlier validation. Tests include equal-length changes,
+malformed field boundaries that concatenate to the same digest input, and SQL-null versus JSON-null
+metadata. LRU refresh/replacement, count/character eviction and oversized bypass are covered.
+
+`session-event-revision.ts` hashes canonical JSON components separately while preserving the
+existing SHA-256 bytes. JSON emitted by the actual repository write codecs can share one digest
+with its validated revision on a miss. Older/noncanonical JSON keeps its original wire revision
+and uses a separate raw fingerprint when cached. Well-formed text uses UTF-8; unpaired surrogates
+use a distinct length-framed UTF-16 fingerprint domain. Page and detail revisions stay identical
+to the baseline. Detail responses always read and validate the full current row; a matching cache
+entry can supply the revision. No migration, runtime GC, allocator tuning or client changes are
+introduced. History selection, cursors, raw byte budgets and scheduler yield accounting are unchanged.
+
+### Method
+
+All primary captures use Node 24.22.0, separate server/client processes, 20 concurrent readers,
+telemetry disabled and synthetic providers/data. Seed creation happens in independent processes;
+each reader process opens a fresh copy. The main 6,000-row ordinary and diff fixtures are serialized
+with the baseline's actual `sessionEventCodecs.validateData/validateMetadata`, matching repository
+writes. Original manually ordered JSON seeds are also preserved and measured as a compatibility
+case; their normalized wire output and revisions are identical to the canonical fixture.
+
+Five alternating process pairs measure structured diff history, three pairs measure ordinary
+read/terminal output, and two pairs measure older JSON formatting. Each process measures its first
+20 compact reads before history warmup, performs two warmup waves and diagnostic collection,
+then measures 600 repeated reads of the same latest pages. Rows remain unchanged during this
+phase, and the working sets fit the cache. Updates are covered by correctness tests rather than
+this latency workload; rotating through more rows than the cache holds will miss. Opening one
+tool/session is a separate 400-request detail phase.
+A final forced collection measures retained server heap outside latency measurements. No GC is
+forced during measured load; tests/builds and inspector profiling do not overlap primary captures.
+All pairs, including slower candidate captures, are retained. These localhost results include
+client JSON decoding and do not measure browser rendering or provider inference.
+
+### Comparison
+
+Medians of process measurements; request p95 is calculated separately in each process.
+
+| Metric                           | Diff before | Diff after | Ordinary before | Ordinary after |
+| -------------------------------- | ----------: | ---------: | --------------: | -------------: |
+| Cold first-batch p95 (ms)        |      483.40 |     548.45 |          351.01 |         307.31 |
+| Cold first-batch server CPU (ms) |      657.15 |     720.11 |          503.53 |         469.03 |
+| Repeated history p95 (ms)        |      333.59 |     163.03 |          241.00 |         145.58 |
+| Repeated server CPU/request (ms) |       14.45 |       7.33 |           10.69 |           6.56 |
+| Server peak RSS (MiB)            |      372.82 |     300.84 |          319.99 |         295.84 |
+| Server peak used heap (MiB)      |      195.25 |     121.31 |          144.52 |         112.91 |
+| Server post-GC used heap (MiB)   |       42.92 |      43.29 |           42.56 |          42.94 |
+| Server event-loop delay p99 (ms) |       15.61 |      16.02 |           14.86 |          14.77 |
+| Expanded-detail p95 (ms)         |       24.49 |      30.43 |           29.47 |          20.09 |
+| Response bytes/page              |      18,368 |     18,368 |          12,340 |         12,340 |
+
+Repeated diff-page p95 improves **51.1%**, and CPU/request improves **49.3%**. Ordinary-page
+p95 improves **39.6%**, with CPU/request down **38.6%**. Diff repeated p95s span
+325.74–453.96 ms before and 128.56–290.73 ms after; ordinary ranges are 231.77–253.95 and
+127.50–177.56 ms. Separate warm CPU profiles remove full-output parsing/canonical serialization
+from the cache-hit path; original-payload SQL reads and raw fingerprint hashing remain.
+
+This does not improve every load. Cold diff p95 is **13.5% higher**, with cold-batch CPU
+**9.6% higher**. First/evicted reads still derive patch summaries and validate complete output,
+and cache setup/identity checks add work. Cold p95 ranges are wide and overlap:
+444.79–668.00 ms before versus 442.86–835.97 ms after. Ordinary cold p95 is 12.4% lower by median,
+but its ranges also overlap. Separate cold profiles retain full decoding/patch work and do not
+justify a general cold-load speedup claim.
+
+Detail timing varies: diff p95 is 24.3% higher by median, while ordinary p95 is 31.8% lower.
+Ranges overlap substantially (diff 18.10–46.82 versus 16.57–34.90 ms; ordinary 18.47–40.07 versus
+17.90–40.52 ms). Do not infer a consistent detail-endpoint speedup. The main result is repeated
+page processing. Event-loop p99 is similar, rather than a demonstrated improvement.
+
+Diff peak RSS falls **19.3%** and ordinary peak RSS **7.5%** in these load windows. Retained
+used heap increases about 0.37 MiB, consistent with retaining small compact entries. Diff captures
+hold 640 entries/325,984 encoded characters, each at most 529 characters; no synthetic output bodies
+are retained in those entries. RSS remains sensitive to GC phase and reusable pages as described
+in the preceding investigation. These finite captures do not establish a long-running RSS bound.
+
+The two-pair older-format case preserves exact output and improves repeated p95
+415.25 → 140.99 ms, CPU/request 14.14 → 6.82 ms and peak RSS 376.11 → 301.17 MiB.
+Cold p95 rises 445.57 → 487.11 ms (+9.3%); noncanonical rows require a separate fingerprint on
+cache population. Its smaller sample and overlapping/noisy timings limit broader claims.
+
+### Verification and artifacts
+
+Primary captures validate 400 complete cold-page hashes against baseline, selections/cursors
+across 12,000 repeated requests, and 400 sampled full-detail hashes. All 8,000 detail requests
+validate event identity and revision. Separate candidate wire checks compare all 20 cold and hot
+page hashes for each of the three storage/workload cases, proving cache-hit bodies remain exact.
+Every primary process drains history work to zero and verifies cache count/character/per-entry
+limits and omission of fixture output bodies. Unit/integration checks cover byte-compatible
+revisions, cache hits without JSON decoding, updates/corruption, eviction, detail freshness and
+original-payload scheduling on cache hits.
+The full Node/browser suite passes 1,635 tests across 286 files, plus 11 architecture regression
+checks. Workspace types, dependency/ownership checks, lint, formatting and the server build pass.
+The five affected production JavaScript modules match the frozen candidate byte for byte.
+
+Ignored artifacts are in `performance-results/compact-row-cache-comparison/`. `variants/before`
+freezes the committed parser implementation and `variants/after` freezes the final cache;
+`after-initial` and `after-shared-digest` retain earlier candidates. An initial all-UTF-16 fingerprint
+probe added cold work, so the final implementation shares canonical digests and uses the UTF-16
+fallback only where needed. All probe/profile files remain; only fixed-label primary pairs feed
+`comparison.json`. `order.json` records their alternating order. `manifest.json` records source,
+seed, codec/runtime and executable hashes. `validation.json`, `wire-*.json`, separate cold/warm
+profiles and `checks/` retain evidence. The original noisy client-retention diagnostic remains in
+captures but is not used to estimate retained page heap.
+
+With the retained snapshots/seeds, run individual captures with fresh output paths:
+
+```sh
+AGENTCTL_PROFILE_VARIANT=after HISTORY_CASE=diff SERVER_RETENTION=1 NODE_ENV=test LOG_LEVEL=silent AGENTCTL_TELEMETRY=0 node --expose-gc --import ./performance-results/compact-row-cache-comparison/variant-hook.mjs performance-results/compact-row-cache-comparison/reader.mjs /tmp/compact-row-reader.json
+python3 performance-results/compact-row-cache-comparison/analyze.py
+```
+
+`run-pairs.mjs` rejects existing primary output labels. Seed scripts and profile/wire harnesses
+are separate; preserve existing fixed-label artifacts before rerunning them. Forced collection
+remains diagnostic-only. Further cold-load improvements require reducing full-body work on cache
+misses, rather than assuming this bounded cache removes it.

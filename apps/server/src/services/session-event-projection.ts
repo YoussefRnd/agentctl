@@ -6,20 +6,8 @@ import {
   type SessionEventToolCallData,
 } from '@agentctl/shared';
 
-export function eventDetailRevision(event: SessionEventRow): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify([
-        event.sessionId,
-        event.id,
-        event.type,
-        event.createdAt,
-        event.data,
-        event.metadata,
-      ]),
-    )
-    .digest('hex');
-}
+import { eventDetailRevision } from './session-event-revision.js';
+export { eventDetailRevision } from './session-event-revision.js';
 
 function lineCount(text: string | null | undefined): number {
   if (!text) return 0;
@@ -155,6 +143,7 @@ function projectTool(
 export function compactHistoryEvent(
   event: SessionEventRow,
   normalizeDiff: NormalizeDiff = normalizeFileChanges,
+  revision?: () => string,
 ): SessionEventRow {
   if (event.details || event.delta !== undefined) return event;
   if (event.type === 'terminal_output') {
@@ -162,7 +151,7 @@ export function compactHistoryEvent(
     return {
       ...event,
       details: {
-        revision: eventDetailRevision(event),
+        revision: revision?.() ?? eventDetailRevision(event),
         outputBytes: Buffer.byteLength(event.data.data),
       },
       data: { ...event.data, data: '' },
@@ -182,7 +171,7 @@ export function compactHistoryEvent(
     return event;
   return {
     ...event,
-    details: { revision: eventDetailRevision(event) },
+    details: { revision: revision?.() ?? eventDetailRevision(event) },
     data: projectTool(event.data, normalizeDiff),
   };
 }
@@ -221,5 +210,6 @@ export class SessionEventProjection {
     return changes;
   };
 
-  compact = (event: SessionEventRow) => compactHistoryEvent(event, this.normalizeDiff);
+  compact = (event: SessionEventRow, revision?: () => string) =>
+    compactHistoryEvent(event, this.normalizeDiff, revision);
 }

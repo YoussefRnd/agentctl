@@ -2,6 +2,7 @@ import { expect, it } from 'vite-plus/test';
 import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions, sessionEvents } from '@agentctl/core/db';
 import { decodingRows } from '../../tests/performance/row-decoding-fixture.js';
+import { SessionEventCompactReader } from './session-event-compact-reader.js';
 import { SessionEventQueries } from './session-event-queries.js';
 import { SessionEventPageReader } from './session-event-page-reader.js';
 import { prepareEventPageResponse } from './session-event-page-response.js';
@@ -183,6 +184,52 @@ it('yields after large original payloads even when their compact representations
     }),
   }));
   const work = prepareEventPageResponse(() => ({ rows, nextBeforeId: null }), true);
+  expect(work.next().done).toBe(false);
+  expect(work.next().done).toBe(false);
+  expect(rows).toHaveLength(19);
+  work.return(undefined);
+  expect(rows).toHaveLength(0);
+});
+
+it('keeps cached pages and detail revisions fresh after output updates and rejects later corruption', async () => {
+  const db = fixture();
+  const toolData = (body: string) =>
+    JSON.stringify({ name: 'read', kind: 'read', status: 'completed', rawOutput: body });
+  db.update(sessionEvents)
+    .set({ type: 'tool_call', data: toolData('a'.repeat(20000)) })
+    .where(eq(sessionEvents.id, 9))
+    .run();
+  const queries = new SessionEventQueries(db);
+  const options = { limit: 200, compact: true };
+  const first = await queries.pageResponse(id, options);
+  expect(await queries.pageResponse(id, options)).toBe(first);
+  const marker = JSON.parse(first!).events.find((e: { id: number }) => e.id === 9).details.revision;
+  expect(JSON.parse((await queries.detailResponse(id, 9))!).revision).toBe(marker);
+  db.update(sessionEvents)
+    .set({ data: toolData('b'.repeat(20000)) })
+    .where(eq(sessionEvents.id, 9))
+    .run();
+  const second = await queries.pageResponse(id, options);
+  expect(second).not.toBe(first);
+  const detail = JSON.parse((await queries.detailResponse(id, 9))!);
+  expect(detail.revision).toBe(
+    JSON.parse(second!).events.find((e: { id: number }) => e.id === 9).details.revision,
+  );
+  expect(detail.event.data.rawOutput).toBe('b'.repeat(20000));
+  db.update(sessionEvents).set({ metadata: 'null' }).where(eq(sessionEvents.id, 9)).run();
+  await expect(queries.pageResponse(id, options)).rejects.toThrow();
+});
+
+it('keeps original-payload yield accounting on compact cache hits', () => {
+  const reader = new SessionEventCompactReader();
+  const source = decodingRows(20, false).map((row) => ({
+    ...row,
+    type: 'tool_call' as const,
+    data: JSON.stringify({ name: 'read', status: 'completed', rawOutput: 'x'.repeat(20000) }),
+  }));
+  source.forEach(reader.encode);
+  const rows = source.slice();
+  const work = prepareEventPageResponse(() => ({ rows, nextBeforeId: null }), true, reader.encode);
   expect(work.next().done).toBe(false);
   expect(work.next().done).toBe(false);
   expect(rows).toHaveLength(19);

@@ -17,28 +17,30 @@ query the database, launch an ACP driver, or implement filesystem storage.
 reconciliation, Git-command, and native-import owners. `SessionService` keeps its public calling
 surface and coordinates multi-field patches in the established order. It does not own SQL.
 
-| Owner                                    | Responsibility                                                                                                                        |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `services/session-queries.ts`            | List/detail/execution query assembly without repair or workspace restoration                                                          |
-| `services/session-reconciler.ts`         | Explicit legacy workspace recovery, branch snapshot, token and context-limit repair                                                   |
-| `services/session-commands.ts`           | Create/configure/finalize/rename/spawn/handoff/elicitation application operations                                                     |
-| `services/session-git-service.ts`        | Branch checkout/merge and their session command lanes                                                                                 |
-| `services/session-git-operations.ts`     | Git preconditions, mutation lane, partial-change notifications, review/status/merge preview, draft generation and fingerprint recheck |
-| `services/session-repository-service.ts` | Backend-neutral review and legacy baseline import                                                                                     |
-| `services/session-event-history.ts`      | Bounded history windows/replay and transactional snapshot/change-cursor catch-up                                                      |
-| `services/session-turn-index.ts`         | Bounded, cursor-invalidated turn preview read model                                                                                   |
-| `services/session-event-queries.ts`      | Event list/high-water/batch/query facade for transport replay                                                                         |
-| `services/projects/`                     | Project queries, folder discovery and open/create/delete application workflows                                                        |
-| `services/search-queries.ts`             | Search SQL, categorization, text extraction and snippets                                                                              |
-| `services/provider-session-queries.ts`   | Project-scoped native session listing and import annotations                                                                          |
-| `services/settings-service.ts`           | Settings defaults, validation, normalization, persistence and notifications                                                           |
-| `services/mcp-service.ts`                | MCP config persistence, approval compatibility, reload and tools                                                                      |
-| `services/workspace-queries.ts`          | Context/terminal workspace resolution with their established fallback rules                                                           |
-| `services/attachment-service.ts`         | Attachment validation, filename policy, storage, rollback and read errors                                                             |
-| `services/auth-attempt-limiter.ts`       | Per-app pairing-attempt window state                                                                                                  |
-| `services/terminal-service.ts`           | Interactive/command terminal processes, input/resize, output history and termination                                                  |
-| `services/server-lifecycle.ts`           | Recovery, credential-change retirement, background provider refresh and awaited shutdown                                              |
-| `services/session-state-events.ts`       | Session/workspace notification topics independent of Fastify                                                                          |
+| Owner                                      | Responsibility                                                                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `services/session-queries.ts`              | List/detail/execution query assembly without repair or workspace restoration                                                          |
+| `services/session-reconciler.ts`           | Explicit legacy workspace recovery, branch snapshot, token and context-limit repair                                                   |
+| `services/session-commands.ts`             | Create/configure/finalize/rename/spawn/handoff/elicitation application operations                                                     |
+| `services/session-git-service.ts`          | Branch checkout/merge and their session command lanes                                                                                 |
+| `services/session-git-operations.ts`       | Git preconditions, mutation lane, partial-change notifications, review/status/merge preview, draft generation and fingerprint recheck |
+| `services/session-repository-service.ts`   | Backend-neutral review and legacy baseline import                                                                                     |
+| `services/session-event-compact-reader.ts` | Bounded validated compact-page JSON and matching detail-revision reuse                                                                |
+| `services/session-event-revision.ts`       | Canonical revision digests and persisted JSON fingerprints                                                                            |
+| `services/session-event-history.ts`        | Bounded history windows/replay and transactional snapshot/change-cursor catch-up                                                      |
+| `services/session-turn-index.ts`           | Bounded, cursor-invalidated turn preview read model                                                                                   |
+| `services/session-event-queries.ts`        | Event list/high-water/batch/query facade for transport replay                                                                         |
+| `services/projects/`                       | Project queries, folder discovery and open/create/delete application workflows                                                        |
+| `services/search-queries.ts`               | Search SQL, categorization, text extraction and snippets                                                                              |
+| `services/provider-session-queries.ts`     | Project-scoped native session listing and import annotations                                                                          |
+| `services/settings-service.ts`             | Settings defaults, validation, normalization, persistence and notifications                                                           |
+| `services/mcp-service.ts`                  | MCP config persistence, approval compatibility, reload and tools                                                                      |
+| `services/workspace-queries.ts`            | Context/terminal workspace resolution with their established fallback rules                                                           |
+| `services/attachment-service.ts`           | Attachment validation, filename policy, storage, rollback and read errors                                                             |
+| `services/auth-attempt-limiter.ts`         | Per-app pairing-attempt window state                                                                                                  |
+| `services/terminal-service.ts`             | Interactive/command terminal processes, input/resize, output history and termination                                                  |
+| `services/server-lifecycle.ts`             | Recovery, credential-change retirement, background provider refresh and awaited shutdown                                              |
+| `services/session-state-events.ts`         | Session/workspace notification topics independent of Fastify                                                                          |
 
 ## History page reads
 
@@ -247,8 +249,7 @@ where `event` is complete; absent/deleted rows return 404. Detail responses use 
 than SSE sequence numbers, so repeated delivery shares client detail queries while updates
 invalidate them. Page selection still uses the original 1 MiB payload budget, and decoding work
 still yields according to original payload size even when the encoded compact row is small.
-No new persisted representation, migration, server output cache or history provider dependency
-is introduced.
+No new persisted representation, migration or history provider dependency is introduced.
 
 `SessionEventQueries` owns one `SessionEventProjection` shared by HTTP and SSE. Its diff-summary
 LRU stores SHA-256 keys and encoded normalized file summaries, with at most 1,024 entries,
@@ -256,3 +257,23 @@ LRU stores SHA-256 keys and encoded normalized file summaries, with at most 1,02
 raw outputs or patches; oversized summaries are recomputed. This avoids parsing the same patch
 on repeated history reads while bounding retained server state. Changed content invalidates the
 key, and callers receive independent summary objects. Cold loads still derive statistics.
+
+Compact HTTP pages also use one per-app `SessionEventCompactReader`. Its LRU retains only encoded
+compact rows and identity digests: at most 1,024 entries, 524,288 UTF-16 characters total (1 MiB
+of payload storage), and 8,192 characters per entry. Key/digest/envelope bookkeeping adds bounded
+entry overhead. Large compact inputs/extensions, unknown tools and active output remain uncached.
+
+Every lookup validates the database envelope and checks current payload/metadata fingerprints,
+raw string lengths/nullness, parent identity, session, event ID, type and creation time. Cache hits
+reuse previously validated JSON; misses fully decode/validate and project the current row. Raw
+length checks preserve JSON field boundaries even for corrupt fragments that concatenate to the
+same digest input. Output bodies and decoded row objects are not retained by this cache. The
+page scheduler still accounts for original payload size on hits, and selection/cursors are unchanged.
+
+`session-event-revision.ts` preserves the existing SHA-256 revision bytes while hashing serialized
+components separately. Repository-written canonical JSON shares a digest with its validated wire
+revision. Older/noncanonical JSON is validated and uses a separate raw fingerprint when cached;
+unpaired UTF-16 surrogates use a distinct fingerprint domain. The detail endpoint always reads and
+validates its complete current row, but can reuse a matching cached revision. Ordinary full-history
+reads, and SSE decoding/projection, retain their existing paths. Cold/evicted rows still require full
+output decoding, and SQLite still loads the original payloads on every page request.

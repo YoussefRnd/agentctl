@@ -1,17 +1,15 @@
-import type { SessionEventRow } from '@agentctl/shared';
 import type { SessionEventDbRow } from '@agentctl/core/db';
 import type { CapturedEventPage } from './session-event-page-reader.js';
 import { parseEventRow } from './session-event-row.js';
-import { compactHistoryEvent } from './session-event-projection.js';
+import { SessionEventCompactReader } from './session-event-compact-reader.js';
 
 // Keep decoded bodies inside this call; only encoded output survives a scheduler yield.
 function encodeRow(
   row: SessionEventDbRow,
   compact: boolean,
-  project: (event: SessionEventRow) => SessionEventRow,
+  encodeCompact: (row: SessionEventDbRow) => string,
 ) {
-  const event = parseEventRow(row);
-  const encoded = JSON.stringify(compact ? project(event) : event);
+  const encoded = compact ? encodeCompact(row) : JSON.stringify(parseEventRow(row));
   return {
     encoded,
     workCharacters: compact
@@ -24,7 +22,7 @@ function encodeRow(
 export function* prepareEventPageResponse(
   capture: () => CapturedEventPage | undefined,
   compact = false,
-  project: (event: SessionEventRow) => SessionEventRow = compactHistoryEvent,
+  encodeCompact: (row: SessionEventDbRow) => string = new SessionEventCompactReader().encode,
 ) {
   const page = capture();
   if (!page) return undefined;
@@ -37,7 +35,7 @@ export function* prepareEventPageResponse(
     let batchRows = 0;
     let batchCharacters = 0;
     while (rows.length > 0) {
-      const { encoded, workCharacters } = encodeRow(rows.pop()!, compact, project);
+      const { encoded, workCharacters } = encodeRow(rows.pop()!, compact, encodeCompact);
       events.push(encoded);
       batchRows++;
       batchCharacters += workCharacters;
