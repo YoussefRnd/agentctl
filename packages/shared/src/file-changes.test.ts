@@ -168,3 +168,55 @@ test('resets incomplete hunks at file boundaries and ignores metadata outside hu
     { operation: 'add', path: '/second', stats: { additions: 1, deletions: 0 } },
   ]);
 });
+
+test('reads omitted, zero, padded and very large hunk counts without losing prefix semantics', () => {
+  const cases = [
+    { header: '@@ -7 +9 @@ section', body: '-old\n+new', additions: 1, deletions: 1 },
+    {
+      header: '@@ -0007,02 +0009,003 @@ section',
+      body: '-old\n context\n+new\n+extra',
+      additions: 2,
+      deletions: 1,
+    },
+    { header: '@@ -0,0 +1,2 @@', body: '+one\n+two', additions: 2, deletions: 0 },
+    { header: '@@ -1,2 +0,0 @@', body: '-one\n-two', additions: 0, deletions: 2 },
+    { header: '@@ -1 +1 @@@ trailing metadata', body: '-old\n+new', additions: 1, deletions: 1 },
+    {
+      header: `@@ -1,${'9'.repeat(400)} +1,${'9'.repeat(400)} @@`,
+      body: '-old\n context\n+new\n+extra',
+      additions: 2,
+      deletions: 1,
+    },
+  ];
+  for (const { header, body, additions, deletions } of cases) {
+    expect(
+      normalizeFileChanges({
+        changes: [{ operation: 'modify', path: '/file' }],
+        patch: { format: 'git_patch', text: `--- a/file\n+++ b/file\n${header}\n${body}` },
+      })[0].stats,
+    ).toEqual({ additions, deletions });
+  }
+});
+
+test('ignores malformed hunk prefixes without carrying counters into later valid hunks', () => {
+  for (const header of [
+    '@@ - +1 @@',
+    '@@ -1, +1 @@',
+    '@@ -1 + @@',
+    '@@ -1 +1, @@',
+    '@@ -1,2x +1 @@',
+    '@@ -1\t+1 @@',
+    '@@ -1 +1 @',
+    '@@ -١ +1 @@',
+    '@@ --1 +1 @@',
+    '@@ -1 +1,-2 @@',
+  ]) {
+    const text = `--- a/file\n+++ b/file\n${header}\n-ignored\n+ignored\n@@ -2 +2 @@\n-real\n+real`;
+    expect(
+      normalizeFileChanges({
+        changes: [{ operation: 'modify', path: '/file' }],
+        patch: { format: 'git_patch', text },
+      })[0].stats,
+    ).toEqual({ additions: 1, deletions: 1 });
+  }
+});

@@ -47,6 +47,50 @@ function comparablePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\//, '');
 }
 
+function afterDigits(text: string, start: number, end: number): number {
+  let offset = start;
+  while (offset < end) {
+    const code = text.charCodeAt(offset);
+    if (code < 48 || code > 57) break;
+    offset++;
+  }
+  return offset;
+}
+
+/** Parse a unified hunk prefix into reusable counters, without allocating a match array. */
+function readHunkCounts(
+  text: string,
+  start: number,
+  end: number,
+  counts: [number, number],
+): boolean {
+  if (!text.startsWith('@@ -', start)) return false;
+  let offset = afterDigits(text, start + 4, end);
+  if (offset === start + 4) return false;
+  let oldCount = 1;
+  if (text.charCodeAt(offset) === 44) {
+    const countStart = offset + 1;
+    offset = afterDigits(text, countStart, end);
+    if (offset === countStart) return false;
+    oldCount = Number(text.slice(countStart, offset));
+  }
+  if (!text.startsWith(' +', offset)) return false;
+  const newStart = offset + 2;
+  offset = afterDigits(text, newStart, end);
+  if (offset === newStart) return false;
+  let newCount = 1;
+  if (text.charCodeAt(offset) === 44) {
+    const countStart = offset + 1;
+    offset = afterDigits(text, countStart, end);
+    if (offset === countStart) return false;
+    newCount = Number(text.slice(countStart, offset));
+  }
+  if (offset + 3 > end || !text.startsWith(' @@', offset)) return false;
+  counts[0] = oldCount;
+  counts[1] = newCount;
+  return true;
+}
+
 /** Count only hunk lines. Headers, binary patches and rename metadata are not edits. */
 function patchStats(patch?: FilePatch | null) {
   const files: {
@@ -60,15 +104,13 @@ function patchStats(patch?: FilePatch | null) {
   let oldRemaining = 0;
   let newRemaining = 0;
   const text = patch.text;
-  const hunkHeader = /@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/y;
+  const counts: [number, number] = [0, 0];
   // Scan offsets instead of splitting the whole patch into an array of line strings.
   // Only file headers need a substring; ordinary hunk lines need their first character.
   for (let start = 0; start <= text.length;) {
     const newline = text.indexOf('\n', start);
     const next = newline === -1 ? text.length + 1 : newline + 1;
     const end = newline === -1 ? text.length : newline;
-    const lineEnd =
-      newline !== -1 && end > start && text.charCodeAt(end - 1) === 13 ? end - 1 : end;
     const first = text.charCodeAt(start);
     const preamble = first === 100 && text.startsWith('diff --git ', start);
     const oldHeader = first === 45 && text.startsWith('--- ', start);
@@ -81,18 +123,18 @@ function patchStats(patch?: FilePatch | null) {
     }
     if (file) {
       if (!oldRemaining && !newRemaining) {
-        if (oldHeader) file.oldPath = patchPath(text.slice(start + 4, lineEnd));
-        else if (first === 43 && text.startsWith('+++ ', start)) {
-          file.path = patchPath(text.slice(start + 4, lineEnd));
-          file.hasNewHeader = true;
-        }
-        if (first === 64) {
-          hunkHeader.lastIndex = start;
-          const hunk = hunkHeader.exec(text);
-          if (hunk) {
-            oldRemaining = Number(hunk[1] ?? 1);
-            newRemaining = Number(hunk[2] ?? 1);
+        if (oldHeader || (first === 43 && text.startsWith('+++ ', start))) {
+          const lineEnd =
+            newline !== -1 && end > start && text.charCodeAt(end - 1) === 13 ? end - 1 : end;
+          if (oldHeader) file.oldPath = patchPath(text.slice(start + 4, lineEnd));
+          else {
+            file.path = patchPath(text.slice(start + 4, lineEnd));
+            file.hasNewHeader = true;
           }
+        }
+        if (first === 64 && readHunkCounts(text, start, end, counts)) {
+          oldRemaining = counts[0];
+          newRemaining = counts[1];
         }
       } else if (first === 43 && newRemaining > 0) {
         file.stats.additions++;

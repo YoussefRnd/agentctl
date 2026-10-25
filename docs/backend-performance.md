@@ -1876,3 +1876,132 @@ python3 performance-results/compact-row-cache-comparison/analyze.py
 are separate; preserve existing fixed-label artifacts before rerunning them. Forced collection
 remains diagnostic-only. Further cold-load improvements require reducing full-body work on cache
 misses, rather than assuming this bounded cache removes it.
+
+## Cold diff hunk scanning (2026-10-25)
+
+Compact-row/revision reuse is committed as `afa27d4` (`perf: reuse compact history rows and
+revision digests`). This comparison uses that implementation as its baseline. The only runtime
+change is the shared patch-statistics scanner; cache policies, wire revisions, persistence,
+selection, scheduling and detail loading remain unchanged.
+
+Cold profiles still showed substantial time in `patchStats`. Its sticky regular-expression
+execution created a match array for every hunk, including hunks whose counts default to one.
+The scanner now reads the same prefix grammar with offsets and reuses one counter pair per patch.
+Explicit counts retain native `Number` conversion, including leading zeros and very large values.
+CR stripping is limited to actual file headers instead of inspecting every patch body line.
+The implementation still counts actual hunk lines rather than trusting declared totals, and
+preserves malformed/incomplete hunk handling, file boundaries, quoted paths and operation mapping.
+The shared function also serves browser review summaries.
+
+### Method
+
+All captures use frozen before/after executables, separate server/client processes and independent
+synthetic seed databases. Each process opens a fresh copy; telemetry is disabled and no provider
+process or real repository/database is involved. Twenty concurrent readers request compact pages.
+The baseline includes the previous bounded compact-row and diff-summary caches on both sides.
+
+Five alternating process pairs measure the existing 600-hunk fixture with omitted hunk counts.
+Three pairs measure an additional fixture with 600 explicit-count hunks, varying line offsets,
+section headings, context lines, two old lines and three new lines per hunk. Three ordinary-history
+pairs provide a control that does not call the diff parser. The explicit fixture uses the same
+20-session/300-event shape and repository codecs, but larger patch bodies mean fewer rows fit
+its unchanged raw 1 MiB page budget. Its absolute latency is not directly comparable with the
+omitted-count fixture.
+
+Each process measures its first 20 requests before any history warmup, then two warmup waves,
+a diagnostic collection outside timing, 600 repeated reads and 400 separately timed detail reads.
+New cold-phase samples record per-field memory peaks and event-loop delay at 10 ms resolution.
+No GC is forced during measured requests. All paired captures are included; tests/builds and
+inspector profiles run separately. These end-to-end localhost timings include connection setup,
+lazy SQL/schema/JIT work and client JSON parsing as well as projection.
+
+### Fresh-process results
+
+Medians of process measurements; request p95 is computed separately per process.
+
+| Metric                         | Omitted before | Omitted after | Explicit before | Explicit after |
+| ------------------------------ | -------------: | ------------: | --------------: | -------------: |
+| Cold first-batch p95 (ms)      |         439.60 |        420.43 |          517.77 |         468.90 |
+| Cold server CPU/batch (ms)     |         639.53 |        633.95 |          694.19 |         694.74 |
+| Cold peak used heap (MiB)      |         116.56 |        111.82 |          122.34 |         110.80 |
+| Cold peak RSS (MiB)            |         298.16 |        292.23 |          293.32 |         294.57 |
+| Cold event-loop delay p99 (ms) |          20.86 |         23.17 |           24.97 |          26.18 |
+| Repeated history p95 (ms)      |         132.97 |        141.36 |          226.32 |         154.03 |
+| Repeated CPU/request (ms)      |           6.57 |          6.52 |            7.77 |           7.31 |
+| Post-GC retained heap (MiB)    |          43.29 |         43.31 |           43.04 |          43.06 |
+| Expanded-detail p95 (ms)       |          18.32 |         18.91 |           26.82 |          27.12 |
+| Response bytes/page            |         18,368 |        18,368 |          11,225 |         11,225 |
+
+Cold p95 improves **4.4%** for omitted counts and **9.4%** for explicit counts. Omitted-count
+ranges overlap: 428.29–508.00 ms before and 407.43–447.50 ms after. Explicit-count ranges are
+wide: 470.82–751.54 versus 439.23–672.26 ms. Fresh-process CPU medians are essentially unchanged
+(-0.9% and +0.1%); these captures do not establish a general process-start CPU reduction.
+Cold used-heap peaks fall 4.1% and 9.4%, while cold RSS changes -2.0% and +0.4%. Cold event-loop
+p99 is higher by median, so there is no demonstrated event-loop-tail improvement.
+
+Warm pages normally hit the existing compact-row cache and do not run this parser. Their timings
+are therefore controls, not a parser speedup claim. Ordinary-history cold p95 is
+323.28 → 319.60 ms, CPU/batch 490.46 → 484.24 ms and warm p95 157.03 → 170.52 ms; overlapping
+ranges and changes in this unaffected path illustrate host/GC variability. The larger apparent
+explicit-case warm gain also must not be attributed to hunk scanning. Detail timing and retained
+heap are similar. No capture is dropped because its timing is unfavorable.
+
+### Cold projection in a warmed server
+
+A separate three-pair diagnostic per diff fixture distinguishes first-process work from a miss
+in an already running server. The harness first warms the same HTTP, SQL, schema and parser code,
+then explicitly clears only the compact-row and derived-diff caches, verifies the history queue
+is empty, and collects outside timing. It then measures 20 uncached projections. Database and filesystem page-cache state is not reset;
+connections and JIT code remain warm. This is controlled cache clearing in the benchmark,
+not an application cache policy or a simulation of cold disk reads. These captures are excluded
+from the fresh-process comparison above.
+
+| Warm-runtime cache-miss metric | Omitted before | Omitted after | Explicit before | Explicit after |
+| ------------------------------ | -------------: | ------------: | --------------: | -------------: |
+| Batch request p95 (ms)         |         407.60 |        309.11 |          334.83 |         316.54 |
+| Server CPU/batch (ms)          |         460.09 |        350.55 |          371.94 |         358.75 |
+
+Here p95 improves **24.2%** for omitted counts and **5.5%** for explicit counts; CPU falls
+**23.8%** and **3.5%**. This supports reducing hunk allocations in warm-code projection work,
+while the fresh-process measurements show the smaller improvement when startup work is included.
+The diagnostic is finite and synthetic; it does not establish a bound for arbitrary patches or
+long-running memory use. Full stored-output reading, validation and revision hashing remain costs
+on cache misses, and a large individual event remains indivisible within the existing scheduler.
+
+### Verification and artifacts
+
+The 20,000-case malformed/mixed patch differential check matches the committed parser. Another
+10,000 generated multi-file patches vary explicit/omitted/zero/padded counts, offsets, body headers,
+context, line endings and final newlines; all match. Regression tests cover the same grammar plus
+400-digit counts, malformed prefixes and counter reset before later valid hunks.
+
+All 440 primary cold-page hashes, selections/cursors for 13,200 repeated reads, and 440 sampled
+full-detail hashes match before/after. All 8,800 primary detail requests validate event identity and
+revision. The separate warm-runtime diagnostics verify another 240 uncached page hashes and their
+selection/detail invariants. Every capture drains history work to zero and retains the existing
+cache count/character/per-entry/body-omission checks.
+The full suite passes 1,637 tests across 286 files, plus 11 architecture regression checks.
+Workspace types, dependency/ownership checks, lint, formatting and the server build pass.
+Only the shared parser production JavaScript differs between snapshots, and its rebuilt bytes
+match the frozen candidate.
+
+Ignored artifacts are in `performance-results/cold-diff-load-comparison/`: frozen executables in
+`variants/`, canonical isolated seeds, `explicit-seed.mjs`, primary `order.json`, and separate
+`runtime-order.json`. `comparison.json` includes all process values, medians and ranges;
+`validation.json` records invariants. `manifest.json` pins the committed baseline, source,
+executable, fixture and harness hashes. Inspector profiles, `equivalence.json`,
+`differential-hunks.json` and `checks/` retain diagnostics and verification. No runtime GC, cache
+clearing or allocator tuning is added to application code.
+
+With the retained snapshots, use fresh output paths for individual reruns:
+
+```sh
+AGENTCTL_PROFILE_VARIANT=after HISTORY_CASE=explicit SERVER_RETENTION=1 NODE_ENV=test LOG_LEVEL=silent AGENTCTL_TELEMETRY=0 node --expose-gc --import ./performance-results/cold-diff-load-comparison/variant-hook.mjs performance-results/cold-diff-load-comparison/reader.mjs /tmp/cold-diff-load.json
+python3 performance-results/cold-diff-load-comparison/analyze.py
+node performance-results/cold-diff-load-comparison/equivalence.mjs
+node performance-results/cold-diff-load-comparison/differential-hunks.mjs
+```
+
+`run-pairs.mjs` and `run-runtime-miss.mjs` reject existing primary/diagnostic output labels.
+Preserve fixed-label seed/profile files before regenerating them. Forced collection remains
+outside measured requests and absent from application code.
