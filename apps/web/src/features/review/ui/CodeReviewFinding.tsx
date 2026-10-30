@@ -1,3 +1,4 @@
+import { CodeReviewFixAttempts } from './CodeReviewFixAttempts';
 import { CodeReviewHandoff } from './CodeReviewHandoff';
 import type { ReviewComposerActions } from '../model/composer-actions';
 import { CodeReviewExcerpt } from './CodeReviewExcerpt';
@@ -83,7 +84,11 @@ export function CodeReviewFinding({
           title={finding.title}
           line={finding.line}
           composerActions={composerActions}
+          initialBaselineCheckId={finding.verification?.checkId ?? null}
         />
+      )}
+      {sessionId && reviewId && (
+        <CodeReviewFixAttempts sessionId={sessionId} reviewId={reviewId} findingId={finding.id} />
       )}
       {finding.status === 'open' ? (
         dismissing ? (

@@ -448,5 +448,25 @@
     "method": "POST",
     "path": "/api/sessions/:id/code-reviews/:reviewId/walkthrough/:position/question",
     "responses": ["200", "400"]
+  },
+  "listReviewFixes": {
+    "method": "GET",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/findings/:findingId/fixes",
+    "responses": ["200"]
+  },
+  "createReviewFix": {
+    "method": "POST",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/findings/:findingId/fixes",
+    "responses": ["200", "400", "409"]
+  },
+  "verifyReviewFix": {
+    "method": "POST",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/findings/:findingId/fixes/:attemptId/check",
+    "responses": ["202", "400", "409"]
+  },
+  "reviewReviewFix": {
+    "method": "POST",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/findings/:findingId/fixes/:attemptId/review",
+    "responses": ["202", "400", "409"]
   }
 }

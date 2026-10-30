@@ -153,3 +153,61 @@ export async function prepareWalkthroughQuestion(
   assertApiStatus(response, 200, 'Could not prepare section question');
   return response.body;
 }
+
+export async function listReviewFixes(
+  sessionId: string,
+  reviewId: string,
+  findingId: string,
+  before?: string,
+  signal?: AbortSignal,
+) {
+  const response = await api.listReviewFixes({
+    params: { id: sessionId, reviewId, findingId },
+    query: { before },
+    fetchOptions: { signal },
+  });
+  assertApiStatus(response, 200, 'Could not load fix attempts');
+  return response.body;
+}
+export async function createReviewFix(
+  sessionId: string,
+  reviewId: string,
+  findingId: string,
+  body: import('@agentctl/shared').CreateReviewFix,
+  signal?: AbortSignal,
+) {
+  const response = await api.createReviewFix({
+    params: { id: sessionId, reviewId, findingId },
+    body,
+    fetchOptions: { signal },
+  });
+  assertApiStatus(response, 200, 'Could not track fix request');
+  return response.body;
+}
+export async function verifyReviewFix(
+  sessionId: string,
+  reviewId: string,
+  findingId: string,
+  attemptId: string,
+  body: import('@agentctl/shared').RunReviewCheck,
+) {
+  const response = await api.verifyReviewFix({
+    params: { id: sessionId, reviewId, findingId, attemptId },
+    body,
+  });
+  assertApiStatus(response, 202, 'Could not verify fix');
+  return response.body;
+}
+export async function reviewReviewFix(
+  sessionId: string,
+  reviewId: string,
+  findingId: string,
+  attemptId: string,
+) {
+  const response = await api.reviewReviewFix({
+    params: { id: sessionId, reviewId, findingId, attemptId },
+    body: {},
+  });
+  assertApiStatus(response, 202, 'Could not review fix');
+  return response.body;
+}

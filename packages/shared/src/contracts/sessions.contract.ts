@@ -1,3 +1,4 @@
+import { reviewFixContract } from './review-fix.contract.js';
 import { reviewVerificationContract } from './review-verification.contract.js';
 import { z } from 'zod';
 import {
@@ -23,6 +24,7 @@ export const sessionsContract = {
   ...repositoryContract,
   ...codeReviewContract,
   ...reviewVerificationContract,
+  ...reviewFixContract,
   ...sessionGitContract,
   importNativeSession: {
     method: 'POST',

@@ -1,3 +1,4 @@
+import { ReviewFixService } from '../services/review-fix-service.js';
 import { ReviewVerificationService } from '../services/review-verification-service.js';
 import { spawn } from 'node:child_process';
 import { CodeReviewService } from '../services/code-review-service.js';
@@ -48,6 +49,16 @@ export function createServerServices(deps: FastifyInstance) {
       deps.eventBus,
       reviewVerification(),
     ));
+  const reviewFix = once(
+    () =>
+      new ReviewFixService(
+        deps.db,
+        { open: (path) => deps.sessionManager.getRepositoryService().open(path) },
+        codeReview(),
+        reviewVerification(),
+        deps.eventBus,
+      ),
+  );
   deps.addHook('preClose', async () => {
     await verification?.dispose();
     await reviews?.dispose();
@@ -90,6 +101,9 @@ export function createServerServices(deps: FastifyInstance) {
       ),
   );
   return {
+    get reviewFix() {
+      return reviewFix();
+    },
     get reviewVerification() {
       return reviewVerification();
     },

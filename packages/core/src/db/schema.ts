@@ -102,6 +102,7 @@ export const codeReviews = sqliteTable(
       .references(() => sessions.id, { onDelete: 'cascade' }),
     providerId: text('provider_id').notNull(),
     modelId: text('model_id').notNull(),
+    purpose: text('purpose').$type<'review' | 'verification'>().notNull().default('review'),
     scope: text('scope').$type<'working' | 'session'>().notNull(),
     context: text('context'),
     evidenceCheckIds: text('evidence_check_ids'),
@@ -181,6 +182,25 @@ export const reviewChecks = sqliteTable(
     outputTruncated: integer('output_truncated', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [index('review_checks_review_idx').on(table.reviewId, table.startedAt)],
+);
+
+export const reviewFixAttempts = sqliteTable(
+  'review_fix_attempts',
+  {
+    id: text('id').primaryKey(),
+    findingId: text('finding_id')
+      .notNull()
+      .references(() => codeReviewFindings.id, { onDelete: 'cascade' }),
+    requestHash: text('request_hash').notNull(),
+    prompt: text('prompt').notNull(),
+    requestRevision: text('request_revision').notNull(),
+    beforeCheckId: text('before_check_id').references(() => reviewChecks.id, {
+      onDelete: 'set null',
+    }),
+    runs: text('runs').notNull().default('[]'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('review_fix_attempts_finding_idx').on(table.findingId, table.createdAt)],
 );
 
 export const reviewFindingEvidence = sqliteTable(

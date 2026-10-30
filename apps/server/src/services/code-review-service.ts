@@ -111,6 +111,7 @@ export class CodeReviewService {
       .where(
         and(
           eq(codeReviews.sessionId, sessionId),
+          eq(codeReviews.purpose, 'review'),
           cursor
             ? or(
                 lt(codeReviews.startedAt, cursor.startedAt),
@@ -805,6 +806,35 @@ export class CodeReviewService {
       'Explain this walkthrough section, its purpose and how its parts connect. Distinguish the captured version from current code. Context includes at most three captured excerpt anchors, six related findings and two review-wide check results; do not assume full section coverage.',
     );
     return { prompt: result.prompt, freshness, capture: current?.capture ?? null };
+  }
+  async verificationTarget(sessionId: string, scope: 'working' | 'session') {
+    const { session, repository, capture } = await this.capture(sessionId);
+    if (!canMutateWorkspace(session.status))
+      throw new AppError('Stop the active turn before verification.', 409);
+    const fromRevision = scope === 'session' ? capture.baseline : capture.working;
+    const files = await repository.diff(fromRevision, capture.current);
+    if (files.length > 100 || files.reduce((sum, file) => sum + file.diff.length, 0) > 60000)
+      throw new AppError('The verification target is too large. Narrow the changes first.', 400);
+    const id = randomUUID();
+    this.db
+      .insert(codeReviews)
+      .values({
+        id,
+        sessionId,
+        providerId: 'local-verification',
+        modelId: 'none',
+        purpose: 'verification',
+        scope,
+        fromRevision,
+        toRevision: capture.current,
+        capturedFiles: JSON.stringify(files),
+        status: 'completed',
+        summary: 'Captured verification target; no AI review performed.',
+        startedAt: Date.now(),
+        finishedAt: Date.now(),
+      })
+      .run();
+    return id;
   }
   private savedEvidenceIds(raw: string | null) {
     try {

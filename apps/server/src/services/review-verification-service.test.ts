@@ -141,6 +141,10 @@ beforeEach(async () => {
   const server = initServer();
   const contract = {
     getCodeReviewFile: sessionsContract.getCodeReviewFile,
+    listReviewFixes: sessionsContract.listReviewFixes,
+    createReviewFix: sessionsContract.createReviewFix,
+    verifyReviewFix: sessionsContract.verifyReviewFix,
+    reviewReviewFix: sessionsContract.reviewReviewFix,
     updateWalkthroughProgress: sessionsContract.updateWalkthroughProgress,
     prepareWalkthroughQuestion: sessionsContract.prepareWalkthroughQuestion,
     prepareReviewFindingHandoff: sessionsContract.prepareReviewFindingHandoff,

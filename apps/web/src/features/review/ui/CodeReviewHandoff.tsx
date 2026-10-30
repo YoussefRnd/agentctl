@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Button,
+  Select,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -8,7 +9,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@agentctl/ui';
-import { prepareReviewFindingHandoff } from '@agentctl/api-client';
+import { useQueryClient } from '@tanstack/react-query';
+import { useReviewChecks } from '../model/useReviewChecks';
+import { fixAttemptsKey } from './CodeReviewFixAttempts';
+import { createReviewFix, prepareReviewFindingHandoff } from '@agentctl/api-client';
 import type { ReviewHandoff, ReviewHandoffIntent, ReviewHandoffSnippet } from '@agentctl/shared';
 import type { ReviewComposerActions } from '../model/composer-actions';
 
@@ -60,6 +64,7 @@ export function CodeReviewHandoff({
   title,
   line,
   composerActions,
+  initialBaselineCheckId = null,
 }: {
   sessionId: string;
   reviewId: string;
@@ -67,9 +72,14 @@ export function CodeReviewHandoff({
   title: string;
   line: number;
   composerActions: ReviewComposerActions;
+  initialBaselineCheckId?: string | null;
 }) {
+  const client = useQueryClient();
+  const tracked = useRef<{ key: string; id: string } | null>(null);
+  const [baseline, setBaseline] = useState(initialBaselineCheckId ?? '');
   const [open, setOpen] = useState(false);
   const [intent, setIntent] = useState<ReviewHandoffIntent>('ask');
+  const baselineChecks = useReviewChecks(sessionId, reviewId, open && intent === 'fix');
   const [notes, setNotes] = useState('');
   const [data, setData] = useState<ReviewHandoff | null>(null);
   const [busy, setBusy] = useState(false);
@@ -117,7 +127,27 @@ export function CodeReviewHandoff({
         );
         return;
       }
-      composerActions.insertIntoComposer(next.prompt);
+      let prompt = next.prompt;
+      if (mode === 'fix' && next.capture) {
+        const key = JSON.stringify([question, baseline, next.capture]);
+        if (tracked.current?.key !== key) tracked.current = { key, id: crypto.randomUUID() };
+        const attempt = await createReviewFix(
+          sessionId,
+          reviewId,
+          findingId,
+          {
+            id: tracked.current.id,
+            beforeCheckId: baseline || null,
+            notes: question,
+            expectedCapture: next.capture,
+          },
+          controller.signal,
+        );
+        if (generation.current !== token) return;
+        prompt = attempt.prompt;
+        void client.invalidateQueries({ queryKey: fixAttemptsKey(sessionId, reviewId, findingId) });
+      }
+      composerActions.insertIntoComposer(prompt);
       close();
     } catch (cause) {
       if (generation.current === token && !controller.signal.aborted)
@@ -127,6 +157,8 @@ export function CodeReviewHandoff({
     }
   };
   const begin = (mode: ReviewHandoffIntent) => {
+    tracked.current = null;
+    setBaseline(initialBaselineCheckId ?? '');
     setIntent(mode);
     setNotes('');
     setData(null);
@@ -220,6 +252,48 @@ export function CodeReviewHandoff({
                   {data.prompt}
                 </pre>
               </details>
+            </div>
+          )}
+          {intent === 'fix' && (
+            <div className="space-y-2 text-xs">
+              <Select
+                aria-label="Fix baseline check"
+                value={baseline}
+                options={[
+                  { value: '', label: 'Track without a failing baseline' },
+                  ...(baseline && !baselineChecks.checks.some((check) => check.id === baseline)
+                    ? [{ value: baseline, label: 'Previously linked reproduction check' }]
+                    : []),
+                  ...baselineChecks.checks
+                    .filter(
+                      (check) => check.status === 'failed' && check.revisionState === 'unchanged',
+                    )
+                    .map((check) => ({ value: check.id, label: check.name })),
+                ]}
+                onChange={setBaseline}
+              />
+              <p className="text-text-muted text-[11px]">
+                A suggested fix needs a comparable failing check explicitly confirmed as reproducing
+                this finding. Without that baseline, the attempt remains evidence for manual
+                investigation.
+              </p>
+              {baselineChecks.query.hasNextPage && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    void baselineChecks.query.fetchNextPage();
+                  }}
+                >
+                  Load older baseline checks
+                </Button>
+              )}
+              {baselineChecks.query.isError && (
+                <p role="alert" className="text-warning">
+                  Could not load baseline checks.
+                </p>
+              )}
             </div>
           )}
           <label className="space-y-1 text-xs">

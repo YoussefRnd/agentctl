@@ -7,6 +7,10 @@ import { CodeReviewPanel } from './CodeReviewPanel';
 
 const fixture = vi.hoisted(() => ({
   list: vi.fn(),
+  fixes: vi.fn(),
+  verifyFix: vi.fn(),
+  reviewFix: vi.fn(),
+  createFix: vi.fn(),
   progress: vi.fn(),
   section: vi.fn(),
   prepare: vi.fn(),
@@ -25,6 +29,10 @@ const fixture = vi.hoisted(() => ({
 vi.mock('@agentctl/api-client', async (original) => ({
   ...(await original<typeof import('@agentctl/api-client')>()),
   listCodeReviews: fixture.list,
+  listReviewFixes: fixture.fixes,
+  verifyReviewFix: fixture.verifyFix,
+  reviewReviewFix: fixture.reviewFix,
+  createReviewFix: fixture.createFix,
   updateWalkthroughProgress: fixture.progress,
   prepareWalkthroughQuestion: fixture.section,
   prepareReviewFindingHandoff: fixture.prepare,
@@ -84,6 +92,8 @@ afterEach(() => {
 });
 async function render(runs: CodeReviewRun[] = [], disabled = false) {
   fixture.list.mockResolvedValue({ runs, nextCursor: null });
+  if (!fixture.checks.getMockImplementation())
+    fixture.checks.mockResolvedValue({ checks: [], nextCursor: null });
   if (!fixture.file.getMockImplementation())
     fixture.file.mockResolvedValue({ file: null, source: 'unavailable' });
   fixture.providers.mockResolvedValue([
@@ -695,6 +705,10 @@ it('prepares editable questions only on request and rechecks before inserting in
   expect(fixture.resolve).not.toHaveBeenCalled();
 });
 it('requires inspecting updated context after a late edit and blocks a fix when freshness is unknown', async () => {
+  fixture.createFix.mockResolvedValue({
+    id: run().id,
+    prompt: 'Recheck changed code before fixing',
+  });
   fixture.prepare.mockResolvedValueOnce(prepared({ intent: 'fix' })).mockResolvedValue(
     prepared({
       intent: 'fix',
@@ -864,4 +878,117 @@ it('opens a file-index excerpt on the first actual changed line, including an em
   });
   expect(file.textContent).toContain('old side');
   expect(file.textContent).toContain('Highlighted line 50');
+});
+
+it('creates a tracked fix request with its selected baseline only when added to the composer', async () => {
+  const checkId = '33333333-3333-4333-8333-333333333333';
+  const item = run();
+  item.findings[0]!.verification = {
+    state: 'reproduced',
+    checkId,
+    reason: 'Regression reproduces this finding.',
+    confirmedAt: 1,
+  };
+  fixture.prepare.mockResolvedValue(prepared({ intent: 'fix' }));
+  fixture.createFix.mockResolvedValue({
+    id: item.id,
+    prompt: '[AgentCtl fix attempt: tracked] Focused fix request',
+  });
+  const f = await render([item]);
+  await act(async () => button(f.container, 'Fix this finding').click());
+  await readyDialog();
+  expect(fixture.createFix).not.toHaveBeenCalled();
+  await act(async () => button(document.body, 'Add to composer').click());
+  await vi.waitFor(() => expect(fixture.createFix).toHaveBeenCalled());
+  expect(fixture.createFix).toHaveBeenCalledWith(
+    'session-1',
+    item.id,
+    item.findings[0]!.id,
+    { id: expect.any(String), beforeCheckId: checkId, notes: '', expectedCapture: capture },
+    expect.any(AbortSignal),
+  );
+  expect(fixture.draft).toHaveBeenCalledWith(expect.stringContaining('AgentCtl fix attempt'));
+  expect(fixture.resolve).not.toHaveBeenCalled();
+  expect(fixture.start).not.toHaveBeenCalled();
+});
+it('runs explicit verification and independent review actions without resolving the finding', async () => {
+  const item = run();
+  const attemptId = '44444444-4444-4444-8444-444444444444';
+  const attempt = {
+    id: attemptId,
+    reviewId: item.id,
+    findingId: item.findings[0]!.id,
+    requestRevision: 'old',
+    createdAt: 1,
+    requestEventId: null,
+    before: null,
+    after: null as Record<string, unknown> | null,
+    runs: [],
+    followup: null,
+    outcome: 'not_checked',
+    reason: 'Run the selected check.',
+    freshness: 'current',
+  };
+  fixture.fixes.mockResolvedValue({ attempts: [attempt], nextCursor: null });
+  fixture.verifyFix.mockResolvedValue({ id: attemptId });
+  fixture.reviewFix.mockResolvedValue({ id: attemptId });
+  const f = await render([item]);
+  const details = [...f.container.querySelectorAll('details')].find(
+    (node) => node.querySelector('summary')?.textContent === 'Tracked fix attempts',
+  )!;
+  await act(async () => {
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(details.querySelector('[aria-label="Fix verification command"]')).not.toBeNull();
+  });
+  expect(fixture.verifyFix).not.toHaveBeenCalled();
+  const command = details.querySelector<HTMLTextAreaElement>(
+    '[aria-label="Fix verification command"]',
+  )!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+      command,
+      'pnpm test input',
+    );
+    command.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  fixture.fixes.mockResolvedValue({
+    attempts: [
+      {
+        ...attempt,
+        after: {
+          id: attemptId,
+          reviewId: attemptId,
+          status: 'passed',
+          command: 'pnpm test input',
+          exitCode: 0,
+        },
+        outcome: 'needs_investigation',
+      },
+    ],
+    nextCursor: null,
+  });
+  await act(async () => button(details, 'Run selected check').click());
+  expect(fixture.verifyFix).toHaveBeenCalledWith(
+    'session-1',
+    item.id,
+    item.findings[0]!.id,
+    attemptId,
+    { command: 'pnpm test input', timeoutMs: 180000, name: 'Tracked fix verification' },
+  );
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(button(details, 'Review with session provider').disabled).toBe(false);
+  });
+  await act(async () => button(details, 'Review with session provider').click());
+  expect(fixture.reviewFix).toHaveBeenCalledWith(
+    'session-1',
+    item.id,
+    item.findings[0]!.id,
+    attemptId,
+  );
+  expect(fixture.resolve).not.toHaveBeenCalled();
 });

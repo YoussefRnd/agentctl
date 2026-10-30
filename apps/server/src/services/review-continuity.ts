@@ -45,6 +45,7 @@ export function collectReviewHistory(
         eq(codeReviews.sessionId, sessionId),
         eq(codeReviews.scope, scope),
         eq(codeReviews.status, 'completed'),
+        eq(codeReviews.purpose, 'review'),
       ),
     )
     .orderBy(desc(codeReviews.startedAt), desc(codeReviews.id))

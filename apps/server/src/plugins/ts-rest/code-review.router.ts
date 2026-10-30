@@ -1,3 +1,4 @@
+import { createReviewFixRouter } from './review-fix.router.js';
 import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
 import { sessionsContract } from '@agentctl/shared';
@@ -8,6 +9,10 @@ type ReviewContract = Pick<
   | 'prepareReviewFindingHandoff'
   | 'updateWalkthroughProgress'
   | 'prepareWalkthroughQuestion'
+  | 'listReviewFixes'
+  | 'createReviewFix'
+  | 'verifyReviewFix'
+  | 'reviewReviewFix'
   | 'getCodeReviewFile'
   | 'listCodeReviews'
   | 'startCodeReview'
@@ -21,6 +26,7 @@ type ReviewContract = Pick<
 >;
 export function createCodeReviewRouter(app: FastifyInstance): RouterImplementation<ReviewContract> {
   return {
+    ...createReviewFixRouter(app),
     updateWalkthroughProgress: async ({ params, body }) => {
       try {
         return {

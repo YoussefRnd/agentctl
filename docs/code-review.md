@@ -251,3 +251,36 @@ includes bounded captured context, relevant findings and historical check data, 
 editable explanation request into the current coding session's composer. It requires no provider
 switch, native review tool or optional ACP extension. Closing/navigating away prevents late draft
 insertion. Delivery and execution use the existing session workflow and its reinspection rules.
+
+## Tracked fix-and-verify loop
+
+Adding a **Fix this finding** request creates a durable attempt and inserts its ID into the editable
+request. Preparation does not send a message or start an agent. The attempt records the observed
+request revision and an optional selected failing baseline check. Reusing the same request ID/body
+returns the same attempt; conflicting IDs and changed preparation snapshots are rejected. A matching
+user message can be found in that session's conversation by its attempt marker. This records a
+handoff reference, not proof that an agent authored a later code change.
+
+Under **Tracked fix attempts**, explicitly run a selected command after changes, inspect before/after
+output, then request a fresh independent review using the session's selected provider/model. A check
+captures an internal verification target without generating an AI review; these targets are excluded
+from review history and continuity context. Existing check ownership, workspace serialization,
+timeouts, cancellation and restart recovery still apply. Follow-up reviews use the normal isolated
+ACP review workflow and receive recorded check evidence. Source edits after a check require another
+check before reviewing. Attempts retain at most twenty check/review references and paginate history.
+
+A suggested fixed outcome requires a human-confirmed reproduction baseline on the request revision,
+the same unredacted command and working directory passing on a different source revision, unchanged
+check snapshots, and a completed matching independent review that received that check evidence and
+reported no findings. Missing baselines, changed commands, interrupted checks, stale/unknown code,
+failed/incomplete reviews or findings need investigation. A comparable failed command is labelled
+check still failing; inspect it to establish whether its failure is the original scenario. Source
+snapshots do not capture ignored dependencies, services or runtime environment, so suggestions stay
+provisional. All final finding resolutions remain explicit manual actions.
+
+Migration `0056_review_fix_attempts` persists attempts and distinguishes internal verification targets
+from AI reviews. Request prompts, baseline IDs, code revisions, check output references and review
+references survive restart. Session deletion cascades attempts and their review/check records.
+No model output can change a final resolution, and commands/reviews never run just because a request
+is prepared or a panel opens. Cancel and re-run controls are explicit. Every provider receives the
+same standard text request and independent-review contract; no native fix or review extension is used.
