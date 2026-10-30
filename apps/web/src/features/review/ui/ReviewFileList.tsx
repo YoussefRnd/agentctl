@@ -8,8 +8,10 @@ import {
   CommentIcon,
   KebabHorizontalIcon,
 } from '@primer/octicons-react';
-import { useMemo, useRef, useLayoutEffect } from 'react';
+import { useMemo, useRef, useLayoutEffect, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { CodeReviewFinding } from './CodeReviewFinding';
+import type { CodeReviewRun, ResolveReviewFinding } from '@agentctl/shared';
 import { DiffBlock } from './diff/DiffBlock';
 import type { ReviewFile, FileState } from './ReviewHeader';
 
@@ -53,6 +55,12 @@ const STATE_BADGE: Record<FileState, { letter: string; color: string; label: str
 };
 
 export interface ReviewFileListProps {
+  sessionId?: string;
+  codeReview?: CodeReviewRun;
+  resolvingFinding?: boolean;
+  findingError?: string;
+  onResolveFinding?(findingId: string, body: ResolveReviewFinding): Promise<unknown>;
+
   composerActions: ReviewComposerActions;
   files?: (ReviewFile & { hunks: ReturnType<typeof parseDiff> })[];
   collapsedFiles: Record<string, boolean>;
@@ -71,6 +79,11 @@ export interface ReviewFileListProps {
 }
 
 export function ReviewFileList({
+  sessionId,
+  codeReview,
+  resolvingFinding,
+  findingError,
+  onResolveFinding,
   composerActions,
   files,
   collapsedFiles,
@@ -87,6 +100,50 @@ export function ReviewFileList({
   onTargetFileHandled,
   onVisibleExpandedFilesChange,
 }: ReviewFileListProps) {
+  const annotations = useMemo(() => {
+    const result = new Map<string, Map<string, ReactNode>>();
+    if (!sessionId || !codeReview || !onResolveFinding) return result;
+    for (const file of files ?? []) {
+      const findings = codeReview.findings.filter(
+        (finding) => finding.path === file.path && finding.status === 'open',
+      );
+      const lines = new Map<string, ReactNode>();
+      const oldSide = !file.hunks.some((hunk) =>
+        hunk.lines.some((line) => line.newLineNumber !== undefined),
+      );
+      for (const line of new Set(findings.map((finding) => finding.line))) {
+        lines.set(
+          `${oldSide ? 'old' : 'new'}:${line}`,
+          <div className="space-y-2 text-xs">
+            <p className="text-text-muted text-[11px]">AI findings · matching review version</p>
+            <ul className="space-y-2">
+              {findings
+                .filter((finding) => finding.line === line)
+                .map((finding) => (
+                  <CodeReviewFinding
+                    key={finding.id}
+                    finding={finding}
+                    sessionId={sessionId}
+                    reviewId={codeReview.id}
+                    showExcerpt={false}
+                    pending={!!resolvingFinding}
+                    onSelectFile={() => onOpenFile?.(file.path)}
+                    onResolve={(body) => onResolveFinding(finding.id, body)}
+                  />
+                ))}
+            </ul>
+            {findingError && (
+              <p role="alert" className="text-danger [overflow-wrap:anywhere]">
+                {findingError}
+              </p>
+            )}
+          </div>,
+        );
+      }
+      result.set(file.path, lines);
+    }
+    return result;
+  }, [files, sessionId, codeReview, resolvingFinding, findingError, onResolveFinding, onOpenFile]);
   const allFiles = useMemo(() => files ?? [], [files]);
 
   const parentRef = useRef<HTMLDivElement>(null);
@@ -364,6 +421,7 @@ export function ReviewFileList({
                   )}
                   <DiffBlock
                     composerActions={composerActions}
+                    annotations={annotations.get(file.path)}
                     path={file.path}
                     hunks={file.hunks}
                     isCollapsed={collapsed}

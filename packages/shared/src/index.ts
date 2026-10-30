@@ -12,6 +12,9 @@ export * from './env-web.js';
 export * from './utils.js';
 
 export * from './schemas/review.js';
+export * from './schemas/code-review.js';
+export * from './schemas/review-verification.js';
+export * from './schemas/review-context.js';
 export * from './schemas/repository.js';
 export * from './workspace-policy.js';
 export * from './agent-config.js';
@@ -37,3 +40,5 @@ export * from './fuzzy-search.js';
 
 export * from './schemas/context.js';
 export * from './schemas/attachments.js';
+
+export * from './schemas/review-continuity.js';

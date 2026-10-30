@@ -76,6 +76,8 @@ export class GitRepositoryBackend implements RepositoryBackend {
         if (!revision) throw new Error('Repository is no longer available');
         return revision;
       },
+      textSnapshot: (revision) =>
+        this.snapshots.openTextSnapshot(workspacePath, immutableRevision(revision)),
       review: async (baseline, options) => {
         const result = await this.snapshots.getReview(
           workspacePath,

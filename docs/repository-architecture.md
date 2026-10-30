@@ -127,3 +127,13 @@ revision/recovery retention, and passes the neutral workflow and HTTP tests with
 AgentCtl's development tooling still uses Git to audit this source checkout. That development
 requirement does not place Git inside the repository-neutral runtime contract. Git-specific
 branch, staging, push and forge operations remain optional backend workflows.
+
+## Immutable source context
+
+`SourceRepository.textSnapshot(reference)` validates the scoped reference and returns a read-only
+snapshot reader, or null when a backend does not implement this optional capability. Readers
+list bounded file metadata, read bounded text with explicit unsupported/binary/missing results,
+and may search textual references. The Git implementation resolves scoped trees once and reads
+blob objects, independent of later working-tree edits. It never follows symlinks or executes
+repository filters. Review context selection is backend-neutral policy in `repository/review-context.ts`;
+see [AI review coverage](code-review.md#richer-context-v2) for selection and limits.

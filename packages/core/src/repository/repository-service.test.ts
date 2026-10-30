@@ -21,6 +21,10 @@ it('supports backend-native revision IDs that are not Git hashes and validates o
     { path: 'file.txt', state: 'modified' as const, diff: 'a patch' },
   ]);
   const compare = vi.fn(async () => ({ files: [], totalAdditions: 0, totalDeletions: 0 }));
+  const textSnapshot = vi.fn(async () => ({
+    listFiles: async () => ({ files: [], truncated: false }),
+    readFile: async () => ({ status: 'missing' as const }),
+  }));
   const backendWorkspace: BackendWorkspace = {
     identity: {
       repositoryId: 'other-repository',
@@ -37,6 +41,7 @@ it('supports backend-native revision IDs that are not Git hashes and validates o
     }),
     diff,
     compare,
+    textSnapshot,
   };
   const backend: RepositoryBackend = { id: 'example-vcs', open: async () => backendWorkspace };
   const otherService = new RepositoryService([backend]);
@@ -48,6 +53,8 @@ it('supports backend-native revision IDs that are not Git hashes and validates o
   const reopened = await new RepositoryService([backend]).open(directory);
   await reopened.compare(baseline, review.capture!.current);
   expect(compare).toHaveBeenCalledWith('revision/head/α', 'checkpoint/next/β');
+  await reopened.textSnapshot(review.capture!.current);
+  expect(textSnapshot).toHaveBeenCalledWith('checkpoint/next/β');
   expect(repository.info.capabilities.restore).toBe(false);
   await expect(repository.restore(baseline)).rejects.toMatchObject({ code: 'unsupported' });
   for (const invalid of ['HEAD', 'a'.repeat(40), 'revision:v1:bad-json', 'revision:v2:anything']) {

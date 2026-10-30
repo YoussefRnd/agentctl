@@ -7,3 +7,5 @@ export { repositoryIdentity } from './identity.js';
 
 export * from './workspace.js';
 export * from './checkpoints.js';
+
+export * from './review-context.js';

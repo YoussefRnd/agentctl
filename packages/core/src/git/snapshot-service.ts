@@ -1,3 +1,4 @@
+import { GitTextSnapshot } from './text-snapshot.js';
 import { GitSnapshotComparison } from './snapshot-comparison.js';
 import type { FilePatch, SnapshotFileChange, SnapshotComparison } from './snapshot-types.js';
 export type { FilePatch, SnapshotFileChange, SnapshotComparison } from './snapshot-types.js';
@@ -297,6 +298,14 @@ export class SnapshotService {
     toHash?: string,
   ): Promise<SnapshotComparison> {
     return this.compareSnapshots(projectPath, fromHash, toHash);
+  }
+
+  async openTextSnapshot(projectPath: string, revision: string) {
+    const context = await this.getContext(projectPath);
+    if (!context) throw new Error('Repository is no longer available');
+    const git = simpleGit(context.projectPath).env(context.env);
+    const tree = await this.resolveTreeish(git, context, revision);
+    return new GitTextSnapshot(context.repositoryRoot, context.env, tree);
   }
 
   async getCheckpointDiffFiles(

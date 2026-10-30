@@ -49,6 +49,7 @@ export interface BackendWorkspace {
   importLegacyRecovery?: (recovery: string) => string;
   resolveRevision?: (selector: string) => Promise<string>;
   capture?: () => Promise<string>;
+  textSnapshot?: (revision: string) => Promise<RepositoryTextSnapshot>;
   review?: (
     baseline: string | undefined,
     options: RepositoryReviewOptions,
@@ -62,4 +63,26 @@ export interface RepositoryBackend {
   readonly id: string;
   /** Return null only when this backend does not own the selected directory. */
   open(workspacePath: string): Promise<BackendWorkspace | null>;
+}
+
+/** Read-only access to one immutable revision; never follows working-tree links. */
+export interface SnapshotFileEntry {
+  path: string;
+  size: number;
+  kind: 'file' | 'symlink' | 'submodule';
+}
+export type SnapshotTextFile =
+  | { status: 'text'; text: string }
+  | { status: 'missing' | 'binary' | 'too_large' | 'symlink' | 'submodule' };
+export interface RepositoryTextSnapshot {
+  listFiles(
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<{ files: SnapshotFileEntry[]; truncated: boolean }>;
+  readFile(path: string, maxBytes: number, signal?: AbortSignal): Promise<SnapshotTextFile>;
+  search?(
+    terms: string[],
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<{ paths: string[]; truncated: boolean }>;
 }

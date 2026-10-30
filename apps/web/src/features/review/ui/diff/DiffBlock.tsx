@@ -16,6 +16,7 @@ import {
   useRef,
   useLayoutEffect,
   type RefObject,
+  type ReactNode,
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DiffHunk } from '@/shared/lib/diff-parser';
@@ -28,6 +29,7 @@ import { toast } from 'sonner';
 import type { ReviewComposerActions } from '../../model/composer-actions';
 
 interface DiffBlockProps {
+  annotations?: ReadonlyMap<string, ReactNode>;
   composerActions: ReviewComposerActions;
   scrollElement: RefObject<HTMLDivElement | null>;
   scrollOffset: number;
@@ -85,6 +87,7 @@ function HunkHeader({
 }
 
 function DiffBody({
+  annotations,
   composerActions,
   scrollElement,
   scrollOffset,
@@ -96,6 +99,7 @@ function DiffBody({
   viewMode,
   wrapLines,
 }: {
+  annotations?: ReadonlyMap<string, ReactNode>;
   scrollElement: RefObject<HTMLDivElement | null>;
   scrollOffset: number;
   hunks: DiffHunk[];
@@ -113,13 +117,38 @@ function DiffBody({
   // rather than mounting every hunk or creating one scroll observer per hunk.
   const rows = useMemo(
     () =>
-      hunks.flatMap((hunk) => [
-        { hunk, line: null, split: null },
-        ...(isSplit
-          ? buildSplitRows(hunk.lines).map((split) => ({ hunk: null, line: null, split }))
-          : hunk.lines.map((line) => ({ hunk: null, line, split: null }))),
-      ]),
-    [hunks, isSplit],
+      hunks.flatMap((hunk) => {
+        const header = { hunk, line: null, split: null, annotation: null };
+        const lines = isSplit
+          ? buildSplitRows(hunk.lines).map((split) => ({
+              hunk: null,
+              line: null,
+              split,
+              annotation: null,
+            }))
+          : hunk.lines.map((line) => ({ hunk: null, line, split: null, annotation: null }));
+        return [
+          header,
+          ...lines.flatMap((row) => {
+            const old = row.line?.oldLineNumber ?? row.split?.left?.oldLineNumber;
+            const current = row.line?.newLineNumber ?? row.split?.right?.newLineNumber;
+            const additions = [
+              annotations?.get(`old:${old}`),
+              annotations?.get(`new:${current}`),
+            ].filter((value): value is ReactNode => value != null);
+            return [
+              row,
+              ...additions.map((annotation) => ({
+                hunk: null,
+                line: null,
+                split: null,
+                annotation,
+              })),
+            ];
+          }),
+        ];
+      }),
+    [hunks, isSplit, annotations],
   );
   const [scrollMargin, setScrollMargin] = useState(scrollOffset);
   useLayoutEffect(() => {
@@ -138,13 +167,13 @@ function DiffBody({
     // A newly mounted file shares an already-scrolled container. Starting its
     // row virtualizer at zero would reset the entire review pane on mount.
     initialOffset: () => scrollElement.current?.scrollTop ?? 0,
-    estimateSize: (index) => (rows[index].hunk ? 32 : 18),
+    estimateSize: (index) => (rows[index].annotation ? 240 : rows[index].hunk ? 32 : 18),
     overscan: 8,
     enabled: rows.length > 0,
   });
   useLayoutEffect(() => {
     virtualizer.measure();
-  }, [virtualizer, wrapLines, viewMode]);
+  }, [virtualizer, wrapLines, viewMode, annotations]);
   const longestLine = useMemo(() => {
     let longest = 0;
     for (const hunk of hunks)
@@ -174,6 +203,12 @@ function DiffBody({
     : `calc(${longestLine * columns}ch + ${gutterWidth * columns}px)`;
   function renderRow(index: number) {
     const row = rows[index];
+    if (row.annotation)
+      return (
+        <div className="p-2 font-sans" style={{ maxWidth: parentRef.current?.clientWidth }}>
+          {row.annotation}
+        </div>
+      );
     if (row.hunk)
       return <HunkHeader hunk={row.hunk} path={path} composerActions={composerActions} />;
     if (row.line)
@@ -229,6 +264,7 @@ function DiffBody({
 }
 
 export const DiffBlock = memo(function DiffBlock({
+  annotations,
   composerActions,
   scrollElement,
   scrollOffset,
@@ -396,6 +432,7 @@ export const DiffBlock = memo(function DiffBlock({
 
       {!isCollapsed && (
         <DiffBody
+          annotations={annotations}
           composerActions={composerActions}
           scrollElement={scrollElement}
           scrollOffset={scrollOffset}

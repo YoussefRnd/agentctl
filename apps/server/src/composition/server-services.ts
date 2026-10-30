@@ -1,3 +1,6 @@
+import { ReviewVerificationService } from '../services/review-verification-service.js';
+import { spawn } from 'node:child_process';
+import { CodeReviewService } from '../services/code-review-service.js';
 import type { FastifyInstance } from 'fastify';
 import { AcpAgentDriver } from '@agentctl/core/acp';
 import { SearchQueries } from '../services/search-queries.js';
@@ -27,6 +30,28 @@ function once<T>(create: () => T): () => T {
 }
 
 export function createServerServices(deps: FastifyInstance) {
+  let verification: ReviewVerificationService | undefined;
+  const reviewVerification = () =>
+    (verification ??= new ReviewVerificationService(
+      deps.db,
+      { open: (path) => deps.sessionManager.getRepositoryService().open(path) },
+      deps.sessionManager,
+      deps.eventBus,
+    ));
+  let reviews: CodeReviewService | undefined;
+  const codeReview = () =>
+    (reviews ??= new CodeReviewService(
+      deps.db,
+      { open: (path) => deps.sessionManager.getRepositoryService().open(path) },
+      deps.providerRegistry,
+      AcpAgentDriver.create(spawn, deps.log, deps.runtimeServices?.diagnostics),
+      deps.eventBus,
+      reviewVerification(),
+    ));
+  deps.addHook('preClose', async () => {
+    await verification?.dispose();
+    await reviews?.dispose();
+  });
   const search = once(() => new SearchQueries(deps.db));
   const settings = once(() => new SettingsService(deps.providerRegistry, deps.eventBus));
   const mcp = once(() => new McpService(deps.db, deps.mcpGateway, deps.eventBus, deps.log));
@@ -65,6 +90,15 @@ export function createServerServices(deps: FastifyInstance) {
       ),
   );
   return {
+    get reviewVerification() {
+      return reviewVerification();
+    },
+    cancelReviewChecksForSession(id: string) {
+      verification?.cancelSession(id);
+    },
+    get codeReview() {
+      return codeReview();
+    },
     get search() {
       return search();
     },

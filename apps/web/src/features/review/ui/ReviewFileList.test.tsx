@@ -1,3 +1,5 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { CodeReviewRun } from '@agentctl/shared';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
@@ -13,8 +15,10 @@ const composer = vi.hoisted(() => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn() } }));
 
 const roots: Root[] = [];
+const clients: QueryClient[] = [];
 afterEach(() => {
   act(() => roots.splice(0).forEach((root) => root.unmount()));
+  clients.splice(0).forEach((client) => client.clear());
   document.body.innerHTML = '';
   vi.restoreAllMocks();
   vi.clearAllMocks();
@@ -255,4 +259,82 @@ describe('review file actions', () => {
     committed.openMenu();
     expect(document.body.textContent).not.toContain('Discard file changes');
   });
+});
+
+it('places findings on the displayed side in unified and split layouts, including committed deletions', async () => {
+  mockVirtualViewport();
+  const path = 'src/input.ts';
+  const diff = '@@ -1 +1 @@\n-old\n+new';
+  const file = { path, state: 'modified' as const, diff, hunks: parseDiff(diff) };
+  const finding = {
+    id: '22222222-2222-4222-8222-222222222222',
+    path,
+    line: 1,
+    severity: 'high' as const,
+    title: 'Inline missing guard',
+    body: 'Empty input reaches the changed call.',
+    status: 'open' as const,
+    resolution: null,
+  };
+  const run = { id: '11111111-1111-4111-8111-111111111111', findings: [finding] } as CodeReviewRun;
+  const onResolve = vi.fn(async () => {});
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  clients.push(client);
+  const render = (
+    viewMode: 'inline' | 'split',
+    displayed = file as ReviewFile & { hunks: ReturnType<typeof parseDiff> },
+  ) =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <ReviewFileList
+          sessionId="session-1"
+          codeReview={run}
+          onResolveFinding={onResolve}
+          composerActions={composer}
+          files={[displayed]}
+          collapsedFiles={{ [path]: false }}
+          fileStats={new Map()}
+          viewMode={viewMode}
+          onToggleFile={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+  for (const mode of ['inline', 'split'] as const) {
+    await act(async () => render(mode));
+    const annotation = [...container.querySelectorAll<HTMLElement>('[data-index]')].find(
+      (element) =>
+        element.textContent?.includes('Inline missing guard') && element.querySelector('li'),
+    )!;
+    expect(annotation).toBeDefined();
+    expect(annotation.previousElementSibling?.textContent).toContain('new');
+    if (mode === 'inline')
+      expect(annotation.previousElementSibling?.textContent).not.toContain('old');
+    expect(container.textContent).not.toContain('Loading captured code');
+  }
+  const deleted = {
+    ...file,
+    state: 'committed' as const,
+    diff: '@@ -1 +0,0 @@\n-old',
+    hunks: parseDiff('@@ -1 +0,0 @@\n-old'),
+  };
+  for (const mode of ['inline', 'split'] as const) {
+    await act(async () => render(mode, deleted));
+    const annotation = [...container.querySelectorAll<HTMLElement>('[data-index]')].find(
+      (element) =>
+        element.textContent?.includes('Inline missing guard') && element.querySelector('li'),
+    )!;
+    expect(annotation).toBeDefined();
+    expect(annotation.previousElementSibling?.textContent).toContain('old');
+    expect(annotation.previousElementSibling?.textContent).not.toContain('new');
+  }
+  await act(async () =>
+    [...container.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Mark fixed'))!
+      .click(),
+  );
+  expect(onResolve).toHaveBeenCalledWith(finding.id, { status: 'fixed' });
 });

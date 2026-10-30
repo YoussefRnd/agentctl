@@ -1,6 +1,15 @@
 export const sessionKeys = {
   all: ['session'] as const,
   detail: (sessionId: string) => ['session', sessionId] as const,
+  allReviewChecks: ['review-checks'] as const,
+  reviewChecks: (id: string, reviewId?: string) =>
+    reviewId ? (['review-checks', id, reviewId] as const) : (['review-checks', id] as const),
+  reviewCheck: (id: string, reviewId: string, checkId: string) =>
+    ['review-check-output', id, reviewId, checkId] as const,
+  codeReviewFile: (sessionId: string, reviewId: string, path: string) =>
+    ['code-review-file', sessionId, reviewId, path] as const,
+  allCodeReviews: ['session-code-reviews'] as const,
+  codeReviews: (sessionId: string) => ['session-code-reviews', sessionId] as const,
   allReviews: ['session-review'] as const,
   allReviewFiles: ['session-review-file'] as const,
   reviewFiles: (sessionId: string) => ['session-review-file', sessionId] as const,

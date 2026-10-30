@@ -72,6 +72,7 @@
       "evidence": "docs/provider-architecture.md",
       "files": [
         "packages/core/src/agent/chat-error.ts",
+        "packages/core/src/agent/code-review.ts",
         "packages/core/src/agent/conformance.ts",
         "packages/core/src/agent/connection-lifecycle.ts",
         "packages/core/src/agent/diagnostics.ts",
@@ -79,6 +80,8 @@
         "packages/core/src/agent/errors.ts",
         "packages/core/src/agent/index.ts",
         "packages/core/src/agent/operation-diagnostics.ts",
+        "packages/core/src/agent/review-check.ts",
+        "packages/core/src/agent/review-continuity.ts",
         "packages/core/src/agent/runtime-services.ts",
         "packages/core/src/agent/text-generation.ts",
         "packages/core/src/agent/tool-effects.ts",
@@ -184,6 +187,7 @@
         "packages/core/src/git/snapshot-types.ts",
         "packages/core/src/git/text-generation-context.ts",
         "packages/core/src/git/text-generation-settings.ts",
+        "packages/core/src/git/text-snapshot.ts",
         "packages/core/src/git/utils.ts",
         "packages/core/src/git/worktree-manager.ts"
       ]
@@ -244,6 +248,7 @@
         "packages/core/src/repository/identity.ts",
         "packages/core/src/repository/index.ts",
         "packages/core/src/repository/repository-service.ts",
+        "packages/core/src/repository/review-context.ts",
         "packages/core/src/repository/source-repository.ts",
         "packages/core/src/repository/types.ts",
         "packages/core/src/repository/workspace.ts"

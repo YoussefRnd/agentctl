@@ -93,6 +93,109 @@ export const sessions = sqliteTable('sessions', {
   ...timestamps,
 });
 
+export const codeReviews = sqliteTable(
+  'code_reviews',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id').notNull(),
+    modelId: text('model_id').notNull(),
+    scope: text('scope').$type<'working' | 'session'>().notNull(),
+    context: text('context'),
+    evidenceCheckIds: text('evidence_check_ids'),
+    capturedFiles: text('captured_files'),
+    continuity: text('continuity'),
+    fromRevision: text('from_revision').notNull(),
+    toRevision: text('to_revision').notNull(),
+    status: text('status').$type<'running' | 'completed' | 'failed' | 'cancelled'>().notNull(),
+    summary: text('summary').notNull().default(''),
+    error: text('error'),
+    startedAt: integer('started_at').notNull(),
+    finishedAt: integer('finished_at'),
+  },
+  (table) => [index('code_reviews_session_idx').on(table.sessionId, table.startedAt)],
+);
+
+export const codeReviewFindings = sqliteTable(
+  'code_review_findings',
+  {
+    id: text('id').primaryKey(),
+    reviewId: text('review_id')
+      .notNull()
+      .references(() => codeReviews.id, { onDelete: 'cascade' }),
+    severity: text('severity').$type<'high' | 'medium' | 'low'>().notNull(),
+    path: text('path').notNull(),
+    line: integer('line').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    status: text('status').$type<'open' | 'fixed' | 'dismissed'>().notNull().default('open'),
+    resolution: text('resolution'),
+    fingerprint: text('fingerprint'),
+    continuity: text('continuity'),
+  },
+  (table) => [index('code_review_findings_review_idx').on(table.reviewId)],
+);
+
+export const reviewChecks = sqliteTable(
+  'review_checks',
+  {
+    id: text('id').primaryKey(),
+    reviewId: text('review_id')
+      .notNull()
+      .references(() => codeReviews.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    command: text('command').notNull(),
+    commandRedacted: integer('command_redacted', { mode: 'boolean' }).notNull().default(false),
+    status: text('status')
+      .$type<
+        | 'pending'
+        | 'running'
+        | 'passed'
+        | 'failed'
+        | 'error'
+        | 'cancelled'
+        | 'timed_out'
+        | 'interrupted'
+      >()
+      .notNull(),
+    timeoutMs: integer('timeout_ms').notNull(),
+    cwd: text('cwd').notNull(),
+    expectedRevision: text('expected_revision').notNull(),
+    checkedRevision: text('checked_revision'),
+    afterRevision: text('after_revision'),
+    revisionState: text('revision_state')
+      .$type<'unchanged' | 'changed' | 'unknown'>()
+      .notNull()
+      .default('unknown'),
+    exitCode: integer('exit_code'),
+    signal: text('signal'),
+    error: text('error'),
+    stdout: text('stdout').notNull().default(''),
+    stderr: text('stderr').notNull().default(''),
+    startedAt: integer('started_at').notNull(),
+    finishedAt: integer('finished_at'),
+    outputTruncated: integer('output_truncated', { mode: 'boolean' }).notNull().default(false),
+  },
+  (table) => [index('review_checks_review_idx').on(table.reviewId, table.startedAt)],
+);
+
+export const reviewFindingEvidence = sqliteTable(
+  'review_finding_evidence',
+  {
+    id: text('id').primaryKey(),
+    findingId: text('finding_id')
+      .notNull()
+      .references(() => codeReviewFindings.id, { onDelete: 'cascade' }),
+    checkId: text('check_id').references(() => reviewChecks.id, { onDelete: 'set null' }),
+    state: text('state').$type<'suspected' | 'reproduced'>().notNull(),
+    reason: text('reason'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('review_finding_evidence_finding_idx').on(table.findingId, table.createdAt)],
+);
+
 export const sessionOperations = sqliteTable(
   'session_operations',
   {

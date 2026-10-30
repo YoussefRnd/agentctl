@@ -16,6 +16,7 @@ import type {
   RepositoryReviewOptions,
   ChangeComparison,
   RepositoryRestore,
+  RepositoryTextSnapshot,
 } from './types.js';
 
 export class SourceRepository {
@@ -177,6 +178,12 @@ export class SourceRepository {
   ): Promise<ReviewFile[]> {
     if (!this.workspace.diff) return this.unsupported('revision comparisons');
     return this.workspace.diff(this.references.decode(from), this.references.decode(to), filePath);
+  }
+
+  /** Null is an explicit diff-only fallback for backends without immutable file access. */
+  async textSnapshot(revision: RevisionReference): Promise<RepositoryTextSnapshot | null> {
+    const native = this.references.decode(revision);
+    return this.workspace.textSnapshot ? this.workspace.textSnapshot(native) : null;
   }
 
   async restore(revision: RevisionReference): Promise<RepositoryRestore> {

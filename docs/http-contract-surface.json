@@ -383,5 +383,55 @@
     "method": "GET",
     "path": "/api/diagnostics/transport",
     "responses": ["200"]
+  },
+  "listCodeReviews": {
+    "method": "GET",
+    "path": "/api/sessions/:id/code-reviews",
+    "responses": ["200"]
+  },
+  "startCodeReview": {
+    "method": "POST",
+    "path": "/api/sessions/:id/code-reviews",
+    "responses": ["202", "400", "409"]
+  },
+  "cancelCodeReview": {
+    "method": "POST",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/cancel",
+    "responses": ["200"]
+  },
+  "resolveCodeReviewFinding": {
+    "method": "PATCH",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/findings/:findingId",
+    "responses": ["200"]
+  },
+  "listReviewChecks": {
+    "method": "GET",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/checks",
+    "responses": ["200"]
+  },
+  "getReviewCheck": {
+    "method": "GET",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/checks/:checkId",
+    "responses": ["200"]
+  },
+  "runReviewCheck": {
+    "method": "POST",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/checks",
+    "responses": ["202", "400", "409"]
+  },
+  "cancelReviewCheck": {
+    "method": "POST",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/checks/:checkId/cancel",
+    "responses": ["200"]
+  },
+  "confirmReviewFindingEvidence": {
+    "method": "POST",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/findings/:findingId/evidence",
+    "responses": ["200", "400", "409"]
+  },
+  "getCodeReviewFile": {
+    "method": "GET",
+    "path": "/api/sessions/:id/code-reviews/:reviewId/file",
+    "responses": ["200"]
   }
 }

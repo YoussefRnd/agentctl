@@ -15,3 +15,5 @@ export { api } from './api.js';
 export { SessionEngine, type SessionEngineOptions } from './stream/session-engine.js';
 
 export { subscribeStateChanges } from './stream/state-stream.js';
+
+export * from './services/code-review.js';

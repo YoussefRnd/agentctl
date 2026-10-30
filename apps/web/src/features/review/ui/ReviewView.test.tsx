@@ -55,6 +55,7 @@ vi.mock('@/shared/workspace/useGitStatus', () => ({
     },
   }),
 }));
+vi.mock('./CodeReviewPanel', () => ({ CodeReviewPanel: () => null }));
 vi.mock('./ReviewDialogs', () => ({ ReviewDialogs: () => null }));
 
 const initialStore = useReviewUIStore.getState();

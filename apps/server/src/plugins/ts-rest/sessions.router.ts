@@ -1,3 +1,4 @@
+import { createCodeReviewRouter } from './code-review.router.js';
 import type { FastifyInstance } from 'fastify';
 import type { RouterImplementation } from '@ts-rest/fastify';
 import { sessionsContract, providerCapabilitySchema, createTaskSlug } from '@agentctl/shared';
@@ -14,6 +15,7 @@ export function createSessionsRouter(
 ): RouterImplementation<typeof sessionsContract> {
   return {
     ...createSessionGitRouter(fastify),
+    ...createCodeReviewRouter(fastify),
     ...createSessionRepositoryRouter(fastify),
     resumeSessionQueue: async ({ params }) => {
       try {
@@ -145,6 +147,7 @@ export function createSessionsRouter(
     },
     deleteSession: async ({ params }) => {
       const { id } = params;
+      fastify.services.cancelReviewChecksForSession(id);
       await fastify.sessionService.deleteSession(id);
       publishSessionChange(fastify.eventBus, id);
       return {
@@ -154,6 +157,7 @@ export function createSessionsRouter(
     },
     archiveSession: async ({ params }) => {
       const { id } = params;
+      fastify.services.cancelReviewChecksForSession(id);
       await fastify.sessionService.archiveSession(id);
       publishSessionChange(fastify.eventBus, id);
       return {

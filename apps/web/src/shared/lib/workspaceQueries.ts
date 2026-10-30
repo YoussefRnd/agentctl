@@ -10,6 +10,12 @@ export function invalidateWorkspaceQueries(
   change: WorkspaceChange = 'git',
 ): void {
   void client.invalidateQueries({
+    queryKey: sessionId ? sessionKeys.reviewChecks(sessionId) : sessionKeys.allReviewChecks,
+  });
+  void client.invalidateQueries({
+    queryKey: sessionId ? sessionKeys.codeReviews(sessionId) : sessionKeys.allCodeReviews,
+  });
+  void client.invalidateQueries({
     queryKey: sessionId ? sessionKeys.review(sessionId) : sessionKeys.allReviews,
   });
   void client.invalidateQueries({

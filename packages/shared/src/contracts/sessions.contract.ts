@@ -1,3 +1,4 @@
+import { reviewVerificationContract } from './review-verification.contract.js';
 import { z } from 'zod';
 import {
   createSessionSchema,
@@ -8,6 +9,7 @@ import {
   thinkingEffortSchema,
 } from '../schemas/session.js';
 
+import { codeReviewContract } from './code-review.contract.js';
 import { repositoryContract } from './repository.contract.js';
 import { sessionGitContract } from './session-git.contract.js';
 
@@ -19,6 +21,8 @@ export const sessionsContract = {
   ...sessionExecutionContract,
   ...sessionHistoryContract,
   ...repositoryContract,
+  ...codeReviewContract,
+  ...reviewVerificationContract,
   ...sessionGitContract,
   importNativeSession: {
     method: 'POST',

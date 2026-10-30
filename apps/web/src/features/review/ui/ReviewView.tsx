@@ -1,3 +1,6 @@
+import { useCodeReviews } from '../model/useCodeReviews';
+import { currentInlineReview } from '../lib/inlineFindings';
+import { CodeReviewPanel } from './CodeReviewPanel';
 import type { ReviewComposerActions } from '../model/composer-actions';
 import { canMutateWorkspace } from '@agentctl/shared';
 import { useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -18,7 +21,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import type { ReviewFileItem } from '@agentctl/shared';
+import type { ReviewFileItem, ResolveReviewFinding } from '@agentctl/shared';
 import {
   api,
   assertApiStatus,
@@ -89,6 +92,28 @@ export function ReviewView({ composerActions }: { composerActions: ReviewCompose
   const capture = reviewData.capture;
   const fromRevision = reviewScope === 'all_edits' ? capture?.baseline : capture?.working;
   const toRevision = capture?.current;
+  const aiReviews = useCodeReviews(sessionId, capture);
+  const inlineReview = currentInlineReview(
+    aiReviews.query.data ?? [],
+    reviewScope === 'all_edits' ? 'session' : 'working',
+    fromRevision,
+    toRevision,
+  );
+  const inlineReviewId = inlineReview?.id;
+  const resolveFinding = aiReviews.resolve.mutateAsync;
+  const resolveInlineFinding = useCallback(
+    (findingId: string, body: ResolveReviewFinding) =>
+      inlineReviewId
+        ? resolveFinding({ reviewId: inlineReviewId, findingId, ...body })
+        : Promise.resolve(),
+    [inlineReviewId, resolveFinding],
+  );
+  const openInlineFile = useCallback(
+    (path: string) => {
+      void openWorkspaceFile(path);
+    },
+    [openWorkspaceFile],
+  );
   const detailFiles = useMemo(
     () =>
       summaryFiles.filter(
@@ -399,18 +424,41 @@ export function ReviewView({ composerActions }: { composerActions: ReviewCompose
     [dispatch, setTargetReviewFile],
   );
 
+  const aiReview = (
+    <CodeReviewPanel
+      key={sessionId}
+      sessionId={sessionId}
+      capture={capture}
+      disabled={!canMutateWorkspace(sessionStatus)}
+      unavailable={
+        reviewData.repository?.capabilities.review === false ||
+        reviewData.repository?.capabilities.checkpoints === false
+      }
+      onSelectFile={(filePath, scope) => {
+        setReviewScope(scope === 'session' ? 'all_edits' : 'uncommitted');
+        handleSelectFile(filePath);
+        if (isClosed || !summaryFiles.some((file) => file.path === filePath)) {
+          void safeAction(() => openWorkspaceFile(filePath));
+        }
+      }}
+    />
+  );
+
   if (isClosed)
     return (
-      <ReviewClosedState
-        sessionStatus={sessionStatus}
-        baseBranch={baseBranch}
-        mode={sessionData?.session.mode}
-        canRecover={sessionStatus === 'discarded' && !!sessionData?.session.discardBackup}
-        isRecovering={undoDiscard.isPending}
-        onRecover={() => {
-          void safeAction(() => undoDiscard.mutateAsync());
-        }}
-      />
+      <div className="flex h-full min-h-0 flex-col">
+        {aiReview}
+        <ReviewClosedState
+          sessionStatus={sessionStatus}
+          baseBranch={baseBranch}
+          mode={sessionData?.session.mode}
+          canRecover={sessionStatus === 'discarded' && !!sessionData?.session.discardBackup}
+          isRecovering={undoDiscard.isPending}
+          onRecover={() => {
+            void safeAction(() => undoDiscard.mutateAsync());
+          }}
+        />
+      </div>
     );
 
   return (
@@ -451,6 +499,8 @@ export function ReviewView({ composerActions }: { composerActions: ReviewCompose
         }}
       />
 
+      {aiReview}
+
       {/* Main Review Content Area */}
       {isLoading ? (
         <ReviewLoadingState />
@@ -463,6 +513,11 @@ export function ReviewView({ composerActions }: { composerActions: ReviewCompose
         />
       ) : (
         <ReviewFileList
+          sessionId={sessionId}
+          codeReview={inlineReview}
+          resolvingFinding={aiReviews.resolve.isPending}
+          findingError={aiReviews.resolve.error?.message}
+          onResolveFinding={resolveInlineFinding}
           composerActions={composerActions}
           files={parsedFiles}
           collapsedFiles={state.collapsedFiles}
@@ -481,9 +536,7 @@ export function ReviewView({ composerActions }: { composerActions: ReviewCompose
           onRevert={(p) => {
             void safeAction(() => onRevert(p));
           }}
-          onOpenFile={(p) => {
-            void openWorkspaceFile(p);
-          }}
+          onOpenFile={openInlineFile}
           targetFilePath={targetReviewFile}
           onTargetFileHandled={onTargetFileHandled}
           onVisibleExpandedFilesChange={onVisibleExpandedFilesChange}

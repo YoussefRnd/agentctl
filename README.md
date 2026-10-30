@@ -142,6 +142,16 @@ worktree or restore local files and staging. Local recovery refuses to overwrite
 Branch switches in isolated sessions reuse the existing checkout. If Git was initialized after
 a local session began, explicitly commit its changes before applying the session.
 
+The review panel also offers independent AI review through any installed ACP provider/profile.
+Choose **Review changes** for uncommitted or all session changes. Findings and dismissal reasons
+survive restarts; reviews show **Outdated** when either comparison revision changes. Saved history
+remains available, including cancelled/failed reviews. Reviews include captured diffs and related source/test context, with a saved report of supplied
+files, excerpts and omissions. **Verification** saves explicitly run commands, output and revision checks.
+Findings appear inline when the displayed revisions match, and retain captured code for later inspection.
+Relevant earlier findings, decisions, and evidence carry into new reviews. Findings start as suspected; link a matching failed check and confirm its failure scenario to mark
+one reproduced. Recorded evidence can inform a new review with any ACP provider. See
+[AI code review](docs/code-review.md) for scope and execution limits.
+
 ## Drafts and conversation history
 
 Composer text, project selections, and queued messages survive browser and desktop restarts.
