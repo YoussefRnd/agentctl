@@ -42,3 +42,7 @@ export * from './schemas/context.js';
 export * from './schemas/attachments.js';
 
 export * from './schemas/review-continuity.js';
+
+export * from './schemas/review-handoff.js';
+
+export * from './schemas/review-walkthrough.js';

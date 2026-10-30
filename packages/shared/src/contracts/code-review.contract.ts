@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  updateWalkthroughProgressSchema,
+  walkthroughProgressSchema,
+  walkthroughQuestionSchema,
+} from '../schemas/review-walkthrough.js';
+import { prepareReviewHandoffSchema, reviewHandoffSchema } from '../schemas/review-handoff.js';
 import { codeReviewFileSchema } from '../schemas/review-continuity.js';
 import {
   codeReviewRunSchema,
@@ -10,6 +16,27 @@ const sessionParams = z.object({ id: z.uuid() });
 const runParams = sessionParams.extend({ reviewId: z.uuid() });
 const failure = z.object({ message: z.string() });
 export const codeReviewContract = {
+  updateWalkthroughProgress: {
+    method: 'PATCH',
+    path: '/api/sessions/:id/code-reviews/:reviewId/walkthrough/progress',
+    pathParams: runParams,
+    body: updateWalkthroughProgressSchema,
+    responses: { 200: walkthroughProgressSchema, 400: failure },
+  },
+  prepareWalkthroughQuestion: {
+    method: 'POST',
+    path: '/api/sessions/:id/code-reviews/:reviewId/walkthrough/:position/question',
+    pathParams: runParams.extend({ position: z.coerce.number().int().min(0) }),
+    body: emptyBodySchema,
+    responses: { 200: walkthroughQuestionSchema, 400: failure },
+  },
+  prepareReviewFindingHandoff: {
+    method: 'POST',
+    path: '/api/sessions/:id/code-reviews/:reviewId/findings/:findingId/handoff',
+    pathParams: runParams.extend({ findingId: z.uuid() }),
+    body: prepareReviewHandoffSchema,
+    responses: { 200: reviewHandoffSchema, 400: failure },
+  },
   getCodeReviewFile: {
     method: 'GET',
     path: '/api/sessions/:id/code-reviews/:reviewId/file',

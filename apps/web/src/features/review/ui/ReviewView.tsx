@@ -426,6 +426,7 @@ export function ReviewView({ composerActions }: { composerActions: ReviewCompose
 
   const aiReview = (
     <CodeReviewPanel
+      composerActions={composerActions}
       key={sessionId}
       sessionId={sessionId}
       capture={capture}

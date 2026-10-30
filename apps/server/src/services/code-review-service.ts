@@ -8,6 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, getTableColumns, inArray, sql, lt, or } from 'drizzle-orm';
 import {
   buildCodeReviewPrompt,
+  buildReviewHandoffPrompt,
+  reviewHandoffSources,
   reviewFindingFingerprint,
   matchReviewFinding,
   reviewCapturedChanges,
@@ -25,6 +27,14 @@ import type { ProviderRegistry } from '@agentctl/core/providers';
 import { collectReviewContext, type RepositoryService } from '@agentctl/core/repository';
 import {
   canMutateWorkspace,
+  reviewWalkthroughSchema,
+  walkthroughProgressSchema,
+  updateWalkthroughProgressSchema,
+  type UpdateWalkthroughProgress,
+  prepareReviewHandoffSchema,
+  type PrepareReviewHandoff,
+  type ReviewHandoff,
+  type ReviewExecutionEvidence,
   findAgentConfigOption,
   resolveReviewFindingSchema,
   codeReviewRunSchema,
@@ -53,7 +63,7 @@ export class CodeReviewService {
     private readonly events: Pick<EventBus, 'publishState'>,
     private readonly verification?: Pick<
       ReviewVerificationService,
-      'states' | 'promptEvidence' | 'isWorkspaceBusy'
+      'states' | 'promptEvidence' | 'isWorkspaceBusy' | 'get'
     >,
   ) {
     db.update(codeReviews)
@@ -133,6 +143,8 @@ export class CodeReviewService {
         codeReviewRunSchema.parse({
           ...row,
           context: this.savedContext(row.context),
+          walkthrough: this.savedWalkthrough(row.walkthrough),
+          walkthroughProgress: this.savedProgress(row.walkthroughProgress),
           continuity: this.savedContinuityReport(row.continuity),
           evidenceCheckIds: this.savedEvidenceIds(row.evidenceCheckIds),
           verificationSummary: verification?.summaries.get(row.id) ?? {
@@ -453,7 +465,12 @@ export class CodeReviewService {
             )
             .run();
         tx.update(codeReviews)
-          .set({ status: 'completed', summary: result.summary, finishedAt: Date.now() })
+          .set({
+            status: 'completed',
+            summary: result.summary,
+            walkthrough: result.walkthrough ? JSON.stringify(result.walkthrough) : null,
+            finishedAt: Date.now(),
+          })
           .where(eq(codeReviews.id, id))
           .run();
       });
@@ -510,6 +527,284 @@ export class CodeReviewService {
       /* Saved findings remain usable when their source objects are no longer available. */
     }
     return { file: null, source: 'unavailable' as const };
+  }
+  async handoff(
+    sessionId: string,
+    reviewId: string,
+    findingId: string,
+    input: PrepareReviewHandoff,
+  ): Promise<ReviewHandoff> {
+    const request = prepareReviewHandoffSchema.parse(input);
+    const review = this.ownedRun(sessionId, reviewId);
+    const finding = this.db
+      .select()
+      .from(codeReviewFindings)
+      .where(and(eq(codeReviewFindings.id, findingId), eq(codeReviewFindings.reviewId, reviewId)))
+      .get();
+    if (!finding) throw new AppError('Finding not found', 404);
+    if (review.status !== 'completed')
+      throw new AppError('Only completed reviews can hand off findings.', 400);
+    const session = await this.db.query.sessions.findFirst({ where: eq(sessions.id, sessionId) });
+    if (!session) throw new AppError('Session not found', 404);
+    const file = (await this.file(sessionId, reviewId, finding.path)).file ?? undefined;
+    const current = await this.capture(sessionId).catch(() => undefined);
+    const freshness: ReviewHandoff['freshness'] = current
+      ? review.fromRevision ===
+          (review.scope === 'session' ? current.capture.baseline : current.capture.working) &&
+        review.toRevision === current.capture.current
+        ? 'current'
+        : 'outdated'
+      : 'unknown';
+    const checkedAt = Date.now();
+    const reader = current
+      ? await current.repository.textSnapshot(current.capture.current).catch(() => null)
+      : null;
+    const text = reader
+      ? await reader.readFile(finding.path, 128 * 1024, AbortSignal.timeout(5000)).catch(() => null)
+      : null;
+    const sources = reviewHandoffSources(file, finding.line, text, freshness);
+    const verification = this.verification?.states([reviewId]).findings.get(findingId) ?? {
+      state: 'suspected' as const,
+      checkId: null,
+      reason: null,
+      confirmedAt: null,
+    };
+    const continuity = savedFindingContinuity(finding.continuity);
+    const checks: Array<ReviewExecutionEvidence & { reviewId: string; appliesToCurrent: boolean }> =
+      [];
+    const addCheck = (sourceReviewId: string, check: ReviewExecutionEvidence, matches: boolean) => {
+      if (!checks.some((entry) => entry.checkId === check.checkId))
+        checks.push({ ...check, reviewId: sourceReviewId, appliesToCurrent: matches });
+    };
+    const linked = [
+      { reviewId, verification },
+      continuity?.lastEvidence,
+      continuity ? { reviewId: continuity.reviewId, verification: continuity.verification } : null,
+    ].filter((entry) => entry?.verification.checkId);
+    for (const entry of linked) {
+      if (!entry?.verification.checkId || !this.verification || checks.length >= 2) continue;
+      try {
+        const check = this.verification.get(sessionId, entry.reviewId, entry.verification.checkId);
+        if (
+          !['passed', 'failed'].includes(check.status) ||
+          check.exitCode === null ||
+          check.finishedAt === null
+        )
+          continue;
+        const source = this.ownedRun(sessionId, entry.reviewId);
+        addCheck(
+          entry.reviewId,
+          {
+            checkId: check.id,
+            name: check.name,
+            command: check.command,
+            status: check.status as 'passed' | 'failed',
+            exitCode: check.exitCode,
+            startedAt: check.startedAt,
+            finishedAt: check.finishedAt,
+            stdout: check.stdout.slice(-1000),
+            stderr: check.stderr.slice(-1000),
+            outputTruncated:
+              check.outputTruncated || check.stdout.length > 1000 || check.stderr.length > 1000,
+          },
+          !!current &&
+            source.fromRevision ===
+              (source.scope === 'session' ? current.capture.baseline : current.capture.working) &&
+            source.toRevision === current.capture.current &&
+            check.revisionState === 'unchanged',
+        );
+      } catch {
+        /* A missing historical check is not substituted with a provider's claim. */
+      }
+    }
+    for (const check of this.verification?.promptEvidence(
+      sessionId,
+      reviewId,
+      review.fromRevision,
+      review.toRevision,
+    ) ?? [])
+      if (checks.length < 3) addCheck(reviewId, check, freshness === 'current');
+    const closed = ['merged', 'discarded', 'archived'].includes(session.status);
+    const busy =
+      !!current && this.verification?.isWorkspaceBusy(current.repository.info.workspacePath);
+    const blockedReason = closed
+      ? 'Reactivate this session before adding a request.'
+      : request.intent === 'fix' && !canMutateWorkspace(session.status)
+        ? 'Stop the active turn before preparing a fix request.'
+        : request.intent === 'fix' && (freshness === 'unknown' || busy)
+          ? 'A stable workspace snapshot is required before preparing a fix request. Refresh when the workspace is available and checks have stopped.'
+          : null;
+    const short = (reference: string) =>
+      reference.length > 160 ? reference.slice(0, 160) + ' [abbreviated]' : reference;
+    const result = buildReviewHandoffPrompt(
+      request.intent,
+      {
+        finding: {
+          reviewId,
+          findingId,
+          path: finding.path,
+          reviewedLine: finding.line,
+          title: finding.title,
+          body: finding.body,
+          status: finding.status,
+          resolution: finding.resolution,
+          verification,
+        },
+        review: {
+          scope: review.scope,
+          fromRevision: short(review.fromRevision),
+          toRevision: short(review.toRevision),
+        },
+        observation: {
+          freshness,
+          checkedAt,
+          currentLine: sources.currentLine,
+          location: sources.location,
+          capture: current
+            ? Object.fromEntries(
+                Object.entries(current.capture).map(([key, value]) => [key, short(value)]),
+              )
+            : null,
+        },
+        sources: { reviewed: sources.reviewed, current: sources.current },
+        history: continuity,
+        checks,
+      },
+      request.notes,
+    );
+    return {
+      intent: request.intent,
+      freshness,
+      checkedAt,
+      capture: current?.capture ?? null,
+      ...sources,
+      canAdd: !blockedReason,
+      blockedReason,
+      evidenceCount: checks.length,
+      ...result,
+    };
+  }
+  private savedWalkthrough(raw: string | null) {
+    try {
+      return raw ? reviewWalkthroughSchema.parse(JSON.parse(raw)) : null;
+    } catch {
+      return null;
+    }
+  }
+  private savedProgress(raw: string | null) {
+    try {
+      return raw ? walkthroughProgressSchema.parse(JSON.parse(raw)) : { position: 0, seen: [] };
+    } catch {
+      return { position: 0, seen: [] };
+    }
+  }
+  progress(sessionId: string, reviewId: string, input: UpdateWalkthroughProgress) {
+    const request = updateWalkthroughProgressSchema.parse(input);
+    this.ownedRun(sessionId, reviewId);
+    const result = this.db.transaction((tx) => {
+      const review = tx
+        .select()
+        .from(codeReviews)
+        .where(and(eq(codeReviews.id, reviewId), eq(codeReviews.sessionId, sessionId)))
+        .get();
+      if (!review) throw new AppError('Review not found', 404);
+      const tour = this.savedWalkthrough(review.walkthrough);
+      if (!tour || review.status !== 'completed')
+        throw new AppError(
+          'This review has no saved walkthrough. Review again to generate one.',
+          400,
+        );
+      if (request.action !== 'reset' && request.position >= tour.length)
+        throw new AppError('Walkthrough stop not found', 400);
+      const progress = this.savedProgress(review.walkthroughProgress);
+      if (request.action === 'reset') {
+        progress.position = 0;
+        progress.seen = [];
+      } else if (request.action === 'navigate') progress.position = request.position;
+      else
+        progress.seen = request.seen
+          ? [...new Set([...progress.seen, request.position])].sort((a, b) => a - b)
+          : progress.seen.filter((index) => index !== request.position);
+      tx.update(codeReviews)
+        .set({ walkthroughProgress: JSON.stringify(progress) })
+        .where(eq(codeReviews.id, reviewId))
+        .run();
+      return progress;
+    });
+    this.notify(sessionId);
+    return result;
+  }
+  async walkthroughQuestion(sessionId: string, reviewId: string, position: number) {
+    const review = this.ownedRun(sessionId, reviewId);
+    const tour = this.savedWalkthrough(review.walkthrough);
+    const stop = tour?.[position];
+    if (!stop || review.status !== 'completed')
+      throw new AppError('Walkthrough stop not found', 400);
+    const session = await this.db.query.sessions.findFirst({ where: eq(sessions.id, sessionId) });
+    if (!session || ['merged', 'discarded', 'archived'].includes(session.status))
+      throw new AppError('Reactivate this session before asking about a section.', 400);
+    const current = await this.capture(sessionId).catch(() => undefined);
+    const freshness = current
+      ? review.toRevision === current.capture.current &&
+        review.fromRevision ===
+          (review.scope === 'session' ? current.capture.baseline : current.capture.working)
+        ? ('current' as const)
+        : ('outdated' as const)
+      : ('unknown' as const);
+    const sources = [];
+    for (const anchor of stop.excerpts.slice(0, 3)) {
+      const file = (await this.file(sessionId, reviewId, anchor.path)).file;
+      sources.push({
+        path: anchor.path,
+        ...reviewHandoffSources(
+          file ? { ...file, state: anchor.side === 'old' ? 'deleted' : 'modified' } : undefined,
+          anchor.line,
+          null,
+          freshness,
+        ).reviewed,
+      });
+    }
+    const findings = this.db
+      .select()
+      .from(codeReviewFindings)
+      .where(eq(codeReviewFindings.reviewId, reviewId))
+      .all()
+      .filter((finding) =>
+        [...stop.files, ...stop.excerpts.map((anchor) => anchor.path)].includes(finding.path),
+      )
+      .slice(0, 6);
+    const checks = (
+      this.verification?.promptEvidence(
+        sessionId,
+        reviewId,
+        review.fromRevision,
+        review.toRevision,
+      ) ?? []
+    )
+      .slice(0, 2)
+      .map((check) => ({ ...check, appliesToCurrent: freshness === 'current' }));
+    const result = buildReviewHandoffPrompt(
+      'ask',
+      {
+        finding: { path: stop.excerpts[0]?.path ?? stop.files[0] ?? '', body: stop.summary },
+        history: {
+          section: stop.title,
+          findings: findings.map(({ title, body, path, line, status, resolution }) => ({
+            title,
+            body,
+            path,
+            line,
+            status,
+            resolution,
+          })),
+        },
+        checks,
+        sources,
+        observation: { freshness, checkedAt: Date.now() },
+      },
+      'Explain this walkthrough section, its purpose and how its parts connect. Distinguish the captured version from current code. Context includes at most three captured excerpt anchors, six related findings and two review-wide check results; do not assume full section coverage.',
+    );
+    return { prompt: result.prompt, freshness, capture: current?.capture ?? null };
   }
   private savedEvidenceIds(raw: string | null) {
     try {

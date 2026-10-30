@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events';
 import type { ChildProcess, spawn } from 'node:child_process';
 import { expect, it, vi } from 'vite-plus/test';
 import { EMPTY_AGENT_FEATURES, type ReviewFile } from '@agentctl/shared';
+import { buildReviewHandoffPrompt } from '../agent/review-handoff.js';
 import { reviewCapturedChanges, buildCodeReviewPrompt } from '../agent/code-review.js';
 import { noopLogger } from '../logger.js';
 import { AcpAgentDriver } from './driver.js';
@@ -12,9 +13,13 @@ import { AcpV1AgentDriver } from './v1/driver.js';
 import { AcpV2AgentDriver } from './v2/driver.js';
 import type { AgentStreamTransport } from './types.js';
 
-it.each(['v1', 'v2'] as const)(
-  'reviews through the real %s adapter with only baseline session and text capabilities',
-  async (version) => {
+it.each(
+  (['v1', 'v2'] as const).flatMap((version) =>
+    (['review', 'ask', 'fix'] as const).map((mode) => ({ version, mode })),
+  ),
+)(
+  'transports $mode through the real $version adapter with only baseline session and text capabilities',
+  async ({ version, mode }) => {
     const toAgent = new TransformStream<Uint8Array>();
     const toClient = new TransformStream<Uint8Array>();
     const child = new EventEmitter() as ChildProcess;
@@ -32,6 +37,14 @@ it.each(['v1', 'v2'] as const)(
     const output = {
       summary: 'No concrete bugs found in the supplied diff. Tests were not run.',
       findings: [],
+      walkthrough: [
+        {
+          title: 'Understand the change',
+          summary: 'The captured implementation changes its result.',
+          excerpts: [{ path: 'example.ts', side: 'new', line: 1 }],
+          files: [],
+        },
+      ],
     };
     let close: () => void;
     if (version === 'v1') {
@@ -120,59 +133,77 @@ it.each(['v1', 'v2'] as const)(
           driver,
           { command: 'any-provider', args: [], env: { AGENTCTL_ACP_PROTOCOL: version } },
           { features: EMPTY_AGENT_FEATURES },
-          buildCodeReviewPrompt(
-            files,
-            'Update example',
-            '',
-            context,
-            60000,
-            [
-              {
-                checkId: '11111111-1111-4111-8111-111111111111',
-                name: 'Regression',
-                command: 'pnpm test',
-                status: 'failed',
-                exitCode: 1,
-                startedAt: 10,
-                finishedAt: 20,
-                stdout: 'APP_RECORDED_FAILURE',
-                stderr: '',
-                outputTruncated: false,
-              },
-            ],
-            [
-              {
-                reviewId: '11111111-1111-4111-8111-111111111111',
-                findingId: '22222222-2222-4222-8222-222222222222',
-                path: 'example.ts',
-                line: 1,
-                title: 'Prior issue',
-                body: 'Earlier failure scenario',
-                status: 'dismissed',
-                resolution: 'PRIOR_DECISION_ACROSS_ACP',
-                verification: {
-                  state: 'suspected',
-                  checkId: null,
-                  reason: null,
-                  confirmedAt: null,
+          mode !== 'review'
+            ? buildReviewHandoffPrompt(
+                mode,
+                {
+                  finding: { path: 'example.ts', body: 'ACP_HANDOFF_SCENARIO' },
+                  history: null,
+                  checks: [],
+                  sources: {},
                 },
-                comparison: 'changed',
-                fingerprint: null,
-                lastDecision: null,
-                lastEvidence: null,
-              },
-            ],
-          ),
+                'Inspect current code first.',
+              ).prompt
+            : buildCodeReviewPrompt(
+                files,
+                'Update example',
+                '',
+                context,
+                60000,
+                [
+                  {
+                    checkId: '11111111-1111-4111-8111-111111111111',
+                    name: 'Regression',
+                    command: 'pnpm test',
+                    status: 'failed',
+                    exitCode: 1,
+                    startedAt: 10,
+                    finishedAt: 20,
+                    stdout: 'APP_RECORDED_FAILURE',
+                    stderr: '',
+                    outputTruncated: false,
+                  },
+                ],
+                [
+                  {
+                    reviewId: '11111111-1111-4111-8111-111111111111',
+                    findingId: '22222222-2222-4222-8222-222222222222',
+                    path: 'example.ts',
+                    line: 1,
+                    title: 'Prior issue',
+                    body: 'Earlier failure scenario',
+                    status: 'dismissed',
+                    resolution: 'PRIOR_DECISION_ACROSS_ACP',
+                    verification: {
+                      state: 'suspected',
+                      checkId: null,
+                      reason: null,
+                      confirmedAt: null,
+                    },
+                    comparison: 'changed',
+                    fingerprint: null,
+                    lastDecision: null,
+                    lastEvidence: null,
+                  },
+                ],
+              ),
           files,
           new AbortController().signal,
         ),
       ).toEqual(output);
-      expect(JSON.stringify(received.mock.calls)).toContain('CAPTURED_TEST_CONTEXT');
-      expect(JSON.stringify(received.mock.calls)).toContain('contextFiles');
-      expect(JSON.stringify(received.mock.calls)).toContain('verificationEvidence');
-      expect(JSON.stringify(received.mock.calls)).toContain('APP_RECORDED_FAILURE');
-      expect(JSON.stringify(received.mock.calls)).toContain('PRIOR_DECISION_ACROSS_ACP');
-      expect(JSON.stringify(received.mock.calls)).toContain('previousFindings');
+      if (mode === 'review') {
+        expect(JSON.stringify(received.mock.calls)).toContain('CAPTURED_TEST_CONTEXT');
+        expect(JSON.stringify(received.mock.calls)).toContain('contextFiles');
+        expect(JSON.stringify(received.mock.calls)).toContain('verificationEvidence');
+        expect(JSON.stringify(received.mock.calls)).toContain('APP_RECORDED_FAILURE');
+        expect(JSON.stringify(received.mock.calls)).toContain('PRIOR_DECISION_ACROSS_ACP');
+        expect(JSON.stringify(received.mock.calls)).toContain('previousFindings');
+      } else {
+        expect(JSON.stringify(received.mock.calls)).toContain('ACP_HANDOFF_SCENARIO');
+        expect(JSON.stringify(received.mock.calls)).toContain(
+          mode === 'ask' ? 'do not edit files' : 'fix only if the issue is still valid',
+        );
+      }
       expect(created).toHaveBeenCalledWith(
         expect.objectContaining({
           cwd: expect.stringContaining('agentctl-review-'),

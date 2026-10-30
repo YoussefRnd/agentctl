@@ -106,6 +106,8 @@ export const codeReviews = sqliteTable(
     context: text('context'),
     evidenceCheckIds: text('evidence_check_ids'),
     capturedFiles: text('captured_files'),
+    walkthrough: text('walkthrough'),
+    walkthroughProgress: text('walkthrough_progress'),
     continuity: text('continuity'),
     fromRevision: text('from_revision').notNull(),
     toRevision: text('to_revision').notNull(),

@@ -163,6 +163,7 @@ export function CodeReviewVerification({
   const error = start.error ?? cancel.error;
   return (
     <details
+      id={`review-verification-${run.id}`}
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
       className="border-border/40 border-t pt-2"

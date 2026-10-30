@@ -110,3 +110,46 @@ export async function getCodeReviewFile(
   assertApiStatus(response, 200, 'Could not load captured review code');
   return response.body;
 }
+
+export async function prepareReviewFindingHandoff(
+  sessionId: string,
+  reviewId: string,
+  findingId: string,
+  body: import('@agentctl/shared').PrepareReviewHandoff,
+  signal?: AbortSignal,
+) {
+  const response = await api.prepareReviewFindingHandoff({
+    params: { id: sessionId, reviewId, findingId },
+    body,
+    fetchOptions: { signal },
+  });
+  assertApiStatus(response, 200, 'Could not prepare finding request');
+  return response.body;
+}
+
+export async function updateWalkthroughProgress(
+  sessionId: string,
+  reviewId: string,
+  body: import('@agentctl/shared').UpdateWalkthroughProgress,
+) {
+  const response = await api.updateWalkthroughProgress({
+    params: { id: sessionId, reviewId },
+    body,
+  });
+  assertApiStatus(response, 200, 'Could not save walkthrough progress');
+  return response.body;
+}
+export async function prepareWalkthroughQuestion(
+  sessionId: string,
+  reviewId: string,
+  position: number,
+  signal?: AbortSignal,
+) {
+  const response = await api.prepareWalkthroughQuestion({
+    params: { id: sessionId, reviewId, position },
+    body: {},
+    fetchOptions: { signal },
+  });
+  assertApiStatus(response, 200, 'Could not prepare section question');
+  return response.body;
+}

@@ -82,6 +82,8 @@
         "packages/core/src/agent/operation-diagnostics.ts",
         "packages/core/src/agent/review-check.ts",
         "packages/core/src/agent/review-continuity.ts",
+        "packages/core/src/agent/review-handoff.ts",
+        "packages/core/src/agent/review-walkthrough.ts",
         "packages/core/src/agent/runtime-services.ts",
         "packages/core/src/agent/text-generation.ts",
         "packages/core/src/agent/tool-effects.ts",

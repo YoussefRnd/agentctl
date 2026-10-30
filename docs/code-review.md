@@ -197,3 +197,57 @@ fingerprints/history snapshots on findings. Full patches are excluded from the r
 and fetched through a session-scoped file endpoint. As with local coding transcripts, captured
 patches may contain source or credentials present in the actual diff; they are stored exactly,
 rather than modifying code text and making line evidence misleading.
+
+## Ask and fix handoffs
+
+**Ask about this** and **Fix this finding** prepare an editable request for the selected coding
+provider in the existing session. They are available on saved and inline findings. The dialog
+shows reviewed/current excerpts, current location mapping, freshness and recorded-check coverage.
+Adding a request inserts text into the page-supplied composer without replacing the existing
+draft. The normal Send action owns delivery, persistence, queueing and provider selection.
+Preparing a request does not start an agent or change a finding's resolution/verification.
+
+The server checks both comparison revisions when opening the dialog and again before insertion.
+If they change while the dialog is open, updated context is displayed for inspection before a
+second insertion attempt. Stale line numbers never stand in for current locations: exact local
+source context must map uniquely, or the location is explicitly changed/ambiguous/unavailable.
+Deleted files use the captured old side. Current text comes from the observed immutable snapshot,
+with bounded reads; legacy/unavailable source is labelled rather than substituted.
+
+Ask requests prohibit edits. Fix requests require an editable stopped session, an available
+workspace snapshot and no active verification check. They direct the coding agent to investigate
+current code and make a focused change only if the issue remains valid, then report meaningful
+checks and seek a fresh independent review. Earlier decisions and recorded output are historical,
+untrusted data; check revision applicability is explicit. Missing workspaces still allow preparing
+historical questions, while fixes wait for a stable workspace. Closed sessions require reactivation.
+
+Drafts can wait before sending, so the prompt explicitly requires re-reading current code at
+execution time. Snapshot checks are observations, not a filesystem lock or an enforcement sandbox
+for arbitrary provider tools. All providers receive the same plain text through the existing
+coding-session workflow; no native review/fix command, provider switch or optional ACP extension
+is required. Source, history and logs are bounded, and truncation is labelled. Closing/navigating
+away aborts preparation and prevents late responses from targeting another session's composer.
+
+## Guided change walkthrough
+
+New review prompts request a separate ordered walkthrough: up to eight explanatory stops with
+captured excerpt anchors and file lists. Findings retain their independent defect/resolution
+semantics. App validation rejects invented paths, wrong deleted-file sides and out-of-hunk anchors.
+An explicit final file-index stop accounts for changed files not covered by the model's explanations;
+it does not claim those files were investigated. Providers may omit the optional walkthrough without
+breaking a valid defect review. Older/omitted walkthroughs show a Review again hint.
+
+Migration `0055_review_walkthrough` saves explanations and reading progress on the review row.
+Progress supports navigation, mark reviewed/unread and reset, scoped to that immutable review.
+Marking a stop reviewed does not approve changes, resolve findings, or establish test coverage.
+The collapsed tour loads captured excerpts when opened, supports old and new sides, and links
+findings in its files and review-wide verification. Other-file excerpts load on demand.
+
+Walkthrough freshness is the same exact from/to comparison used by its saved review, including
+uncommitted/untracked contents and baseline changes. Outdated or unknown tours retain their
+original explanations, excerpts and reading progress with a version warning. No current file is
+substituted for a historical excerpt. Asking about a section refreshes freshness server-side,
+includes bounded captured context, relevant findings and historical check data, and inserts an
+editable explanation request into the current coding session's composer. It requires no provider
+switch, native review tool or optional ACP extension. Closing/navigating away prevents late draft
+insertion. Delivery and execution use the existing session workflow and its reinspection rules.

@@ -167,6 +167,9 @@ beforeEach(async () => {
           cancelReviewCheck: sessionsContract.cancelReviewCheck,
           confirmReviewFindingEvidence: sessionsContract.confirmReviewFindingEvidence,
           getCodeReviewFile: sessionsContract.getCodeReviewFile,
+          updateWalkthroughProgress: sessionsContract.updateWalkthroughProgress,
+          prepareWalkthroughQuestion: sessionsContract.prepareWalkthroughQuestion,
+          prepareReviewFindingHandoff: sessionsContract.prepareReviewFindingHandoff,
           listCodeReviews: sessionsContract.listCodeReviews,
           startCodeReview: sessionsContract.startCodeReview,
           cancelCodeReview: sessionsContract.cancelCodeReview,
@@ -849,4 +852,205 @@ it('does not create an automatic recurrence link from ambiguous source, even whe
   expect(
     (await service.list(sessionId)).runs.find((run) => run.id === next.id)!.findings[0]!.continuity,
   ).toBeNull();
+});
+it('prepares ask/fix requests with a fresh workspace observation, captured code, and no agent execution or finding mutations', async () => {
+  const { id } = await service.start(sessionId, { scope: 'working' });
+  await finished(id);
+  const finding = (await service.list(sessionId)).runs[0]!.findings[0]!;
+  const beforePrompts = prompt.mock.calls.length;
+  const response = await app.inject({
+    method: 'POST',
+    url: `/api/sessions/${sessionId}/code-reviews/${id}/findings/${finding.id}/handoff`,
+    payload: { intent: 'ask', notes: 'Explain the failure scenario.' },
+  });
+  expect(response.statusCode, response.body).toBe(200);
+  expect(response.json()).toMatchObject({
+    intent: 'ask',
+    freshness: 'current',
+    canAdd: true,
+    location: 'original',
+    currentLine: 1,
+  });
+  expect(response.json().prompt).toContain('Explain the failure scenario.');
+  expect(response.json().prompt).toContain('missingGuard');
+  const fix = await service.handoff(sessionId, id, finding.id, { intent: 'fix', notes: '' });
+  expect(fix.prompt).toContain('fix only if the issue is still valid');
+  expect(fix.canAdd).toBe(true);
+  expect(prompt).toHaveBeenCalledTimes(beforePrompts);
+  expect((await service.list(sessionId)).runs[0]!.findings[0]!.status).toBe('open');
+  expect(
+    (
+      await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${secondSession}/code-reviews/${id}/findings/${finding.id}/handoff`,
+        payload: { intent: 'fix' },
+      })
+    ).statusCode,
+  ).toBe(404);
+  expect(
+    (
+      await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionId}/code-reviews/${id}/findings/${randomUUID()}/handoff`,
+        payload: { intent: 'ask' },
+      })
+    ).statusCode,
+  ).toBe(404);
+});
+it('detects late edits and committed baseline changes and maps a moved finding to the current snapshot', async () => {
+  const { id } = await service.start(sessionId, { scope: 'working' });
+  await finished(id);
+  const finding = (await service.list(sessionId)).runs[0]!.findings[0]!;
+  const initial = await service.handoff(sessionId, id, finding.id, { intent: 'fix', notes: '' });
+  await writeFile(
+    path.join(directory, 'example.ts'),
+    '// new route\nexport const value = missingGuard();\n',
+  );
+  const moved = await service.handoff(sessionId, id, finding.id, { intent: 'fix', notes: '' });
+  expect(moved).toMatchObject({
+    freshness: 'outdated',
+    location: 'moved',
+    currentLine: 2,
+    canAdd: true,
+  });
+  expect(moved.capture?.current).not.toBe(initial.capture?.current);
+  expect(moved.reviewed.lines[0]!.line).toBe(1);
+  expect(moved.current.lines.find((line) => line.line === 2)?.text).toContain('missingGuard');
+  await writeFile(path.join(directory, 'example.ts'), 'export const value = alreadyFixed();\n');
+  const changed = await service.handoff(sessionId, id, finding.id, { intent: 'ask', notes: '' });
+  expect(changed).toMatchObject({ freshness: 'outdated', location: 'changed', currentLine: null });
+  expect(changed.current.lines).toEqual([]);
+  await writeFile(path.join(directory, 'example.ts'), 'export const value = missingGuard();\n');
+  await git('add', '.');
+  await git('commit', '-m', 'Same reviewed contents');
+  expect(
+    (await service.handoff(sessionId, id, finding.id, { intent: 'fix', notes: '' })).freshness,
+  ).toBe('outdated');
+});
+it('keeps historical questions available with missing workspaces but blocks fix preparation without a stable editable session', async () => {
+  const { id } = await service.start(sessionId, { scope: 'working' });
+  await finished(id);
+  const finding = (await service.list(sessionId)).runs[0]!.findings[0]!;
+  db.update(sessions).set({ status: 'running' }).where(eq(sessions.id, sessionId)).run();
+  expect(
+    (await service.handoff(sessionId, id, finding.id, { intent: 'fix', notes: '' })).canAdd,
+  ).toBe(false);
+  db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, sessionId)).run();
+  await rm(directory, { recursive: true, force: true });
+  expect(
+    await service.handoff(sessionId, id, finding.id, { intent: 'ask', notes: '' }),
+  ).toMatchObject({ freshness: 'unknown', canAdd: true, reviewed: { status: 'text' } });
+  expect(
+    await service.handoff(sessionId, id, finding.id, { intent: 'fix', notes: '' }),
+  ).toMatchObject({ freshness: 'unknown', canAdd: false });
+});
+it('includes saved and earlier confirmed evidence as historical data and never promotes a stale check to current proof', async () => {
+  const repositories = createDefaultRepositoryService(
+    new SnapshotService(path.join(storage, 'snapshots')),
+  );
+  const verification = new ReviewVerificationService(
+    db,
+    repositories,
+    {} as Pick<SessionManager, 'runWorkspaceCommand'>,
+    events,
+  );
+  await service.dispose();
+  service = new CodeReviewService(
+    db,
+    repositories,
+    providers as unknown as ProviderRegistry,
+    { startSession } as unknown as AgentDriver,
+    events,
+    verification,
+  );
+  try {
+    const first = await service.start(sessionId, { scope: 'working' });
+    await finished(first.id);
+    const run = (await service.list(sessionId)).runs[0]!;
+    const finding = run.findings[0]!;
+    const checkId = randomUUID();
+    db.insert(reviewChecks)
+      .values({
+        id: checkId,
+        reviewId: run.id,
+        name: 'Regression',
+        command: 'pnpm test example',
+        status: 'failed',
+        timeoutMs: 1000,
+        cwd: directory,
+        expectedRevision: run.toRevision,
+        checkedRevision: run.toRevision,
+        afterRevision: run.toRevision,
+        revisionState: 'unchanged',
+        exitCode: 1,
+        stdout: 'RECORDED_REGRESSION_OUTPUT',
+        startedAt: 1,
+        finishedAt: 2,
+      })
+      .run();
+    verification.confirm(sessionId, run.id, finding.id, {
+      state: 'reproduced',
+      checkId,
+      reason: 'The empty-input assertion throws at the reported line.',
+    });
+    const next = await service.start(sessionId, { scope: 'working', providerId: 'another-acp' });
+    await finished(next.id);
+    const occurrence = (await service.list(sessionId)).runs.find((row) => row.id === next.id)!
+      .findings[0]!;
+    await writeFile(path.join(directory, 'example.ts'), 'export const value = changed();\n');
+    const handoff = await service.handoff(sessionId, next.id, occurrence.id, {
+      intent: 'fix',
+      notes: '',
+    });
+    expect(handoff.evidenceCount).toBe(1);
+    expect(handoff.prompt).toContain('RECORDED_REGRESSION_OUTPUT');
+    expect(handoff.prompt).toContain('"appliesToCurrent":false');
+    expect(handoff.freshness).toBe('outdated');
+    expect(occurrence.verification?.state).toBe('suspected');
+  } finally {
+    await verification.dispose();
+  }
+});
+it('persists a provider-neutral walkthrough, reading progress and stale section questions without mutating findings', async () => {
+  prompt.mockImplementation(async () => {
+    await callbacks.onUpdate({
+      type: 'text',
+      text: JSON.stringify({
+        ...result,
+        walkthrough: [
+          {
+            title: 'Input contract',
+            summary: 'The input now reaches a new call.',
+            excerpts: [{ path: 'example.ts', side: 'new', line: 1 }],
+            files: [],
+          },
+        ],
+      }),
+    });
+    return { stopReason: 'end_turn' };
+  });
+  const { id } = await service.start(sessionId, { scope: 'working', providerId: 'another-acp' });
+  await finished(id);
+  expect((await service.list(sessionId)).runs[0]!.walkthrough?.[0]?.title).toBe('Input contract');
+  service.progress(sessionId, id, { action: 'mark', position: 0, seen: true });
+  expect(() => service.progress(sessionId, id, { action: 'navigate', position: 99 })).toThrow();
+  await service.dispose();
+  service = createService(createDatabase(path.join(storage, 'review.sqlite')));
+  expect((await service.list(sessionId)).runs[0]!.walkthroughProgress).toEqual({
+    position: 0,
+    seen: [0],
+  });
+  await writeFile(path.join(directory, 'example.ts'), 'export const value = changed();\n');
+  const question = await service.walkthroughQuestion(sessionId, id, 0);
+  expect(question.freshness).toBe('outdated');
+  expect(question.prompt).toContain('missingGuard');
+  expect(question.prompt).toContain('Input contract');
+  expect(question.prompt).toContain('do not edit files');
+  expect((await service.list(sessionId)).runs[0]!.freshness).toBe('outdated');
+  expect((await service.list(sessionId)).runs[0]!.findings[0]!.status).toBe('open');
+  expect(() => service.progress(secondSession, id, { action: 'reset' })).toThrow(
+    'Review not found',
+  );
+  service.progress(sessionId, id, { action: 'mark', position: 0, seen: false });
+  expect((await service.list(sessionId)).runs[0]!.walkthroughProgress?.seen).toEqual([]);
 });

@@ -1,3 +1,5 @@
+import { CodeReviewWalkthrough } from './CodeReviewWalkthrough';
+import type { ReviewComposerActions } from '../model/composer-actions';
 import { CodeReviewVerification } from './CodeReviewVerification';
 import { CodeReviewContext } from './CodeReviewContext';
 import { useId, useState } from 'react';
@@ -25,6 +27,7 @@ import {
 } from './CodeReviewControls';
 
 interface Props {
+  composerActions?: ReviewComposerActions;
   sessionId: string;
   capture?: RepositoryCapture;
   disabled?: boolean;
@@ -46,6 +49,7 @@ function reviewStatus(
   return run.findings.length ? 'All resolved' : 'No issues';
 }
 export function CodeReviewPanel({
+  composerActions,
   sessionId,
   capture,
   disabled,
@@ -134,6 +138,7 @@ export function CodeReviewPanel({
     <CodeReviewFinding
       key={finding.id}
       finding={finding}
+      composerActions={composerActions}
       sessionId={sessionId}
       reviewId={run!.id}
       pending={resolve.isPending}
@@ -327,6 +332,13 @@ export function CodeReviewPanel({
                   Checking the captured changes for bugs…
                 </p>
               )}
+              <CodeReviewWalkthrough
+                key={`tour:${run.id}`}
+                sessionId={sessionId}
+                run={run}
+                freshness={freshness ?? 'unknown'}
+                composerActions={composerActions}
+              />
               {openFindings.length > 0 && (
                 <ul aria-label="Open findings" className="space-y-2">
                   {openFindings.map(findingCard)}

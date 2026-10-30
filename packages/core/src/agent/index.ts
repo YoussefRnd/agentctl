@@ -13,3 +13,7 @@ export * from './error-redaction.js';
 export * from './review-check.js';
 
 export * from './review-continuity.js';
+
+export * from './review-handoff.js';
+
+export * from './review-walkthrough.js';

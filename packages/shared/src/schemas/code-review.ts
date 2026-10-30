@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { reviewWalkthroughSchema, walkthroughProgressSchema } from './review-walkthrough.js';
 import {
   reviewFindingContinuitySchema,
   reviewContinuityReportSchema,
@@ -28,6 +29,7 @@ export const reviewFindingContentSchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 export const codeReviewOutputSchema = z.object({
+  walkthrough: reviewWalkthroughSchema.optional(),
   summary: z.string().trim().min(1).max(2000),
   findings: z.array(reviewFindingContentSchema).max(30),
 });
@@ -39,6 +41,8 @@ export const reviewFindingSchema = reviewFindingContentSchema.extend({
   continuity: reviewFindingContinuitySchema.nullable().optional(),
 });
 export const codeReviewRunSchema = z.object({
+  walkthrough: reviewWalkthroughSchema.nullable().optional(),
+  walkthroughProgress: walkthroughProgressSchema.nullable().optional(),
   id: z.uuid(),
   sessionId: z.uuid(),
   providerId: z.string(),

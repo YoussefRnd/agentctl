@@ -9,11 +9,15 @@ export function CodeReviewExcerpt({
   reviewId,
   path,
   line,
+  side,
+  firstChange = false,
 }: {
   sessionId: string;
   reviewId: string;
   path: string;
   line: number;
+  side?: 'old' | 'new';
+  firstChange?: boolean;
 }) {
   const [radius, setRadius] = useState(3);
   const query = useQuery({
@@ -24,18 +28,41 @@ export function CodeReviewExcerpt({
   const excerpt = useMemo(() => {
     const file = query.data?.file;
     if (!file) return null;
-    const oldSide = file.state === 'deleted';
-    for (const hunk of parseDiff(file.diff, { highlightWords: false })) {
+    const hunks = parseDiff(file.diff, { highlightWords: false });
+    const oldSide = side
+      ? side === 'old'
+      : file.state === 'deleted' ||
+        (firstChange &&
+          !hunks.some((hunk) => hunk.lines.some((row) => row.newLineNumber !== undefined)));
+    const target = firstChange
+      ? hunks[0]?.lines.find(
+          (row) => (oldSide ? row.oldLineNumber : row.newLineNumber) !== undefined,
+        )
+      : undefined;
+    const anchorLine = firstChange
+      ? oldSide
+        ? target?.oldLineNumber
+        : target?.newLineNumber
+      : line;
+    if (anchorLine === undefined) return null;
+    for (const hunk of hunks) {
       const index = hunk.lines.findIndex(
-        (row) => (oldSide ? row.oldLineNumber : row.newLineNumber) === line,
+        (row) => (oldSide ? row.oldLineNumber : row.newLineNumber) === anchorLine,
       );
       if (index < 0) continue;
       const start = Math.max(0, index - radius);
       const end = Math.min(hunk.lines.length, index + radius + 1);
-      return { rows: hunk.lines.slice(start, end), oldSide, start, end, length: hunk.lines.length };
+      return {
+        rows: hunk.lines.slice(start, end),
+        oldSide,
+        start,
+        end,
+        length: hunk.lines.length,
+        anchorLine,
+      };
     }
     return null;
-  }, [query.data, line, radius]);
+  }, [query.data, line, radius, side, firstChange]);
   if (query.isPending)
     return (
       <p role="status" className="text-text-muted text-[11px]">
@@ -80,12 +107,12 @@ export function CodeReviewExcerpt({
     >
       <div className="bg-surface/60 text-text-muted flex flex-wrap items-center justify-between gap-1 px-2 py-1.5 text-[10px]">
         <span>Captured code · {excerpt.oldSide ? 'old side' : 'new side'}</span>
-        <span>Highlighted line {line}</span>
+        <span>Highlighted line {excerpt.anchorLine}</span>
       </div>
       <div className="bg-surface/20 overflow-x-auto py-1 font-mono text-[11px]">
         {excerpt.rows.map((row, index) => {
           const number = excerpt.oldSide ? row.oldLineNumber : row.newLineNumber;
-          const anchor = number === line;
+          const anchor = number === excerpt.anchorLine;
           return (
             <div
               key={index}

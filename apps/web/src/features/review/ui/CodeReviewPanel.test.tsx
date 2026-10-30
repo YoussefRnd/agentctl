@@ -7,6 +7,10 @@ import { CodeReviewPanel } from './CodeReviewPanel';
 
 const fixture = vi.hoisted(() => ({
   list: vi.fn(),
+  progress: vi.fn(),
+  section: vi.fn(),
+  prepare: vi.fn(),
+  draft: vi.fn(),
   file: vi.fn(),
   checks: vi.fn(),
   check: vi.fn(),
@@ -21,6 +25,9 @@ const fixture = vi.hoisted(() => ({
 vi.mock('@agentctl/api-client', async (original) => ({
   ...(await original<typeof import('@agentctl/api-client')>()),
   listCodeReviews: fixture.list,
+  updateWalkthroughProgress: fixture.progress,
+  prepareWalkthroughQuestion: fixture.section,
+  prepareReviewFindingHandoff: fixture.prepare,
   getCodeReviewFile: fixture.file,
   listReviewChecks: fixture.checks,
   getReviewCheck: fixture.check,
@@ -102,6 +109,7 @@ async function render(runs: CodeReviewRun[] = [], disabled = false) {
     root.render(
       <QueryClientProvider client={client}>
         <CodeReviewPanel
+          composerActions={{ insertIntoComposer: fixture.draft, attachContextToComposer: () => {} }}
           sessionId="session-1"
           capture={nextCapture}
           disabled={disabled}
@@ -626,4 +634,234 @@ it('shows earlier decisions and historical verification separately from the new 
   expect(fixture.check).toHaveBeenCalledWith('session-1', oldId, checkId, expect.any(AbortSignal));
   expect(f.container.textContent).toContain('2 relevant findings were omitted');
   expect(f.container.textContent).toContain('ten most recent');
+});
+
+function prepared(extra: Record<string, unknown> = {}) {
+  const source = {
+    status: 'text',
+    side: 'new',
+    lines: [{ line: 2, text: 'savedCall()' }],
+    truncated: false,
+  };
+  return {
+    intent: 'ask',
+    freshness: 'current',
+    checkedAt: 100,
+    capture,
+    location: 'original',
+    currentLine: 2,
+    reviewed: source,
+    current: source,
+    canAdd: true,
+    blockedReason: null,
+    evidenceCount: 0,
+    prompt: 'Explain savedCall without edits',
+    truncated: false,
+    ...extra,
+  };
+}
+async function readyDialog() {
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain(
+      'Checking the workspace',
+    );
+  });
+}
+it('prepares editable questions only on request and rechecks before inserting into the supplied composer', async () => {
+  fixture.prepare.mockImplementation(async (_session, _review, _finding, body) =>
+    prepared({ prompt: 'Explain without edits: ' + body.notes }),
+  );
+  const f = await render([run()]);
+  expect(fixture.prepare).not.toHaveBeenCalled();
+  await act(async () => button(f.container, 'Ask about this').click());
+  await readyDialog();
+  const notes = document.querySelector<HTMLTextAreaElement>(
+    '[aria-label="Finding request notes"]',
+  )!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+      notes,
+      'Why is this unsafe?',
+    );
+    notes.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await act(async () => button(document.body, 'Add to composer').click());
+  await vi.waitFor(() =>
+    expect(fixture.draft).toHaveBeenCalledWith('Explain without edits: Why is this unsafe?'),
+  );
+  expect(fixture.prepare).toHaveBeenCalledTimes(2);
+  expect(fixture.start).not.toHaveBeenCalled();
+  expect(fixture.resolve).not.toHaveBeenCalled();
+});
+it('requires inspecting updated context after a late edit and blocks a fix when freshness is unknown', async () => {
+  fixture.prepare.mockResolvedValueOnce(prepared({ intent: 'fix' })).mockResolvedValue(
+    prepared({
+      intent: 'fix',
+      freshness: 'outdated',
+      capture: { ...capture, current: 'late-edit' },
+      prompt: 'Recheck changed code before fixing',
+    }),
+  );
+  const f = await render([run()]);
+  await act(async () => button(f.container, 'Fix this finding').click());
+  await readyDialog();
+  await act(async () => button(document.body, 'Add to composer').click());
+  await readyDialog();
+  expect(fixture.draft).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain('workspace changed while this dialog was open');
+  await act(async () => button(document.body, 'Add to composer').click());
+  await vi.waitFor(() =>
+    expect(fixture.draft).toHaveBeenCalledWith('Recheck changed code before fixing'),
+  );
+  fixture.prepare.mockResolvedValue(
+    prepared({
+      intent: 'fix',
+      freshness: 'unknown',
+      capture: null,
+      canAdd: false,
+      blockedReason: 'Stable workspace required',
+    }),
+  );
+  await act(async () => button(f.container, 'Fix this finding').click());
+  await readyDialog();
+  expect(button(document.body, 'Add to composer').disabled).toBe(true);
+  expect(document.body.textContent).toContain('Stable workspace required');
+});
+it('does not insert a late response after the handoff dialog closes', async () => {
+  fixture.prepare.mockResolvedValueOnce(prepared());
+  const f = await render([run()]);
+  await act(async () => button(f.container, 'Ask about this').click());
+  await readyDialog();
+  let finish!: (value: ReturnType<typeof prepared>) => void;
+  fixture.prepare.mockImplementation(
+    async () =>
+      await new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(async () => button(document.body, 'Add to composer').click());
+  await act(async () => button(document.body, 'Close dialog').click());
+  await act(async () => finish(prepared()));
+  expect(fixture.draft).not.toHaveBeenCalled();
+});
+
+it('navigates captured walkthrough stops, saves reversible progress, and prepares an outdated section question', async () => {
+  const item = run({
+    walkthrough: [
+      {
+        title: 'New behavior',
+        summary: 'The input behavior changes.',
+        excerpts: [{ path: 'src/example.ts', side: 'new', line: 1 }],
+        files: [],
+      },
+      {
+        title: 'Earlier contract',
+        summary: 'The removed contract explains the change.',
+        excerpts: [{ path: 'src/example.ts', side: 'old', line: 1 }],
+        files: [],
+      },
+    ],
+    walkthroughProgress: { position: 0, seen: [] },
+    freshness: 'outdated',
+  });
+  fixture.file.mockResolvedValue({
+    source: 'saved',
+    file: {
+      path: 'src/example.ts',
+      state: 'modified',
+      diff: '@@ -1 +1 @@\n-oldCapturedContract\n+newCapturedBehavior',
+    },
+  });
+  fixture.progress.mockImplementation(async (_session, _id, action) => {
+    if (action.action === 'navigate') item.walkthroughProgress!.position = action.position;
+    if (action.action === 'mark')
+      item.walkthroughProgress!.seen = action.seen ? [action.position] : [];
+    if (action.action === 'reset') item.walkthroughProgress = { position: 0, seen: [] };
+    fixture.list.mockResolvedValue({
+      runs: [{ ...item, walkthroughProgress: { ...item.walkthroughProgress! } }],
+      nextCursor: null,
+    });
+    return item.walkthroughProgress;
+  });
+  fixture.section.mockResolvedValue({
+    prompt: 'Explain the captured section; the current code is outdated. Do not edit.',
+    freshness: 'outdated',
+    capture: null,
+  });
+  const f = await render([item]);
+  const tour = f.container.querySelector<HTMLDetailsElement>(
+    '[aria-label="Guided change walkthrough"]',
+  )!;
+  expect(tour.open).toBe(false);
+  await act(async () => {
+    tour.open = true;
+    tour.dispatchEvent(new Event('toggle'));
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(tour.textContent).toContain('newCapturedBehavior');
+  });
+  expect(tour.textContent).toContain('Outdated walkthrough');
+  await act(async () => button(tour, 'Mark reviewed').click());
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(tour.textContent).toContain('1/2 reviewed');
+  });
+  await act(async () => button(tour, 'Next').click());
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(tour.textContent).toContain('Stop 2 of 2');
+  });
+  expect(tour.textContent).toContain('old side');
+  await act(async () => button(tour, 'Ask about this section').click());
+  await vi.waitFor(() =>
+    expect(fixture.draft).toHaveBeenCalledWith(expect.stringContaining('current code is outdated')),
+  );
+  expect(fixture.section).toHaveBeenCalledWith('session-1', item.id, 1, expect.any(AbortSignal));
+  await act(async () => button(tour, 'Reset progress').click());
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(tour.textContent).toContain('0/2 reviewed');
+  });
+});
+it('opens a file-index excerpt on the first actual changed line, including an emptied file', async () => {
+  fixture.file.mockResolvedValue({
+    source: 'saved',
+    file: {
+      path: 'src/example.ts',
+      state: 'modified',
+      diff: '@@ -50 +49,0 @@\n-removedContractAtFifty',
+    },
+  });
+  const f = await render([
+    run({
+      walkthrough: [
+        {
+          title: 'Other files',
+          summary: 'Inspect the remaining captured changes.',
+          excerpts: [],
+          files: ['src/example.ts'],
+        },
+      ],
+    }),
+  ]);
+  const tour = f.container.querySelector<HTMLDetailsElement>(
+    '[aria-label="Guided change walkthrough"]',
+  )!;
+  await act(async () => {
+    tour.open = true;
+    tour.dispatchEvent(new Event('toggle'));
+  });
+  const file = tour.querySelector<HTMLDetailsElement>('article details')!;
+  await act(async () => {
+    file.open = true;
+    file.dispatchEvent(new Event('toggle'));
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(file.textContent).toContain('removedContractAtFifty');
+  });
+  expect(file.textContent).toContain('old side');
+  expect(file.textContent).toContain('Highlighted line 50');
 });

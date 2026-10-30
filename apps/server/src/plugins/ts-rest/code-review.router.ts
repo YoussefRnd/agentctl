@@ -5,6 +5,9 @@ import { AppError } from '../../errors/app-error.js';
 
 type ReviewContract = Pick<
   typeof sessionsContract,
+  | 'prepareReviewFindingHandoff'
+  | 'updateWalkthroughProgress'
+  | 'prepareWalkthroughQuestion'
   | 'getCodeReviewFile'
   | 'listCodeReviews'
   | 'startCodeReview'
@@ -18,6 +21,57 @@ type ReviewContract = Pick<
 >;
 export function createCodeReviewRouter(app: FastifyInstance): RouterImplementation<ReviewContract> {
   return {
+    updateWalkthroughProgress: async ({ params, body }) => {
+      try {
+        return {
+          status: 200,
+          body: app.services.codeReview.progress(params.id, params.reviewId, body),
+        };
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode === 404) throw error;
+        return {
+          status: 400,
+          body: { message: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    },
+    prepareWalkthroughQuestion: async ({ params }) => {
+      try {
+        return {
+          status: 200,
+          body: await app.services.codeReview.walkthroughQuestion(
+            params.id,
+            params.reviewId,
+            params.position,
+          ),
+        };
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode === 404) throw error;
+        return {
+          status: 400,
+          body: { message: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    },
+    prepareReviewFindingHandoff: async ({ params, body }) => {
+      try {
+        return {
+          status: 200,
+          body: await app.services.codeReview.handoff(
+            params.id,
+            params.reviewId,
+            params.findingId,
+            body,
+          ),
+        };
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode === 404) throw error;
+        return {
+          status: 400,
+          body: { message: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    },
     getCodeReviewFile: async ({ params, query }) => ({
       status: 200,
       body: await app.services.codeReview.file(params.id, params.reviewId, query.path),

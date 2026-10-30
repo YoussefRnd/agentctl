@@ -126,6 +126,7 @@ export function ReviewFileList({
                     sessionId={sessionId}
                     reviewId={codeReview.id}
                     showExcerpt={false}
+                    composerActions={composerActions}
                     pending={!!resolvingFinding}
                     onSelectFile={() => onOpenFile?.(file.path)}
                     onResolve={(body) => onResolveFinding(finding.id, body)}
@@ -143,7 +144,16 @@ export function ReviewFileList({
       result.set(file.path, lines);
     }
     return result;
-  }, [files, sessionId, codeReview, resolvingFinding, findingError, onResolveFinding, onOpenFile]);
+  }, [
+    files,
+    sessionId,
+    codeReview,
+    resolvingFinding,
+    findingError,
+    onResolveFinding,
+    onOpenFile,
+    composerActions,
+  ]);
   const allFiles = useMemo(() => files ?? [], [files]);
 
   const parentRef = useRef<HTMLDivElement>(null);

@@ -1,3 +1,5 @@
+import { CodeReviewHandoff } from './CodeReviewHandoff';
+import type { ReviewComposerActions } from '../model/composer-actions';
 import { CodeReviewExcerpt } from './CodeReviewExcerpt';
 import { CodeReviewContinuity } from './CodeReviewContinuity';
 import { CodeReviewEvidence } from './CodeReviewEvidence';
@@ -12,6 +14,7 @@ export function CodeReviewFinding({
   reviewId,
   pending,
   showExcerpt = true,
+  composerActions,
   onResolve,
   onSelectFile,
 }: {
@@ -20,6 +23,7 @@ export function CodeReviewFinding({
   reviewId?: string;
   pending: boolean;
   showExcerpt?: boolean;
+  composerActions?: ReviewComposerActions;
   onResolve(body: ResolveReviewFinding): Promise<unknown>;
   onSelectFile(path: string): void;
 }) {
@@ -27,7 +31,10 @@ export function CodeReviewFinding({
   const [reason, setReason] = useState('');
   const severity = { high: 'High', medium: 'Medium', low: 'Low' }[finding.severity];
   return (
-    <li className="border-border/40 bg-surface/40 min-w-0 space-y-2.5 rounded-lg border p-3">
+    <li
+      id={showExcerpt ? `review-finding-${finding.id}` : undefined}
+      className="border-border/40 bg-surface/40 min-w-0 space-y-2.5 rounded-lg border p-3"
+    >
       <div className="flex items-start gap-2">
         <span
           className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${finding.severity === 'high' ? 'bg-danger/10 text-danger' : finding.severity === 'medium' ? 'bg-warning/10 text-warning' : 'bg-surface-tertiary text-text-muted'}`}
@@ -67,6 +74,16 @@ export function CodeReviewFinding({
         <p className="text-text-muted leading-relaxed [overflow-wrap:anywhere]">
           {finding.resolution}
         </p>
+      )}
+      {sessionId && reviewId && composerActions && (
+        <CodeReviewHandoff
+          sessionId={sessionId}
+          reviewId={reviewId}
+          findingId={finding.id}
+          title={finding.title}
+          line={finding.line}
+          composerActions={composerActions}
+        />
       )}
       {finding.status === 'open' ? (
         dismissing ? (
