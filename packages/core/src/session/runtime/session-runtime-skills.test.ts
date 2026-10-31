@@ -9,6 +9,7 @@ import type { WorkspaceManager } from '../../git/worktree-manager.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
 import { noopLogger } from '../../logger.js';
 import { createCompactionProjector } from '../../acp/protocol/compaction.js';
+import { AgentPromptRejectedError } from '../../agent/errors.js';
 import { SessionEventRepository } from '../persistence/session-event-repository.js';
 import { SessionRuntime } from './session-runtime.js';
 import { SessionRuntimeRegistry } from './session-runtime-registry.js';
@@ -202,7 +203,9 @@ describe('skill catalog delivery', () => {
 
   it('does not record rejected delivery but retains accepted foreground failures', async () => {
     const rejected = runtime();
-    rejected.prompt.mockRejectedValueOnce(new Error('Rejected'));
+    rejected.prompt.mockRejectedValueOnce(
+      new AgentPromptRejectedError({ code: -1, message: 'Rejected' }),
+    );
     await expect(rejected.session.prompt('First')).rejects.toThrow('Rejected');
     expect(db.select().from(sessionSkillCatalogs).all()).toEqual([]);
     const restored = runtime(handle('native', 'restored'));

@@ -86,9 +86,6 @@ export class SessionService {
   undoRewind(...args: Parameters<SessionCommands['undoRewind']>) {
     return this.parts.commands.undoRewind(...args);
   }
-  handoffSession(...args: Parameters<SessionCommands['handoffSession']>) {
-    return this.parts.commands.handoffSession(...args);
-  }
   previewSnapshotDiff(...args: Parameters<SessionCommands['previewSnapshotDiff']>) {
     return this.parts.commands.previewSnapshotDiff(...args);
   }

@@ -5,7 +5,6 @@ import type { SessionManager } from '@agentctl/core/session';
 import type { ProviderRegistry } from '@agentctl/core/providers';
 import type { FastifyBaseLogger } from 'fastify';
 import {
-  type HandoffSessionResponse,
   type ElicitationResponse,
   type SessionMode,
   sessionRowSchema,
@@ -196,35 +195,6 @@ export class SessionCommands {
 
   async undoRewind(sessionId: string) {
     return await this.sessionManager.undoRewind(sessionId);
-  }
-
-  async handoffSession(
-    sessionId: string,
-    targetProvider: string,
-    targetModel?: string,
-    nextSessionFocus?: string,
-  ): Promise<HandoffSessionResponse> {
-    try {
-      return await this.sessionManager.handoffSession(
-        sessionId,
-        targetProvider,
-        targetModel,
-        nextSessionFocus,
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to handoff session';
-      if (message.startsWith('Session not found:')) {
-        throw new AppError(message, 404);
-      }
-      if (
-        message.includes('current agent turn') ||
-        message.includes('source agent started another turn') ||
-        message.includes('already using provider')
-      ) {
-        throw new AppError(message, 409);
-      }
-      throw error;
-    }
   }
 
   async previewSnapshotDiff(sessionId: string, eventId: number) {

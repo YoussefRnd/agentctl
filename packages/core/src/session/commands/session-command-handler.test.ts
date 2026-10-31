@@ -1,7 +1,8 @@
 import { expect, test, vi } from 'vite-plus/test';
-import { createDatabase, projects, sessions, providers } from '../../db/index.js';
+import { createDatabase, projects, sessions, providers, sessionEvents } from '../../db/index.js';
 import { Provider } from '../../providers/provider.js';
 import { noopLogger } from '../../logger.js';
+import type { SessionRuntime } from '../runtime/session-runtime.js';
 import type { AgentConfigOption } from '@agentctl/shared';
 import { SessionStateProjector } from '../projection/session-state-projector.js';
 import { SessionEventRepository } from '../persistence/session-event-repository.js';
@@ -100,7 +101,8 @@ function setup(
       return liveOptions;
     }),
   };
-  const handler = new SessionCommandHandler({
+  const restart = vi.fn(async () => active as unknown as SessionRuntime);
+  const deps = {
     db,
     logger: noopLogger,
     providerRegistry: {
@@ -113,7 +115,9 @@ function setup(
       getSession() {
         return active;
       },
+      stopSessionAndWait: async () => {},
     },
+    restartSession: restart,
     launcher: {
       buildInitialConfigOptions(config: AgentConfigOption[]) {
         return config;
@@ -121,8 +125,18 @@ function setup(
       async ensureWorkspaceAvailable() {},
       async reportModelFallback() {},
     },
-  } as unknown as SessionCommandHandlerDependencies);
-  return { handler, active, calls, row: () => db.select().from(sessions).get()! };
+  } as unknown as SessionCommandHandlerDependencies;
+  const handler = new SessionCommandHandler(deps);
+  return {
+    db,
+    deps,
+    restart,
+    repository,
+    handler,
+    active,
+    calls,
+    row: () => db.select().from(sessions).get()!,
+  };
 }
 const newEffort: AgentConfigOption = {
   id: 'new-effort',
@@ -204,3 +218,55 @@ test('restores the previous model before restoring its effort after a failure', 
   expect(calls).toEqual(['model:b', 'effort:new-effort:max', 'model:a', 'effort:old-effort:high']);
   expect(row()).toMatchObject({ selectedModel: 'a', selectedThinkingEffort: 'high' });
 });
+
+test.each([false, true])(
+  'records historical provider endpoints only for successful switches (fails=%s)',
+  async (fails) => {
+    const { db, deps, restart, repository, handler, row } = setup(newEffort);
+    db.update(providers).set({ icon: 'https://cdn.example.com/source.svg' }).run();
+    const source = db.select().from(providers).get()!;
+    const target = new Provider({
+      ...source,
+      id: 'target',
+      name: 'Target provider',
+      icon: 'https://cdn.example.com/target.svg',
+    });
+    deps.providerRegistry.ensureProviderReady = async () => target;
+    await repository.append('s', 'text', { role: 'user', content: 'Continue this task' });
+    if (fails) restart.mockRejectedValueOnce(new Error('Startup failed'));
+    const switching = handler.updateSessionConfig('s', {
+      selectedProvider: 'target',
+      selectedModel: 'b',
+    });
+    if (fails) await expect(switching).rejects.toThrow('Startup failed');
+    else await switching;
+    const changes = db
+      .select()
+      .from(sessionEvents)
+      .all()
+      .map((event) => JSON.parse(event.data))
+      .filter((data) => data.status === 'provider_switched');
+    if (fails) {
+      expect(changes).toEqual([]);
+      expect(row().selectedProvider).toBe('provider');
+    } else {
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toMatchObject({
+        from: {
+          providerId: 'provider',
+          providerName: 'Provider',
+          providerIcon: 'https://cdn.example.com/source.svg',
+          modelId: 'a',
+          modelName: 'A',
+        },
+        to: {
+          providerId: 'target',
+          providerName: 'Target provider',
+          providerIcon: 'https://cdn.example.com/target.svg',
+          modelId: 'b',
+          modelName: 'B',
+        },
+      });
+    }
+  },
+);

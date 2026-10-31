@@ -43,3 +43,44 @@ test('an unresponsive session close releases local ownership without killing ano
     vi.useRealTimers();
   }
 });
+
+test('a session close finishing after connection shutdown does not revive its idle timer', async () => {
+  const manager = new PersistentAgentConnectionManager({} as never, {} as never, {} as never);
+  const response = Promise.withResolvers<void>();
+  const connection = {
+    providerId: 'provider',
+    generation: 1,
+    connection: { closeSession: () => response.promise, close() {} },
+    capabilities: { supportsCloseSession: true },
+    sessions: new Map([['session', { sessionId: 'session', createdAt: 0 }]]),
+    activeSessions: new Map(),
+    terminalToSession: new Map(),
+    terminalManager: { release() {}, dispose: async () => {} },
+    transport: {
+      isAlive: true,
+      closed: Promise.resolve(),
+      kill() {
+        this.isAlive = false;
+      },
+    },
+    idleTimer: null,
+  };
+  const internals = manager as unknown as { connections: Map<string, PersistentConnection> };
+  internals.connections.set('provider', connection as unknown as PersistentConnection);
+  vi.useFakeTimers();
+  try {
+    const closing = manager.closeSession(
+      'provider',
+      'session',
+      connection as unknown as PersistentConnection,
+    );
+    manager.closeConnection('provider');
+    response.resolve();
+    await closing;
+    expect(connection.idleTimer).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+    await manager.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});

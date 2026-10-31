@@ -43,24 +43,6 @@ export async function undoRewind(sessionId: string): Promise<{ success: boolean 
   return res.body;
 }
 
-export async function handoffSession(
-  sessionId: string,
-  targetProvider: string,
-  targetModel?: string,
-  nextSessionFocus?: string,
-): Promise<ClientInferResponseBody<typeof apiContract.handoffSession, 200>> {
-  const res = await api.handoffSession({
-    params: { id: sessionId },
-    body: {
-      targetProvider,
-      targetModel,
-      nextSessionFocus,
-    },
-  });
-  assertApiStatus(res, 200, 'Failed to handoff session');
-  return res.body;
-}
-
 export async function restoreSnapshot(
   sessionId: string,
   snapshotHash: string,

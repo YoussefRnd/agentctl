@@ -74,12 +74,12 @@ Paths in this table are relative to `packages/core/src/session/`.
 | `requests/request-cancellation.ts`                | One abort listener and waiter per request; explicit disposal.                                                                                                                                                                                                                |
 | `services/session-launcher.ts`                    | Workspace availability, provider selection/launch configuration, start/restart and coalesced resuscitation. Retained owner; dependencies narrowed.                                                                                                                           |
 | `services/session-lifecycle-service.ts`           | Workspace mode, archive, deletion, finalization and orphan synchronization; provider-native deletion best effort. Retained owner; dependencies narrowed.                                                                                                                     |
-| `services/session-history-service.ts`             | Fork, rewind/undo and handoff orchestration; stop and flush runtime before history mutation. Retained owner; dependencies narrowed.                                                                                                                                          |
+| `services/session-history-service.ts`             | Fork and rewind/undo orchestration; stop and flush runtime before history mutation. Retained owner; dependencies narrowed.                                                                                                                                                   |
 | `agent-session-id.ts`                             | Pure native-session ID compatibility decoding and provider selection.                                                                                                                                                                                                        |
 | `context-budget.ts`                               | Pure byte budgeting and recent context selection.                                                                                                                                                                                                                            |
 | `context-files.ts`                                | Session-scoped canonical-path grants for generated context files; expiry and a 500-entry bound.                                                                                                                                                                              |
 | `history-transcript.ts`                           | Persisted transcript selection, delivery filtering, context budget and private overflow document creation.                                                                                                                                                                   |
-| `handoff.ts`                                      | Handoff document policy and associated private-file/Git context I/O; redaction, retention and unreferenced timer cleanup. Workspace context is injected through backend-neutral review capabilities after CP05; no Git subprocess remains.                                   |
+| `handoff.ts`                                      | Secret redaction and legacy temporary-file cleanup. Durable context documents live in the session-owned state directory.                                                                                                                                                     |
 | `stream-buffer.ts`                                | Coalesced persistence timers, serialized writes, awaited in-flight flush, observable errors, retryable pending content, and generation-safe reset.                                                                                                                           |
 
 ## State and operation owners
@@ -195,3 +195,28 @@ buffered report. After configuration and binding, the installed runtime applies 
 through its normal ownership guard before accepting live reports. Failed startup never
 publishes buffered usage. Starting a native connection clears its old session cost until
 a fresh report arrives; replayed conversation consumption never becomes occupancy.
+
+Provider changes retain the app session and resume the selected provider's native conversation when
+available. `execution/provider-context-delivery.ts` transfers saved activity on the next prompt,
+using migration `0058_provider_contexts` to record a cursor per session, provider, and native
+conversation. The cursor follows event changes so a queued request accepted before an earlier
+turn finishes is still transferred when it reaches a different provider. Pending delivery is persisted before dispatch; returned prompts advance the cursor,
+while explicit insertion rejections restore the prior cursor. An ambiguous delivery requires a fresh
+native conversation. Native forks and imports start with their copied history acknowledged.
+History budgeting includes the final skill context and current input; a resumed conversation that
+cannot fit the handoff is replaced before dispatch, reusing the accepted user message.
+
+Successful provider changes with existing conversation history persist `provider_switched` status
+events. The captured provider names, icons, and model selections preserve historical labels even
+when profiles are renamed or the active provider changes again. Startup failures restore the source
+selection without recording a successful switch.
+
+Omitted history is retained in private, content-addressed documents under
+`$AGENTCTL_HOME/context/<session-id>` (default `~/.agentctl/context`). ACP reads authorize the owning
+session independently of process-local grants; symlinked files/directories and cross-session reads
+are rejected. Deleting the session removes its documents. Attributed history is the shared ACP
+transport; native message injection is an optional provider capability, not a requirement for
+portable handoffs. The opt-in `handoff:smoke` script exercises actual providers using isolated
+application state and checks cross-provider recall, native resumption, runtime restart, omitted-history
+retrieval, and document cleanup. It uses a private in-memory descriptor cache and only the explicitly
+configured provider commands/models; it never opens the normal application database.

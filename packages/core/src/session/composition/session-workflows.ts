@@ -92,8 +92,6 @@ export function composeSessionWorkflows(
     startSession: (...args) => delegates.startSession(...args),
     restartSession: (...args) => delegates.restartSession(...args),
     createForkSession: (...args) => delegates.createForkSession(...args),
-    updateSessionConfig: (sessionId, params, options) =>
-      commandHandler.updateSessionConfig(sessionId, params, options),
   });
   const commandHandler = new SessionCommandHandler({
     get db() {

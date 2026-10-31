@@ -1,20 +1,31 @@
-import { describe, it, expect, beforeEach } from 'vite-plus/test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vite-plus/test';
 import { createDatabase } from '../db/index.js';
 import { SessionEventRepository } from './persistence/session-event-repository.js';
 import { projects, sessions } from '../db/schema.js';
 import { buildConversationHistoryTranscript } from './history-transcript.js';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import type { DbClient } from '../db/index.js';
 
 describe('buildConversationHistoryTranscript', () => {
   let db: DbClient;
+  let home: string;
 
   beforeEach(async () => {
+    home = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-history-test-'));
+    vi.stubEnv('AGENTCTL_HOME', home);
     db = createDatabase(':memory:');
     await db.insert(projects).values({
       id: 'proj-1',
       name: 'test-project',
       path: '/tmp/test',
     });
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await fs.rm(home, { recursive: true, force: true });
   });
 
   it('returns null if there are no prior text messages in history', async () => {
@@ -119,5 +130,73 @@ describe('buildConversationHistoryTranscript', () => {
     expect(transcript).not.toContain('[User]: User message 14');
     expect(transcript).toContain('[User]: User message 15');
     expect(transcript).not.toContain('[User]: User message 10');
+  });
+
+  it('transfers missed activity without reasoning, undelivered messages, or the current request', async () => {
+    await db.insert(sessions).values({
+      id: 'activity',
+      projectId: 'proj-1',
+      branch: 'main',
+      worktreePath: '/tmp/test',
+      taskSlug: 'activity',
+      agent: 'source',
+      selectedProvider: 'target',
+      baseCommit: 'hash',
+    });
+    const store = new SessionEventRepository(db, { publish() {} });
+    const anchor = await store.append('activity', 'text', {
+      role: 'user',
+      content: 'Already seen',
+    });
+    await store.append('activity', 'text', { role: 'user', content: 'Missed request' });
+    await store.append('activity', 'text', { role: 'thought', content: 'Private reasoning' });
+    for (const deliveryStatus of ['queued', 'cancelled', 'failed', 'unknown'] as const)
+      await store.append('activity', 'text', {
+        role: 'user',
+        content: `Undelivered ${deliveryStatus}`,
+        deliveryStatus,
+      });
+    await store.append('activity', 'tool_call', {
+      name: 'test',
+      status: 'failed',
+      rawOutput: { exitCode: 1, output: 'Command failed' },
+    });
+    await store.append('activity', 'tool_call', {
+      name: 'reason',
+      kind: 'think',
+      rawOutput: 'Hidden reasoning',
+    });
+    await store.append('activity', 'text', { role: 'provider', content: '界🧪'.repeat(2_000) });
+    await store.append('activity', 'text', { role: 'provider', content: 'Latest answer' });
+    const current = await store.append('activity', 'text', {
+      role: 'user',
+      content: 'Current request',
+    });
+    const context = await buildConversationHistoryTranscript(db, 'activity', {
+      afterEventId: anchor,
+      excludeEventId: current,
+      includeActivity: true,
+      maxBytes: 4_000,
+      maxTurns: Infinity,
+    });
+    expect(context).toContain('Missed request');
+    expect(context).toContain('Command failed');
+    expect(context).toContain('Latest answer');
+    for (const excluded of [
+      'Already seen',
+      'Private reasoning',
+      'Hidden reasoning',
+      'Undelivered',
+      'Current request',
+      '界🧪',
+    ])
+      expect(context).not.toContain(excluded);
+    expect(Buffer.byteLength(JSON.stringify(context)) + 256).toBeLessThanOrEqual(4_000);
+    const filePath = context!.match(/at (.+?\.md) if needed/)![1];
+    try {
+      expect(await fs.readFile(filePath, 'utf8')).toContain('界🧪'.repeat(2_000));
+    } finally {
+      await fs.unlink(filePath);
+    }
   });
 });

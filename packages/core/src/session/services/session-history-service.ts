@@ -1,15 +1,12 @@
-import { describeWorkspace } from '../../workspace/workspace-context.js';
-import { contextByteBudget } from '../context-budget.js';
 import { eq, asc, desc } from 'drizzle-orm';
-import { sessions, sessionEvents } from '../../db/schema.js';
+import {
+  sessions,
+  sessionEvents,
+  sessionProviderContexts,
+  sessionEventChanges,
+} from '../../db/schema.js';
 import type { SessionEventDbRow } from '../../db/zod-schemas.js';
 import type { SessionEvent, SessionMode, ThinkingEffort } from '@agentctl/shared';
-import {
-  findAgentGeneratedHandoff,
-  generateHandoffDocument,
-  scheduleHandoffCleanup,
-  type HandoffResult,
-} from '../handoff.js';
 import { resolveAgentSessionId } from '../agent-session-id.js';
 import { sessionEventCodecs } from '../../db/json-codecs.js';
 import type { DbClient } from '../../db/index.js';
@@ -18,7 +15,6 @@ import type { SessionEventRepository } from '../persistence/session-event-reposi
 import type { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
 import type { SessionWorkspace } from '../../workspace/session-workspace.js';
 import type { SessionLauncher } from './session-launcher.js';
-import type { SessionRuntime } from '../runtime/session-runtime.js';
 
 export interface RewindBackup {
   undoSnapshotHash?: string;
@@ -51,15 +47,6 @@ export interface SessionHistoryDependencies {
   startSession: SessionLauncher['startSession'];
   restartSession: SessionLauncher['restartSession'];
   createForkSession: SessionHistoryService['createForkSession'];
-  updateSessionConfig(
-    sessionId: string,
-    params: {
-      selectedProvider: string;
-      selectedModel: string;
-      selectedThinkingEffort: ThinkingEffort;
-    },
-    options?: { forceNewAgentSession?: boolean },
-  ): Promise<SessionRuntime | null>;
 }
 
 export class SessionHistoryService {
@@ -127,7 +114,7 @@ export class SessionHistoryService {
     );
 
     try {
-      await this.deps.startSession(
+      const runtime = await this.deps.startSession(
         forkSessionId,
         worktreePath,
         launch.command,
@@ -142,6 +129,24 @@ export class SessionHistoryService {
           : { kind: 'new' },
         selection.resolvedModelConfigId,
       );
+      if (forkFromAgentSessionId && !runtime.requiresHistoryContext && runtime.nativeSessionId) {
+        const lastCopiedEvent = await this.deps.db
+          .select({ sequence: sessionEventChanges.sequence })
+          .from(sessionEventChanges)
+          .where(eq(sessionEventChanges.sessionId, forkSessionId))
+          .orderBy(desc(sessionEventChanges.sequence))
+          .limit(1);
+        await this.deps.db
+          .insert(sessionProviderContexts)
+          .values({
+            sessionId: forkSessionId,
+            providerId: sourceRecord.selectedProvider,
+            nativeSessionId: runtime.nativeSessionId,
+            throughSequence: lastCopiedEvent[0]?.sequence ?? 0,
+            status: 'delivered',
+          })
+          .onConflictDoNothing();
+      }
     } catch (error) {
       await this.deps.db
         .update(sessions)
@@ -155,172 +160,6 @@ export class SessionHistoryService {
     }
 
     return forkSessionId;
-  }
-
-  async handoffSession(
-    sessionId: string,
-    targetProvider: string,
-    targetModel?: string,
-    nextSessionFocus?: string,
-  ): Promise<{
-    sessionId: string;
-    handoffFilePath: string;
-    initialPrompt: string;
-    handoffSource: HandoffResult['source'];
-  }> {
-    const sessionRecord = await this.deps.db.query.sessions.findFirst({
-      where: eq(sessions.id, sessionId),
-      with: { project: true },
-    });
-
-    if (!sessionRecord) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-    if (sessionRecord.status === 'running') {
-      throw new Error('Wait for the current agent turn to finish before switching providers');
-    }
-    if (sessionRecord.selectedProvider === targetProvider) {
-      throw new Error(`Session is already using provider: ${targetProvider}`);
-    }
-
-    const { providerId: resolvedProviderId, selection } =
-      await this.deps.launcher.resolveSessionProviderAndParameters(
-        sessionRecord.projectId,
-        targetProvider,
-        targetModel,
-        sessionRecord.selectedThinkingEffort as ThinkingEffort,
-      );
-
-    const latestEventRows = await this.deps.db
-      .select({ id: sessionEvents.id })
-      .from(sessionEvents)
-      .where(eq(sessionEvents.sessionId, sessionId))
-      .orderBy(desc(sessionEvents.id))
-      .limit(1);
-    const latestEventId = latestEventRows[0]?.id ?? 0;
-
-    let handoffResult: HandoffResult | null = null;
-    try {
-      const sourceSession =
-        this.deps.runtimeRegistry.getSession(sessionId) ??
-        (await this.deps.restartSession(sessionId));
-      const focusParts = [`Continue this work with ${resolvedProviderId}.`];
-      if (nextSessionFocus?.trim()) {
-        focusParts.push(nextSessionFocus.trim());
-      }
-      await sourceSession.prompt(focusParts.join(' '), undefined, undefined, {
-        purpose: 'provider-handoff',
-      });
-      await sourceSession.flushAll();
-
-      const generatedEvents = await this.deps.db
-        .select()
-        .from(sessionEvents)
-        .where(eq(sessionEvents.sessionId, sessionId))
-        .orderBy(desc(sessionEvents.id));
-      const responseTexts = generatedEvents
-        .filter((event) => event.id > latestEventId && event.type === 'text')
-        .map((event) => {
-          const data = sessionEventCodecs.text(event.data);
-          return data.role === 'provider' ? (data.content ?? data.text ?? '') : '';
-        })
-        .filter((text) => text.length > 0);
-      handoffResult = await findAgentGeneratedHandoff(responseTexts, sessionId);
-    } catch (error) {
-      this.deps.logger.warn(error, 'The source agent could not produce a handoff document');
-    }
-
-    if (
-      handoffResult &&
-      Buffer.byteLength(handoffResult.content) > contextByteBudget(selection.contextWindow)
-    ) {
-      const original = handoffResult;
-      const skillReference = `Source agent's handoff document: ${original.filePath}\n\n`;
-      handoffResult = await generateHandoffDocument(this.deps.db, sessionId, resolvedProviderId, {
-        nextSessionFocus,
-        describeWorkspace: (directory) =>
-          describeWorkspace(this.deps.runtimeRegistry.getRepositoryService(), directory),
-        maxEventId: latestEventId,
-        maxBytes: contextByteBudget(selection.contextWindow) - Buffer.byteLength(skillReference),
-      });
-      // The full skill document remains retrievable without clipping its contents.
-      handoffResult.content = skillReference + handoffResult.content;
-      scheduleHandoffCleanup(original.filePath);
-    }
-    handoffResult ??= await generateHandoffDocument(this.deps.db, sessionId, resolvedProviderId, {
-      nextSessionFocus,
-      describeWorkspace: (directory) =>
-        describeWorkspace(this.deps.runtimeRegistry.getRepositoryService(), directory),
-      maxEventId: latestEventId,
-      contextWindow: selection.contextWindow,
-    });
-
-    const sessionBeforeSwitch = await this.deps.db.query.sessions.findFirst({
-      where: eq(sessions.id, sessionId),
-    });
-    if (sessionBeforeSwitch?.status === 'running') {
-      scheduleHandoffCleanup(handoffResult.filePath);
-      throw new Error('The source agent started another turn before the handoff could complete');
-    }
-
-    const sourceSelection = {
-      selectedProvider: sessionRecord.selectedProvider,
-      selectedModel: sessionRecord.selectedModel,
-      selectedThinkingEffort: sessionRecord.selectedThinkingEffort as ThinkingEffort,
-    };
-    const initialPrompt = `Continue the work from the attached handoff context.${
-      nextSessionFocus && nextSessionFocus.trim().length > 0
-        ? ` Focus for this session: ${nextSessionFocus.trim()}`
-        : ''
-    }`;
-
-    try {
-      const targetSession = await this.deps.updateSessionConfig(
-        sessionId,
-        {
-          selectedProvider: resolvedProviderId,
-          selectedModel: selection.selectedModel,
-          selectedThinkingEffort: selection.selectedThinkingEffort,
-        },
-        { forceNewAgentSession: true },
-      );
-      if (!targetSession) {
-        throw new Error(`Failed to start target provider: ${resolvedProviderId}`);
-      }
-
-      await this.deps.eventRepository.append(
-        sessionId,
-        'status',
-        {
-          status: 'context_handoff',
-          title: `Handoff from ${sessionRecord.selectedProvider} to ${resolvedProviderId}`,
-          handoffFilePath: handoffResult.filePath,
-          handoffSource: handoffResult.source,
-        },
-        null,
-      );
-      await targetSession.prompt(initialPrompt, undefined, handoffResult.content);
-    } catch (error) {
-      await this.deps.runtimeRegistry.stopSessionAndWait(sessionId).catch(() => undefined);
-      await this.deps
-        .updateSessionConfig(sessionId, sourceSelection)
-        .catch((rollbackError: unknown) => {
-          this.deps.logger.error(
-            rollbackError,
-            'Failed to restore source provider after handoff failed',
-          );
-        });
-      throw error;
-    } finally {
-      scheduleHandoffCleanup(handoffResult.filePath);
-    }
-
-    return {
-      sessionId,
-      handoffFilePath: handoffResult.filePath,
-      initialPrompt,
-      handoffSource: handoffResult.source,
-    };
   }
 
   async rewindSession(

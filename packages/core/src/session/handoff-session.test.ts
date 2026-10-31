@@ -1,9 +1,10 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { createDatabase } from '../db/index.js';
-import { projects, sessionEvents, sessions } from '../db/schema.js';
+import { projects, sessions, sessionEvents, sessionProviderContexts } from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import { noopLogger } from '../logger.js';
 import { Provider } from '../providers/provider.js';
@@ -41,23 +42,14 @@ function createProvider(id: string): Provider {
 }
 
 describe('SessionManager provider handoff', () => {
-  it('invokes the source skill, keeps the workspace, and prompts a fresh target', async () => {
+  it('keeps one chat, resumes returning providers, and delivers only missed history on the next input', async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-handoff-session-'));
-    const agentctlHome = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-handoff-home-'));
-    const originalAgentctlHome = process.env.AGENTCTL_HOME;
-    const originalSkillsDirectory = process.env.AGENTCTL_SKILLS_DIR;
-    const originalSkillPath = process.env.AGENTCTL_SKILL_PATH;
-    const originalWorkspaceSkillsDirectory = process.env.AGENTCTL_WORKSPACE_SKILLS_DIR;
-    process.env.AGENTCTL_HOME = agentctlHome;
-    process.env.AGENTCTL_SKILLS_DIR = path.join(agentctlHome, 'skills');
-    delete process.env.AGENTCTL_SKILL_PATH;
-    delete process.env.AGENTCTL_WORKSPACE_SKILLS_DIR;
+    vi.stubEnv('AGENTCTL_HOME', path.join(cwd, 'home'));
+    vi.stubEnv('AGENTCTL_SKILLS_DIR', path.join(cwd, 'home', 'skills'));
+    vi.stubEnv('AGENTCTL_SKILL_PATH', '');
+    vi.stubEnv('AGENTCTL_WORKSPACE_SKILLS_DIR', path.join(cwd, 'workspace-skills'));
     const db = createDatabase(':memory:');
-    await db.insert(projects).values({
-      id: 'project-1',
-      name: 'project',
-      path: cwd,
-    });
+    await db.insert(projects).values({ id: 'project-1', name: 'project', path: cwd });
     await db.insert(sessions).values({
       id: 'session-1',
       projectId: 'project-1',
@@ -69,31 +61,20 @@ describe('SessionManager provider handoff', () => {
       status: 'idle',
       selectedProvider: 'source',
       selectedModel: 'default',
-      selectedThinkingEffort: 'medium',
       baseCommit: 'none',
       mode: 'local',
     });
-    await db.insert(sessionEvents).values({
-      sessionId: 'session-1',
-      type: 'text',
-      data: JSON.stringify({ role: 'user', content: 'Keep this context' }),
-    });
-
     const providers = new Map([
       ['source', createProvider('source')],
       ['target', createProvider('target')],
     ]);
     const providerRegistry = {
-      ensureProviderReady: (providerId: string) => Promise.resolve(providers.get(providerId)!),
+      ensureProviderReady: (id: string) => Promise.resolve(providers.get(id)!),
       getSettings: () => Promise.resolve({ defaultProviderId: 'source' }),
       discover: () => Promise.resolve(Array.from(providers.values()).map((p) => p.toDiscovery())),
     } as unknown as ProviderRegistry;
-
-    const executions: {
-      options: AgentSessionOptions;
-      prompt: ReturnType<typeof vi.fn>;
-      stop: ReturnType<typeof vi.fn>;
-    }[] = [];
+    const executions: { options: AgentSessionOptions; prompt: ReturnType<typeof vi.fn> }[] = [];
+    let reportFullContext = false;
     const runtime: AgentDriver = {
       inspectProvider: () =>
         Promise.resolve({
@@ -103,96 +84,150 @@ describe('SessionManager provider handoff', () => {
           supportsDynamicModel: false,
           supportsDynamicConfig: false,
         }),
-      startSession: (_command, _args, options, callbacks) => {
-        const prompt = vi.fn(async () => {
-          if (options.providerId === 'source') {
-            const filePath = path.join(os.tmpdir(), `source-handoff-${Date.now()}.md`);
-            await fs.writeFile(filePath, '# Skill handoff\n\nKeep this context\n');
-            await callbacks.onUpdate({ type: 'text', text: `Wrote handoff to \`${filePath}\`` });
+      startSession: async (_command, _args, options, callbacks) => {
+        if (reportFullContext && options.intent?.kind === 'resume') {
+          reportFullContext = false;
+          await callbacks.onUpdate({ type: 'usage_update', used: 127_900, size: 128_000 });
+        }
+        const prompt = vi.fn(async (text: string) => {
+          if (text === 'Before queued target') {
+            await manager.startInput('session-1', 'Queued target request');
           }
-          return { stopReason: 'end_turn' as const };
+          await callbacks.onUpdate({ type: 'text', text: `Answer to ${text}` });
+          return text === 'Before queued target'
+            ? {
+                stopReason: 'error' as const,
+                userMessageId: 'accepted-source-input',
+                error: { code: -1, message: 'Transient provider error' },
+              }
+            : { stopReason: 'end_turn' as const };
         });
-        const stop = vi.fn(() => Promise.resolve());
-        executions.push({ options, prompt, stop });
+        executions.push({ options, prompt });
         return Promise.resolve({
-          id: `${options.providerId}-acp-session`,
-          history: 'fresh',
+          id:
+            options.intent?.kind === 'resume'
+              ? options.intent.sessionId
+              : `${options.providerId}-native-${executions.length}`,
+          history: options.intent?.kind === 'resume' ? 'restored' : 'fresh',
           closed: new Promise<void>(() => undefined),
           onError: () => undefined,
           onClose: () => undefined,
           prompt,
           authenticate: () => Promise.resolve(),
           cancel: () => Promise.resolve(),
-          close: stop,
+          close: () => Promise.resolve(),
         });
       },
     };
-
     const manager = new SessionManager(
       db,
       {} as WorkspaceManager,
       providerRegistry,
-      { publish: () => undefined },
+      { publish() {} },
       noopLogger,
       runtime,
     );
-    await manager.startSession('session-1', cwd, 'source', []);
-
-    const result = await manager.handoffSession('session-1', 'target');
-
-    expect(result).toMatchObject({
-      sessionId: 'session-1',
-      handoffSource: 'skill',
-    });
-    expect(executions).toHaveLength(2);
-    expect(executions[0]?.prompt).toHaveBeenCalledWith(
-      'Continue this work with target.',
-      [],
-      expect.stringContaining('name: handoff'),
-    );
-    expect(executions[0]?.stop).toHaveBeenCalledOnce();
-    expect(executions[1]?.options).toMatchObject({
-      providerId: 'target',
-      localSessionId: 'session-1',
-      cwd,
-      intent: { kind: 'new' },
-    });
-    expect(executions[1]?.prompt).toHaveBeenCalledWith(
-      expect.stringContaining('Continue the work'),
-      [],
-      expect.stringContaining('Keep this context'),
-    );
-
-    const storedSessions = await db.select().from(sessions);
-    expect(storedSessions).toHaveLength(1);
-    expect(storedSessions[0]).toMatchObject({
-      id: 'session-1',
-      selectedProvider: 'target',
-      worktreePath: cwd,
-    });
-
-    await fs.unlink(result.handoffFilePath).catch(() => undefined);
-    await fs.rm(cwd, { recursive: true, force: true });
-    await fs.rm(agentctlHome, { recursive: true, force: true });
-    if (originalAgentctlHome === undefined) {
-      delete process.env.AGENTCTL_HOME;
-    } else {
-      process.env.AGENTCTL_HOME = originalAgentctlHome;
-    }
-    if (originalSkillsDirectory === undefined) {
-      delete process.env.AGENTCTL_SKILLS_DIR;
-    } else {
-      process.env.AGENTCTL_SKILLS_DIR = originalSkillsDirectory;
-    }
-    if (originalSkillPath === undefined) {
-      delete process.env.AGENTCTL_SKILL_PATH;
-    } else {
-      process.env.AGENTCTL_SKILL_PATH = originalSkillPath;
-    }
-    if (originalWorkspaceSkillsDirectory === undefined) {
-      delete process.env.AGENTCTL_WORKSPACE_SKILLS_DIR;
-    } else {
-      process.env.AGENTCTL_WORKSPACE_SKILLS_DIR = originalWorkspaceSkillsDirectory;
+    const input = async (text: string) => {
+      await manager.startInput('session-1', text);
+      await manager.waitForSessionOperations('session-1');
+    };
+    try {
+      await manager.startSession('session-1', cwd, 'source', []);
+      await input('Original task');
+      await manager.updateSessionConfig('session-1', {
+        selectedProvider: 'target',
+        selectedModel: 'default',
+      });
+      expect(executions[0]!.prompt).toHaveBeenCalledTimes(1);
+      expect(executions[1]!.prompt).not.toHaveBeenCalled();
+      await input('Work with target');
+      const targetContext = executions[1]!.prompt.mock.calls[0]![2] as string;
+      expect(targetContext).toContain('Original task');
+      expect(targetContext).toContain('Answer to Original task');
+      expect(targetContext).not.toContain('Work with target');
+      await manager.updateSessionConfig('session-1', {
+        selectedProvider: 'source',
+        selectedModel: 'default',
+      });
+      expect(executions[2]!.options.intent).toEqual({
+        kind: 'resume',
+        sessionId: 'source-native-1',
+      });
+      await input('Back to source');
+      const returnContext = executions[2]!.prompt.mock.calls[0]![2] as string;
+      expect(returnContext).toContain('Work with target');
+      expect(returnContext).toContain('Answer to Work with target');
+      expect(returnContext).not.toContain('Original task');
+      expect(returnContext).not.toContain('Back to source');
+      await input('Continue source');
+      expect(executions[2]!.prompt.mock.calls[1]![2] ?? '').not.toContain('Work with target');
+      await manager.stopSessionAndWait('session-1');
+      await manager.reconnectSession('session-1');
+      await input('After reconnect');
+      expect(executions.at(-1)!.options.intent?.kind).toBe('resume');
+      expect(executions.at(-1)!.prompt.mock.calls[0]![2] ?? '').not.toContain('Work with target');
+      await manager.updateSessionConfig('session-1', {
+        selectedProvider: 'target',
+        selectedModel: 'default',
+      });
+      await input('More target work');
+      reportFullContext = true;
+      await manager.updateSessionConfig('session-1', {
+        selectedProvider: 'source',
+        selectedModel: 'default',
+      });
+      const fullNative = executions.at(-1)!;
+      await input('Continue with full provider');
+      expect(fullNative.options.intent?.kind).toBe('resume');
+      expect(fullNative.prompt).not.toHaveBeenCalled();
+      expect(executions.at(-1)!.options.intent?.kind).toBe('new');
+      expect(executions.at(-1)!.prompt.mock.calls[0]![2]).toContain('Original task');
+      expect(executions.at(-1)!.prompt.mock.calls[0]![2]).toContain('More target work');
+      const fullInput = db
+        .select()
+        .from(sessionEvents)
+        .all()
+        .filter(
+          (event) =>
+            event.type === 'text' &&
+            JSON.parse(event.data).role === 'user' &&
+            JSON.parse(event.data).content === 'Continue with full provider',
+        );
+      expect(fullInput).toHaveLength(1);
+      db.update(sessionProviderContexts)
+        .set({ status: 'pending' })
+        .where(eq(sessionProviderContexts.providerId, 'source'))
+        .run();
+      await manager.stopSessionAndWait('session-1');
+      await manager.reconnectSession('session-1');
+      expect(executions.at(-1)!.options.intent?.kind).toBe('new');
+      await input('Recover uncertain delivery');
+      expect(executions.at(-1)!.prompt.mock.calls[0]![2]).toContain('Original task');
+      await input('Before queued target');
+      await manager.updateSessionConfig('session-1', {
+        selectedProvider: 'target',
+        selectedModel: 'default',
+      });
+      await manager.waitForSessionOperations('session-1');
+      await manager.updateSessionConfig('session-1', {
+        selectedProvider: 'source',
+        selectedModel: 'default',
+      });
+      await input('Return after queued target');
+      const queuedContext = executions.at(-1)!.prompt.mock.calls[0]![2];
+      expect(queuedContext).toContain('Queued target request');
+      expect(queuedContext).toContain('Answer to Queued target request');
+      const rows = await db.select().from(sessions);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        id: 'session-1',
+        selectedProvider: 'source',
+        worktreePath: cwd,
+      });
+    } finally {
+      await manager.stopAll();
+      vi.unstubAllEnvs();
+      await fs.rm(cwd, { recursive: true, force: true });
     }
   });
 });

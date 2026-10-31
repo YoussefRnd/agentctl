@@ -8,6 +8,7 @@ import type { FeedEventGroup } from '../lib/eventFeedGrouping';
 import type { ElicitationItem } from '@agentctl/shared';
 import { chatErrorSchema } from '@agentctl/shared';
 import type { RewindMode } from '@/features/sessions';
+import { ProviderSwitchRow } from './ProviderSwitchRow';
 
 interface EventFeedItemProps {
   group: FeedEventGroup;
@@ -36,6 +37,7 @@ export function EventFeedItem({
   onRefresh,
   recoveryPending,
 }: EventFeedItemProps) {
+  if (group.type === 'provider_switch') return <ProviderSwitchRow change={group.change} />;
   if (
     group.type === 'error' ||
     (group.type === 'notice' &&

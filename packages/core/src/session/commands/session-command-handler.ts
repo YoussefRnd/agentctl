@@ -1,17 +1,19 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { SessionRuntime } from '../runtime/session-runtime.js';
-import { sessions } from '../../db/schema.js';
+import { providers, sessionEvents, sessions } from '../../db/schema.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
 import {
   findAgentConfigOption,
   isThinkingEffort,
   resolveThinkingEffort,
   type ThinkingEffort,
+  type ProviderSwitchData,
 } from '@agentctl/shared';
 import { negotiateCapabilities } from '../../providers/capabilities-negotiator.js';
-import { buildConversationHistoryTranscript } from '../history-transcript.js';
-import { getContextTurnLimit } from '../../config/runtime-defaults.js';
-import { resolveAgentSessionId } from '../agent-session-id.js';
+import {
+  ProviderContextRecoveryError,
+  providerContextReceipt,
+} from '../execution/provider-context-delivery.js';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
@@ -60,7 +62,6 @@ export class SessionCommandHandler {
       selectedModel: string;
       selectedThinkingEffort?: ThinkingEffort;
     },
-    options: { forceNewAgentSession?: boolean } = {},
   ): Promise<SessionRuntime | null> {
     const sessionRecord = await this.deps.db.query.sessions.findFirst({
       where: eq(sessions.id, sessionId),
@@ -100,6 +101,11 @@ export class SessionCommandHandler {
     const providerIdChanged = sessionRecord.selectedProvider !== params.selectedProvider;
     const modelChanged = selection.selectedModel !== sessionRecord.selectedModel;
     const effortChanged = selection.selectedThinkingEffort !== sessionRecord.selectedThinkingEffort;
+    const sourceProvider = providerIdChanged
+      ? await this.deps.db.query.providers.findFirst({
+          where: eq(providers.id, sessionRecord.selectedProvider),
+        })
+      : undefined;
     await this.deps.launcher.ensureWorkspaceAvailable(sessionId);
     const activeSession = this.deps.runtimeRegistry.getSession(sessionId);
 
@@ -119,10 +125,10 @@ export class SessionCommandHandler {
           selectedModel: selection.selectedModel,
           selectedThinkingEffort: selection.selectedThinkingEffort,
           contextLimit: preservedLimit,
-          ...(providerIdChanged || modelChanged || options.forceNewAgentSession
+          ...(providerIdChanged || modelChanged
             ? { contextUsedTokens: null, contextLimit: 0 }
             : {}),
-          ...(providerIdChanged || options.forceNewAgentSession
+          ...(providerIdChanged
             ? {
                 sessionMetrics: JSON.stringify({
                   ...jsonCodecs.unknownRecord(sessionRecord.sessionMetrics),
@@ -170,12 +176,7 @@ export class SessionCommandHandler {
         .where(eq(sessions.id, sessionId));
     };
 
-    if (
-      activeSession &&
-      !activeSession.isDead &&
-      !providerIdChanged &&
-      !options.forceNewAgentSession
-    ) {
+    if (activeSession && !activeSession.isDead && !providerIdChanged) {
       const needsModelRestart = modelChanged && !selection.features.configuration.model;
       const needsEffortRestart = effortChanged && !selection.features.configuration.options;
 
@@ -250,19 +251,18 @@ export class SessionCommandHandler {
       }
     }
 
-    if (options.forceNewAgentSession) {
+    if (providerIdChanged) {
       await this.deps.runtimeRegistry.stopSessionAndWait(sessionId);
     }
 
+    let restarted: SessionRuntime;
     try {
       await persistSelection();
       await this.deps.launcher.reportModelFallback(sessionId, selection);
-      return options.forceNewAgentSession
-        ? await this.deps.restartSession(sessionId, { resumeExisting: false })
-        : await this.deps.restartSession(sessionId);
+      restarted = await this.deps.restartSession(sessionId);
     } catch (error) {
       await rollbackSelection();
-      if (options.forceNewAgentSession && providerIdChanged) {
+      if (providerIdChanged) {
         await this.deps.restartSession(sessionId).catch((rollbackError: unknown) => {
           this.deps.logger.error(
             rollbackError,
@@ -272,6 +272,52 @@ export class SessionCommandHandler {
       }
       throw error;
     }
+    if (providerIdChanged) {
+      const hasConversation = this.deps.db
+        .select({ id: sessionEvents.id })
+        .from(sessionEvents)
+        .where(
+          and(
+            eq(sessionEvents.sessionId, sessionId),
+            eq(sessionEvents.type, 'text'),
+            sql`json_extract(${sessionEvents.data}, '$.role') = 'user'`,
+            sql`coalesce(json_extract(${sessionEvents.data}, '$.deliveryStatus'), 'accepted') in ('accepted', 'sending')`,
+          ),
+        )
+        .limit(1)
+        .get();
+      if (hasConversation) {
+        const targetRecord = await this.deps.db.query.sessions.findFirst({
+          where: eq(sessions.id, sessionId),
+        });
+        const targetModel = targetRecord?.selectedModel ?? selection.selectedModel;
+        await this.deps.eventRepository.append(sessionId, 'status', {
+          status: 'provider_switched',
+          from: {
+            providerId: sessionRecord.selectedProvider,
+            providerName: sourceProvider?.name ?? sessionRecord.selectedProvider,
+            providerIcon: sourceProvider?.icon ?? undefined,
+            modelId: sessionRecord.selectedModel,
+            modelName: findAgentConfigOption(
+              jsonCodecs.agentConfigOptionsOrNull(sessionRecord.sessionConfigOptions) ?? [],
+              'model',
+            )?.options?.find((option) => option.value === sessionRecord.selectedModel)?.name,
+          },
+          to: {
+            providerId: params.selectedProvider,
+            providerName: discovery.label,
+            providerIcon: discovery.icon,
+            modelId: targetModel,
+            modelName: findAgentConfigOption(
+              jsonCodecs.agentConfigOptionsOrNull(targetRecord?.sessionConfigOptions) ??
+                configOptions,
+              'model',
+            )?.options?.find((option) => option.value === targetModel)?.name,
+          },
+        } satisfies ProviderSwitchData);
+      }
+    }
+    return restarted;
   }
 
   async setConfigOption(
@@ -394,7 +440,7 @@ export class SessionCommandHandler {
       attemptId?: string;
     },
   ) {
-    const session = ['approve', 'deny', 'cancel'].includes(action)
+    let session = ['approve', 'deny', 'cancel'].includes(action)
       ? this.deps.runtimeRegistry.getSession(sessionId)
       : await this.deps.getOrResuscitate(sessionId, { allowArchived: true });
 
@@ -443,60 +489,50 @@ export class SessionCommandHandler {
       }
       await this.deps.rewindSession(sessionId, evtId, rewindMode);
     } else if (payload.input !== undefined) {
-      let historyContext: string | undefined;
-
-      const sessionRecord = await this.deps.db.query.sessions.findFirst({
+      const input = payload.input;
+      const row = await this.deps.db.query.sessions.findFirst({
         where: eq(sessions.id, sessionId),
       });
-
-      if (sessionRecord) {
-        const existingAgentSessionId = resolveAgentSessionId(
-          sessionRecord.agentSessionId,
-          sessionRecord.selectedProvider,
-          sessionRecord.agent,
-        );
-        const hasExistingProviderSession =
-          Boolean(existingAgentSessionId) && !session.requiresHistoryContext;
-
-        if (!hasExistingProviderSession) {
-          const transcript = await buildConversationHistoryTranscript(this.deps.db, sessionId, {
-            maxTurns: getContextTurnLimit(),
-            beforeEventId: payload.acceptedEventId,
-            contextWindow: sessionRecord.contextLimit,
-          });
-          if (transcript) {
-            historyContext = transcript;
-            await this.deps.eventRepository.append(
-              sessionId,
-              'status',
-              {
-                status: 'context_handoff',
-                title: `Transferred recent conversation context to ${sessionRecord.selectedProvider}`,
-              },
-              null,
-            );
-          }
+      if (
+        row &&
+        session.nativeSessionId &&
+        !session.requiresHistoryContext &&
+        providerContextReceipt(
+          this.deps.db,
+          sessionId,
+          row.selectedProvider,
+          session.nativeSessionId,
+        )?.status === 'pending'
+      ) {
+        session = await this.deps.restartSession(sessionId, { resumeExisting: false });
+      }
+      const prompt = async (active: SessionRuntime) => {
+        if (payload.attemptId) await active.bindAttempt(payload.attemptId);
+        this.deps.clearRewindBackup(sessionId);
+        if (payload.onAccepted || payload.acceptedEventId) {
+          await active.prompt(
+            input,
+            payload.attachmentIds,
+            undefined,
+            undefined,
+            payload.onAccepted,
+            payload.clientMessageId,
+            payload.acceptedEventId && payload.attemptId
+              ? { eventId: payload.acceptedEventId, attemptId: payload.attemptId }
+              : undefined,
+          );
+        } else {
+          await active.prompt(input, payload.attachmentIds);
         }
+      };
+      try {
+        await prompt(session);
+      } catch (error) {
+        if (!(error instanceof ProviderContextRecoveryError) || session.requiresHistoryContext)
+          throw error;
+        session = await this.deps.restartSession(sessionId, { resumeExisting: false });
+        await prompt(session);
       }
-
-      if (payload.attemptId) await session.bindAttempt(payload.attemptId);
-      this.deps.clearRewindBackup(sessionId);
-      if (payload.onAccepted || payload.acceptedEventId) {
-        await session.prompt(
-          payload.input,
-          payload.attachmentIds,
-          historyContext,
-          undefined,
-          payload.onAccepted,
-          payload.clientMessageId,
-          payload.acceptedEventId && payload.attemptId
-            ? { eventId: payload.acceptedEventId, attemptId: payload.attemptId }
-            : undefined,
-        );
-      } else {
-        await session.prompt(payload.input, payload.attachmentIds, historyContext);
-      }
-      session.markHistoryContextTransferred?.();
     }
   }
 }

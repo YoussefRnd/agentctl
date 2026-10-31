@@ -4,7 +4,12 @@ import { useFeedViewport } from '../model/useFeedViewport';
 import { getGroupKey } from '../lib/feedGroupKey';
 import { RefreshCw, ArrowDown, LoaderCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { isComposerOnlyInput, type SessionEventRow } from '@agentctl/shared';
+import {
+  isComposerOnlyInput,
+  type SessionEventRow,
+  type ProviderDiscovery,
+} from '@agentctl/shared';
+import { getProviderIconUrl } from '@/shared';
 import {
   useSession,
   useSessionStream,
@@ -22,6 +27,7 @@ import { NewSessionEmptyState } from './NewSessionEmptyState';
 
 interface EventFeedProps {
   events: SessionEventRow[];
+  providers?: readonly ProviderDiscovery[];
   targetEventId?: number;
   onTargetEventHandled?: () => void;
   isConnected?: boolean;
@@ -34,6 +40,7 @@ interface EventFeedProps {
 
 export function EventFeed({
   events,
+  providers,
   targetEventId,
   onTargetEventHandled,
   isConnected = true,
@@ -117,9 +124,19 @@ export function EventFeed({
     );
   }, [turnIndex, hasMoreHistory, loadedTurns, sessionId, turnMeta, events]);
 
+  const providerIcons = useMemo(
+    () =>
+      new Map(
+        [...(sessionData?.capabilities ?? []), ...(providers ?? [])].flatMap((provider) => {
+          const icon = getProviderIconUrl(provider);
+          return icon ? [[provider.id, icon] as const] : [];
+        }),
+      ),
+    [providers, sessionData?.capabilities],
+  );
   const groupedEvents = useMemo(
-    () => groupFeedEvents(events, streamingEventId, isSessionRunning),
-    [events, streamingEventId, isSessionRunning],
+    () => groupFeedEvents(events, streamingEventId, isSessionRunning, providerIcons),
+    [events, streamingEventId, isSessionRunning, providerIcons],
   );
   const {
     parentRef,

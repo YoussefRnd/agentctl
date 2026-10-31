@@ -4,7 +4,6 @@ import { ChildConversation } from './ChildConversation';
 import { ChangedFileRow } from './ChangedFileRow';
 import { useRef, useCallback, useMemo, useEffect } from 'react';
 import { useConversationHistory } from '../model/useConversationHistory';
-import { useConversationHandoff } from '../model/useConversationHandoff';
 import { afterPaint, journeyPerformance } from '@/shared/lib/performanceRecorder';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,7 +16,7 @@ import {
   useSessionStream,
   useSessionTurnState,
 } from '@/features/sessions';
-import { useProviders, SwitchAgentModal } from '@/features/providers';
+import { useProviders } from '@/features/providers';
 import { CommandBar } from '@/features/composer';
 import { EventFeed } from './EventFeed';
 import { NewSessionEmptyState } from './NewSessionEmptyState';
@@ -57,7 +56,20 @@ export function MainFeed() {
     return afterPaint(() => journeyPerformance.finish('session-click-to-feed-painted', sessionId));
   }, [sessionId, isLoadingEvents, isLoadingSession, historyError, sessionData]);
   const { handleSend, handleRetry, handleApprove, handleDeny } = useSessionActions();
-  const { switchProvider, isSwitching } = useProviders(sessionId);
+  const { providers, switchProvider, isSwitching } = useProviders(sessionId);
+  const hasUserMessages = useMemo(
+    () =>
+      events.some((event) => {
+        if (event.type !== 'text') return false;
+        try {
+          const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+          return data?.role === 'user' && Boolean(data.content || data.text);
+        } catch {
+          return false;
+        }
+      }),
+    [events],
+  );
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,15 +96,6 @@ export function MainFeed() {
     });
   }, [location.hash, location.pathname, location.search, locationState, navigate]);
 
-  const {
-    switchAgentTarget,
-    setSwitchAgentTarget,
-    isHandoffLoading,
-    hasUserMessages,
-    handleProviderSelect,
-    handleConfirmHandoff,
-    handleConfirmNewSession,
-  } = useConversationHandoff({ sessionId, sessionData, events, switchProvider });
   const {
     confirmRewind,
     isRewindDialogOpen,
@@ -255,7 +258,9 @@ export function MainFeed() {
                 disabled={!isConnected || isSwitching || isLoadingSession || isHistoryChanging}
                 selectedProviderId={sessionData?.session.selectedProvider}
                 selectedModelId={sessionData?.session.selectedModel}
-                onProviderSelect={handleProviderSelect}
+                onProviderSelect={(providerId, modelId) =>
+                  switchProvider(providerId, modelId, sessionData)
+                }
                 initialInput={rewindInput || initialPrompt}
               />
             </NewSessionEmptyState>
@@ -270,6 +275,7 @@ export function MainFeed() {
                 <LoadingState message="Loading session..." className="h-full" />
               ) : (
                 <EventFeed
+                  providers={providers}
                   events={
                     isHistoryChanging
                       ? historySnapshotRef.current!.events
@@ -416,7 +422,9 @@ export function MainFeed() {
                   disabled={!isConnected || isSwitching || isLoadingSession || isHistoryChanging}
                   selectedProviderId={sessionData?.session.selectedProvider}
                   selectedModelId={sessionData?.session.selectedModel}
-                  onProviderSelect={handleProviderSelect}
+                  onProviderSelect={(providerId, modelId) =>
+                    switchProvider(providerId, modelId, sessionData)
+                  }
                   initialInput={rewindInput || initialPrompt}
                 />
               </ApprovalComposerSlot>
@@ -449,22 +457,6 @@ export function MainFeed() {
             subagentsConnected &&
             isSubagentActive((liveActiveSubagent.subagentEvent.data as { status: string }).status)
           }
-        />
-      )}
-      {switchAgentTarget && (
-        <SwitchAgentModal
-          open={Boolean(switchAgentTarget)}
-          onOpenChange={(open) => {
-            if (!open && !isHandoffLoading) {
-              setSwitchAgentTarget(null);
-            }
-          }}
-          currentProvider={sessionData?.session.selectedProvider ?? 'agent'}
-          targetProvider={switchAgentTarget.targetProvider}
-          targetModel={switchAgentTarget.targetModel}
-          onConfirmHandoff={handleConfirmHandoff}
-          onConfirmNewSession={handleConfirmNewSession}
-          isLoading={isHandoffLoading}
         />
       )}
     </div>

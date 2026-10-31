@@ -408,3 +408,92 @@ it('shows model fallback notices even before the first conversation turn', () =>
   };
   expect(groupFeedEvents([event], null)).toEqual([{ type: 'notice', event, isStreaming: false }]);
 });
+
+it('keeps a provider switch between turns as a standalone timeline row', () => {
+  const events: SessionEventRow[] = [
+    {
+      id: 1,
+      sessionId: 's',
+      createdAt: new Date(),
+      type: 'text',
+      data: { role: 'user', content: 'First request' },
+    },
+    {
+      id: 2,
+      sessionId: 's',
+      createdAt: new Date(),
+      type: 'text',
+      parentEventId: 1,
+      data: { role: 'provider', content: 'First reply' },
+    },
+    {
+      id: 3,
+      sessionId: 's',
+      createdAt: new Date(),
+      type: 'status',
+      data: {
+        status: 'provider_switched',
+        from: { providerId: 'codex', providerName: 'Codex', modelId: 'model-a' },
+        to: { providerId: 'claude', providerName: 'Claude Code', modelId: 'model-b' },
+      },
+    },
+    {
+      id: 4,
+      sessionId: 's',
+      createdAt: new Date(),
+      type: 'text',
+      data: { role: 'user', content: 'Next request' },
+    },
+  ];
+  const icons = new Map([
+    ['codex', 'https://cdn.example.com/codex.svg'],
+    ['claude', 'https://cdn.example.com/claude.svg'],
+  ]);
+  const grouped = groupFeedEvents(events, null, true, icons);
+  expect(grouped.map((group) => group.type)).toEqual([
+    'user',
+    'agent',
+    'provider_switch',
+    'user',
+    'agent',
+  ]);
+  expect('event' in grouped[2] && grouped[2].event.id).toBe(3);
+  if (grouped[2].type === 'provider_switch') {
+    expect(grouped[2].change.from.providerIcon).toBe(icons.get('codex'));
+    expect(grouped[2].change.to.providerIcon).toBe(icons.get('claude'));
+  }
+  expect(groupFeedEvents([events[2]], null)).toHaveLength(1);
+});
+
+it('preserves the recorded provider icon when registry branding changes', () => {
+  const event: SessionEventRow = {
+    id: 1,
+    sessionId: 's',
+    createdAt: new Date(),
+    type: 'status',
+    data: {
+      status: 'provider_switched',
+      from: {
+        providerId: 'codex',
+        providerName: 'Codex',
+        providerIcon: 'https://cdn.example.com/original-codex.svg',
+        modelId: 'default',
+      },
+      to: { providerId: 'claude', providerName: 'Claude Code', modelId: 'default' },
+    },
+  };
+  const [group] = groupFeedEvents(
+    [event],
+    null,
+    false,
+    new Map([
+      ['codex', 'https://cdn.example.com/new-codex.svg'],
+      ['claude', 'https://cdn.example.com/claude.svg'],
+    ]),
+  );
+  expect(group.type).toBe('provider_switch');
+  if (group.type === 'provider_switch') {
+    expect(group.change.from.providerIcon).toBe('https://cdn.example.com/original-codex.svg');
+    expect(group.change.to.providerIcon).toBe('https://cdn.example.com/claude.svg');
+  }
+});

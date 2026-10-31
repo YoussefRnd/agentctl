@@ -1,11 +1,17 @@
-import type { SessionEventRow, SessionExecution } from '@agentctl/shared';
-import { chatErrorSchema, isSessionEventText } from '@agentctl/shared';
+import type { SessionEventRow, SessionExecution, ProviderSwitchData } from '@agentctl/shared';
+import { chatErrorSchema, isSessionEventText, providerSwitchDataSchema } from '@agentctl/shared';
 import { orderConversationEvents } from './orderConversationEvents';
 
 export type FeedEventGroup =
   | { type: 'user'; event: SessionEventRow; isStreaming: boolean }
   | { type: 'agent'; events: SessionEventRow[]; isStreaming: boolean; id: string }
   | { type: 'notice'; event: SessionEventRow; isStreaming: boolean }
+  | {
+      type: 'provider_switch';
+      event: SessionEventRow;
+      change: ProviderSwitchData;
+      isStreaming: boolean;
+    }
   | { type: 'error'; event: SessionEventRow; isStreaming: boolean }
   | { type: 'command'; event: SessionEventRow; isStreaming: boolean }
   | { type: 'elicitation'; event: SessionEventRow; isStreaming: boolean };
@@ -45,6 +51,7 @@ export function groupFeedEvents(
   events: SessionEventRow[],
   streamingEventId: number | null | undefined,
   isSessionRunning?: boolean,
+  providerIcons?: ReadonlyMap<string, string>,
 ): FeedEventGroup[] {
   const result: FeedEventGroup[] = [];
   let currentAgentTurn: {
@@ -122,6 +129,28 @@ export function groupFeedEvents(
           ].includes(statusVal)));
 
     if (isHiddenSystemEvent) {
+      continue;
+    }
+
+    if (e.type === 'status' && statusVal === 'provider_switched') {
+      const change = providerSwitchDataSchema.safeParse(e.data);
+      if (change.success) {
+        currentAgentTurn = null;
+        const withIcon = (endpoint: ProviderSwitchData['from']) => ({
+          ...endpoint,
+          providerIcon: endpoint.providerIcon || providerIcons?.get(endpoint.providerId),
+        });
+        result.push({
+          type: 'provider_switch',
+          event: e,
+          change: {
+            ...change.data,
+            from: withIcon(change.data.from),
+            to: withIcon(change.data.to),
+          },
+          isStreaming: false,
+        });
+      }
       continue;
     }
 

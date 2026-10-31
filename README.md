@@ -215,12 +215,18 @@ with v1 fallback for initialization incompatibility. Authentication, launch, and
 remain visible. Set `AGENTCTL_ACP_PROTOCOL=v1` to force v1. Unavailable model selections produce
 a visible conversation notice identifying the fallback model.
 
-Handoff context keeps whole messages within a conservative UTF-8 byte budget, reserves 60% of
-an advertised model window for instructions, tools, the next prompt, and output, and caps embedded
-context at 32 KiB. Without a known window, it uses a 32,000-token estimate. Original and latest
-messages take priority; omitted history remains available in a private temporary document for ten
-minutes. Providers can expose per-model capacity through `contextWindow` in registry options or
-`_meta.contextWindow` in ACP model choices.
+Switch providers directly in the current chat. The next message carries a deterministic selection
+of saved conversation and tool activity; no outgoing-agent summary turn or separate chat is needed.
+Returning to a provider resumes its native conversation when supported and transfers only history
+it missed. Successful provider changes appear as a divider in the conversation, with the previous
+and next provider and model. Whole messages retain their order, with the original request and latest exchanges taking
+priority. History is capped at 16,000 conservative UTF-8/JSON bytes after reserving room for existing
+context, your current request, attachments, skills, tools, and output. Per-model capacity comes from
+registry `contextWindow` or ACP model metadata; unknown capacity defaults to 128,000 tokens.
+Omitted history remains available in private, session-scoped documents across reconnects and server
+restarts. These documents are removed when the chat is deleted. Interrupted
+handoff delivery and exhausted native context recover in a fresh provider conversation inside the
+same chat; the current message is preserved.
 
 ## Configuration
 

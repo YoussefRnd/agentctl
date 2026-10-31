@@ -180,6 +180,21 @@ export const sessionEventTerminalExitDataSchema = z
 export const sessionEventDiffDataSchema = z.record(z.string(), z.unknown());
 export const sessionEventStatusDataSchema = z.record(z.string(), z.unknown());
 
+const providerSwitchEndpointSchema = z.object({
+  providerId: z.string().min(1),
+  providerName: z.string().min(1),
+  providerIcon: z.string().optional(),
+  modelId: z.string(),
+  modelName: z.string().optional(),
+});
+
+export const providerSwitchDataSchema = z.object({
+  status: z.literal('provider_switched'),
+  from: providerSwitchEndpointSchema,
+  to: providerSwitchEndpointSchema,
+});
+export type ProviderSwitchData = z.infer<typeof providerSwitchDataSchema>;
+
 export const providerRetryStatusSchema = z.object({
   attempt: z.number().int().min(1),
   nextRetryAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),

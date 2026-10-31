@@ -76,7 +76,6 @@ vi.mock('@/features/sessions', () => ({
 }));
 vi.mock('@/features/providers', () => ({
   useProviders: () => ({ switchProvider: vi.fn(), isSwitching: false }),
-  SwitchAgentModal: () => null,
 }));
 vi.mock('@/features/composer', () => ({
   CommandBar: ({ initialInput, disabled }: { initialInput?: string; disabled?: boolean }) => (

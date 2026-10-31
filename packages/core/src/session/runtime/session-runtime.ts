@@ -141,10 +141,6 @@ export class SessionRuntime {
     return this.needsHistoryContext;
   }
 
-  markHistoryContextTransferred(): void {
-    this.needsHistoryContext = false;
-  }
-
   constructor(
     public sessionId: string,
     private runtimeHandle: AgentSession,
@@ -271,7 +267,9 @@ export class SessionRuntime {
   }
 
   prompt(...args: Parameters<SessionTurnExecutor['execute']>): Promise<void> {
-    return this.turnExecutor.execute(...args);
+    return this.turnExecutor.execute(...args).then(() => {
+      this.needsHistoryContext = false;
+    });
   }
 
   resolvePermission(permissionId: string, response: AgentPermissionResponse): void {

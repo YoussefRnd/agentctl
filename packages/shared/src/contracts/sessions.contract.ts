@@ -3,8 +3,6 @@ import { reviewVerificationContract } from './review-verification.contract.js';
 import { z } from 'zod';
 import {
   createSessionSchema,
-  handoffSessionSchema,
-  handoffSessionResponseSchema,
   sessionWithCapabilitiesSchema,
   sessionRowSchema,
   thinkingEffortSchema,
@@ -174,20 +172,6 @@ export const sessionsContract = {
     pathParams: z.object({ id: z.uuid() }),
     body: emptyBodySchema,
     responses: { 200: z.object({ success: z.boolean() }), 400: z.object({ message: z.string() }) },
-  },
-  handoffSession: {
-    method: 'POST',
-    path: '/api/sessions/:id/handoff',
-    pathParams: z.object({
-      id: z.uuid(),
-    }),
-    body: handoffSessionSchema,
-    responses: {
-      200: handoffSessionResponseSchema,
-      404: z.object({ message: z.string() }),
-      409: z.object({ message: z.string() }),
-    },
-    summary: 'Handoff the current workspace and conversation context to another agent',
   },
   spawnParallelAgent: {
     method: 'POST',

@@ -50,7 +50,7 @@ operation retains its failure message. Independent API reads restore them after 
 
 Commands use short per-session lanes. A provider turn does not occupy the command lane.
 Approvals and Stop bypass it so they can release the active turn. Configuration, persona,
-history and handoff commands coordinate at the public facade; internal dependencies avoid
+history commands coordinate at the public facade; internal dependencies avoid
 recursively acquiring the same lane. User reconnect, approval-policy changes and workspace commands also pass through the coordinator.
 Archive, delete and finalization suspend dispatch, cancel outstanding messages, close the runtime,
 and wait for the active dispatch to settle before changing the workspace. Failed retirement

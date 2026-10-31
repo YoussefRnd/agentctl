@@ -1,7 +1,13 @@
 import { RepositoryCheckpoints } from '../../repository/checkpoints.js';
 import { decodeCustomModels } from '@agentctl/shared';
-import { eq } from 'drizzle-orm';
-import { sessions, mcpServers, providers } from '../../db/schema.js';
+import { eq, desc } from 'drizzle-orm';
+import {
+  sessions,
+  mcpServers,
+  providers,
+  sessionEventChanges,
+  sessionProviderContexts,
+} from '../../db/schema.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
 import {
   EMPTY_AGENT_FEATURES,
@@ -428,6 +434,26 @@ export class SessionRuntimeRegistry {
       this.registerSession(sessionId, session, false);
 
       await replayProjector?.flushAll();
+      if (replayProjector && runtimeHandle.history === 'restored' && runtimeHandle.id) {
+        const lastImportedEvent = this.db
+          .select({ sequence: sessionEventChanges.sequence })
+          .from(sessionEventChanges)
+          .where(eq(sessionEventChanges.sessionId, sessionId))
+          .orderBy(desc(sessionEventChanges.sequence))
+          .limit(1)
+          .get();
+        this.db
+          .insert(sessionProviderContexts)
+          .values({
+            sessionId,
+            providerId,
+            nativeSessionId: runtimeHandle.id,
+            throughSequence: lastImportedEvent?.sequence ?? 0,
+            status: 'delivered',
+          })
+          .onConflictDoNothing()
+          .run();
+      }
       replayProjector = undefined;
       if (replayedCompactionId && runtimeHandle.history === 'restored') {
         await session.handleDomainEvent({

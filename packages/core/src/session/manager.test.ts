@@ -22,6 +22,7 @@ import { simpleGit } from 'simple-git';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { persistContextDocument } from './context-files.js';
 
 function createManager(...args: ConstructorParameters<typeof SessionManager>): SessionManager {
   const [db, workspaces] = args;
@@ -1243,7 +1244,16 @@ describe('SessionManager tests', () => {
       noopLogger,
       spyRuntime,
     );
-    await manager.deleteSession('session-1');
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-delete-context-'));
+    vi.stubEnv('AGENTCTL_HOME', home);
+    try {
+      const contextPath = await persistContextDocument('session-1', 'Saved handoff');
+      await manager.deleteSession('session-1');
+      await expect(fs.stat(contextPath)).rejects.toThrow();
+    } finally {
+      vi.unstubAllEnvs();
+      await fs.rm(home, { recursive: true, force: true });
+    }
     expect(deletedAgentSessionId).toBe('agent-session-abc');
   });
 
@@ -1456,226 +1466,6 @@ describe('SessionManager tests', () => {
       // Target provider is different -> returns null to prevent passing legacy ID to new agent
       expect(resolveAgentSessionId(legacyId, 'provider-b', 'provider-a')).toBeNull();
     });
-  });
-
-  describe('handleClientMessage / sendUserAction history context injection', () => {
-    it('injects history transcript as embeddedContext when prompt is sent to a new provider for the first time', async () => {
-      const db = createDatabase(':memory:');
-      await db.insert(projects).values({
-        id: 'proj-1',
-        name: 'test-project',
-        path: '/tmp/test',
-      });
-      await db.insert(sessions).values({
-        id: 'sess-history-test',
-        projectId: 'proj-1',
-        branch: 'main',
-        worktreePath: '/tmp/test',
-        taskSlug: 'test',
-        agent: 'provider-a',
-        title: 'history test',
-        status: 'idle',
-        selectedProvider: 'provider-b',
-        agentSessionId: JSON.stringify({ 'provider-a': 'agent-sess-1' }),
-        baseCommit: 'hash',
-      });
-
-      const store = new SessionEventRepository(db, {
-        publish() {
-          /* noop */
-        },
-      });
-      await store.append(
-        'sess-history-test',
-        'text',
-        { text: 'Create login page', role: 'user' },
-        null,
-      );
-      await store.append(
-        'sess-history-test',
-        'text',
-        { text: 'Created login page', role: 'provider' },
-        null,
-      );
-
-      const mockPrompt = vi.fn().mockResolvedValue(undefined);
-      const manager = createManager(
-        db,
-        mockWorkspaceManager,
-        mockProviderRegistry,
-        eventBus,
-        noopLogger,
-        fakeRuntime,
-      );
-
-      vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue({
-        prompt: mockPrompt,
-        bindAttempt: async () => {},
-      } as unknown as SessionRuntime);
-
-      await manager.handleClientMessage('sess-history-test', 'session.input', {
-        input: 'Add validation',
-      });
-      await manager.waitForSessionOperations('sess-history-test');
-
-      expect(mockPrompt.mock.calls[0].slice(0, 3)).toEqual([
-        'Add validation',
-        [],
-        expect.stringContaining('<previous_conversation_context>'),
-      ]);
-      expect(mockPrompt.mock.calls[0][2]).toContain('[User]: Create login page');
-      expect(mockPrompt.mock.calls[0][2]).toContain('[Assistant]: Created login page');
-    });
-
-    it('transfers copied fork history once even after the fresh provider session id is saved', async () => {
-      const db = createDatabase(':memory:');
-      await db.insert(projects).values({
-        id: 'proj-1',
-        name: 'test-project',
-        path: '/tmp/test',
-      });
-      await db.insert(sessions).values({
-        id: 'sess-history-test',
-        projectId: 'proj-1',
-        branch: 'main',
-        worktreePath: '/tmp/test',
-        taskSlug: 'test',
-        agent: 'provider-a',
-        title: 'history test',
-        status: 'idle',
-        selectedProvider: 'provider-b',
-        agentSessionId: JSON.stringify({ 'provider-b': 'fresh-fork-agent-session' }),
-        baseCommit: 'hash',
-      });
-
-      const store = new SessionEventRepository(db, {
-        publish() {
-          /* noop */
-        },
-      });
-      await store.append(
-        'sess-history-test',
-        'text',
-        { text: 'Create login page', role: 'user' },
-        null,
-      );
-      await store.append(
-        'sess-history-test',
-        'text',
-        { text: 'Created login page', role: 'provider' },
-        null,
-      );
-
-      const mockPrompt = vi.fn().mockResolvedValue(undefined);
-      const manager = createManager(
-        db,
-        mockWorkspaceManager,
-        mockProviderRegistry,
-        eventBus,
-        noopLogger,
-        fakeRuntime,
-      );
-
-      const forkSession = {
-        prompt: mockPrompt,
-        bindAttempt: async () => {},
-        requiresHistoryContext: true,
-        markHistoryContextTransferred() {
-          this.requiresHistoryContext = false;
-        },
-      };
-      vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(
-        forkSession as unknown as SessionRuntime,
-      );
-
-      await manager.handleClientMessage('sess-history-test', 'session.input', {
-        input: 'Add validation',
-      });
-      await manager.waitForSessionOperations('sess-history-test');
-
-      expect(mockPrompt.mock.calls[0].slice(0, 3)).toEqual([
-        'Add validation',
-        [],
-        expect.stringContaining('<previous_conversation_context>'),
-      ]);
-      expect(mockPrompt.mock.calls[0][2]).toContain('[User]: Create login page');
-      expect(mockPrompt.mock.calls[0][2]).toContain('[Assistant]: Created login page');
-      await manager.handleClientMessage('sess-history-test', 'session.input', { input: 'Next' });
-      await manager.waitForSessionOperations('sess-history-test');
-      expect(mockPrompt.mock.calls.at(-1)?.slice(0, 3)).toEqual(['Next', [], undefined]);
-    });
-
-    it.each([false, true])(
-      'does not replay provider-owned history after an initially empty prompt (fresh=%s)',
-      async (fresh) => {
-        const db = createDatabase(':memory:');
-        await db.insert(projects).values({
-          id: 'proj-1',
-          name: 'test-project',
-          path: '/tmp/test',
-        });
-        await db.insert(sessions).values({
-          id: 'sess-existing-test',
-          projectId: 'proj-1',
-          branch: 'main',
-          worktreePath: '/tmp/test',
-          taskSlug: 'test',
-          agent: 'provider-b',
-          title: 'existing test',
-          status: 'idle',
-          selectedProvider: 'provider-b',
-          agentSessionId: JSON.stringify({ 'provider-b': 'agent-sess-2' }),
-          baseCommit: 'hash',
-        });
-
-        const store = new SessionEventRepository(db, {
-          publish() {
-            /* noop */
-          },
-        });
-        if (!fresh) {
-          await store.append('sess-existing-test', 'text', { text: 'Hello', role: 'user' }, null);
-        }
-
-        const mockPrompt = vi.fn().mockResolvedValue(undefined);
-        const manager = createManager(
-          db,
-          mockWorkspaceManager,
-          mockProviderRegistry,
-          eventBus,
-          noopLogger,
-          fakeRuntime,
-        );
-
-        const activeSession = {
-          prompt: mockPrompt,
-          bindAttempt: async () => {},
-          requiresHistoryContext: fresh,
-          markHistoryContextTransferred() {
-            this.requiresHistoryContext = false;
-          },
-        };
-        vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue(
-          activeSession as unknown as SessionRuntime,
-        );
-
-        await manager.handleClientMessage('sess-existing-test', 'session.input', {
-          input: 'Followup message',
-        });
-        await manager.waitForSessionOperations('sess-existing-test');
-
-        expect(mockPrompt.mock.calls[0].slice(0, 3)).toEqual(['Followup message', [], undefined]);
-        await store.append(
-          'sess-existing-test',
-          'text',
-          { text: 'Followup message', role: 'user' },
-          null,
-        );
-        await manager.handleClientMessage('sess-existing-test', 'session.input', { input: 'Next' });
-        await manager.waitForSessionOperations('sess-existing-test');
-        expect(mockPrompt.mock.calls.at(-1)?.slice(0, 3)).toEqual(['Next', [], undefined]);
-      },
-    );
   });
 
   describe('createSession provider resolution & smarter fallbacks', () => {

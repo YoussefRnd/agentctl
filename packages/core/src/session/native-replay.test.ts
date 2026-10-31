@@ -25,6 +25,7 @@ test('native replay persists startup history with user roles, complete chunks, a
     })
     .run();
   let liveCallbacks: Parameters<AgentDriver['startSession']>[3] | undefined;
+  const nativePrompt = vi.fn().mockResolvedValue({ stopReason: 'end_turn' });
   const runtime: AgentDriver = {
     inspectProvider: vi.fn(),
     startSession: async (_command, _args, options, callbacks) => {
@@ -45,7 +46,7 @@ test('native replay persists startup history with user roles, complete chunks, a
         closed: new Promise<void>(() => {}),
         onClose() {},
         onError() {},
-        prompt: vi.fn(),
+        prompt: nativePrompt,
         close: vi.fn().mockResolvedValue(undefined),
         cancel: vi.fn(),
         authenticate: vi.fn(),
@@ -87,6 +88,10 @@ test('native replay persists startup history with user roles, complete chunks, a
   expect(rows[1].parentEventId).toBe(rows[0].id);
   expect(rows[3].parentEventId).toBe(rows[2].id);
   expect(loaded.requiresHistoryContext).toBe(false);
+  await loaded.prompt('Continue imported work');
+  expect(nativePrompt.mock.lastCall?.[2] ?? '').not.toContain('Original request');
+  const receipt = db.query.sessionProviderContexts.findFirst();
+  expect((await receipt)?.status).toBe('delivered');
   await liveCallbacks!.onUpdate({ type: 'user_text', text: 'echo should be ignored' });
   expect(
     db
@@ -94,6 +99,6 @@ test('native replay persists startup history with user roles, complete chunks, a
       .from(sessionEvents)
       .all()
       .filter((row) => row.type === 'text'),
-  ).toHaveLength(4);
+  ).toHaveLength(5);
   await machine.stopSessionAndWait('session');
 });

@@ -286,6 +286,7 @@
         "packages/core/src/session/context-budget.ts",
         "packages/core/src/session/context-files.ts",
         "packages/core/src/session/contracts.ts",
+        "packages/core/src/session/execution/provider-context-delivery.ts",
         "packages/core/src/session/execution/session-execution-state.ts",
         "packages/core/src/session/execution/session-failure-stage.ts",
         "packages/core/src/session/execution/session-operation-worker.ts",

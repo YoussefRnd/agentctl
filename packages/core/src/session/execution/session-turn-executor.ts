@@ -14,13 +14,20 @@ import { SkillRegistry, type SkillActivation } from '../../skills/registry.js';
 import {
   isDefaultSessionTitle,
   normalizeReportedCost,
+  findAgentConfigOption,
   type TurnTimings,
   type ChatError,
 } from '@agentctl/shared';
 import { resolveMessageAttachments } from '../commands/message-attachments.js';
 import { normalizeChatError } from '../../agent/chat-error.js';
+import { AgentError } from '../../agent/errors.js';
 import type { SessionTurnStore } from '../persistence/session-turn-store.js';
 import { SkillCatalogDelivery } from './skill-catalog-delivery.js';
+import {
+  ProviderContextRecoveryError,
+  ProviderContextDelivery,
+} from './provider-context-delivery.js';
+import { providerContextByteBudget, attachmentContextAllowance } from '../context-budget.js';
 
 interface TurnRuntimeState {
   runtimeId: string;
@@ -35,6 +42,7 @@ interface TurnRuntimeState {
 export class SessionTurnExecutor {
   private running = false;
   private skillCatalog: SkillCatalogDelivery;
+  private contextDelivery?: ProviderContextDelivery;
   private diagnosticTurn?: {
     attemptId: string;
     eventId?: number;
@@ -212,6 +220,7 @@ export class SessionTurnExecutor {
     this.deps.beginAttempt(attemptId);
     this.permissionEngine.clearTurn();
     let outcome: TurnOutcome = 'error';
+    let history: Awaited<ReturnType<ProviderContextDelivery['prepare']>> | undefined;
     try {
       const sessionRecord = await this.store.session(this.sessionId);
 
@@ -318,13 +327,51 @@ export class SessionTurnExecutor {
         throw new Error(`Agent skill not found: ${requested}`);
       }
       const skills = this.skillCatalog.prepare(registry, activation);
-      const finalEmbeddedContext = [embeddedContext, skills.context]
+      const instructions = [embeddedContext, skills.context].filter(Boolean).join('\n\n---\n\n');
+      this.contextDelivery ??= new ProviderContextDelivery(
+        this.db,
+        {
+          sessionId: this.sessionId,
+          providerId: sessionRecord?.selectedProvider ?? '',
+          nativeSessionId: this.runtimeHandle.id ?? this.deps.runtimeId,
+        },
+        this.runtimeHandle.history === 'fresh',
+      );
+      const modelWindow = findAgentConfigOption(
+        jsonCodecs.agentConfigOptionsOrNull(sessionRecord?.sessionConfigOptions) ?? [],
+        'model',
+      )?.options?.find((option) => option.value === sessionRecord?.selectedModel)?.contextWindow;
+      const window = Math.min(sessionRecord?.contextLimit || Infinity, modelWindow ?? Infinity);
+      history = await this.contextDelivery.prepare(
+        turn.eventId,
+        providerContextByteBudget({
+          contextWindow: Number.isFinite(window) ? window : undefined,
+          usedTokens: sessionRecord?.contextUsedTokens ?? this.contextDelivery.usedTokens,
+          userText: promptText,
+          instructions,
+          attachmentMimeTypes: resolvedAttachmentFiles.map((file) => file.mimeType),
+        }),
+      );
+      const finalEmbeddedContext = [history.context, instructions]
         .filter(Boolean)
         .join('\n\n---\n\n');
+      if (history.context)
+        await this.eventRepository.append(
+          this.sessionId,
+          'status',
+          {
+            status: 'context_handoff',
+            title: `Transferred conversation context to ${sessionRecord?.selectedProvider ?? 'agent'}`,
+            strategy: history.strategy,
+          },
+          turn.eventId,
+          { attemptId },
+        );
 
       const snapshotService = this.runtimeRegistry?.getCheckpointService?.();
 
       await this.deps.markDispatched();
+      history.pending();
       diagnostics.dispatch();
       observation.phase('dispatched');
       const promptResult = await this.runtimeHandle.prompt(
@@ -471,6 +518,11 @@ export class SessionTurnExecutor {
       });
       if (foregroundFailure)
         await this.recordFailure(attemptId, turn.eventId, foregroundFailure, timings);
+      history.delivered(
+        Buffer.byteLength(JSON.stringify(promptText)) +
+          Buffer.byteLength(JSON.stringify(finalEmbeddedContext)) +
+          attachmentContextAllowance(resolvedAttachmentFiles.map((file) => file.mimeType)),
+      );
 
       if (this.runtimeRegistry) {
         await this.runtimeRegistry.transitionTo(this.sessionId, 'idle', {
@@ -486,6 +538,12 @@ export class SessionTurnExecutor {
             ? 'error'
             : 'success';
     } catch (error: unknown) {
+      if (
+        error instanceof AgentError &&
+        (error.delivery === 'rejected' || error.delivery === 'not_sent')
+      )
+        history?.unsent();
+      if (error instanceof ProviderContextRecoveryError) throw error;
       if (
         this.runtimeRegistry?.ownsRuntime &&
         !this.runtimeRegistry.ownsRuntime(this.sessionId, this.deps.runtimeId)

@@ -413,7 +413,12 @@ export class PersistentAgentConnectionManager {
       }
     }
 
-    if (conn.sessions.size === 0) {
+    if (
+      conn.sessions.size === 0 &&
+      conn.transport.isAlive &&
+      this.connections.get(providerId) === conn &&
+      !this.disposed
+    ) {
       this.resetIdleTimer(conn);
     }
   }

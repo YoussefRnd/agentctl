@@ -12,6 +12,7 @@ import {
 } from '@agentctl/shared';
 import { negotiateCapabilities } from '../../providers/capabilities-negotiator.js';
 import type { AgentSessionIntent } from '../../agent/types.js';
+import { providerContextReceipt } from '../execution/provider-context-delivery.js';
 import { resolveAgentSessionId } from '../agent-session-id.js';
 import type { SessionEventRepository } from '../persistence/session-event-repository.js';
 import type { DbClient } from '../../db/index.js';
@@ -371,7 +372,7 @@ export class SessionLauncher {
       hasUserMessages = messages.length > 0;
     }
 
-    const resolvedAgentSessionId =
+    let resolvedAgentSessionId =
       (hasUserMessages || options.nativeImport) && options.resumeExisting !== false
         ? resolveAgentSessionId(
             sessionRecord.agentSessionId,
@@ -379,6 +380,18 @@ export class SessionLauncher {
             sessionRecord.agent,
           )
         : null;
+
+    if (
+      resolvedAgentSessionId &&
+      providerContextReceipt(
+        this.deps.db,
+        sessionId,
+        sessionRecord.selectedProvider,
+        resolvedAgentSessionId,
+      )?.status === 'pending'
+    ) {
+      resolvedAgentSessionId = null;
+    }
 
     return this.deps.startSession(
       sessionId,

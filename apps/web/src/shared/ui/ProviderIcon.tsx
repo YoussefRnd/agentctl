@@ -15,6 +15,12 @@ const sizeMap = {
   lg: { container: 'h-10 w-10 p-2', img: 'h-6 w-6', icon: 'h-5 w-5' },
 };
 
+export function getProviderIconUrl(
+  provider: Pick<ProviderDiscovery, 'icon' | 'agent'>,
+): string | undefined {
+  return provider.agent?.icon || provider.icon;
+}
+
 export function ProviderIcon({
   provider,
   size = 'md',
@@ -22,13 +28,14 @@ export function ProviderIcon({
   className = '',
 }: ProviderIconProps) {
   const s = sizeMap[size];
+  const iconUrl = getProviderIconUrl(provider);
 
-  if (provider.agent?.icon) {
+  if (iconUrl) {
     return (
       <div
         className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-colors ${s.container} ${className}`}
       >
-        <img src={provider.agent.icon} alt="" className={`object-contain ${s.img}`} />
+        <img src={iconUrl} alt="" className={`object-contain ${s.img}`} />
       </div>
     );
   }

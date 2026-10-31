@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { SessionRuntime } from '../runtime/session-runtime.js';
 import { sessions, projects } from '../../db/schema.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
+import { removeSessionContextFiles } from '../context-files.js';
 import type { SessionMode, ThinkingEffort } from '@agentctl/shared';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
@@ -116,6 +117,7 @@ export class SessionLifecycleService {
       this.deps.logger.error({ err, sessionId }, 'Failed to teardown workspace on deleteSession');
       throw err;
     });
+    await removeSessionContextFiles(sessionId);
 
     try {
       const fs = await import('node:fs');
@@ -167,6 +169,7 @@ export class SessionLifecycleService {
           'Failed to teardown workspace on deleteProject',
         );
       });
+      await removeSessionContextFiles(session.id);
     }
 
     await this.deps.db.delete(projects).where(eq(projects.id, projectId));

@@ -30,6 +30,8 @@ export function prepareTurnStatements(db: DbClient) {
         title: sessions.title,
         taskSlug: sessions.taskSlug,
         selectedProvider: sessions.selectedProvider,
+        selectedModel: sessions.selectedModel,
+        sessionConfigOptions: sessions.sessionConfigOptions,
         sessionMetrics: sessions.sessionMetrics,
         contextLimit: sessions.contextLimit,
         contextUsedTokens: sessions.contextUsedTokens,

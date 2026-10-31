@@ -319,11 +319,6 @@
     "path": "/api/sessions/:id/undo-rewind",
     "responses": ["200"]
   },
-  "handoffSession": {
-    "method": "POST",
-    "path": "/api/sessions/:id/handoff",
-    "responses": ["200", "404", "409"]
-  },
   "restoreSnapshot": {
     "method": "POST",
     "path": "/api/sessions/:id/restore-snapshot",

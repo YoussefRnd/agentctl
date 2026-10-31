@@ -64,7 +64,8 @@
     "acp:benchmark": "node scripts/acp-benchmark.mjs",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "handoff:smoke": "node scripts/handoff-smoke.mjs"
   },
   "keywords": [],
   "author": "",

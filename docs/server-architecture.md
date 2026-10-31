@@ -21,7 +21,7 @@ surface and coordinates multi-field patches in the established order. It does no
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `services/session-queries.ts`              | List/detail/execution query assembly without repair or workspace restoration                                                          |
 | `services/session-reconciler.ts`           | Explicit legacy workspace recovery, branch snapshot, token and context-limit repair                                                   |
-| `services/session-commands.ts`             | Create/configure/finalize/rename/spawn/handoff/elicitation application operations                                                     |
+| `services/session-commands.ts`             | Create/configure/finalize/rename/spawn/elicitation application operations                                                             |
 | `services/session-git-service.ts`          | Branch checkout/merge and their session command lanes                                                                                 |
 | `services/session-git-operations.ts`       | Git preconditions, mutation lane, partial-change notifications, review/status/merge preview, draft generation and fingerprint recheck |
 | `services/session-repository-service.ts`   | Backend-neutral review and legacy baseline import                                                                                     |
@@ -177,7 +177,6 @@ relative to `apps/server/src/plugins/ts-rest/`.
 | `POST /api/sessions/:id/undo-discard`               | `undoDiscard`             | `sessions.router.ts`           |
 | `POST /api/sessions/:id/rewind`                     | `rewindSession`           | `sessions.router.ts`           |
 | `POST /api/sessions/:id/undo-rewind`                | `undoRewind`              | `sessions.router.ts`           |
-| `POST /api/sessions/:id/handoff`                    | `handoffSession`          | `sessions.router.ts`           |
 | `POST /api/sessions/:id/restore-snapshot`           | `restoreSnapshot`         | `sessions.router.ts`           |
 | `GET /api/sessions/:id/snapshots/:eventId/preview`  | `previewSnapshotDiff`     | `sessions.router.ts`           |
 | `POST /api/sessions/:id/agents`                     | `spawnParallelAgent`      | `sessions.router.ts`           |

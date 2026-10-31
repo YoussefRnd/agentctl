@@ -311,10 +311,9 @@ export class SessionManager {
       selectedModel: string;
       selectedThinkingEffort?: ThinkingEffort;
     },
-    options: { forceNewAgentSession?: boolean } = {},
   ): Promise<SessionRuntime | null> {
-    return this.executeMutation(sessionId, 'session.configuration', { params, options }, () =>
-      this.commandHandler.updateSessionConfig(sessionId, params, options),
+    return this.executeMutation(sessionId, 'session.configuration', { params }, () =>
+      this.commandHandler.updateSessionConfig(sessionId, params),
     );
   }
 
@@ -457,20 +456,6 @@ export class SessionManager {
   async restoreSnapshot(sessionId: string, snapshotHash: string): Promise<{ backupHash: string }> {
     return this.executeMutation(sessionId, 'session.restore_snapshot', { snapshotHash }, () =>
       this.history.restoreSnapshot(sessionId, snapshotHash),
-    );
-  }
-
-  async handoffSession(
-    sessionId: string,
-    targetProvider: string,
-    targetModel?: string,
-    nextSessionFocus?: string,
-  ) {
-    return this.executeMutation(
-      sessionId,
-      'session.handoff',
-      { targetProvider, targetModel, nextSessionFocus },
-      () => this.history.handoffSession(sessionId, targetProvider, targetModel, nextSessionFocus),
     );
   }
 

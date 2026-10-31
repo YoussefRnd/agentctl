@@ -309,6 +309,21 @@ export const sessionSkillCatalogs = sqliteTable(
   (table) => [primaryKey({ columns: [table.sessionId, table.providerId, table.nativeSessionId] })],
 );
 
+export const sessionProviderContexts = sqliteTable(
+  'session_provider_contexts',
+  {
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id').notNull(),
+    nativeSessionId: text('native_session_id').notNull(),
+    throughSequence: integer('through_sequence').notNull().default(0),
+    usedTokens: integer('used_tokens').notNull().default(0),
+    status: text('status').$type<'pending' | 'delivered'>().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.sessionId, table.providerId, table.nativeSessionId] })],
+);
+
 /** Immutable cursor entries reference the latest conversation row, not duplicated bodies. */
 export const sessionEventChanges = sqliteTable(
   'session_event_changes',
