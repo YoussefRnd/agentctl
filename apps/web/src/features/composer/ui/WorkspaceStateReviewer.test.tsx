@@ -166,7 +166,7 @@ describe('ContextWindowPopover', () => {
       });
       expect(button.getAttribute('aria-label')).toBe('Context usage unavailable');
       expect(button.textContent).toContain('—');
-      expect(content).toContain('The provider has not reported current context usage.');
+      expect(content).toContain('Waiting for a provider report.');
       expect(content).not.toContain('1.6M');
       expect(content).not.toContain('%');
     },

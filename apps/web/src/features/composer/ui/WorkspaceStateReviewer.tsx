@@ -148,144 +148,160 @@ export function ContextWindowPopover({
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" side="top" className="w-[320px] rounded-lg p-4 shadow-2xl">
-          <div className="flex flex-col gap-3 font-sans text-xs">
-            <div className="flex flex-col gap-1">
-              <span className="text-text-muted/45 text-[9px] font-bold tracking-[0.2em] uppercase">
-                Context window
-              </span>
-              <div className="text-text-muted mt-0.5 flex items-baseline justify-between text-[11px] font-semibold">
-                <span className="font-mono">
+        <PopoverContent
+          align="end"
+          side="top"
+          sideOffset={8}
+          className="w-[300px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl p-0 shadow-xl"
+        >
+          <div className="divide-border/40 divide-y font-sans text-xs">
+            <div className="space-y-2.5 px-4 py-3.5">
+              <h3 className="text-text-main text-xs font-medium">Context window</h3>
+              <div className="text-text-main flex items-baseline justify-between gap-3 text-xs">
+                <span
+                  className={cn('font-mono tabular-nums', safeTokens === null && 'text-text-muted')}
+                >
                   {safeTokens === null
                     ? 'Unavailable'
                     : hasCalculatedLimit
                       ? `${formatTokenCount(safeTokens)} / ${formatTokenCount(calculatedLimit)} tokens`
                       : `${formatTokenCount(safeTokens)} tokens`}
                 </span>
-                <span
-                  className={cn(
-                    'font-mono font-bold',
-                    usagePercent === null
-                      ? 'text-text-muted'
-                      : usagePercent > 90
+                {usagePercent !== null && (
+                  <span
+                    className={cn(
+                      'font-mono text-[11px] tabular-nums',
+                      usagePercent > 90
                         ? 'text-danger'
                         : usagePercent > 70
                           ? 'text-warning'
                           : 'text-accent',
-                  )}
-                >
-                  {usagePercent !== null ? `${usagePercent.toFixed(1)}%` : '—'}
-                </span>
+                    )}
+                  >
+                    {usagePercent.toFixed(1)}%
+                  </span>
+                )}
               </div>
               {safeTokens === null && (
-                <p className="text-text-muted text-[11px]">
-                  The provider has not reported current context usage.
+                <p className="text-text-muted text-[11px] leading-relaxed">
+                  Waiting for a provider report.
                 </p>
               )}
               {safeTokens !== null && !hasCalculatedLimit && (
                 <p className="text-text-muted text-[11px]">Context capacity unavailable.</p>
               )}
-            </div>
-
-            <div className="bg-surface-tertiary/30 ring-border/10 relative h-2 w-full overflow-hidden rounded-full ring-1">
-              {hasCalculatedLimit && usageBreakdown ? (
-                <div className="absolute inset-0 flex h-full w-full">
-                  <div
-                    className="bg-accent/80 h-full"
-                    style={{
-                      width: `${String(((usageBreakdown.history ?? 0) / calculatedLimit) * 100)}%`,
-                    }}
-                  />
-                  <div
-                    className="bg-brand-teal/70 h-full"
-                    style={{
-                      width: `${String(((usageBreakdown.files ?? 0) / calculatedLimit) * 100)}%`,
-                    }}
-                  />
-                  <div
-                    className="bg-brand-lavender/40 h-full"
-                    style={{
-                      width: `${String(((usageBreakdown.system ?? 0) / calculatedLimit) * 100)}%`,
-                    }}
-                  />
+              {usagePercent !== null && (
+                <div className="bg-surface-tertiary/50 relative h-1 w-full overflow-hidden rounded-full">
+                  {hasCalculatedLimit && usageBreakdown ? (
+                    <div className="absolute inset-0 flex h-full w-full">
+                      <div
+                        className="bg-accent/80 h-full"
+                        style={{
+                          width: `${String(((usageBreakdown.history ?? 0) / calculatedLimit) * 100)}%`,
+                        }}
+                      />
+                      <div
+                        className="bg-brand-teal/70 h-full"
+                        style={{
+                          width: `${String(((usageBreakdown.files ?? 0) / calculatedLimit) * 100)}%`,
+                        }}
+                      />
+                      <div
+                        className="bg-brand-lavender/40 h-full"
+                        style={{
+                          width: `${String(((usageBreakdown.system ?? 0) / calculatedLimit) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  ) : hasCalculatedLimit && usagePercent !== null ? (
+                    <div
+                      className="bg-accent absolute top-0 left-0 h-full rounded-full transition-colors duration-300"
+                      style={{ width: `${String(usagePercent)}%` }}
+                    />
+                  ) : null}
                 </div>
-              ) : hasCalculatedLimit && usagePercent !== null ? (
-                <div
-                  className="bg-accent absolute top-0 left-0 h-full rounded-full transition-colors duration-300"
-                  style={{ width: `${String(usagePercent)}%` }}
-                />
-              ) : null}
+              )}
             </div>
 
             {consumption.length > 0 && (
-              <div className="border-border/10 space-y-1 border-t pt-2">
-                <p className="text-text-muted/60 text-[9px] font-bold tracking-wider uppercase">
+              <section className="space-y-2 px-4 py-3">
+                <h3
+                  className="text-text-muted text-[11px] font-medium"
+                  title="Tokens processed during the last turn, separate from current context occupancy."
+                >
                   Last turn consumption
-                </p>
-                <dl className="grid grid-cols-2 gap-1 font-mono">
+                </h3>
+                <dl className="space-y-1.5">
                   {consumption.map(({ label, count }) => (
-                    <div key={label}>
-                      <dt className="text-text-muted">{label}</dt>
-                      <dd>{formatTokenCount(count)} tokens</dd>
+                    <div key={label} className="flex items-baseline justify-between gap-4">
+                      <dt
+                        className={
+                          label === 'Total' ? 'text-text-main font-medium' : 'text-text-muted'
+                        }
+                      >
+                        {label}
+                      </dt>
+                      <dd className="text-text-main font-mono text-[11px] tabular-nums">
+                        {formatTokenCount(count)} <span className="text-text-muted">tokens</span>
+                      </dd>
                     </div>
                   ))}
                 </dl>
-                <p className="text-text-muted text-[11px]">
-                  Provider-reported tokens processed during the last turn, separate from current
-                  context occupancy.
-                </p>
-              </div>
+              </section>
             )}
 
-            <div className="border-border/10 space-y-1 border-t pt-2">
-              <p className="text-text-muted/60 text-[9px] font-bold tracking-wider uppercase">
+            <section className="space-y-2 px-4 py-3">
+              <h3
+                className="text-text-muted text-[11px] font-medium"
+                title="Session and last-turn amounts are reported separately by the agent."
+              >
                 Provider reported cost
-              </p>
-              <dl className="grid grid-cols-2 gap-1 font-mono">
-                <div>
+              </h3>
+              <dl className="space-y-1.5">
+                <div className="flex items-baseline justify-between gap-4">
                   <dt className="text-text-muted">Session</dt>
-                  <dd>{formatReportedCost(reportedCost)}</dd>
+                  <dd
+                    className={cn(
+                      'font-mono text-[11px] tabular-nums',
+                      reportedCost ? 'text-text-main' : 'text-text-muted',
+                    )}
+                  >
+                    {formatReportedCost(reportedCost)}
+                  </dd>
                 </div>
                 {lastTurn?.cost && (
-                  <div>
+                  <div className="flex items-baseline justify-between gap-4">
                     <dt className="text-text-muted">Last turn</dt>
-                    <dd>{formatReportedCost(lastTurn.cost)}</dd>
+                    <dd className="text-text-main font-mono text-[11px] tabular-nums">
+                      {formatReportedCost(lastTurn.cost)}
+                    </dd>
                   </div>
                 )}
               </dl>
-              <p className="text-text-muted text-[11px]">
-                Session and last-turn amounts are reported separately by the agent.
-              </p>
-            </div>
+            </section>
 
             {(usageBreakdown !== undefined || turnsRemaining !== undefined) && (
-              <div className="border-border/10 mt-1 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-2">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3">
                 {usageBreakdown?.history !== undefined && (
                   <div className="flex flex-col">
-                    <span className="text-text-muted/45 text-[8px] font-bold tracking-[0.15em] uppercase">
-                      History
-                    </span>
-                    <span className="text-text-main font-mono text-[10.5px] font-bold">
+                    <span className="text-text-muted text-[11px]">History</span>
+                    <span className="text-text-main font-mono text-[11px] tabular-nums">
                       {formatTokenCount(usageBreakdown.history)}
                     </span>
                   </div>
                 )}
                 {usageBreakdown?.files !== undefined && (
                   <div className="flex flex-col">
-                    <span className="text-text-muted/45 text-[8px] font-bold tracking-[0.15em] uppercase">
-                      Knowledge
-                    </span>
-                    <span className="text-text-main font-mono text-[10.5px] font-bold">
+                    <span className="text-text-muted text-[11px]">Knowledge</span>
+                    <span className="text-text-main font-mono text-[11px] tabular-nums">
                       {formatTokenCount(usageBreakdown.files)}
                     </span>
                   </div>
                 )}
                 {turnsRemaining !== undefined && (
                   <div className="flex flex-col">
-                    <span className="text-text-muted/45 text-[8px] font-bold tracking-[0.15em] uppercase">
-                      Turns left
-                    </span>
-                    <span className="text-text-main font-mono text-[10.5px] font-bold">
+                    <span className="text-text-muted text-[11px]">Turns left</span>
+                    <span className="text-text-main font-mono text-[11px] tabular-nums">
                       ~{turnsRemaining}
                     </span>
                   </div>
