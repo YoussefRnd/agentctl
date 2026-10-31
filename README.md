@@ -9,7 +9,7 @@ Electron desktop application, and shared agent/runtime packages.
 
 ## Requirements
 
-- Node.js 24.11 or newer in the 24.x line, or Node.js 26+
+- Node.js 26+
 - pnpm 12
 - Git
 

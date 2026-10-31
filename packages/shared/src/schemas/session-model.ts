@@ -60,11 +60,41 @@ export const availableCommandSchema = z.object({
 
 export const sessionConfigOptionsSchema = z.array(agentConfigOptionSchema);
 
+export const reportedCostSchema = z.object({
+  amount: z.number().finite().nonnegative(),
+  currency: z.string().trim().min(1).max(32),
+});
+export type ReportedCost = z.infer<typeof reportedCostSchema>;
+
+/** Preserve unknown amounts/currencies; never invent USD or turn missing values into zero. */
+export function normalizeReportedCost(value: unknown): ReportedCost | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const amount =
+    typeof raw.amount === 'string' && raw.amount.trim() !== '' ? Number(raw.amount) : raw.amount;
+  const result = reportedCostSchema.safeParse({ amount, currency: raw.currency });
+  return result.success ? result.data : undefined;
+}
+
 export const sessionMetricsSchema = z.object({
   inputTokens: z.number().optional(),
   outputTokens: z.number().optional(),
   totalTokens: z.number().optional(),
   contextLimit: z.number().optional(),
+  reportedCost: z
+    .preprocess((value) => normalizeReportedCost(value) ?? null, reportedCostSchema.nullable())
+    .optional(),
+  lastTurn: z
+    .object({
+      inputTokens: z.number().nonnegative().optional(),
+      outputTokens: z.number().nonnegative().optional(),
+      totalTokens: z.number().nonnegative().optional(),
+      cachedReadTokens: z.number().nonnegative().optional(),
+      cachedWriteTokens: z.number().nonnegative().optional(),
+      thoughtTokens: z.number().nonnegative().optional(),
+      cost: z.preprocess(normalizeReportedCost, reportedCostSchema.optional()),
+    })
+    .optional(),
   usageBreakdown: z
     .object({
       history: z.number().optional(),
@@ -97,6 +127,7 @@ export const sessionRowSchema = sessionSchema.extend({
   status: sessionStatusSchema,
   mode: sessionModeSchema.default('local'),
   totalTokens: z.number(),
+  contextUsedTokens: z.number().finite().nonnegative().nullable().optional(),
   contextLimit: z.number(),
   estimatedCost: z.number(),
   lastHeartbeat: z.coerce.date().nullable(),

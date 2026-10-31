@@ -18,6 +18,27 @@ test('normalizes legacy usage aliases at the ACP boundary', () => {
   });
 });
 
+test.each([
+  undefined,
+  {},
+  { amount: null, currency: 'USD' },
+  { amount: '', currency: 'USD' },
+  { amount: -1, currency: 'USD' },
+  { amount: Number.NaN, currency: 'USD' },
+  { amount: Infinity, currency: 'USD' },
+  { amount: 1 },
+  { amount: 1, currency: ' ' },
+])('does not fabricate a known cost from %j', (cost) => {
+  expect(normalizeAcpUsage({ cost })?.cost).toBeUndefined();
+});
+
+test('preserves explicitly reported zero and trims the supplied currency', () => {
+  expect(normalizeAcpUsage({ cost: { amount: '0', currency: ' EUR ' } })?.cost).toEqual({
+    amount: 0,
+    currency: 'EUR',
+  });
+});
+
 test('does not turn null or blank usage fields into zero', () => {
   expect(normalizeAcpUsage({ inputTokens: null, outputTokens: '' })).toMatchObject({
     inputTokens: undefined,

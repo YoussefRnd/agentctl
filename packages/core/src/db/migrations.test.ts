@@ -118,6 +118,7 @@ it('upgrades populated databases from every migration boundary without losing se
         expect(db.select().from(sessions).get()).toMatchObject({
           id: 'session',
           discardBackup: null,
+          contextUsedTokens: null,
         });
         if (hasSavedEffort)
           expect(db.select().from(sessions).get()?.selectedThinkingEffort).toBe('vendor-choice');

@@ -32,6 +32,7 @@ export function prepareTurnStatements(db: DbClient) {
         selectedProvider: sessions.selectedProvider,
         sessionMetrics: sessions.sessionMetrics,
         contextLimit: sessions.contextLimit,
+        contextUsedTokens: sessions.contextUsedTokens,
         estimatedCost: sessions.estimatedCost,
       })
       .from(sessions)

@@ -1,4 +1,5 @@
 import type { AgentUsage } from '../../agent/types.js';
+import { normalizeReportedCost } from '@agentctl/shared';
 
 function count(raw: Record<string, unknown>, ...keys: string[]): number | undefined {
   for (const key of keys) {
@@ -15,11 +16,6 @@ function count(raw: Record<string, unknown>, ...keys: string[]): number | undefi
 export function normalizeAcpUsage(usage: unknown): AgentUsage | undefined {
   if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return undefined;
   const raw = usage as Record<string, unknown>;
-  const costRaw =
-    raw.cost && typeof raw.cost === 'object' && !Array.isArray(raw.cost)
-      ? (raw.cost as Record<string, unknown>)
-      : undefined;
-  const amount = costRaw ? count(costRaw, 'amount') : undefined;
 
   return {
     inputTokens: count(raw, 'inputTokens', 'input_tokens', 'promptTokens', 'prompt_tokens'),
@@ -35,12 +31,6 @@ export function normalizeAcpUsage(usage: unknown): AgentUsage | undefined {
     cachedReadTokens: count(raw, 'cachedReadTokens', 'cached_read_tokens'),
     cachedWriteTokens: count(raw, 'cachedWriteTokens', 'cached_write_tokens'),
     contextLimit: count(raw, 'contextLimit', 'context_limit', 'size', 'maxTokens'),
-    cost:
-      amount !== undefined
-        ? {
-            amount,
-            currency: typeof costRaw?.currency === 'string' ? costRaw.currency : 'USD',
-          }
-        : undefined,
+    cost: normalizeReportedCost(raw.cost),
   };
 }

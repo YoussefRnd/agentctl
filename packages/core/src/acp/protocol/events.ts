@@ -4,7 +4,7 @@ import type {
   SessionNotification,
   ToolCall,
 } from '@agentclientprotocol/sdk';
-import type { AgentConfigOption } from '@agentctl/shared';
+import { normalizeReportedCost, type AgentConfigOption } from '@agentctl/shared';
 import type { AgentUpdate } from '../../agent/types.js';
 import { createCompactionProjector } from './compaction.js';
 import { displayAcpContent } from './content.js';
@@ -167,14 +167,11 @@ export function parseNotificationToEvents(
       const used = parseCount(rec?.used);
       const size = parseCount(rec?.size);
       if (used !== null && size !== null) {
-        const costRec = asRecord(rec?.cost);
-        const amount = parseCount(costRec?.amount);
-        const currency = typeof costRec?.currency === 'string' ? costRec.currency : undefined;
         events.push({
           type: 'usage_update',
           used: Math.max(0, used),
           size: Math.max(0, size),
-          cost: amount !== null && currency ? { amount, currency } : undefined,
+          cost: normalizeReportedCost(rec?.cost),
         });
       }
       break;

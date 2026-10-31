@@ -119,6 +119,17 @@ export class SessionCommandHandler {
           selectedModel: selection.selectedModel,
           selectedThinkingEffort: selection.selectedThinkingEffort,
           contextLimit: preservedLimit,
+          ...(providerIdChanged || modelChanged || options.forceNewAgentSession
+            ? { contextUsedTokens: null, contextLimit: 0 }
+            : {}),
+          ...(providerIdChanged || options.forceNewAgentSession
+            ? {
+                sessionMetrics: JSON.stringify({
+                  ...jsonCodecs.unknownRecord(sessionRecord.sessionMetrics),
+                  reportedCost: null,
+                }),
+              }
+            : {}),
           availableCommands: '[]',
           ...(preserveLiveOptions
             ? {}

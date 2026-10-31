@@ -107,119 +107,114 @@ describe('CommandBarFooter branch label', () => {
 });
 
 describe('ContextWindowPopover', () => {
-  it('calculates and displays exact tokens and percentage when contextLimit is provided', () => {
+  function renderMeter(overrides: Partial<SessionWithCapabilities['session']>) {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
     roots.push(root);
-
-    const sessionData = createSessionData({
-      totalTokens: 33044,
+    act(() =>
+      root.render(
+        <ContextWindowPopover sessionData={createSessionData(overrides)} isLoading={false} />,
+      ),
+    );
+    const button = container.querySelector('button')!;
+    act(() => button.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    return { button, content: document.body.textContent ?? '' };
+  }
+  it('uses reported context occupancy even when turn consumption exceeds the context window', () => {
+    const { button, content } = renderMeter({
+      totalTokens: 1581561,
+      contextUsedTokens: 161651,
       contextLimit: 200000,
-    });
-
-    act(() => {
-      root.render(<ContextWindowPopover sessionData={sessionData} isLoading={false} />);
-    });
-
-    const triggerButton = container.querySelector('button');
-    expect(triggerButton).not.toBeNull();
-    // 33044 / 200000 = 16.5% -> rounded on badge is 17%
-    expect(triggerButton?.textContent).toContain('17%');
-
-    // Click to open popover
-    act(() => {
-      triggerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const content = document.body.textContent ?? '';
-    expect(content).toContain('33.0K / 200.0K tokens');
-    expect(content).toContain('16.5%');
-    expect(content).not.toContain('/ 1 tokens');
-    expect(content).not.toContain('100.0%');
-  });
-
-  it('formats million-token context limits as M', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    roots.push(root);
-    const sessionData = createSessionData({
-      totalTokens: 70400,
-      contextLimit: 1000000,
-    });
-
-    act(() => {
-      root.render(<ContextWindowPopover sessionData={sessionData} isLoading={false} />);
-    });
-    act(() => {
-      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(document.body.textContent).toContain('70.4K / 1M tokens');
-    expect(document.body.textContent).not.toContain('1000.0K');
-  });
-
-  it('uses calculated context limit from sessionMetrics if session.contextLimit is 0', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    roots.push(root);
-
-    const sessionData = createSessionData({
-      totalTokens: 33044,
-      contextLimit: 0,
       sessionMetrics: {
-        contextLimit: 200000,
+        totalTokens: 1581561,
+        lastTurn: { totalTokens: 1581561, cachedReadTokens: 1564544 },
       },
     });
-
-    act(() => {
-      root.render(<ContextWindowPopover sessionData={sessionData} isLoading={false} />);
-    });
-
-    const triggerButton = container.querySelector('button');
-    expect(triggerButton?.textContent).toContain('17%');
-
-    act(() => {
-      triggerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const content = document.body.textContent ?? '';
-    expect(content).toContain('33.0K / 200.0K tokens');
-    expect(content).toContain('16.5%');
-    expect(content).not.toContain('/ 1 tokens');
-  });
-
-  it('does not invent arbitrary fallbacks (like 128k or 1) when context limit is unmetered', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    roots.push(root);
-
-    const sessionData = createSessionData({
-      totalTokens: 33044,
-      contextLimit: 0,
-      sessionMetrics: {},
-    });
-
-    act(() => {
-      root.render(<ContextWindowPopover sessionData={sessionData} isLoading={false} />);
-    });
-
-    const triggerButton = container.querySelector('button');
-    // Badge shows actual tokens instead of a fake percentage
-    expect(triggerButton?.textContent).toContain('33.0K');
-
-    act(() => {
-      triggerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const content = document.body.textContent ?? '';
-    expect(content).toContain('33.0K tokens');
-    expect(content).toContain('—');
-    expect(content).not.toContain('/ 128.0K');
-    expect(content).not.toContain('/ 1 tokens');
+    expect(button.textContent).toContain('81%');
+    expect(content).toContain('161.7K / 200.0K tokens');
+    expect(content).toContain('80.8%');
+    expect(content).toContain('Last turn consumption');
+    expect(content).toContain('1.6M tokens');
     expect(content).not.toContain('100.0%');
+  });
+  it('formats million-token context limits as M', () => {
+    const { content } = renderMeter({ contextUsedTokens: 70400, contextLimit: 1000000 });
+    expect(content).toContain('70.4K / 1M tokens');
+    expect(content).not.toContain('1000.0K');
+  });
+  it('shows available consumption fields without deriving a context count or guessing a total', () => {
+    const { content } = renderMeter({
+      contextUsedTokens: null,
+      sessionMetrics: { lastTurn: { inputTokens: 11785, outputTokens: 2382 } },
+    });
+    expect(content).toContain('Last turn consumption');
+    expect(content).toContain('Input11.8K tokens');
+    expect(content).toContain('Output2.4K tokens');
+    expect(content).toContain('Unavailable');
+    expect(content).not.toContain('%');
+    expect(content).not.toContain('Total');
+  });
+  it.each([undefined, null])(
+    'does not infer occupancy from legacy totals or capacity (occupancy=%s)',
+    (contextUsedTokens) => {
+      const { button, content } = renderMeter({
+        contextUsedTokens,
+        totalTokens: 1581561,
+        contextLimit: 200000,
+        sessionMetrics: { totalTokens: 1581561, contextLimit: 200000 },
+      });
+      expect(button.getAttribute('aria-label')).toBe('Context usage unavailable');
+      expect(button.textContent).toContain('—');
+      expect(content).toContain('The provider has not reported current context usage.');
+      expect(content).not.toContain('1.6M');
+      expect(content).not.toContain('%');
+    },
+  );
+  it('does not borrow a stale metrics capacity when a provider reports occupancy without capacity', () => {
+    const { content } = renderMeter({
+      contextUsedTokens: 33044,
+      contextLimit: 0,
+      sessionMetrics: { contextLimit: 200000 },
+    });
+    expect(content).toContain('33.0K tokens');
+    expect(content).toContain('Context capacity unavailable.');
+    expect(content).not.toContain('200.0K');
+    expect(content).not.toContain('%');
+  });
+  it('distinguishes a reported empty context from unavailable usage', () => {
+    const { content } = renderMeter({
+      contextUsedTokens: 0,
+      contextLimit: 200000,
+      sessionMetrics: { reportedCost: { amount: 0, currency: 'USD' } },
+    });
+    expect(content).toContain('0 / 200.0K tokens');
+    expect(content).toContain('0.0%');
+    expect(content).not.toContain('Unavailable');
+    expect(content).toContain('USD 0.00');
+  });
+  it('does not substitute a legacy zero estimate for an unreported cost', () => {
+    const { content } = renderMeter({ estimatedCost: 0, sessionMetrics: { estimatedCost: 0 } });
+    expect(content).toContain('Provider reported cost');
+    expect(content).toContain('SessionUnavailable');
+    expect(content).not.toContain('$0');
+    expect(content).not.toContain('USD');
+  });
+  it('preserves different session and turn currencies without combining amounts', () => {
+    const { content } = renderMeter({
+      sessionMetrics: {
+        reportedCost: { amount: 0.42, currency: 'EUR' },
+        lastTurn: { cost: { amount: 0.05, currency: 'CAD' } },
+      },
+    });
+    expect(content).toContain('SessionEUR 0.42');
+    expect(content).toContain('Last turnCAD 0.05');
+    expect(content).not.toContain('0.47');
+  });
+  it('does not display a positive tiny charge as zero', () => {
+    const { content } = renderMeter({
+      sessionMetrics: { reportedCost: { amount: 0.00000012, currency: 'credits' } },
+    });
+    expect(content).toContain('credits 1.20e-7');
   });
 });

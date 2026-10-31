@@ -15,6 +15,7 @@ import {
   planArtifactSchema,
   findAgentConfigOption,
   isThinkingEffort,
+  normalizeReportedCost,
   type SessionEventPayload,
 } from '@agentctl/shared';
 
@@ -62,6 +63,7 @@ export class SessionStateProjector {
     attemptId?: string,
   ): ReturnType<ConversationProjector['startTurn']> {
     this.activeAttemptId = attemptId;
+    if (this.canProject()) this.invalidateContext();
     return this.conversation.startTurn(
       text,
       attachments,
@@ -129,11 +131,20 @@ export class SessionStateProjector {
     );
   }
 
+  private invalidateContext(): void {
+    this.db
+      .update(sessions)
+      .set({ contextUsedTokens: null })
+      .where(eq(sessions.id, this.sessionId))
+      .run();
+  }
+
   async handleDomainEvent(event: AgentUpdate): Promise<void> {
     if (!this.canProject()) return;
     switch (event.type) {
       case 'context_compacted':
         // Lifecycle signal; the accompanying tool call carries the visible summary.
+        this.invalidateContext();
         break;
       case 'notice':
         this.eventRepository.publishNotice?.({ ...event, sessionId: this.sessionId });
@@ -186,6 +197,7 @@ export class SessionStateProjector {
         );
         break;
       case 'usage_update': {
+        if (!Number.isFinite(event.used) || !Number.isFinite(event.size)) break;
         const sanitizedUsed = Math.max(0, event.used);
         const sanitizedSize = Math.max(0, event.size);
 
@@ -196,33 +208,22 @@ export class SessionStateProjector {
 
         const existingMetrics = jsonCodecs.unknownRecord(sessionRecord?.sessionMetrics);
 
-        const effectiveContextLimit =
-          sanitizedSize > 0
-            ? sanitizedSize
-            : sessionRecord?.contextLimit && sessionRecord.contextLimit > 0
-              ? sessionRecord.contextLimit
-              : typeof existingMetrics.contextLimit === 'number' && existingMetrics.contextLimit > 0
-                ? existingMetrics.contextLimit
-                : 0;
+        const effectiveContextLimit = sanitizedSize;
+        const reportedCost = normalizeReportedCost(event.cost);
 
         const metricsPayload = {
           ...existingMetrics,
-          totalTokens: sanitizedUsed,
-          ...(effectiveContextLimit > 0 ? { contextLimit: effectiveContextLimit } : {}),
-          cost: event.cost ?? existingMetrics.cost ?? null,
+          contextLimit: effectiveContextLimit,
+          ...(reportedCost ? { reportedCost } : {}),
           lastUpdated: new Date().toISOString(),
         };
 
         const updateSet: Record<string, unknown> = {
-          totalTokens: sanitizedUsed,
-          estimatedCost: event.cost ? event.cost.amount : (sessionRecord?.estimatedCost ?? 0.0),
+          contextUsedTokens: sanitizedUsed,
+          contextLimit: effectiveContextLimit,
           sessionMetrics: JSON.stringify(metricsPayload),
           updatedAt: new Date(),
         };
-
-        if (effectiveContextLimit > 0) {
-          updateSet.contextLimit = effectiveContextLimit;
-        }
 
         this.db.update(sessions).set(updateSet).where(eq(sessions.id, this.sessionId)).run();
 
@@ -231,9 +232,11 @@ export class SessionStateProjector {
           'status',
           {
             status: 'usage_update',
+            contextUsedTokens: sanitizedUsed,
+            // Keep the historical event alias for old clients; never use it as consumption.
             totalTokens: sanitizedUsed,
             contextLimit: effectiveContextLimit > 0 ? effectiveContextLimit : undefined,
-            cost: event.cost ?? undefined,
+            cost: reportedCost,
           },
           null,
         );
@@ -316,16 +319,26 @@ export class SessionStateProjector {
         );
         break;
       }
-      case 'metrics_update':
+      case 'metrics_update': {
+        const record = await this.db.query.sessions.findFirst({
+          where: eq(sessions.id, this.sessionId),
+        });
+        if (!this.canProject()) return;
+        const previous = jsonCodecs.unknownRecord(record?.sessionMetrics);
         this.db
           .update(sessions)
           .set({
-            sessionMetrics: JSON.stringify(event.metrics),
+            sessionMetrics: JSON.stringify({
+              ...previous,
+              ...event.metrics,
+              reportedCost: previous.reportedCost ?? null,
+            }),
             updatedAt: new Date(),
           })
           .where(eq(sessions.id, this.sessionId))
           .run();
         break;
+      }
       case 'config_option_update': {
         const sessionRecord = await this.db.query.sessions.findFirst({
           where: eq(sessions.id, this.sessionId),
@@ -341,11 +354,15 @@ export class SessionStateProjector {
           decodeCustomModels(provider?.customModels),
         );
         const thinkingValue = findAgentConfigOption(configOptions, 'thought_level')?.currentValue;
+        const modelValue = findAgentConfigOption(configOptions, 'model')?.currentValue;
         this.db
           .update(sessions)
           .set({
             sessionConfigOptions: JSON.stringify(configOptions),
             selectedThinkingEffort: isThinkingEffort(thinkingValue) ? thinkingValue : null,
+            ...(modelValue && modelValue !== sessionRecord?.selectedModel
+              ? { contextUsedTokens: null, contextLimit: 0 }
+              : {}),
             updatedAt: new Date(),
           })
           .where(eq(sessions.id, this.sessionId))

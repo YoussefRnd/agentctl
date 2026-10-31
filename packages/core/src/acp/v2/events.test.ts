@@ -2,6 +2,25 @@ import { describe, expect, test } from 'vite-plus/test';
 import { projectV2SessionUpdate } from './events.js';
 
 describe('ACP v2 event projection', () => {
+  test('keeps a reported zero cost but drops invalid or unspecified currencies', () => {
+    for (const [cost, expected] of [
+      [
+        { amount: 0, currency: ' EUR ' },
+        { amount: 0, currency: 'EUR' },
+      ],
+      [{ amount: -1, currency: 'EUR' }, undefined],
+      [{ amount: 1, currency: '' }, undefined],
+    ] as const) {
+      expect(
+        projectV2SessionUpdate({ sessionUpdate: 'usage_update', used: 100, size: 200000, cost })[0],
+      ).toMatchObject({ type: 'usage_update', cost: expected });
+    }
+  });
+  test('projects context occupancy independently from prompt consumption', () => {
+    expect(
+      projectV2SessionUpdate({ sessionUpdate: 'usage_update', used: 161651, size: 200000 }),
+    ).toEqual([{ type: 'usage_update', used: 161651, size: 200000, cost: undefined }]);
+  });
   test('keeps mixed message content and media placeholders across chunk and replacement updates', () => {
     const content = [
       { type: 'text' as const, text: 'See report' },

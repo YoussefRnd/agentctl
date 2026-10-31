@@ -20,7 +20,7 @@ import type {
   UsageUpdate,
   UserMessage,
 } from '@agentclientprotocol/sdk/experimental/v2';
-import type { AgentConfigOption } from '@agentctl/shared';
+import { normalizeReportedCost, type AgentConfigOption } from '@agentctl/shared';
 import type { AgentToolCallContent, AgentUpdate } from '../../agent/types.js';
 import { createCompactionProjector } from '../protocol/compaction.js';
 import { displayAcpContent } from '../protocol/content.js';
@@ -293,9 +293,7 @@ export function projectV2SessionUpdate(
           type: 'usage_update',
           used: Math.max(0, value.used),
           size: Math.max(0, value.size),
-          cost: value.cost
-            ? { amount: Math.max(0, value.cost.amount), currency: value.cost.currency }
-            : undefined,
+          cost: normalizeReportedCost(value.cost),
         },
       ];
     }

@@ -5,7 +5,7 @@ import { GitBranchIcon, RepoPullIcon, RepoPushIcon } from '@primer/octicons-reac
 import { toast } from 'sonner';
 import { useSessionWorkspace } from '@/features/sessions';
 import { useGitStatus } from '@/shared/workspace/useGitStatus';
-import type { SessionWithCapabilities } from '@agentctl/shared';
+import type { SessionWithCapabilities, ReportedCost } from '@agentctl/shared';
 import { CommandDropdown } from './CommandDropdown';
 import { formatTokenCount } from '@/shared/lib/formatTokenCount';
 
@@ -23,6 +23,18 @@ function formatBranchName(branch: string) {
   return branch;
 }
 
+function formatReportedCost(cost: ReportedCost | null | undefined): string {
+  if (!cost) return 'Unavailable';
+  const amount =
+    cost.amount > 0 && cost.amount < 0.01
+      ? cost.amount.toPrecision(3)
+      : cost.amount.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 4,
+        });
+  return `${cost.currency} ${amount}`;
+}
+
 export function ContextWindowPopover({
   sessionData,
   isLoading,
@@ -34,22 +46,36 @@ export function ContextWindowPopover({
 
   if (isLoading || !sessionData?.session) return null;
 
-  const { totalTokens, contextLimit, sessionMetrics } = sessionData.session;
-  const safeTokens = Math.max(0, totalTokens ?? 0);
+  const { contextUsedTokens, contextLimit, sessionMetrics } = sessionData.session;
+  const safeTokens =
+    typeof contextUsedTokens === 'number' &&
+    Number.isFinite(contextUsedTokens) &&
+    contextUsedTokens >= 0
+      ? contextUsedTokens
+      : null;
 
   // Use the agent-calculated context limit without guessing hardcoded fallbacks
   const calculatedLimit =
-    typeof contextLimit === 'number' && contextLimit > 0
-      ? contextLimit
-      : typeof sessionMetrics?.contextLimit === 'number' && sessionMetrics.contextLimit > 0
-        ? sessionMetrics.contextLimit
-        : null;
+    typeof contextLimit === 'number' && contextLimit > 0 ? contextLimit : null;
 
   const hasCalculatedLimit = calculatedLimit !== null;
-  const usagePercent = hasCalculatedLimit
-    ? Math.min(100, Math.max(0, (safeTokens / calculatedLimit) * 100))
-    : null;
-  const { usageBreakdown, estimatedCost, turnsRemaining } = sessionMetrics;
+  const usagePercent =
+    hasCalculatedLimit && safeTokens !== null
+      ? Math.min(100, Math.max(0, (safeTokens / calculatedLimit) * 100))
+      : null;
+  const { reportedCost, lastTurn } = sessionMetrics;
+  const consumption = (
+    [
+      ['Total', lastTurn?.totalTokens],
+      ['Input', lastTurn?.inputTokens],
+      ['Output', lastTurn?.outputTokens],
+      ['Cache read', lastTurn?.cachedReadTokens],
+      ['Cache write', lastTurn?.cachedWriteTokens],
+      ['Reasoning', lastTurn?.thoughtTokens],
+    ] as const
+  ).flatMap(([label, count]) => (count !== undefined ? [{ label, count }] : []));
+  const usageBreakdown = safeTokens !== null ? sessionMetrics.usageBreakdown : undefined;
+  const turnsRemaining = safeTokens !== null ? sessionMetrics.turnsRemaining : undefined;
 
   const radius = 8;
   const circumference = 2 * Math.PI * radius;
@@ -70,6 +96,7 @@ export function ContextWindowPopover({
         <PopoverTrigger asChild>
           <button
             type="button"
+            aria-label={safeTokens === null ? 'Context usage unavailable' : 'Context usage'}
             onClick={() => {
               setIsOpen((prev) => !prev);
             }}
@@ -115,7 +142,9 @@ export function ContextWindowPopover({
             >
               {usagePercent !== null
                 ? `${Math.round(usagePercent)}%`
-                : formatTokenCount(safeTokens)}
+                : safeTokens !== null
+                  ? formatTokenCount(safeTokens)
+                  : '—'}
             </span>
           </button>
         </PopoverTrigger>
@@ -127,9 +156,11 @@ export function ContextWindowPopover({
               </span>
               <div className="text-text-muted mt-0.5 flex items-baseline justify-between text-[11px] font-semibold">
                 <span className="font-mono">
-                  {hasCalculatedLimit
-                    ? `${formatTokenCount(safeTokens)} / ${formatTokenCount(calculatedLimit)} tokens`
-                    : `${formatTokenCount(safeTokens)} tokens`}
+                  {safeTokens === null
+                    ? 'Unavailable'
+                    : hasCalculatedLimit
+                      ? `${formatTokenCount(safeTokens)} / ${formatTokenCount(calculatedLimit)} tokens`
+                      : `${formatTokenCount(safeTokens)} tokens`}
                 </span>
                 <span
                   className={cn(
@@ -146,6 +177,14 @@ export function ContextWindowPopover({
                   {usagePercent !== null ? `${usagePercent.toFixed(1)}%` : '—'}
                 </span>
               </div>
+              {safeTokens === null && (
+                <p className="text-text-muted text-[11px]">
+                  The provider has not reported current context usage.
+                </p>
+              )}
+              {safeTokens !== null && !hasCalculatedLimit && (
+                <p className="text-text-muted text-[11px]">Context capacity unavailable.</p>
+              )}
             </div>
 
             <div className="bg-surface-tertiary/30 ring-border/10 relative h-2 w-full overflow-hidden rounded-full ring-1">
@@ -178,9 +217,48 @@ export function ContextWindowPopover({
               ) : null}
             </div>
 
-            {(usageBreakdown !== undefined ||
-              estimatedCost !== undefined ||
-              turnsRemaining !== undefined) && (
+            {consumption.length > 0 && (
+              <div className="border-border/10 space-y-1 border-t pt-2">
+                <p className="text-text-muted/60 text-[9px] font-bold tracking-wider uppercase">
+                  Last turn consumption
+                </p>
+                <dl className="grid grid-cols-2 gap-1 font-mono">
+                  {consumption.map(({ label, count }) => (
+                    <div key={label}>
+                      <dt className="text-text-muted">{label}</dt>
+                      <dd>{formatTokenCount(count)} tokens</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="text-text-muted text-[11px]">
+                  Provider-reported tokens processed during the last turn, separate from current
+                  context occupancy.
+                </p>
+              </div>
+            )}
+
+            <div className="border-border/10 space-y-1 border-t pt-2">
+              <p className="text-text-muted/60 text-[9px] font-bold tracking-wider uppercase">
+                Provider reported cost
+              </p>
+              <dl className="grid grid-cols-2 gap-1 font-mono">
+                <div>
+                  <dt className="text-text-muted">Session</dt>
+                  <dd>{formatReportedCost(reportedCost)}</dd>
+                </div>
+                {lastTurn?.cost && (
+                  <div>
+                    <dt className="text-text-muted">Last turn</dt>
+                    <dd>{formatReportedCost(lastTurn.cost)}</dd>
+                  </div>
+                )}
+              </dl>
+              <p className="text-text-muted text-[11px]">
+                Session and last-turn amounts are reported separately by the agent.
+              </p>
+            </div>
+
+            {(usageBreakdown !== undefined || turnsRemaining !== undefined) && (
               <div className="border-border/10 mt-1 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-2">
                 {usageBreakdown?.history !== undefined && (
                   <div className="flex flex-col">
@@ -199,16 +277,6 @@ export function ContextWindowPopover({
                     </span>
                     <span className="text-text-main font-mono text-[10.5px] font-bold">
                       {formatTokenCount(usageBreakdown.files)}
-                    </span>
-                  </div>
-                )}
-                {estimatedCost !== undefined && (
-                  <div className="flex flex-col">
-                    <span className="text-text-muted/45 text-[8px] font-bold tracking-[0.15em] uppercase">
-                      Cost
-                    </span>
-                    <span className="text-text-main font-mono text-[10.5px] font-bold">
-                      ${estimatedCost.toFixed(3)}
                     </span>
                   </div>
                 )}

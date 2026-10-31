@@ -5,6 +5,8 @@ import { sessions, mcpServers, providers } from '../../db/schema.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
 import {
   EMPTY_AGENT_FEATURES,
+  findAgentConfigOption,
+  normalizeReportedCost,
   type AgentFeatures,
   type SessionStatus,
   type ThinkingEffort,
@@ -15,7 +17,12 @@ import type { DbClient } from '../../db/index.js';
 import type { SessionEventRepository } from '../persistence/session-event-repository.js';
 import type { Logger } from '../../logger.js';
 import { noopLogger } from '../../logger.js';
-import type { AgentDriver, AgentSession, AgentSessionIntent } from '../../agent/types.js';
+import type {
+  AgentDriver,
+  AgentSession,
+  AgentSessionIntent,
+  AgentUpdate,
+} from '../../agent/types.js';
 import { AgentAuthenticationRequiredError } from '../../agent/errors.js';
 import type { SnapshotService } from '../../git/snapshot-service.js';
 import type { SessionRepositoryResources } from '../contracts.js';
@@ -266,6 +273,11 @@ export class SessionRuntimeRegistry {
     );
 
     let session: SessionRuntime | undefined;
+    // Keep only the newest report while native startup/configuration is in progress.
+    // Apply it through the installed runtime owner, never through an unfenced callback.
+    let startupUsage: Extract<AgentUpdate, { type: 'usage_update' }> | undefined;
+    let captureStartupUsage = true;
+    let startupModel = selectedModel;
     let replayedCompactionId: string | undefined;
     let replayProjector =
       intent.kind === 'resume' && intent.requireExisting
@@ -322,6 +334,19 @@ export class SessionRuntimeRegistry {
       });
 
       let startupConfigOptions: AgentSession['configOptions'];
+      // A new native connection must report its own occupancy, including on resume.
+      this.db
+        .update(sessions)
+        .set({
+          contextUsedTokens: null,
+          contextLimit: 0,
+          sessionMetrics: JSON.stringify({
+            ...jsonCodecs.unknownRecord(sessionRecord?.sessionMetrics),
+            reportedCost: null,
+          }),
+        })
+        .where(eq(sessions.id, sessionId))
+        .run();
       const runtimeHandle = await this.runtime.startSession(
         command,
         args,
@@ -342,6 +367,24 @@ export class SessionRuntimeRegistry {
         },
         {
           onUpdate: async (event) => {
+            if (captureStartupUsage) {
+              if (event.type === 'usage_update') {
+                if (Number.isFinite(event.used) && Number.isFinite(event.size))
+                  startupUsage = {
+                    ...event,
+                    cost: normalizeReportedCost(event.cost) ?? startupUsage?.cost,
+                  };
+                return;
+              }
+              if (event.type === 'context_compacted') startupUsage = undefined;
+              if (event.type === 'config_option_update') {
+                const model = findAgentConfigOption(event.configOptions, 'model')?.currentValue;
+                if (typeof model === 'string' && model !== startupModel) {
+                  startupUsage = undefined;
+                  startupModel = model;
+                }
+              }
+            }
             if (!session && event.type === 'context_compacted')
               replayedCompactionId = event.compactionId;
             if (replayProjector) {
@@ -435,6 +478,7 @@ export class SessionRuntimeRegistry {
         );
       replayProjector = undefined;
       if (err instanceof AgentAuthenticationRequiredError) {
+        startupUsage = undefined;
         this.logger.warn(`Session ${sessionId} requires authentication`);
         this.providerRegistry
           .getAuthCoordinator()
@@ -475,6 +519,12 @@ export class SessionRuntimeRegistry {
 
     try {
       await session.recordRuntimeBinding(features);
+      while (startupUsage) {
+        const report = startupUsage;
+        startupUsage = undefined;
+        await session.handleDomainEvent(report);
+      }
+      captureStartupUsage = false;
       if (session.isDead || !this.ownsRuntime(sessionId, session.runtimeId))
         throw new Error('Session runtime was retired during startup');
       this.initializing.delete(session);

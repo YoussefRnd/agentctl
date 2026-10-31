@@ -11,7 +11,12 @@ import type { SessionEventRepositoryLike, SessionStatusTransitioner } from '../c
 import type { SessionStateProjector } from '../projection/session-state-projector.js';
 import type { PermissionEngine } from '../../security/permission-engine.js';
 import { SkillRegistry, type SkillActivation } from '../../skills/registry.js';
-import { isDefaultSessionTitle, type TurnTimings, type ChatError } from '@agentctl/shared';
+import {
+  isDefaultSessionTitle,
+  normalizeReportedCost,
+  type TurnTimings,
+  type ChatError,
+} from '@agentctl/shared';
 import { resolveMessageAttachments } from '../commands/message-attachments.js';
 import { normalizeChatError } from '../../agent/chat-error.js';
 import type { SessionTurnStore } from '../persistence/session-turn-store.js';
@@ -404,20 +409,21 @@ export class SessionTurnExecutor {
             const newInput = currentInput + (metrics.inputTokens ?? 0);
             const newOutput = currentOutput + (metrics.outputTokens ?? 0);
             const newTotal = Math.max(0, metrics.totalTokens ?? newInput + newOutput);
+            // Context reports own both occupancy and capacity. Prompt consumption
+            // metadata must not replace that report, including an unknown capacity.
             const effectiveLimit =
-              metrics.contextLimit && metrics.contextLimit > 0
-                ? metrics.contextLimit
-                : sessionRecord.contextLimit > 0
-                  ? sessionRecord.contextLimit
-                  : typeof existingMetrics.contextLimit === 'number' &&
-                      existingMetrics.contextLimit > 0
-                    ? existingMetrics.contextLimit
-                    : 0;
+              sessionRecord.contextUsedTokens !== null
+                ? sessionRecord.contextLimit
+                : metrics.contextLimit && metrics.contextLimit > 0
+                  ? metrics.contextLimit
+                  : sessionRecord.contextLimit > 0
+                    ? sessionRecord.contextLimit
+                    : typeof existingMetrics.contextLimit === 'number' &&
+                        existingMetrics.contextLimit > 0
+                      ? existingMetrics.contextLimit
+                      : 0;
             const newContextLimit =
               effectiveLimit > 0 ? effectiveLimit : sessionRecord.contextLimit;
-            const newCost = metrics.cost
-              ? sessionRecord.estimatedCost + metrics.cost.amount
-              : sessionRecord.estimatedCost;
 
             const updatedMetrics = {
               ...existingMetrics,
@@ -425,13 +431,11 @@ export class SessionTurnExecutor {
               outputTokens: newOutput,
               totalTokens: newTotal,
               ...(newContextLimit > 0 ? { contextLimit: newContextLimit } : {}),
-              estimatedCost: newCost,
-              lastTurn: metrics,
+              lastTurn: { ...metrics, cost: normalizeReportedCost(metrics.cost) },
             };
 
             const sessionUpdate: Record<string, unknown> = {
               totalTokens: newTotal,
-              estimatedCost: newCost,
               sessionMetrics: JSON.stringify(updatedMetrics),
               updatedAt: new Date(),
             };

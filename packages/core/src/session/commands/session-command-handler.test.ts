@@ -63,6 +63,8 @@ function setup(
       selectedProvider: 'provider',
       selectedModel: 'a',
       selectedThinkingEffort: 'high',
+      contextUsedTokens: 161651,
+      contextLimit: 200000,
       sessionConfigOptions: JSON.stringify(oldOptions),
     })
     .run();
@@ -140,6 +142,8 @@ test.each([false, true])(
     const { handler, active, row } = setup(newEffort, { notifyOnly });
     await handler.updateSessionConfig('s', { selectedProvider: 'provider', selectedModel: 'b' });
     expect(row().selectedThinkingEffort).toBe('default');
+    expect(row().contextUsedTokens).toBeNull();
+    expect(row().contextLimit).toBe(0);
     expect(
       JSON.parse(row().sessionConfigOptions).find(
         (option: AgentConfigOption) => option.category === 'thought_level',

@@ -76,6 +76,8 @@ export const sessions = sqliteTable('sessions', {
     .default('review'),
   status: text('status').$type<SessionStatus>().notNull().default('idle'),
   totalTokens: integer('total_tokens').notNull().default(0),
+  // Latest ACP usage_update occupancy; null means the provider has not reported it.
+  contextUsedTokens: integer('context_used_tokens'),
   contextLimit: integer('context_limit').notNull().default(DEFAULT_CONTEXT_LIMIT),
   estimatedCost: real('estimated_cost').notNull().default(0.0),
   lastHeartbeat: integer('last_heartbeat', { mode: 'timestamp' }),

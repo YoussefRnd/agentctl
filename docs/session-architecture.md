@@ -157,3 +157,41 @@ retains the original session evidence; its final closure section records reposit
 was narrowed deliberately: server fixtures now import the internal elicitation registry
 directly; application code continues through the facade and execution query. No HTTP contract
 or database schema change is introduced.
+
+## Context occupancy and token consumption
+
+`sessions.contextUsedTokens` is the latest current-context occupancy reported by an ACP
+`usage_update`. It is separate from `totalTokens`, transcript token estimates, and the
+provider's prompt-result consumption metrics. Only a context report writes occupancy;
+finishing a turn, processing cached input, or recalculating transcript estimates cannot
+overwrite it. `sessionMetrics.lastTurn` exposes the provider's separate processing counts
+without deriving occupancy or assuming cache accounting is identical across providers.
+
+Occupancy is nullable: providers without a current report show **Unavailable**, even if
+their processing totals and maximum context capacity are known. A reported zero is valid.
+An unknown capacity does not borrow a historical metrics limit to produce a percentage.
+New turns, compaction, model/provider switches and native reconnects invalidate the old
+occupancy until the provider reports it again. ACP v1 and v2 share the same projection and
+meter; this does not depend on a provider name or an optional native API.
+
+Migration `0057_context_occupancy` adds the nullable field. Historical processing totals
+are preserved and never backfilled as context usage. The historical `usage_update` event's
+`totalTokens` alias is retained for compatibility alongside the explicit `contextUsedTokens`
+field; it is not a consumption counter. Saved occupancy survives a database reopen, while
+a new native connection must report its own state.
+
+Session costs are saved as nullable `sessionMetrics.reportedCost` snapshots with the
+agent's amount and currency. Repeated session reports replace the snapshot rather than
+adding it; a later report without cost preserves the last known report. Prompt-result
+costs are retained separately in `sessionMetrics.lastTurn.cost`. Neither is added to the
+other or converted into the legacy currency-less `estimatedCost`. Missing, malformed or
+currency-less costs remain unknown; an explicitly reported zero remains known. The meter
+displays session and last-turn costs separately and never defaults the currency to USD.
+
+Native startup, normal resume and native import capture the latest usage report while
+initialization is in progress. The buffer holds only one report, retaining the latest
+valid cost if a later report omits it. Compaction or a model change invalidates an earlier
+buffered report. After configuration and binding, the installed runtime applies the report
+through its normal ownership guard before accepting live reports. Failed startup never
+publishes buffered usage. Starting a native connection clears its old session cost until
+a fresh report arrives; replayed conversation consumption never becomes occupancy.

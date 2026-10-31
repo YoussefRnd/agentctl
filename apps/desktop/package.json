@@ -27,16 +27,16 @@
     "@agentctl/server": "workspace:*",
     "@agentctl/shared": "workspace:*",
     "@opentelemetry/api": "1.9.1",
-    "electron-updater": "^6.8.9",
-    "sodium-native": "^5.1.0"
+    "electron-updater": "^6.8.11",
+    "sodium-native": "^5.2.0"
   },
   "devDependencies": {
     "@agentctl/tsconfig": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@typescript/native": "catalog:",
-    "@vitejs/plugin-react": "^6.1.1",
-    "electron": "^43.7.5",
-    "electron-builder": "^26.15.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^43.8.4",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^5.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "catalog:",

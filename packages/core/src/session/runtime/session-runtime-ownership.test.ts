@@ -2,7 +2,7 @@ import { composeRepositoryResources } from '../composition/repository-resources.
 import { afterEach, expect, test, vi } from 'vite-plus/test';
 import { eq } from 'drizzle-orm';
 import { createDatabase, projects, sessions, sessionRuntimeBindings } from '../../db/index.js';
-import type { AgentDriver, AgentSession } from '../../agent/types.js';
+import type { AgentDriver, AgentSession, AgentSessionCallbacks } from '../../agent/types.js';
 import type { WorkspaceManager } from '../../git/worktree-manager.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
 import { noopLogger } from '../../logger.js';
@@ -15,7 +15,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   for (const close of cleanup.splice(0)) await close();
 });
-function fixture() {
+function fixture(driver = {} as AgentDriver) {
   const db = createDatabase(':memory:');
   db.insert(projects).values({ id: 'p', name: 'Project', path: '/tmp/project' }).run();
   db.insert(sessions)
@@ -36,7 +36,7 @@ function fixture() {
     {} as ProviderRegistry,
     events,
     noopLogger,
-    {} as AgentDriver,
+    driver,
     composeRepositoryResources({} as WorkspaceManager),
   );
   cleanup.push(() => registry.stopAll());
@@ -178,7 +178,49 @@ test('a provider update suspended in projection cannot overwrite replacement ses
   bind();
   await update;
   expect(db.select().from(sessions).get()?.totalTokens).toBe(0);
+  expect(db.select().from(sessions).get()?.contextUsedTokens).toBeNull();
 });
+
+test.each([true, false])(
+  'turn consumption never becomes context occupancy (provider reports occupancy=%s)',
+  async (reported) => {
+    const { db, bind } = fixture();
+    const { runtime, handle } = bind();
+    handle.prompt.mockImplementation(async () => {
+      if (reported)
+        await runtime.handleDomainEvent({
+          type: 'usage_update',
+          used: 161651,
+          size: 200000,
+          cost: { amount: 0.42, currency: 'EUR' },
+        });
+      return {
+        stopReason: 'end_turn',
+        usage: {
+          inputTokens: 11785,
+          outputTokens: 2382,
+          totalTokens: 1581561,
+          cachedReadTokens: 1564544,
+          contextLimit: 128000,
+          cost: { amount: 0.05, currency: 'CAD' },
+        },
+      };
+    });
+    await runtime.prompt('Inspect the change');
+    const row = db.select().from(sessions).get()!;
+    expect(row.totalTokens).toBe(1581561);
+    expect(row.contextUsedTokens).toBe(reported ? 161651 : null);
+    expect(JSON.parse(row.sessionMetrics).lastTurn.totalTokens).toBe(1581561);
+    expect(JSON.parse(row.sessionMetrics).lastTurn.cost).toEqual({ amount: 0.05, currency: 'CAD' });
+    expect(row.estimatedCost).toBe(0);
+    if (reported)
+      expect(JSON.parse(row.sessionMetrics).reportedCost).toEqual({
+        amount: 0.42,
+        currency: 'EUR',
+      });
+    if (reported) expect(row.contextLimit).toBe(200000);
+  },
+);
 
 test('runtime binding and initialized personas roll back together on failure', async () => {
   const { db, bind } = fixture();
@@ -196,3 +238,183 @@ test('runtime binding and initialized personas roll back together on failure', a
     'coder',
   ]);
 });
+
+test.each(['new', 'resume', 'native-import'] as const)(
+  'captures reports during %s and binding, then accepts live reports',
+  async (kind) => {
+    let callbacks!: AgentSessionCallbacks;
+    const handle = {
+      id: 'remote',
+      history: kind === 'new' ? 'fresh' : 'restored',
+      closed: new Promise<void>(() => {}),
+      onError() {},
+      onClose() {},
+      close: async () => {},
+      prompt: async () => ({ stopReason: 'end_turn' }),
+      authenticate: async () => {},
+      cancel: async () => {},
+    } as AgentSession;
+    const driver = {
+      inspectProvider: async () => {
+        throw new Error('Unexpected provider inspection');
+      },
+      startSession: async (_command, _args, _options, received) => {
+        callbacks = received;
+        if (kind !== 'new')
+          await callbacks.onUpdate({ type: 'context_compacted', compactionId: 'replayed' });
+        await callbacks.onUpdate({
+          type: 'usage_update',
+          used: 900,
+          size: 200000,
+          cost: { amount: 0.42, currency: 'EUR' },
+        });
+        await callbacks.onUpdate({
+          type: 'config_option_update',
+          configOptions: [
+            {
+              id: 'model',
+              category: 'model',
+              name: 'Model',
+              type: 'select',
+              currentValue: 'a',
+              options: [{ value: 'a', name: 'A' }],
+            },
+          ],
+        });
+        await callbacks.onUpdate({ type: 'usage_update', used: 1000, size: 200000 });
+        return handle;
+      },
+    } as AgentDriver;
+    const { db, registry } = fixture(driver);
+    db.update(sessions)
+      .set({
+        selectedModel: 'a',
+        contextUsedTokens: 10,
+        sessionMetrics: JSON.stringify({ reportedCost: { amount: 99, currency: 'USD' } }),
+      })
+      .run();
+    const original = SessionRuntime.prototype.recordRuntimeBinding;
+    vi.spyOn(SessionRuntime.prototype, 'recordRuntimeBinding').mockImplementationOnce(
+      async function (this: SessionRuntime, features) {
+        await callbacks.onUpdate({ type: 'usage_update', used: 1200, size: 200000 });
+        return original.call(this, features);
+      },
+    );
+    const project = SessionRuntime.prototype.handleDomainEvent;
+    vi.spyOn(SessionRuntime.prototype, 'handleDomainEvent').mockImplementation(async function (
+      this: SessionRuntime,
+      event,
+    ) {
+      if (event.type === 'usage_update' && event.used === 1200)
+        await callbacks.onUpdate({ type: 'usage_update', used: 1400, size: 200000 });
+      return project.call(this, event);
+    });
+    await registry.startSession(
+      's',
+      '/tmp/project',
+      'generic-acp',
+      [],
+      {},
+      'a',
+      null,
+      undefined,
+      undefined,
+      kind === 'new'
+        ? { kind: 'new' }
+        : {
+            kind: 'resume',
+            sessionId: 'remote',
+            ...(kind === 'native-import' ? { requireExisting: true } : {}),
+          },
+    );
+    let row = db.select().from(sessions).get()!;
+    expect(row).toMatchObject({ contextUsedTokens: 1400, contextLimit: 200000 });
+    expect(JSON.parse(row.sessionMetrics).reportedCost).toEqual({ amount: 0.42, currency: 'EUR' });
+    await callbacks.onUpdate({
+      type: 'usage_update',
+      used: 2000,
+      size: 200000,
+      cost: { amount: 0, currency: 'JPY' },
+    });
+    row = db.select().from(sessions).get()!;
+    expect(row.contextUsedTokens).toBe(2000);
+    expect(JSON.parse(row.sessionMetrics).reportedCost).toEqual({ amount: 0, currency: 'JPY' });
+  },
+);
+
+test('does not publish a buffered report from failed native startup', async () => {
+  const driver = {
+    inspectProvider: async () => {
+      throw new Error('Unexpected provider inspection');
+    },
+    startSession: async (_command, _args, _options, callbacks) => {
+      await callbacks.onUpdate({
+        type: 'usage_update',
+        used: 1000,
+        size: 200000,
+        cost: { amount: 0.42, currency: 'EUR' },
+      });
+      throw new Error('Native startup failed');
+    },
+  } as AgentDriver;
+  const { db, registry } = fixture(driver);
+  await expect(registry.startSession('s', '/tmp/project', 'generic-acp', [])).rejects.toThrow(
+    'Native startup failed',
+  );
+  const row = db.select().from(sessions).get()!;
+  expect(row.contextUsedTokens).toBeNull();
+  expect(JSON.parse(row.sessionMetrics).reportedCost).toBeNull();
+});
+
+test.each(['compaction', 'model'] as const)(
+  'does not apply a startup report invalidated by %s',
+  async (invalidation) => {
+    const handle = {
+      id: 'remote',
+      history: 'fresh',
+      closed: new Promise<void>(() => {}),
+      onError() {},
+      onClose() {},
+      close: async () => {},
+      prompt: async () => ({ stopReason: 'end_turn' }),
+      authenticate: async () => {},
+      cancel: async () => {},
+    } as AgentSession;
+    const driver = {
+      inspectProvider: async () => {
+        throw new Error('Unexpected provider inspection');
+      },
+      startSession: async (_command, _args, _options, callbacks) => {
+        await callbacks.onUpdate({
+          type: 'usage_update',
+          used: 1000,
+          size: 200000,
+          cost: { amount: 0.42, currency: 'EUR' },
+        });
+        await callbacks.onUpdate(
+          invalidation === 'compaction'
+            ? { type: 'context_compacted', compactionId: 'startup-compaction' }
+            : {
+                type: 'config_option_update',
+                configOptions: [
+                  {
+                    id: 'model',
+                    category: 'model',
+                    name: 'Model',
+                    type: 'select',
+                    currentValue: 'b',
+                    options: [{ value: 'b', name: 'B' }],
+                  },
+                ],
+              },
+        );
+        return handle;
+      },
+    } as AgentDriver;
+    const { db, registry } = fixture(driver);
+    await registry.startSession('s', '/tmp/project', 'generic-acp', [], {}, 'a');
+    const row = db.select().from(sessions).get()!;
+    expect(row.contextUsedTokens).toBeNull();
+    expect(JSON.parse(row.sessionMetrics).reportedCost).toBeNull();
+  },
+);
