@@ -414,6 +414,13 @@
       "when": 1793461233272,
       "tag": "0058_provider_contexts",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1793500173311,
+      "tag": "0059_sidebar_session_state",
+      "breakpoints": true
     }
   ]
 }

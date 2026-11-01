@@ -123,6 +123,12 @@ export const sessionRowSchema = sessionSchema.extend({
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   hasUserActivity: z.boolean().optional(),
+  pinnedAt: z.coerce.date().nullable().optional(),
+  lastReadEventId: z.number().int().nonnegative().optional(),
+  latestActivityEventId: z.number().int().nonnegative().optional(),
+  sidebarActivity: z
+    .enum(['working', 'approval', 'input', 'failed', 'completed', 'stopped', 'idle'])
+    .optional(),
   selectedProvider: providerSchema,
   selectedModel: z.string().min(1),
   selectedThinkingEffort: thinkingEffortSchema,

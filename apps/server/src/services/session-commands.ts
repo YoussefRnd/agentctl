@@ -1,5 +1,5 @@
-import { sessions, type DbClient } from '@agentctl/core/db';
-import { eq } from 'drizzle-orm';
+import { sessions, sessionEvents, type DbClient } from '@agentctl/core/db';
+import { eq, sql } from 'drizzle-orm';
 import { AppError } from '../errors/app-error.js';
 import type { SessionManager } from '@agentctl/core/session';
 import type { ProviderRegistry } from '@agentctl/core/providers';
@@ -257,6 +257,33 @@ export class SessionCommands {
     }
 
     return this.parseSessionRow(sessionRecord);
+  }
+
+  async updateSidebarState(
+    sessionId: string,
+    patch: { pinned?: boolean; lastReadEventId?: number },
+  ) {
+    const result = await this.db
+      .update(sessions)
+      .set({
+        ...(patch.pinned !== undefined
+          ? {
+              pinnedAt: patch.pinned ? sql`coalesce(${sessions.pinnedAt}, ${Date.now()})` : null,
+            }
+          : {}),
+        ...(patch.lastReadEventId !== undefined
+          ? {
+              // A client can acknowledge only the history it actually received. Never move backward
+              // or let a future/cross-session event ID hide subsequent output.
+              lastReadEventId: sql`max(${sessions.lastReadEventId}, min(${patch.lastReadEventId},
+          coalesce((select max(id) from ${sessionEvents} where session_id = ${sessionId}), 0)))`,
+            }
+          : {}),
+        updatedAt: sql`${sessions.updatedAt}`,
+      })
+      .where(eq(sessions.id, sessionId))
+      .returning({ id: sessions.id });
+    if (!result.length) throw new AppError('Session not found', 404);
   }
 
   async renameSession(sessionId: string, title: string) {

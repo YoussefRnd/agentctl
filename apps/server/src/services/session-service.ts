@@ -110,6 +110,8 @@ export class SessionService {
   }
 
   async patchSession(id: string, body: z.infer<typeof sessionsContract.patchSession.body>) {
+    if (body.pinned !== undefined || body.lastReadEventId !== undefined)
+      await this.parts.commands.updateSidebarState(id, body);
     if (body.title !== undefined) await this.renameSession(id, body.title);
     if (body.mode !== undefined) await this.switchMode(id, body.mode);
     if (body.approvalMode !== undefined) await this.updateApprovalMode(id, body.approvalMode);
@@ -123,6 +125,10 @@ export class SessionService {
     if (body.configId !== undefined && body.configValue !== undefined)
       await this.manager.setConfigOption(id, body.configId, body.configValue);
     if (body.branch !== undefined) await this.checkoutBranch(id, body.branch);
+    if (Object.keys(body).every((key) => key === 'pinned' || key === 'lastReadEventId')) {
+      // Sidebar preferences must never restore worktrees or reconnect a provider.
+      return this.parts.queries.withCapabilities(await this.parts.queries.findDetail(id));
+    }
     return this.getSessionWithCapabilities(id);
   }
 }

@@ -1,9 +1,13 @@
 import { Link } from 'react-router-dom';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
+import type { ProviderDiscovery } from '@agentctl/shared';
+import { Button } from '@agentctl/ui';
 import { ProjectItem } from './ProjectItem';
 
 interface SidebarProjectListProps {
+  providersById: ReadonlyMap<string, ProviderDiscovery>;
+  handlePinSession: (id: string, pinned: boolean) => void;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
@@ -23,6 +27,8 @@ interface SidebarProjectListProps {
 }
 
 export function SidebarProjectList({
+  providersById,
+  handlePinSession,
   isLoading,
   isError,
   refetch,
@@ -42,9 +48,9 @@ export function SidebarProjectList({
 }: SidebarProjectListProps) {
   if (isLoading) {
     return (
-      <div className="space-y-3 p-2">
+      <div className="space-y-3 py-2">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="space-y-1.5">
+          <div key={i} className="space-y-2">
             <div className="bg-surface-secondary/60 h-7 w-3/4 animate-pulse rounded-lg" />
             <div className="ml-4 space-y-1">
               <div className="bg-surface-secondary/40 h-6 w-5/6 animate-pulse rounded-md" />
@@ -58,21 +64,23 @@ export function SidebarProjectList({
 
   if (isError) {
     return (
-      <div className="bg-danger/5 border-danger/20 my-3 space-y-2 rounded-xl border p-3 text-center">
-        <div className="text-danger flex items-center justify-center gap-1.5 text-xs font-medium">
-          <AlertCircle className="h-3.5 w-3.5" />
+      <div className="border-border/40 my-3 space-y-2 rounded-lg border p-3 text-center">
+        <div className="text-role-control text-text-main flex items-center justify-center gap-2">
+          <AlertCircle className="icon-compact" />
           Failed to load workspaces
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="compact"
           onClick={() => {
             void refetch();
           }}
-          className="bg-danger/10 hover:bg-danger/20 text-danger inline-flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors"
+          className="gap-2"
         >
-          <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw className="icon-compact" />
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -80,13 +88,13 @@ export function SidebarProjectList({
   if (filteredProjects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
-        <p className="text-text-muted/60 text-xs font-medium">
+        <p className="text-role-control text-text-muted">
           {searchQuery ? 'No matching sessions' : 'No workspaces yet'}
         </p>
         {!searchQuery && (
           <Link
             to="/"
-            className="text-accent hover:text-accent/80 mt-2 text-xs font-medium underline underline-offset-2 transition-colors"
+            className="text-role-control text-accent motion-disclosure mt-2 underline underline-offset-2"
           >
             Add your first project
           </Link>
@@ -96,7 +104,7 @@ export function SidebarProjectList({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-3">
       {filteredProjects.map((proj) => {
         const hasActiveSession = proj.sessions.some((s) => s.id === currentActiveSessionId);
         const isCollapsed = collapsedProjects[proj.id] ?? !hasActiveSession;
@@ -104,6 +112,8 @@ export function SidebarProjectList({
         return (
           <ProjectItem
             key={proj.id}
+            providersById={providersById}
+            handlePinSession={handlePinSession}
             proj={proj}
             activeSessionId={currentActiveSessionId}
             isCollapsed={isCollapsed}

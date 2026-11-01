@@ -81,3 +81,18 @@ last replacement or enough UTF-8 output bytes. Complete detail responses can sti
 this design reduces default transfer and retained client data rather than imposing a hard global
 memory limit or truncating persisted output. Expanding every output trades those savings for
 additional requests and full bodies while the views remain open.
+
+### Session sidebar
+
+The project sidebar keeps pinned sessions above recent sessions within each project. Pins and
+monotonic read markers live on the server session row and reconcile through existing project
+state notifications. Provider logos use the discovered provider metadata; branch/worktree details
+and explicit working, approval, input, failure and unread-completion labels share each session row.
+
+`ProjectQueries` summarizes root assistant output and turn/request events without returning
+transcripts. Administrative changes and child transcript text do not create unread activity; actionable
+approval/input requests from child agents still surface on the parent chat.
+`useSessionReadMarker` acknowledges only loaded current history in a focused, visible chat, with
+bounded event IDs supplied by the client. Prefetching, historical pages and background tabs do
+not mark chats read. Sidebar mutations neither restore worktrees nor reconnect providers.
+Migration 0059 initializes existing chats as read to avoid flagging historical work as new.

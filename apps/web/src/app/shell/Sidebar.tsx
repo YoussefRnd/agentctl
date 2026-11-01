@@ -1,9 +1,9 @@
 import { useWorkspaceDrop } from './model/useWorkspaceDrop';
-import { sessionKeys, projectKeys } from '@/shared/lib/queryKeys';
-import { useState, useRef, useEffect } from 'react';
+import { providerKeys, sessionKeys, projectKeys } from '@/shared/lib/queryKeys';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, MessageSquare, Folder, FolderUp } from 'lucide-react';
+import { Plus, FolderUp } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import {
   apiClient,
@@ -12,8 +12,10 @@ import {
   deleteSession,
   renameSession,
   rewindSession,
+  patchSession,
+  providerService,
 } from '@agentctl/api-client';
-import { ConfirmationModal, Tooltip, cn } from '@agentctl/ui';
+import { ConfirmationModal, IconButton, Tooltip, cn } from '@agentctl/ui';
 import { toast } from 'sonner';
 import { SidebarProjectList } from './SidebarProjectList';
 import { SidebarTranscriptResults } from './SidebarTranscriptResults';
@@ -114,6 +116,24 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
     staleTime: 2000,
     refetchOnWindowFocus: true,
   });
+
+  const { data: providers = [] } = useQuery({
+    queryKey: providerKeys.all,
+    queryFn: () => providerService.getProviders(),
+    staleTime: 2_000,
+  });
+  const providersById = useMemo(
+    () => new Map(providers.map((provider) => [provider.id, provider])),
+    [providers],
+  );
+
+  const handlePinSession = (sessionId: string, pinned: boolean) => {
+    void execute(`pin-session-${sessionId}`, () => patchSession(sessionId, { pinned }), {
+      errorMessage: pinned ? 'Failed to pin session' : 'Failed to unpin session',
+    }).then((result) => {
+      if (result) void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+    });
+  };
 
   useEffect(() => {
     let runningCount = 0;
@@ -259,11 +279,11 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        'relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent transition-colors duration-150 select-none',
+        'relative z-20 flex h-full w-full shrink-0 flex-col overflow-hidden bg-transparent tracking-normal transition-colors duration-150 select-none',
         isDraggingOverSidebar && 'ring-accent/20 bg-accent/[0.015] ring-1 ring-inset',
       )}
     >
-      <div className="space-y-2.5 px-3 pt-3 pb-2">
+      <div className="space-y-3 px-3 pt-3 pb-2">
         <SidebarSearch
           ref={searchInputRef}
           value={searchQuery}
@@ -275,22 +295,23 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
         />
 
         {searchQuery.trim().length > 0 ? (
-          <div className="bg-surface-secondary/30 border-border/20 flex items-center justify-between gap-1 rounded-lg border p-0.5">
+          <div className="bg-surface-secondary/50 flex items-center gap-1 rounded-lg p-1">
             <button
               type="button"
               onClick={() => {
                 setSearchTab('workspaces');
               }}
               className={cn(
-                'click-press focus-visible:ring-accent/40 flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-[color,background-color,box-shadow,transform] duration-150 select-none focus-visible:ring-2 focus-visible:outline-none',
+                'control-compact text-role-control motion-disclosure focus-visible:ring-accent/40 flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md focus-visible:ring-2 focus-visible:outline-none',
                 searchTab === 'workspaces'
-                  ? 'bg-surface-secondary text-text-main font-semibold shadow-xs'
+                  ? 'bg-surface-tertiary/60 text-text-main'
                   : 'text-text-muted hover:text-text-main',
               )}
             >
-              <Folder className="h-3.5 w-3.5" />
               <span>Workspaces</span>
-              <span className="font-mono text-[10px] opacity-70">({totalSessionsCount})</span>
+              <span className="text-role-caption text-text-muted tabular-nums">
+                ({totalSessionsCount})
+              </span>
             </button>
             <button
               type="button"
@@ -298,22 +319,19 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
                 setSearchTab('messages');
               }}
               className={cn(
-                'click-press focus-visible:ring-accent/40 flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-[color,background-color,box-shadow,transform] duration-150 select-none focus-visible:ring-2 focus-visible:outline-none',
+                'control-compact text-role-control motion-disclosure focus-visible:ring-accent/40 flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md focus-visible:ring-2 focus-visible:outline-none',
                 searchTab === 'messages'
-                  ? 'bg-surface-secondary text-text-main font-semibold shadow-xs'
+                  ? 'bg-surface-tertiary/60 text-text-main'
                   : 'text-text-muted hover:text-text-main',
               )}
             >
-              <MessageSquare className="h-3.5 w-3.5" />
               <span>Messages</span>
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-between px-0.5">
+          <div className="flex min-h-7 items-center justify-between px-2">
             <div className="flex items-center gap-1.5">
-              <span className="text-text-muted/60 text-[10px] font-bold tracking-wider uppercase">
-                Workspaces
-              </span>
+              <span className="text-role-eyebrow text-text-muted">Workspaces</span>
             </div>
 
             <div className="flex items-center gap-0.5">
@@ -332,22 +350,18 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
               />
 
               <Tooltip content="Add workspace">
-                <Link
-                  to="/"
-                  className="text-text-muted hover:text-text-main hover:bg-surface-secondary/80 focus-visible:ring-accent/40 click-press flex h-7 w-7 items-center justify-center rounded-lg border border-transparent transition-[color,background-color,transform] duration-150 focus-visible:ring-2 focus-visible:outline-none"
-                  aria-label="Add workspace"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Link>
+                <IconButton as={Link} to="/" size="compact" aria-label="Add workspace">
+                  <Plus className="icon-compact shrink-0" />
+                </IconButton>
               </Tooltip>
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2.5 pb-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         {isDraggingOverSidebar && (
-          <div className="border-accent/40 bg-accent/[0.04] text-accent ring-accent/20 animate-in fade-in slide-in-from-top-1 pointer-events-none mb-2.5 flex items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-3 text-xs font-medium tracking-tight ring-1 backdrop-blur-xs transition-all duration-150">
+          <div className="border-accent/40 bg-surface-secondary text-role-control text-text-main pointer-events-none mb-3 flex items-center justify-center gap-2 rounded-lg border border-dashed p-3">
             <FolderUp className="h-4 w-4 shrink-0" />
             <span>Drop folder to open workspace</span>
           </div>
@@ -363,6 +377,8 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
           />
         ) : (
           <SidebarProjectList
+            providersById={providersById}
+            handlePinSession={handlePinSession}
             isLoading={isLoading}
             isError={isError}
             refetch={refetch}

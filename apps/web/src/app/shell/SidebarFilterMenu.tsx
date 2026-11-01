@@ -1,5 +1,5 @@
 import { ListFilter, Check } from 'lucide-react';
-import { Switch, Tooltip } from '@agentctl/ui';
+import { Dropdown, IconButton, Tooltip } from '@agentctl/ui';
 
 export type SortByOption = 'lastActive' | 'name' | 'createdAt';
 
@@ -27,101 +27,77 @@ export function SidebarFilterMenu({
   onSettingsChange,
 }: SidebarFilterMenuProps) {
   return (
-    <div className="relative flex items-center">
-      <Tooltip content="Filter & Sort">
-        <button
-          type="button"
-          onClick={onToggle}
-          className={`hover:text-text-main text-text-muted hover:bg-surface-secondary/70 flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-colors ${
-            isOpen ? 'text-accent bg-accent/10 border-accent/30' : 'border-transparent'
-          }`}
-          aria-label="Filter & Sort"
-        >
-          <ListFilter className="h-3.5 w-3.5" />
-        </button>
-      </Tooltip>
-
-      {isOpen && (
-        <>
-          <button
+    <Dropdown.Root
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (open === isOpen) return;
+        if (open) onToggle();
+        else onClose();
+      }}
+    >
+      <Tooltip content="Filter and sort">
+        <Dropdown.Trigger asChild>
+          <IconButton
             type="button"
-            aria-label="Close filter menu"
-            className="fixed inset-0 z-30 cursor-default border-none bg-transparent outline-none"
-            onClick={onClose}
-          />
-          <div className="border-border/70 bg-surface/95 animate-in fade-in slide-in-from-top-1.5 absolute top-full right-0 z-40 mt-1.5 w-52 rounded-xl border p-2 font-sans text-xs shadow-2xl backdrop-blur-xl">
-            <div className="text-text-muted/60 mb-1 px-2 text-[10px] font-semibold tracking-wider uppercase">
-              Sort by
-            </div>
-            <div className="space-y-0.5">
-              {(
-                [
-                  { id: 'lastActive', label: 'Last active' },
-                  { id: 'name', label: 'Project name' },
-                  { id: 'createdAt', label: 'Date created' },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    onSettingsChange({ sortBy: opt.id });
-                    onClose();
-                  }}
-                  className={`hover:bg-surface-secondary/80 flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
-                    sortBy === opt.id
-                      ? 'text-accent font-semibold'
-                      : 'text-text-muted hover:text-text-main font-normal'
-                  }`}
-                >
-                  <span>{opt.label}</span>
-                  {sortBy === opt.id && <Check className="text-accent h-3.5 w-3.5" />}
-                </button>
-              ))}
-            </div>
-
-            <div className="border-border/30 my-1.5 border-t" />
-
-            <div className="text-text-muted/60 mb-1 px-2 text-[10px] font-semibold tracking-wider uppercase">
-              Filter
-            </div>
-            <div className="space-y-0.5">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSettingsChange({ gitOnly: !gitOnly });
-                }}
-                className="hover:bg-surface-secondary/80 text-text-muted hover:text-text-main flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors"
-              >
-                <span>Git repositories only</span>
-                <Switch
-                  checked={gitOnly}
-                  size="sm"
-                  aria-label="Git repos only"
-                  className="pointer-events-none"
-                />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSettingsChange({ showArchived: !showArchived });
-                }}
-                className="hover:bg-surface-secondary/80 text-text-muted hover:text-text-main flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors"
-              >
-                <span>Show archived</span>
-                <Switch
-                  checked={showArchived}
-                  size="sm"
-                  aria-label="Show archived sessions"
-                  className="pointer-events-none"
-                />
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+            size="compact"
+            aria-label="Filter and sort"
+            className="motion-disclosure data-[state=open]:bg-surface-tertiary/60 active:transform-none active:opacity-100"
+          >
+            <ListFilter className="icon-compact" />
+          </IconButton>
+        </Dropdown.Trigger>
+      </Tooltip>
+      <Dropdown.Portal>
+        <Dropdown.Content align="end" className="w-52">
+          <div className="text-role-eyebrow text-text-muted px-2 py-2">Sort by</div>
+          {(
+            [
+              { id: 'lastActive', label: 'Last active' },
+              { id: 'name', label: 'Project name' },
+              { id: 'createdAt', label: 'Date created' },
+            ] as const
+          ).map((option) => (
+            <Dropdown.Item
+              key={option.id}
+              role="menuitemradio"
+              aria-checked={sortBy === option.id}
+              onSelect={() => onSettingsChange({ sortBy: option.id })}
+              className="text-role-control min-h-8 justify-between gap-2"
+            >
+              <span>{option.label}</span>
+              {sortBy === option.id && (
+                <Check className="icon-inline text-text-muted" aria-hidden="true" />
+              )}
+            </Dropdown.Item>
+          ))}
+          <Dropdown.Separator />
+          <div className="text-role-eyebrow text-text-muted px-2 py-2">Filter</div>
+          <Dropdown.Item
+            role="menuitemcheckbox"
+            aria-checked={gitOnly}
+            onSelect={(event) => {
+              event.preventDefault();
+              onSettingsChange({ gitOnly: !gitOnly });
+            }}
+            className="text-role-control min-h-8 justify-between gap-2"
+          >
+            <span>Git repositories only</span>
+            {gitOnly && <Check className="icon-inline text-text-muted" aria-hidden="true" />}
+          </Dropdown.Item>
+          <Dropdown.Item
+            role="menuitemcheckbox"
+            aria-checked={showArchived}
+            onSelect={(event) => {
+              event.preventDefault();
+              onSettingsChange({ showArchived: !showArchived });
+            }}
+            className="text-role-control min-h-8 justify-between gap-2"
+          >
+            <span>Show archived</span>
+            {showArchived && <Check className="icon-inline text-text-muted" aria-hidden="true" />}
+          </Dropdown.Item>
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown.Root>
   );
 }

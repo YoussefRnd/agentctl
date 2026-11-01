@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, sql, isNull, inArray, or } from 'drizzle-orm';
 import { projects, sessionEvents, sessions, type DbClient } from '@agentctl/core/db';
 import { projectsContract, sessionRowSchema } from '@agentctl/shared';
 import type { z } from 'zod';
@@ -13,19 +13,48 @@ export class ProjectQueries {
     const { search, gitOnly, sortBy = 'lastActive', sortOrder = 'desc' } = query;
     const allProjects = await this.db.select().from(projects);
     const allSessions = await this.db.select().from(sessions);
-    const sessionsWithUserActivity = new Set(
-      (
-        await this.db
-          .selectDistinct({ sessionId: sessionEvents.sessionId })
-          .from(sessionEvents)
-          .where(
+    // Summarize root activity without shipping transcripts or issuing a query per session.
+    const activityRows = await this.db
+      .select({
+        sessionId: sessionEvents.sessionId,
+        hasUserActivity: sql<number>`max(case when ${sessionEvents.type} = 'text'
+          and json_extract(${sessionEvents.data}, '$.role') = 'user' then 1 else 0 end)`,
+        latestActivityEventId: sql<number>`max(case when
+        (${sessionEvents.type} = 'text' and json_extract(${sessionEvents.data}, '$.role') = 'provider')
+        or (${sessionEvents.type} = 'approval_request' and json_extract(${sessionEvents.data}, '$.requiresApproval') = 1)
+        or (${sessionEvents.type} = 'status' and json_extract(${sessionEvents.data}, '$.status') in
+          ('turn_end', 'prompt_failed', 'runtime_error', 'elicitation_requested')
+          and coalesce(json_extract(${sessionEvents.data}, '$.diagnosticOnly'), 0) = 0)
+        then ${sessionEvents.id} else 0 end)`,
+        turnStartedId: sql<number>`max(case when json_extract(${sessionEvents.data}, '$.status') = 'turn_started' then ${sessionEvents.id} else 0 end)`,
+        turnEndId: sql<number>`max(case when json_extract(${sessionEvents.data}, '$.status') = 'turn_end' then ${sessionEvents.id} else 0 end)`,
+        failedId: sql<number>`max(case when json_extract(${sessionEvents.data}, '$.status') = 'turn_end'
+        and json_extract(${sessionEvents.data}, '$.stopReason') = 'error' then ${sessionEvents.id} else 0 end)`,
+        stoppedId: sql<number>`max(case when json_extract(${sessionEvents.data}, '$.status') = 'turn_end'
+        and json_extract(${sessionEvents.data}, '$.stopReason') in ('cancelled', 'canceled') then ${sessionEvents.id} else 0 end)`,
+        inputId: sql<number>`max(case when json_extract(${sessionEvents.data}, '$.status') = 'elicitation_requested'
+        and not exists (select 1 from session_events response
+          where response.session_id = session_events.session_id and response.type = 'status'
+          and json_extract(response.data, '$.status') = 'elicitation_responded'
+          and json_extract(response.data, '$.elicitationId') = json_extract(session_events.data, '$.elicitation.id'))
+        then ${sessionEvents.id} else 0 end)`,
+      })
+      .from(sessionEvents)
+      .where(
+        and(
+          or(
+            isNull(sessionEvents.parentEventId),
+            eq(sessionEvents.type, 'approval_request'),
             and(
-              eq(sessionEvents.type, 'text'),
-              sql`json_extract(${sessionEvents.data}, '$.role') = 'user'`,
+              eq(sessionEvents.type, 'status'),
+              sql`json_extract(${sessionEvents.data}, '$.status') = 'elicitation_requested'`,
             ),
-          )
-      ).map((row) => row.sessionId),
-    );
+          ),
+          inArray(sessionEvents.type, ['text', 'status', 'approval_request']),
+        ),
+      )
+      .groupBy(sessionEvents.sessionId);
+    const activityBySession = new Map(activityRows.map((row) => [row.sessionId, row]));
 
     const sessionsByProject = new Map<string, typeof allSessions>();
     for (const session of allSessions) {
@@ -49,7 +78,22 @@ export class ProjectQueries {
           .map((session) =>
             sessionRowSchema.parse({
               ...session,
-              hasUserActivity: sessionsWithUserActivity.has(session.id),
+              hasUserActivity: Boolean(activityBySession.get(session.id)?.hasUserActivity),
+              latestActivityEventId: activityBySession.get(session.id)?.latestActivityEventId ?? 0,
+              sidebarActivity: (() => {
+                const activity = activityBySession.get(session.id);
+                if (session.status === 'needs_attention') return 'approval';
+                if (session.status === 'error') return 'failed';
+                if (session.status === 'running')
+                  return activity &&
+                    activity.inputId > Math.max(activity.turnStartedId, activity.turnEndId)
+                    ? 'input'
+                    : 'working';
+                if (!activity?.turnEndId) return 'idle';
+                if (activity.turnEndId === activity.failedId) return 'failed';
+                if (activity.turnEndId === activity.stoppedId) return 'stopped';
+                return 'completed';
+              })(),
             }),
           ),
         lastActiveTime: lastSessionUpdate,

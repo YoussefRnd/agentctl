@@ -29,5 +29,11 @@ export type SidebarProject = Pick<ProjectListRow, 'id' | 'name' | 'path' | 'isGi
     | 'mode'
     | 'worktreePath'
     | 'hasUserActivity'
+    | 'selectedProvider'
+    | 'selectedModel'
+    | 'pinnedAt'
+    | 'lastReadEventId'
+    | 'latestActivityEventId'
+    | 'sidebarActivity'
   >[];
 };

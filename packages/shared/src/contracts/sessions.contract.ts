@@ -116,6 +116,8 @@ export const sessionsContract = {
     }),
     body: z.object({
       title: z.string().optional(),
+      pinned: z.boolean().optional(),
+      lastReadEventId: z.number().int().nonnegative().optional(),
       mode: z.enum(['local', 'worktree']).optional(),
       approvalMode: z.enum(['review', 'auto_approve', 'yolo']).optional(),
       persona: z.string().optional(),

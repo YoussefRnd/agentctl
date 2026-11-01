@@ -112,3 +112,20 @@ These screenshots use disposable fixture data:
   focus trapping, Escape dismissal, and focus restoration. Toasts use theme text and viewport bounds.
 - Slash-command and context suggestions use the composer as a floating anchor, flip when necessary,
   and bound their scrolling list to the available viewport height without moving typing focus.
+
+## Session sidebar composition
+
+The sidebar uses the existing typography, icon, control and motion roles and retains the shared
+glass surfaces and Catppuccin themes. Session titles share a fixed unread gutter, provider logos
+use a muted theme backing, and branch details retain space when activity labels wrap. Project
+actions appear above the header on interaction instead of reserving space while hidden.
+
+Filter and sort uses the shared Dropdown with checked menu items, keyboard navigation, Escape
+dismissal and focus restoration. Search, session actions and footer controls reuse the existing
+SearchBar, Button, IconButton and Kbd components. Sidebar disclosure controls stay geometrically
+stable; live working/loading indicators retain reduced-motion support.
+
+An isolated browser fixture using the real sidebar components was checked in Mocha and Latte,
+at 280px and 240px sidebar widths and 13px/20px UI font settings. The check covered long titles,
+branch truncation, pending activity, pinning, search results and keyboard filtering. No shared UI
+foundation or primitive implementation changed during this pass.

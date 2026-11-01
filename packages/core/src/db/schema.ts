@@ -80,6 +80,8 @@ export const sessions = sqliteTable('sessions', {
   contextUsedTokens: integer('context_used_tokens'),
   contextLimit: integer('context_limit').notNull().default(DEFAULT_CONTEXT_LIMIT),
   estimatedCost: real('estimated_cost').notNull().default(0.0),
+  pinnedAt: integer('pinned_at', { mode: 'timestamp_ms' }),
+  lastReadEventId: integer('last_read_event_id').notNull().default(0),
   lastHeartbeat: integer('last_heartbeat', { mode: 'timestamp' }),
   closedAt: integer('closed_at', { mode: 'timestamp' }),
   availableCommands: text('available_commands').notNull().default('[]'),

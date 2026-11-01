@@ -4,7 +4,7 @@ import { searchSessionEvents, type SearchResultItem } from '@agentctl/api-client
 import type { SearchEventType } from '@agentctl/shared';
 import { MessageSquare, Wrench, BrainCircuit, Loader2, SearchX, RotateCw } from 'lucide-react';
 import { AgentIcon, RelativeTime } from '@/shared';
-import { cn } from '@agentctl/ui';
+import { Button, cn } from '@agentctl/ui';
 
 interface SidebarTranscriptResultsProps {
   searchQuery: string;
@@ -27,25 +27,25 @@ function getEventBadge(type: SearchEventType) {
       return {
         label: 'User',
         icon: MessageSquare,
-        color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+        color: 'text-text-muted',
       };
     case 'tool':
       return {
         label: 'Tool',
         icon: Wrench,
-        color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+        color: 'text-text-muted',
       };
     case 'thought':
       return {
         label: 'Thought',
         icon: BrainCircuit,
-        color: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
+        color: 'text-text-muted',
       };
     case 'agent':
       return {
         label: 'Agent',
         icon: AgentIcon,
-        color: 'text-accent bg-accent/10 border-accent/20',
+        color: 'text-text-muted',
       };
   }
 }
@@ -65,9 +65,7 @@ function HighlightedSnippet({ item }: { item: SearchResultItem }) {
   return (
     <span>
       {before}
-      <span className="text-accent bg-accent/15 rounded-xs px-0.5 font-semibold underline underline-offset-2">
-        {match}
-      </span>
+      <span className="text-text-main bg-accent/15 rounded-sm px-0.5 font-medium">{match}</span>
       {after}
     </span>
   );
@@ -112,7 +110,7 @@ export function SidebarTranscriptResults({
   return (
     <div className="flex flex-col space-y-2">
       {/* Event Type Filter Pills */}
-      <div className="no-scrollbar flex items-center gap-1 overflow-x-auto px-1 py-1 select-none">
+      <div className="no-scrollbar flex items-center gap-1 overflow-x-auto py-1 select-none">
         {FILTER_TYPES.map((filter) => (
           <button
             key={filter.id}
@@ -121,9 +119,9 @@ export function SidebarTranscriptResults({
               setActiveFilter(filter.id);
             }}
             className={cn(
-              'shrink-0 cursor-pointer rounded-md px-2 py-0.5 text-[10.5px] font-medium transition-colors',
+              'text-role-control control-compact motion-disclosure focus-visible:ring-accent/40 shrink-0 cursor-pointer rounded-md focus-visible:ring-2 focus-visible:outline-none',
               activeFilter === filter.id
-                ? 'bg-accent/20 text-accent font-semibold'
+                ? 'bg-surface-tertiary/60 text-text-main'
                 : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/50',
             )}
           >
@@ -134,34 +132,36 @@ export function SidebarTranscriptResults({
 
       {/* Results Content */}
       {isSearching ? (
-        <div className="text-text-muted/60 flex flex-col items-center justify-center py-10">
-          <Loader2 className="text-accent mb-2 h-5 w-5 animate-spin" />
-          <span className="text-xs">Searching transcript messages...</span>
+        <div className="text-text-muted flex flex-col items-center justify-center py-10">
+          <Loader2 className="icon-prominent mb-2 animate-spin motion-reduce:animate-none" />
+          <span className="text-role-control">Searching messages</span>
         </div>
       ) : isError ? (
-        <div className="text-text-muted/60 flex flex-col items-center justify-center px-4 py-8 text-center">
-          <p className="text-xs font-medium">Could not search transcript messages</p>
-          <button
+        <div className="text-text-muted flex flex-col items-center justify-center px-4 py-8 text-center">
+          <p className="text-role-control">Could not search transcript messages</p>
+          <Button
             type="button"
+            variant="ghost"
+            size="compact"
             onClick={() => {
               void refetch();
             }}
-            className="text-accent hover:bg-accent/10 mt-2 flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium transition-colors"
+            className="mt-2 gap-2"
           >
-            <RotateCw className="h-3.5 w-3.5" />
+            <RotateCw className="icon-compact" />
             Retry
-          </button>
+          </Button>
         </div>
       ) : results.length === 0 ? (
-        <div className="text-text-muted/60 flex flex-col items-center justify-center px-4 py-8 text-center">
+        <div className="text-text-muted flex flex-col items-center justify-center px-4 py-8 text-center">
           <SearchX className="mb-1.5 h-5 w-5 opacity-40" />
-          <p className="text-xs font-medium">No transcript matches found</p>
-          <p className="text-text-muted/40 mt-0.5 text-[11px]">
+          <p className="text-role-control">No transcript matches found</p>
+          <p className="text-role-caption text-text-muted mt-1">
             Try a different keyword or event filter
           </p>
         </div>
       ) : (
-        <div className="space-y-1.5 px-0.5">
+        <div className="space-y-2">
           {results.map((item) => {
             const badge = getEventBadge(item.eventType);
             const Icon = badge.icon;
@@ -180,36 +180,32 @@ export function SidebarTranscriptResults({
                     onSelectResult(item.sessionId, item.eventId);
                   }
                 }}
-                className="group border-border/20 bg-surface-secondary/20 hover:border-accent/30 hover:bg-surface-secondary/60 flex cursor-pointer flex-col gap-1.5 rounded-xl border p-2.5 text-left transition-[border-color,background-color] duration-150"
+                className="motion-disclosure group border-border/30 hover:bg-surface-secondary/60 focus-visible:ring-accent/40 flex min-w-0 cursor-pointer flex-col gap-2 rounded-lg border p-3 text-left focus-visible:ring-2 focus-visible:outline-none"
               >
                 {/* Header: Project / Session + Event Type + Time */}
-                <div className="flex items-center justify-between gap-1.5 text-[11px]">
+                <div className="text-role-label flex items-center justify-between gap-2 font-normal">
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
                     <span
                       className={cn(
-                        'py-0.2 inline-flex shrink-0 items-center gap-1 rounded border px-1.5 text-[9.5px] font-semibold tracking-wider uppercase',
+                        'text-role-caption inline-flex shrink-0 items-center gap-1',
                         badge.color,
                       )}
                     >
-                      <Icon className="h-2.5 w-2.5" />
+                      <Icon className="icon-inline" />
                       <span>{badge.label}</span>
                     </span>
-                    <span className="text-text-muted/80 truncate font-mono text-[11px] font-medium">
-                      {item.projectName}
-                    </span>
-                    <span className="text-text-muted/40">/</span>
-                    <span className="text-text-main group-hover:text-accent truncate text-[11.5px] font-medium transition-colors">
-                      {item.sessionTitle}
-                    </span>
+                    <span className="text-text-muted truncate font-mono">{item.projectName}</span>
+                    <span className="text-text-muted">/</span>
+                    <span className="text-text-main truncate font-medium">{item.sessionTitle}</span>
                   </div>
 
-                  <span className="text-text-muted/40 shrink-0 font-mono text-[10px]">
+                  <span className="text-role-caption text-text-muted shrink-0 tabular-nums">
                     <RelativeTime value={item.createdAt} />
                   </span>
                 </div>
 
                 {/* Body: Matched snippet */}
-                <div className="text-text-muted/80 group-hover:text-text-main/90 line-clamp-2 font-mono text-[11px] leading-relaxed transition-colors">
+                <div className="text-role-code text-text-muted line-clamp-2 leading-relaxed">
                   <HighlightedSnippet item={item} />
                 </div>
               </div>

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Terminal } from 'lucide-react';
 import { AgentIcon } from './AgentIcon';
 import type { ProviderDiscovery } from '@agentctl/shared';
@@ -51,18 +52,34 @@ export function ProviderIcon({
 
 interface ProviderIconUrlProps {
   url: string | null;
+  size?: 'inline' | 'compact';
   fallback?: 'agent' | 'terminal' | 'bot' | 'sparkles';
   className?: string;
 }
 
-export function ProviderIconUrl({ url, fallback = 'agent', className }: ProviderIconUrlProps) {
-  if (url) {
-    return <img src={url} alt="" className={`h-5 w-5 object-contain ${className ?? ''}`} />;
+export function ProviderIconUrl({
+  url,
+  size,
+  fallback = 'agent',
+  className,
+}: ProviderIconUrlProps) {
+  const sizeClass =
+    size === 'inline' ? 'icon-inline' : size === 'compact' ? 'icon-compact' : undefined;
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  if (url && url !== failedUrl) {
+    return (
+      <img
+        src={url}
+        alt=""
+        onError={() => setFailedUrl(url)}
+        className={`${sizeClass ?? 'h-5 w-5'} object-contain ${className ?? ''}`}
+      />
+    );
   }
 
   if (fallback === 'terminal') {
-    return <Terminal className={`h-4 w-4 ${className ?? ''}`} />;
+    return <Terminal className={`${sizeClass ?? 'h-4 w-4'} ${className ?? ''}`} />;
   }
 
-  return <AgentIcon className={`h-4 w-4 ${className ?? ''}`} />;
+  return <AgentIcon className={`${sizeClass ?? 'h-4 w-4'} ${className ?? ''}`} />;
 }

@@ -228,6 +228,11 @@ restarts. These documents are removed when the chat is deleted. Interrupted
 handoff delivery and exhausted native context recover in a fresh provider conversation inside the
 same chat; the current message is preserved.
 
+The session sidebar shows provider logos, branch/worktree details, activity and unread results.
+Pin sessions from their options menu to keep them above recent chats within a workspace. Pins and
+read markers survive restarts; unread activity clears when the latest history is viewed in a focused
+window. Existing chats start as read when upgrading.
+
 ## Configuration
 
 Copy `.env.example` to `.env` for local development. Important settings include:

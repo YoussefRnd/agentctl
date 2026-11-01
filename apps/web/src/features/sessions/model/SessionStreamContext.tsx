@@ -6,6 +6,7 @@ import { sessionDetailOptions } from '../api/sessionNavigation';
 import { useSessionEvents } from './useSessionEvents';
 import { getSessionTurnState, type SessionTurnState } from './sessionTurnState';
 import { useSessionMessageQueue } from './useSessionMessageQueue';
+import { useSessionReadMarker } from './useSessionReadMarker';
 import { useSessionStatusEffects } from './useSessionStatusEffects';
 
 interface PlanItem {
@@ -100,6 +101,16 @@ export function SessionStreamProvider({
     isLoadingOlder: isLoadingOlderHistory,
     historyError,
   } = useSessionEvents(sessionId);
+
+  const latestVisibleEventId = visibleEvents.reduce(
+    (latest, event) => Math.max(latest, event.id),
+    0,
+  );
+  useSessionReadMarker(
+    sessionId,
+    latestVisibleEventId,
+    !isLoadingEvents && !hasNewerHistory && !historyError,
+  );
 
   const { data: sessionData } = useQuery({ ...sessionDetailOptions(sessionId) });
   const {

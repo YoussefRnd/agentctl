@@ -49,6 +49,8 @@ function session(
     mode: 'local',
     worktreePath: '/repo',
     hasUserActivity: true,
+    selectedProvider: 'test-provider',
+    selectedModel: 'default',
   };
 }
 const projects: SidebarProject[] = [

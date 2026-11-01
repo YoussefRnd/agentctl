@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import type { FastifyInstance } from 'fastify';
+import { eq } from 'drizzle-orm';
 import { WorkspaceManager, SessionWorkspace, GitMutex } from '@agentctl/core/git';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -21,12 +22,13 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('Projects routes', () => {
   let app: FastifyInstance;
+  let db: ReturnType<typeof createDatabase>;
   const projectId = '10000000-0000-4000-8000-000000000001';
   const sessionWithMessageId = '20000000-0000-4000-8000-000000000001';
   const emptySessionId = '20000000-0000-4000-8000-000000000002';
 
   beforeEach(async () => {
-    const db = createDatabase(':memory:');
+    db = createDatabase(':memory:');
 
     await db.insert(projects).values({
       id: projectId,
@@ -109,6 +111,127 @@ describe('Projects routes', () => {
       { id: emptySessionId, hasUserActivity: false },
       { id: sessionWithMessageId, hasUserActivity: true },
     ]);
+  });
+  it('persists pins and bounded read markers without changing activity or restoring a workspace', async () => {
+    const append = async (
+      type: 'text' | 'status',
+      data: object,
+      parentEventId: number | null = null,
+    ) =>
+      (
+        await db
+          .insert(sessionEvents)
+          .values({
+            sessionId: sessionWithMessageId,
+            type,
+            data: JSON.stringify(data),
+            parentEventId,
+          })
+          .returning()
+      )[0].id;
+    const get = async () =>
+      (await app.inject({ method: 'GET', url: '/api/projects' }))
+        .json()[0]
+        .sessions.find((s: { id: string }) => s.id === sessionWithMessageId);
+    const patch = (payload: object) =>
+      app.inject({ method: 'PATCH', url: `/api/sessions/${sessionWithMessageId}`, payload });
+    const assistant = await append('text', { role: 'provider', content: 'Done' });
+    expect((await get()).latestActivityEventId).toBe(assistant);
+    const completed = await append('status', { status: 'turn_end', stopReason: 'end_turn' });
+    await append('text', { role: 'provider', content: 'Child transcript' }, assistant);
+    expect(await get()).toMatchObject({
+      latestActivityEventId: completed,
+      sidebarActivity: 'completed',
+      lastReadEventId: 0,
+      selectedProvider: 'test-provider',
+    });
+    const reconcile = vi.spyOn(app.sessionManager, 'reconnectSession');
+    const restore = vi.spyOn(app.sessionManager, 'ensureWorkspaceAvailable');
+    await db
+      .update(sessions)
+      .set({ mode: 'worktree', updatedAt: new Date('2026-09-14T12:00:00.000Z') })
+      .where(eq(sessions.id, sessionWithMessageId));
+    expect((await patch({ pinned: true, lastReadEventId: completed })).statusCode).toBe(200);
+    const pinned = await get();
+    expect(pinned.pinnedAt).toBeTruthy();
+    expect(pinned.lastReadEventId).toBe(completed);
+    expect(pinned.lastActivityAt).toBe('2026-01-02T00:00:00.000Z');
+    expect(pinned.updatedAt).toBe('2026-09-14T12:00:00.000Z');
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(restore).not.toHaveBeenCalled();
+    expect((await patch({ pinned: true, lastReadEventId: assistant })).statusCode).toBe(200);
+    expect(await get()).toMatchObject({ pinnedAt: pinned.pinnedAt, lastReadEventId: completed });
+    await append('status', { status: 'session_info_update', title: 'Renamed' });
+    await append('text', { role: 'user', content: 'Next question' });
+    await append('text', { role: 'thought', content: 'Internal reasoning' });
+    await append('status', { status: 'runtime_error', diagnosticOnly: true });
+    await db.insert(sessionEvents).values({
+      sessionId: sessionWithMessageId,
+      type: 'approval_request',
+      data: JSON.stringify({ requiresApproval: false, status: 'approved' }),
+    });
+    expect((await get()).latestActivityEventId).toBe(completed);
+    const failed = await append('status', { status: 'turn_end', stopReason: 'error' });
+    expect(await get()).toMatchObject({
+      sidebarActivity: 'failed',
+      latestActivityEventId: failed,
+      lastReadEventId: completed,
+    });
+    expect(
+      (await patch({ pinned: false, lastReadEventId: Number.MAX_SAFE_INTEGER })).statusCode,
+    ).toBe(200);
+    expect(await get()).toMatchObject({ pinnedAt: null, lastReadEventId: failed });
+    const next = await append('text', { role: 'provider', content: 'New result' });
+    expect((await get()).latestActivityEventId).toBe(next);
+    expect(next).toBeGreaterThan((await get()).lastReadEventId);
+    expect((await patch({ lastReadEventId: -1 })).statusCode).toBe(400);
+  });
+
+  it('distinguishes pending input, approvals, active work and cancelled turns', async () => {
+    await db
+      .update(sessions)
+      .set({ status: 'running' })
+      .where(eq(sessions.id, sessionWithMessageId));
+    const append = async (data: object) =>
+      db
+        .insert(sessionEvents)
+        .values({ sessionId: sessionWithMessageId, type: 'status', data: JSON.stringify(data) });
+    const activity = async () =>
+      (await app.inject({ method: 'GET', url: '/api/projects' }))
+        .json()[0]
+        .sessions.find((s: { id: string }) => s.id === sessionWithMessageId).sidebarActivity;
+    await append({ status: 'elicitation_requested', elicitation: { id: 'first' } });
+    await append({ status: 'elicitation_requested', elicitation: { id: 'second' } });
+    await append({ status: 'elicitation_responded', elicitationId: 'second' });
+    expect(await activity()).toBe('input');
+    await append({ status: 'elicitation_responded', elicitationId: 'first' });
+    expect(await activity()).toBe('working');
+    await db
+      .update(sessions)
+      .set({ status: 'needs_attention' })
+      .where(eq(sessions.id, sessionWithMessageId));
+    expect(await activity()).toBe('approval');
+    await append({ status: 'elicitation_requested', elicitation: { id: 'stale' } });
+    await append({ status: 'turn_end', stopReason: 'cancelled' });
+    await db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, sessionWithMessageId));
+    expect(await activity()).toBe('stopped');
+    await append({ status: 'turn_started' });
+    await db
+      .update(sessions)
+      .set({ status: 'running' })
+      .where(eq(sessions.id, sessionWithMessageId));
+    expect(await activity()).toBe('working');
+    const [parent] = await db.select({ id: sessionEvents.id }).from(sessionEvents).limit(1);
+    await db.insert(sessionEvents).values({
+      sessionId: sessionWithMessageId,
+      type: 'status',
+      parentEventId: parent.id,
+      data: JSON.stringify({
+        status: 'elicitation_requested',
+        elicitation: { id: 'child-input' },
+      }),
+    });
+    expect(await activity()).toBe('input');
   });
 });
 
