@@ -1,5 +1,6 @@
 import { memo } from 'react';
-import type { ElementType, ComponentPropsWithoutRef, ReactNode } from 'react';
+import { actionVariants } from '../controlStyles.js';
+import type { ElementType, ComponentPropsWithRef, ReactNode } from 'react';
 import { Spinner } from '../../components/Spinner.js';
 import { cn } from '../../utils.js';
 
@@ -17,14 +18,7 @@ export interface IconButtonBaseProps {
 
 export type IconButtonProps<T extends ElementType = 'button'> = IconButtonBaseProps & {
   as?: T;
-} & Omit<ComponentPropsWithoutRef<T>, keyof IconButtonBaseProps | 'as'>;
-
-const variants: Record<IconButtonVariant, string> = {
-  solid: 'bg-accent text-brand-crust hover:opacity-90 click-press',
-  outline: 'bg-transparent border border-border hover:bg-white/5 text-text-main click-press',
-  ghost: 'bg-transparent hover:bg-white/5 text-text-muted hover:text-text-main click-press',
-  danger: 'bg-danger text-white hover:opacity-90 click-press',
-};
+} & Omit<ComponentPropsWithRef<T>, keyof IconButtonBaseProps | 'as'>;
 
 const sizes: Record<IconButtonSize, string> = {
   sm: 'h-6 w-6 text-xs p-1',
@@ -53,7 +47,8 @@ const IconButtonComponent = <T extends ElementType = 'button'>({
 
   return (
     <Component
-      className={cn(baseStyles, variants[variant], sizes[size], className)}
+      type={Component === 'button' ? 'button' : undefined}
+      className={cn(baseStyles, actionVariants[variant], sizes[size], className)}
       disabled={disabled || isLoading}
       aria-label={ariaLabel}
       aria-busy={isLoading ? true : undefined}

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { sessionKeys, projectKeys } from '@/shared/lib/queryKeys';
 import { useFrameScheduler } from '@/shared/hooks/useFrameScheduler';
 import { ChildConversation } from './ChildConversation';
@@ -217,7 +218,7 @@ export function MainFeed() {
                     void queryClient.invalidateQueries({ queryKey: sessionKeys.review(sessionId) });
                     void queryClient.invalidateQueries({ queryKey: projectKeys.all });
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : 'Failed to restore session');
+                    toast.error(getErrorMessage(err, 'Failed to restore session'));
                   }
                 })();
               }}

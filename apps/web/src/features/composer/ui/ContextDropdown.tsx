@@ -1,6 +1,7 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { useEffect, useRef } from 'react';
 import { Folder, Code2, Check, Search, AlertCircle } from 'lucide-react';
-import { cn, Spinner } from '@agentctl/ui';
+import { Spinner } from '@agentctl/ui';
 import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem, ContextItemType } from '@agentctl/api-client';
 import { FileIcon } from '@/shared';
@@ -92,28 +93,16 @@ export function ContextDropdown({
         }
       />
 
-      <div
-        role="group"
-        aria-label="Filter context"
-        className="flex shrink-0 items-center gap-1 px-3 pt-2.5 pb-2"
-      >
-        {filters.map(({ type, label }) => (
-          <button
-            key={type}
-            type="button"
-            aria-pressed={filterType === type}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => setFilterType(type)}
-            className={cn(
-              'focus-visible:ring-accent cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
-              filterType === type
-                ? 'bg-accent/15 text-accent'
-                : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
-            )}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="shrink-0 px-3 pt-2.5 pb-2">
+        <SegmentedControl
+          aria-label="Filter context"
+          className="w-fit"
+          typographyClassName="text-xs font-medium"
+          preserveFocus
+          value={filterType}
+          onValueChange={setFilterType}
+          options={filters.map(({ type, label }) => ({ value: type, label }))}
+        />
       </div>
 
       <SuggestionList id={listboxId} label="Workspace context" loading={isLoading}>

@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import {
   ColumnsIcon,
   RowsIcon,
@@ -350,93 +351,49 @@ export function ReviewHeader({
         />
 
         {files.length > 0 && onStatusFilterChange && (
-          <div className="-my-1 flex [scrollbar-width:none] items-center gap-1 overflow-x-auto py-1">
-            <button
-              type="button"
-              onClick={() => onStatusFilterChange('all')}
-              className={cn(
-                'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
-                statusFilter === 'all'
-                  ? 'bg-accent/15 text-accent border-accent/30 border font-semibold shadow-xs'
-                  : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
-              )}
-            >
-              <span>All</span>
-              <span className="font-mono tabular-nums opacity-60">{statusCounts.all}</span>
-            </button>
-
-            {statusCounts.modified > 0 && (
-              <button
-                type="button"
-                onClick={() =>
-                  onStatusFilterChange(statusFilter === 'modified' ? 'all' : 'modified')
-                }
-                className={cn(
-                  'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
-                  statusFilter === 'modified'
-                    ? 'border border-amber-500/30 bg-amber-500/15 font-semibold text-amber-300 shadow-xs'
-                    : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
-                )}
-              >
-                <span className="font-mono font-bold text-amber-400">M</span>
-                <span>Modified</span>
-                <span className="font-mono tabular-nums opacity-60">{statusCounts.modified}</span>
-              </button>
-            )}
-
-            {statusCounts.untracked > 0 && (
-              <button
-                type="button"
-                onClick={() =>
-                  onStatusFilterChange(statusFilter === 'untracked' ? 'all' : 'untracked')
-                }
-                className={cn(
-                  'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
-                  statusFilter === 'untracked'
-                    ? 'border border-emerald-500/30 bg-emerald-500/15 font-semibold text-emerald-300 shadow-xs'
-                    : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
-                )}
-              >
-                <span className="font-mono font-bold text-emerald-400">U</span>
-                <span>Untracked</span>
-                <span className="font-mono tabular-nums opacity-60">{statusCounts.untracked}</span>
-              </button>
-            )}
-
-            {statusCounts.staged > 0 && (
-              <button
-                type="button"
-                onClick={() => onStatusFilterChange(statusFilter === 'staged' ? 'all' : 'staged')}
-                className={cn(
-                  'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
-                  statusFilter === 'staged'
-                    ? 'border border-emerald-500/30 bg-emerald-500/15 font-semibold text-emerald-300 shadow-xs'
-                    : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
-                )}
-              >
-                <span className="font-mono font-bold text-emerald-400">S</span>
-                <span>Staged</span>
-                <span className="font-mono tabular-nums opacity-60">{statusCounts.staged}</span>
-              </button>
-            )}
-
-            {statusCounts.deleted > 0 && (
-              <button
-                type="button"
-                onClick={() => onStatusFilterChange(statusFilter === 'deleted' ? 'all' : 'deleted')}
-                className={cn(
-                  'flex h-5 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition-colors active:scale-[0.96]',
-                  statusFilter === 'deleted'
-                    ? 'border border-rose-500/30 bg-rose-500/15 font-semibold text-rose-300 shadow-xs'
-                    : 'text-text-muted/70 hover:text-text-main hover:bg-surface-secondary border border-transparent',
-                )}
-              >
-                <span className="font-mono font-bold text-rose-400">D</span>
-                <span>Deleted</span>
-                <span className="font-mono tabular-nums opacity-60">{statusCounts.deleted}</span>
-              </button>
-            )}
-          </div>
+          <SegmentedControl
+            aria-label="Filter changed files"
+            className="[scrollbar-width:none] flex-nowrap overflow-x-auto"
+            typographyClassName="text-[10px] font-medium"
+            itemClassName="h-5 gap-1 px-1.5 py-0"
+            value={statusFilter}
+            onValueChange={(filter) =>
+              onStatusFilterChange(filter !== 'all' && filter === statusFilter ? 'all' : filter)
+            }
+            options={(['all', 'modified', 'untracked', 'staged', 'deleted'] as const)
+              .filter((state) => state === 'all' || statusCounts[state] > 0)
+              .map((state) => ({
+                value: state,
+                className: statusFilter === state ? 'font-semibold shrink-0' : 'shrink-0',
+                icon:
+                  state !== 'all' ? (
+                    <span
+                      className={cn(
+                        'font-mono font-bold',
+                        statusFilter === state ? 'text-current' : STATE_LETTER[state].color,
+                      )}
+                    >
+                      {STATE_LETTER[state].letter}
+                    </span>
+                  ) : undefined,
+                label: (
+                  <>
+                    <span>
+                      {
+                        {
+                          all: 'All',
+                          modified: 'Modified',
+                          untracked: 'Untracked',
+                          staged: 'Staged',
+                          deleted: 'Deleted',
+                        }[state]
+                      }
+                    </span>
+                    <span className="font-mono tabular-nums opacity-60">{statusCounts[state]}</span>
+                  </>
+                ),
+              }))}
+          />
         )}
       </div>
     </div>

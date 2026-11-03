@@ -1,6 +1,6 @@
 import { McpServerCardLayout, McpToolDiscoveryHint } from './SettingsListLayouts';
 import { type ReactNode } from 'react';
-import { SkeletonSurface } from '@agentctl/ui';
+import { SkeletonSurface, StatusBadge } from '@agentctl/ui';
 import { Button, Switch, Select } from '@agentctl/ui';
 import { Server, ChevronDown, Edit2, Trash2 } from 'lucide-react';
 import type { McpServerData, McpToolData } from '../api/useMcpServers';
@@ -50,22 +50,31 @@ export function McpServerCardPresentation({
   const statusBadge: ReactNode = (() => {
     if (server.status === 'connected') {
       return (
-        <span className="rounded border border-emerald-500/30 bg-emerald-500/5 px-1.5 py-0.5 text-[8px] font-black tracking-widest text-emerald-400 uppercase">
-          CONNECTED
-        </span>
+        <StatusBadge
+          status="success"
+          appearance="plain"
+          label="CONNECTED"
+          className="rounded border border-emerald-500/30 bg-emerald-500/5 px-1.5 py-0.5 text-[8px] font-black tracking-widest text-emerald-400 uppercase"
+        />
       );
     }
     if (server.status === 'disconnected') {
       return (
-        <span className="rounded border border-red-500/30 bg-red-500/5 px-1.5 py-0.5 text-[8px] font-black tracking-widest text-red-400 uppercase">
-          DISCONNECTED
-        </span>
+        <StatusBadge
+          status="error"
+          appearance="plain"
+          label="DISCONNECTED"
+          className="rounded border border-red-500/30 bg-red-500/5 px-1.5 py-0.5 text-[8px] font-black tracking-widest text-red-400 uppercase"
+        />
       );
     }
     return (
-      <span className="border-border/40 text-text-muted rounded border px-1.5 py-0.5 text-[8px] font-black tracking-widest uppercase opacity-50">
-        DISABLED
-      </span>
+      <StatusBadge
+        status="idle"
+        appearance="plain"
+        label="DISABLED"
+        className="border-border/40 text-text-muted rounded border px-1.5 py-0.5 text-[8px] font-black tracking-widest uppercase opacity-50"
+      />
     );
   })();
 

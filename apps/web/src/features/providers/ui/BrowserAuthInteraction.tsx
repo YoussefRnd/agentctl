@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { useState } from 'react';
 import { providerService } from '@agentctl/api-client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,7 +21,7 @@ export function BrowserAuthInteraction({
       await providerService.respondAuthInteraction(providerId, request.id, accepted);
       await queryClient.invalidateQueries({ queryKey: providerKeys.all });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not continue sign-in');
+      toast.error(getErrorMessage(error, 'Could not continue sign-in'));
     } finally {
       setBusy(false);
     }

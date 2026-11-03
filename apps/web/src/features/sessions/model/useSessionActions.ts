@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { projectKeys } from '@/shared/lib/queryKeys';
 import { useSession } from './SessionConfigContext';
 import { useSessionQueue } from './SessionStreamContext';
@@ -140,7 +141,7 @@ export function useSessionActions() {
           return true;
         }
         if (!isWaiting) cancelPromptPerformance(sessionId);
-        const message = error instanceof Error ? error.message : 'Message was not accepted';
+        const message = getErrorMessage(error, 'Message was not accepted');
         useMessageQueueStore
           .getState()
           .setMessageStatus(sessionId, clientMessageId, 'failed', message);
@@ -183,7 +184,7 @@ export function useSessionActions() {
         void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       })
       .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'Failed to respond to approval');
+        toast.error(getErrorMessage(err, 'Failed to respond to approval'));
       });
   };
 
@@ -198,7 +199,7 @@ export function useSessionActions() {
         void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       })
       .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'Failed to respond to approval');
+        toast.error(getErrorMessage(err, 'Failed to respond to approval'));
       });
   };
 
@@ -213,7 +214,7 @@ export function useSessionActions() {
         void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       })
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : 'Failed to stop agent';
+        const message = getErrorMessage(err, 'Failed to stop agent');
         toast.error(message);
       });
   };

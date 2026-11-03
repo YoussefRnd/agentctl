@@ -11,7 +11,7 @@ export interface FormFieldProps {
   children: React.ReactElement<FieldControlProps>;
 }
 
-interface FieldControlProps {
+export interface FieldControlProps {
   id?: string;
   required?: boolean;
   'aria-describedby'?: string;
@@ -34,6 +34,38 @@ export function useFormField(): FormFieldContextValue | null {
   return React.useContext(FormFieldContext);
 }
 
+/** Headless form wiring for custom layouts: it adds no elements or presentation classes. */
+export function useFieldAccessibility(
+  {
+    id: explicitId,
+    description,
+    error,
+    required,
+  }: Pick<FormFieldProps, 'id' | 'description' | 'error' | 'required'>,
+  existing: FieldControlProps = {},
+) {
+  const generatedId = React.useId();
+  const id = existing.id ?? explicitId ?? generatedId;
+  const descriptionId = description && !error ? `${id}-desc` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy =
+    [...new Set([existing['aria-describedby'], descriptionId].filter(Boolean))].join(' ') ||
+    undefined;
+  return {
+    id,
+    descriptionId,
+    errorId,
+    controlProps: {
+      id,
+      required: existing.required ?? required,
+      'aria-required': existing['aria-required'] ?? required,
+      'aria-describedby': describedBy,
+      'aria-errormessage': errorId ?? existing['aria-errormessage'],
+      'aria-invalid': error ? true : existing['aria-invalid'],
+    } satisfies FieldControlProps,
+  };
+}
+
 export function FormField({
   id: explicitId,
   label,
@@ -43,21 +75,13 @@ export function FormField({
   className,
   children,
 }: FormFieldProps) {
-  const generatedId = React.useId();
-  const id = explicitId ?? generatedId;
-  const descriptionId = description && !error ? `${id}-desc` : undefined;
-  const errorId = error ? `${id}-error` : undefined;
-  const childId = children.props.id ?? id;
-  const describedBy =
-    [children.props['aria-describedby'], descriptionId].filter(Boolean).join(' ') || undefined;
-  const control = React.cloneElement(children, {
+  const {
     id: childId,
-    required: children.props.required ?? required,
-    'aria-required': children.props['aria-required'] ?? required,
-    'aria-describedby': describedBy,
-    'aria-errormessage': errorId,
-    'aria-invalid': error ? true : children.props['aria-invalid'],
-  });
+    descriptionId,
+    errorId,
+    controlProps,
+  } = useFieldAccessibility({ id: explicitId, description, error, required }, children.props);
+  const control = React.cloneElement(children, controlProps);
 
   const contextValue = React.useMemo<FormFieldContextValue>(
     () => ({

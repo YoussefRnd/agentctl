@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import {
   SyncIcon,
   CheckIcon,
@@ -130,7 +131,7 @@ export function ApplySessionDialog({
       await onConfirm(message, isWorktree ? targetBranch : undefined);
       onOpenChange(false);
     } catch (err) {
-      const detail = err instanceof Error ? err.message : 'Failed to apply changes';
+      const detail = getErrorMessage(err, 'Failed to apply changes');
       setError(committed ? `Your changes were committed. ${detail}` : detail);
       if (isWorktree) void preview.refetch();
     } finally {

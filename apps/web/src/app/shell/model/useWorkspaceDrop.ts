@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -60,7 +61,7 @@ export function useWorkspaceDrop(projects: SidebarProject[]) {
       void navigate(`/?project=${encodeURIComponent(project.id)}`);
       toast.success('Workspace opened');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to open workspace';
+      const msg = getErrorMessage(err, 'Failed to open workspace');
       toast.error(msg);
       if (!resolvedPath) {
         void navigate('/');

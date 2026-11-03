@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { getToolOverride } from './McpUtils';
 
 interface McpToolPermissionEditorProps {
@@ -39,25 +40,17 @@ export function McpToolPermissionEditor({
         )}
       </div>
 
-      <div className="bg-surface-secondary/85 border-border/20 flex gap-1 rounded-xl border p-1 select-none">
-        {overrideOptions.map((opt) => (
-          <button
-            key={opt.value}
-            id={`mcp-tool-override-${toolName}-${opt.value}`}
-            type="button"
-            onClick={() => {
-              onUpdateOverride(shortName, opt.value);
-            }}
-            className={`label-3xs cursor-pointer rounded-lg px-2.5 py-1 transition-colors ${
-              currentOverride === opt.value
-                ? 'bg-accent text-brand-crust shadow-sm'
-                : 'text-text-muted hover:text-text-main hover:bg-white/5'
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label={`Approval policy for ${shortName}`}
+        typographyClassName="label-3xs"
+        itemClassName="px-2.5 py-1"
+        value={currentOverride}
+        onValueChange={(value) => onUpdateOverride(shortName, value)}
+        options={overrideOptions.map((opt) => ({
+          ...opt,
+          id: `mcp-tool-override-${toolName}-${opt.value}`,
+        }))}
+      />
     </div>
   );
 }

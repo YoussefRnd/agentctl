@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { useState, useEffect, useRef, useMemo, useId, type ElementType } from 'react';
 import { Dialog, DialogContent, DialogTitle, SearchHighlight, cn, Spinner } from '@agentctl/ui';
 import { useNavigate } from 'react-router-dom';
@@ -366,32 +367,23 @@ export function CommandPalette() {
           </div>
         </div>
 
-        <div
-          role="group"
-          aria-label="Filter search results"
-          className="flex shrink-0 flex-wrap items-center gap-1 px-3 pt-2.5 pb-2"
-        >
-          {(['All', ...categories] as const).map((category) => (
-            <button
-              key={category}
-              type="button"
-              aria-pressed={filter === category}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                setFilter(category);
-                setSelectedIndex(0);
-                inputRef.current?.focus();
-              }}
-              className={cn(
-                'focus-visible:ring-accent cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
-                filter === category
-                  ? 'bg-accent/15 text-accent'
-                  : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
-              )}
-            >
-              {category}
-            </button>
-          ))}
+        <div className="shrink-0 px-3 pt-2.5 pb-2">
+          <SegmentedControl
+            aria-label="Filter search results"
+            className="w-fit"
+            typographyClassName="text-xs font-medium"
+            preserveFocus
+            value={filter}
+            onValueChange={(category) => {
+              setFilter(category);
+              setSelectedIndex(0);
+              inputRef.current?.focus();
+            }}
+            options={(['All', ...categories] as const).map((category) => ({
+              value: category,
+              label: category,
+            }))}
+          />
         </div>
 
         {isPending && (

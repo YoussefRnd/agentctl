@@ -40,10 +40,13 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
 }) {
+  const previousFocus = React.useRef<HTMLElement | null>(null);
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -55,6 +58,18 @@ function DialogContent({
             className,
           )}
           {...props}
+          onOpenAutoFocus={(event) => {
+            previousFocus.current =
+              document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            onOpenAutoFocus?.(event);
+          }}
+          onCloseAutoFocus={(event) => {
+            onCloseAutoFocus?.(event);
+            if (!event.defaultPrevented && previousFocus.current?.isConnected) {
+              event.preventDefault();
+              previousFocus.current.focus();
+            }
+          }}
         >
           {children}
           {showCloseButton && (

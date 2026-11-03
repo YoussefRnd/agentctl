@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { ProvidersSettingsPresentation } from './ProvidersSettingsPresentation';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -27,7 +28,7 @@ export function ProvidersSettingsView() {
       URL.revokeObjectURL(url);
       toast.success('Transport diagnostics exported');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to export diagnostics');
+      toast.error(getErrorMessage(error, 'Failed to export diagnostics'));
     } finally {
       setIsExportingDiagnostics(false);
     }

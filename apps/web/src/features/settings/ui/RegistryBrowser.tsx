@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { RegistryCardsLayout } from './SettingsListLayouts';
 import { RegistryToolbarLayout } from './SettingsListLayouts';
 import { RegistryCardSkeleton } from './RegistryCard';
@@ -143,30 +144,16 @@ export function RegistryBrowserPresentation({ settings, api }: RegistryBrowserPr
           </>
         }
         filters={
-          <>
-            {(
-              [
-                { id: 'all', label: 'All' },
-                { id: 'installed', label: 'Installed' },
-                { id: 'not_installed', label: 'Available' },
-              ] as const
-            ).map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setStatusFilter(id);
-                }}
-                className={`cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-                  statusFilter === id
-                    ? 'bg-accent text-brand-crust shadow-sm'
-                    : 'text-text-muted hover:text-text-main hover:bg-surface/60'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </>
+          <SegmentedControl
+            aria-label="Filter providers"
+            value={statusFilter}
+            onValueChange={setStatusFilter}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'installed', label: 'Installed' },
+              { value: 'not_installed', label: 'Available' },
+            ]}
+          />
         }
       />
 

@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { useId, useMemo, useState } from 'react';
 import { useSession } from '../model/SessionConfigContext';
 import {
@@ -5,7 +6,7 @@ import {
   resolveAgentFeatures,
   type AgentConfigOption,
 } from '@agentctl/shared';
-import { Select, cn, Spinner } from '@agentctl/ui';
+import { Select, Spinner } from '@agentctl/ui';
 
 const DEFAULT_FILTER_CATEGORIES: string[] = [];
 
@@ -105,34 +106,27 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
           )}
         </div>
 
-        <div
-          role="group"
+        <SegmentedControl
           aria-labelledby={labelId}
           aria-describedby={description ? descriptionId : undefined}
-          className="border-border/40 bg-surface-secondary/40 flex shrink-0 items-center rounded-lg border p-0.5"
-        >
-          {binaryOptions.map((opt) => {
-            const isSelected =
-              String(option.currentValue).toLowerCase() === opt.value.toLowerCase();
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                disabled={disabled}
-                aria-pressed={isSelected}
-                onClick={() => onChange(opt.value)}
-                className={cn(
-                  'focus-visible:ring-accent cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors select-none focus-visible:ring-2 focus-visible:outline-none disabled:cursor-default disabled:opacity-50',
-                  isSelected
-                    ? 'bg-accent/15 text-accent border-accent/40 font-semibold shadow-xs'
-                    : 'text-text-muted hover:text-text-main border-transparent',
-                )}
-              >
-                {opt.name}
-              </button>
-            );
-          })}
-        </div>
+          className="shrink-0"
+          typographyClassName="text-xs font-medium"
+          value={
+            binaryOptions.find(
+              (opt) => String(option.currentValue).toLowerCase() === opt.value.toLowerCase(),
+            )?.value ?? String(option.currentValue)
+          }
+          onValueChange={onChange}
+          disabled={disabled}
+          options={binaryOptions.map((opt) => ({
+            value: opt.value,
+            label: opt.name,
+            className:
+              String(option.currentValue).toLowerCase() === opt.value.toLowerCase()
+                ? 'font-semibold'
+                : undefined,
+          }))}
+        />
       </div>
     );
   }

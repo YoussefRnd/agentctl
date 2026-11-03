@@ -1,6 +1,8 @@
-import { Card, Button, Input, Select } from '@agentctl/ui';
+import { SegmentedControl } from '@agentctl/ui';
+import { Card, Button, Input, Select, useFieldAccessibility } from '@agentctl/ui';
+import { useEffect, useRef } from 'react';
 import { Settings, X, Check } from 'lucide-react';
-import { type McpFormState, approvalPolicyOptions } from './McpUtils';
+import { type McpFormState, type McpFormError, approvalPolicyOptions } from './McpUtils';
 
 interface McpServerFormProps {
   formState: McpFormState;
@@ -8,6 +10,8 @@ interface McpServerFormProps {
   onSave: () => void;
   onCancel: () => void;
   isEditing: boolean;
+  error?: McpFormError | null;
+  isSaving?: boolean;
 }
 
 type Setter = <K extends keyof McpFormState>(key: K, value: McpFormState[K]) => void;
@@ -18,7 +22,30 @@ export function McpServerForm({
   onSave,
   onCancel,
   isEditing,
+  error,
+  isSaving = false,
 }: McpServerFormProps) {
+  const nameRef = useRef<HTMLInputElement>(null);
+  const commandRef = useRef<HTMLInputElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
+  const nameField = useFieldAccessibility({
+    id: 'mcp-name',
+    required: true,
+    error: error?.field === 'name' ? error.message : undefined,
+  });
+  const commandField = useFieldAccessibility({
+    id: 'mcp-command',
+    required: true,
+    error: error?.field === 'command' ? error.message : undefined,
+  });
+  const urlField = useFieldAccessibility({
+    id: 'mcp-url',
+    required: true,
+    error: error?.field === 'url' ? error.message : undefined,
+  });
+  useEffect(() => {
+    if (error) ({ name: nameRef, command: commandRef, url: urlRef })[error.field].current?.focus();
+  }, [error]);
   const set: Setter = (key, value) => {
     onChange({ ...formState, [key]: value });
   };
@@ -33,6 +60,7 @@ export function McpServerForm({
         <Button
           variant="ghost"
           onClick={onCancel}
+          disabled={isSaving}
           aria-label="Cancel server form"
           className="hover:bg-surface-secondary/40 h-7 w-7 cursor-pointer rounded-md p-0"
         >
@@ -46,7 +74,9 @@ export function McpServerForm({
             Display Name
           </label>
           <Input
-            id="mcp-name"
+            {...nameField.controlProps}
+            ref={nameRef}
+            disabled={isSaving}
             placeholder="Server name (e.g. GitHub, Filesystem, Cloudflare MCP)"
             value={formState.name ?? ''}
             onChange={(e) => {
@@ -58,24 +88,17 @@ export function McpServerForm({
 
         <div className="space-y-1">
           <span className="text-text-muted label-3xs block opacity-70">Server Type</span>
-          <div className="border-border/30 bg-surface/40 flex w-fit max-w-full flex-wrap gap-1 rounded-lg border p-1">
-            {(['local', 'remote'] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => {
-                  set('type', type);
-                }}
-                className={`min-w-0 cursor-pointer rounded-md px-3 py-1 text-center text-xs font-semibold transition-colors ${
-                  formState.type === type
-                    ? 'bg-accent text-brand-crust shadow-sm'
-                    : 'text-text-muted hover:text-text-main hover:bg-surface-secondary/40'
-                }`}
-              >
-                {type === 'local' ? 'Local (stdio)' : 'Remote (Stateless HTTP / SSE)'}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            aria-label="Server Type"
+            value={formState.type}
+            onValueChange={(type) => set('type', type)}
+            disabled={isSaving}
+            className="w-fit"
+            options={[
+              { value: 'local', label: 'Local (stdio)' },
+              { value: 'remote', label: 'Remote (Stateless HTTP / SSE)' },
+            ]}
+          />
         </div>
 
         {formState.type === 'local' ? (
@@ -85,7 +108,9 @@ export function McpServerForm({
                 Command
               </label>
               <Input
-                id="mcp-command"
+                {...commandField.controlProps}
+                ref={commandRef}
+                disabled={isSaving}
                 placeholder="Command (e.g. npx, uvx, python)"
                 value={formState.command ?? ''}
                 onChange={(e) => {
@@ -101,6 +126,7 @@ export function McpServerForm({
               </label>
               <Input
                 id="mcp-args"
+                disabled={isSaving}
                 placeholder="Arguments (e.g. -y @modelcontextprotocol/server-filesystem /path)"
                 value={formState.args ?? ''}
                 onChange={(e) => {
@@ -116,6 +142,7 @@ export function McpServerForm({
               </label>
               <textarea
                 id="mcp-env"
+                disabled={isSaving}
                 placeholder="KEY=VALUE (one per line)"
                 value={formState.env ?? ''}
                 onChange={(e) => {
@@ -132,7 +159,9 @@ export function McpServerForm({
                 Endpoint URL
               </label>
               <Input
-                id="mcp-url"
+                {...urlField.controlProps}
+                ref={urlRef}
+                disabled={isSaving}
                 placeholder="https://mcp.your-domain.com/mcp or https://... (Streamable HTTP)"
                 value={formState.url ?? ''}
                 onChange={(e) => {
@@ -148,6 +177,7 @@ export function McpServerForm({
               </label>
               <textarea
                 id="mcp-headers"
+                disabled={isSaving}
                 placeholder="Authorization=Bearer your_token_here (one per line)&#10;Mcp-Version=2026-07-28"
                 value={formState.headers ?? ''}
                 onChange={(e) => {
@@ -170,6 +200,7 @@ export function McpServerForm({
           </label>
           <Select
             id="mcp-form-approval-policy"
+            disabled={isSaving}
             value={formState.approvalPolicy}
             onChange={(val) => {
               set('approvalPolicy', val as McpFormState['approvalPolicy']);
@@ -183,12 +214,14 @@ export function McpServerForm({
           <Button
             variant="ghost"
             onClick={onCancel}
+            disabled={isSaving}
             className="hover:bg-surface-secondary/40 text-text-muted h-8 cursor-pointer rounded-lg px-3.5 text-xs font-medium"
           >
             Cancel
           </Button>
           <Button
             onClick={onSave}
+            disabled={isSaving}
             className="bg-accent hover:bg-accent/80 text-brand-crust flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-4 text-xs font-bold"
           >
             <Check className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -196,6 +229,20 @@ export function McpServerForm({
           </Button>
         </div>
       </div>
+      {error && (
+        <p
+          id={
+            error.field === 'name'
+              ? nameField.errorId
+              : error.field === 'command'
+                ? commandField.errorId
+                : urlField.errorId
+          }
+          className="sr-only"
+        >
+          {error.message}
+        </p>
+      )}
     </Card>
   );
 }

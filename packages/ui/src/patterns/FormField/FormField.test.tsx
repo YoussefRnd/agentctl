@@ -53,3 +53,32 @@ describe('FormField', () => {
     expect(alert?.textContent).toBe('Invalid email address');
   });
 });
+
+it('retains an existing control ID and external accessible description and error', () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      <>
+        <p id="external-hint">Account name</p>
+        <p id="external-error">Already taken</p>
+        <FormField id="wrapper" label="Name" description="Use your full name">
+          <Input
+            id="custom-name"
+            aria-describedby="external-hint"
+            aria-invalid
+            aria-errormessage="external-error"
+          />
+        </FormField>
+      </>,
+    ),
+  );
+  const input = container.querySelector('input')!;
+  expect(container.querySelector('label')!.htmlFor).toBe('custom-name');
+  expect(input.getAttribute('aria-describedby')).toBe('external-hint custom-name-desc');
+  expect(document.getElementById('custom-name-desc')?.textContent).toBe('Use your full name');
+  expect(input.getAttribute('aria-errormessage')).toBe('external-error');
+  expect(input.getAttribute('aria-invalid')).toBe('true');
+  act(() => root.unmount());
+});

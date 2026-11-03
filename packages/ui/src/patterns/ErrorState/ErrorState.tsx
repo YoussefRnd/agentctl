@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { Button } from '../../primitives/Button/index.js';
+import { FeedbackContent } from '../FeedbackContent.js';
 import { cn } from '../../utils.js';
 
 export interface ErrorStateProps {
@@ -29,19 +30,18 @@ export function ErrorState({
       <div className="bg-danger/10 text-danger mb-3 rounded-full p-2.5">
         <AlertCircle className="h-5 w-5" />
       </div>
-      <h3 className="text-role-title text-text-main">{title}</h3>
-      {message && (
-        <p className="text-role-body text-text-muted/80 mt-1 max-w-sm min-w-0 [overflow-wrap:anywhere]">
-          {message}
-        </p>
-      )}
-      {onRetry && (
-        <div className="mt-4">
-          <Button variant="outline" size="compact" onClick={onRetry}>
-            {retryLabel}
-          </Button>
-        </div>
-      )}
+      <FeedbackContent
+        title={title}
+        description={message}
+        descriptionClassName="text-role-body text-text-muted/80 mt-1 max-w-sm min-w-0 [overflow-wrap:anywhere]"
+        action={
+          onRetry ? (
+            <Button variant="outline" size="compact" onClick={onRetry}>
+              {retryLabel}
+            </Button>
+          ) : undefined
+        }
+      />
     </div>
   );
 }

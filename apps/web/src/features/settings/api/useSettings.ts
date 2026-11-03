@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '@agentctl/api-client';
@@ -25,7 +26,7 @@ export function useSettings() {
       queryClient.setQueryData(settingsKeys.all, data);
     },
     onError: (error: unknown) => {
-      toast.error(error instanceof Error ? error.message : 'Failed to update settings');
+      toast.error(getErrorMessage(error, 'Failed to update settings'));
     },
   });
 

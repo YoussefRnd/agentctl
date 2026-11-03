@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { NativeSessionImport } from '@/features/sessions';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -247,29 +248,18 @@ export function QuickLaunchSessionDialog({
             <label className="text-text-muted text-[11px] font-bold tracking-wider uppercase">
               Workspace Mode
             </label>
-            <div className="border-border/40 bg-surface/40 flex w-full gap-1 rounded-lg border p-1">
-              {[
+            <SegmentedControl
+              aria-label="Workspace Mode"
+              fullWidth
+              value={selectedMode}
+              onValueChange={setSelectedMode}
+              options={[
                 ...(allowWorktree
-                  ? [{ mode: 'worktree' as const, label: 'Worktree (Branch)' }]
+                  ? [{ value: 'worktree' as const, label: 'Worktree (Branch)' }]
                   : []),
-                { mode: 'local' as const, label: 'Local (In-place)' },
-              ].map(({ mode, label }) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => {
-                    setSelectedMode(mode);
-                  }}
-                  className={`flex flex-1 cursor-pointer items-center justify-center rounded-md py-1.5 text-xs font-semibold transition-colors ${
-                    selectedMode === mode
-                      ? 'bg-accent text-brand-crust shadow-sm'
-                      : 'text-text-muted hover:text-text-main hover:bg-surface/60'
-                  }`}
-                >
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
+                { value: 'local', label: 'Local (In-place)' },
+              ]}
+            />
           </div>
 
           {/* Optional Task Slug */}

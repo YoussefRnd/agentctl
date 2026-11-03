@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { useWorkspaceDrop } from './model/useWorkspaceDrop';
 import { providerKeys, sessionKeys, projectKeys } from '@/shared/lib/queryKeys';
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -312,39 +313,33 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
         />
 
         {searchQuery.trim().length > 0 ? (
-          <div className="bg-surface-secondary/50 flex items-center gap-1 rounded-lg p-1">
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTab('workspaces');
-              }}
-              className={cn(
-                'control-compact text-role-control motion-disclosure focus-visible:ring-accent/40 flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md focus-visible:ring-2 focus-visible:outline-none',
-                searchTab === 'workspaces'
-                  ? 'bg-surface-tertiary/60 text-text-main'
-                  : 'text-text-muted hover:text-text-main',
-              )}
-            >
-              <span>Workspaces</span>
-              <span className="text-role-caption text-text-muted tabular-nums">
-                ({totalSessionsCount})
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTab('messages');
-              }}
-              className={cn(
-                'control-compact text-role-control motion-disclosure focus-visible:ring-accent/40 flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md focus-visible:ring-2 focus-visible:outline-none',
-                searchTab === 'messages'
-                  ? 'bg-surface-tertiary/60 text-text-main'
-                  : 'text-text-muted hover:text-text-main',
-              )}
-            >
-              <span>Messages</span>
-            </button>
-          </div>
+          <SegmentedControl
+            aria-label="Search sidebar"
+            fullWidth
+            value={searchTab}
+            onValueChange={setSearchTab}
+            typographyClassName="control-compact text-role-control motion-disclosure"
+            itemClassName="gap-2 px-2 py-0"
+            options={[
+              {
+                value: 'workspaces',
+                label: (
+                  <>
+                    <span>Workspaces</span>
+                    <span
+                      className={cn(
+                        'text-role-caption tabular-nums',
+                        searchTab === 'workspaces' ? 'text-current opacity-60' : 'text-text-muted',
+                      )}
+                    >
+                      ({totalSessionsCount})
+                    </span>
+                  </>
+                ),
+              },
+              { value: 'messages', label: 'Messages' },
+            ]}
+          />
         ) : (
           <div className="flex min-h-7 items-center justify-between px-2">
             <div className="flex items-center gap-1.5">

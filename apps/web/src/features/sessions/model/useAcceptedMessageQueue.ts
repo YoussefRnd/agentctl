@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { useMemo, useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@agentctl/api-client';
@@ -47,7 +48,7 @@ export function useAcceptedMessageQueue(sessionId: string) {
         }
         return true;
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Could not update the queue');
+        toast.error(getErrorMessage(error, 'Could not update the queue'));
         return false;
       } finally {
         // Conflicts often mean the message was dispatched while the user acted.

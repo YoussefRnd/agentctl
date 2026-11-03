@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { FeedbackContent } from '../FeedbackContent.js';
 import { cn } from '../../utils.js';
 
 export interface EmptyStateProps {
@@ -18,11 +19,12 @@ export function EmptyState({ icon, title, description, action, className }: Empt
       )}
     >
       {icon && <div className="text-text-muted/60 mb-3">{icon}</div>}
-      <h3 className="text-role-title text-text-main">{title}</h3>
-      {description && (
-        <p className="text-role-body text-text-muted/80 mt-1 max-w-sm">{description}</p>
-      )}
-      {action && <div className="mt-4">{action}</div>}
+      <FeedbackContent
+        title={title}
+        description={description}
+        action={action}
+        descriptionClassName="text-role-body text-text-muted/80 mt-1 max-w-sm"
+      />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { sessionKeys, projectKeys } from '@/shared/lib/queryKeys';
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -161,7 +162,7 @@ export function useConversationHistory({
         void navigate(`/sessions/${result.forkSessionId}`);
       }
     } catch (err) {
-      setRewindError(err instanceof Error ? err.message : 'Rewind failed');
+      setRewindError(getErrorMessage(err, 'Rewind failed'));
     } finally {
       historyMutationRef.current = false;
       setIsRewinding(false);
@@ -187,7 +188,7 @@ export function useConversationHistory({
       toast.success('Rewind undone');
       setRewindUndoState(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to undo rewind');
+      toast.error(getErrorMessage(e, 'Failed to undo rewind'));
     } finally {
       historyMutationRef.current = false;
       setIsUndoing(false);
@@ -225,7 +226,7 @@ export function useConversationHistory({
         toast.success('Prompt updated and restarted');
         return true;
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to update prompt');
+        toast.error(getErrorMessage(err, 'Failed to update prompt'));
         return false;
       } finally {
         historyMutationRef.current = false;

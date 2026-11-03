@@ -147,3 +147,13 @@ export const approvalPolicyOptions = [
   { value: 'auto_approve_all', label: 'AUTO-APPROVE ALL' },
   { value: 'deny_all', label: 'DENY ALL' },
 ];
+
+export type McpFormError = { field: 'name' | 'command' | 'url'; message: string };
+export function validateMcpForm(state: McpFormState): McpFormError | null {
+  if (!state.name.trim()) return { field: 'name', message: 'Name is required.' };
+  if (state.type === 'local' && !state.command.trim())
+    return { field: 'command', message: 'Command is required for local servers.' };
+  if (state.type === 'remote' && !state.url.trim())
+    return { field: 'url', message: 'URL is required for remote servers.' };
+  return null;
+}

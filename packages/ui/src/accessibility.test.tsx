@@ -120,3 +120,131 @@ it('opens tooltips on keyboard focus with an accessible description and closes w
   });
   expect(button.hasAttribute('aria-describedby')).toBe(false);
 });
+it('keeps action buttons out of form submission unless explicitly marked submit', () => {
+  const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
+  const action = vi.fn();
+  render(
+    <form onSubmit={submit}>
+      <Button onClick={action}>Action</Button>
+      <Button type="submit">Submit</Button>
+    </form>,
+  );
+  const [actionButton, submitButton] = document.querySelectorAll('button');
+  act(() => actionButton!.click());
+  expect(action).toHaveBeenCalledTimes(1);
+  expect(submit).not.toHaveBeenCalled();
+  act(() => submitButton!.click());
+  expect(submit).toHaveBeenCalledTimes(1);
+});
+it('restores focus for controlled dialogs opened without a DialogTrigger', async () => {
+  vi.useFakeTimers();
+  function Example() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <Button onClick={() => setOpen(true)}>Open confirmation</Button>
+        <ConfirmationModal
+          isOpen={open}
+          title="Remove item"
+          message="Confirm removal."
+          onCancel={() => setOpen(false)}
+          onConfirm={() => setOpen(false)}
+        />
+      </>
+    );
+  }
+  render(<Example />);
+  const opener = document.querySelector('button')!;
+  act(() => {
+    opener.focus();
+    opener.click();
+  });
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  await act(async () =>
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+  );
+  act(() => vi.advanceTimersByTime(0));
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement).toBe(opener);
+});
+
+it('blocks dismissal while confirming and allows cancellation after a failed attempt', () => {
+  const cancel = vi.fn();
+  const confirm = vi.fn();
+  render(
+    <ConfirmationModal
+      isOpen
+      title="Remove"
+      message="Remove item?"
+      onConfirm={confirm}
+      onCancel={cancel}
+    />,
+  );
+  const clickConfirm = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent === 'Proceed')!
+      .click();
+  act(clickConfirm);
+  expect(confirm).toHaveBeenCalledOnce();
+  act(() =>
+    root.render(
+      <ConfirmationModal
+        isOpen
+        isConfirming
+        title="Remove"
+        message="Remove item?"
+        onConfirm={confirm}
+        onCancel={cancel}
+      />,
+    ),
+  );
+  act(() =>
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    ),
+  );
+  expect(cancel).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-busy')).toBe('true');
+  expect(
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].every(
+      (button) => button.disabled,
+    ),
+  ).toBe(true);
+  act(() =>
+    root.render(
+      <ConfirmationModal
+        isOpen
+        title="Remove"
+        message="Remove item?"
+        onConfirm={confirm}
+        onCancel={cancel}
+      />,
+    ),
+  );
+  act(() =>
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    ),
+  );
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
+it('keeps a confirmation cancellable when its action leaves the controlled dialog open', () => {
+  const cancel = vi.fn();
+  render(
+    <ConfirmationModal
+      isOpen
+      title="Remove"
+      message="Remove item?"
+      onConfirm={() => {}}
+      onCancel={cancel}
+    />,
+  );
+  act(() =>
+    [...document.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent === 'Proceed')!
+      .click(),
+  );
+  act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  expect(cancel).toHaveBeenCalledOnce();
+});

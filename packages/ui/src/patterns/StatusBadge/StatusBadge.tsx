@@ -17,6 +17,8 @@ export interface StatusBadgeProps {
   size?: BadgeSize;
   pulse?: boolean;
   className?: string;
+  /** Reuse status semantics with an existing feature's exact classes and content. */
+  appearance?: 'badge' | 'plain';
 }
 
 const statusMap: Record<StatusType, { variant: BadgeVariant; defaultLabel: string; dot: boolean }> =
@@ -31,9 +33,24 @@ const statusMap: Record<StatusType, { variant: BadgeVariant; defaultLabel: strin
     neutral: { variant: 'surface', defaultLabel: 'Neutral', dot: false },
   };
 
-export function StatusBadge({ status, label, size = 'sm', pulse, className }: StatusBadgeProps) {
+export function StatusBadge({
+  status,
+  label,
+  size = 'sm',
+  pulse,
+  className,
+  appearance = 'badge',
+}: StatusBadgeProps) {
   const config = statusMap[status] ?? statusMap.neutral;
   const shouldPulse = pulse ?? status === 'running';
+
+  if (appearance === 'plain') {
+    return (
+      <span data-status={status} className={className}>
+        {label ?? config.defaultLabel}
+      </span>
+    );
+  }
 
   return (
     <Badge

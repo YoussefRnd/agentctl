@@ -3,6 +3,7 @@ export * from './primitives/Button/index.js';
 export * from './primitives/IconButton/index.js';
 export * from './primitives/Input/index.js';
 export * from './primitives/Select/index.js';
+export * from './primitives/SegmentedControl/index.js';
 export * from './primitives/Dialog/index.js';
 export * from './primitives/Dropdown/index.js';
 export * from './primitives/Popover/index.js';

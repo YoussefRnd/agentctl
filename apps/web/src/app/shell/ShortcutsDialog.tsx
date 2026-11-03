@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { useEffect, useId, useMemo, useRef, useState, type ElementType } from 'react';
 import {
   Dialog,
@@ -6,7 +7,6 @@ import {
   DialogDescription,
   Kbd,
   SearchHighlight,
-  cn,
 } from '@agentctl/ui';
 import { fuzzySearch } from '@agentctl/shared';
 import { Keyboard, Command, MessageSquareCode, GitPullRequest, Search, X } from 'lucide-react';
@@ -160,31 +160,22 @@ export function ShortcutsDialog() {
           </div>
         </div>
 
-        <div
-          role="group"
-          aria-label="Filter keyboard shortcuts"
-          className="flex shrink-0 flex-wrap items-center gap-1 px-3 pt-2.5 pb-2"
-        >
-          {(['All', ...categories] as const).map((category) => (
-            <button
-              key={category}
-              type="button"
-              aria-pressed={filter === category}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                setFilter(category);
-                inputRef.current?.focus();
-              }}
-              className={cn(
-                'focus-visible:ring-accent cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
-                filter === category
-                  ? 'bg-accent/15 text-accent'
-                  : 'text-text-muted hover:bg-surface-secondary hover:text-text-main',
-              )}
-            >
-              {category}
-            </button>
-          ))}
+        <div className="shrink-0 px-3 pt-2.5 pb-2">
+          <SegmentedControl
+            aria-label="Filter keyboard shortcuts"
+            className="w-fit"
+            typographyClassName="text-xs font-medium"
+            preserveFocus
+            value={filter}
+            onValueChange={(category) => {
+              setFilter(category);
+              inputRef.current?.focus();
+            }}
+            options={(['All', ...categories] as const).map((category) => ({
+              value: category,
+              label: category,
+            }))}
+          />
         </div>
 
         <div

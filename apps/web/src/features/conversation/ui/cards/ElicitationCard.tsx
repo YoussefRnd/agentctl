@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import React, { useState } from 'react';
 import {
   getElicitationValidationError,
@@ -84,9 +85,7 @@ export const ElicitationCard: React.FC<ElicitationCardProps> = ({
     try {
       await onRespond(elicitation.id, response);
     } catch (error) {
-      setResponseError(
-        error instanceof Error ? error.message : 'Could not submit the response. Try again.',
-      );
+      setResponseError(getErrorMessage(error, 'Could not submit the response. Try again.'));
     } finally {
       setSubmitting(false);
     }

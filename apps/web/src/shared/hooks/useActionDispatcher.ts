@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { useActionStore } from '../stores/useActionStore';
@@ -29,8 +30,7 @@ export const useActionDispatcher = () => {
         return result;
       } catch (error) {
         if (!silent) {
-          const message =
-            errorMessage ?? (error instanceof Error ? error.message : 'Action failed');
+          const message = errorMessage ?? getErrorMessage(error, 'Action failed');
           toast.error(message, { id: message });
         }
         return undefined;

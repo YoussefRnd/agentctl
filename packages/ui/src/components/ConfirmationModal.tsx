@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react';
+import { memo } from 'react';
 import { Button } from '../primitives/Button/index.js';
 import {
   Dialog,
@@ -32,8 +32,6 @@ export const ConfirmationModal = memo(function ConfirmationModal({
   isConfirming = false,
   type = 'info',
 }: ConfirmationModalProps) {
-  const confirmedRef = useRef(false);
-
   const isDestructive = type === 'brand-red' || type === 'danger';
   const isWarning = type === 'brand-peach' || type === 'warning';
 
@@ -49,11 +47,20 @@ export const ConfirmationModal = memo(function ConfirmationModal({
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        if (!open && !confirmedRef.current && !isConfirming) onCancel();
-        confirmedRef.current = false;
+        if (!open && !isConfirming) onCancel();
       }}
     >
-      <DialogContent showCloseButton={false} className="max-w-sm p-5">
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-sm p-5"
+        aria-busy={isConfirming || undefined}
+        onEscapeKeyDown={(event) => {
+          if (isConfirming) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (isConfirming) event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className={typeColorClass}>{title}</DialogTitle>
         </DialogHeader>
@@ -73,8 +80,7 @@ export const ConfirmationModal = memo(function ConfirmationModal({
           </Button>
           <Button
             onClick={() => {
-              confirmedRef.current = true;
-              onConfirm();
+              if (!isConfirming) onConfirm();
             }}
             disabled={isConfirming}
             className={`h-8 px-4 text-xs font-medium transition-colors active:scale-[0.97] ${confirmButtonClass}`}

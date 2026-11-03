@@ -409,6 +409,7 @@
         "apps/web/src/shared/lib/diff-highlighter.ts",
         "apps/web/src/shared/lib/diff-highlighter.worker.ts",
         "apps/web/src/shared/lib/diff-parser.ts",
+        "apps/web/src/shared/lib/feedback.ts",
         "apps/web/src/shared/lib/formatTokenCount.ts",
         "apps/web/src/shared/lib/notifications.ts",
         "apps/web/src/shared/lib/performanceRecorder.ts",

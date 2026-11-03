@@ -197,9 +197,7 @@ export function RegistryToolbarLayout({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 flex-1">{search}</div>
-      <div className="border-border/30 bg-surface/40 flex shrink-0 gap-1 rounded-xl border p-1">
-        {filters}
-      </div>
+      <div className="max-w-full shrink-0">{filters}</div>
     </div>
   );
 }

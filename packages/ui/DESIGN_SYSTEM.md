@@ -15,6 +15,14 @@ Shared primitives and semantic foundation classes are the source of truth for ap
 - `control-default`: 32px standard controls.
 - `control-large`: 36px prominent controls.
 - Use `Button`, `IconButton`, `Input`, and `Select` instead of recreating their interaction states.
+- Use `SegmentedControl` for mutually exclusive inline choices. Its default appearance is the existing
+  Theme Mode selector. Keep existing text sizes and weights through `typographyClassName`; compact
+  toolbars can retain their dimensions with `itemClassName`. Do not give each consumer a separate
+  selected-state palette or corner style. Dropdown menus, sliders and navigation tabs keep their own
+  interaction semantics.
+- Segmented controls expose one selected button and tab stop, arrow/Home/End navigation, disabled
+  skipping and RTL support. Use `preserveFocus` for pointer-operated search filters so input focus
+  stays in the associated search field.
 - Disclosure controls must remain geometrically stable. Use `motion-disclosure`; do not add click scaling.
 - Restrict `click-press` to primary or destructive actions.
 
@@ -66,8 +74,41 @@ Use `LoadingState`, `EmptyState`, `ErrorState`, and `StatusBadge` for consistent
 
 ## Radius hierarchy
 
-- Small items: `rounded-md`.
-- Standard controls and menus: `rounded-lg`.
-- Floating feature panels: `rounded-xl`.
-- Dialogs and major panels: `rounded-2xl`.
-- Pills and compact selectors: `rounded-full`.
+The foundation values remain `sm: 0.25rem`, `md: 0.5rem`, `lg: 0.75rem` and `xl: 1rem`.
+Compact and default controls use `--radius-md`; large controls use `--radius-lg`.
+Cards use `rounded-lg`; the shared dialog uses `rounded-xl`; pills and status dots use
+`rounded-full`. Established feature panels and selectors may have their own explicit rounding.
+Preserve those choices when sharing behavior; this table is not a bulk migration instruction.
+
+## Standardization without redesign
+
+Existing feature appearances are supported designs. Refactor behavior behind their current DOM,
+classes and slots. Do not replace custom segmented selectors with action buttons, apply new font
+roles to existing text, or bulk-normalize spacing, radii or palette classes. A visual redesign is
+separate work.
+
+1. **Status:** use `StatusBadge` for the shared status vocabulary. Its default badge appearance stays
+   unchanged. Use `appearance="plain"`, an explicit label and the feature's existing classes when
+   adopting it in an established inline status. This preserves the existing dot, icon, typography
+   and palette choices; it does not add a badge background or a second indicator.
+2. **Forms:** `FormField` owns the normal shared field layout. Custom forms use
+   `useFieldAccessibility` to share label/description/error IDs and required semantics without adding
+   layout wrappers. Keep validation rules in the feature. Focus the first invalid field, retain entered
+   data on failure, and clear an editor only after successful persistence. Existing validation copy
+   and presentation remain owned by the form.
+3. **Actions:** `Button` and `IconButton` share `actionVariants`. They default to `type="button"`;
+   submit actions explicitly use `type="submit"`. Loading blocks repeat activation. Icon actions need
+   an accessible name. Inline choice selectors use `SegmentedControl`, retaining their labels, icons and existing typography.
+4. **Dialogs:** use the existing Radix-based `Dialog` and `ConfirmationModal`. Controlled dialogs
+   restore the focused opener unless the consumer handles close focus. The caller owns confirmation
+   completion and pending state. Pending confirmations block Escape, outside dismissal and both
+   action buttons; failed operations keep the dialog available for retry or cancellation.
+5. **Feedback:** `EmptyState` and `ErrorState` share content slots while keeping their different
+   padding, icons and recovery behavior. The existing application toaster remains the success/error
+   host. `shared/lib/feedback.ts` owns safe error-copy fallback; operation owners retain their contextual
+   messages and notification options. Do not emit a second notification for the same mutation.
+6. **Type and geometry:** the existing foundation CSS remains the source of truth. `controlSizes`
+   shares the current compact/default/large aliases across buttons and inputs. Keep existing feature
+   overrides, user font settings and selector dimensions. The appearance-contract tests cover the
+   shared control variants, feedback, confirmation layout, theme modes, MCP form layouts and stylesheet
+   values. Change those baselines only for an intentional design change.

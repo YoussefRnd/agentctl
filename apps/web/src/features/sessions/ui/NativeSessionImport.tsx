@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { providerService } from '@agentctl/api-client';
@@ -46,7 +47,7 @@ export function NativeSessionImport({
       await queryClient.invalidateQueries({ queryKey: ['native-sessions', providerId, projectId] });
       onImported(result.sessionId);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to import session');
+      toast.error(getErrorMessage(error, 'Failed to import session'));
     } finally {
       setImporting(null);
     }

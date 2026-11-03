@@ -3,7 +3,7 @@ import { McpServerCardSkeleton } from './McpServerCard';
 import { SettingsListLayout } from './SettingsListLayouts';
 import { useState } from 'react';
 import type { McpToolData, useMcpServers } from '../api/useMcpServers';
-import { Card, Button, LoadingSkeleton } from '@agentctl/ui';
+import { Card, Button, LoadingSkeleton, ConfirmationModal } from '@agentctl/ui';
 import { Server, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -14,6 +14,8 @@ import {
   initialFormState,
   updateToolOverride,
   type McpFormState,
+  type McpFormError,
+  validateMcpForm,
 } from './McpUtils';
 import { McpServerForm } from './McpServerForm';
 import { McpServerCardPresentation } from './McpServerCard';
@@ -27,6 +29,9 @@ export function McpSettingsPresentation({
   tools: McpToolData[];
 }) {
   const { mcpServers, isLoading, addMcpServer, updateMcpServer, deleteMcpServer } = api;
+  const [formError, setFormError] = useState<McpFormError | null>(null);
+  const [deletingServer, setDeletingServer] = useState<McpServerData | null>(null);
+  const isSaving = api.isAdding || api.isUpdating;
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedServers, setExpandedServers] = useState<Record<string, boolean>>({});
@@ -37,6 +42,7 @@ export function McpSettingsPresentation({
   };
 
   const handleResetForm = () => {
+    setFormError(null);
     setFormState(initialFormState);
     setIsAddingNew(false);
     setEditingId(null);
@@ -54,39 +60,35 @@ export function McpSettingsPresentation({
   });
 
   const validate = (): boolean => {
-    if (!formState.name) {
-      toast.error('Name is required.');
-      return false;
-    }
-    if (formState.type === 'local' && !formState.command) {
-      toast.error('Command is required for local servers.');
-      return false;
-    }
-    if (formState.type === 'remote' && !formState.url) {
-      toast.error('URL is required for remote servers.');
+    const error = validateMcpForm(formState);
+    setFormError(error);
+    if (error) {
+      toast.error(error.message);
       return false;
     }
     return true;
   };
 
   const handleSaveNew = () => {
-    if (!validate()) return;
+    if (isSaving || !validate()) return;
     const generatedId = formState.name
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9_-]/g, '-')
       .replace(/[\s_-]+/g, '-');
-    addMcpServer({ id: generatedId, ...buildServerPayload(), enabled: true, autoApprove: false });
-    handleResetForm();
+    addMcpServer(
+      { id: generatedId, ...buildServerPayload(), enabled: true, autoApprove: false },
+      { onSuccess: handleResetForm },
+    );
   };
 
   const handleSaveEdit = (id: string) => {
-    if (!validate()) return;
-    updateMcpServer({ id, ...buildServerPayload() });
-    handleResetForm();
+    if (isSaving || !validate()) return;
+    updateMcpServer({ id, ...buildServerPayload() }, { onSuccess: handleResetForm });
   };
 
   const handleStartEdit = (server: McpServerData) => {
+    setFormError(null);
     setEditingId(server.id);
     setFormState({
       name: server.name,
@@ -142,7 +144,12 @@ export function McpSettingsPresentation({
         {showForm && (
           <McpServerForm
             formState={formState}
-            onChange={setFormState}
+            onChange={(next) => {
+              setFormError(null);
+              setFormState(next);
+            }}
+            error={formError}
+            isSaving={isSaving}
             onSave={
               editingId
                 ? () => {
@@ -180,11 +187,7 @@ export function McpSettingsPresentation({
                 onEdit={() => {
                   handleStartEdit(server);
                 }}
-                onDelete={() => {
-                  if (confirm(`Are you sure you want to delete ${server.name}?`)) {
-                    deleteMcpServer(server.id);
-                  }
-                }}
+                onDelete={() => setDeletingServer(server)}
                 onUpdatePolicy={(val) => {
                   updateMcpServer({
                     id: server.id,
@@ -225,6 +228,19 @@ export function McpSettingsPresentation({
           </McpCardsLayout>
         )}
       </div>
+      <ConfirmationModal
+        isOpen={deletingServer !== null}
+        title="Delete MCP server"
+        message={`Are you sure you want to delete ${deletingServer?.name ?? 'this server'}?`}
+        confirmText="Delete server"
+        type="danger"
+        isConfirming={api.isDeleting}
+        onCancel={() => setDeletingServer(null)}
+        onConfirm={() => {
+          if (deletingServer && !api.isDeleting)
+            deleteMcpServer(deletingServer.id, { onSuccess: () => setDeletingServer(null) });
+        }}
+      />
     </SettingsListLayout>
   );
 }

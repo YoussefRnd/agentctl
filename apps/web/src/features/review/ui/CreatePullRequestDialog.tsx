@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { useGitDraft } from '../model/useGitDraft';
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, Input, Button, Spinner } from '@agentctl/ui';
@@ -119,7 +120,7 @@ export function CreatePullRequestDialog({
       }
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create pull request');
+      setError(getErrorMessage(err, 'Failed to create pull request'));
     } finally {
       submitting.current = false;
       setIsSubmitting(false);

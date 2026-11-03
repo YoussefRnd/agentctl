@@ -1,3 +1,4 @@
+import { SegmentedControl } from '@agentctl/ui';
 import { GeneralSettingsLayout } from './GeneralSettingsLayout';
 import { GitGenerationSettingsPanel } from './GitGenerationSettingsPanel';
 import type { useTheme } from '@/shared';
@@ -64,32 +65,16 @@ export function GeneralSettingsPresentation({
       themeMode={themeMode}
       slots={{
         themeMode: (
-          <div
-            className="border-border/40 bg-surface/40 flex max-w-full flex-wrap gap-1 rounded-lg border p-1"
-            role="group"
+          <SegmentedControl
             aria-label="Theme mode"
-          >
-            {[
-              { mode: 'system' as const, label: 'System', icon: Monitor },
-              { mode: 'dark' as const, label: 'Dark', icon: Moon },
-              { mode: 'light' as const, label: 'Light', icon: Sun },
-            ].map(({ mode, label, icon: Icon }) => (
-              <button
-                key={mode}
-                type="button"
-                aria-pressed={themeMode === mode}
-                onClick={() => setThemeMode(mode)}
-                className={`flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  themeMode === mode
-                    ? 'bg-accent text-brand-crust shadow-sm'
-                    : 'text-text-muted hover:text-text-main hover:bg-surface/60'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
+            value={themeMode}
+            onValueChange={setThemeMode}
+            options={[
+              { value: 'system', label: 'System', icon: <Monitor className="h-3.5 w-3.5" /> },
+              { value: 'dark', label: 'Dark', icon: <Moon className="h-3.5 w-3.5" /> },
+              { value: 'light', label: 'Light', icon: <Sun className="h-3.5 w-3.5" /> },
+            ]}
+          />
         ),
         lightTheme: (
           <ThemeSelect themes={getLightThemes()} value={lightTheme} onChange={setLightTheme} />

@@ -1,5 +1,5 @@
 import { AlertCircle, Check, Circle, ShieldQuestion } from 'lucide-react';
-import { cn } from '@agentctl/ui';
+import { cn, StatusBadge } from '@agentctl/ui';
 import { subagentDisplayStatus, type SubagentGroup } from '../lib/subagentBlockUtils';
 
 export function SubagentStatus({
@@ -16,7 +16,19 @@ export function SubagentStatus({
   const running = status === 'Running' || status === 'Starting';
   const Icon = approval ? ShieldQuestion : failed ? AlertCircle : completed ? Check : Circle;
   return (
-    <span
+    <StatusBadge
+      appearance="plain"
+      status={
+        approval
+          ? 'warning'
+          : failed
+            ? 'error'
+            : completed
+              ? 'success'
+              : running
+                ? 'running'
+                : 'idle'
+      }
       className={cn(
         'inline-flex shrink-0 items-center gap-1.5 text-xs',
         approval
@@ -29,9 +41,12 @@ export function SubagentStatus({
                 ? 'text-accent'
                 : 'text-text-muted',
       )}
-    >
-      <Icon aria-hidden className="h-3.5 w-3.5 shrink-0" />
-      {status}
-    </span>
+      label={
+        <>
+          <Icon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+          {status}
+        </>
+      }
+    />
   );
 }

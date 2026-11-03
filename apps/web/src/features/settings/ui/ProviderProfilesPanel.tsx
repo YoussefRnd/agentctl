@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { ProviderProfilesLayout } from './SettingsListLayouts';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -73,7 +74,7 @@ export function ProviderProfilesPresentation({
       await invalidate();
       toast.success('Provider configuration saved');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save provider configuration');
+      toast.error(getErrorMessage(error, 'Failed to save provider configuration'));
     } finally {
       setBusy(false);
     }

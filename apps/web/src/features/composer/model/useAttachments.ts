@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/shared/lib/feedback';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { uploadAttachment } from '@agentctl/api-client';
 
@@ -83,7 +84,7 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
         })
         .catch((err: unknown) => {
           if (controller.signal.aborted) return;
-          const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+          const errorMessage = getErrorMessage(err, 'Upload failed');
           patchAttachment(localId, { state: 'error', errorMessage });
         })
         .finally(() => {
