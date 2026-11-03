@@ -106,6 +106,7 @@ export class SessionOperationStore {
         eventId: accepted.id,
       });
       this.statements.attempt.run({ attemptId, sessionId, operationId, providerId });
+      this.statements.reopen.run({ sessionId });
       return accepted;
     });
   }

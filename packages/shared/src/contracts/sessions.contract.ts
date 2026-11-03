@@ -117,6 +117,7 @@ export const sessionsContract = {
     body: z.object({
       title: z.string().optional(),
       pinned: z.boolean().optional(),
+      settled: z.boolean().optional(),
       lastReadEventId: z.number().int().nonnegative().optional(),
       mode: z.enum(['local', 'worktree']).optional(),
       approvalMode: z.enum(['review', 'auto_approve', 'yolo']).optional(),
@@ -130,6 +131,7 @@ export const sessionsContract = {
     }),
     responses: {
       200: sessionWithCapabilitiesSchema,
+      409: z.object({ error: z.string() }),
     },
     summary: 'Update session attributes',
   },

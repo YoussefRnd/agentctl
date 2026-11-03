@@ -1,6 +1,6 @@
 import { useGitDraft } from '../model/useGitDraft';
 import { useState, useEffect, useRef } from 'react';
-import { Dialog, Input, Button } from '@agentctl/ui';
+import { Dialog, Input, Button, Spinner } from '@agentctl/ui';
 import {
   GitDialogContent,
   GitDialogHeader,
@@ -8,7 +8,7 @@ import {
   GitMessageEditor,
   GitDialogNotice,
 } from './GitDialog';
-import { GitPullRequestIcon, SyncIcon, ArrowRightIcon } from '@primer/octicons-react';
+import { GitPullRequestIcon, ArrowRightIcon } from '@primer/octicons-react';
 
 import type { CreatePullRequestResult } from '@agentctl/shared';
 import { useGitStatus } from '@/shared/workspace/useGitStatus';
@@ -165,7 +165,7 @@ export function CreatePullRequestDialog({
             >
               {isPublishing ? (
                 <>
-                  <SyncIcon className="h-3.5 w-3.5 animate-spin" />
+                  <Spinner aria-hidden="true" className="icon-compact" />
                   <span>Publishing PR…</span>
                 </>
               ) : (

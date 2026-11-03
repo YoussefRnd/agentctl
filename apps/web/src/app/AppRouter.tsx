@@ -8,7 +8,8 @@ const galleryEnabled = import.meta.env.DEV || import.meta.env.MODE === 'gallery'
 const UiGalleryRoute = galleryEnabled
   ? lazy(() => import('../routes/UiGalleryRoute.js').then((m) => ({ default: m.UiGalleryRoute })))
   : () => null;
-import { Spinner } from '@agentctl/ui';
+import { LoadingState } from '@agentctl/ui';
+import { AppShell, Sidebar } from './shell';
 
 const SessionRoute = lazy(() =>
   import('../routes/SessionRoute.js').then((m) => ({ default: m.SessionRoute })),
@@ -18,9 +19,12 @@ export function AppRouter() {
   return (
     <Suspense
       fallback={
-        <div className="bg-background flex h-screen w-screen items-center justify-center">
-          <Spinner className="h-6 w-6" />
-        </div>
+        <AppShell
+          nav={<span className="text-role-control text-text-muted">Workspace</span>}
+          sidebar={<Sidebar />}
+        >
+          <LoadingState message="Loading workspace…" className="h-full" />
+        </AppShell>
       }
     >
       <Routes>

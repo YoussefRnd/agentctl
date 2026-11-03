@@ -1,7 +1,8 @@
+import { Spinner } from '@agentctl/ui';
 import { StreamingMarkdown } from '@/shared/markdown';
 import { latestPlanArtifacts } from '../libPlanArtifacts';
 import { useMemo } from 'react';
-import { Circle, Loader2, CheckCircle2, CircleSlash } from 'lucide-react';
+import { Circle, CheckCircle2, CircleSlash } from 'lucide-react';
 import { useSessionStream, useSession, type StructuredPlanItem } from '@/features/sessions';
 
 export interface PlanPanelProps {
@@ -81,7 +82,7 @@ export function PlanPanel({ plan: customPlan }: PlanPanelProps = {}) {
                 </div>
               ) : isInProgress ? (
                 <div className="bg-accent/20 text-accent ring-accent/30 flex h-5 w-5 items-center justify-center rounded-full ring-1">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Spinner aria-hidden="true" className="icon-compact" />
                 </div>
               ) : isPaused ? (
                 <div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20">

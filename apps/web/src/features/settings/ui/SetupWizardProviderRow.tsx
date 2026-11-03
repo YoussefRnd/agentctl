@@ -1,3 +1,6 @@
+import { SkeletonSurface } from '@agentctl/ui';
+import { pendingProvider } from './RegistryCard';
+import { SetupProviderRowLayout } from './SettingsListLayouts';
 import { Input, Button } from '@agentctl/ui';
 import { ProviderIcon } from '@/shared';
 import {
@@ -43,28 +46,25 @@ export function SetupWizardProviderRow({
   };
 
   return (
-    <div className="bg-surface-secondary/20 border-border/10 hover:border-border/30 animate-in fade-in flex flex-col gap-2.5 rounded-xl border p-3 transition-colors">
-      <div className="flex items-center justify-between">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <ProviderIcon provider={provider} size="sm" />
-          <div className="min-w-0">
-            <div className="text-text-main truncate text-xs font-semibold">{provider.label}</div>
-            <div className="text-text-muted mt-0.5 text-[10px] font-medium opacity-60">
-              {provider.installState === 'not_installed'
-                ? 'Supported'
-                : provider.authState === 'authenticated'
-                  ? 'Authenticated'
-                  : provider.authState === 'not_required'
-                    ? 'Connected · No authentication needed'
-                    : provider.authState === 'required'
-                      ? 'Auth Required'
-                      : provider.authState === 'error'
-                        ? 'Error'
-                        : 'Not Authenticated'}
-            </div>
-          </div>
-        </div>
-      </div>
+    <SetupProviderRowLayout
+      icon={<ProviderIcon provider={provider} size="sm" />}
+      title={<>{provider.label}</>}
+      status={
+        <>
+          {provider.installState === 'not_installed'
+            ? 'Supported'
+            : provider.authState === 'authenticated'
+              ? 'Authenticated'
+              : provider.authState === 'not_required'
+                ? 'Connected · No authentication needed'
+                : provider.authState === 'required'
+                  ? 'Auth Required'
+                  : provider.authState === 'error'
+                    ? 'Error'
+                    : 'Not Authenticated'}
+        </>
+      }
+    >
       {isActive && hasKeys && (
         <div className="border-border/10 space-y-2 border-t pt-2.5">
           <div className="space-y-2">
@@ -116,6 +116,24 @@ export function SetupWizardProviderRow({
           </div>
         </div>
       )}
-    </div>
+    </SetupProviderRowLayout>
+  );
+}
+
+export function SetupProviderRowSkeleton({
+  provider = pendingProvider,
+}: {
+  provider?: ProviderDiscovery;
+}) {
+  return (
+    <SkeletonSurface message="Loading provider…">
+      <SetupWizardProviderRow
+        provider={provider}
+        localCustomEnvs={{}}
+        onEnvChange={() => undefined}
+        onSaveConfig={async () => undefined}
+        isUpdatingConfig={false}
+      />
+    </SkeletonSurface>
   );
 }

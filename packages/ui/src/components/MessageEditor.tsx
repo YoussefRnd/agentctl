@@ -1,5 +1,5 @@
+import { Spinner } from './Spinner.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { Button } from '../primitives/Button/index.js';
 import { cn } from '../utils.js';
 
@@ -116,7 +116,7 @@ export function MessageEditor({
           disabled={saving || !value.trim() || value.trim() === initialValue.trim()}
           onClick={() => void save()}
         >
-          {saving && <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />}
+          {saving && <Spinner aria-hidden="true" className="icon-compact" />}
           {submitLabel}
         </Button>
       </div>

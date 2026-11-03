@@ -1,8 +1,9 @@
+import type { SVGProps } from 'react';
 import { cn } from '../utils';
 
-export interface SpinnerProps {
-  className?: string;
+export interface SpinnerProps extends Omit<SVGProps<SVGSVGElement>, 'size'> {
   size?: number | string;
+  label?: string;
 }
 
 export interface ThinkingSpinnerProps {
@@ -12,16 +13,21 @@ export interface ThinkingSpinnerProps {
 }
 
 /** Standard UI loading spinner for general loading states (data fetching, page transitions, buttons) */
-export function Spinner({ className, size }: SpinnerProps) {
+export function Spinner({ className, size, label = 'Loading…', ...props }: SpinnerProps) {
+  const decorative = props['aria-hidden'] === true || props['aria-hidden'] === 'true';
   return (
     <svg
-      className={cn('text-text-muted/70 h-4 w-4 animate-spin', className)}
-      style={size === undefined ? undefined : { width: size, height: size }}
+      {...props}
+      className={cn(
+        'icon-default text-current shrink-0 animate-spin motion-reduce:animate-none',
+        className,
+      )}
+      style={size === undefined ? props.style : { ...props.style, width: size, height: size }}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
-      role="status"
-      aria-label="Loading"
+      role={decorative ? undefined : 'status'}
+      aria-label={decorative ? undefined : (props['aria-label'] ?? label)}
     >
       <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
       <path

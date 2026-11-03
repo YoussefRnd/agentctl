@@ -1,13 +1,15 @@
+import { SidebarProjectSkeleton } from './ProjectItem';
 import { Link } from 'react-router-dom';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import type { SidebarProject } from '@agentctl/api-client';
 import type { ProviderDiscovery } from '@agentctl/shared';
-import { Button } from '@agentctl/ui';
+import { Button, SkeletonSurface } from '@agentctl/ui';
 import { ProjectItem } from './ProjectItem';
 
 interface SidebarProjectListProps {
   providersById: ReadonlyMap<string, ProviderDiscovery>;
   handlePinSession: (id: string, pinned: boolean) => void;
+  handleSettleSession: (id: string, settled: boolean) => void;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
@@ -29,6 +31,7 @@ interface SidebarProjectListProps {
 export function SidebarProjectList({
   providersById,
   handlePinSession,
+  handleSettleSession,
   isLoading,
   isError,
   refetch,
@@ -48,17 +51,11 @@ export function SidebarProjectList({
 }: SidebarProjectListProps) {
   if (isLoading) {
     return (
-      <div className="space-y-3 py-2">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="space-y-2">
-            <div className="bg-surface-secondary/60 h-7 w-3/4 animate-pulse rounded-lg" />
-            <div className="ml-4 space-y-1">
-              <div className="bg-surface-secondary/40 h-6 w-5/6 animate-pulse rounded-md" />
-              <div className="bg-surface-secondary/30 h-6 w-2/3 animate-pulse rounded-md" />
-            </div>
-          </div>
+      <SkeletonSurface message="Loading workspaces and sessions…" className="space-y-3 py-2">
+        {[0, 1, 2].map((i) => (
+          <SidebarProjectSkeleton key={i} />
         ))}
-      </div>
+      </SkeletonSurface>
     );
   }
 
@@ -114,6 +111,7 @@ export function SidebarProjectList({
             key={proj.id}
             providersById={providersById}
             handlePinSession={handlePinSession}
+            handleSettleSession={handleSettleSession}
             proj={proj}
             activeSessionId={currentActiveSessionId}
             isCollapsed={isCollapsed}

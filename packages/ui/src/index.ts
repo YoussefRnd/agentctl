@@ -29,9 +29,12 @@ export * from './components/SearchBar.js';
 export * from './components/SearchHighlight.js';
 export * from './components/ImagePreview.js';
 export * from './components/MessageEditor.js';
-export * from './components/Skeleton.js';
+export * from './components/LoadingSkeleton.js';
+export * from './components/Progress.js';
 export * from './components/Badge.js';
 export * from './components/Spinner.js';
 
 // Utilities
 export * from './utils.js';
+
+export * from './components/SkeletonSurface.js';

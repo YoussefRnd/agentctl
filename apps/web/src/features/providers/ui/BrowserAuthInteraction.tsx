@@ -35,6 +35,33 @@ export function BrowserAuthInteraction({
     }
   };
   return (
+    <BrowserAuthInteractionPresentation
+      request={request}
+      opened={opened}
+      busy={busy}
+      onOpened={() => setOpened(true)}
+      copyLink={copyLink}
+      respond={respond}
+    />
+  );
+}
+
+export function BrowserAuthInteractionPresentation({
+  request,
+  opened = false,
+  busy = false,
+  onOpened,
+  copyLink,
+  respond,
+}: {
+  request: { id: string; url: string; message: string };
+  opened?: boolean;
+  busy?: boolean;
+  onOpened: () => void;
+  copyLink: () => Promise<void>;
+  respond: (accepted: boolean) => Promise<void>;
+}) {
+  return (
     <div className="border-border/40 space-y-3 rounded-xl border p-4 text-xs">
       <p>{request.message}</p>
       <div className="flex flex-wrap gap-3">
@@ -42,7 +69,7 @@ export function BrowserAuthInteraction({
           href={request.url}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => setOpened(true)}
+          onClick={onOpened}
           className="text-accent underline"
         >
           Open sign-in page

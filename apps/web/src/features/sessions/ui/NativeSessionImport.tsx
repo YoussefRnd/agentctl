@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { providerService } from '@agentctl/api-client';
-import { Button } from '@agentctl/ui';
+import { Button, LoadingState } from '@agentctl/ui';
 import { projectKeys } from '@/shared/lib/queryKeys';
 import { toast } from 'sonner';
 
@@ -54,7 +54,7 @@ export function NativeSessionImport({
   return (
     <div className="border-border/40 max-h-72 space-y-2 overflow-y-auto rounded-lg border p-3">
       <p className="text-text-muted text-xs">Existing sessions in this project’s directory</p>
-      {query.isPending && <p className="text-xs">Loading sessions…</p>}
+      {query.isPending && <LoadingState variant="inline" message="Loading sessions…" />}
       {query.error && (
         <div>
           <p role="alert" className="text-xs">

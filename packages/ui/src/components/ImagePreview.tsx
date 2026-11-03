@@ -1,5 +1,6 @@
+import { Spinner } from './Spinner.js';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ImageIcon, ImageOff, Loader2, Maximize2, RefreshCw } from 'lucide-react';
+import { ImageIcon, ImageOff, Maximize2, RefreshCw } from 'lucide-react';
 import { Button } from '../primitives/Button/index.js';
 import { Dialog, DialogContent, DialogTitle } from '../primitives/Dialog/index.js';
 import { cn } from '../utils.js';
@@ -107,7 +108,7 @@ export function ImagePreview({
             </>
           ) : (
             <>
-              <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />
+              <Spinner aria-hidden="true" className="icon-prominent" />
               <span role="status">Loading image…</span>
             </>
           )}

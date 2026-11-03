@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `settled_at` integer;

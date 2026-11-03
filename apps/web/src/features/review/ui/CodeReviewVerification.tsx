@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Input, Select } from '@agentctl/ui';
+import { Button, Input, Select, LoadingState } from '@agentctl/ui';
 import type { CodeReviewRun, ReviewCheckSummary } from '@agentctl/shared';
 import { useReviewChecks, useReviewCheck } from '../model/useReviewChecks';
 
@@ -13,7 +13,7 @@ export function ReviewCheckOutput({
   checkId: string;
 }) {
   const result = useReviewCheck(sessionId, reviewId, checkId, true);
-  if (result.isPending) return <p role="status">Loading saved output…</p>;
+  if (result.isPending) return <LoadingState variant="inline" message="Loading saved output…" />;
   if (result.isError)
     return (
       <p role="alert" className="text-danger">
@@ -251,7 +251,7 @@ export function CodeReviewVerification({
             </p>
           )}
           {query.isPending ? (
-            <p role="status">Loading checks…</p>
+            <LoadingState variant="inline" message="Loading checks…" />
           ) : checks.length ? (
             <ul aria-label="Saved verification checks" className="space-y-2">
               {checks.map((check) => (

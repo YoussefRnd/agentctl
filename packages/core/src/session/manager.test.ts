@@ -936,21 +936,12 @@ describe('SessionManager tests', () => {
   });
 
   test('validates persona before DB mutation and never sends approval policy through ACP setMode', async () => {
-    const update = vi.fn((_table: unknown) => ({
-      set: () => ({ where: () => Object.assign(Promise.resolve(), { run: () => undefined }) }),
-    }));
-    const db = Object.assign({}, mockDb, {
-      update,
-      query: Object.assign({}, mockDb.query, {
-        sessions: Object.assign({}, mockDb.query.sessions, {
-          findFirst: () =>
-            Promise.resolve({
-              id: 'session-1',
-              availableAgentPersonas: JSON.stringify(['coder']),
-            }),
-        }),
-      }),
-    }) as unknown as DbClient;
+    const db = inputDatabase();
+    db.update(sessions)
+      .set({ agentPersona: 'coder', availableAgentPersonas: JSON.stringify(['coder']) })
+      .where(eq(sessions.id, 'session-1'))
+      .run();
+    const before = db.select().from(sessions).get()!;
     const manager = createManager(
       db,
       mockWorkspaceManager,
@@ -959,18 +950,35 @@ describe('SessionManager tests', () => {
       noopLogger,
       fakeRuntime,
     );
-
-    await expect(manager.setAgentPersona('session-1', 'architect')).rejects.toThrow(
-      'Agent persona is not available',
-    );
-    expect(update.mock.calls.every((args) => args[0] !== sessions)).toBe(true);
-
+    const registry = (
+      manager as unknown as {
+        runtimeRegistry: { getSession: (id: string) => SessionRuntime | undefined };
+      }
+    ).runtimeRegistry;
     const setMode = vi.fn();
-    Object.defineProperty(manager, 'runtimeRegistry', {
-      value: { getSession: () => ({ isDead: false, setMode }) },
-    });
-    await manager.updateApprovalMode('session-1', 'yolo');
-    expect(setMode).not.toHaveBeenCalled();
+    const getSession = vi.spyOn(registry, 'getSession').mockReturnValue({
+      isDead: false,
+      setMode,
+    } as unknown as SessionRuntime);
+    try {
+      await expect(manager.setAgentPersona('session-1', 'architect')).rejects.toThrow(
+        'Agent persona is not available',
+      );
+      await manager.waitForSessionOperations('session-1');
+      // Preparing a statement is not a write: verify the persisted row itself.
+      expect(db.select().from(sessions).get()).toEqual(before);
+      expect(setMode).not.toHaveBeenCalled();
+
+      await manager.updateApprovalMode('session-1', 'yolo');
+      await manager.waitForSessionOperations('session-1');
+      expect(db.select().from(sessions).get()).toMatchObject({
+        agentPersona: 'coder',
+        approvalMode: 'yolo',
+      });
+      expect(setMode).not.toHaveBeenCalled();
+    } finally {
+      getSession.mockRestore();
+    }
   });
 
   test('setConfigOption fails for an inactive session', async () => {

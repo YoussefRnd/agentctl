@@ -35,7 +35,7 @@ export function StatusPane() {
   }, [completedSteps, plan.length]);
 
   const mcpBadgeText = useMemo(() => {
-    if (isLoadingMcp) return 'Loading...';
+    if (isLoadingMcp) return 'Loading…';
     if (mcpServers.length === 0) return '0 servers';
     return `${String(activeMcpServers)}/${String(mcpServers.length)} active`;
   }, [isLoadingMcp, activeMcpServers, mcpServers.length]);

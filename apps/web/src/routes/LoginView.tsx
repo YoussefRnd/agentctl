@@ -92,10 +92,11 @@ export function LoginView() {
 
           <Button
             type="submit"
-            disabled={isLoading || !key.trim()}
+            isLoading={isLoading}
+            disabled={!key.trim()}
             className="!h-10 w-full text-xs font-bold"
           >
-            {isLoading ? 'Pairing device...' : 'Connect device'}
+            Connect device
           </Button>
         </form>
 

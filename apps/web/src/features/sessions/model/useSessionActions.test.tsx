@@ -18,6 +18,7 @@ vi.mock('./SessionConfigContext', async (importOriginal) => ({
 vi.mock('./useSessionEvents', () => ({
   useSessionEvents: () => ({
     events: [],
+    visibleEvents: [],
     isLoading: false,
     isConnected: true,
     streamingEventId: null,

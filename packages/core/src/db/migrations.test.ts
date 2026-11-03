@@ -119,6 +119,7 @@ it('upgrades populated databases from every migration boundary without losing se
           id: 'session',
           discardBackup: null,
           contextUsedTokens: null,
+          settledAt: null,
         });
         if (hasSavedEffort)
           expect(db.select().from(sessions).get()?.selectedThinkingEffort).toBe('vendor-choice');

@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { Spinner } from '@agentctl/ui';
 import type { UpdateState } from '@/electron';
 
 interface UpdateIndicatorProps {
@@ -23,12 +23,13 @@ export function UpdateIndicator({ state, onInstall }: UpdateIndicatorProps) {
       type="button"
       onClick={onInstall}
       disabled={downloading}
+      aria-busy={downloading || undefined}
       title={downloaded ? `Restart to install v${state.version}` : `Downloading update…`}
       className="app-region-no-drag bg-accent/15 text-accent hover:bg-accent/25 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-80"
     >
       {downloading ? (
         <>
-          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          <Spinner aria-hidden="true" className="icon-compact" />
           <span>
             {'percent' in state ? `${Math.round(state.percent).toString()}%` : 'Downloading…'}
           </span>

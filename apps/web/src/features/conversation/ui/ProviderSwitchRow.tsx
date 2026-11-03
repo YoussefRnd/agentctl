@@ -6,14 +6,19 @@ function Endpoint({ endpoint }: { endpoint: ProviderSwitchData['from'] }) {
   const model = endpoint.modelId === 'default' ? undefined : endpoint.modelName || endpoint.modelId;
   return (
     <span
-      className="inline-flex max-w-full min-w-0 items-center gap-1.5"
+      className="flex min-w-0 items-center gap-2"
       title={`${endpoint.providerName}${model ? ` · ${model}` : ''}`}
     >
-      <span aria-hidden="true" className="shrink-0 [&>img]:size-3.5 [&>svg]:size-3.5">
-        <ProviderIconUrl url={endpoint.providerIcon || null} />
+      <span
+        aria-hidden="true"
+        className="bg-text-muted text-background inline-flex shrink-0 items-center justify-center rounded-md p-0.5"
+      >
+        <ProviderIconUrl url={endpoint.providerIcon || null} size="inline" />
       </span>
-      <span className="text-text-main truncate font-medium">{endpoint.providerName}</span>
-      {model && <span className="text-text-muted truncate">{model}</span>}
+      <span className="text-role-control min-w-0 flex-1 truncate">
+        <span className="text-text-main font-medium">{endpoint.providerName}</span>
+        {model && <span className="text-role-caption text-text-muted"> · {model}</span>}
+      </span>
     </span>
   );
 }
@@ -23,24 +28,16 @@ export function ProviderSwitchRow({ change }: { change: ProviderSwitchData }) {
     <div
       role="note"
       aria-label={`Provider switched from ${change.from.providerName} to ${change.to.providerName}`}
-      className="text-text-muted flex items-center gap-3 py-2 text-xs"
+      className="text-role-caption text-text-muted flex min-w-0 items-center justify-center gap-2 py-2"
     >
-      <span aria-hidden="true" className="border-border/60 min-w-3 flex-1 border-t" />
-      <div className="flex max-w-full min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-1.5">
-        <span className="inline-flex items-center gap-1.5 text-[11px] whitespace-nowrap">
-          <ArrowRightLeft className="size-3" aria-hidden="true" />
-          Provider switched
-        </span>
-        <span className="inline-flex max-w-full min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-1.5">
-          <Endpoint endpoint={change.from} />
-          <span className="inline-flex max-w-full min-w-0 items-center gap-2">
-            <ArrowRight className="size-3 shrink-0" aria-hidden="true" />
-            <span className="sr-only">to</span>
-            <Endpoint endpoint={change.to} />
-          </span>
-        </span>
-      </div>
-      <span aria-hidden="true" className="border-border/60 min-w-3 flex-1 border-t" />
+      <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
+        <ArrowRightLeft className="icon-inline" aria-hidden="true" />
+        <span>Provider switched</span>
+      </span>
+      <Endpoint endpoint={change.from} />
+      <ArrowRight className="icon-inline shrink-0" aria-hidden="true" />
+      <span className="sr-only">to</span>
+      <Endpoint endpoint={change.to} />
     </div>
   );
 }

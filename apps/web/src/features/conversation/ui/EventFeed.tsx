@@ -2,7 +2,7 @@ import { sessionKeys } from '@/shared/lib/queryKeys';
 import { useCallback, useMemo } from 'react';
 import { useFeedViewport } from '../model/useFeedViewport';
 import { getGroupKey } from '../lib/feedGroupKey';
-import { RefreshCw, ArrowDown, LoaderCircle } from 'lucide-react';
+import { RefreshCw, ArrowDown } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   isComposerOnlyInput,
@@ -16,7 +16,7 @@ import {
   useSessionTurnIndex,
   type RewindMode,
 } from '@/features/sessions';
-import { Button, IconButton, LoadingState } from '@agentctl/ui';
+import { Button, IconButton, LoadingState, Spinner } from '@agentctl/ui';
 import { groupFeedEvents, hasCurrentChatFailure } from '../lib/eventFeedGrouping';
 import { useSettingsOverlayStore } from '@/features/settings';
 import { TurnErrorCard } from './cards/TurnErrorCard';
@@ -180,7 +180,7 @@ export function EventFeed({
   });
   if ((events.length === 0 || groupedEvents.length === 0) && !isSessionError) {
     if (!isConnected) {
-      return <LoadingState message="Connecting to session..." className="h-full py-20" />;
+      return <LoadingState message="Connecting to session…" className="h-full py-20" />;
     }
 
     return <NewSessionEmptyState />;
@@ -214,7 +214,7 @@ export function EventFeed({
               role="status"
               className="text-text-muted absolute inset-x-0 top-0 flex h-10 items-center justify-center gap-2 text-xs"
             >
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              <Spinner className="icon-compact" aria-hidden="true" />
               Loading earlier messages…
             </div>
           ) : historyError ? (

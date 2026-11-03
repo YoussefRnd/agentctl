@@ -1,3 +1,5 @@
+import { ReviewFileList } from './ReviewFileList';
+import { SkeletonSurface } from '@agentctl/ui';
 import { SearchIcon, BlockedIcon, CheckCircleIcon } from '@primer/octicons-react';
 
 import { ReviewCleanState } from './ReviewCleanState';
@@ -32,15 +34,24 @@ export function ReviewEmptyState({
 
 export function ReviewLoadingState() {
   return (
-    <div className="text-text-muted/40 bg-surface-secondary/5 flex h-full flex-col items-center justify-center p-8">
-      <div className="relative mb-6">
-        <div className="border-accent/20 border-t-accent h-8 w-8 animate-spin rounded-full border-2" />
-        <div className="bg-accent/20 absolute inset-0 animate-pulse rounded-full blur-lg" />
-      </div>
-      <span className="text-[10px] font-black tracking-[0.3em] uppercase">
-        Scanning Workspace...
-      </span>
-    </div>
+    <SkeletonSurface message="Scanning workspace…">
+      <ReviewFileList
+        files={[0, 1, 2, 3].map((row) => ({
+          path: `workspace/file-${row}.tsx`,
+          state: 'modified' as const,
+          diff: '',
+          hunks: [],
+        }))}
+        collapsedFiles={{}}
+        fileStats={new Map()}
+        viewMode="inline"
+        onToggleFile={() => undefined}
+        composerActions={{
+          attachContextToComposer: () => undefined,
+          insertIntoComposer: () => undefined,
+        }}
+      />
+    </SkeletonSurface>
   );
 }
 

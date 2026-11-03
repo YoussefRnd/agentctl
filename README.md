@@ -229,7 +229,10 @@ handoff delivery and exhausted native context recover in a fresh provider conver
 same chat; the current message is preserved.
 
 The session sidebar shows provider logos, branch/worktree details, activity and unread results.
-Pin sessions from their options menu to keep them above recent chats within a workspace. Pins and
+Pin sessions from their options menu to keep them above recent chats within a workspace.
+Settle finished sessions to move them into the workspace's collapsed Settled group while preserving
+their files and history. Reopen them from that group, pin them, or send a new message to return them
+to active work. Running or queued work must finish or be cancelled before settling. Pins and
 read markers survive restarts; unread activity clears when the latest history is viewed in a focused
 window. Existing chats start as read when upgrading.
 

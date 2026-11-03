@@ -15,7 +15,7 @@ export function SidebarFooter() {
         variant="ghost"
         size="default"
         onClick={() => openSettings('general')}
-        className="motion-disclosure min-w-0 flex-1 justify-between active:transform-none active:opacity-100"
+        className="motion-disclosure min-w-0 flex-1 justify-between px-2 active:transform-none active:opacity-100"
       >
         <div className="flex items-center gap-2">
           <Settings className="icon-compact text-text-muted" />

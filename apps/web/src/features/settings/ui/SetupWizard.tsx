@@ -1,3 +1,4 @@
+import { SetupProviderRowSkeleton } from './SetupWizardProviderRow';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSetupWizard } from '../model/useSetupWizard';
@@ -15,6 +16,7 @@ import {
   Switch,
   Select,
   ErrorState,
+  LoadingSkeleton,
 } from '@agentctl/ui';
 import { ChecklistItem } from './SetupWizardChecklistItem';
 import { SetupWizardProviderRow } from './SetupWizardProviderRow';
@@ -184,14 +186,11 @@ export function SetupWizard() {
               className="p-3"
             />
           ) : isLoadingProviders ? (
-            <div className="animate-pulse space-y-1.5">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="bg-surface-secondary/40 border-border/20 h-12 rounded-xl border"
-                />
+            <LoadingSkeleton message="Loading providers…" className="space-y-3">
+              {Array.from({ length: 2 }, (_, i) => (
+                <SetupProviderRowSkeleton key={i} />
               ))}
-            </div>
+            </LoadingSkeleton>
           ) : (
             providers.map((provider) => (
               <SetupWizardProviderRow

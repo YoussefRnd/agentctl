@@ -1,3 +1,4 @@
+import { LoadingState } from '@agentctl/ui';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getCodeReviewFile } from '@agentctl/api-client';
@@ -63,12 +64,7 @@ export function CodeReviewExcerpt({
     }
     return null;
   }, [query.data, line, radius, side, firstChange]);
-  if (query.isPending)
-    return (
-      <p role="status" className="text-text-muted text-[11px]">
-        Loading captured code…
-      </p>
-    );
+  if (query.isPending) return <LoadingState variant="inline" message="Loading captured code…" />;
   if (query.isError)
     return (
       <p role="alert" className="text-warning text-[11px]">

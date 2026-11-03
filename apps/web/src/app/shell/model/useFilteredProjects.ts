@@ -15,6 +15,12 @@ export function filterProjects(
   const visibleProjects = projects.map((p) => {
     const validSessions = p.sessions.filter((s) => showArchived || s.status !== 'archived');
     const sortedSessions = validSessions.toSorted((a, b) => {
+      if (Boolean(a.settledAt) !== Boolean(b.settledAt)) return a.settledAt ? 1 : -1;
+      if (a.settledAt && b.settledAt)
+        return (
+          new Date(b.settledAt).getTime() - new Date(a.settledAt).getTime() ||
+          a.id.localeCompare(b.id)
+        );
       if (Boolean(a.pinnedAt) !== Boolean(b.pinnedAt)) return a.pinnedAt ? -1 : 1;
       if (a.pinnedAt && b.pinnedAt)
         return (

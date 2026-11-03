@@ -9,7 +9,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { ProviderRegistry } from '@agentctl/core/providers';
 import { buildApp } from '../app.js';
-import { createDatabase, projects, sessionEvents, sessions } from '@agentctl/core/db';
+import {
+  createDatabase,
+  projects,
+  sessionEvents,
+  sessions,
+  sessionOperations,
+  sessionTurnAttempts,
+} from '@agentctl/core/db';
 
 // Project route fixtures must not download or launch actual registry agents.
 beforeEach(() => {
@@ -187,6 +194,63 @@ describe('Projects routes', () => {
     expect((await patch({ lastReadEventId: -1 })).statusCode).toBe(400);
   });
 
+  it('keeps running, waiting and queued work active and makes settlement mutually exclusive with pins', async () => {
+    const patch = (payload: object) =>
+      app.inject({ method: 'PATCH', url: `/api/sessions/${sessionWithMessageId}`, payload });
+    const row = () =>
+      db.select().from(sessions).where(eq(sessions.id, sessionWithMessageId)).get()!;
+    for (const status of ['running', 'needs_attention', 'archived'] as const) {
+      await db.update(sessions).set({ status }).where(eq(sessions.id, sessionWithMessageId));
+      const response = await patch({ settled: true });
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error).toBeTypeOf('string');
+      expect(row().settledAt).toBeNull();
+    }
+    await db.update(sessions).set({ status: 'idle' }).where(eq(sessions.id, sessionWithMessageId));
+    await db.insert(sessionOperations).values({
+      id: 'queued',
+      sessionId: sessionWithMessageId,
+      commandId: 'queued',
+      kind: 'message.send',
+      fingerprint: 'queued',
+      payload: '{}',
+      status: 'pending',
+    });
+    expect((await patch({ settled: true })).statusCode).toBe(409);
+    await db
+      .update(sessionOperations)
+      .set({ status: 'succeeded' })
+      .where(eq(sessionOperations.id, 'queued'));
+    await db.insert(sessionTurnAttempts).values({
+      id: 'attempt',
+      sessionId: sessionWithMessageId,
+      operationId: 'queued',
+      providerId: 'test-provider',
+      status: 'running',
+    });
+    expect((await patch({ settled: true })).statusCode).toBe(409);
+    await db
+      .update(sessionTurnAttempts)
+      .set({ status: 'completed' })
+      .where(eq(sessionTurnAttempts.id, 'attempt'));
+    expect((await patch({ pinned: true })).statusCode).toBe(200);
+    expect((await patch({ settled: true, pinned: true })).statusCode).toBe(400);
+    expect(row().pinnedAt).not.toBeNull();
+    expect((await patch({ settled: true })).statusCode).toBe(200);
+    const settledAt = row().settledAt;
+    expect(settledAt).not.toBeNull();
+    expect(row().pinnedAt).toBeNull();
+    expect((await patch({ settled: true })).statusCode).toBe(200);
+    expect(row().settledAt).toEqual(settledAt);
+    expect((await patch({ pinned: true })).statusCode).toBe(200);
+    expect(row().settledAt).toBeNull();
+    expect(row().pinnedAt).not.toBeNull();
+    expect((await patch({ settled: true })).statusCode).toBe(200);
+    expect((await patch({ settled: false })).statusCode).toBe(200);
+    expect(row().settledAt).toBeNull();
+    expect(row().status).toBe('idle');
+  });
+
   it('distinguishes pending input, approvals, active work and cancelled turns', async () => {
     await db
       .update(sessions)
@@ -259,7 +323,7 @@ describe('Draft workspace lifecycle through projects routes', () => {
     await fs.writeFile(path.join(repoPath, 'file.txt'), 'baseline');
     await git(repoPath, 'add', 'file.txt');
     await git(repoPath, 'commit', '-m', 'Initial');
-    db = createDatabase(':memory:');
+    db = createDatabase(path.join(tempDir, 'app.sqlite'));
     manager = new WorkspaceManager(new GitMutex(), path.join(tempDir, 'worktrees'));
     workspace = new SessionWorkspace(db, manager, () => undefined);
     await db.insert(projects).values({
@@ -295,6 +359,65 @@ describe('Draft workspace lifecycle through projects routes', () => {
     expect(session.status).toBe('idle');
     await expect(fs.stat(draft.worktreePath)).rejects.toMatchObject({ code: 'ENOENT' });
   }, 15_000);
+
+  it('persists settled work across a restart and reopens without changing files, history or provider state', async () => {
+    const created = await workspace.establish(
+      '10000000-0000-4000-8000-000000000010',
+      'settled-work',
+      {
+        selectedProvider: 'test-provider',
+        selectedModel: 'default',
+      },
+    );
+    await fs.writeFile(path.join(created.worktreePath, 'uncommitted.txt'), 'Keep this work');
+    await db.insert(sessionEvents).values({
+      sessionId: created.sessionId,
+      type: 'text',
+      data: JSON.stringify({ role: 'provider', content: 'Retained result' }),
+    });
+    app = await buildApp({ db, worktreeManager: manager, embedded: true });
+    let stop = vi.spyOn(app.sessionManager, 'stopSessionAndWait');
+    let restore = vi.spyOn(app.sessionManager, 'ensureWorkspaceAvailable');
+    const before = db.select().from(sessions).where(eq(sessions.id, created.sessionId)).get()!;
+    const patch = (settled: boolean) =>
+      app!.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${created.sessionId}`,
+        payload: { settled },
+      });
+    expect((await patch(true)).statusCode).toBe(200);
+    const listed = (await app.inject({ method: 'GET', url: '/api/projects' }))
+      .json()
+      .flatMap((p: { sessions: unknown[] }) => p.sessions)
+      .find((s: { id: string }) => s.id === created.sessionId);
+    expect(listed.settledAt).toBeTruthy();
+    expect(stop).not.toHaveBeenCalled();
+    expect(restore).not.toHaveBeenCalled();
+    await app.close();
+    db = createDatabase(path.join(tempDir, 'app.sqlite'));
+    app = await buildApp({ db, worktreeManager: manager, embedded: true });
+    expect(
+      db
+        .select()
+        .from(sessions)
+        .where(eq(sessions.id, created.sessionId))
+        .get()
+        ?.settledAt?.toISOString(),
+    ).toBe(listed.settledAt);
+    stop = vi.spyOn(app.sessionManager, 'stopSessionAndWait');
+    restore = vi.spyOn(app.sessionManager, 'ensureWorkspaceAvailable');
+    expect((await patch(false)).statusCode).toBe(200);
+    const after = db.select().from(sessions).where(eq(sessions.id, created.sessionId)).get()!;
+    expect(after).toEqual(before);
+    expect(await fs.readFile(path.join(created.worktreePath, 'uncommitted.txt'), 'utf8')).toBe(
+      'Keep this work',
+    );
+    expect(await git(repoPath, 'worktree', 'list', '--porcelain')).toContain(created.worktreePath);
+    expect(db.select().from(sessions).all()).toHaveLength(1);
+    expect(JSON.parse(db.select().from(sessionEvents).get()!.data).content).toBe('Retained result');
+    expect(stop).not.toHaveBeenCalled();
+    expect(restore).not.toHaveBeenCalled();
+  });
 
   it('registers a folder without creating a session or worktree', async () => {
     app = await buildApp({ db, worktreeManager: manager, embedded: true });

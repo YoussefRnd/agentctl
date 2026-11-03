@@ -1,6 +1,6 @@
 import { approvalBehaviorOptions } from '@agentctl/shared';
-import { Square, ArrowUp, Shield, Loader2 } from 'lucide-react';
-import { Button, cn, Tooltip } from '@agentctl/ui';
+import { Square, ArrowUp, Shield } from 'lucide-react';
+import { Button, cn, Tooltip, Spinner } from '@agentctl/ui';
 import { CommandDropdown } from './CommandDropdown';
 import { ContextWindowPopover } from './WorkspaceStateReviewer';
 import type { SessionWithCapabilities } from '@agentctl/shared';
@@ -37,6 +37,7 @@ export function SubmitButton({
         >
           <Button
             disabled={isSubmitting}
+            aria-busy={isSubmitting || undefined}
             size="sm"
             className={cn(
               'group/send flex h-8 w-8 items-center justify-center rounded-full border-none p-0 transition-[color,background-color,box-shadow,opacity,transform] duration-150',
@@ -50,7 +51,7 @@ export function SubmitButton({
             }
           >
             {isSubmitting ? (
-              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+              <Spinner aria-hidden="true" className="icon-default" />
             ) : isStop ? (
               <Square className="h-3.5 w-3.5 fill-current" />
             ) : (

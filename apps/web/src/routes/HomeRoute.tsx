@@ -1,8 +1,9 @@
+import { LoadingState } from '@agentctl/ui';
 import { projectKeys } from '@/shared/lib/queryKeys';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { openProjectFolder } from '@agentctl/api-client';
 import { AppShell, Sidebar } from '@/app/shell';
@@ -38,9 +39,7 @@ export function HomeRoute() {
       sidebar={<Sidebar />}
     >
       {isLoading ? (
-        <div className="flex h-full w-full items-center justify-center">
-          <Loader2 className="text-accent h-6 w-6 animate-spin" />
-        </div>
+        <LoadingState message="Loading workspaces…" className="h-full w-full" />
       ) : showExplorer || projects.length === 0 ? (
         <div className="flex h-full w-full flex-col items-center justify-center overflow-y-auto p-4 py-8 select-none">
           <div className="w-full max-w-2xl space-y-4">

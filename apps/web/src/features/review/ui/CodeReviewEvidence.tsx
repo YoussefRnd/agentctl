@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Select } from '@agentctl/ui';
+import { Button, Select, LoadingState } from '@agentctl/ui';
 import type { ReviewFinding } from '@agentctl/shared';
 import { useReviewChecks } from '../model/useReviewChecks';
 import { ReviewCheckOutput } from './CodeReviewVerification';
@@ -72,7 +72,7 @@ export function CodeReviewEvidence({
             </p>
           )}
           {query.isPending ? (
-            <p role="status">Loading checks…</p>
+            <LoadingState variant="inline" message="Loading checks…" />
           ) : eligible.length ? (
             <form
               className="space-y-2"

@@ -119,7 +119,8 @@ beforeEach(() => {
     options?: ScrollToOptions | number,
   ) {
     this.scrollTop = typeof options === 'number' ? options : (options?.top ?? 0);
-    this.dispatchEvent(new Event('scroll'));
+    // Browser scroll events arrive after the write, outside React's commit.
+    queueMicrotask(() => this.dispatchEvent(new Event('scroll')));
   };
   container = document.createElement('div');
   document.body.append(container);

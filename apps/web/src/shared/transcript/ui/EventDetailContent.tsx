@@ -1,3 +1,4 @@
+import { LoadingState } from '@agentctl/ui';
 import { useQuery, useQueries, queryOptions } from '@tanstack/react-query';
 import { fetchSessionEventDetail } from '@agentctl/api-client';
 import type { ReactNode } from 'react';
@@ -28,9 +29,7 @@ function DetailState({ error, retry }: { error?: boolean; retry: () => void }) {
       </button>
     </div>
   ) : (
-    <p role="status" className="text-text-muted text-xs">
-      Loading output…
-    </p>
+    <LoadingState variant="inline" message="Loading output…" />
   );
 }
 

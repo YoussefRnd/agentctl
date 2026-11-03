@@ -1,7 +1,7 @@
 import { useReducer, useEffect } from 'react';
-import { Folder, ChevronLeft, Home, AlertCircle, Loader2 } from 'lucide-react';
+import { Folder, ChevronLeft, Home, AlertCircle } from 'lucide-react';
 import { apiClient } from '@agentctl/api-client';
-import { Button, GlassPanel } from '@agentctl/ui';
+import { Button, GlassPanel, LoadingState } from '@agentctl/ui';
 import { GitBranchIcon } from '@primer/octicons-react';
 
 interface FolderEntry {
@@ -116,9 +116,7 @@ export function DirectoryExplorer({ onSelect }: { onSelect: (path: string) => vo
 
       <div className="h-72 overflow-y-auto p-1.5">
         {isLoading ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="text-accent h-6 w-6 animate-spin" />
-          </div>
+          <LoadingState message="Loading folders…" className="h-full" />
         ) : error ? (
           <div className="flex h-full flex-col items-center justify-center p-4 text-center">
             <AlertCircle className="text-danger mb-2 h-6 w-6 opacity-30" />

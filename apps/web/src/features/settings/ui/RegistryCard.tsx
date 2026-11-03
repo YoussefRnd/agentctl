@@ -1,3 +1,5 @@
+import { SkeletonSurface } from '@agentctl/ui';
+import { RegistryCardLayout } from './SettingsListLayouts';
 import { resolveAgentFeatures, type ProviderDiscovery } from '@agentctl/shared';
 import {
   AlertTriangle,
@@ -5,7 +7,6 @@ import {
   Download,
   ExternalLink,
   KeyRound,
-  Loader2,
   LogOut,
   MoreHorizontal,
   RefreshCw,
@@ -14,12 +15,13 @@ import {
 import { ProviderIcon } from '@/shared';
 import {
   Button,
-  Card,
   DropdownContent,
   DropdownItem,
   DropdownRoot,
   DropdownSeparator,
   DropdownTrigger,
+  Spinner,
+  Progress,
 } from '@agentctl/ui';
 
 function GithubIcon({ className }: { className?: string }) {
@@ -113,7 +115,7 @@ export function RegistryCard({
   if (isInstalling) {
     primaryAction = (
       <Button variant="outline" size="sm" onClick={() => onCancelInstall(provider.id)}>
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <Spinner aria-hidden="true" className="icon-compact" />
         Cancel
       </Button>
     );
@@ -152,24 +154,15 @@ export function RegistryCard({
   }
 
   return (
-    <Card className="border-border/25 bg-surface-secondary/5 hover:border-border/40 flex flex-col gap-2 rounded-lg border p-3.5 transition-colors [&::before]:hidden">
-      <div className="flex min-w-0 flex-wrap items-start gap-3">
-        <ProviderIcon provider={provider} size="sm" className="mt-0.5 shrink-0" />
-        <div className="min-w-0 flex-1 basis-32 [overflow-wrap:anywhere]">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-            <h3 className="text-text-main truncate text-[13px] font-semibold" title={providerId}>
-              {name}
-            </h3>
-            {versionLabel && (
-              <span className="text-text-muted font-mono text-[10.5px]">{versionLabel}</span>
-            )}
-          </div>
-          <p
-            className="text-text-muted mt-0.5 truncate text-[11px]"
-            title={provider.description ?? undefined}
-          >
-            {provider.description ?? 'No description available'}
-          </p>
+    <RegistryCardLayout
+      icon={<ProviderIcon provider={provider} size="sm" className="mt-0.5 shrink-0" />}
+      title={name}
+      titleHint={providerId}
+      version={versionLabel}
+      description={provider.description ?? 'No description available'}
+      descriptionHint={provider.description ?? undefined}
+      status={
+        <>
           {(authStatus || isInstalling) && !downloadProgress && (
             <div className="text-text-muted mt-1 flex items-center gap-1.5 text-[10.5px]">
               {authStatus && (
@@ -180,9 +173,10 @@ export function RegistryCard({
               </span>
             </div>
           )}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
+        </>
+      }
+      actions={
+        <>
           {primaryAction}
           {showMenu && (
             <DropdownRoot>
@@ -240,7 +234,7 @@ export function RegistryCard({
                       className="text-red-400 focus-visible:text-red-300"
                     >
                       {isRemoving ? (
-                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        <Spinner aria-hidden="true" className="icon-compact mr-2" />
                       ) : (
                         <Trash2 className="mr-2 h-3.5 w-3.5" />
                       )}
@@ -251,9 +245,9 @@ export function RegistryCard({
               </DropdownContent>
             </DropdownRoot>
           )}
-        </div>
-      </div>
-
+        </>
+      }
+    >
       {downloadProgress && (
         <div className="space-y-1.5">
           <div className="text-text-muted flex flex-wrap items-center justify-between gap-2 text-[10.5px]">
@@ -265,22 +259,9 @@ export function RegistryCard({
               {downloadProgress.totalBytes ? ` / ${formatMiB(downloadProgress.totalBytes)}` : ''}
             </span>
           </div>
-          <div
-            role="progressbar"
-            aria-label={`${name} download`}
-            aria-valuemin={0}
-            aria-valuemax={downloadPercent === null ? undefined : 100}
-            aria-valuenow={downloadPercent ?? undefined}
-            className="bg-border/40 h-1.5 overflow-hidden rounded-full"
-          >
-            <div
-              className={`bg-accent h-full rounded-full transition-all duration-300 ${downloadPercent === null ? 'w-1/3 animate-pulse' : ''}`}
-              style={downloadPercent === null ? undefined : { width: `${downloadPercent}%` }}
-            />
-          </div>
+          <Progress label={`${name} download`} value={downloadPercent} />
         </div>
       )}
-
       {hasInstallError && (
         <details className="group border-warning/20 bg-warning/8 text-warning rounded-lg border px-2.5 py-1.5 text-[11px]">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
@@ -297,7 +278,6 @@ export function RegistryCard({
           </p>
         </details>
       )}
-
       {!hasInstallError && hasConnectionError && (
         <details className="group border-warning/20 bg-warning/8 text-warning rounded-lg border px-2.5 py-1.5 text-[11px]">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
@@ -310,6 +290,49 @@ export function RegistryCard({
           </p>
         </details>
       )}
-    </Card>
+    </RegistryCardLayout>
+  );
+}
+
+export const pendingProvider: ProviderDiscovery = {
+  id: 'pending-provider',
+  label: 'Agent provider',
+  description: 'Provider description and connection details',
+  command: '',
+  launchArgs: [],
+  launchEnv: {},
+  customEnv: {},
+  customEnvConfigured: {},
+  authMethods: [],
+  authState: 'unknown',
+  connectionState: 'unknown',
+  enabled: true,
+  supportsDynamicModel: false,
+  supportsDynamicConfig: false,
+  supportsLogout: false,
+  nativelyLoadsSkills: false,
+  updateAvailable: false,
+  installState: 'not_installed',
+};
+const noop = () => undefined;
+export function RegistryCardSkeleton({
+  provider = pendingProvider,
+}: {
+  provider?: ProviderDiscovery;
+}) {
+  return (
+    <SkeletonSurface message="Loading provider…">
+      <RegistryCard
+        provider={provider}
+        onInstall={noop}
+        onCancelInstall={noop}
+        onRefresh={noop}
+        onRemove={noop}
+        onAuth={noop}
+        onLogout={noop}
+        isInstalling={false}
+        isRemoving={false}
+      />
+    </SkeletonSurface>
   );
 }

@@ -366,6 +366,8 @@ describe('SessionOperationWorker', () => {
     await context.worker.idle('s');
     expect(context.operations()[0].status).toBe('succeeded');
     expect(context.attempts()[0].status).toBe('completed');
+    const settledAt = new Date();
+    context.db.update(sessions).set({ settledAt }).where(eq(sessions.id, 's')).run();
     const restarted = new SessionOperationWorker(
       context.db,
       context.events,
@@ -374,6 +376,7 @@ describe('SessionOperationWorker', () => {
     );
     expect(await restarted.acceptMessage('s', 'hello', [], 'message')).toBe(first);
     expect(context.dispatch).toHaveBeenCalledOnce();
+    expect(context.db.select().from(sessions).get()?.settledAt).toEqual(settledAt);
     restarted.stop();
   });
 

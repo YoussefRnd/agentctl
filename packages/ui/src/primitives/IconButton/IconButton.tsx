@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import type { ElementType, ComponentPropsWithoutRef, ReactNode } from 'react';
+import { Spinner } from '../../components/Spinner.js';
 import { cn } from '../../utils.js';
 
 export type IconButtonVariant = 'ghost' | 'outline' | 'solid' | 'danger';
@@ -58,30 +59,7 @@ const IconButtonComponent = <T extends ElementType = 'button'>({
       aria-busy={isLoading ? true : undefined}
       {...props}
     >
-      {isLoading ? (
-        <svg
-          className="h-3.5 w-3.5 animate-spin"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
-      ) : (
-        children
-      )}
+      {isLoading ? <Spinner aria-hidden="true" className="icon-compact" /> : children}
     </Component>
   );
 };

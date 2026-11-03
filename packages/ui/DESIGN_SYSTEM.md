@@ -50,6 +50,20 @@ Shared primitives and semantic foundation classes are the source of truth for ap
 
 Use `LoadingState`, `EmptyState`, `ErrorState`, and `StatusBadge` for consistent feedback. Use semantic `success`, `warning`, and `danger` tokens rather than palette-specific colors.
 
+## Loading
+
+- Keep the screen, panel or dialog frame visible. Place pending content inside that frame.
+- Use `LoadingState` for a named initial load; `variant="inline"` fits smaller regions.
+- Use `LoadingSkeleton` to announce a pending list once; its rows use the actual presentation through `SkeletonSurface`.
+- Keep existing content during background refetches. Show a local indicator instead of replacing useful data.
+- Use `Spinner` for busy controls. Set `aria-hidden="true"` when the parent already names or announces the work; label standalone spinners.
+- `Button isLoading` retains its label, reserves the spinner slot and prevents duplicate clicks. Pass a boolean in both states to keep width stable. `IconButton isLoading` retains its accessible name.
+- Use `Progress` with a real percentage when available; omit `value` for indeterminate work. Keep cancellation controls usable.
+- Loading primitives use semantic color, icon and typography tokens and respect reduced motion. Live views and skeletons share lightweight presentation layouts; placeholders fill their content slots. Data hooks and action handlers stay in the live views.
+- For a presentation that can render safely with known/default props, use `SkeletonSurface pending={loading}` around the actual view. It derives masks from rendered text, icons and controls; additions and conditional sections need no separate placeholder markup. Keep data fetching, subscriptions and service actions in the live controller: masking a component does not prevent its hooks from running.
+- `SkeletonSurface` follows DOM mutations, resizing, scrolling and font loading, clips overflow and respects reduced motion. Nested surfaces announce loading once and pending content is hidden and inert. Unknown server conditions and list lengths still require default or cached data.
+- Agent thinking and streaming feedback retain their dedicated indicators.
+
 ## Radius hierarchy
 
 - Small items: `rounded-md`.

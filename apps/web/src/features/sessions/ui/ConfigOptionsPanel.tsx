@@ -5,8 +5,7 @@ import {
   resolveAgentFeatures,
   type AgentConfigOption,
 } from '@agentctl/shared';
-import { Select, cn } from '@agentctl/ui';
-import { Loader2 } from 'lucide-react';
+import { Select, cn, Spinner } from '@agentctl/ui';
 
 const DEFAULT_FILTER_CATEGORIES: string[] = [];
 
@@ -97,7 +96,7 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
             <span id={labelId} className="text-text-main text-xs font-medium">
               {option.name}
             </span>
-            {isUpdating && <Loader2 size={11} className="text-accent animate-spin" />}
+            {isUpdating && <Spinner aria-hidden="true" className="icon-inline" />}
           </div>
           {description && (
             <p id={descriptionId} className="text-text-muted mt-1 text-[11px] leading-relaxed">
@@ -144,7 +143,7 @@ function ConfigOptionRow({ option, onChange, disabled, isUpdating }: ConfigOptio
         <label htmlFor={optionId} className="text-text-main text-xs font-medium">
           {option.name}
         </label>
-        {isUpdating && <Loader2 size={11} className="text-accent animate-spin" />}
+        {isUpdating && <Spinner aria-hidden="true" className="icon-inline" />}
       </div>
 
       <Select

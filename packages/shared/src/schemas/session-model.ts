@@ -124,6 +124,7 @@ export const sessionRowSchema = sessionSchema.extend({
   updatedAt: z.coerce.date(),
   hasUserActivity: z.boolean().optional(),
   pinnedAt: z.coerce.date().nullable().optional(),
+  settledAt: z.coerce.date().nullable().optional(),
   lastReadEventId: z.number().int().nonnegative().optional(),
   latestActivityEventId: z.number().int().nonnegative().optional(),
   sidebarActivity: z

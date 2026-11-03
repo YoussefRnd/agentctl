@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { ProvidersSettingsPresentation } from './ProvidersSettingsPresentation';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { providerKeys } from '@/shared/lib/queryKeys';
 import { useProviders } from '@/features/providers';
 import { useSettings } from '../api/useSettings';
-import { Button, ErrorState } from '@agentctl/ui';
-import { Download, Loader2, RefreshCw } from 'lucide-react';
-import { ProviderProfilesPanel } from './ProviderProfilesPanel';
-import { RegistryBrowser } from './RegistryBrowser';
 import { providerService } from '@agentctl/api-client';
 import { toast } from 'sonner';
 
@@ -34,68 +33,23 @@ export function ProvidersSettingsView() {
     }
   };
 
+  const synced = useRef(false);
+  useEffect(() => {
+    if (synced.current) return;
+    synced.current = true;
+    providersApi.syncProviders();
+  }, [providersApi.syncProviders]);
+  const queryClient = useQueryClient();
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-text-main text-lg leading-8 font-bold">AI Providers</h2>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void exportDiagnostics()}
-              disabled={isExportingDiagnostics}
-              title="Exports connection state and capability decisions without prompts, environment variables, or protocol frames"
-              className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold whitespace-nowrap"
-            >
-              {isExportingDiagnostics ? (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5 shrink-0" />
-              )}
-              <span>Export diagnostics</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                providersApi.syncProviders();
-              }}
-              disabled={providersApi.isSyncing}
-              className="border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50 flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold whitespace-nowrap"
-            >
-              {providersApi.isSyncing ? (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5 shrink-0 transition-transform duration-500 hover:rotate-180" />
-              )}
-              <span>Sync All</span>
-            </Button>
-          </div>
-        </div>
-        <p className="text-text-muted mt-1 text-xs">
-          Configure agent providers, authentication keys, and model parameters. Installed provider
-          packages update automatically in the background.
-        </p>
-      </div>
-
-      {providersApi.providersError && (
-        <ErrorState
-          title="Could not load agents"
-          message={providersApi.providersError.message}
-          onRetry={() => void providersApi.retryProviders()}
-        />
-      )}
-      {providersApi.registryError && (
-        <ErrorState
-          title="Could not load agent catalog"
-          message={providersApi.registryError.message}
-          onRetry={() => void providersApi.retryRegistry()}
-        />
-      )}
-      <ProviderProfilesPanel providers={providersApi.providers} />
-      <RegistryBrowser settings={settings} api={providersApi} />
-    </div>
+    <ProvidersSettingsPresentation
+      settings={settings}
+      providersApi={providersApi}
+      isExportingDiagnostics={isExportingDiagnostics}
+      exportDiagnostics={exportDiagnostics}
+      invalidateProfiles={async () => {
+        await queryClient.invalidateQueries({ queryKey: providerKeys.all });
+        await queryClient.invalidateQueries({ queryKey: providerKeys.registry });
+      }}
+    />
   );
 }

@@ -1,6 +1,9 @@
+import { RegistryCardsLayout } from './SettingsListLayouts';
+import { RegistryToolbarLayout } from './SettingsListLayouts';
+import { RegistryCardSkeleton } from './RegistryCard';
 import { useEffect, useState, useRef } from 'react';
 import type { ProviderDiscovery } from '@agentctl/shared';
-import { SearchBar, Card } from '@agentctl/ui';
+import { SearchBar, Card, LoadingSkeleton } from '@agentctl/ui';
 import { RegistryCard } from './RegistryCard';
 import { ProviderAuthDialog } from '@/features/providers';
 
@@ -38,19 +41,21 @@ interface RegistryBrowserProps {
 
 type StatusFilter = 'all' | 'installed' | 'not_installed';
 
-export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
-  const { syncProviders } = api;
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [authProvider, setAuthProvider] = useState<ProviderDiscovery | null>(null);
-
+export function RegistryBrowser(props: RegistryBrowserProps) {
+  const { syncProviders } = props.api;
   const hasSyncedRef = useRef(false);
-
   useEffect(() => {
     if (hasSyncedRef.current) return;
     hasSyncedRef.current = true;
     syncProviders();
   }, [syncProviders]);
+  return <RegistryBrowserPresentation {...props} />;
+}
+
+export function RegistryBrowserPresentation({ settings, api }: RegistryBrowserProps) {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [authProvider, setAuthProvider] = useState<ProviderDiscovery | null>(null);
 
   const matchesQuery = (p: ProviderDiscovery) => {
     const q = query.toLowerCase().trim();
@@ -122,54 +127,59 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
       )}
 
       {/* Top search & filter bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <SearchBar
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-            }}
-            onClear={() => {
-              setQuery('');
-            }}
-            placeholder="Search providers & agents..."
-          />
-        </div>
-
-        <div className="border-border/30 bg-surface/40 flex shrink-0 gap-1 rounded-xl border p-1">
-          {(
-            [
-              { id: 'all', label: 'All' },
-              { id: 'installed', label: 'Installed' },
-              { id: 'not_installed', label: 'Available' },
-            ] as const
-          ).map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                setStatusFilter(id);
+      <RegistryToolbarLayout
+        search={
+          <>
+            <SearchBar
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
               }}
-              className={`cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
-                statusFilter === id
-                  ? 'bg-accent text-brand-crust shadow-sm'
-                  : 'text-text-muted hover:text-text-main hover:bg-surface/60'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+              onClear={() => {
+                setQuery('');
+              }}
+              placeholder="Search providers & agents..."
+            />
+          </>
+        }
+        filters={
+          <>
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'installed', label: 'Installed' },
+                { id: 'not_installed', label: 'Available' },
+              ] as const
+            ).map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(id);
+                }}
+                className={`cursor-pointer rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                  statusFilter === id
+                    ? 'bg-accent text-brand-crust shadow-sm'
+                    : 'text-text-muted hover:text-text-main hover:bg-surface/60'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </>
+        }
+      />
 
       {api.isLoadingRegistry ? (
-        <div className="animate-pulse space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 rounded-xl border border-white/5 bg-white/5" />
-          ))}
-        </div>
+        <LoadingSkeleton message="Loading provider registry…" className="space-y-3">
+          <RegistryCardsLayout>
+            {Array.from({ length: 3 }, (_, i) => (
+              <RegistryCardSkeleton key={i} />
+            ))}
+          </RegistryCardsLayout>
+        </LoadingSkeleton>
       ) : (
-        <div className="grid gap-3">
+        <RegistryCardsLayout>
           {filtered.map((p) => (
             <RegistryCard
               key={p.id}
@@ -194,7 +204,7 @@ export function RegistryBrowser({ settings, api }: RegistryBrowserProps) {
               </div>
             </Card>
           )}
-        </div>
+        </RegistryCardsLayout>
       )}
 
       <ProviderAuthDialog

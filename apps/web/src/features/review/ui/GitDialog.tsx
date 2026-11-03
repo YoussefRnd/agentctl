@@ -1,6 +1,5 @@
 import type { ReactNode, TextareaHTMLAttributes } from 'react';
-import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@agentctl/ui';
-import { SyncIcon } from '@primer/octicons-react';
+import { DialogContent, DialogDescription, DialogHeader, DialogTitle, Spinner } from '@agentctl/ui';
 
 /** Keep the form scrollable while its recovery and submit actions stay reachable. */
 export function GitDialogContent({
@@ -63,7 +62,7 @@ export function GitDraftButton({
       disabled={disabled || pending}
       onClick={onClick}
     >
-      {pending && <SyncIcon className="h-3.5 w-3.5 animate-spin" />}
+      {pending && <Spinner aria-hidden="true" className="icon-compact" />}
       {pending ? 'Generating…' : label}
     </button>
   );

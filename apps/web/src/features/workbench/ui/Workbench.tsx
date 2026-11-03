@@ -2,7 +2,7 @@ import type { ReviewComposerActions } from '@/features/review';
 import { useState, useRef, useEffect, Suspense, lazy } from 'react';
 import { StatusPane } from './StatusPane';
 import { useSession } from '@/features/sessions';
-import { GlassPanel, Spinner, Dropdown, Tooltip, cn } from '@agentctl/ui';
+import { GlassPanel, Dropdown, Tooltip, cn, LoadingState } from '@agentctl/ui';
 import { Maximize2, Minimize2, Terminal, FileText, X, Plus, Layout } from 'lucide-react';
 import { DiffIcon } from '@primer/octicons-react';
 import { useWorkbenchStore, type WorkbenchTab } from '@/shared/stores/useWorkbenchStore';
@@ -389,9 +389,16 @@ export function Workbench({
             ) : (
               <Suspense
                 fallback={
-                  <div className="flex h-full items-center justify-center p-8">
-                    <Spinner className="h-5 w-5" />
-                  </div>
+                  <LoadingState
+                    message={
+                      tab === 'terminal'
+                        ? 'Loading terminal…'
+                        : tab === 'changes'
+                          ? 'Loading changes…'
+                          : 'Loading status…'
+                    }
+                    className="h-full"
+                  />
                 }
               >
                 {tab === 'status' && <StatusPane />}

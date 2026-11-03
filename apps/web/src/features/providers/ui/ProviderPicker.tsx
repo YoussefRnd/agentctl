@@ -1,3 +1,4 @@
+import { Spinner, LoadingState } from '@agentctl/ui';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Check, RefreshCw } from 'lucide-react';
 import { findAgentConfigOption, type ProviderDiscovery } from '@agentctl/shared';
@@ -197,6 +198,7 @@ export function ProviderPicker({
                 refreshProvider(activeProvider.id);
               }
             }}
+            aria-busy={isRefreshing || undefined}
             disabled={isRefreshing || activeProvider.installState === 'not_installed'}
             title={
               activeProvider.installState === 'not_installed'
@@ -205,7 +207,11 @@ export function ProviderPicker({
             }
             className="text-text-muted hover:text-text-main hover:bg-text-main/5 rounded-lg p-1.5 transition-colors disabled:pointer-events-none disabled:opacity-30"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? (
+              <Spinner aria-hidden="true" className="icon-compact" />
+            ) : (
+              <RefreshCw className="icon-compact" />
+            )}
           </button>
         </div>
 
@@ -229,10 +235,11 @@ export function ProviderPicker({
           ) : models.length === 0 ? (
             <div className="p-2">
               {isRefreshing ? (
-                <div className="text-text-muted flex items-center justify-center gap-2 p-6 text-xs font-medium">
-                  <RefreshCw className="text-accent h-4 w-4 animate-spin" />
-                  <span>Loading available models...</span>
-                </div>
+                <LoadingState
+                  variant="inline"
+                  message="Loading available models…"
+                  className="justify-center p-6"
+                />
               ) : (
                 <button
                   type="button"

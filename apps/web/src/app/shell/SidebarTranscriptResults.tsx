@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { searchSessionEvents, type SearchResultItem } from '@agentctl/api-client';
 import type { SearchEventType } from '@agentctl/shared';
-import { MessageSquare, Wrench, BrainCircuit, Loader2, SearchX, RotateCw } from 'lucide-react';
+import { MessageSquare, Wrench, BrainCircuit, SearchX, RotateCw } from 'lucide-react';
 import { AgentIcon, RelativeTime } from '@/shared';
-import { Button, cn } from '@agentctl/ui';
+import { Button, cn, LoadingState } from '@agentctl/ui';
 
 interface SidebarTranscriptResultsProps {
   searchQuery: string;
@@ -132,10 +132,7 @@ export function SidebarTranscriptResults({
 
       {/* Results Content */}
       {isSearching ? (
-        <div className="text-text-muted flex flex-col items-center justify-center py-10">
-          <Loader2 className="icon-prominent mb-2 animate-spin motion-reduce:animate-none" />
-          <span className="text-role-control">Searching messages</span>
-        </div>
+        <LoadingState message="Searching messages…" className="py-10" />
       ) : isError ? (
         <div className="text-text-muted flex flex-col items-center justify-center px-4 py-8 text-center">
           <p className="text-role-control">Could not search transcript messages</p>

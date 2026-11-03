@@ -11,7 +11,7 @@ import { useGitDraft, formatGeneratedCommit } from '../model/useGitDraft';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, assertApiStatus } from '@agentctl/api-client';
-import { Dialog, Button } from '@agentctl/ui';
+import { Dialog, Button, Spinner } from '@agentctl/ui';
 import {
   GitDialogContent,
   GitDialogHeader,
@@ -186,7 +186,7 @@ export function ApplySessionDialog({
               className="h-auto min-h-8 min-w-0 gap-1.5 py-2 text-xs whitespace-normal"
             >
               {isSubmitting ? (
-                <SyncIcon className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                <Spinner aria-hidden="true" className="icon-compact shrink-0" />
               ) : isWorktree ? (
                 <GitMergeIcon className="h-3.5 w-3.5 shrink-0" />
               ) : (
@@ -263,7 +263,7 @@ export function ApplySessionDialog({
             <span role="status" className="text-text-muted inline-flex items-center gap-1.5">
               {isSubmitting ? (
                 <>
-                  <SyncIcon className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <Spinner aria-hidden="true" className="icon-compact shrink-0" />
                   {step}
                 </>
               ) : workspaceBusy || checkError || blockedReason ? (
@@ -272,7 +272,8 @@ export function ApplySessionDialog({
                 </>
               ) : isChecking ? (
                 <>
-                  <SyncIcon className="h-3.5 w-3.5 shrink-0 animate-spin" /> Checking readiness…
+                  <Spinner aria-hidden="true" className="icon-compact shrink-0" /> Checking
+                  readiness…
                 </>
               ) : hasConflicts ? (
                 <>

@@ -35,6 +35,9 @@ import {
   GlassPanel,
   Input,
   LoadingState,
+  SkeletonSurface,
+  Progress,
+  IconButton,
   Select,
   Switch,
   Dialog,
@@ -680,6 +683,80 @@ function GallerySection({
   );
 }
 
+export function LoadingPatternsPreview() {
+  const [busy, setBusy] = useState(true);
+  const [extra, setExtra] = useState(false);
+  return (
+    <GallerySection
+      title="Loading patterns"
+      description="Shared feedback for content, local work and measurable progress."
+    >
+      <div className="grid min-w-0 gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <h3 className="text-role-title">Content loading</h3>
+          </CardHeader>
+          <CardContent>
+            <SkeletonSurface pending={busy} message="Loading preferences…">
+              <div className="space-y-3">
+                <h4 className="text-role-label">Workspace preferences</h4>
+                <p className="text-role-caption text-text-muted">
+                  The real presentation supplies the loading layout.
+                </p>
+                <Button>Save preferences</Button>
+                {extra && (
+                  <section className="space-y-2">
+                    <p className="text-role-caption">Additional options</p>
+                    <Button variant="outline">Conditional action</Button>
+                  </section>
+                )}
+              </div>
+            </SkeletonSurface>
+            <Button className="mt-4" variant="outline" onClick={() => setExtra(!extra)}>
+              Toggle conditional section
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <h3 className="text-role-title">Local loading</h3>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <LoadingState message="Connecting to session…" className="min-h-36" />
+            <LoadingState variant="inline" message="Refreshing models…" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <h3 className="text-role-title">Actions and progress</h3>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button isLoading={busy} data-testid="loading-action">
+                Save preferences
+              </Button>
+              <IconButton aria-label="Refresh preview" isLoading={busy}>
+                <Inbox className="icon-compact" />
+              </IconButton>
+            </div>
+            <Button variant="outline" onClick={() => setBusy(!busy)}>
+              Toggle action state
+            </Button>
+            <div className="space-y-2">
+              <p className="text-role-caption text-text-muted">Provider download · 64%</p>
+              <Progress label="Provider download" value={64} />
+            </div>
+            <div className="space-y-2">
+              <p className="text-role-caption text-text-muted">Preparing installation…</p>
+              <Progress label="Preparing installation" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </GallerySection>
+  );
+}
+
 export function UiGalleryRoute() {
   const [selectedAgent, setSelectedAgent] = useState('claude');
   const [enabled, setEnabled] = useState(true);
@@ -832,6 +909,8 @@ export function UiGalleryRoute() {
             </GlassPanel>
           </div>
         </GallerySection>
+
+        <LoadingPatternsPreview />
 
         <GallerySection
           title="Feedback states"

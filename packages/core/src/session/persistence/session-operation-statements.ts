@@ -5,6 +5,16 @@ import { messageEventExists } from './session-operation-reconciliation.js';
 
 export function prepareOperationStatements(db: DbClient) {
   return {
+    reopen: db
+      .update(sessions)
+      .set({
+        settledAt: null,
+        updatedAt: sql`${sessions.updatedAt}`,
+      })
+      .where(
+        and(eq(sessions.id, sql.placeholder('sessionId')), sql`${sessions.settledAt} is not null`),
+      )
+      .prepare(),
     previous: db
       .select({
         kind: sessionOperations.kind,

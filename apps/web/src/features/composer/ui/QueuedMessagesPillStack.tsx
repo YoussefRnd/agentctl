@@ -8,11 +8,10 @@ import {
   Pencil,
   RotateCcw,
   Play,
-  Loader2,
   AlertCircle,
 } from 'lucide-react';
 import { useSessionQueue } from '@/features/sessions';
-import { IconButton, MessageEditor, Tooltip } from '@agentctl/ui';
+import { IconButton, MessageEditor, Tooltip, Spinner } from '@agentctl/ui';
 import { presentProviderError } from '@agentctl/shared';
 import type { QueuedMessage } from '@/shared/stores/useMessageQueueStore';
 
@@ -106,7 +105,7 @@ export function MessageQueue({
               onClick={() => void onResume()}
             >
               {pendingId === 'resume' ? (
-                <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+                <Spinner aria-hidden="true" className="icon-compact" />
               ) : (
                 <Play aria-hidden="true" className="h-3.5 w-3.5" />
               )}
@@ -178,9 +177,9 @@ export function MessageQueue({
                   )}
                   <div className="flex shrink-0 items-center gap-0.5">
                     {message.status === 'sending' || pendingId === message.id ? (
-                      <Loader2
-                        aria-label="Updating queued message"
-                        className="text-text-muted mx-1.5 h-3.5 w-3.5 animate-spin"
+                      <Spinner
+                        label="Updating queued message"
+                        className="text-text-muted icon-compact mx-1.5"
                       />
                     ) : null}
                     {message.status === 'failed' && (

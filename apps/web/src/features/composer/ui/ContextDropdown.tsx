@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Folder, Code2, Loader2, Check, Search, AlertCircle } from 'lucide-react';
-import { cn } from '@agentctl/ui';
+import { Folder, Code2, Check, Search, AlertCircle } from 'lucide-react';
+import { cn, Spinner } from '@agentctl/ui';
 import { DiffIcon, GitBranchIcon, GitCommitIcon } from '@primer/octicons-react';
 import type { ContextItem, ContextItemType } from '@agentctl/api-client';
 import { FileIcon } from '@/shared';
@@ -154,7 +154,7 @@ export function ContextDropdown({
         >
           {isLoading ? (
             <>
-              <Loader2 aria-hidden="true" className="text-accent h-5 w-5 animate-spin" />
+              <Spinner aria-hidden="true" className="text-accent icon-prominent" />
               <p>Searching workspace…</p>
             </>
           ) : searchError ? (

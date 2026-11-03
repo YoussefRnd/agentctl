@@ -129,3 +129,33 @@ An isolated browser fixture using the real sidebar components was checked in Moc
 at 280px and 240px sidebar widths and 13px/20px UI font settings. The check covered long titles,
 branch truncation, pending activity, pinning, search results and keyboard filtering. No shared UI
 foundation or primitive implementation changed during this pass.
+
+Sidebar groups use spacing and labels rather than a vertical tree line. Project names, Pinned,
+Active and Settled labels, session titles and the Settings label share the same icon/text gutters.
+Session and project action buttons share their right inset; nested groups keep the full row width.
+
+## Loading feedback consistency
+
+Application loaders compose the shared Spinner, LoadingState, LoadingSkeleton, SkeletonSurface and
+Progress primitives. The gallery's Loading patterns section covers content placeholders, local
+status, busy controls and measured/indeterminate progress. Existing agent-thinking and streaming
+indicators retain their own semantics.
+
+Browser checks covered Mocha at 13px UI text and Latte at 20px, including a 390px viewport.
+Busy and idle Save preferences controls retained identical dimensions and labels. Content and
+progress stayed contained; Settings and provider-authentication loading frames kept their close
+controls, and Escape dismissed both. Dedicated regressions cover polite status ownership,
+decorative placeholders, progress bounds, duplicate-click prevention, focus preservation and
+closing before deferred content is ready.
+
+SkeletonSurface now masks the actual settings, provider/MCP/setup, authentication, sidebar and
+review presentation trees. Buttons, text, icons and conditional sections create placeholders
+automatically; no second control tree is maintained. Local UI state remains mounted when a
+surface is revealed. LoadingSkeleton groups remain for accessible pending lists and share nested
+status ownership with automatic surfaces. Unused manual shape/text primitives are removed.
+
+An isolated browser fixture added a conditional section with a new button: the mask count changed
+from three to five while the pending and loaded presentations retained identical heights. Real
+General, Providers and MCP settings views kept one accessible status and stayed contained in a
+390px viewport at 20px text in Latte; Mocha/13px was also checked. Sidebar and review rows were
+visually inspected. Unknown server conditions, text lengths and list counts still use safe defaults.

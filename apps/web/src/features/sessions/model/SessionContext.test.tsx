@@ -19,6 +19,7 @@ const { streamState } = vi.hoisted(() => ({ streamState: { events: [] as Session
 vi.mock('./useSessionEvents', () => ({
   useSessionEvents: () => ({
     events: streamState.events,
+    visibleEvents: streamState.events,
     isLoading: false,
     isConnected: true,
     streamingEventId: null,

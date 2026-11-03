@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
   Button,
+  Spinner,
 } from '@agentctl/ui';
 import {
   GitBranchIcon,
@@ -168,7 +169,7 @@ export function ReviewGitActions({
                 {pendingAction === 'fetch' ||
                 pendingAction === 'push' ||
                 pendingAction === 'pull' ? (
-                  <SyncIcon className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <Spinner aria-hidden="true" className="icon-compact shrink-0" />
                 ) : (
                   <SyncIcon className="h-3.5 w-3.5 shrink-0" />
                 )}
@@ -491,7 +492,7 @@ export function ReviewGitActions({
                 className="h-auto min-h-8 min-w-0 gap-2 py-2 text-xs whitespace-normal"
               >
                 {isGitActionPending ? (
-                  <SyncIcon className="h-3.5 w-3.5 animate-spin" />
+                  <Spinner aria-hidden="true" className="icon-compact" />
                 ) : needsPushRetry ? (
                   <RepoPushIcon className="h-3.5 w-3.5" />
                 ) : (

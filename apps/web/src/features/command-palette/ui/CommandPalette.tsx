@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useId, type ElementType } from 'react';
-import { Dialog, DialogContent, DialogTitle, SearchHighlight, cn } from '@agentctl/ui';
+import { Dialog, DialogContent, DialogTitle, SearchHighlight, cn, Spinner } from '@agentctl/ui';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fuzzySearch, getSessionDisplayTitle } from '@agentctl/shared';
@@ -17,7 +17,6 @@ import {
   Maximize2,
   Plus,
   CornerDownLeft,
-  Loader2,
   X,
   FolderGit2,
 } from 'lucide-react';
@@ -400,7 +399,7 @@ export function CommandPalette() {
             role="status"
             className="text-text-muted flex shrink-0 items-center gap-2 px-4 pb-2 text-[11px]"
           >
-            <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+            <Spinner aria-hidden="true" className="icon-compact" />
             Loading sessions and workspaces…
           </div>
         )}

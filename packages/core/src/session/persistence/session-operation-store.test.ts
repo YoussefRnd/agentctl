@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { eq } from 'drizzle-orm';
 import { DatabaseSync } from 'node:sqlite';
 import {
   createDatabase,
@@ -57,7 +58,9 @@ describe('Prepared session writes', () => {
     const firstTime = new Date('2030-01-01T00:00:00Z');
     const secondTime = new Date('2030-01-02T00:00:00Z');
     vi.setSystemTime(firstTime);
+    db.update(sessions).set({ settledAt: firstTime }).where(eq(sessions.id, 's')).run();
     const first = store.accept({ ...message('first'), traceparent: 'first-trace' });
+    expect(db.select().from(sessions).get()?.settledAt).toBeNull();
     store.reconcile('s');
     const prepare = vi.spyOn(DatabaseSync.prototype, 'prepare');
     expect(store.next('s')?.id).toBe('first');
@@ -87,6 +90,8 @@ describe('Prepared session writes', () => {
 
   it('rolls back event, change, token, operation and attempt writes if acceptance fails', () => {
     const { db, store } = fixture();
+    const settledAt = new Date();
+    db.update(sessions).set({ settledAt }).where(eq(sessions.id, 's')).run();
     db.run(
       "CREATE TRIGGER fail_attempt BEFORE INSERT ON session_turn_attempts BEGIN SELECT RAISE(ABORT, 'accept failure'); END",
     );
@@ -99,8 +104,10 @@ describe('Prepared session writes', () => {
     ])
       expect(db.select().from(table).all()).toEqual([]);
     expect(db.select().from(sessions).get()?.totalTokens).toBe(0);
+    expect(db.select().from(sessions).get()?.settledAt).toEqual(settledAt);
     db.run('DROP TRIGGER fail_attempt');
     expect(store.accept(message('second')).id).toBeGreaterThan(0);
+    expect(db.select().from(sessions).get()?.settledAt).toBeNull();
   });
 
   it('rolls back a claim when starting its attempt fails, and can reuse the statements afterward', () => {

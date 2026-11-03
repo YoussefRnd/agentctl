@@ -1,4 +1,4 @@
-import { RotateCcw, Undo2, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { RotateCcw, Undo2, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import type { RewindMode } from './RewindMenu';
 import { previewSnapshotDiff } from '@agentctl/api-client';
@@ -10,6 +10,7 @@ import {
   DialogDescription,
   Button,
   Badge,
+  Spinner,
 } from '@agentctl/ui';
 import { RepoForkedIcon } from '@primer/octicons-react';
 
@@ -123,7 +124,7 @@ export function RewindConfirmDialog({
                   </span>
                   {isLoadingSnapshot ? (
                     <span className="text-text-muted flex items-center gap-1 text-[10px]">
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Spinner aria-hidden="true" className="icon-inline" />
                       Inspecting snapshot...
                     </span>
                   ) : (
@@ -136,7 +137,7 @@ export function RewindConfirmDialog({
                 <div className="max-h-40 overflow-y-auto p-2">
                   {isLoadingSnapshot ? (
                     <div className="text-text-muted flex h-16 items-center justify-center gap-2 text-xs">
-                      <Loader2 className="text-accent h-4 w-4 animate-spin" />
+                      <Spinner aria-hidden="true" className="text-accent icon-default" />
                       <span>Reading file snapshot diff...</span>
                     </div>
                   ) : filesUnavailable ? (
@@ -208,7 +209,7 @@ export function RewindConfirmDialog({
           >
             {isLoading ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <Spinner aria-hidden="true" className="icon-compact" />
                 <span>Rolling back...</span>
               </>
             ) : (

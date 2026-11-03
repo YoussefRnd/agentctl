@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Settings, ChevronUp, AlertCircle } from 'lucide-react';
-import { Popover, PopoverTrigger, PopoverContent, cn } from '@agentctl/ui';
+import { Popover, PopoverTrigger, PopoverContent, cn, Spinner } from '@agentctl/ui';
 import { AgentIcon } from '@/shared';
 import { ProviderPicker } from '@/features/providers';
 import { CommandDropdown } from './CommandDropdown';
@@ -51,7 +51,7 @@ export function ProviderPickerTrigger({
 
   const providerLabel = activeProvider?.label ?? selectedProviderLabel;
   const badgeLabel = isLoading
-    ? 'Loading...'
+    ? 'Loading…'
     : modelLabel && modelLabel !== providerLabel
       ? `${providerLabel} · ${modelLabel}`
       : providerLabel;
@@ -85,6 +85,7 @@ export function ProviderPickerTrigger({
             <button
               type="button"
               disabled={isLoading}
+              aria-busy={isLoading || undefined}
               aria-label="Select AI provider"
               aria-expanded={isOpen}
               className={cn(
@@ -96,7 +97,7 @@ export function ProviderPickerTrigger({
               )}
             >
               {isLoading ? (
-                <div className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
+                <Spinner aria-hidden="true" className="icon-compact" />
               ) : activeProvider?.agent?.icon ? (
                 <img
                   src={activeProvider.agent.icon}

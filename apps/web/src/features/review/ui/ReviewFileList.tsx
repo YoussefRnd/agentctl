@@ -1,3 +1,4 @@
+import { ReviewFileRowLayout } from './ReviewFileRowLayout';
 import {
   ChevronRightIcon,
   ChevronDownIcon,
@@ -15,7 +16,7 @@ import type { CodeReviewRun, ResolveReviewFinding } from '@agentctl/shared';
 import { DiffBlock } from './diff/DiffBlock';
 import type { ReviewFile, FileState } from './ReviewHeader';
 
-import { Dropdown, cn } from '@agentctl/ui';
+import { Dropdown, cn, LoadingState } from '@agentctl/ui';
 import { toast } from 'sonner';
 import type { parseDiff } from '@/shared/lib/diff-parser';
 import { FileIcon } from '@/shared';
@@ -247,7 +248,7 @@ export function ReviewFileList({
           const badge = STATE_BADGE[file.state] ?? STATE_BADGE.modified;
 
           return (
-            <div
+            <ReviewFileRowLayout
               key={file.path}
               data-review-file={file.path}
               data-index={item?.index}
@@ -272,54 +273,25 @@ export function ReviewFileList({
                   targetFileRef?.(element);
                 }
               }}
-              className="border-border/10 border-b"
-            >
-              {/* Sticky File Header: docks to top while scrolling through diff */}
-              <div
-                className={cn(
-                  'group/filerow border-border/20 bg-surface sticky top-0 z-10 flex w-full items-center justify-between border-b transition-colors',
-                  !collapsed
-                    ? 'border-l-accent/80 bg-surface-secondary border-l-2 shadow-xs'
-                    : 'hover:bg-surface-secondary/25',
-                )}
-              >
-                <button
-                  type="button"
-                  title={file.path}
-                  aria-label={`Toggle diff for ${file.path}`}
-                  aria-expanded={!collapsed}
-                  onClick={() => {
-                    onToggleFile(file.path);
-                  }}
-                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left select-none"
-                >
-                  {/* Single Slot: FileIcon at rest, Chevron replaces it on row hover */}
-                  <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
-                    <span className="transition-opacity duration-150 group-hover/filerow:opacity-0">
-                      <FileIcon path={file.path} className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="text-text-muted absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover/filerow:opacity-100">
-                      {collapsed ? (
-                        <ChevronRightIcon className="h-3.5 w-3.5" />
-                      ) : (
-                        <ChevronDownIcon className="h-3.5 w-3.5" />
-                      )}
-                    </span>
-                  </div>
-
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-text-main truncate font-mono text-xs font-medium">
-                      {fileName}
-                    </span>
-                    {dirPath && (
-                      <span className="text-text-muted/50 truncate font-mono text-[10px]">
-                        {dirPath}/
-                      </span>
+              collapsed={collapsed}
+              icon={
+                <>
+                  <span className="transition-opacity duration-150 group-hover/filerow:opacity-0">
+                    <FileIcon path={file.path} className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-text-muted absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover/filerow:opacity-100">
+                    {collapsed ? (
+                      <ChevronRightIcon className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDownIcon className="h-3.5 w-3.5" />
                     )}
                   </span>
-                </button>
-
-                <div className="flex shrink-0 items-center gap-2 pr-3 select-none">
+                </>
+              }
+              title={fileName}
+              subtitle={dirPath ? `${dirPath}/` : undefined}
+              actions={
+                <>
                   {(canStage || canUnstage) && (
                     <button
                       type="button"
@@ -391,7 +363,6 @@ export function ReviewFileList({
                       </Dropdown.Content>
                     </Dropdown.Portal>
                   </Dropdown.Root>
-
                   {/* Diff Line Stats (+N / -N) */}
                   {(stats.additions > 0 || stats.deletions > 0) && (
                     <div className="flex shrink-0 items-center gap-1 font-mono text-[10.5px] font-semibold tabular-nums">
@@ -403,7 +374,6 @@ export function ReviewFileList({
                       )}
                     </div>
                   )}
-
                   {/* Status Letter: Placed at MAX RIGHT (VS Code Style) */}
                   <span
                     className={cn(
@@ -414,15 +384,21 @@ export function ReviewFileList({
                   >
                     {badge.letter}
                   </span>
-                </div>
-              </div>
-
+                </>
+              }
+              filePath={file.path}
+              onToggle={() => onToggleFile(file.path)}
+            >
+              {/* Sticky File Header: docks to top while scrolling through diff */}
               {/* Diff content when expanded */}
               {!collapsed && (
                 <div className="bg-surface/10">
-                  {file.hunks.length === 0 && (
-                    <p className="text-text-muted p-3 text-xs">{file.diff || 'Loading diff…'}</p>
-                  )}
+                  {file.hunks.length === 0 &&
+                    (file.diff ? (
+                      <p className="text-text-muted p-3 text-xs">{file.diff}</p>
+                    ) : (
+                      <LoadingState variant="inline" message="Loading diff…" className="p-3" />
+                    ))}
                   {file.hasStagedChanges && file.hasUnstagedChanges && (
                     <p className="text-text-muted p-2 text-xs">
                       This file has both staged and unstaged changes. Commit includes only the
@@ -446,7 +422,7 @@ export function ReviewFileList({
                   />
                 </div>
               )}
-            </div>
+            </ReviewFileRowLayout>
           );
         })}
       </div>

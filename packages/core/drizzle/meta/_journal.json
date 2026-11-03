@@ -421,6 +421,13 @@
       "when": 1793500173311,
       "tag": "0059_sidebar_session_state",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "6",
+      "when": 1793502497647,
+      "tag": "0060_settled_sessions",
+      "breakpoints": true
     }
   ]
 }

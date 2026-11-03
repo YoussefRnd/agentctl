@@ -1,3 +1,4 @@
+import { LoadingState } from '@agentctl/ui';
 import { useMcpServers, type McpServerData } from '@/features/settings';
 
 export interface McpStatusPanelProps {
@@ -16,9 +17,11 @@ export function McpStatusPanel({
 
   if (isLoading) {
     return (
-      <div className="text-text-muted flex items-center justify-center py-4 text-xs font-normal">
-        Loading MCP servers...
-      </div>
+      <LoadingState
+        variant="inline"
+        message="Loading MCP servers…"
+        className="justify-center py-4"
+      />
     );
   }
 

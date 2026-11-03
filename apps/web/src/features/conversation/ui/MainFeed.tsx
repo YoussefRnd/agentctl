@@ -272,7 +272,7 @@ export function MainFeed() {
               className="motion-history min-h-0 w-full flex-1 overflow-hidden"
             >
               {isLoadingEvents && !isHistoryChanging ? (
-                <LoadingState message="Loading session..." className="h-full" />
+                <LoadingState message="Loading session…" className="h-full" />
               ) : (
                 <EventFeed
                   providers={providers}

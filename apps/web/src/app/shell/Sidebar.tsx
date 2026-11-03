@@ -135,6 +135,23 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
     });
   };
 
+  const handleSettleSession = (sessionId: string, settled: boolean) => {
+    void execute(`settle-session-${sessionId}`, () => patchSession(sessionId, { settled }), {
+      errorMessage: settled ? 'Failed to settle session' : 'Failed to reopen session',
+    }).then((result) => {
+      if (!result) return;
+      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      if (settled && currentActiveSessionId === sessionId) {
+        const project = projects.find((project) =>
+          project.sessions.some((session) => session.id === sessionId),
+        );
+        if (project) keepProjectExpanded(project.id);
+        void navigate('/');
+      } else if (!settled) void navigate(`/sessions/${sessionId}`);
+    });
+  };
+
   useEffect(() => {
     let runningCount = 0;
     let needsAttentionCount = 0;
@@ -379,6 +396,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
           <SidebarProjectList
             providersById={providersById}
             handlePinSession={handlePinSession}
+            handleSettleSession={handleSettleSession}
             isLoading={isLoading}
             isError={isError}
             refetch={refetch}

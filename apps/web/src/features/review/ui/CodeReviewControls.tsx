@@ -231,10 +231,10 @@ export function CodeReviewHistory({
             size="sm"
             variant="ghost"
             className="mt-2 w-full"
-            disabled={loadingOlder}
+            isLoading={loadingOlder}
             onClick={onLoadOlder}
           >
-            {loadingOlder ? 'Loading…' : 'Load older reviews'}
+            Load older reviews
           </Button>
         )}
       </PopoverContent>

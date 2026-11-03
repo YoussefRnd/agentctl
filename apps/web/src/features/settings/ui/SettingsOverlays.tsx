@@ -1,10 +1,12 @@
+import { useTheme } from '@/shared';
 import { lazy, Suspense } from 'react';
 import { useSettings } from '../api/useSettings';
 import { useSettingsOverlayStore } from '../model/useSettingsOverlayStore';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@agentctl/ui';
+import { SettingsDialogFrame } from './SettingsDialogFrame';
+import { SettingsContentSkeleton } from './SettingsContentSkeleton';
 
-const SettingsDialog = lazy(() =>
-  import('./SettingsDialog').then((module) => ({ default: module.SettingsDialog })),
+const SettingsDialogContent = lazy(() =>
+  import('./SettingsDialog').then((module) => ({ default: module.SettingsDialogContent })),
 );
 const SetupWizard = lazy(() =>
   import('./SetupWizard').then((module) => ({ default: module.SetupWizard })),
@@ -12,28 +14,18 @@ const SetupWizard = lazy(() =>
 
 export function SettingsOverlays() {
   const { settings, isLoading } = useSettings();
+  const { themeMode } = useTheme();
   const isOpen = useSettingsOverlayStore((s) => s.isSettingsOpen);
-  const closeSettings = useSettingsOverlayStore((s) => s.closeSettings);
   return (
     <>
       {isOpen && (
-        <Suspense
-          fallback={
-            <Dialog
-              open
-              onOpenChange={(open) => {
-                if (!open) closeSettings();
-              }}
-            >
-              <DialogContent>
-                <DialogTitle>Settings</DialogTitle>
-                <DialogDescription role="status">Loading settings…</DialogDescription>
-              </DialogContent>
-            </Dialog>
-          }
-        >
-          <SettingsDialog />
-        </Suspense>
+        <SettingsDialogFrame>
+          <Suspense
+            fallback={<SettingsContentSkeleton themeMode={themeMode} settings={settings} />}
+          >
+            <SettingsDialogContent />
+          </Suspense>
+        </SettingsDialogFrame>
       )}
       {!isLoading && settings && !settings.onboardingCompleted && (
         <Suspense fallback={null}>

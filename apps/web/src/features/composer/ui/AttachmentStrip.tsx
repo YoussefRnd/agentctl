@@ -1,6 +1,6 @@
-import { RefreshCw, X, Loader2, AlertCircle } from 'lucide-react';
+import { RefreshCw, X, AlertCircle } from 'lucide-react';
 import type { PendingAttachment } from '../model/useAttachments';
-import { Button, IconButton, ImagePreview } from '@agentctl/ui';
+import { Button, IconButton, ImagePreview, Spinner } from '@agentctl/ui';
 
 interface AttachmentStripProps {
   attachments: PendingAttachment[];
@@ -37,7 +37,7 @@ export function AttachmentStrip({ attachments, onRemove, onRetry }: AttachmentSt
           {/* Uploading: circular spinner overlay */}
           {attachment.state === 'uploading' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/60 backdrop-blur-xs">
-              <Loader2 className="text-accent h-4 w-4 animate-spin" />
+              <Spinner aria-hidden="true" className="text-accent icon-default" />
               <span className="font-mono text-[9px] font-bold text-white">
                 {attachment.progress}%
               </span>

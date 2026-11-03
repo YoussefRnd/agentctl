@@ -4,7 +4,7 @@ import { CodeReviewVerification } from './CodeReviewVerification';
 import { CodeReviewContext } from './CodeReviewContext';
 import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from '@agentctl/ui';
+import { Button, Spinner } from '@agentctl/ui';
 import { providerService } from '@agentctl/api-client';
 import {
   AlertIcon,
@@ -12,7 +12,6 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CodeReviewIcon,
-  SyncIcon,
   XIcon,
 } from '@primer/octicons-react';
 import type { CodeReviewRun, RepositoryCapture, ReviewFinding } from '@agentctl/shared';
@@ -173,7 +172,7 @@ export function CodeReviewPanel({
             className={`inline-flex items-center gap-1.5 font-normal ${goodResult ? 'text-brand-teal' : needsAttention ? 'text-warning' : 'text-text-muted'}`}
           >
             {busy ? (
-              <SyncIcon size={12} className="animate-spin" />
+              <Spinner aria-hidden="true" className="icon-compact" />
             ) : goodResult ? (
               <CheckCircleIcon size={12} />
             ) : needsAttention ? (
@@ -247,7 +246,7 @@ export function CodeReviewPanel({
               onClick={startReview}
             >
               {start.isPending ? (
-                <SyncIcon size={13} className="animate-spin" />
+                <Spinner aria-hidden="true" className="icon-compact" />
               ) : (
                 <CodeReviewIcon size={13} />
               )}

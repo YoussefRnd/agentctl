@@ -152,7 +152,7 @@ export function CommandInputComposer({
   }, [showSlashMenu]);
 
   const getPlaceholder = () => {
-    if (disabled) return disabledReason ?? 'Connecting to session...';
+    if (disabled) return disabledReason ?? 'Connecting to session…';
     if (status === 'running') return 'Type a message to queue...';
     if (placeholder) return placeholder;
     return variant === 'hero'

@@ -1,3 +1,4 @@
+import { ProviderProfilesLayout } from './SettingsListLayouts';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { providerService } from '@agentctl/api-client';
@@ -8,6 +9,24 @@ import { providerKeys } from '@/shared/lib/queryKeys';
 
 export function ProviderProfilesPanel({ providers }: { providers: ProviderDiscovery[] }) {
   const queryClient = useQueryClient();
+  return (
+    <ProviderProfilesPresentation
+      providers={providers}
+      invalidate={async () => {
+        await queryClient.invalidateQueries({ queryKey: providerKeys.all });
+        await queryClient.invalidateQueries({ queryKey: providerKeys.registry });
+      }}
+    />
+  );
+}
+
+export function ProviderProfilesPresentation({
+  providers,
+  invalidate,
+}: {
+  providers: ProviderDiscovery[];
+  invalidate: () => Promise<void>;
+}) {
   const [providerId, setProviderId] = useState('');
   const provider = providers.find((item) => item.id === providerId);
   const [name, setName] = useState('');
@@ -51,8 +70,7 @@ export function ProviderProfilesPanel({ providers }: { providers: ProviderDiscov
     setBusy(true);
     try {
       await operation();
-      await queryClient.invalidateQueries({ queryKey: providerKeys.all });
-      await queryClient.invalidateQueries({ queryKey: providerKeys.registry });
+      await invalidate();
       toast.success('Provider configuration saved');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save provider configuration');
@@ -61,22 +79,19 @@ export function ProviderProfilesPanel({ providers }: { providers: ProviderDiscov
     }
   };
   return (
-    <div className="border-border/40 space-y-3 rounded-xl border p-4">
-      <p className="text-sm font-semibold">Provider profiles</p>
-      <p className="text-text-muted text-xs">
-        Create named profiles with separate credentials and defaults. Profiles share the installed
-        agent. For agents using a global login, configure a separate account directory through their
-        environment settings below.
-      </p>
-      <Select
-        value={providerId}
-        disabled={busy}
-        onChange={setProviderId}
-        placeholder="Choose a provider or profile"
-        options={providers
-          .filter((item) => item.installState !== 'not_installed')
-          .map((item) => ({ value: item.id, label: item.label }))}
-      />
+    <ProviderProfilesLayout
+      selector={
+        <Select
+          value={providerId}
+          disabled={busy}
+          onChange={setProviderId}
+          placeholder="Choose a provider or profile"
+          options={providers
+            .filter((item) => item.installState !== 'not_installed')
+            .map((item) => ({ value: item.id, label: item.label }))}
+        />
+      }
+    >
       {provider && (
         <>
           <div className="flex gap-2">
@@ -328,6 +343,6 @@ export function ProviderProfilesPanel({ providers }: { providers: ProviderDiscov
           </Button>
         </>
       )}
-    </div>
+    </ProviderProfilesLayout>
   );
 }

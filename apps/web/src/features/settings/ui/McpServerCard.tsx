@@ -1,7 +1,9 @@
+import { McpServerCardLayout, McpToolDiscoveryHint } from './SettingsListLayouts';
 import { type ReactNode } from 'react';
-import { Card, Button, Switch, Select } from '@agentctl/ui';
+import { SkeletonSurface } from '@agentctl/ui';
+import { Button, Switch, Select } from '@agentctl/ui';
 import { Server, ChevronDown, Edit2, Trash2 } from 'lucide-react';
-import type { McpServerData } from '../api/useMcpServers';
+import type { McpServerData, McpToolData } from '../api/useMcpServers';
 import { useMcpTools } from '../api/useMcpServers';
 import { formatKeyValuesJson, formatArgumentsJson, approvalPolicyOptions } from './McpUtils';
 import { McpToolPermissionEditor } from './McpToolPermissionEditor';
@@ -20,8 +22,14 @@ interface McpServerCardProps {
   ) => void;
 }
 
-export function McpServerCard({
+export function McpServerCard(props: McpServerCardProps) {
+  const { tools } = useMcpTools();
+  return <McpServerCardPresentation {...props} mcpTools={tools} />;
+}
+
+export function McpServerCardPresentation({
   server,
+  mcpTools,
   isExpanded,
   onToggleExpand,
   onToggleEnabled,
@@ -29,8 +37,7 @@ export function McpServerCard({
   onDelete,
   onUpdatePolicy,
   onUpdateToolPermission,
-}: McpServerCardProps) {
-  const { tools: mcpTools } = useMcpTools();
+}: McpServerCardProps & { mcpTools: McpToolData[] }) {
   const serverTools = mcpTools.filter((t) => t.serverId === server.id);
 
   let parsedArgs: string[] = [];
@@ -63,50 +70,36 @@ export function McpServerCard({
   })();
 
   return (
-    <Card className="group border-border/20 hover:border-accent/20 overflow-hidden border transition-colors">
-      <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3 p-4">
-        <button
-          type="button"
-          onClick={onToggleExpand}
-          aria-expanded={isExpanded}
-          aria-controls={`mcp-server-content-${server.id}`}
-          className="focus-visible:ring-accent/40 flex min-w-0 flex-1 basis-48 cursor-pointer items-center gap-3.5 rounded-md border-none bg-transparent text-left select-none focus-visible:ring-2 focus-visible:outline-none"
-        >
-          <div className="border-border/30 bg-surface-secondary/40 group-hover:bg-surface-secondary/60 text-text-main flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border p-1.5 transition-colors">
-            <Server className="h-4.5 w-4.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-role-title text-text-main flex min-w-0 flex-wrap items-center gap-2">
-              <span className="min-w-0 [overflow-wrap:anywhere]">{server.name}</span>
-              {statusBadge}
-            </h3>
-
-            {server.enabled && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {serverTools.slice(0, 3).map((t) => (
-                  <span
-                    key={t.name}
-                    className="bg-surface-secondary/50 text-text-muted border-border/10 max-w-full min-w-0 rounded border px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-tight [overflow-wrap:anywhere]"
-                  >
-                    {t.name.split('__')[1] ?? t.name}
-                  </span>
-                ))}
-                {serverTools.length > 3 && (
-                  <span className="text-text-muted text-[9px] font-bold opacity-60">
-                    +{serverTools.length - 3} more
-                  </span>
-                )}
-                {serverTools.length === 0 && (
-                  <span className="text-text-muted text-[9.5px] italic opacity-40">
-                    Discovering tools...
-                  </span>
-                )}
-              </div>
+    <McpServerCardLayout
+      icon={<Server className="h-4.5 w-4.5" />}
+      title={
+        <>
+          <span className="min-w-0 [overflow-wrap:anywhere]">{server.name}</span>
+          {statusBadge}
+        </>
+      }
+      detail={
+        server.enabled && (
+          <>
+            {serverTools.slice(0, 3).map((t) => (
+              <span
+                key={t.name}
+                className="bg-surface-secondary/50 text-text-muted border-border/10 max-w-full min-w-0 rounded border px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-tight [overflow-wrap:anywhere]"
+              >
+                {t.name.split('__')[1] ?? t.name}
+              </span>
+            ))}
+            {serverTools.length > 3 && (
+              <span className="text-text-muted text-[9px] font-bold opacity-60">
+                +{serverTools.length - 3} more
+              </span>
             )}
-          </div>
-        </button>
-
-        <div className="ml-auto flex shrink-0 items-center gap-3">
+            {serverTools.length === 0 && <McpToolDiscoveryHint />}
+          </>
+        )
+      }
+      actions={
+        <>
           <Switch
             checked={server.enabled}
             onCheckedChange={onToggleEnabled}
@@ -126,9 +119,13 @@ export function McpServerCard({
               }`}
             />
           </button>
-        </div>
-      </div>
-
+        </>
+      }
+      onToggleExpand={onToggleExpand}
+      expanded={isExpanded}
+      controlsId={`mcp-server-content-${server.id}`}
+      summaryTitle={server.name}
+    >
       {isExpanded && (
         <div
           id={`mcp-server-content-${server.id}`}
@@ -226,6 +223,42 @@ export function McpServerCard({
           </div>
         </div>
       )}
-    </Card>
+    </McpServerCardLayout>
+  );
+}
+
+const noop = () => undefined;
+export function McpServerCardSkeleton({
+  server,
+  tools = [],
+}: {
+  server?: McpServerData;
+  tools?: McpToolData[];
+}) {
+  return (
+    <SkeletonSurface message="Loading tools…">
+      <McpServerCardPresentation
+        server={
+          server ?? {
+            id: 'pending-server',
+            name: 'MCP server',
+            enabled: true,
+            autoApprove: false,
+            type: 'local',
+            status: 'connected',
+            approvalPolicy: 'always_prompt',
+            toolPermissions: '{}',
+          }
+        }
+        mcpTools={tools}
+        isExpanded={false}
+        onToggleExpand={noop}
+        onToggleEnabled={noop}
+        onEdit={noop}
+        onDelete={noop}
+        onUpdatePolicy={noop}
+        onUpdateToolPermission={noop}
+      />
+    </SkeletonSurface>
   );
 }

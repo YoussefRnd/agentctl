@@ -41,6 +41,11 @@ a second detail cache. Filtered project
 lists keep filter values in their keys. Workspace mutation invalidation remains centralized in
 `workspaceQueries`; it does not invalidate unrelated streaming data on every tool update.
 
+Settings opens its existing dialog frame immediately. Only the content views are deferred;
+SkeletonSurface masks the shared presentation tree until that code is ready. The
+frame, section selection and close controls persist across loading, with a screen-reader status
+and reduced-motion support. Regression tests cover changing sections and closing while pending.
+
 The settings response derives from shared schemas; app composition owns the query singleton
 and delegates HTTP/SSE to the client. The [contracts audit](contracts-architecture.md) records
 all public API and alias decisions. There is no second transport or state owner.
@@ -96,3 +101,52 @@ approval/input requests from child agents still surface on the parent chat.
 bounded event IDs supplied by the client. Prefetching, historical pages and background tabs do
 not mark chats read. Sidebar mutations neither restore worktrees nor reconnect providers.
 Migration 0059 initializes existing chats as read to avoid flagging historical work as new.
+
+Settled sessions use a separate persisted timestamp, independent of execution status and archive
+lifecycle. Settling clears pinning; pinning or explicitly reopening clears settlement. Active rows
+stay above a collapsed Settled group in each project; search reveals settled rows automatically.
+The currently selected settled chat is revealed by default, and settling the selected chat keeps
+the project expanded while returning to Home.
+
+Sidebar mutations reject settlement while operations/attempts are pending or active, using the
+same immediate transaction as the metadata update. No runtime shutdown or worktree cleanup is
+involved. A newly accepted message clears settlement inside the durable acceptance transaction;
+a failed acceptance rolls back, and replaying an old receipt does not reopen a subsequently
+settled chat. Migration 0060 leaves existing sessions active.
+
+## Loading presentation
+
+Loading feedback is composed from the UI package's Spinner, LoadingState, LoadingSkeleton,
+SkeletonSurface and Progress. Feature components retain loading/data/error ownership; ordinary query
+refetches keep cached content. Session routes render the normal workspace shell while lazy code
+loads. Settings and provider authentication keep their dialog frame mounted around their lazy
+content, including accessible close controls. Authentication regressions cover focus preservation
+and Escape cancellation before a delayed load completes. Review, sidebar, MCP, registry and setup
+placeholders use the shared theme-aware skeletons. Agent thinking and streaming indicators remain
+distinct from application loading.
+
+## Automatic skeleton presentation
+
+SkeletonSurface renders the actual presentation tree with inert, hidden content and derives
+placeholder rectangles from text ranges, icons and controls. MutationObserver picks up new
+buttons and conditional sections; ResizeObserver, scroll/resize and font events keep geometry
+in sync. Summary/disclosure controls expose their inner text/icon shapes rather than a full-row
+rectangle. Masks clip to overflow bounds and use the existing skeleton color/motion tokens.
+Nested LoadingSkeleton/SkeletonSurface regions share one accessible status. Pending controls
+cannot receive focus or activate actions. Revealing a surface preserves its component/DOM state.
+
+GeneralSettingsPresentation, ProvidersSettingsPresentation, McpSettingsPresentation and
+ProviderAuthPresentation contain the actual controls and conditional UI. Their live controllers
+own queries, provider synchronization, permission requests and terminal mounting. Sidebar project
+and session presentations supply the same rows for loading; review loading uses ReviewFileList
+with collapsed sample rows and inert composer actions. Loading a presentation must not start data
+requests: a mask cannot suppress React effects. Local UI-only hooks are safe.
+
+Fallbacks use available theme/notification/provider metadata and safe default data for unavailable
+records. Unknown server-dependent conditions, text and list counts cannot be inferred before the
+data arrives. Add new UI to the presentation owner, rather than the service controller, so it is
+included automatically. The gallery includes a conditional-section example.
+
+Regression coverage adds/removes a conditional section without skeleton changes, verifies new
+control masks, resize/scroll measurement, single status ownership, observer cleanup and DOM/state
+preservation. Settings/auth regressions keep closing and focus working while code is deferred.

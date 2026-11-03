@@ -1,5 +1,6 @@
+import { Spinner } from '@agentctl/ui';
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, Info, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Check, Info } from 'lucide-react';
 import { useUpdate } from '@/features/updates';
 
 type ToastKind = 'info' | 'success' | 'danger';
@@ -59,7 +60,7 @@ export function UpdateToast() {
         className={`bg-surface/90 border ${border} pointer-events-auto flex items-center gap-2.5 rounded-xl px-4 py-2.5 shadow-2xl backdrop-blur-xl`}
       >
         {toast.kind === 'info' ? (
-          <RefreshCw className={`${iconColor} h-4 w-4 animate-spin`} />
+          <Spinner aria-hidden="true" className={`${iconColor} icon-default`} />
         ) : (
           <Icon className={`${iconColor} h-4 w-4`} />
         )}

@@ -7,7 +7,7 @@ import {
   cancelReviewCheck,
   cancelCodeReview,
 } from '@agentctl/api-client';
-import { Button } from '@agentctl/ui';
+import { Button, LoadingState } from '@agentctl/ui';
 import type { ReviewFix } from '@agentctl/shared';
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { ReviewCheckOutput } from './CodeReviewVerification';
@@ -236,7 +236,7 @@ export function CodeReviewFixAttempts({
             fresh independent review. Final resolution stays manual.
           </p>
           {query.isPending ? (
-            <p role="status">Loading fix attempts…</p>
+            <LoadingState variant="inline" message="Loading fix attempts…" />
           ) : (
             <ul className="space-y-2">
               {attempts.map((attempt) => (

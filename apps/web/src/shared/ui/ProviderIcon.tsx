@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Terminal } from 'lucide-react';
 import { AgentIcon } from './AgentIcon';
@@ -22,31 +23,40 @@ export function getProviderIconUrl(
   return provider.agent?.icon || provider.icon;
 }
 
+function ProviderIconFrame({
+  size,
+  className,
+  children,
+}: {
+  size: NonNullable<ProviderIconProps['size']>;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-colors ${sizeMap[size].container} ${className ?? ''}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function ProviderIcon({
   provider,
   size = 'md',
   showFallbackIcon = true,
   className = '',
 }: ProviderIconProps) {
-  const s = sizeMap[size];
   const iconUrl = getProviderIconUrl(provider);
-
-  if (iconUrl) {
-    return (
-      <div
-        className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-colors ${s.container} ${className}`}
-      >
-        <img src={iconUrl} alt="" className={`object-contain ${s.img}`} />
-      </div>
-    );
-  }
-
+  const sizing = sizeMap[size];
   return (
-    <div
-      className={`border-border/30 bg-surface-secondary/40 flex items-center justify-center rounded-lg border transition-colors ${s.container} ${className}`}
-    >
-      {showFallbackIcon && <AgentIcon className={`text-text-main ${s.icon}`} />}
-    </div>
+    <ProviderIconFrame size={size} className={className}>
+      {iconUrl ? (
+        <img src={iconUrl} alt="" className={`object-contain ${sizing.img}`} />
+      ) : (
+        showFallbackIcon && <AgentIcon className={`text-text-main ${sizing.icon}`} />
+      )}
+    </ProviderIconFrame>
   );
 }
 

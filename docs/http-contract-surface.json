@@ -267,7 +267,7 @@
   "patchSession": {
     "method": "PATCH",
     "path": "/api/sessions/:id",
-    "responses": ["200"]
+    "responses": ["200", "409"]
   },
   "deleteSession": {
     "method": "DELETE",

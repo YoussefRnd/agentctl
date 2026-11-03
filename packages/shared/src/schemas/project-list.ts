@@ -32,6 +32,7 @@ export type SidebarProject = Pick<ProjectListRow, 'id' | 'name' | 'path' | 'isGi
     | 'selectedProvider'
     | 'selectedModel'
     | 'pinnedAt'
+    | 'settledAt'
     | 'lastReadEventId'
     | 'latestActivityEventId'
     | 'sidebarActivity'
