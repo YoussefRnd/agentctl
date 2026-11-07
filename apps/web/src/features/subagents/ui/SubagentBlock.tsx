@@ -1,3 +1,4 @@
+import { useTabNavigation } from '@agentctl/ui';
 import { ArrowUpRight } from 'lucide-react';
 import { useSubagentStore } from '../model/useSubagentStore';
 import {
@@ -25,9 +26,26 @@ export function SubagentBlock({ subagentGroups, isConnected = true }: SubagentBl
   const selected = useSubagentStore((state) => state.activeSubagentId);
   const selectedSession = useSubagentStore((state) => state.activeSessionId);
   const groups = sortSubagentGroups(subagentGroups);
+  const navigation = useTabNavigation({
+    value: groups.find(
+      (group) =>
+        getSubagentGroupKey(group) === selected &&
+        group.subagentEvent.sessionId === selectedSession,
+    )
+      ? selected
+      : null,
+    items: groups.map(getSubagentGroupKey),
+    orientation: 'vertical',
+    selectionMode: 'buttons',
+    onValueChange: (key) => {
+      const group = groups.find((group) => getSubagentGroupKey(group) === key);
+      if (group) select(key, group.subagentEvent.sessionId);
+    },
+  });
   if (!groups.length) return null;
   return (
     <div
+      {...navigation.getListProps()}
       className="border-border/40 bg-surface-secondary/10 overflow-hidden rounded-lg border"
       aria-label="Delegated tasks"
     >
@@ -38,11 +56,9 @@ export function SubagentBlock({ subagentGroups, isConnected = true }: SubagentBl
         const key = getSubagentGroupKey(group);
         return (
           <button
-            type="button"
+            {...navigation.getItemProps(key)}
             key={key}
             aria-label={`Inspect ${title}`}
-            aria-pressed={selected === key && selectedSession === group.subagentEvent.sessionId}
-            onClick={() => select(key, group.subagentEvent.sessionId)}
             className="border-border/30 hover:bg-surface-secondary/50 aria-pressed:bg-accent/5 focus-visible:ring-accent/50 flex w-full items-center gap-3 border-b px-3 py-2.5 text-left last:border-b-0 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
           >
             <span className="min-w-0 flex-1">

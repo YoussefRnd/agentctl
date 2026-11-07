@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, beforeEach } from 'vite-plus/test';
 import { createRoot } from 'react-dom/client';
@@ -5,7 +6,11 @@ import { act } from 'react';
 import { SubagentBlock } from './SubagentBlock';
 import { SubagentChatView } from './SubagentChatView';
 import { useSubagentStore } from '../model/useSubagentStore';
-import { getSubagentGroupKey, type SubagentGroup } from '../lib/subagentBlockUtils';
+import {
+  getSubagentGroupKey,
+  sortSubagentGroups,
+  type SubagentGroup,
+} from '../lib/subagentBlockUtils';
 import type { SessionEventRow } from '@agentctl/shared';
 
 beforeEach(() => {
@@ -169,4 +174,53 @@ describe('SubagentChatView (Expanded subagent view)', () => {
       root.unmount();
     });
   });
+});
+
+it('preserves the existing delegated-task navigation appearance', () => {
+  const { root, container } = renderSubagentBlock([
+    createMockGroup('a', 'Build', 'Build app', 'completed'),
+    createMockGroup('b', 'Review', 'Review app', 'completed'),
+  ]);
+  const appearance = (node: Element): unknown => [
+    node.tagName,
+    node.getAttribute('class'),
+    node.getAttribute('style'),
+    [...node.children].map(appearance),
+  ];
+  expect(
+    createHash('sha256')
+      .update(JSON.stringify(appearance(container)))
+      .digest('hex'),
+  ).toMatchInlineSnapshot(`"f9dd687565f37ae3d400f1f0a0058436b1f659abcb34b5039aaa3b8db9d7b3cf"`);
+  act(() => root.unmount());
+});
+
+it('shares vertical keyboard selection while keeping the destination session and row appearance', () => {
+  const groups = [
+    createMockGroup('a', 'Build', 'Build app', 'completed'),
+    createMockGroup('b', 'Review', 'Review app', 'completed'),
+  ];
+  groups[1]!.subagentEvent.sessionId = 'sess-2';
+  const ordered = sortSubagentGroups(groups);
+  const { root, container } = renderSubagentBlock(groups);
+  const buttons = container.querySelectorAll<HTMLButtonElement>('button[aria-pressed]');
+  expect(buttons[0]!.tabIndex).toBe(0);
+  act(() => {
+    buttons[0]!.focus();
+    buttons[0]!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+    );
+  });
+  expect(document.activeElement).toBe(buttons[1]);
+  expect(buttons[1]!.getAttribute('aria-pressed')).toBe('true');
+  expect(useSubagentStore.getState().activeSessionId).toBe(ordered[1]!.subagentEvent.sessionId);
+  expect(useSubagentStore.getState().activeSubagentId).toBe(getSubagentGroupKey(ordered[1]!));
+  act(() =>
+    buttons[1]!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+    ),
+  );
+  expect(document.activeElement).toBe(buttons[0]);
+  expect(useSubagentStore.getState().activeSessionId).toBe(ordered[0]!.subagentEvent.sessionId);
+  act(() => root.unmount());
 });

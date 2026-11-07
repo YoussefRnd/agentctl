@@ -23,6 +23,20 @@ Shared primitives and semantic foundation classes are the source of truth for ap
 - Segmented controls expose one selected button and tab stop, arrow/Home/End navigation, disabled
   skipping and RTL support. Use `preserveFocus` for pointer-operated search filters so input focus
   stays in the associated search field.
+- Use `TabsRoot` with `TabsList`, `TabsTrigger` and `TabsContent` for navigation between panels.
+  Pass `unstyled` to those three parts when adopting them in an established design: it adds no
+  presentation classes, inline styles or root wrapper. Keep the feature's existing classes and
+  dimensions verbatim. The existing styled `Tabs` API retains its defaults.
+- Provide the ordered tab values through `items` for dynamic navigation. Shared navigation owns
+  one tab stop, selection, disabled skipping, arrow/Home/End keys and tab/panel IDs. Use
+  `orientation="auto"` for a tab bar whose CSS switches between a row and a column.
+- `useTabNavigation` exposes the same behavior for custom selection lists. Terminal panes and
+  delegated-task rows use `selectionMode="buttons"` because several destinations can be visible
+  together; keep their existing buttons and `aria-pressed` state. Row actions and rename editors
+  remain separate controls. Use `getItemContainerProps` for rows with actions so removal and rename
+  can recover focus without moving it away from another focused region.
+- Feature-specific drag, reorder, close and split actions remain feature-owned. Their handlers run
+  before shared keyboard handling; cancelled events and modified keys are respected.
 - Disclosure controls must remain geometrically stable. Use `motion-disclosure`; do not add click scaling.
 - Restrict `click-press` to primary or destructive actions.
 

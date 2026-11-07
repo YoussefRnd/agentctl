@@ -8,7 +8,7 @@ import {
   X,
   PanelRightClose,
 } from 'lucide-react';
-import { Tooltip } from '@agentctl/ui';
+import { Tooltip, useTabNavigation } from '@agentctl/ui';
 import {
   useTerminalTabsStore,
   type TerminalTabData,
@@ -46,6 +46,21 @@ export function TerminalTabsSidebar({ sessionId }: { sessionId: string }) {
   const activeTabId = workspace?.activeTabId ?? '';
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
   const isCurrentTabSplit = Boolean(activeTab && activeTab.panes.length > 1);
+
+  const navigation = useTabNavigation({
+    value: activeTab ? (activeTab.panes.length > 1 ? activeTab.activePaneId : activeTab.id) : null,
+    items: tabs.flatMap((tab) =>
+      tab.panes.length > 1 ? tab.panes.map((pane) => pane.id) : [tab.id],
+    ),
+    orientation: 'vertical',
+    selectionMode: 'buttons',
+    onValueChange: (id) => {
+      const tab = tabs.find((tab) => tab.id === id || tab.panes.some((pane) => pane.id === id));
+      if (!tab) return;
+      if (tab.id === id) setActiveTab(sessionId, id);
+      else setActivePane(sessionId, tab.id, id);
+    },
+  });
 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>('');
@@ -163,7 +178,10 @@ export function TerminalTabsSidebar({ sessionId }: { sessionId: string }) {
       </div>
 
       {/* Terminal Sessions List */}
-      <div className="flex-1 space-y-0.5 overflow-y-auto p-1">
+      <div
+        {...navigation.getListProps({ 'aria-label': 'Terminal sessions' })}
+        className="flex-1 space-y-0.5 overflow-y-auto p-1"
+      >
         {tabs.map((tab: TerminalTabData, tabIndex: number) => {
           const isTabActive = tab.id === activeTabId;
           const isSplitGroup = tab.panes.length > 1;
@@ -176,6 +194,7 @@ export function TerminalTabsSidebar({ sessionId }: { sessionId: string }) {
             return (
               <div
                 key={tab.id}
+                {...navigation.getItemContainerProps(tab.id)}
                 className={`group/row relative flex h-7 items-center justify-between rounded px-1 font-mono text-xs transition-colors ${
                   isTabActive
                     ? 'bg-surface-secondary/70 text-text-main ring-border/30 font-medium shadow-2xs ring-1'
@@ -204,10 +223,8 @@ export function TerminalTabsSidebar({ sessionId }: { sessionId: string }) {
                   </div>
                 ) : (
                   <button
-                    type="button"
-                    aria-pressed={isTabActive}
+                    {...navigation.getItemProps(tab.id)}
                     aria-label={`${tab.name}, ${singlePane?.status ?? 'unknown status'}`}
-                    onClick={() => setActiveTab(sessionId, tab.id)}
                     onDoubleClick={(e) => handleStartRename(tab.id, tab.name, e)}
                     className="focus-visible:ring-accent/40 flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded px-0.5 text-left focus-visible:ring-1 focus-visible:outline-none"
                   >
@@ -260,6 +277,7 @@ export function TerminalTabsSidebar({ sessionId }: { sessionId: string }) {
                 return (
                   <div
                     key={pane.id}
+                    {...navigation.getItemContainerProps(pane.id)}
                     className={`group/pane relative flex h-7 items-center justify-between rounded px-1 font-mono text-xs transition-colors ${
                       isPaneActive
                         ? 'bg-surface-secondary/80 text-text-main ring-accent/40 font-medium shadow-2xs ring-1'
@@ -291,10 +309,8 @@ export function TerminalTabsSidebar({ sessionId }: { sessionId: string }) {
                       </div>
                     ) : (
                       <button
-                        type="button"
-                        aria-pressed={isPaneActive}
+                        {...navigation.getItemProps(pane.id)}
                         aria-label={`${pane.name}, ${pane.status}`}
-                        onClick={() => setActivePane(sessionId, tab.id, pane.id)}
                         onDoubleClick={(e) => handleStartRename(pane.id, pane.name, e)}
                         className="focus-visible:ring-accent/40 flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded px-0.5 text-left focus-visible:ring-1 focus-visible:outline-none"
                       >
