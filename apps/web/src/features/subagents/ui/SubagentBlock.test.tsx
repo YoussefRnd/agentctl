@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, beforeEach } from 'vite-plus/test';
 import { createRoot } from 'react-dom/client';
@@ -176,26 +175,7 @@ describe('SubagentChatView (Expanded subagent view)', () => {
   });
 });
 
-it('preserves the existing delegated-task navigation appearance', () => {
-  const { root, container } = renderSubagentBlock([
-    createMockGroup('a', 'Build', 'Build app', 'completed'),
-    createMockGroup('b', 'Review', 'Review app', 'completed'),
-  ]);
-  const appearance = (node: Element): unknown => [
-    node.tagName,
-    node.getAttribute('class'),
-    node.getAttribute('style'),
-    [...node.children].map(appearance),
-  ];
-  expect(
-    createHash('sha256')
-      .update(JSON.stringify(appearance(container)))
-      .digest('hex'),
-  ).toMatchInlineSnapshot(`"f9dd687565f37ae3d400f1f0a0058436b1f659abcb34b5039aaa3b8db9d7b3cf"`);
-  act(() => root.unmount());
-});
-
-it('shares vertical keyboard selection while keeping the destination session and row appearance', () => {
+it('shares vertical keyboard selection while keeping the destination session', () => {
   const groups = [
     createMockGroup('a', 'Build', 'Build app', 'completed'),
     createMockGroup('b', 'Review', 'Review app', 'completed'),

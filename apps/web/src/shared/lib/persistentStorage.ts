@@ -1,7 +1,7 @@
 import { createJSONStorage } from 'zustand/middleware';
 
-// A full disk, private browsing, or disabled storage must not block composing.
-export const persistentStorage = createJSONStorage(() => ({
+// A full disk, private browsing, or disabled storage must not block the app.
+export const browserStorage = {
   getItem: (key: string) => {
     try {
       return localStorage.getItem(key);
@@ -12,8 +12,9 @@ export const persistentStorage = createJSONStorage(() => ({
   setItem: (key: string, value: string) => {
     try {
       localStorage.setItem(key, value);
+      return true;
     } catch {
-      /* keep the in-memory draft */
+      return false;
     }
   },
   removeItem: (key: string) => {
@@ -23,4 +24,6 @@ export const persistentStorage = createJSONStorage(() => ({
       /* storage is unavailable */
     }
   },
-}));
+};
+
+export const persistentStorage = createJSONStorage<unknown>(() => browserStorage);

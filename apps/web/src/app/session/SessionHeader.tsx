@@ -1,26 +1,17 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { PanelRight, Pencil, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
 import { Dropdown, Tooltip } from '@agentctl/ui';
 import { getSessionDisplayTitle } from '@agentctl/shared';
 import { DiffIcon, RepoForkedIcon, GitPullRequestIcon } from '@primer/octicons-react';
-import {
-  renameSession,
-  archiveSession,
-  deleteSession,
-  rewindSession,
-  apiClient,
-  type SidebarProject,
-} from '@agentctl/api-client';
 import { toast } from 'sonner';
 import { useGitStatus } from '@/shared/workspace/useGitStatus';
-import { useProjectExpansionStore } from '@/shared/stores/useProjectExpansionStore';
 import { useSessionWorkspace, OpenInPicker } from '@/features/sessions';
-import { projectKeys, sessionKeys } from '@/shared/lib/queryKeys';
+import { projectQueries } from '@/features/projects';
 import { formatShortcut } from '@/shared/lib/platform';
 import { SessionHeaderTitle } from './SessionHeaderTitle';
 import { SessionHeaderDialogs } from './SessionHeaderDialogs';
+import { useSessionLifecycle } from './useSessionLifecycle';
 import type { WorkbenchTab } from '@/shared/stores/useWorkbenchStore';
 
 interface SessionHeaderProps {
@@ -34,10 +25,8 @@ export function SessionHeader({
   isWorkbenchOpen,
   onSelectWorkbenchTab,
 }: SessionHeaderProps) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const keepProjectExpanded = useProjectExpansionStore((state) => state.keepProjectExpanded);
   const { sessionId, sessionData, reviewData } = useSessionWorkspace();
+  const lifecycle = useSessionLifecycle(sessionId);
   const { gitStatus } = useGitStatus(sessionId);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -45,11 +34,7 @@ export function SessionHeader({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
 
-  const { data: projects = [] } = useQuery<SidebarProject[]>({
-    queryKey: projectKeys.all,
-    queryFn: () =>
-      apiClient.fetch<SidebarProject[]>('/api/projects?sortBy=lastActive&gitOnly=false'),
-  });
+  const { data: projects = [] } = useQuery(projectQueries.all());
 
   const currentProjectId = sessionData?.session.projectId;
   const currentProject = projects.find((p) => p.id === currentProjectId);
@@ -102,9 +87,7 @@ export function SessionHeader({
       return;
     }
     try {
-      await renameSession(sessionId, trimmed);
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
+      await lifecycle.rename(sessionId, trimmed);
       toast.success('Session renamed');
     } catch {
       toast.error('Failed to rename session');
@@ -115,12 +98,8 @@ export function SessionHeader({
 
   const handleFork = async () => {
     try {
-      const res = await rewindSession(sessionId, 999999999, 'fork');
+      await lifecycle.forkLatest(sessionId);
       toast.success('Session forked');
-      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
-      if (res.forkSessionId) {
-        void navigate(`/sessions/${res.forkSessionId}`);
-      }
     } catch {
       toast.error('Failed to fork session');
     }
@@ -128,10 +107,8 @@ export function SessionHeader({
 
   const handleArchive = async () => {
     try {
-      await archiveSession(sessionId);
+      await lifecycle.archive(sessionId);
       toast.success('Session archived');
-      void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
       setIsArchiving(false);
     } catch {
       toast.error('Failed to archive session');
@@ -140,12 +117,9 @@ export function SessionHeader({
 
   const handleDelete = async () => {
     try {
-      await deleteSession(sessionId);
-      if (currentProjectId) keepProjectExpanded(currentProjectId);
+      await lifecycle.remove(sessionId, currentProjectId);
       toast.success('Session deleted');
-      void queryClient.invalidateQueries({ queryKey: projectKeys.all });
       setIsDeleting(false);
-      void navigate('/');
     } catch {
       toast.error('Failed to delete session');
     }
@@ -160,10 +134,8 @@ export function SessionHeader({
 
   return (
     <div className="flex h-full w-full min-w-0 items-center justify-between gap-3">
-      {/* Center Zone: Prominent Command & Session Bar */}
       <div className="flex min-w-0 flex-1 items-center justify-center sm:px-2">
         <div className="border-border/35 bg-surface-secondary/40 hover:border-border/60 hover:bg-surface-secondary/70 inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-full border px-2 shadow-xs backdrop-blur-md transition-[border-color,background-color] duration-150 sm:max-w-[380px]">
-          {/* Status Indicator Dot */}
           <Tooltip content={`Status: ${statusConfig.label}`}>
             <div
               className="relative flex h-3.5 w-3.5 shrink-0 cursor-default items-center justify-center"
@@ -188,10 +160,8 @@ export function SessionHeader({
             sessionDisplayTitle={sessionDisplayTitle}
           />
 
-          {/* Subtle separator */}
           <span className="bg-border/25 h-3 w-px shrink-0" />
 
-          {/* Session Options Menu */}
           <Dropdown.Root>
             <Dropdown.Trigger asChild>
               <button
@@ -249,7 +219,6 @@ export function SessionHeader({
         </div>
       </div>
 
-      {/* Right Action Suite: Open in IDE + Changes Pill + PR Chip + Inspector Toggle */}
       <div className="flex shrink-0 items-center gap-1.5">
         {worktreePath && <OpenInPicker targetPath={worktreePath} />}
 

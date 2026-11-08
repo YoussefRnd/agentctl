@@ -1,26 +1,30 @@
 import { useCallback } from 'react';
-import { openInEditor } from '@agentctl/api-client';
 import { toast } from 'sonner';
+import { launchEditor, useEditorPreference } from '@/shared/editors/useEditorPreference';
 import { useSession } from './SessionConfigContext';
 
 export function useOpenWorkspaceFile() {
   const { sessionData } = useSession();
   const worktreePath = sessionData?.session.worktreePath;
+  const { activeEditor } = useEditorPreference(!!worktreePath);
 
   return useCallback(
     async (filePath: string) => {
       if (!worktreePath) return;
 
-      const preferredEditor = localStorage.getItem('agentctl:preferred-editor') ?? 'cursor';
       const separator = worktreePath.endsWith('/') || worktreePath.endsWith('\\') ? '' : '/';
 
       try {
-        await openInEditor(preferredEditor, `${worktreePath}${separator}${filePath}`);
-        toast.success(`Opened ${filePath.split('/').pop() ?? filePath}`);
+        const result = await launchEditor(
+          activeEditor.id,
+          `${worktreePath}${separator}${filePath}`,
+        );
+        const name = filePath.split('/').pop() ?? filePath;
+        toast.success(result === 'browser' ? `Opening ${name}…` : `Opened ${name}`);
       } catch {
         toast.error('Could not open file in editor');
       }
     },
-    [worktreePath],
+    [activeEditor.id, worktreePath],
   );
 }

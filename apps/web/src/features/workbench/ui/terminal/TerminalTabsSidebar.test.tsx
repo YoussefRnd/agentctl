@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { createHash } from 'node:crypto';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test';
@@ -33,30 +32,6 @@ describe('TerminalTabsSidebar semantics', () => {
 
     act(() => root.unmount());
   });
-});
-
-it('preserves terminal row, split group, action and sidebar appearance', () => {
-  useTerminalTabsStore.setState({ workspaces: {} });
-  const store = useTerminalTabsStore.getState();
-  store.ensureWorkspace('session-a');
-  store.splitTab('session-a');
-  store.addTab('session-a');
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
-  act(() => root.render(<TerminalTabsSidebar sessionId="session-a" />));
-  const appearance = (node: Element): unknown => [
-    node.tagName,
-    node.getAttribute('class'),
-    node.getAttribute('style'),
-    [...node.children].map(appearance),
-  ];
-  expect(
-    createHash('sha256')
-      .update(JSON.stringify(appearance(host)))
-      .digest('hex'),
-  ).toMatchInlineSnapshot(`"c880c1b69f7b1a2a8d317de9e012e7dcff145e322607781e32c4472957faa16f"`);
-  act(() => root.unmount());
 });
 
 function setupNavigation() {

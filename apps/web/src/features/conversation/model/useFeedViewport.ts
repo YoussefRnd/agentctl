@@ -14,7 +14,7 @@ import {
 import type { useSessionStream } from '@/features/sessions';
 import type { FeedEventGroup } from '../lib/eventFeedGrouping';
 import type { ConversationTurn } from '../lib/turnMinimapGrouping';
-import { getGroupKey } from '../lib/feedGroupKey';
+import { getGroupKey, groupHasEvent } from '../lib/feedGroupKey';
 
 type History = Pick<
   ReturnType<typeof useSessionStream>,
@@ -26,10 +26,16 @@ type History = Pick<
   | 'loadEventHistory'
   | 'isLoadingNewerHistory'
   | 'loadOlderHistory'
+  | 'retryHistory'
+  | 'returnToLatestHistory'
   | 'isLoadingOlderHistory'
   | 'historyError'
 >;
-/** Owns virtual scroll, historical anchors, follow mode and their timers/observers. */
+
+function isAtLatestEdge(element: HTMLElement, hasNewerHistory: boolean) {
+  return !hasNewerHistory && element.scrollTop + element.clientHeight >= element.scrollHeight - 35;
+}
+
 export function useFeedViewport({
   groupedEvents,
   conversationTurns,
@@ -58,6 +64,8 @@ export function useFeedViewport({
     loadEventHistory,
     isLoadingNewerHistory,
     loadOlderHistory,
+    retryHistory,
+    returnToLatestHistory,
     isLoadingOlderHistory,
     historyError,
   } = history;
@@ -69,7 +77,7 @@ export function useFeedViewport({
   const userScrollIntentRef = useRef(false);
   const lastScrollTopRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
-  const didInitialScrollRef = useRef(false);
+  const requestedNavigationRef = useRef<number | null>(null);
   const [highlightedEventId, setHighlightedEventId] = useState<number | null>(null);
   const [activeTurnIndex, setActiveTurnIndex] = useState<number | null>(null);
   const [selectedTurnEventId, setSelectedTurnEventId] = useState<number | null>(null);
@@ -88,6 +96,12 @@ export function useFeedViewport({
     !isFollowingOutputRef.current && item.start < (instance.scrollOffset ?? 0);
   const prependAnchorRef = useRef<{ key: string; offset: number; eventId: number } | null>(null);
   const loadingPreviousRef = useRef(false);
+  const setFollowingOutput = useCallback((enabled: boolean) => {
+    if (isFollowingOutputRef.current === enabled) return;
+    isFollowingOutputRef.current = enabled;
+    setIsFollowingOutput(enabled);
+  }, []);
+
   const loadPrevious = useCallback(async () => {
     if (loadingPreviousRef.current || isLoadingOlderHistory) return;
     loadingPreviousRef.current = true;
@@ -101,14 +115,13 @@ export function useFeedViewport({
         eventId: 'event' in group ? group.event.id : (group.events[0]?.id ?? 0),
       };
     }
-    setIsFollowingOutput(false);
-    isFollowingOutputRef.current = false;
+    setFollowingOutput(false);
     try {
       await loadOlderHistory();
     } finally {
       loadingPreviousRef.current = false;
     }
-  }, [virtualizer, groupedEvents, loadOlderHistory, isLoadingOlderHistory]);
+  }, [virtualizer, groupedEvents, loadOlderHistory, isLoadingOlderHistory, setFollowingOutput]);
 
   const loadPreviousNearTop = useCallback(() => {
     if (
@@ -129,9 +142,7 @@ export function useFeedViewport({
       prependAnchorRef.current = null;
       return;
     }
-    const index = groupedEvents.findIndex(
-      (group) => 'events' in group && group.events.some((event) => event.id === anchor.eventId),
-    );
+    const index = groupedEvents.findIndex((group) => groupHasEvent(group, anchor.eventId));
     if (index !== -1) {
       const offset = virtualizer.getOffsetForIndex(index, 'start')?.[0];
       if (offset !== undefined) virtualizer.scrollToOffset(offset + anchor.offset);
@@ -144,12 +155,6 @@ export function useFeedViewport({
     const lastGroup = groupedEvents[groupedEvents.length - 1];
     return lastGroup?.type === 'agent' ? lastGroup.id : null;
   }, [groupedEvents]);
-
-  const setFollowingOutput = useCallback((enabled: boolean) => {
-    if (isFollowingOutputRef.current === enabled) return;
-    isFollowingOutputRef.current = enabled;
-    setIsFollowingOutput(enabled);
-  }, []);
 
   const turnRafRef = useRef<number | null>(null);
 
@@ -191,37 +196,39 @@ export function useFeedViewport({
     [setFollowingOutput],
   );
 
-  // Reset initial scroll state when switching sessions
   useEffect(() => {
-    didInitialScrollRef.current = false;
-    isFollowingOutputRef.current = true;
-    setIsFollowingOutput(true);
+    setFollowingOutput(true);
     setSelectedTurnEventId(null);
     requestedNavigationRef.current = null;
     setActiveTurnIndex(null);
-  }, [sessionId]);
+  }, [sessionId, setFollowingOutput]);
 
-  const scrollToBottom = useCallback(
-    (force = false) => {
-      if (scrollFrameRef.current != null) {
-        window.cancelAnimationFrame(scrollFrameRef.current);
-      }
-      scrollFrameRef.current = window.requestAnimationFrame(() => {
-        scrollFrameRef.current = null;
-        if (!force && !isFollowingOutputRef.current) return;
+  const scrollToBottom = useCallback(() => {
+    if (scrollFrameRef.current != null) window.cancelAnimationFrame(scrollFrameRef.current);
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      if (!isFollowingOutputRef.current) return;
 
-        const scrollElement = parentRef.current;
-        if (scrollElement) {
-          virtualizer.scrollToIndex(groupedEvents.length - 1, { align: 'end' });
-          const bottom = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
-          if (Math.abs(scrollElement.scrollTop - bottom) > 1) {
-            scrollElement.scrollTop = bottom;
-          }
-        }
-      });
-    },
-    [virtualizer, groupedEvents.length],
-  );
+      const scrollElement = parentRef.current;
+      if (!scrollElement) return;
+      if (groupedEvents.length > 0)
+        virtualizer.scrollToIndex(groupedEvents.length - 1, { align: 'end' });
+      const bottom = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
+      if (Math.abs(scrollElement.scrollTop - bottom) > 1) scrollElement.scrollTop = bottom;
+    });
+  }, [virtualizer, groupedEvents.length]);
+
+  const resumeFollowing = () => {
+    setSelectedTurnEventId(null);
+    returnToLatestHistory();
+    setFollowingOutput(true);
+    scrollToBottom();
+  };
+
+  const retry = () => {
+    requestedNavigationRef.current = null;
+    void retryHistory();
+  };
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
@@ -229,11 +236,7 @@ export function useFeedViewport({
       const isScrollingUp = target.scrollTop < lastScrollTopRef.current - 1;
       lastScrollTopRef.current = target.scrollTop;
 
-      // Automatically re-enable following and dismiss button when scrolled to bottom
-      const isAtBottom =
-        !hasNewerHistory && target.scrollTop + target.clientHeight >= target.scrollHeight - 35;
-
-      if (isAtBottom) {
+      if (isAtLatestEdge(target, hasNewerHistory)) {
         setFollowingOutput(true);
       } else if (isPointerScrollingRef.current && isScrollingUp) {
         setFollowingOutput(false);
@@ -248,7 +251,7 @@ export function useFeedViewport({
         !loadingPreviousRef.current &&
         target.scrollTop + target.clientHeight * 2 >= target.scrollHeight
       )
-        void loadNewerHistory?.();
+        void loadNewerHistory();
       userScrollIntentRef.current = false;
       updateActiveTurn();
     },
@@ -266,10 +269,7 @@ export function useFeedViewport({
   const handleWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>) => {
       userScrollIntentRef.current = true;
-      const target = event.currentTarget;
-      const isAtBottom =
-        !hasNewerHistory && target.scrollTop + target.clientHeight >= target.scrollHeight - 35;
-      if (isAtBottom && event.deltaY > 0) {
+      if (isAtLatestEdge(event.currentTarget, hasNewerHistory) && event.deltaY > 0) {
         setFollowingOutput(true);
       } else if (event.deltaY < 0) {
         setFollowingOutput(false);
@@ -299,28 +299,21 @@ export function useFeedViewport({
     if (event.isPrimary) isPointerScrollingRef.current = false;
   }, []);
 
-  const requestedNavigationRef = useRef<number | null>(null);
   useEffect(() => {
     requestedNavigationRef.current = null;
   }, [historyRevision]);
   useEffect(() => {
     if (navigationEventId == null || groupedEvents.length === 0) return;
 
-    const targetIndex = groupedEvents.findIndex((group) => {
-      if ('event' in group && group.event.id === navigationEventId) return true;
-      return 'events' in group && group.events.some((event) => event.id === navigationEventId);
-    });
+    const targetIndex = groupedEvents.findIndex((group) => groupHasEvent(group, navigationEventId));
     if (targetIndex === -1) {
-      if (loadEventHistory) {
-        if (requestedNavigationRef.current !== navigationEventId) {
-          requestedNavigationRef.current = navigationEventId;
-          void loadEventHistory(navigationEventId);
-        }
-      } else if (hasMoreHistory && !isLoadingOlderHistory && !historyError) void loadPrevious();
+      if (requestedNavigationRef.current !== navigationEventId) {
+        requestedNavigationRef.current = navigationEventId;
+        void loadEventHistory(navigationEventId);
+      }
       return;
     }
     requestedNavigationRef.current = null;
-    didInitialScrollRef.current = true;
     setFollowingOutput(false);
     setHighlightedEventId(targetEventId ?? null);
     virtualizer.scrollToIndex(targetIndex, { align: targetEventId != null ? 'center' : 'start' });
@@ -333,11 +326,8 @@ export function useFeedViewport({
     onTargetEventHandled,
     setFollowingOutput,
     virtualizer,
-    hasMoreHistory,
-    isLoadingOlderHistory,
-    historyError,
-    loadPrevious,
     loadEventHistory,
+    historyRevision,
   ]);
 
   useEffect(() => {
@@ -351,45 +341,29 @@ export function useFeedViewport({
     };
   }, [highlightedEventId]);
 
-  // Initial scroll to bottom on load / session switch
   useEffect(() => {
-    if (didInitialScrollRef.current || targetEventId != null || groupedEvents.length === 0) {
-      return;
-    }
-
-    scrollToBottom(true);
-    const t1 = setTimeout(() => scrollToBottom(true), 50);
-    const t2 = setTimeout(() => scrollToBottom(true), 150);
-    const t3 = setTimeout(() => scrollToBottom(true), 300);
-
-    didInitialScrollRef.current = true;
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [groupedEvents.length, scrollToBottom, targetEventId, sessionId]);
-
-  useEffect(() => {
-    if (!isFollowingOutputRef.current || groupedEvents.length === 0) {
-      return;
-    }
-
-    scrollToBottom();
-  }, [groupedEvents.length, isSessionRunning, scrollToBottom, streamingEventId]);
+    if (hasGroupedEvents && navigationEventId == null && isFollowingOutputRef.current)
+      scrollToBottom();
+  }, [
+    hasGroupedEvents,
+    navigationEventId,
+    isSessionRunning,
+    scrollToBottom,
+    streamingEventId,
+    sessionId,
+  ]);
 
   useEffect(() => {
     if (!hasGroupedEvents) return;
 
     const contentElement = contentRef.current;
-    if (!contentElement) return;
-
+    const parent = parentRef.current;
+    if (!contentElement || !parent) return;
     const observer = new ResizeObserver(() => {
-      if (isFollowingOutputRef.current || !didInitialScrollRef.current) {
-        scrollToBottom();
-      }
+      if (navigationEventId == null && isFollowingOutputRef.current) scrollToBottom();
     });
     observer.observe(contentElement);
+    observer.observe(parent);
 
     return () => {
       observer.disconnect();
@@ -398,7 +372,7 @@ export function useFeedViewport({
         scrollFrameRef.current = null;
       }
     };
-  }, [hasGroupedEvents, isSessionRunning, scrollToBottom]);
+  }, [hasGroupedEvents, navigationEventId, scrollToBottom]);
 
   return {
     parentRef,
@@ -406,12 +380,9 @@ export function useFeedViewport({
     virtualizer,
     highlightedEventId,
     latestAgentGroupId,
-    requestedNavigationRef,
-    loadPrevious,
+    retry,
+    resumeFollowing,
     isFollowingOutput,
-    setSelectedTurnEventId,
-    setFollowingOutput,
-    scrollToBottom,
     activeTurnIndex,
     handleSelectTurn,
     handleScroll,

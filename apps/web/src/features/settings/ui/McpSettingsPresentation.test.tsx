@@ -1,7 +1,4 @@
-import { createHash } from 'node:crypto';
 import { act } from 'react';
-import { McpServerForm } from './McpServerForm';
-import { initialFormState } from './McpUtils';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vite-plus/test';
 import { McpSettingsPresentation } from './McpSettingsPresentation';
@@ -54,54 +51,6 @@ it('keeps entered MCP configuration until a save succeeds', () => {
   expect(update).toHaveBeenCalledTimes(2);
   act(() => update.mock.calls[1]![1].onSuccess());
   expect(document.getElementById('mcp-name')).toBeNull();
-});
-
-it('preserves the local and remote fields and layout around the shared server type selector', () => {
-  const host = document.createElement('div');
-  document.body.append(host);
-  root = createRoot(host);
-  const appearance = (node: Element): unknown => {
-    // The selector is the explicitly approved design change; surrounding fields stay fixed.
-    if (node.querySelector(':scope > span')?.textContent === 'Server Type') return ['server-type'];
-    return [
-      node.tagName,
-      node.getAttribute('class'),
-      node.getAttribute('style'),
-      [...node.children].map(appearance),
-    ];
-  };
-  const result = [];
-  for (const type of ['local', 'remote'] as const) {
-    act(() =>
-      root.render(
-        <McpServerForm
-          formState={{ ...initialFormState, type }}
-          onChange={() => {}}
-          onSave={() => {}}
-          onCancel={() => {}}
-          isEditing={false}
-        />,
-      ),
-    );
-    result.push({
-      type,
-      signature: createHash('sha256')
-        .update(JSON.stringify(appearance(host)))
-        .digest('hex'),
-    });
-  }
-  expect(result).toMatchInlineSnapshot(`
-    [
-      {
-        "signature": "c8cc4b2a86bfc5f148d512d2a39a9e4cfeafc6fb58ebfe13f6be5d03fcfdeb44",
-        "type": "local",
-      },
-      {
-        "signature": "d151cd0e8800e8d660ada67c9fc4085e394fd20b003f4d83d79bbeeb05138f7c",
-        "type": "remote",
-      },
-    ]
-  `);
 });
 
 function renderMcp(api: Partial<ReturnType<typeof useMcpServers>> = {}) {

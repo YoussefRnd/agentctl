@@ -38,7 +38,7 @@ export const providerKeys = {
 
 export const projectKeys = {
   all: ['projects'] as const,
-  detail: (projectId: string) => ['projects', projectId] as const,
+  list: (sortBy: string, gitOnly: boolean) => ['projects', 'list', sortBy, gitOnly] as const,
 };
 
 export const settingsKeys = {

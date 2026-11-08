@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { browserStorage } from '../lib/persistentStorage';
 import { isLightTheme } from '../lib/theme-registry';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -8,90 +9,72 @@ const LIGHT_KEY = 'agentctl-ui-light-theme';
 const DARK_KEY = 'agentctl-ui-dark-theme';
 const LEGACY_KEY = 'agentctl-ui-theme';
 
-function readKey(key: string, fallback: string): string {
-  try {
-    return localStorage.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeKey(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // storage unavailable — silently fail
-  }
-}
-
-export interface ThemePreferences {
+interface ThemePreferences {
   themeMode: ThemeMode;
   lightTheme: string;
   darkTheme: string;
-  setThemeMode: (mode: ThemeMode) => void;
-  setLightTheme: (theme: string) => void;
-  setDarkTheme: (theme: string) => void;
 }
 
-function migrateLegacyIfNeeded() {
-  try {
-    const hasNewKeys =
-      localStorage.getItem(MODE_KEY) !== null &&
-      localStorage.getItem(LIGHT_KEY) !== null &&
-      localStorage.getItem(DARK_KEY) !== null;
-    if (hasNewKeys) return;
-
-    const legacy = localStorage.getItem(LEGACY_KEY);
-    if (legacy === null) return;
-
-    // oled-glass maps to mocha
-    const resolved = legacy === 'oled-glass' ? 'mocha' : legacy;
-    const isLight = isLightTheme(resolved);
-
-    if (isLight) {
-      localStorage.setItem(MODE_KEY, 'light');
-      localStorage.setItem(LIGHT_KEY, resolved);
-      localStorage.setItem(DARK_KEY, 'mocha');
-    } else {
-      localStorage.setItem(MODE_KEY, 'dark');
-      localStorage.setItem(DARK_KEY, resolved);
-      localStorage.setItem(LIGHT_KEY, 'latte');
-    }
-  } catch {
-    // storage unavailable
-  }
+function normalizeTheme(theme: string): string {
+  return theme === 'oled-glass' ? 'mocha' : theme;
 }
 
-export function useThemePreferences(): ThemePreferences {
-  // Migrate synchronously before state is initialized so initial state callback reads the new keys
-  migrateLegacyIfNeeded();
+function readTheme(key: string): string | null {
+  const stored = browserStorage.getItem(key);
+  return stored === null ? null : normalizeTheme(stored);
+}
 
-  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
-    return readKey(MODE_KEY, 'system') as ThemeMode;
-  });
-  const [lightTheme, setLightThemeState] = useState<string>(() => {
-    return readKey(LIGHT_KEY, 'latte');
-  });
-  const [darkTheme, setDarkThemeState] = useState<string>(() => {
-    return readKey(DARK_KEY, 'mocha');
-  });
+function loadPreferences(): ThemePreferences {
+  const legacy = readTheme(LEGACY_KEY);
+  const legacyMode = legacy === null ? 'system' : isLightTheme(legacy) ? 'light' : 'dark';
+  const savedMode = browserStorage.getItem(MODE_KEY);
+  const themeMode =
+    savedMode === 'light' || savedMode === 'dark' || savedMode === 'system'
+      ? savedMode
+      : legacyMode;
+  return {
+    themeMode,
+    lightTheme: readTheme(LIGHT_KEY) ?? (legacyMode === 'light' ? legacy : null) ?? 'latte',
+    darkTheme: readTheme(DARK_KEY) ?? (legacyMode === 'dark' ? legacy : null) ?? 'mocha',
+  };
+}
 
-  const setThemeMode = useCallback((mode: ThemeMode) => {
-    setThemeModeState(mode);
-    writeKey(MODE_KEY, mode);
+export function persistResolvedTheme(theme: string) {
+  // Older releases read the resolved theme when users switch back to them.
+  browserStorage.setItem(LEGACY_KEY, theme);
+}
+
+export function useThemePreferences() {
+  const [preferences, setPreferences] = useState(loadPreferences);
+
+  useEffect(() => {
+    browserStorage.setItem(MODE_KEY, preferences.themeMode);
+    browserStorage.setItem(LIGHT_KEY, preferences.lightTheme);
+    browserStorage.setItem(DARK_KEY, preferences.darkTheme);
+  }, [preferences]);
+
+  const setThemeMode = useCallback((themeMode: ThemeMode) => {
+    setPreferences((previous) => ({ ...previous, themeMode }));
   }, []);
 
   const setLightTheme = useCallback((theme: string) => {
-    setLightThemeState(theme);
-    writeKey(LIGHT_KEY, theme);
+    const lightTheme = normalizeTheme(theme);
+    setPreferences((previous) => ({ ...previous, lightTheme }));
   }, []);
 
   const setDarkTheme = useCallback((theme: string) => {
-    setDarkThemeState(theme);
-    writeKey(DARK_KEY, theme);
+    const darkTheme = normalizeTheme(theme);
+    setPreferences((previous) => ({ ...previous, darkTheme }));
   }, []);
 
-  return { themeMode, lightTheme, darkTheme, setThemeMode, setLightTheme, setDarkTheme };
-}
+  const setTheme = useCallback((name: string) => {
+    const theme = normalizeTheme(name);
+    setPreferences((previous) =>
+      isLightTheme(theme)
+        ? { ...previous, themeMode: 'light', lightTheme: theme }
+        : { ...previous, themeMode: 'dark', darkTheme: theme },
+    );
+  }, []);
 
-export { isLightTheme, LEGACY_KEY };
+  return { ...preferences, setThemeMode, setLightTheme, setDarkTheme, setTheme };
+}

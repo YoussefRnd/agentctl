@@ -22,7 +22,8 @@
         "apps/web/src/app/session/QuickLaunchSessionDialog.tsx",
         "apps/web/src/app/session/SessionHeader.tsx",
         "apps/web/src/app/session/SessionHeaderDialogs.tsx",
-        "apps/web/src/app/session/SessionHeaderTitle.tsx"
+        "apps/web/src/app/session/SessionHeaderTitle.tsx",
+        "apps/web/src/app/session/useSessionLifecycle.ts"
       ]
     },
     {
@@ -377,9 +378,12 @@
     },
     {
       "area": "shared/editors",
-      "owner": "Editor brand presentation",
+      "owner": "Editor discovery, launch, preferences and brand presentation",
       "evidence": "docs/frontend-state-architecture.md",
-      "files": ["apps/web/src/shared/editors/EditorIcons.tsx"]
+      "files": [
+        "apps/web/src/shared/editors/EditorIcons.tsx",
+        "apps/web/src/shared/editors/useEditorPreference.ts"
+      ]
     },
     {
       "area": "shared/entry",

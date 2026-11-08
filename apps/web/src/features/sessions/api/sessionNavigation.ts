@@ -17,19 +17,43 @@ export const sessionDetailOptions = (sessionId: string) =>
 
 // Cache only the first page briefly. The history hook still owns cursor/window
 // initialization, so prefetching cannot reset an already open conversation.
-export const INITIAL_HISTORY_FRESH_MS = 5_000;
+const INITIAL_HISTORY_FRESH_MS = 5_000;
+
+export type SessionHistoryCursor =
+  | { beforeId: number }
+  | { afterId: number }
+  | { aroundId: number };
+
+export async function fetchSessionHistoryPage(
+  sessionId: string,
+  cursor?: SessionHistoryCursor,
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({ limit: '200', compact: 'true' });
+  if (cursor) for (const [key, value] of Object.entries(cursor)) query.set(key, String(value));
+  const url = `/api/sessions/${encodeURIComponent(sessionId)}/events/page?${query}`;
+  const body = signal ? await apiClient.fetch(url, { signal }) : await apiClient.fetch(url);
+  return sessionEventPageSchema.parse(body);
+}
 
 export const initialHistoryOptions = (sessionId: string) =>
   queryOptions({
     queryKey: sessionKeys.initialHistory(sessionId),
-    queryFn: async () =>
-      sessionEventPageSchema.parse(
-        await apiClient.fetch(`/api/sessions/${sessionId}/events/page?limit=200&compact=true`),
-      ),
+    queryFn: () => fetchSessionHistoryPage(sessionId),
     staleTime: INITIAL_HISTORY_FRESH_MS,
     gcTime: 30_000,
     retry: false,
   });
+
+export function getPrefetchedHistory(client: QueryClient, sessionId: string) {
+  const options = initialHistoryOptions(sessionId);
+  const state = client.getQueryState(options.queryKey);
+  if (
+    state?.fetchStatus === 'fetching' ||
+    (state?.status === 'success' && Date.now() - state.dataUpdatedAt < INITIAL_HISTORY_FRESH_MS)
+  )
+    return client.fetchQuery(options);
+}
 
 const pendingByClient = new WeakMap<QueryClient, Map<string, Promise<void>>>();
 

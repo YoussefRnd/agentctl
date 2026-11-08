@@ -2,10 +2,6 @@ import { getErrorMessage } from '@/shared/lib/feedback';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { uploadAttachment } from '@agentctl/api-client';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export interface PendingAttachment {
   localId: string;
   file: File;
@@ -29,35 +25,19 @@ export interface UseAttachmentsReturn {
   pendingFiles: File[];
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const ALLOWED_MIME_TYPES = new Set<string>(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
 
 export function useAttachments(sessionId: string, initialFiles: File[] = []): UseAttachmentsReturn {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const initialFilesRef = useRef(initialFiles);
   const uploads = useRef(new Map<string, AbortController>());
 
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
-
   /** Immutably patch a single attachment by localId. */
   const patchAttachment = useCallback((localId: string, patch: Partial<PendingAttachment>) => {
     setAttachments((prev) => prev.map((a) => (a.localId === localId ? { ...a, ...patch } : a)));
   }, []);
-
-  // -------------------------------------------------------------------------
-  // uploadFile — shared by addFiles and retryAttachment
-  // -------------------------------------------------------------------------
 
   const uploadFile = useCallback(
     (localId: string, file: File) => {
@@ -94,10 +74,6 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
     [sessionId, patchAttachment],
   );
 
-  // -------------------------------------------------------------------------
-  // addFiles
-  // -------------------------------------------------------------------------
-
   const addFiles = useCallback(
     (files: FileList | File[]) => {
       const fileArray = Array.from(files);
@@ -105,7 +81,6 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
       const newAttachments: PendingAttachment[] = [];
 
       for (const file of fileArray) {
-        // Validation — silently skip invalid files.
         if (!ALLOWED_MIME_TYPES.has(file.type)) continue;
         if (file.size > MAX_SIZE_BYTES) continue;
 
@@ -129,17 +104,12 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
 
       setAttachments((prev) => [...prev, ...newAttachments]);
 
-      // Kick off uploads after state is committed.
       for (const attachment of newAttachments) {
         if (sessionId) uploadFile(attachment.localId, attachment.file);
       }
     },
     [uploadFile, sessionId],
   );
-
-  // -------------------------------------------------------------------------
-  // retryAttachment
-  // -------------------------------------------------------------------------
 
   const retryAttachment = useCallback(
     (localId: string) => {
@@ -150,10 +120,6 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
     },
     [attachments, uploadFile, sessionId],
   );
-
-  // -------------------------------------------------------------------------
-  // removeAttachment
-  // -------------------------------------------------------------------------
 
   const removeAttachment = useCallback((localId: string) => {
     uploads.current.get(localId)?.abort();
@@ -166,10 +132,6 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
       return prev.filter((a) => a.localId !== localId);
     });
   }, []);
-
-  // -------------------------------------------------------------------------
-  // clearAll
-  // -------------------------------------------------------------------------
 
   const clearAll = useCallback(() => {
     for (const controller of uploads.current.values()) controller.abort();
@@ -207,17 +169,11 @@ export function useAttachments(sessionId: string, initialFiles: File[] = []): Us
     };
   }, [sessionId]);
 
-  // -------------------------------------------------------------------------
-  // Derived state
-  // -------------------------------------------------------------------------
-
   const readyAttachmentIds = attachments
     .map((a) => a.attachmentId)
     .filter((id): id is string => id !== undefined);
 
   const isAnyUploading = attachments.some((a) => a.state === 'uploading');
-
-  // -------------------------------------------------------------------------
 
   return {
     attachments,

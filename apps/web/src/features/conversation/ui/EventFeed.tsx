@@ -1,7 +1,7 @@
 import { sessionKeys } from '@/shared/lib/queryKeys';
 import { useCallback, useMemo } from 'react';
 import { useFeedViewport } from '../model/useFeedViewport';
-import { getGroupKey } from '../lib/feedGroupKey';
+import { getGroupKey, groupHasEvent } from '../lib/feedGroupKey';
 import { RefreshCw, ArrowDown } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -60,8 +60,8 @@ export function EventFeed({
     streamingEventId,
     historyRevision,
     hasMoreHistory,
-    hasOlderHistory = hasMoreHistory,
-    hasNewerHistory = false,
+    hasOlderHistory,
+    hasNewerHistory,
     loadNewerHistory,
     loadEventHistory,
     retryHistory,
@@ -144,12 +144,9 @@ export function EventFeed({
     virtualizer,
     highlightedEventId,
     latestAgentGroupId,
-    requestedNavigationRef,
-    loadPrevious,
+    retry,
+    resumeFollowing,
     isFollowingOutput,
-    setSelectedTurnEventId,
-    setFollowingOutput,
-    scrollToBottom,
     activeTurnIndex,
     handleSelectTurn,
     handleScroll,
@@ -174,6 +171,8 @@ export function EventFeed({
       loadEventHistory,
       isLoadingNewerHistory,
       loadOlderHistory,
+      retryHistory,
+      returnToLatestHistory,
       isLoadingOlderHistory,
       historyError,
     },
@@ -225,14 +224,7 @@ export function EventFeed({
               <span className="text-text-muted min-w-0" title={historyError}>
                 Couldn’t load earlier messages.
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  requestedNavigationRef.current = null;
-                  void (retryHistory ? retryHistory() : loadPrevious());
-                }}
-              >
+              <Button variant="ghost" size="sm" onClick={retry}>
                 Retry
               </Button>
             </div>
@@ -241,9 +233,7 @@ export function EventFeed({
             const group = groupedEvents[item.index];
             const groupKey = getGroupKey(group);
             const isGroupHighlighted =
-              highlightedEventId != null &&
-              (('event' in group && group.event.id === highlightedEventId) ||
-                ('events' in group && group.events.some((e) => e.id === highlightedEventId)));
+              highlightedEventId != null && groupHasEvent(group, highlightedEventId);
 
             return (
               <div
@@ -317,12 +307,7 @@ export function EventFeed({
           className="border-accent/40 bg-brand-mantle/95 text-accent hover:border-accent hover:bg-accent hover:text-brand-crust animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 absolute bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full shadow-xl ring-1 ring-white/10 backdrop-blur-xl"
           title="Scroll to bottom"
           aria-label="Scroll to bottom and follow new messages"
-          onClick={() => {
-            setSelectedTurnEventId(null);
-            returnToLatestHistory?.();
-            setFollowingOutput(true);
-            scrollToBottom(true);
-          }}
+          onClick={resumeFollowing}
         >
           <ArrowDown className="h-4 w-4" />
         </IconButton>

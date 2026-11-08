@@ -1,9 +1,8 @@
-import { createContext, use, useEffect, useState, useMemo, useCallback } from 'react';
+import { createContext, use, useEffect, useState, useMemo } from 'react';
 import {
   useThemePreferences,
   type ThemeMode,
-  isLightTheme,
-  LEGACY_KEY,
+  persistResolvedTheme,
 } from '../hooks/useThemePreferences';
 
 type Theme = string;
@@ -29,12 +28,11 @@ function resolveTheme(
 ): string {
   if (mode === 'light') return lightTheme;
   if (mode === 'dark') return darkTheme;
-  // system
   return prefersDark ? darkTheme : lightTheme;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const { themeMode, lightTheme, darkTheme, setThemeMode, setLightTheme, setDarkTheme } =
+  const { themeMode, lightTheme, darkTheme, setTheme, setThemeMode, setLightTheme, setDarkTheme } =
     useThemePreferences();
 
   const [prefersDark, setPrefersDark] = useState(() => {
@@ -42,7 +40,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // Listen to OS theme changes
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = (e: MediaQueryListEvent) => {
@@ -59,37 +56,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [themeMode, lightTheme, darkTheme, prefersDark],
   );
 
-  // Apply theme to DOM
   useEffect(() => {
     const root = window.document.documentElement;
-    const effective = resolvedTheme === 'oled-glass' ? 'mocha' : resolvedTheme;
-
-    // Write resolved theme to legacy key for backward compat
-    localStorage.setItem(LEGACY_KEY, resolvedTheme);
-
-    // Remove old theme classes
+    persistResolvedTheme(resolvedTheme);
     const current = root.getAttribute('data-theme');
     if (current) root.classList.remove(current);
-
-    // Apply new theme
-    root.setAttribute('data-theme', effective);
-    root.classList.add(effective);
+    root.setAttribute('data-theme', resolvedTheme);
+    root.classList.add(resolvedTheme);
   }, [resolvedTheme]);
-
-  // setTheme override: clicking a theme in Theme tab sets mode + appropriate theme
-  const setTheme = useCallback(
-    (theme: Theme) => {
-      const isLight = isLightTheme(theme);
-      if (isLight) {
-        setThemeMode('light');
-        setLightTheme(theme);
-      } else {
-        setThemeMode('dark');
-        setDarkTheme(theme);
-      }
-    },
-    [setThemeMode, setLightTheme, setDarkTheme],
-  );
 
   const contextValue = useMemo(
     () => ({

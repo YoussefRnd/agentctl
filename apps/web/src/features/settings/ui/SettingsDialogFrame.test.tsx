@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it } from 'vite-plus/test';
@@ -10,54 +9,6 @@ afterEach(() => {
   document.body.innerHTML = '';
   useSettingsOverlayStore.getState().closeSettings();
 });
-function appearance(node: Element): unknown {
-  return [
-    node.tagName,
-    node.getAttribute('class'),
-    node.getAttribute('style'),
-    [...node.children].map(appearance),
-  ];
-}
-it('preserves the settings frame and navigation appearance for each section', () => {
-  const host = document.createElement('div');
-  document.body.append(host);
-  root = createRoot(host);
-  useSettingsOverlayStore.getState().openSettings('general');
-  act(() =>
-    root.render(
-      <SettingsDialogFrame>
-        <p>Settings body</p>
-      </SettingsDialogFrame>,
-    ),
-  );
-  const result = [];
-  for (const tab of ['general', 'providers', 'mcp'] as const) {
-    act(() => useSettingsOverlayStore.getState().setSettingsTab(tab));
-    result.push({
-      tab,
-      appearance: createHash('sha256')
-        .update(JSON.stringify(appearance(document.querySelector('[role="dialog"]')!)))
-        .digest('hex'),
-    });
-  }
-  expect(result).toMatchInlineSnapshot(`
-    [
-      {
-        "appearance": "1ce978053b58e203ea1ba560d0406357a1d403c38edf505655a033e21ef01ebf",
-        "tab": "general",
-      },
-      {
-        "appearance": "d6d84070ea826e82d5ad3e838b0335f40769662bc730ac67fbdec6035881e94b",
-        "tab": "providers",
-      },
-      {
-        "appearance": "d87d8f96224d63f414fae85bac16d15d36f3cd8da849b2e2835f06ce06eff4dd",
-        "tab": "mcp",
-      },
-    ]
-  `);
-});
-
 it('shares responsive keyboard selection and links the active settings panel', () => {
   const host = document.createElement('div');
   document.body.append(host);

@@ -1,13 +1,12 @@
 import { sessionKeys } from '@/shared/lib/queryKeys';
-import { initialHistoryOptions, INITIAL_HISTORY_FRESH_MS } from '../api/sessionNavigation';
+import {
+  fetchSessionHistoryPage,
+  getPrefetchedHistory,
+  type SessionHistoryCursor,
+} from '../api/sessionNavigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  sessionEventPageSchema,
-  type SessionEventPage,
-  type SessionEventRow,
-} from '@agentctl/shared';
-import { apiClient } from '@agentctl/api-client';
+import type { SessionEventPage, SessionEventRow } from '@agentctl/shared';
 
 export function mergeEventHistory(
   older: SessionEventRow[],
@@ -28,7 +27,8 @@ interface HistoryWindow {
   before: number | null;
   after: number | null;
 }
-type Operation = { beforeId: number } | { afterId: number } | { aroundId: number };
+const historyWindowKey = (id: string) => ['events-window', id] as const;
+const latestWindowKey = (id: string) => ['events-latest-window', id] as const;
 const WINDOW_EVENT_LIMIT = 1000;
 const LIVE_EVENT_LIMIT = 200;
 
@@ -38,43 +38,42 @@ export function useSessionHistory(sessionId: string | null) {
   const windowsRef = useRef(windows);
   const latestRef = useRef(new Map<string, HistoryWindow>());
   const generation = useRef(0);
-  const requests = useRef(new Map<string, { controller: AbortController; operation: Operation }>());
-  const failures = useRef(new Map<string, Operation>());
-  const [loading, setLoading] = useState<Record<string, Operation | undefined>>({});
+  const requests = useRef(
+    new Map<string, { controller: AbortController; operation: SessionHistoryCursor }>(),
+  );
+  const failures = useRef(new Map<string, SessionHistoryCursor>());
+  const [loading, setLoading] = useState<Record<string, SessionHistoryCursor | undefined>>({});
   const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const readLatestWindow = useCallback(
+    (id: string) =>
+      latestRef.current.get(id) ?? client.getQueryData<HistoryWindow>(latestWindowKey(id)),
+    [client],
+  );
   const setWindow = useCallback(
     (id: string, value: HistoryWindow) => {
       windowsRef.current = { ...windowsRef.current, [id]: value };
       setWindows(windowsRef.current);
-      client.setQueryData(['events-cursor', id], value.before);
-      client.setQueryData(['events-window', id], value);
+      client.setQueryData(historyWindowKey(id), value);
     },
     [client],
   );
-  const fetchPage = useCallback(async (id: string, operation?: Operation, signal?: AbortSignal) => {
-    const query = new URLSearchParams({ limit: '200', compact: 'true' });
-    if (operation)
-      for (const [key, value] of Object.entries(operation)) query.set(key, String(value));
-    const url = `/api/sessions/${id}/events/page?${query}`;
-    return sessionEventPageSchema.parse(
-      signal ? await apiClient.fetch(url, { signal }) : await apiClient.fetch(url),
-    );
-  }, []);
   const resetWindow = useCallback(
     (id: string, page: SessionEventPage) => {
       generation.current++;
       requests.current.get(id)?.controller.abort();
       requests.current.delete(id);
       const window = { before: page.nextBeforeId, after: null, generation: generation.current };
-      latestRef.current.set(id, {
+      const latest = {
         ...window,
         start: page.nextBeforeId ?? page.events.find((event) => event.id > 0)?.id,
         anchors:
           page.nextBeforeId == null
             ? []
             : page.events.filter((event) => event.id < page.nextBeforeId!).map((event) => event.id),
-      });
-      client.setQueryData(['events-latest-window', id], latestRef.current.get(id));
+      };
+      // Keep the active window beyond query cache eviction and make it available after a remount.
+      latestRef.current.set(id, latest);
+      client.setQueryData(latestWindowKey(id), latest);
       setWindow(id, window);
       failures.current.delete(id);
       setErrors((errors) => ({ ...errors, [id]: null }));
@@ -88,16 +87,11 @@ export function useSessionHistory(sessionId: string | null) {
       if (!sessionId) return [];
       // Intent cache is only for the first load. Explicit refetches (for example
       // after rewind) must read fresh history rather than replay a prefetched page.
-      const intent = client.getQueryState(initialHistoryOptions(sessionId).queryKey);
-      const hasIntent =
-        intent &&
-        (intent.fetchStatus === 'fetching' ||
-          (intent.status === 'success' &&
-            Date.now() - intent.dataUpdatedAt < INITIAL_HISTORY_FRESH_MS));
-      const page =
-        client.getQueryData(sessionKeys.events(sessionId)) === undefined && hasIntent
-          ? await client.fetchQuery(initialHistoryOptions(sessionId))
-          : await fetchPage(sessionId);
+      const prefetched =
+        client.getQueryData(sessionKeys.events(sessionId)) === undefined
+          ? getPrefetchedHistory(client, sessionId)
+          : undefined;
+      const page = await (prefetched ?? fetchSessionHistoryPage(sessionId));
       resetWindow(sessionId, page);
       return page.events;
     },
@@ -108,11 +102,9 @@ export function useSessionHistory(sessionId: string | null) {
   });
   const events = query.data ?? [];
   const window = sessionId
-    ? (windows[sessionId] ?? client.getQueryData<HistoryWindow>(['events-window', sessionId]))
+    ? (windows[sessionId] ?? client.getQueryData<HistoryWindow>(historyWindowKey(sessionId)))
     : undefined;
-  const before =
-    window?.before ??
-    (window ? null : (client.getQueryData<number | null>(['events-cursor', sessionId]) ?? null));
+  const before = window?.before ?? null;
   const after = window?.after ?? null;
   const visibleEvents = useMemo(
     () =>
@@ -127,7 +119,7 @@ export function useSessionHistory(sessionId: string | null) {
   );
 
   const load = useCallback(
-    async (operation: Operation) => {
+    async (operation: SessionHistoryCursor) => {
       if (!sessionId) return;
       const running = requests.current.get(sessionId);
       if (running) {
@@ -144,10 +136,10 @@ export function useSessionHistory(sessionId: string | null) {
       setLoading((loading) => ({ ...loading, [sessionId]: operation }));
       setErrors((errors) => ({ ...errors, [sessionId]: null }));
       try {
-        const page = await fetchPage(sessionId, operation, controller.signal);
+        const page = await fetchSessionHistoryPage(sessionId, operation, controller.signal);
         if (controller.signal.aborted || version !== generation.current) return;
         const previous = windowsRef.current[sessionId] ??
-          client.getQueryData<HistoryWindow>(['events-window', sessionId]) ?? {
+          client.getQueryData<HistoryWindow>(historyWindowKey(sessionId)) ?? {
             before,
             after: null,
           };
@@ -196,9 +188,7 @@ export function useSessionHistory(sessionId: string | null) {
             next.before = next.start;
           }
         }
-        const latest =
-          latestRef.current.get(sessionId) ??
-          client.getQueryData<HistoryWindow>(['events-latest-window', sessionId]);
+        const latest = readLatestWindow(sessionId);
         const keepIds = new Set(
           [...kept, ...merged.filter((event) => event.id > 0).slice(-LIVE_EVENT_LIMIT)].map(
             (event) => event.id,
@@ -226,7 +216,7 @@ export function useSessionHistory(sessionId: string | null) {
         }
       }
     },
-    [sessionId, before, client, fetchPage, setWindow],
+    [sessionId, before, client, readLatestWindow, setWindow],
   );
   const loadOlder = useCallback(async () => {
     if (query.error) {
@@ -255,9 +245,7 @@ export function useSessionHistory(sessionId: string | null) {
     requests.current.get(sessionId)?.controller.abort();
     requests.current.delete(sessionId);
     const current = client.getQueryData<SessionEventRow[]>(sessionKeys.events(sessionId)) ?? [];
-    const latest =
-      latestRef.current.get(sessionId) ??
-      client.getQueryData<HistoryWindow>(['events-latest-window', sessionId]);
+    const latest = readLatestWindow(sessionId);
     const tail = current
       .filter((event) => event.id > 0 && (latest?.start === undefined || event.id >= latest.start))
       .slice(-LIVE_EVENT_LIMIT);
@@ -275,7 +263,7 @@ export function useSessionHistory(sessionId: string | null) {
     setLoading((loading) => ({ ...loading, [sessionId]: undefined }));
     setErrors((errors) => ({ ...errors, [sessionId]: null }));
     failures.current.delete(sessionId);
-  }, [sessionId, client, setWindow]);
+  }, [sessionId, client, readLatestWindow, setWindow]);
   useEffect(
     () => () => {
       if (sessionId) requests.current.get(sessionId)?.controller.abort();
@@ -287,7 +275,7 @@ export function useSessionHistory(sessionId: string | null) {
       if (!sessionId) return rows;
       const bounds =
         windowsRef.current[sessionId] ??
-        client.getQueryData<HistoryWindow>(['events-window', sessionId]);
+        client.getQueryData<HistoryWindow>(historyWindowKey(sessionId));
       const persisted = rows.filter((event) => event.id > 0);
       const active = persisted.filter(
         (event) =>
@@ -297,9 +285,7 @@ export function useSessionHistory(sessionId: string | null) {
       const kept = active.slice(-WINDOW_EVENT_LIMIT);
       if (bounds && active.length > kept.length)
         setWindow(sessionId, { ...bounds, start: kept[0].id, before: kept[0].id });
-      const latest =
-        latestRef.current.get(sessionId) ??
-        client.getQueryData<HistoryWindow>(['events-latest-window', sessionId]);
+      const latest = readLatestWindow(sessionId);
       const ids = new Set(
         [...kept, ...persisted.slice(-LIVE_EVENT_LIMIT)].map((event) => event.id),
       );
@@ -307,7 +293,7 @@ export function useSessionHistory(sessionId: string | null) {
         (event) => event.id < 0 || ids.has(event.id) || latest?.anchors?.includes(event.id),
       );
     },
-    [sessionId, setWindow, client],
+    [sessionId, setWindow, client, readLatestWindow],
   );
   const operation = sessionId ? loading[sessionId] : undefined;
   return {

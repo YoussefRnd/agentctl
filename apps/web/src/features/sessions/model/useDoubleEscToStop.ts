@@ -23,7 +23,6 @@ export function useDoubleEscToStop({
     isRunningRef.current = isRunning;
   }, [onStop, isRunning]);
 
-  // If status transitions from running to idle, reset timer
   useEffect(() => {
     if (!isRunning) {
       lastEscTimeRef.current = 0;
@@ -33,7 +32,6 @@ export function useDoubleEscToStop({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') {
-        // Reset if user pressed another key
         lastEscTimeRef.current = 0;
         return;
       }
@@ -54,14 +52,12 @@ export function useDoubleEscToStop({
       const timeSinceLastEsc = now - lastEscTimeRef.current;
 
       if (lastEscTimeRef.current > 0 && timeSinceLastEsc <= thresholdMs) {
-        // Double Escape detected!
         e.preventDefault();
         e.stopPropagation();
         lastEscTimeRef.current = 0;
         toast.info('Agent stopped', { id: ESC_STOP_TOAST_ID });
         onStopRef.current();
       } else {
-        // First Escape press
         lastEscTimeRef.current = now;
         toast.info('Press Esc again to stop the agent', {
           id: ESC_STOP_TOAST_ID,

@@ -20,7 +20,6 @@ export function useSessionEvents(sessionId: string | null) {
   const historyState = useSessionHistory(sessionId);
   const { events: history, isLoading, error, resetWindow, trimLiveHistory } = historyState;
 
-  // 2. Setup SessionEngine
   useEffect(() => {
     if (!sessionId) return;
 
@@ -89,7 +88,6 @@ export function useSessionEvents(sessionId: string | null) {
             (evt) => evt.type === 'text' && evt.data.role === 'user',
           );
 
-          // Fast path: Pure append of new sequential non-delta events
           const isSimpleAppend =
             !hasOptimistic &&
             realUserMessages.length === 0 &&
@@ -102,7 +100,6 @@ export function useSessionEvents(sessionId: string | null) {
             return trimLiveHistory([...old, ...newEvents]);
           }
 
-          // Upsert: replace in-place for existing IDs (streaming updates), append for new ones.
           const result = reconcileOptimisticMessages(old, newEvents);
           const idToIndex = new Map(result.map((event, index) => [event.id, index]));
 
@@ -129,7 +126,7 @@ export function useSessionEvents(sessionId: string | null) {
                   },
                 };
               } else {
-                result[idx] = evt; // update in-place (full row)
+                result[idx] = evt;
               }
             } else {
               idToIndex.set(evt.id, result.length);
@@ -149,7 +146,7 @@ export function useSessionEvents(sessionId: string | null) {
                       },
                     }
                   : evt;
-              result.push(materialized); // append new
+              result.push(materialized);
             }
           }
           return trimLiveHistory(mergeEventHistory([], result));
@@ -173,7 +170,6 @@ export function useSessionEvents(sessionId: string | null) {
     };
   }, [sessionId, queryClient, resetWindow, trimLiveHistory]);
 
-  // 3. Connect to SessionEngine once history is loaded
   useEffect(() => {
     if (
       !isLoading &&

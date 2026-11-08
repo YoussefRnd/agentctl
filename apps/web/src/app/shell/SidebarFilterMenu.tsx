@@ -1,17 +1,16 @@
 import { ListFilter, Check } from 'lucide-react';
 import { Dropdown, IconButton, Tooltip } from '@agentctl/ui';
-
-export type SortByOption = 'lastActive' | 'name' | 'createdAt';
+import type { ProjectSort } from '@/features/projects';
 
 interface SidebarFilterMenuProps {
   isOpen: boolean;
   onToggle: () => void;
   onClose: () => void;
-  sortBy: SortByOption;
+  sortBy: ProjectSort;
   gitOnly: boolean;
   showArchived: boolean;
   onSettingsChange: (patch: {
-    sortBy?: SortByOption;
+    sortBy?: ProjectSort;
     gitOnly?: boolean;
     showArchived?: boolean;
   }) => void;

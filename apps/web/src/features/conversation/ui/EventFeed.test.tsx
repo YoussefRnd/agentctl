@@ -9,9 +9,15 @@ import { EventFeed } from './EventFeed';
 const stream = vi.hoisted(() => ({
   streamingEventId: null,
   hasMoreHistory: true,
+  hasOlderHistory: true,
+  hasNewerHistory: false,
   historyRevision: 0,
   loadOlderHistory: vi.fn(),
+  loadNewerHistory: vi.fn(),
   loadEventHistory: vi.fn(),
+  retryHistory: vi.fn(),
+  returnToLatestHistory: vi.fn(),
+  isLoadingNewerHistory: false,
   isLoadingOlderHistory: false,
   historyError: null as string | null,
   turnIndex: undefined as SessionTurnAnchor[] | undefined,
@@ -69,12 +75,14 @@ const events: SessionEventRow[] = Array.from({ length: 500 }, (_, index) => ({
 }));
 beforeEach(() => {
   stream.hasMoreHistory = true;
+  stream.hasOlderHistory = true;
   stream.historyRevision = 0;
   stream.isLoadingOlderHistory = false;
   stream.historyError = null;
   stream.turnIndex = undefined;
   stream.loadOlderHistory.mockReset().mockResolvedValue(undefined);
   stream.loadEventHistory.mockReset().mockResolvedValue(undefined);
+  stream.retryHistory.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -134,7 +142,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-async function render(targetEventId?: number, feedEvents: SessionEventRow[] = events) {
+async function mountFeed(targetEventId?: number, feedEvents: SessionEventRow[] = events) {
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
@@ -142,10 +150,38 @@ async function render(targetEventId?: number, feedEvents: SessionEventRow[] = ev
       </QueryClientProvider>,
     ),
   );
+}
+
+async function render(targetEventId?: number, feedEvents: SessionEventRow[] = events) {
+  await mountFeed(targetEventId, feedEvents);
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
   });
 }
+
+it('follows the first page until the reader scrolls up', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    await mountFeed();
+    await act(async () => new Promise(requestAnimationFrame));
+    const viewport = container.querySelector<HTMLElement>('[tabindex="0"]')!;
+    expect(viewport.scrollTop).toBeGreaterThan(600);
+    const readingTop = viewport.scrollTop - 400;
+    await act(async () => {
+      viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -400, bubbles: true }));
+      viewport.scrollTop = readingTop;
+      viewport.dispatchEvent(new Event('scroll', { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    await act(async () => new Promise(requestAnimationFrame));
+    expect(viewport.scrollTop).toBe(readingTop);
+    expect(
+      container.querySelector('[aria-label="Scroll to bottom and follow new messages"]'),
+    ).not.toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 it('renders a small window of a long conversation and can navigate to an off-screen event', async () => {
   await render(250);
@@ -233,7 +269,7 @@ it('stops automatic loading after an error and offers an explicit retry', async 
     (button) => button.textContent === 'Retry',
   )!;
   await act(async () => retry.click());
-  expect(stream.loadOlderHistory).toHaveBeenCalledOnce();
+  expect(stream.retryHistory).toHaveBeenCalledOnce();
 });
 
 it('shows a quiet loading status without another history action', async () => {
@@ -332,6 +368,7 @@ it('keeps every timeline tick and navigates directly to an unloaded turn without
   expect(container.querySelector('[data-message="1"]')).toBeNull();
   stream.isLoadingOlderHistory = false;
   stream.hasMoreHistory = false;
+  stream.hasOlderHistory = false;
   await render(undefined, events);
   expect(container.querySelectorAll('[data-timeline] button')).toHaveLength(500);
   expect(container.querySelector('[data-message="1"]')).not.toBeNull();

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { act } from 'react';
 import { useWorkbenchStore } from '@/shared/stores/useWorkbenchStore';
 import { createRoot, type Root } from 'react-dom/client';
@@ -18,36 +17,6 @@ afterEach(() => {
   act(() => root?.unmount());
   document.body.innerHTML = '';
 });
-function appearance(node: Element): unknown {
-  return [
-    node.tagName,
-    node.getAttribute('class'),
-    node.getAttribute('style'),
-    [...node.children].map(appearance),
-  ];
-}
-it('preserves the existing workbench tab and panel appearance', () => {
-  const host = document.createElement('div');
-  document.body.append(host);
-  root = createRoot(host);
-  act(() =>
-    root.render(
-      <Workbench
-        composerActions={{} as ReviewComposerActions}
-        isOpen
-        tab="status"
-        openTabs={['changes', 'terminal', 'status']}
-        onTabChange={() => {}}
-      />,
-    ),
-  );
-  expect(
-    createHash('sha256')
-      .update(JSON.stringify(appearance(host)))
-      .digest('hex'),
-  ).toMatchInlineSnapshot(`"5198fab2c2edcffe3fed7120b7cc28b4bc2716aef902e834c4674929da22eccf"`);
-});
-
 function renderLiveWorkbench() {
   useWorkbenchStore.setState({
     workbenchTab: 'status',

@@ -5,27 +5,19 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, FolderUp } from 'lucide-react';
-import type { SidebarProject } from '@agentctl/api-client';
-import {
-  apiClient,
-  deleteProject,
-  archiveSession,
-  deleteSession,
-  renameSession,
-  rewindSession,
-  patchSession,
-  providerService,
-} from '@agentctl/api-client';
+import { DEFAULT_PROJECT_SORT, projectQueries, type ProjectSort } from '@/features/projects';
+import { deleteProject, patchSession, providerService } from '@agentctl/api-client';
 import { ConfirmationModal, IconButton, Tooltip, cn } from '@agentctl/ui';
 import { toast } from 'sonner';
 import { SidebarProjectList } from './SidebarProjectList';
 import { SidebarTranscriptResults } from './SidebarTranscriptResults';
 import { RenameSessionDialog } from './RenameSessionDialog';
 import { SidebarSearch } from './SidebarSearch';
-import { SidebarFilterMenu, type SortByOption } from './SidebarFilterMenu';
+import { SidebarFilterMenu } from './SidebarFilterMenu';
 import { SidebarFooter } from './SidebarFooter';
 import { useFilteredProjects } from './model/useFilteredProjects';
 import { useProjectExpansionStore } from '@/shared/stores/useProjectExpansionStore';
+import { useSessionLifecycle } from '../session/useSessionLifecycle';
 
 interface SidebarProps {
   activeSessionId?: string;
@@ -38,6 +30,7 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
 
   const sessionMatch = /\/sessions\/([^/]+)/.exec(location.pathname);
   const currentActiveSessionId = activeSessionId ?? sessionMatch?.[1];
+  const lifecycle = useSessionLifecycle(currentActiveSessionId);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,11 +70,11 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   };
 
   const [settings, setSettingsState] = useState<{
-    sortBy: SortByOption;
+    sortBy: ProjectSort;
     gitOnly: boolean;
     showArchived: boolean;
   }>({
-    sortBy: 'lastActive',
+    sortBy: DEFAULT_PROJECT_SORT,
     gitOnly: false,
     showArchived: false,
   });
@@ -108,14 +101,11 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
     isLoading,
     isError,
     refetch,
-  } = useQuery({
-    queryKey: ['projects', sortBy, gitOnly],
-    queryFn: () =>
-      apiClient.fetch<SidebarProject[]>(
-        `/api/projects?sortBy=${sortBy}&gitOnly=${gitOnly ? 'true' : 'false'}`,
-      ),
-    staleTime: 2000,
-    refetchOnWindowFocus: true,
+  } = useQuery(projectQueries.list(sortBy, gitOnly));
+
+  const { data: trayProjects } = useQuery({
+    ...projectQueries.all(),
+    enabled: !!window.electronAPI?.updateTrayStatus,
   });
 
   const { data: providers = [] } = useQuery({
@@ -154,28 +144,18 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   };
 
   useEffect(() => {
+    if (!trayProjects) return;
     let runningCount = 0;
     let needsAttentionCount = 0;
-    for (const project of projects) {
+    for (const project of trayProjects) {
       for (const session of project.sessions ?? []) {
         if (session.status === 'running') runningCount++;
         else if (session.status === 'needs_attention') needsAttentionCount++;
       }
     }
 
-    const electronAPI = (
-      window as unknown as {
-        electronAPI?: {
-          updateTrayStatus?: (status: {
-            runningCount: number;
-            needsAttentionCount: number;
-          }) => void;
-        };
-      }
-    ).electronAPI;
-
-    electronAPI?.updateTrayStatus?.({ runningCount, needsAttentionCount });
-  }, [projects]);
+    window.electronAPI?.updateTrayStatus?.({ runningCount, needsAttentionCount });
+  }, [trayProjects]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -216,34 +196,19 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
   };
 
   const handleDeleteSession = (sessionId: string, title: string) => {
-    void execute(`delete-session-${sessionId}`, () => deleteSession(sessionId), {
+    const project = projects.find((project) =>
+      project.sessions.some((session) => session.id === sessionId),
+    );
+    void execute(`delete-session-${sessionId}`, () => lifecycle.remove(sessionId, project?.id), {
       successMessage: `Session "${title}" deleted`,
       errorMessage: 'Failed to delete session',
-    }).then((result) => {
-      if (result) {
-        if (currentActiveSessionId === sessionId) {
-          const project = projects.find((project) =>
-            project.sessions.some((session) => session.id === sessionId),
-          );
-          if (project) keepProjectExpanded(project.id);
-        }
-        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
-        if (currentActiveSessionId === sessionId) {
-          void navigate('/');
-        }
-      }
     });
   };
 
   const handleArchiveSession = (sessionId: string, title: string) => {
-    void execute(`archive-session-${sessionId}`, () => archiveSession(sessionId), {
+    void execute(`archive-session-${sessionId}`, () => lifecycle.archive(sessionId), {
       successMessage: `Session "${title}" archived`,
       errorMessage: 'Failed to archive session',
-    }).then((result) => {
-      if (result) {
-        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
-        void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      }
     });
   };
 
@@ -255,28 +220,18 @@ export function Sidebar({ activeSessionId }: SidebarProps) {
     const target = renameTarget;
     if (!target) return;
     if (newTitle.trim() !== target.title) {
-      void execute(`rename-session-${target.id}`, () => renameSession(target.id, newTitle.trim()), {
+      void execute(`rename-session-${target.id}`, () => lifecycle.rename(target.id, newTitle), {
         successMessage: 'Session renamed',
         errorMessage: 'Failed to rename session',
-      }).then((result) => {
-        if (result) {
-          void queryClient.invalidateQueries({ queryKey: projectKeys.all });
-          void queryClient.invalidateQueries({ queryKey: sessionKeys.detail(target.id) });
-        }
       });
     }
     setRenameTarget(null);
   };
 
   const handleForkSession = (sessionId: string, title: string) => {
-    void execute(`fork-session-${sessionId}`, () => rewindSession(sessionId, 999999999, 'fork'), {
+    void execute(`fork-session-${sessionId}`, () => lifecycle.forkLatest(sessionId), {
       successMessage: `Session "${title}" forked`,
       errorMessage: 'Failed to fork session',
-    }).then((result) => {
-      if (result?.forkSessionId) {
-        void queryClient.invalidateQueries({ queryKey: projectKeys.all });
-        void navigate(`/sessions/${result.forkSessionId}`);
-      }
     });
   };
 
