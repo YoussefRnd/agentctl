@@ -7,6 +7,9 @@ export function cancellableCallbacks(callbacks: AgentSessionCallbacks) {
   const requestSignal = (signal?: AbortSignal) =>
     signal ? AbortSignal.any([turn.signal, signal]) : turn.signal;
   return {
+    get signal() {
+      return turn.signal;
+    },
     beginTurn() {
       if (turn.signal.aborted) turn = new AbortController();
     },

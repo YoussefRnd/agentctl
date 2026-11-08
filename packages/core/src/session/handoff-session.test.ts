@@ -4,7 +4,13 @@ import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { createDatabase } from '../db/index.js';
-import { projects, sessions, sessionEvents, sessionProviderContexts } from '../db/schema.js';
+import {
+  projects,
+  sessions,
+  sessionEvents,
+  sessionOperations,
+  sessionProviderContexts,
+} from '../db/schema.js';
 import type { WorkspaceManager } from '../git/worktree-manager.js';
 import { noopLogger } from '../logger.js';
 import { Provider } from '../providers/provider.js';
@@ -74,6 +80,8 @@ describe('SessionManager provider handoff', () => {
       discover: () => Promise.resolve(Array.from(providers.values()).map((p) => p.toDiscovery())),
     } as unknown as ProviderRegistry;
     const executions: { options: AgentSessionOptions; prompt: ReturnType<typeof vi.fn> }[] = [];
+    const starting = Promise.withResolvers<void>();
+    const finishStartup = Promise.withResolvers<void>();
     let reportFullContext = false;
     const runtime: AgentDriver = {
       inspectProvider: () =>
@@ -85,6 +93,10 @@ describe('SessionManager provider handoff', () => {
           supportsDynamicConfig: false,
         }),
       startSession: async (_command, _args, options, callbacks) => {
+        if (executions.length === 0) {
+          starting.resolve();
+          await finishStartup.promise;
+        }
         if (reportFullContext && options.intent?.kind === 'resume') {
           reportFullContext = false;
           await callbacks.onUpdate({ type: 'usage_update', used: 127_900, size: 128_000 });
@@ -119,6 +131,7 @@ describe('SessionManager provider handoff', () => {
         });
       },
     };
+    const callTool = vi.fn(async () => 'Tool completed');
     const manager = new SessionManager(
       db,
       {} as WorkspaceManager,
@@ -126,14 +139,26 @@ describe('SessionManager provider handoff', () => {
       { publish() {} },
       noopLogger,
       runtime,
+      { getTools: async () => [{ name: 'demo__mutate' }], callTool },
     );
     const input = async (text: string) => {
       await manager.startInput('session-1', text);
       await manager.waitForSessionOperations('session-1');
     };
     try {
-      await manager.startSession('session-1', cwd, 'source', []);
+      const cancelledId = await manager.startInput('session-1', 'Cancelled during startup');
+      await starting.promise;
+      await manager.handleClientMessage('session-1', 'cancel', {});
+      finishStartup.resolve();
+      await manager.waitForSessionOperations('session-1');
+      expect(executions[0]!.prompt).not.toHaveBeenCalled();
+      expect(
+        db.select().from(sessionOperations).where(eq(sessionOperations.eventId, cancelledId)).get(),
+      ).toMatchObject({ status: 'cancelled' });
       await input('Original task');
+      expect(executions[0]!.prompt.mock.calls[0]?.[2] ?? '').not.toContain(
+        'Cancelled during startup',
+      );
       await manager.updateSessionConfig('session-1', {
         selectedProvider: 'target',
         selectedModel: 'default',
@@ -177,23 +202,30 @@ describe('SessionManager provider handoff', () => {
         selectedModel: 'default',
       });
       const fullNative = executions.at(-1)!;
-      await input('Continue with full provider');
+      await input('/demo:mutate');
       expect(fullNative.options.intent?.kind).toBe('resume');
       expect(fullNative.prompt).not.toHaveBeenCalled();
       expect(executions.at(-1)!.options.intent?.kind).toBe('new');
       expect(executions.at(-1)!.prompt.mock.calls[0]![2]).toContain('Original task');
       expect(executions.at(-1)!.prompt.mock.calls[0]![2]).toContain('More target work');
-      const fullInput = db
-        .select()
-        .from(sessionEvents)
-        .all()
-        .filter(
-          (event) =>
-            event.type === 'text' &&
-            JSON.parse(event.data).role === 'user' &&
-            JSON.parse(event.data).content === 'Continue with full provider',
-        );
+      expect(executions.at(-1)!.prompt.mock.calls[0]![0]).toContain('Tool completed');
+      expect(callTool).toHaveBeenCalledExactlyOnceWith('demo', 'mutate', {});
+      const events = db.select().from(sessionEvents).all();
+      const fullInput = events.filter(
+        (event) =>
+          event.type === 'text' &&
+          JSON.parse(event.data).role === 'user' &&
+          JSON.parse(event.data).content === '/demo:mutate',
+      );
       expect(fullInput).toHaveLength(1);
+      expect(
+        events.filter(
+          (event) =>
+            event.parentEventId === fullInput[0]!.id &&
+            event.type === 'status' &&
+            JSON.parse(event.data).status === 'turn_started',
+        ),
+      ).toHaveLength(1);
       db.update(sessionProviderContexts)
         .set({ status: 'pending' })
         .where(eq(sessionProviderContexts.providerId, 'source'))
@@ -217,6 +249,39 @@ describe('SessionManager provider handoff', () => {
       const queuedContext = executions.at(-1)!.prompt.mock.calls[0]![2];
       expect(queuedContext).toContain('Queued target request');
       expect(queuedContext).toContain('Answer to Queued target request');
+      await manager.updateSessionConfig('session-1', {
+        selectedProvider: 'target',
+        selectedModel: 'default',
+      });
+      await input('History before tool execution');
+      await manager.updateSessionConfig('session-1', {
+        selectedProvider: 'source',
+        selectedModel: 'default',
+      });
+      const beforeTool = executions.at(-1)!;
+      callTool.mockResolvedValueOnce('x'.repeat(140_000));
+      await input('/demo:mutate {"case":"large output"}');
+      expect(executions.at(-1)).toBe(beforeTool);
+      expect(beforeTool.prompt).not.toHaveBeenCalled();
+      expect(callTool).toHaveBeenCalledTimes(2);
+      expect(callTool).toHaveBeenLastCalledWith('demo', 'mutate', { case: 'large output' });
+      const toolInput = db
+        .select()
+        .from(sessionEvents)
+        .all()
+        .filter((event) => event.type === 'text')
+        .map((event) => JSON.parse(event.data))
+        .find(
+          (data) => data.role === 'user' && data.content === '/demo:mutate {"case":"large output"}',
+        );
+      expect(toolInput).toMatchObject({
+        deliveryStatus: 'accepted',
+        deliveryFailure: {
+          details: expect.stringContaining('too little room for conversation history'),
+          delivery: 'accepted',
+        },
+      });
+      expect(toolInput.deliveryFailure.actions).not.toContain('retry');
       const rows = await db.select().from(sessions);
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
@@ -225,6 +290,7 @@ describe('SessionManager provider handoff', () => {
         worktreePath: cwd,
       });
     } finally {
+      finishStartup.resolve();
       await manager.stopAll();
       vi.unstubAllEnvs();
       await fs.rm(cwd, { recursive: true, force: true });

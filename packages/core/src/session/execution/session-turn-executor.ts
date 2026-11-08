@@ -7,7 +7,11 @@ import type { DbClient } from '../../db/index.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
 import type { Logger } from '../../logger.js';
 import type { AgentMcpGateway, AgentSession, AgentUsage, AgentUpdate } from '../../agent/types.js';
-import type { SessionEventRepositoryLike, SessionStatusTransitioner } from '../contracts.js';
+import {
+  undispatchedCancellation,
+  type SessionEventRepositoryLike,
+  type SessionStatusTransitioner,
+} from '../contracts.js';
 import type { SessionStateProjector } from '../projection/session-state-projector.js';
 import type { PermissionEngine } from '../../security/permission-engine.js';
 import { SkillRegistry, type SkillActivation } from '../../skills/registry.js';
@@ -28,19 +32,22 @@ import {
   ProviderContextDelivery,
 } from './provider-context-delivery.js';
 import { providerContextByteBudget, attachmentContextAllowance } from '../context-budget.js';
+import { HistoryTranscriptBudgetError } from '../history-transcript.js';
 
 interface TurnRuntimeState {
   runtimeId: string;
   isStopped(): boolean;
   beginAttempt(attemptId?: string): void;
   endAttempt(): void;
-  markDispatched(): Promise<void>;
+  markDispatched(attemptId?: string): boolean;
   onError(error: unknown): Promise<void>;
 }
 
+class TurnCancelledBeforeDispatch extends Error {}
+
 /** Owns one prompt turn: context preparation, dispatch, output and usage finalization. */
 export class SessionTurnExecutor {
-  private running = false;
+  private activeTurn?: { cancelled: boolean };
   private skillCatalog: SkillCatalogDelivery;
   private contextDelivery?: ProviderContextDelivery;
   private diagnosticTurn?: {
@@ -84,6 +91,25 @@ export class SessionTurnExecutor {
     );
   }
 
+  requestCancellation(): void {
+    if (this.activeTurn) this.activeTurn.cancelled = true;
+  }
+
+  private claimDispatch(attemptId?: string): void {
+    if (this.activeTurn?.cancelled || !this.deps.markDispatched(attemptId))
+      throw new TurnCancelledBeforeDispatch();
+  }
+
+  private async returnToIdle(): Promise<void> {
+    if (this.runtimeRegistry) {
+      await this.runtimeRegistry.transitionTo(this.sessionId, 'idle', {
+        runtimeId: this.deps.runtimeId,
+      });
+    } else {
+      this.store.setSessionStatus(this.sessionId, 'idle');
+    }
+  }
+
   private async recordFailure(
     attemptId: string,
     eventId: number | undefined,
@@ -116,6 +142,7 @@ export class SessionTurnExecutor {
 
   private async parseAndExecuteMcpCommand(
     text: string,
+    attemptId?: string,
   ): Promise<{ result: string; toolName: string; args: string } | null> {
     const match = /^\/([a-zA-Z0-9_-]+):([a-zA-Z0-9_:-]+)(.*)$/.exec(text);
     if (!match) return null;
@@ -130,7 +157,6 @@ export class SessionTurnExecutor {
       throw new Error('MCP gateway not available');
     }
 
-    // Fetch tool definition to determine argument schema
     const tools = await this.mcpGateway.getTools();
     const toolDef = tools.find((t) => t.name === toolName || t.name === shortToolName);
 
@@ -140,7 +166,6 @@ export class SessionTurnExecutor {
         if (argsText.startsWith('{')) {
           parsedArgs = JSON.parse(argsText) as Record<string, unknown>;
         } else {
-          // Map plain text to the first required string parameter in the schema if possible
           const schema = toolDef?.inputSchema;
           const properties = schema?.properties as Record<string, { type?: string }> | undefined;
           const required = schema?.required as string[] | undefined;
@@ -159,8 +184,8 @@ export class SessionTurnExecutor {
       }
     }
 
+    this.claimDispatch(attemptId);
     try {
-      await this.deps.markDispatched();
       const output = await this.mcpGateway.callTool(serverId, shortToolName, parsedArgs);
       return {
         result: typeof output === 'string' ? output : JSON.stringify(output, null, 2),
@@ -183,7 +208,7 @@ export class SessionTurnExecutor {
     accepted?: { eventId: number; attemptId: string },
   ): Promise<void> {
     if (this.deps.isStopped()) throw new Error('Session runtime is closed');
-    if (this.running) throw new Error('prompt already in progress');
+    if (this.activeTurn) throw new Error('prompt already in progress');
     const observation = new TurnObservation();
     return observation.run(async () => {
       try {
@@ -213,16 +238,69 @@ export class SessionTurnExecutor {
     clientMessageId?: string,
     accepted?: { eventId: number; attemptId: string },
   ): Promise<void> {
-    this.running = true;
+    const activeTurn = { cancelled: false };
+    this.activeTurn = activeTurn;
     const attemptId = accepted?.attemptId ?? randomUUID();
     const diagnostics = new TurnDiagnostics();
     this.diagnosticTurn = { attemptId, eventId: accepted?.eventId, diagnostics, observation };
     this.deps.beginAttempt(attemptId);
     this.permissionEngine.clearTurn();
     let outcome: TurnOutcome = 'error';
-    let history: Awaited<ReturnType<ProviderContextDelivery['prepare']>> | undefined;
+    let pendingHistory: Awaited<ReturnType<ProviderContextDelivery['prepare']>> | undefined;
+    let executedMcpCommand = false;
     try {
       const sessionRecord = await this.store.session(this.sessionId);
+
+      const { metadata: resolvedAttachmentsMeta, files: resolvedAttachmentFiles } =
+        await resolveMessageAttachments(this.sessionId, attachmentIds);
+
+      const nativelyLoadsSkills = sessionRecord?.selectedProvider
+        ? await this.store.providerLoadsSkills(sessionRecord.selectedProvider)
+        : false;
+
+      const requestedSkill = /^\/([a-z0-9-]+)(?:\s|$)/i.exec(text)?.[1]?.toLowerCase();
+      const registry = await SkillRegistry.load({
+        cwd: this.cwd,
+        includeWorkspaceSkills: !nativelyLoadsSkills,
+      });
+      const activation = skillActivation ?? (requestedSkill ? { name: requestedSkill } : undefined);
+      const missingSkill =
+        skillActivation && !registry.activate(skillActivation)
+          ? (skillActivation.name ?? `purpose "${skillActivation.purpose}"`)
+          : undefined;
+      const skills = this.skillCatalog.prepare(registry, activation);
+      const instructions = [embeddedContext, skills.context].filter(Boolean).join('\n\n---\n\n');
+      const contextDelivery = (this.contextDelivery ??= new ProviderContextDelivery(
+        this.db,
+        {
+          sessionId: this.sessionId,
+          providerId: sessionRecord?.selectedProvider ?? '',
+          nativeSessionId: this.runtimeHandle.id ?? this.deps.runtimeId,
+        },
+        this.runtimeHandle.history === 'fresh',
+      ));
+      const modelWindow = findAgentConfigOption(
+        jsonCodecs.agentConfigOptionsOrNull(sessionRecord?.sessionConfigOptions) ?? [],
+        'model',
+      )?.options?.find((option) => option.value === sessionRecord?.selectedModel)?.contextWindow;
+      const window = Math.min(sessionRecord?.contextLimit || Infinity, modelWindow ?? Infinity);
+      const attachmentMimeTypes = resolvedAttachmentFiles.map((file) => file.mimeType);
+      const prepareHistory = (userText: string, eventId?: number) =>
+        contextDelivery.prepare(
+          eventId,
+          providerContextByteBudget({
+            contextWindow: Number.isFinite(window) ? window : undefined,
+            usedTokens: sessionRecord?.contextUsedTokens ?? contextDelivery.usedTokens,
+            userText,
+            instructions,
+            attachmentMimeTypes,
+          }),
+        );
+      const prepared =
+        missingSkill === undefined
+          ? { history: await prepareHistory(text, accepted?.eventId) }
+          : { error: new Error(`Agent skill not found: ${missingSkill}`) };
+      if (activeTurn.cancelled) throw new TurnCancelledBeforeDispatch();
 
       if (sessionRecord && isDefaultSessionTitle(sessionRecord.title, sessionRecord.taskSlug)) {
         const summary = text.trim();
@@ -241,9 +319,6 @@ export class SessionTurnExecutor {
       } else {
         await this.store.setSessionStatus(this.sessionId, 'running');
       }
-
-      const { metadata: resolvedAttachmentsMeta, files: resolvedAttachmentFiles } =
-        await resolveMessageAttachments(this.sessionId, attachmentIds);
 
       let promptText = text;
       const promptTokens = Math.ceil(text.length / 4);
@@ -270,18 +345,18 @@ export class SessionTurnExecutor {
 
       if (text.startsWith('/')) {
         try {
-          const executed = await this.parseAndExecuteMcpCommand(text);
+          const executed = await this.parseAndExecuteMcpCommand(text, accepted?.attemptId);
           if (executed) {
-            // Wrap for agent context
+            executedMcpCommand = true;
             promptText = `[System Notification: The user manually executed the tool "${executed.toolName}" with args: "${executed.args}". Result:\n---\n${executed.result}\n---\nAnalyze this output and answer the user's request.]`;
 
-            // Yield result to user timeline feed
             await this.projector.appendText(
               `\n\n*Manual Tool Execution Result [${executed.toolName}]:*\n\`\`\`json\n${executed.result}\n\`\`\`\n`,
             );
             await this.projector.flushAll();
           }
         } catch (err: unknown) {
+          if (err instanceof TurnCancelledBeforeDispatch) throw err;
           this.logger.error(err, 'Manual MCP tool execution failed');
           const failure = normalizeChatError(err, {
             stage: 'stream',
@@ -300,58 +375,30 @@ export class SessionTurnExecutor {
           );
           await this.recordFailure(attemptId, turn.eventId, failure, timings);
 
-          if (this.runtimeRegistry) {
-            await this.runtimeRegistry.transitionTo(this.sessionId, 'idle', {
-              runtimeId: this.deps.runtimeId,
-            });
-          } else {
-            await this.store.setSessionStatus(this.sessionId, 'idle');
-          }
+          await this.returnToIdle();
           return; // Do not call the model if direct execution failed
         }
       }
 
-      let nativelyLoadsSkills = false;
-      if (sessionRecord?.selectedProvider) {
-        nativelyLoadsSkills = await this.store.providerLoadsSkills(sessionRecord.selectedProvider);
+      if (prepared.error) throw prepared.error;
+      let { history } = prepared;
+      if (executedMcpCommand) {
+        try {
+          history = await prepareHistory(promptText, turn.eventId);
+        } catch (error) {
+          // The tool already ran, so changing native sessions must never replay this input.
+          if (
+            error instanceof HistoryTranscriptBudgetError ||
+            error instanceof ProviderContextRecoveryError
+          )
+            throw new AgentError('invalid_request', error.message, {
+              cause: error,
+              delivery: 'accepted',
+            });
+          throw error;
+        }
       }
 
-      const requestedSkill = /^\/([a-z0-9-]+)(?:\s|$)/i.exec(text)?.[1]?.toLowerCase();
-      const registry = await SkillRegistry.load({
-        cwd: this.cwd,
-        includeWorkspaceSkills: !nativelyLoadsSkills,
-      });
-      const activation = skillActivation ?? (requestedSkill ? { name: requestedSkill } : undefined);
-      if (skillActivation && !registry.activate(skillActivation)) {
-        const requested = skillActivation.name ?? `purpose "${skillActivation.purpose}"`;
-        throw new Error(`Agent skill not found: ${requested}`);
-      }
-      const skills = this.skillCatalog.prepare(registry, activation);
-      const instructions = [embeddedContext, skills.context].filter(Boolean).join('\n\n---\n\n');
-      this.contextDelivery ??= new ProviderContextDelivery(
-        this.db,
-        {
-          sessionId: this.sessionId,
-          providerId: sessionRecord?.selectedProvider ?? '',
-          nativeSessionId: this.runtimeHandle.id ?? this.deps.runtimeId,
-        },
-        this.runtimeHandle.history === 'fresh',
-      );
-      const modelWindow = findAgentConfigOption(
-        jsonCodecs.agentConfigOptionsOrNull(sessionRecord?.sessionConfigOptions) ?? [],
-        'model',
-      )?.options?.find((option) => option.value === sessionRecord?.selectedModel)?.contextWindow;
-      const window = Math.min(sessionRecord?.contextLimit || Infinity, modelWindow ?? Infinity);
-      history = await this.contextDelivery.prepare(
-        turn.eventId,
-        providerContextByteBudget({
-          contextWindow: Number.isFinite(window) ? window : undefined,
-          usedTokens: sessionRecord?.contextUsedTokens ?? this.contextDelivery.usedTokens,
-          userText: promptText,
-          instructions,
-          attachmentMimeTypes: resolvedAttachmentFiles.map((file) => file.mimeType),
-        }),
-      );
       const finalEmbeddedContext = [history.context, instructions]
         .filter(Boolean)
         .join('\n\n---\n\n');
@@ -370,8 +417,9 @@ export class SessionTurnExecutor {
 
       const snapshotService = this.runtimeRegistry?.getCheckpointService?.();
 
-      await this.deps.markDispatched();
+      this.claimDispatch(accepted?.attemptId);
       history.pending();
+      pendingHistory = history;
       diagnostics.dispatch();
       observation.phase('dispatched');
       const promptResult = await this.runtimeHandle.prompt(
@@ -411,7 +459,6 @@ export class SessionTurnExecutor {
             : 'unknown',
       );
 
-      // Store turn end with stopReason, per-turn usage, and centralized turn changes
       const turnData: Record<string, unknown> = {
         status: 'turn_end',
         stopReason: promptResult.stopReason,
@@ -519,18 +566,13 @@ export class SessionTurnExecutor {
       if (foregroundFailure)
         await this.recordFailure(attemptId, turn.eventId, foregroundFailure, timings);
       history.delivered(
+        turn.eventId,
         Buffer.byteLength(JSON.stringify(promptText)) +
           Buffer.byteLength(JSON.stringify(finalEmbeddedContext)) +
-          attachmentContextAllowance(resolvedAttachmentFiles.map((file) => file.mimeType)),
+          attachmentContextAllowance(attachmentMimeTypes),
       );
 
-      if (this.runtimeRegistry) {
-        await this.runtimeRegistry.transitionTo(this.sessionId, 'idle', {
-          runtimeId: this.deps.runtimeId,
-        });
-      } else {
-        await this.store.setSessionStatus(this.sessionId, 'idle');
-      }
+      await this.returnToIdle();
       outcome =
         promptResult.stopReason === 'cancelled'
           ? 'cancelled'
@@ -542,8 +584,40 @@ export class SessionTurnExecutor {
         error instanceof AgentError &&
         (error.delivery === 'rejected' || error.delivery === 'not_sent')
       )
-        history?.unsent();
-      if (error instanceof ProviderContextRecoveryError) throw error;
+        pendingHistory?.unsent();
+      if (
+        !this.deps.isStopped() &&
+        (error instanceof TurnCancelledBeforeDispatch || activeTurn.cancelled)
+      ) {
+        outcome = 'cancelled';
+        if (accepted) this.store.finishAttempt(attemptId, 'cancelled');
+        const eventId = this.diagnosticTurn?.eventId;
+        if (eventId !== undefined) {
+          if (
+            accepted &&
+            !executedMcpCommand &&
+            error instanceof AgentError &&
+            error.delivery === 'not_sent'
+          )
+            await this.eventRepository.update(eventId, undispatchedCancellation, undefined, [
+              'deliveryFailure',
+            ]);
+          await this.eventRepository.append(
+            this.sessionId,
+            'status',
+            { status: 'turn_end', stopReason: 'cancelled', timings: diagnostics.finish() },
+            eventId,
+            { attemptId },
+          );
+        }
+        await this.returnToIdle();
+        return;
+      }
+      if (
+        error instanceof ProviderContextRecoveryError ||
+        error instanceof HistoryTranscriptBudgetError
+      )
+        throw error;
       if (
         this.runtimeRegistry?.ownsRuntime &&
         !this.runtimeRegistry.ownsRuntime(this.sessionId, this.deps.runtimeId)
@@ -609,7 +683,7 @@ export class SessionTurnExecutor {
       this.permissionEngine.clearTurn();
       this.diagnosticTurn = undefined;
       this.deps.endAttempt();
-      this.running = false;
+      this.activeTurn = undefined;
     }
   }
 }

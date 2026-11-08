@@ -8,7 +8,7 @@ import {
   DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
   getAgentRequestTimeoutMs,
 } from '../../config/runtime-defaults.js';
-import { buildPromptBlocks } from '../protocol/prompt.js';
+import { buildPromptBlocks, checkPromptDispatch } from '../protocol/prompt.js';
 import type { TerminalManager } from '../protocol/terminal-manager.js';
 import { normalizeAcpUsage } from '../protocol/usage.js';
 import { bindSessionProcessEvents, withTimeout } from '../transport/acp-process-lifecycle.js';
@@ -74,6 +74,7 @@ export function createV1Session(context: SessionContext): AgentSession {
     ): Promise<AgentPromptResult> {
       return observeProviderPrompt('acp-v1', async () => {
         const traceparent = captureTraceparent();
+        const signal = requests.signal;
         const promptParts = await buildPromptBlocks({
           text,
           attachments,
@@ -82,6 +83,7 @@ export function createV1Session(context: SessionContext): AgentSession {
           supportsAudio: capabilities().supportsAudio,
           supportsEmbeddedContext: capabilities().supportsEmbeddedContext,
         });
+        checkPromptDispatch(signal);
 
         const response = await connection
           .prompt({

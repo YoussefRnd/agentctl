@@ -2,13 +2,12 @@ import { composeRepositoryResources } from './repository-resources.js';
 import type { RepositoryService } from '../../repository/repository-service.js';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
-import type { AgentDriver } from '../../agent/types.js';
+import type { AgentDriver, AgentMcpGateway } from '../../agent/types.js';
 import type { AgentRuntimeServices } from '../../agent/runtime-services.js';
 import { createDefaultAgentDriver } from '../../default-agent-driver.js';
 import type { WorkspaceManager } from '../../git/worktree-manager.js';
 import { SessionWorkspace } from '../../workspace/session-workspace.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
-import type { McpGateway } from '../../mcp/mcp-gateway.js';
 import type { IEventBus } from '../contracts.js';
 import { SessionEventRepository } from '../persistence/session-event-repository.js';
 import { SessionRuntimeRegistry } from '../runtime/session-runtime-registry.js';
@@ -21,7 +20,7 @@ export function composeSessionResources(
   eventBus: IEventBus,
   logger: Logger,
   suppliedDriver?: AgentDriver,
-  mcpGateway?: McpGateway,
+  mcpGateway?: AgentMcpGateway,
   runtimeServices?: AgentRuntimeServices,
   repositories?: Pick<RepositoryService, 'open'>,
 ) {

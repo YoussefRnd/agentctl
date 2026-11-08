@@ -3,7 +3,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createDatabase, projects, sessions, sessionSkillCatalogs } from '../../db/index.js';
+import {
+  createDatabase,
+  projects,
+  sessionEvents,
+  sessions,
+  sessionSkillCatalogs,
+} from '../../db/index.js';
 import type { AgentDriver, AgentSession } from '../../agent/types.js';
 import type { WorkspaceManager } from '../../git/worktree-manager.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
@@ -125,6 +131,22 @@ describe('skill catalog delivery', () => {
     const fresh = runtime(handle('native', 'fresh'));
     await fresh.session.prompt('Fresh conversation with a reused ID');
     expect(fresh.prompt.mock.lastCall?.[2]).toContain('## Available Agent Skills');
+  });
+
+  it('records direct input with a missing explicit skill without dispatching it', async () => {
+    const { session, prompt } = runtime();
+    await expect(
+      session.prompt('Use missing skill', undefined, undefined, { name: 'missing-test-skill' }),
+    ).rejects.toThrow('Agent skill not found: missing-test-skill');
+    expect(prompt).not.toHaveBeenCalled();
+    expect(
+      db
+        .select()
+        .from(sessionEvents)
+        .all()
+        .filter((event) => event.type === 'text')
+        .map((event) => JSON.parse(event.data)),
+    ).toEqual([expect.objectContaining({ content: 'Use missing skill', role: 'user' })]);
   });
 
   it('does not share receipts between native IDs, providers, or local sessions', async () => {

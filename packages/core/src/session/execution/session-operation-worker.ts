@@ -214,7 +214,8 @@ export class SessionOperationWorker {
   }
 
   async recover(): Promise<void> {
-    const recovered = this.store.recover();
+    const { recovered, cancelledEvents } = this.store.recover();
+    for (const event of cancelledEvents) this.events.publishCommitted(event);
     for (const { operation, attempt, status } of recovered) {
       if (!operation.eventId) continue;
       if (status === 'pending')
@@ -260,6 +261,12 @@ export class SessionOperationWorker {
       .where(eq(sessionOperations.status, 'pending'))
       .all())
       this.wake(row.sessionId);
+  }
+
+  async cancelInput(sessionId: string): Promise<void> {
+    for (const event of this.store.cancelRunningInput(sessionId))
+      this.events.publishCommitted(event);
+    await this.cancelPending(sessionId);
   }
 
   cancelPending(sessionId: string): Promise<void> {

@@ -1,11 +1,3 @@
-/** UTF-8 bytes are a deliberately conservative upper estimate of token cost. */
-export function contextByteBudget(contextWindow?: number): number {
-  const window =
-    contextWindow && Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : 32_000;
-  // Reserve 60% for instructions, tools, the next prompt, and generated output.
-  return Math.max(128, Math.min(32_768, Math.floor(window * 0.4)));
-}
-
 export function attachmentContextAllowance(mimeTypes: string[]): number {
   return mimeTypes.reduce((sum, mime) => sum + (mime.startsWith('image/') ? 8_192 : 4_096), 0);
 }
@@ -39,11 +31,7 @@ export interface ContextEntry {
   eventId?: number;
 }
 
-export function selectContextEntries<T extends ContextEntry>(
-  entries: T[],
-  budget: number,
-  maxEntries = Infinity,
-): T[] {
+export function selectContextEntries<T extends ContextEntry>(entries: T[], budget: number): T[] {
   const latestUser = entries.findLastIndex((entry) => entry.role === 'User');
   const latestAssistant = entries.findLastIndex((entry) => entry.role === 'Assistant');
   const originalUser = entries.findIndex((entry) => entry.role === 'User');
@@ -53,7 +41,7 @@ export function selectContextEntries<T extends ContextEntry>(
   const selected = new Set<number>();
   let remaining = Math.max(0, budget);
   for (const index of priority) {
-    if (index < 0 || selected.size >= maxEntries) continue;
+    if (index < 0) continue;
     const cost =
       Buffer.byteLength(JSON.stringify(`[${entries[index].role}]: ${entries[index].text}\n\n`)) +
       64;

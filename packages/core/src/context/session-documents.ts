@@ -2,9 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
-import { getHandoffRetentionMs } from '../config/runtime-defaults.js';
-
-const readableFiles = new Map<string, { sessionId: string; expiresAt: number }>();
 
 function contextDirectory(sessionId: string): string {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) throw new Error('Invalid context session ID');
@@ -58,15 +55,13 @@ export async function removeSessionContextFiles(sessionId: string): Promise<void
   const directory = contextDirectory(sessionId);
   if (fs.existsSync(path.dirname(directory))) assertPrivateDirectory(path.dirname(directory));
   await fs.promises.rm(directory, { recursive: true, force: true });
-  for (const [filePath, grant] of readableFiles)
-    if (grant.sessionId === sessionId) readableFiles.delete(filePath);
 }
 
 function isSavedContextFile(sessionId: string, requestedPath: string): boolean {
   try {
     const directory = contextDirectory(sessionId);
     if (
-      path.dirname(path.resolve(requestedPath)) !== directory ||
+      path.dirname(requestedPath) !== directory ||
       !/^[a-f0-9]{64}\.md$/.test(path.basename(requestedPath))
     )
       return false;
@@ -79,32 +74,12 @@ function isSavedContextFile(sessionId: string, requestedPath: string): boolean {
   }
 }
 
-/** Grant only this session read access to a host-created context document. */
-export function registerContextFile(sessionId: string, filePath: string): void {
-  const canonical = fs.realpathSync(filePath);
-  if (readableFiles.size >= 500) readableFiles.delete(readableFiles.keys().next().value!);
-  readableFiles.set(canonical, { sessionId, expiresAt: Date.now() + getHandoffRetentionMs() });
-}
-
-export function resolveContextFile(
+export function resolveSessionContextDocument(
   sessionId: string | undefined,
-  requestedPath: string,
-  cwd: string,
+  absolutePath: string,
 ): string | undefined {
-  if (!sessionId) return undefined;
-  const resolved = path.resolve(cwd, requestedPath);
-  if (isSavedContextFile(sessionId, resolved)) return fs.realpathSync(resolved);
-  let canonical: string;
-  try {
-    canonical = fs.realpathSync(path.resolve(cwd, requestedPath));
-  } catch {
-    return undefined;
-  }
-  const grant = readableFiles.get(canonical);
-  if (!grant || grant.sessionId !== sessionId) return undefined;
-  if (grant.expiresAt <= Date.now()) {
-    readableFiles.delete(canonical);
-    return undefined;
-  }
-  return canonical;
+  const filePath = path.resolve(absolutePath);
+  return sessionId && isSavedContextFile(sessionId, filePath)
+    ? fs.realpathSync(filePath)
+    : undefined;
 }

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { SessionEventPayload } from '@agentctl/shared';
 import type { DbClient } from '../../db/index.js';
 import { sessionOperations, sessionTurnAttempts, sessionRuntimeBindings } from '../../db/schema.js';
@@ -9,8 +9,22 @@ import {
 } from './session-operation-reconciliation.js';
 
 import { prepareOperationStatements } from './session-operation-statements.js';
+import { undispatchedCancellation } from '../contracts.js';
 
 type Operation = typeof sessionOperations.$inferSelect;
+type Attempt = typeof sessionTurnAttempts.$inferSelect;
+type CommittedEvent = NonNullable<ReturnType<SessionEventRepository['updateInTransaction']>>;
+
+function finishedOperationStatus(status?: Attempt['status']) {
+  switch (status) {
+    case 'completed':
+      return 'succeeded';
+    case 'failed':
+    case 'cancelled':
+      return status;
+  }
+}
+
 interface AcceptedMessage {
   sessionId: string;
   text: string;
@@ -57,12 +71,7 @@ export class SessionOperationStore {
     const ended = this.statements.ended.get({ attemptId });
     this.statements.complete.run({
       operationId,
-      status:
-        ended?.status === 'cancelled'
-          ? 'cancelled'
-          : ended?.status === 'failed'
-            ? 'failed'
-            : 'succeeded',
+      status: finishedOperationStatus(ended?.status) ?? 'succeeded',
       now: new Date(),
     });
     this.statements.finish.run({ attemptId, now: new Date() });
@@ -132,6 +141,58 @@ export class SessionOperationStore {
       { behavior: 'immediate' },
     );
   }
+
+  cancelRunningInput(sessionId: string): CommittedEvent[] {
+    return this.db.transaction((tx) => {
+      const now = new Date();
+      const cancelled = tx
+        .update(sessionTurnAttempts)
+        .set({ status: 'cancelled', endedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(sessionTurnAttempts.sessionId, sessionId),
+            inArray(sessionTurnAttempts.status, ['running', 'waiting']),
+            inArray(
+              sessionTurnAttempts.operationId,
+              tx
+                .select({ id: sessionOperations.id })
+                .from(sessionOperations)
+                .where(
+                  and(
+                    eq(sessionOperations.sessionId, sessionId),
+                    eq(sessionOperations.kind, 'message.send'),
+                    eq(sessionOperations.status, 'running'),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .returning({
+          operationId: sessionTurnAttempts.operationId,
+          dispatchedAt: sessionTurnAttempts.dispatchedAt,
+        })
+        .all();
+      return cancelled.flatMap(({ operationId, dispatchedAt }) => {
+        const operation = tx
+          .update(sessionOperations)
+          .set({ status: 'cancelled', updatedAt: now })
+          .where(eq(sessionOperations.id, operationId))
+          .returning({ eventId: sessionOperations.eventId })
+          .get();
+        const event =
+          dispatchedAt === null ? this.cancelUndispatchedEvent(operation?.eventId) : undefined;
+        return event ? [event] : [];
+      });
+    });
+  }
+
+  private cancelUndispatchedEvent(eventId: number | null | undefined) {
+    if (eventId == null) return;
+    return this.events.updateInTransaction(eventId, undispatchedCancellation, undefined, [
+      'deliveryFailure',
+    ]);
+  }
+
   /** Startup policy: retry only work known never to have reached provider dispatch. */
   recover() {
     return this.db.transaction((tx) => {
@@ -145,12 +206,25 @@ export class SessionOperationStore {
         .set({ connectionState: 'lost' })
         .where(eq(sessionRuntimeBindings.connectionState, 'connected'))
         .run();
-      return lost.map((operation) => {
+      const cancelledEvents: CommittedEvent[] = [];
+      const recovered = lost.flatMap((operation) => {
         const attempt = tx
           .select()
           .from(sessionTurnAttempts)
           .where(eq(sessionTurnAttempts.operationId, operation.id))
           .get();
+        const finished = finishedOperationStatus(attempt?.status);
+        if (finished) {
+          tx.update(sessionOperations)
+            .set({ status: finished, updatedAt: new Date() })
+            .where(eq(sessionOperations.id, operation.id))
+            .run();
+          if (finished === 'cancelled' && attempt?.dispatchedAt === null) {
+            const event = this.cancelUndispatchedEvent(operation.eventId);
+            if (event) cancelledEvents.push(event);
+          }
+          return [];
+        }
         const unsent =
           operation.kind === 'message.send' && attempt && attempt.dispatchedAt === null;
         tx.update(sessionOperations)
@@ -168,8 +242,11 @@ export class SessionOperationStore {
           )
           .where(eq(sessionTurnAttempts.operationId, operation.id))
           .run();
-        return { operation, attempt, status: unsent ? ('pending' as const) : ('unknown' as const) };
+        return [
+          { operation, attempt, status: unsent ? ('pending' as const) : ('unknown' as const) },
+        ];
       });
+      return { recovered, cancelledEvents };
     });
   }
 }

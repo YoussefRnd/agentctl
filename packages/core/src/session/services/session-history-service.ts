@@ -1,14 +1,10 @@
-import { eq, asc, desc } from 'drizzle-orm';
-import {
-  sessions,
-  sessionEvents,
-  sessionProviderContexts,
-  sessionEventChanges,
-} from '../../db/schema.js';
+import { eq, asc } from 'drizzle-orm';
+import { sessions, sessionEvents } from '../../db/schema.js';
 import type { SessionEventDbRow } from '../../db/zod-schemas.js';
 import type { SessionEvent, SessionMode, ThinkingEffort } from '@agentctl/shared';
 import { resolveAgentSessionId } from '../agent-session-id.js';
 import { sessionEventCodecs } from '../../db/json-codecs.js';
+import { ProviderContextDelivery } from '../execution/provider-context-delivery.js';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { SessionEventRepository } from '../persistence/session-event-repository.js';
@@ -130,22 +126,11 @@ export class SessionHistoryService {
         selection.resolvedModelConfigId,
       );
       if (forkFromAgentSessionId && !runtime.requiresHistoryContext && runtime.nativeSessionId) {
-        const lastCopiedEvent = await this.deps.db
-          .select({ sequence: sessionEventChanges.sequence })
-          .from(sessionEventChanges)
-          .where(eq(sessionEventChanges.sessionId, forkSessionId))
-          .orderBy(desc(sessionEventChanges.sequence))
-          .limit(1);
-        await this.deps.db
-          .insert(sessionProviderContexts)
-          .values({
-            sessionId: forkSessionId,
-            providerId: sourceRecord.selectedProvider,
-            nativeSessionId: runtime.nativeSessionId,
-            throughSequence: lastCopiedEvent[0]?.sequence ?? 0,
-            status: 'delivered',
-          })
-          .onConflictDoNothing();
+        ProviderContextDelivery.recordNativeFork(this.deps.db, {
+          sessionId: forkSessionId,
+          providerId: sourceRecord.selectedProvider,
+          nativeSessionId: runtime.nativeSessionId,
+        });
       }
     } catch (error) {
       await this.deps.db

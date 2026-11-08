@@ -10,6 +10,7 @@ import { AcpV1AgentDriver } from './v1/driver.js';
 import { parseAcpCapabilities } from './v1/capabilities.js';
 import type { AgentStreamTransport } from './transport/acp-process-lifecycle.js';
 import type { IConnectionManager } from './transport/connection-lease.js';
+import * as promptBlocks from './protocol/prompt.js';
 
 function setup(supported = true, extraSessionCapabilities: Record<string, unknown> = {}) {
   const closed = new Promise<void>(() => {});
@@ -149,6 +150,34 @@ test('v1 cancellation cancels pending approval callbacks without affecting a sib
     ]);
   } finally {
     await Promise.all(sessions.map((session) => session.close()));
+  }
+});
+
+test('v1 Stop during prompt preparation leaves it unsent and permits the next prompt', async () => {
+  const { execute, connection } = setup(false);
+  const session = await execute();
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const build = vi.spyOn(promptBlocks, 'buildPromptBlocks').mockImplementationOnce(async () => {
+    entered.resolve();
+    await release.promise;
+    return [{ type: 'text', text: 'cancel this' }];
+  });
+  try {
+    const result = expect(session.prompt('cancel this')).rejects.toMatchObject({
+      delivery: 'not_sent',
+    });
+    await entered.promise;
+    const stop = session.cancel();
+    release.resolve();
+    await Promise.all([result, stop]);
+    expect(connection.prompt).not.toHaveBeenCalled();
+    await expect(session.prompt('next prompt')).resolves.toMatchObject({ stopReason: 'end_turn' });
+    expect(connection.prompt).toHaveBeenCalledOnce();
+  } finally {
+    release.resolve();
+    build.mockRestore();
+    await session.close();
   }
 });
 

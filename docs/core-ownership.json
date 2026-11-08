@@ -134,6 +134,7 @@
         "packages/core/src/context/context-files.ts",
         "packages/core/src/context/context-service.ts",
         "packages/core/src/context/git-context.ts",
+        "packages/core/src/context/session-documents.ts",
         "packages/core/src/context/types.ts",
         "packages/core/src/context/workspace-index.ts"
       ]
@@ -285,7 +286,6 @@
         "packages/core/src/session/composition/session-resources.ts",
         "packages/core/src/session/composition/session-workflows.ts",
         "packages/core/src/session/context-budget.ts",
-        "packages/core/src/session/context-files.ts",
         "packages/core/src/session/contracts.ts",
         "packages/core/src/session/execution/provider-context-delivery.ts",
         "packages/core/src/session/execution/session-execution-state.ts",

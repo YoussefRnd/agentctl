@@ -93,7 +93,7 @@ export class SessionRuntime {
     });
   }
 
-  async bindAttempt(attemptId: string): Promise<void> {
+  async bindAttempt(attemptId: string): Promise<boolean> {
     if (!this.canReceive()) throw new Error('Session runtime is closed');
     const row = await this.db.query.sessions.findFirst({ where: eq(sessions.id, this.sessionId) });
     if (!row) throw new Error('Session is unavailable');
@@ -102,19 +102,27 @@ export class SessionRuntime {
       .update(sessionRuntimeBindings)
       .set({ nativeSessionId: this.nativeSessionId })
       .where(eq(sessionRuntimeBindings.id, this.runtimeId));
-    await this.db
+    const attempt = this.db
       .update(sessionTurnAttempts)
       .set({
         runtimeId: this.runtimeId,
         providerId: row.selectedProvider,
         nativeSessionId: this.nativeSessionId,
       })
-      .where(eq(sessionTurnAttempts.id, attemptId));
+      .where(
+        and(
+          eq(sessionTurnAttempts.id, attemptId),
+          inArray(sessionTurnAttempts.status, ['running', 'waiting']),
+        ),
+      )
+      .returning({ id: sessionTurnAttempts.id })
+      .get();
+    return attempt !== undefined;
   }
 
-  private async markAttemptDispatched(): Promise<void> {
+  private markAttemptDispatched(attemptId?: string): boolean {
     if (!this.canReceive()) throw new Error('Session runtime is closed');
-    if (this.activeAttemptId) this.turnStore.markDispatched(this.activeAttemptId);
+    return attemptId === undefined || this.turnStore.markDispatched(attemptId);
   }
 
   private async closeBinding(connectionState: 'closed' | 'lost'): Promise<void> {
@@ -198,7 +206,7 @@ export class SessionRuntime {
         endAttempt: () => {
           this.activeAttemptId = undefined;
         },
-        markDispatched: () => this.markAttemptDispatched(),
+        markDispatched: (attemptId) => this.markAttemptDispatched(attemptId),
         onError: (error) => this.handleError(error),
       },
       runtimeRegistry,
@@ -377,17 +385,9 @@ export class SessionRuntime {
   }
 
   async cancel(): Promise<void> {
+    this.turnExecutor.requestCancellation();
     this.rejectPendingApprovals();
-    if (this.activeAttemptId)
-      await this.db
-        .update(sessionTurnAttempts)
-        .set({ status: 'cancelled', endedAt: new Date() })
-        .where(
-          and(
-            eq(sessionTurnAttempts.id, this.activeAttemptId),
-            inArray(sessionTurnAttempts.status, ['running', 'waiting']),
-          ),
-        );
+    if (this.activeAttemptId) this.turnStore.finishAttempt(this.activeAttemptId, 'cancelled');
 
     this.elicitationRegistry.clear();
     try {

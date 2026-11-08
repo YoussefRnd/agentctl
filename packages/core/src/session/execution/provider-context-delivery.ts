@@ -7,25 +7,23 @@ import {
   sessionProviderContexts,
   sessionTurnAttempts,
 } from '../../db/schema.js';
-import { buildConversationHistoryTranscript } from '../history-transcript.js';
+import {
+  buildConversationHistoryTranscript,
+  HistoryTranscriptBudgetError,
+} from '../history-transcript.js';
 
 export class ProviderContextRecoveryError extends Error {}
 
-export class ProviderContextBudgetError extends ProviderContextRecoveryError {
-  constructor() {
-    super(
-      'The current request leaves too little room for conversation history. Shorten it or choose a larger-context model.',
-    );
-  }
-}
+type ProviderContextIdentity = Pick<
+  typeof sessionProviderContexts.$inferSelect,
+  'sessionId' | 'providerId' | 'nativeSessionId'
+>;
 
-export function providerContextReceipt(
+function readProviderContext(
   db: DbClient,
-  sessionId: string,
-  providerId: string,
-  nativeSessionId: string,
+  { sessionId, providerId, nativeSessionId }: ProviderContextIdentity,
 ) {
-  return db
+  const receipt = db
     .select()
     .from(sessionProviderContexts)
     .where(
@@ -36,6 +34,19 @@ export function providerContextReceipt(
       ),
     )
     .get();
+  return { receipt, deliveryUncertain: receipt?.status === 'pending' };
+}
+
+function latestSessionChange(db: DbClient, sessionId: string): number {
+  return (
+    db
+      .select({ sequence: sessionEventChanges.sequence })
+      .from(sessionEventChanges)
+      .where(eq(sessionEventChanges.sessionId, sessionId))
+      .orderBy(desc(sessionEventChanges.sequence))
+      .limit(1)
+      .get()?.sequence ?? 0
+  );
 }
 
 /** A native conversation's cursor advances only after its prompt has returned. */
@@ -43,22 +54,30 @@ export class ProviderContextDelivery {
   private initialized = false;
   constructor(
     private db: DbClient,
-    private identity: { sessionId: string; providerId: string; nativeSessionId: string },
+    private identity: ProviderContextIdentity,
     private fresh: boolean,
   ) {}
 
-  get usedTokens(): number {
-    return this.fresh
-      ? 0
-      : (providerContextReceipt(
-          this.db,
-          this.identity.sessionId,
-          this.identity.providerId,
-          this.identity.nativeSessionId,
-        )?.usedTokens ?? 0);
+  static canResume(db: DbClient, identity: ProviderContextIdentity): boolean {
+    return !readProviderContext(db, identity).deliveryUncertain;
   }
 
-  async prepare(eventId: number, budget: number) {
+  static recordNativeFork(db: DbClient, identity: ProviderContextIdentity): void {
+    db.insert(sessionProviderContexts)
+      .values({
+        ...identity,
+        throughSequence: latestSessionChange(db, identity.sessionId),
+        status: 'delivered',
+      })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  get usedTokens(): number {
+    return this.fresh ? 0 : (readProviderContext(this.db, this.identity).receipt?.usedTokens ?? 0);
+  }
+
+  async prepare(eventId: number | undefined, budget: number) {
     const { sessionId, providerId, nativeSessionId } = this.identity;
     if (!this.initialized) {
       if (this.fresh)
@@ -74,8 +93,8 @@ export class ProviderContextDelivery {
           .run();
       this.initialized = true;
     }
-    const receipt = providerContextReceipt(this.db, sessionId, providerId, nativeSessionId);
-    if (receipt?.status === 'pending')
+    const { receipt, deliveryUncertain } = readProviderContext(this.db, this.identity);
+    if (deliveryUncertain)
       throw new ProviderContextRecoveryError(
         'Historical context delivery is uncertain; replace the native conversation before retrying.',
       );
@@ -98,7 +117,9 @@ export class ProviderContextDelivery {
                 eq(sessionEvents.sessionId, sessionId),
                 eq(sessionTurnAttempts.providerId, providerId),
                 eq(sessionTurnAttempts.nativeSessionId, nativeSessionId),
-                ne(sessionEvents.parentEventId, eventId),
+                eventId === undefined
+                  ? isNotNull(sessionEvents.parentEventId)
+                  : ne(sessionEvents.parentEventId, eventId),
                 isNotNull(sessionTurnAttempts.dispatchedAt),
               ),
             )
@@ -125,15 +146,13 @@ export class ProviderContextDelivery {
     let context: string | null;
     try {
       context = await buildConversationHistoryTranscript(this.db, sessionId, {
-        afterSequence: throughSequence > 0 ? throughSequence : undefined,
+        afterSequence: throughSequence,
         excludeEventId: eventId,
-        includeActivity: true,
         maxBytes: budget,
-        maxTurns: Infinity,
       });
     } catch (error) {
-      if (error instanceof Error && error.message.includes('context budget'))
-        throw new ProviderContextBudgetError();
+      if (!this.fresh && error instanceof HistoryTranscriptBudgetError)
+        throw new ProviderContextRecoveryError(error.message, { cause: error });
       throw error;
     }
     const save = (status: 'pending' | 'delivered', cursor: number, usedTokens: number) =>
@@ -154,14 +173,7 @@ export class ProviderContextDelivery {
       strategy: throughSequence === 0 ? 'full_thread_summary' : 'delta_since_target_last_seen',
       pending: () => save('pending', throughSequence, receipt?.usedTokens ?? 0),
       unsent: () => save('delivered', throughSequence, receipt?.usedTokens ?? 0),
-      delivered: (inputCost: number) => {
-        const latest = this.db
-          .select({ sequence: sessionEventChanges.sequence })
-          .from(sessionEventChanges)
-          .where(eq(sessionEventChanges.sessionId, sessionId))
-          .orderBy(desc(sessionEventChanges.sequence))
-          .limit(1)
-          .get();
+      delivered: (eventId: number, inputCost: number) => {
         const usage = this.db
           .select({ used: sessions.contextUsedTokens })
           .from(sessions)
@@ -181,7 +193,7 @@ export class ProviderContextDelivery {
           .reduce((sum, row) => sum + Buffer.byteLength(row.data), 0);
         save(
           'delivered',
-          latest?.sequence ?? 0,
+          latestSessionChange(this.db, sessionId),
           usage ?? this.usedTokens + inputCost + outputBytes,
         );
         this.fresh = false;

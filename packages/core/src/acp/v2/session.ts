@@ -20,7 +20,7 @@ import {
   DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
   getAgentRequestTimeoutMs,
 } from '../../config/runtime-defaults.js';
-import { buildPromptBlocks } from '../protocol/prompt.js';
+import { buildPromptBlocks, checkPromptDispatch } from '../protocol/prompt.js';
 import { bindSessionProcessEvents, withTimeout } from '../transport/acp-process-lifecycle.js';
 import {
   ACP_SESSION_CLOSE_TIMEOUT_MS,
@@ -88,6 +88,7 @@ export function createV2Session(context: SessionContext): AgentSession {
         if (!this.id) throw new AgentError('invalid_request', 'Agent session has no ID');
         const active = sessions.get(this.id);
         if (!active) throw new AgentError('transport_lost', 'Agent session is not active');
+        const signal = requests.signal;
         const blocks = await buildPromptBlocks({
           text,
           attachments,
@@ -96,6 +97,7 @@ export function createV2Session(context: SessionContext): AgentSession {
           supportsAudio: capabilities().audio,
           supportsEmbeddedContext: capabilities().embeddedContext,
         });
+        checkPromptDispatch(signal);
         const stopPromise = new Promise<TurnStop>((resolve, reject) => {
           active.waiters.push({ resolve, reject });
         });

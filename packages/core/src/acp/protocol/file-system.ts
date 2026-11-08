@@ -1,4 +1,4 @@
-import { resolveContextFile } from '../../session/context-files.js';
+import { resolveSessionContextDocument } from '../../context/session-documents.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { RequestError } from '@agentclientprotocol/sdk';
@@ -32,7 +32,7 @@ export async function handleFsReadTextFile(
   if (params.limit !== undefined && (!Number.isSafeInteger(params.limit) || params.limit < 0))
     throw RequestError.invalidParams(undefined, 'limit must be a non-negative integer');
   const absPath =
-    resolveContextFile(localSessionId, params.path, cwd) ??
+    resolveSessionContextDocument(localSessionId, params.path) ??
     resolveAllowedPath(params.path, cwd, additionalDirectories);
   let content = await fs.readFile(absPath, 'utf8');
   if (params.line !== undefined || params.limit !== undefined) {

@@ -15,6 +15,7 @@ import { MessageAcceptanceService } from '../commands/message-acceptance-service
 import { SessionEventRepository } from '../persistence/session-event-repository.js';
 import { SessionOperationWorker, type PendingSessionMessage } from './session-operation-worker.js';
 import { readSessionExecutionState } from './session-execution-state.js';
+import { ConversationProjector } from '../projection/conversation-projector.js';
 
 function deferred() {
   let resolve!: () => void;
@@ -519,6 +520,37 @@ describe('SessionOperationWorker', () => {
     }
   });
 
+  it.each([
+    { attempt: 'cancelled', dispatched: false, operation: 'cancelled', delivery: 'cancelled' },
+    { attempt: 'cancelled', dispatched: true, operation: 'cancelled', delivery: 'accepted' },
+    { attempt: 'completed', dispatched: true, operation: 'succeeded', delivery: 'accepted' },
+    { attempt: 'failed', dispatched: false, operation: 'failed', delivery: 'accepted' },
+  ] as const)(
+    'keeps a $attempt turn terminal after a crash (dispatched=$dispatched)',
+    async ({ attempt, dispatched, operation, delivery }) => {
+      const context = fixture();
+      await pauseQueue(context);
+      const eventId = await context.worker.acceptMessage('s', 'hello');
+      await context.events.update(eventId, { deliveryStatus: 'accepted' });
+      context.db.update(sessionOperations).set({ status: 'running' }).run();
+      context.db
+        .update(sessionTurnAttempts)
+        .set({ status: attempt, dispatchedAt: dispatched ? new Date() : null, endedAt: new Date() })
+        .run();
+
+      await context.worker.recover();
+      await context.worker.resumeQueue('s');
+      await context.worker.idle('s');
+
+      expect(context.operations()[0].status).toBe(operation);
+      expect(context.attempts()[0].status).toBe(attempt);
+      expect((await context.events.getEvent(eventId))?.data).toMatchObject({
+        deliveryStatus: delivery,
+      });
+      expect(context.dispatch).not.toHaveBeenCalled();
+    },
+  );
+
   it('keeps commands idempotent and rejects conflicting command IDs', async () => {
     const context = fixture();
     const execute = vi.fn(async () => {});
@@ -666,6 +698,101 @@ it.each([401, 402, 429])(
     expect(context.dispatch).toHaveBeenCalledOnce();
   },
 );
+
+it.each([
+  'projecting input',
+  'preparing a tool',
+  'preparing provider input',
+  'preparing provider input after a tool ran',
+  'waiting on the provider',
+] as const)('finalizes a running turn cancelled while %s', async (phase) => {
+  const entered = deferred();
+  const resume = deferred();
+  const preparingTool = phase === 'preparing a tool';
+  const ranTool = phase === 'preparing provider input after a tool ran';
+  const preparingProvider = phase === 'preparing provider input' || ranTool;
+  const dispatched = preparingProvider || phase === 'waiting on the provider';
+  let runtime: SessionRuntime;
+  const context = fixture(async (_session, message) => {
+    await runtime.prompt(message.text, [], undefined, undefined, undefined, undefined, message);
+  });
+  const prompt = vi.fn<AgentSession['prompt']>().mockResolvedValue({ stopReason: 'end_turn' });
+  if (dispatched) {
+    prompt.mockImplementationOnce(async () => {
+      entered.resolve();
+      await resume.promise;
+      if (preparingProvider)
+        throw new AgentError('invalid_request', 'Prompt cancelled', { delivery: 'not_sent' });
+      throw new Error('Provider ended the cancelled prompt');
+    });
+  }
+  if (phase === 'projecting input') {
+    const flush = ConversationProjector.prototype.flushAll;
+    const mock = vi
+      .spyOn(ConversationProjector.prototype, 'flushAll')
+      .mockImplementationOnce(async function (this: ConversationProjector) {
+        entered.resolve();
+        await resume.promise;
+        await flush.call(this);
+      });
+    cleanup.push(async () => mock.mockRestore());
+  }
+  const callTool = vi.fn(async () => 'Tool executed');
+  runtime = new SessionRuntime(
+    's',
+    {
+      id: 'remote',
+      history: 'fresh',
+      closed: new Promise<void>(() => {}),
+      onError() {},
+      onClose() {},
+      authenticate: async () => {},
+      cancel: async () => {},
+      close: async () => {},
+      prompt,
+    },
+    context.db,
+    context.events,
+    '/tmp/project',
+    undefined,
+    noopLogger,
+    {
+      async getTools() {
+        if (preparingTool) {
+          entered.resolve();
+          await resume.promise;
+        }
+        return [{ name: 'demo__mutate' }];
+      },
+      callTool,
+    },
+  );
+  cleanup.unshift(async () => resume.resolve());
+  cleanup.push(() => runtime.stop());
+  const eventId = await context.worker.acceptMessage(
+    's',
+    preparingTool || ranTool ? '/demo:mutate' : 'hello',
+  );
+  await entered.promise;
+  await Promise.all([context.worker.cancelInput('s'), runtime.cancel()]);
+  resume.resolve();
+  await context.worker.idle('s');
+
+  expect(callTool).toHaveBeenCalledTimes(ranTool ? 1 : 0);
+  expect(prompt).toHaveBeenCalledTimes(dispatched ? 1 : 0);
+  expect(context.operations()).toMatchObject([{ status: 'cancelled' }]);
+  expect(context.attempts()).toMatchObject([
+    { status: 'cancelled', dispatchedAt: dispatched ? expect.any(Date) : null },
+  ]);
+  expect((await context.events.getEvent(eventId))?.data).toMatchObject({
+    deliveryStatus: ranTool || phase === 'waiting on the provider' ? 'accepted' : 'cancelled',
+  });
+  expect(context.db.select().from(sessions).get()?.status).toBe('idle');
+  const end = await context.events.findLastEventByType('s', 'status');
+  expect(end?.data).toMatchObject({ status: 'turn_end', stopReason: 'cancelled' });
+  const child = context.db.select().from(sessionEvents).where(eq(sessionEvents.id, end!.id)).get();
+  expect(child?.parentEventId).toBe(eventId);
+});
 
 it.each([false, true])(
   'gives the worker sole ownership of a runtime failure (provider accepted=%s)',

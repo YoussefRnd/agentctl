@@ -1,6 +1,14 @@
 import fs from 'node:fs/promises';
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 import type { ContentBlock as V2ContentBlock } from '@agentclientprotocol/sdk/experimental/v2';
+import { AgentError } from '../../agent/errors.js';
+
+export function checkPromptDispatch(signal: AbortSignal) {
+  if (signal.aborted)
+    throw new AgentError('invalid_request', 'Prompt was cancelled before sending.', {
+      delivery: 'not_sent',
+    });
+}
 
 export interface PromptBuildParams {
   text: string;

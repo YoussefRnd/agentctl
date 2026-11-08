@@ -12,7 +12,7 @@ import {
 } from '@agentctl/shared';
 import { negotiateCapabilities } from '../../providers/capabilities-negotiator.js';
 import type { AgentSessionIntent } from '../../agent/types.js';
-import { providerContextReceipt } from '../execution/provider-context-delivery.js';
+import { ProviderContextDelivery } from '../execution/provider-context-delivery.js';
 import { resolveAgentSessionId } from '../agent-session-id.js';
 import type { SessionEventRepository } from '../persistence/session-event-repository.js';
 import type { DbClient } from '../../db/index.js';
@@ -205,7 +205,7 @@ export class SessionLauncher {
               configOptions,
             };
           } catch {
-            // Candidate not ready, try next
+            continue;
           }
         }
       }
@@ -383,12 +383,11 @@ export class SessionLauncher {
 
     if (
       resolvedAgentSessionId &&
-      providerContextReceipt(
-        this.deps.db,
+      !ProviderContextDelivery.canResume(this.deps.db, {
         sessionId,
-        sessionRecord.selectedProvider,
-        resolvedAgentSessionId,
-      )?.status === 'pending'
+        providerId: sessionRecord.selectedProvider,
+        nativeSessionId: resolvedAgentSessionId,
+      })
     ) {
       resolvedAgentSessionId = null;
     }

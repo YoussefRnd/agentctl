@@ -25,6 +25,7 @@ import type { Logger } from '../../logger.js';
 import { noopLogger } from '../../logger.js';
 import type {
   AgentDriver,
+  AgentMcpGateway,
   AgentSession,
   AgentSessionIntent,
   AgentUpdate,
@@ -33,7 +34,6 @@ import { AgentAuthenticationRequiredError } from '../../agent/errors.js';
 import type { SnapshotService } from '../../git/snapshot-service.js';
 import type { SessionRepositoryResources } from '../contracts.js';
 import type { RepositoryService } from '../../repository/repository-service.js';
-import type { McpGateway } from '../../mcp/mcp-gateway.js';
 import { DEFAULT_AGENT_MODEL } from '../../config/runtime-defaults.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
 
@@ -93,7 +93,7 @@ export class SessionRuntimeRegistry {
     private logger: Logger = noopLogger,
     private runtime: AgentDriver,
     repositoryResources: SessionRepositoryResources,
-    private mcpGateway?: McpGateway,
+    private mcpGateway?: AgentMcpGateway,
   ) {
     this.snapshotService = repositoryResources.legacySnapshots;
     this.repositoryService = repositoryResources.repositories;

@@ -10,10 +10,7 @@ import {
   type ProviderSwitchData,
 } from '@agentctl/shared';
 import { negotiateCapabilities } from '../../providers/capabilities-negotiator.js';
-import {
-  ProviderContextRecoveryError,
-  providerContextReceipt,
-} from '../execution/provider-context-delivery.js';
+import { ProviderContextRecoveryError } from '../execution/provider-context-delivery.js';
 import type { DbClient } from '../../db/index.js';
 import type { Logger } from '../../logger.js';
 import type { ProviderRegistry } from '../../providers/provider-registry.js';
@@ -440,7 +437,7 @@ export class SessionCommandHandler {
       attemptId?: string;
     },
   ) {
-    let session = ['approve', 'deny', 'cancel'].includes(action)
+    const session = ['approve', 'deny', 'cancel'].includes(action)
       ? this.deps.runtimeRegistry.getSession(sessionId)
       : await this.deps.getOrResuscitate(sessionId, { allowArchived: true });
 
@@ -490,24 +487,8 @@ export class SessionCommandHandler {
       await this.deps.rewindSession(sessionId, evtId, rewindMode);
     } else if (payload.input !== undefined) {
       const input = payload.input;
-      const row = await this.deps.db.query.sessions.findFirst({
-        where: eq(sessions.id, sessionId),
-      });
-      if (
-        row &&
-        session.nativeSessionId &&
-        !session.requiresHistoryContext &&
-        providerContextReceipt(
-          this.deps.db,
-          sessionId,
-          row.selectedProvider,
-          session.nativeSessionId,
-        )?.status === 'pending'
-      ) {
-        session = await this.deps.restartSession(sessionId, { resumeExisting: false });
-      }
       const prompt = async (active: SessionRuntime) => {
-        if (payload.attemptId) await active.bindAttempt(payload.attemptId);
+        if (payload.attemptId && !(await active.bindAttempt(payload.attemptId))) return;
         this.deps.clearRewindBackup(sessionId);
         if (payload.onAccepted || payload.acceptedEventId) {
           await active.prompt(
@@ -528,10 +509,8 @@ export class SessionCommandHandler {
       try {
         await prompt(session);
       } catch (error) {
-        if (!(error instanceof ProviderContextRecoveryError) || session.requiresHistoryContext)
-          throw error;
-        session = await this.deps.restartSession(sessionId, { resumeExisting: false });
-        await prompt(session);
+        if (!(error instanceof ProviderContextRecoveryError)) throw error;
+        await prompt(await this.deps.restartSession(sessionId, { resumeExisting: false }));
       }
     }
   }

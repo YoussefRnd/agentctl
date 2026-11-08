@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vite-plus/test';
 import { findWorkspaceRoot, loadWorkspaceEnv } from './workspace.js';
-import { DEFAULT_CONTEXT_TURN_LIMIT, getContextTurnLimit } from './runtime-defaults.js';
+import { DEFAULT_GIT_COMMAND_TIMEOUT_MS, getGitCommandTimeoutMs } from './runtime-defaults.js';
 
 test('workspace environment loading is explicit, rooted, and preserves existing values', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'agentctl-config-'));
@@ -31,11 +31,11 @@ test('workspace environment loading is explicit, rooted, and preserves existing 
 test('runtime settings are resolved on use and reject invalid positive integers', () => {
   try {
     for (const value of ['0', '-1', '1.5', 'Infinity', 'not-a-number', '9007199254740992']) {
-      vi.stubEnv('AGENTCTL_CONTEXT_TURN_LIMIT', value);
-      expect(getContextTurnLimit()).toBe(DEFAULT_CONTEXT_TURN_LIMIT);
+      vi.stubEnv('AGENTCTL_GIT_COMMAND_TIMEOUT_MS', value);
+      expect(getGitCommandTimeoutMs()).toBe(DEFAULT_GIT_COMMAND_TIMEOUT_MS);
     }
-    vi.stubEnv('AGENTCTL_CONTEXT_TURN_LIMIT', '25');
-    expect(getContextTurnLimit()).toBe(25);
+    vi.stubEnv('AGENTCTL_GIT_COMMAND_TIMEOUT_MS', '25');
+    expect(getGitCommandTimeoutMs()).toBe(25);
   } finally {
     vi.unstubAllEnvs();
   }

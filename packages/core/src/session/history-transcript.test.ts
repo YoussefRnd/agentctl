@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vite-plus/test';
 import { createDatabase } from '../db/index.js';
 import { SessionEventRepository } from './persistence/session-event-repository.js';
-import { projects, sessions } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
+import { projects, sessions, sessionEventChanges } from '../db/schema.js';
 import { buildConversationHistoryTranscript } from './history-transcript.js';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -42,7 +43,10 @@ describe('buildConversationHistoryTranscript', () => {
       baseCommit: 'hash',
     });
 
-    const transcript = await buildConversationHistoryTranscript(db, 'sess-empty');
+    const transcript = await buildConversationHistoryTranscript(db, 'sess-empty', {
+      afterSequence: 0,
+      maxBytes: 4_000,
+    });
     expect(transcript).toBeNull();
   });
 
@@ -80,7 +84,8 @@ describe('buildConversationHistoryTranscript', () => {
     );
 
     const transcript = await buildConversationHistoryTranscript(db, 'sess-history', {
-      maxTurns: 10,
+      afterSequence: 0,
+      maxBytes: 4_000,
     });
 
     expect(transcript).toContain('<previous_conversation_context>');
@@ -88,48 +93,6 @@ describe('buildConversationHistoryTranscript', () => {
     expect(transcript).toContain('[Assistant]: I created src/components/LoginForm.tsx.');
     expect(transcript).toContain('[User]: Add validation to it');
     expect(transcript).toContain('</previous_conversation_context>');
-  });
-
-  it('respects maxTurns while retaining the original request', async () => {
-    await db.insert(sessions).values({
-      id: 'sess-long',
-      projectId: 'proj-1',
-      branch: 'main',
-      worktreePath: '/tmp/test',
-      taskSlug: 'test',
-      agent: 'test',
-      title: 'long',
-      status: 'idle',
-      selectedProvider: 'claude-acp',
-      baseCommit: 'hash',
-    });
-
-    const store = new SessionEventRepository(db, {
-      publish() {
-        /* noop */
-      },
-    });
-    for (let i = 1; i <= 15; i++) {
-      await store.append(
-        'sess-long',
-        'text',
-        { text: `User message ${String(i)}`, role: 'user' },
-        null,
-      );
-      await store.append(
-        'sess-long',
-        'text',
-        { text: `Assistant response ${String(i)}`, role: 'provider' },
-        null,
-      );
-    }
-
-    const transcript = await buildConversationHistoryTranscript(db, 'sess-long', { maxTurns: 4 });
-
-    expect(transcript).toContain('[User]: User message 1');
-    expect(transcript).not.toContain('[User]: User message 14');
-    expect(transcript).toContain('[User]: User message 15');
-    expect(transcript).not.toContain('[User]: User message 10');
   });
 
   it('transfers missed activity without reasoning, undelivered messages, or the current request', async () => {
@@ -172,12 +135,21 @@ describe('buildConversationHistoryTranscript', () => {
       role: 'user',
       content: 'Current request',
     });
+    const change = db
+      .select()
+      .from(sessionEventChanges)
+      .where(eq(sessionEventChanges.eventId, anchor))
+      .get()!;
+    await store.append(
+      'activity',
+      'text',
+      { role: 'provider', content: 'Current tool output' },
+      current,
+    );
     const context = await buildConversationHistoryTranscript(db, 'activity', {
-      afterEventId: anchor,
+      afterSequence: change.sequence,
       excludeEventId: current,
-      includeActivity: true,
       maxBytes: 4_000,
-      maxTurns: Infinity,
     });
     expect(context).toContain('Missed request');
     expect(context).toContain('Command failed');
@@ -188,6 +160,7 @@ describe('buildConversationHistoryTranscript', () => {
       'Hidden reasoning',
       'Undelivered',
       'Current request',
+      'Current tool output',
       '界🧪',
     ])
       expect(context).not.toContain(excluded);

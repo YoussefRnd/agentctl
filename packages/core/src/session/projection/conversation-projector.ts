@@ -139,13 +139,7 @@ export class ConversationProjector {
       ));
     this.currentParentEventId = eventId;
     this.pendingUserEcho = { eventId, text: '' };
-    if (acceptedEventId)
-      await this.eventRepository.update(
-        eventId,
-        { ...userPayload, deliveryStatus: 'accepted' },
-        metadata,
-        ['deliveryError'],
-      );
+    if (acceptedEventId) await this.eventRepository.update(eventId, userPayload, metadata);
 
     const snapshotPromise = (async (): Promise<string | undefined> => {
       if (!this.cwd || !this.snapshotService) return undefined;

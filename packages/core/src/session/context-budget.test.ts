@@ -1,15 +1,6 @@
 import { expect, test } from 'vite-plus/test';
-import {
-  contextByteBudget,
-  providerContextByteBudget,
-  selectContextEntries,
-} from './context-budget.js';
+import { providerContextByteBudget, selectContextEntries } from './context-budget.js';
 
-test('reserves context for instructions, tools, prompts, and output', () => {
-  expect(contextByteBudget(8_000)).toBe(3_200);
-  expect(contextByteBudget()).toBe(12_800);
-  expect(contextByteBudget(1_000_000)).toBe(32_768);
-});
 test('keeps original and latest messages whole, omitting oversized intermediate messages', () => {
   const entries = [
     { role: 'User', text: 'original request' },

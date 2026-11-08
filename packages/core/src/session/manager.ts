@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { projects } from '../db/schema.js';
 import type { SessionRuntime } from './runtime/session-runtime.js';
 import type { DbClient } from '../db/index.js';
-import type { AgentDriver, AgentSessionIntent } from '../agent/types.js';
+import type { AgentDriver, AgentMcpGateway, AgentSessionIntent } from '../agent/types.js';
 import type { AgentRuntimeServices } from '../agent/runtime-services.js';
 import type { Logger } from '../logger.js';
 import { noopLogger } from '../logger.js';
@@ -21,7 +21,6 @@ import {
   type ThinkingEffort,
 } from '@agentctl/shared';
 import type { SessionRuntimeRegistry } from './runtime/session-runtime-registry.js';
-import type { McpGateway } from '../mcp/mcp-gateway.js';
 import { DEFAULT_AGENT_MODEL } from '../config/runtime-defaults.js';
 import type { SessionLauncher, CreateSessionParams } from './services/session-launcher.js';
 import type { SessionLifecycleService } from './services/session-lifecycle-service.js';
@@ -57,7 +56,7 @@ export class SessionManager {
     eventBus: IEventBus,
     logger: Logger = noopLogger,
     runtime?: AgentDriver,
-    mcpGateway?: McpGateway,
+    mcpGateway?: AgentMcpGateway,
     runtimeServices?: AgentRuntimeServices,
     repositories?: Pick<RepositoryService, 'open'>,
   ) {
@@ -370,8 +369,8 @@ export class SessionManager {
   ): Promise<void> {
     if (action === 'cancel') {
       await Promise.all([
+        this.operationWorker.cancelInput(sessionId),
         this.commandHandler.handleClientMessage(sessionId, action, payload),
-        this.operationWorker.cancelPending(sessionId),
       ]);
       return;
     }

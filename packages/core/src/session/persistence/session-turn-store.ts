@@ -22,8 +22,8 @@ export class SessionTurnStore {
   finishAttempt(attemptId: string, status: 'completed' | 'failed' | 'cancelled'): void {
     this.statements.finish.run({ attemptId, status, now: new Date() });
   }
-  markDispatched(attemptId: string): void {
-    this.statements.dispatch.run({ attemptId, now: new Date() });
+  markDispatched(attemptId: string): boolean {
+    return this.statements.dispatch.get({ attemptId, now: new Date() }) !== undefined;
   }
   catalog(identity: CatalogIdentity) {
     return this.statements.catalog.get(identity);

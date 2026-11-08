@@ -79,6 +79,7 @@ export function prepareTurnStatements(db: DbClient) {
           inArray(sessionTurnAttempts.status, ['running', 'waiting']),
         ),
       )
+      .returning({ id: sessionTurnAttempts.id })
       .prepare(),
     catalog: db
       .select({

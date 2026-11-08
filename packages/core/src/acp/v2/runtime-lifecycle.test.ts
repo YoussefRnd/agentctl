@@ -13,6 +13,7 @@ import type { AgentSessionCallbacks } from '../../agent/types.js';
 import type { AgentStreamTransport } from '../transport/acp-process-lifecycle.js';
 import { ACP_MAX_PENDING_UPDATES, ACP_SESSION_OPERATION_TIMEOUT_MS } from '../transport/limits.js';
 import { AcpV2AgentDriver } from './driver.js';
+import * as promptBlocks from '../protocol/prompt.js';
 
 afterEach(() => vi.useRealTimers());
 
@@ -213,6 +214,40 @@ test.each(['permission', 'form'] as const)(
     }
   },
 );
+
+test('v2 Stop during prompt preparation leaves it unsent', async () => {
+  const h = peer();
+  const updates = vi.fn();
+  const session = await h.start({
+    onUpdate: updates,
+    onRequestPermission: async () => ({ allowed: false }),
+  });
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const build = vi.spyOn(promptBlocks, 'buildPromptBlocks').mockImplementationOnce(async () => {
+    entered.resolve();
+    await release.promise;
+    return [{ type: 'text', text: 'cancel this' }];
+  });
+  try {
+    const result = expect(session.prompt('cancel this')).rejects.toMatchObject({
+      delivery: 'not_sent',
+    });
+    await entered.promise;
+    const stop = session.cancel();
+    release.resolve();
+    await Promise.all([result, stop]);
+    await vi.waitFor(() => expect(h.cancel).toHaveBeenCalledOnce());
+    expect(updates).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'user_message_accepted' }),
+    );
+  } finally {
+    release.resolve();
+    build.mockRestore();
+    await session.close();
+    h.connection.close();
+  }
+});
 
 test('session listing times out when a live peer never responds', async () => {
   const h = peer();

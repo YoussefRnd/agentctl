@@ -13,6 +13,11 @@ export interface IEventBus {
   publish(event: unknown): void;
 }
 
+export const undispatchedCancellation = {
+  deliveryStatus: 'cancelled',
+  deliveryError: 'Message cancelled before dispatch',
+} as const;
+
 export interface SessionEventRepositoryLike {
   publishNotice?(notice: SessionNotice): void;
   append<T extends SessionEvent['type']>(

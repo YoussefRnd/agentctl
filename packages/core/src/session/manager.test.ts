@@ -22,7 +22,7 @@ import { simpleGit } from 'simple-git';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { persistContextDocument } from './context-files.js';
+import { persistContextDocument } from '../context/session-documents.js';
 
 function createManager(...args: ConstructorParameters<typeof SessionManager>): SessionManager {
   const [db, workspaces] = args;
@@ -302,7 +302,7 @@ describe('SessionManager tests', () => {
     });
     vi.spyOn(manager, 'getOrResuscitate').mockResolvedValue({
       requiresHistoryContext: false,
-      bindAttempt: async () => {},
+      bindAttempt: async () => true,
       prompt,
     } as unknown as SessionRuntime);
     const id = await manager.startInput('session-1', 'hello');
