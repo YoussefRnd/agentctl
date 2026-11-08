@@ -16,67 +16,21 @@ import {
 export * from './session-event-payloads.js';
 function createSessionEventSchema<T extends z.ZodRawShape>(fields: T) {
   const common = { createdAt: z.coerce.date(), ...fields };
+  const event = <Kind extends string, Data extends z.ZodType>(type: Kind, data: Data) =>
+    z.object({ ...common, type: z.literal(type), data });
   return z.discriminatedUnion('type', [
-    z.object({
-      ...common,
-      type: z.literal('text'),
-      data: sessionEventTextDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('tool_call'),
-      data: sessionEventToolCallDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('approval_request'),
-      data: sessionEventApprovalRequestDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('plan_update'),
-      data: sessionEventPlanDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('mode_update'),
-      data: sessionEventModeDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('terminal_created'),
-      data: sessionEventTerminalCreatedDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('terminal_output'),
-      data: sessionEventTerminalOutputDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('terminal_exit'),
-      data: sessionEventTerminalExitDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('diff'),
-      data: sessionEventDiffDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('status'),
-      data: sessionEventStatusDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('compact'),
-      data: sessionEventCompactDataSchema,
-    }),
-    z.object({
-      ...common,
-      type: z.literal('subagent_update'),
-      data: sessionEventSubagentUpdateDataSchema,
-    }),
+    event('text', sessionEventTextDataSchema),
+    event('tool_call', sessionEventToolCallDataSchema),
+    event('approval_request', sessionEventApprovalRequestDataSchema),
+    event('plan_update', sessionEventPlanDataSchema),
+    event('mode_update', sessionEventModeDataSchema),
+    event('terminal_created', sessionEventTerminalCreatedDataSchema),
+    event('terminal_output', sessionEventTerminalOutputDataSchema),
+    event('terminal_exit', sessionEventTerminalExitDataSchema),
+    event('diff', sessionEventDiffDataSchema),
+    event('status', sessionEventStatusDataSchema),
+    event('compact', sessionEventCompactDataSchema),
+    event('subagent_update', sessionEventSubagentUpdateDataSchema),
   ]);
 }
 
@@ -84,25 +38,23 @@ export const sessionEventSchema = createSessionEventSchema({});
 
 export type SessionEvent = z.infer<typeof sessionEventSchema>;
 
-export interface SessionEventPayloadMap {
-  text: z.input<typeof sessionEventTextDataSchema>;
-  tool_call: z.input<typeof sessionEventToolCallDataSchema>;
-  approval_request: z.input<typeof sessionEventApprovalRequestDataSchema>;
-  plan_update: z.input<typeof sessionEventPlanDataSchema>;
-  mode_update: z.input<typeof sessionEventModeDataSchema>;
-  terminal_created: z.input<typeof sessionEventTerminalCreatedDataSchema>;
-  terminal_output: z.input<typeof sessionEventTerminalOutputDataSchema>;
-  terminal_exit: z.input<typeof sessionEventTerminalExitDataSchema>;
-  diff: Record<string, unknown>;
-  status: Record<string, unknown>;
-  compact: Record<string, unknown>;
-  subagent_update: z.input<typeof sessionEventSubagentUpdateDataSchema>;
-}
+type SchemaPayloads = {
+  [Event in z.input<typeof sessionEventSchema> as Event['type']]: Event['data'];
+};
+
+export interface SessionEventPayloadMap extends SchemaPayloads {}
 
 export type SessionEventType = keyof SessionEventPayloadMap;
 export type SessionEventPayload<T extends string> = T extends SessionEventType
   ? SessionEventPayloadMap[T]
   : Record<string, unknown>;
+
+type EventVariant = (typeof sessionEventSchema.options)[number];
+export const sessionEventPayloadSchemas = Object.freeze(
+  Object.fromEntries(sessionEventSchema.options.map(({ shape }) => [shape.type.value, shape.data])),
+) as {
+  readonly [Event in EventVariant as Event['shape']['type']['value']]: Event['shape']['data'];
+};
 
 export const sessionEventMetadataSchema = z
   .object({
@@ -143,7 +95,6 @@ export const sessionEventRowSchema = createSessionEventSchema({
 
 export type SessionEventRow = z.infer<typeof sessionEventRowSchema>;
 
-// Type Guard Utilities
 export function isSessionEvent(event: unknown): event is SessionEvent {
   return sessionEventSchema.safeParse(event).success;
 }

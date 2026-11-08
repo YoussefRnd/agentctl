@@ -331,7 +331,7 @@ export class SessionHistoryService {
       throw new Error(`Event not found: ${String(eventId)}`);
     }
 
-    const metadata = sessionEventCodecs.metadata(event.metadata);
+    const metadata = sessionEventCodecs.parseMetadata(event.metadata);
 
     if (!metadata.snapshotHash) {
       return { hasSnapshot: false, files: [] };

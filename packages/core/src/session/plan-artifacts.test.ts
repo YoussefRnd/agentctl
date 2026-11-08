@@ -2,7 +2,6 @@ import { expect, test } from 'vite-plus/test';
 import { createDatabase, projects, sessions } from '../db/index.js';
 import { SessionStateProjector } from './projection/session-state-projector.js';
 import { SessionEventRepository } from './persistence/session-event-repository.js';
-import { sessionEventCodecs } from '../db/json-codecs.js';
 import { eq } from 'drizzle-orm';
 
 test('plan updates persist multiple formats and removal survives projector restart', async () => {
@@ -39,8 +38,8 @@ test('plan updates persist multiple formats and removal survives projector resta
     { id: 'b', kind: 'file', uri: 'file:///tmp/plan.md' },
   ]);
   expect(JSON.parse(session.plan)).toEqual([]);
-  expect(
-    sessionEventCodecs.planUpdate({ plan: [], artifacts: JSON.parse(session.planArtifacts) })
-      .artifacts,
-  ).toHaveLength(1);
+  const event = await store.findLastEventByType('s', 'plan_update');
+  expect(event?.data).toMatchObject({
+    artifacts: [{ id: 'b', kind: 'file', uri: 'file:///tmp/plan.md' }],
+  });
 });

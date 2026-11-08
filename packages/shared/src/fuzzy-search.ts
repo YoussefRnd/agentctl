@@ -12,11 +12,9 @@ export function fuzzyScore(target: string, query: string): number {
   while (tIdx < t.length && qIdx < q.length) {
     if (t[tIdx] === q[qIdx]) {
       score += 10;
-      // Consecutive match bonus
       if (consecutive > 0) score += consecutive * 15;
       consecutive++;
 
-      // Word boundary bonus (start of string or preceded by /, -, _, ., space)
       if (tIdx === 0 || '/-_ .:'.includes(t[tIdx - 1])) {
         score += 35;
       }
@@ -27,14 +25,11 @@ export function fuzzyScore(target: string, query: string): number {
     tIdx++;
   }
 
-  // Must match all characters of query in order
   if (qIdx < q.length) return -1;
 
-  // Exact match bonus
   if (t === q) score += 200;
   else if (t.startsWith(q)) score += 80;
 
-  // Penalty for length gap
   score -= (t.length - q.length) * 0.4;
   return Math.max(1, score);
 }

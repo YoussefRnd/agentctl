@@ -106,6 +106,22 @@ export const sessionStatusSchema = z.enum([
   'archived',
 ]);
 
+function decodeSessionField<T extends z.ZodType>(
+  schema: T,
+  fallback: Exclude<z.output<T>, undefined>,
+) {
+  return z
+    .preprocess((value) => {
+      if (typeof value !== 'string') return value ?? fallback;
+      try {
+        return JSON.parse(value) as unknown;
+      } catch {
+        return fallback;
+      }
+    }, schema)
+    .default(fallback);
+}
+
 export const sessionRowSchema = sessionSchema.extend({
   id: z.uuid(),
   worktreePath: z.string().min(1),
@@ -135,79 +151,13 @@ export const sessionRowSchema = sessionSchema.extend({
   selectedThinkingEffort: thinkingEffortSchema,
   approvalMode: approvalModeSchema,
   agentPersona: z.string().nullable().default(null),
-  availableAgentPersonas: z
-    .preprocess((val) => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val) as unknown;
-        } catch {
-          return [];
-        }
-      }
-      return val ?? [];
-    }, z.array(z.string()))
-    .default([]),
+  availableAgentPersonas: decodeSessionField(z.array(z.string()), []),
   project: projectSchema.optional(),
-  availableCommands: z
-    .preprocess((val) => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val) as unknown;
-        } catch {
-          return [];
-        }
-      }
-      return val ?? [];
-    }, z.array(availableCommandSchema))
-    .default([]),
-  planArtifacts: z
-    .preprocess((value) => {
-      if (typeof value === 'string') {
-        try {
-          return JSON.parse(value);
-        } catch {
-          return [];
-        }
-      }
-      return value ?? [];
-    }, z.array(planArtifactSchema))
-    .default([]),
-  plan: z
-    .preprocess((val) => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val) as unknown;
-        } catch {
-          return [];
-        }
-      }
-      return val ?? [];
-    }, z.array(planItemSchema))
-    .default([]),
-  sessionConfigOptions: z
-    .preprocess((val) => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val) as unknown;
-        } catch {
-          return [];
-        }
-      }
-      return val ?? [];
-    }, sessionConfigOptionsSchema)
-    .default([]),
-  sessionMetrics: z
-    .preprocess((val) => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val) as unknown;
-        } catch {
-          return {};
-        }
-      }
-      return val ?? {};
-    }, sessionMetricsSchema)
-    .default({}),
+  availableCommands: decodeSessionField(z.array(availableCommandSchema), []),
+  planArtifacts: decodeSessionField(z.array(planArtifactSchema), []),
+  plan: decodeSessionField(z.array(planItemSchema), []),
+  sessionConfigOptions: decodeSessionField(sessionConfigOptionsSchema, []),
+  sessionMetrics: decodeSessionField(sessionMetricsSchema, {}),
 });
 
 export const sessionWithCapabilitiesSchema = z.object({

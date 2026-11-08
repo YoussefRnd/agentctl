@@ -8,18 +8,7 @@ import {
   registryDistributionSchema,
   sessionMetricsSchema,
   sessionEventMetadataSchema,
-  sessionEventTextDataSchema,
-  sessionEventToolCallDataSchema,
-  sessionEventApprovalRequestDataSchema,
-  sessionEventPlanDataSchema,
-  sessionEventModeDataSchema,
-  sessionEventTerminalCreatedDataSchema,
-  sessionEventTerminalOutputDataSchema,
-  sessionEventTerminalExitDataSchema,
-  sessionEventDiffDataSchema,
-  sessionEventStatusDataSchema,
-  sessionEventCompactDataSchema,
-  sessionEventSubagentUpdateDataSchema,
+  sessionEventPayloadSchemas,
   type AgentConfigOption,
   type AgentFeatures,
   type AuthError,
@@ -27,11 +16,7 @@ import {
   type CapabilitySnapshot,
   type RegistryDistribution,
   type SessionMetrics,
-  type SessionEventTextData,
-  type SessionEventToolCallData,
-  type SessionEventApprovalRequestData,
-  type SessionEventPlanData,
-  type SessionEventModeData,
+  type SessionEvent,
   type SessionEventMetadata,
   type SessionEventType,
   type SessionEventPayload,
@@ -51,55 +36,44 @@ export function decodeJson<T>(
   }
 }
 
+const eventFallbacks = {
+  text: { content: '' },
+  tool_call: { name: '' },
+  approval_request: {},
+  plan_update: { plan: [] },
+  mode_update: { mode: '' },
+  terminal_created: { terminalId: '', command: '' },
+  terminal_output: { terminalId: '', data: '' },
+  terminal_exit: { terminalId: '', code: null },
+  diff: {},
+  status: {},
+  compact: {},
+  subagent_update: { subagentId: '', name: '', scope: '', status: 'failed' },
+} satisfies { [Event in SessionEvent as Event['type']]: Event['data'] };
+
+// Older readers for these event kinds also accepted a JSON string inside the stored JSON.
+const nestedJsonEventTypes = new Set<SessionEventType>([
+  'text',
+  'tool_call',
+  'approval_request',
+  'plan_update',
+  'mode_update',
+]);
+
 function parseSessionEventData<T extends SessionEventType>(
   type: T,
   value: unknown,
-): SessionEventPayload<T>;
+): Extract<SessionEvent, { type: T }>['data'];
 function parseSessionEventData(type: string, value: unknown): unknown;
 function parseSessionEventData(type: string, value: unknown): unknown {
   const parsed = parseJsonValue(value);
-  switch (type) {
-    case 'text':
-      return sessionEventCodecs.text(parsed);
-    case 'tool_call':
-      return sessionEventCodecs.toolCall(parsed);
-    case 'approval_request':
-      return sessionEventCodecs.approvalRequest(parsed);
-    case 'plan_update':
-      return sessionEventCodecs.planUpdate(parsed);
-    case 'mode_update':
-      return sessionEventCodecs.modeUpdate(parsed);
-    case 'terminal_created':
-      return parseOrFallback(sessionEventTerminalCreatedDataSchema, parsed, {
-        terminalId: '',
-        command: '',
-      });
-    case 'terminal_output':
-      return parseOrFallback(sessionEventTerminalOutputDataSchema, parsed, {
-        terminalId: '',
-        data: '',
-      });
-    case 'terminal_exit':
-      return parseOrFallback(sessionEventTerminalExitDataSchema, parsed, {
-        terminalId: '',
-        code: null,
-      });
-    case 'diff':
-      return parseOrFallback(sessionEventDiffDataSchema, parsed, {});
-    case 'status':
-      return parseOrFallback(sessionEventStatusDataSchema, parsed, {});
-    case 'compact':
-      return parseOrFallback(sessionEventCompactDataSchema, parsed, {});
-    case 'subagent_update':
-      return parseOrFallback(sessionEventSubagentUpdateDataSchema, parsed, {
-        subagentId: '',
-        name: '',
-        scope: '',
-        status: 'failed' as const,
-      });
-    default:
-      return parsed;
-  }
+  if (!Object.hasOwn(eventFallbacks, type)) return parsed;
+  const kind = type as SessionEventType;
+  const schema: ZodType = sessionEventPayloadSchemas[kind];
+  const payload =
+    typeof parsed === 'string' && nestedJsonEventTypes.has(kind) ? parseJsonValue(parsed) : parsed;
+  const result = schema.safeParse(payload);
+  return result.success ? result.data : structuredClone(eventFallbacks[kind]);
 }
 
 const stringArraySchema = z.array(z.string());
@@ -172,13 +146,7 @@ export const jsonCodecs = {
     return decodeJson(value, agentFeaturesSchema, EMPTY_AGENT_FEATURES);
   },
   capabilitySnapshot(value: string | null | undefined): CapabilitySnapshot | undefined {
-    if (!value) return undefined;
-    try {
-      const result = capabilitySnapshotSchema.safeParse(JSON.parse(value) as unknown);
-      return result.success ? result.data : undefined;
-    } catch {
-      return undefined;
-    }
+    return decodeJson(value, capabilitySnapshotSchema, undefined);
   },
   authMethods(value: string | null | undefined): AuthMethod[] {
     return decodeJson(value, z.array(authMethodSchema), []);
@@ -192,67 +160,20 @@ export const jsonCodecs = {
   sessionMetrics(value: string | null | undefined): SessionMetrics {
     return decodeJson(value, sessionMetricsSchema, {});
   },
-  sessionEventData(type: string, value: unknown): unknown {
-    return sessionEventCodecs.parseData(type, value);
-  },
-  sessionEventMetadata(value: unknown): Record<string, unknown> {
-    return sessionEventCodecs.parseMetadata(value);
-  },
 };
 
 export const sessionEventCodecs = {
-  text(value: unknown): SessionEventTextData {
-    if (typeof value === 'string') {
-      return decodeJson(value, sessionEventTextDataSchema, { content: '' });
-    }
-    const res = sessionEventTextDataSchema.safeParse(value);
-    return res.success ? res.data : { content: '' };
-  },
-  toolCall(value: unknown): SessionEventToolCallData {
-    if (typeof value === 'string') {
-      return decodeJson(value, sessionEventToolCallDataSchema, { name: '' });
-    }
-    const res = sessionEventToolCallDataSchema.safeParse(value);
-    return res.success ? res.data : { name: '' };
-  },
-  approvalRequest(value: unknown): SessionEventApprovalRequestData {
-    if (typeof value === 'string') {
-      return decodeJson(value, sessionEventApprovalRequestDataSchema, {});
-    }
-    const res = sessionEventApprovalRequestDataSchema.safeParse(value);
-    return res.success ? res.data : {};
-  },
-  planUpdate(value: unknown): SessionEventPlanData {
-    if (typeof value === 'string') {
-      return decodeJson(value, sessionEventPlanDataSchema, { plan: [] });
-    }
-    const res = sessionEventPlanDataSchema.safeParse(value);
-    return res.success ? res.data : { plan: [] };
-  },
-  modeUpdate(value: unknown): SessionEventModeData {
-    if (typeof value === 'string') {
-      return decodeJson(value, sessionEventModeDataSchema, { mode: '' });
-    }
-    const res = sessionEventModeDataSchema.safeParse(value);
-    return res.success ? res.data : { mode: '' };
-  },
-  metadata(value: unknown): SessionEventMetadata {
-    if (typeof value === 'string') {
-      return decodeJson(value, sessionEventMetadataSchema, {});
-    }
-    const res = sessionEventMetadataSchema.safeParse(value);
-    return res.success ? res.data : {};
-  },
   parseData: parseSessionEventData,
   validateData<T extends SessionEventType>(type: T, value: SessionEventPayload<T>): unknown {
-    const schema = eventDataSchemas[type];
+    const schema: ZodType = sessionEventPayloadSchemas[type];
     return schema.parse(parseJsonValue(value));
   },
   validateMetadata(value: SessionEventMetadata | null | undefined): SessionEventMetadata | null {
     return value == null ? null : sessionEventMetadataSchema.parse(value);
   },
   parseMetadata(value: unknown): SessionEventMetadata {
-    return sessionEventCodecs.metadata(value);
+    const result = sessionEventMetadataSchema.safeParse(parseJsonValue(value));
+    return result.success ? result.data : {};
   },
 };
 
@@ -266,23 +187,3 @@ function parseJsonValue(value: unknown): unknown {
   }
   return value;
 }
-
-function parseOrFallback<T>(schema: ZodType<T>, value: unknown, fallback: T): T {
-  const result = schema.safeParse(value);
-  return result.success ? result.data : fallback;
-}
-
-const eventDataSchemas: Record<SessionEventType, ZodType> = {
-  text: sessionEventTextDataSchema,
-  tool_call: sessionEventToolCallDataSchema,
-  approval_request: sessionEventApprovalRequestDataSchema,
-  plan_update: sessionEventPlanDataSchema,
-  mode_update: sessionEventModeDataSchema,
-  terminal_created: sessionEventTerminalCreatedDataSchema,
-  terminal_output: sessionEventTerminalOutputDataSchema,
-  terminal_exit: sessionEventTerminalExitDataSchema,
-  diff: sessionEventDiffDataSchema,
-  status: sessionEventStatusDataSchema,
-  compact: sessionEventCompactDataSchema,
-  subagent_update: sessionEventSubagentUpdateDataSchema,
-};
