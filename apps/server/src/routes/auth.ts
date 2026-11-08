@@ -20,7 +20,6 @@ const pairingCreateSchema = z.object({
 export const authRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
   const attemptLimiter = new AuthAttemptLimiter();
 
-  // Check auth status
   fastify.get('/auth/status', (request) => {
     const isDev = fastify.config.NODE_ENV !== 'production';
     const isEmbedded = fastify.embedded;
@@ -36,7 +35,6 @@ export const authRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
     };
   });
 
-  // Consume a one-time pairing token
   fastify.withTypeProvider<ZodTypeProvider>().post(
     '/auth/pairing/consume',
     {
@@ -80,7 +78,6 @@ export const authRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
     },
   );
 
-  // Generate a new pairing token for another device
   fastify.withTypeProvider<ZodTypeProvider>().post(
     '/auth/pairing/create',
     {
@@ -103,14 +100,12 @@ export const authRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
     },
   );
 
-  // List active connected client sessions
   fastify.get('/auth/sessions', () => {
     return {
       sessions: fastify.authManager.listActiveSessions(),
     };
   });
 
-  // Revoke a specific connected client session
   fastify.delete(
     '/auth/sessions/:id',
     {

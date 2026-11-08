@@ -184,7 +184,6 @@ export async function buildApp(deps: AppDependencies = {}) {
   fastify.addHook('onClose', () => lifecycle.stop());
   fastify.ready(() => lifecycle.startGateway());
 
-  // Global error handler — keeps all error serialization in one place.
   fastify.setErrorHandler((error: FastifyError, _request, reply) => {
     if (error instanceof AppError) {
       return reply.code(error.statusCode).send({ error: error.message });
@@ -250,7 +249,6 @@ export async function buildApp(deps: AppDependencies = {}) {
     done(null, payload);
   });
 
-  // Register Secure Session
   await fastify.register(secureSession, {
     cookieName: 'agentctl_session',
     secret: config.AGENTCTL_SESSION_KEY,
@@ -273,19 +271,16 @@ export async function buildApp(deps: AppDependencies = {}) {
   // Register Auth Plugin first
   await fastify.register(authPlugin);
 
-  // Register other plugins
   await fastify.register(websocket);
   await fastify.register(worktreePlugin);
   await fastify.register(tsRestPlugin);
 
-  // Register routes
   await fastify.register(authRoutes, { prefix: '/api' });
   await fastify.register(eventsRoutes, { prefix: '/api' });
   await fastify.register(terminalRoutes, { prefix: '/api' });
   await fastify.register(contextRoutes, { prefix: '/api' });
   await fastify.register(attachmentsRoutes, { prefix: '/api' });
 
-  // Basic route to verify server is up
   fastify.get('/health', () => {
     return { status: 'ok' };
   });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { repositoryCaptureSchema } from './repository.js';
+import { reviewFreshnessSchema } from './review.js';
 const excerpt = z.object({
   path: z.string().min(1).max(1024),
   side: z.enum(['old', 'new']),
@@ -23,9 +24,10 @@ export const updateWalkthroughProgressSchema = z.discriminatedUnion('action', [
 ]);
 export const walkthroughQuestionSchema = z.object({
   prompt: z.string(),
-  freshness: z.enum(['current', 'outdated', 'unknown']),
+  freshness: reviewFreshnessSchema,
   capture: repositoryCaptureSchema.nullable(),
 });
 export type ReviewWalkthroughStop = z.infer<typeof reviewWalkthroughStopSchema>;
 export type WalkthroughProgress = z.infer<typeof walkthroughProgressSchema>;
 export type UpdateWalkthroughProgress = z.infer<typeof updateWalkthroughProgressSchema>;
+export type WalkthroughQuestion = z.infer<typeof walkthroughQuestionSchema>;

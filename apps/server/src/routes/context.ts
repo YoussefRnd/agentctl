@@ -19,7 +19,6 @@ export const contextRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     return reply.send(await fastify.contextService.resolve(cwd, body.items));
   });
 
-  // Search workspace context (files, folders, git targets, symbols)
   fastify.get('/sessions/:id/context/search', async (req, reply) => {
     const { id: sessionId } = req.params as { id: string };
     const query = req.query as { q?: string; type?: string };
@@ -32,7 +31,6 @@ export const contextRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     return reply.send({ items });
   });
 
-  // Resolve selected context references into hydrated content
   fastify.post('/sessions/:id/context/resolve', async (req, reply) => {
     const { id: sessionId } = req.params as { id: string };
     const body = req.body as { items: ContextItemReference[] };

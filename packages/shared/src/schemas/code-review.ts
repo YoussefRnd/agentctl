@@ -7,6 +7,7 @@ import {
 import { findingVerificationSchema, verificationSummarySchema } from './review-verification.js';
 import { reviewContextReportSchema } from './review-context.js';
 import { revisionReferenceSchema } from './repository.js';
+import { reviewDiffScopeSchema, reviewFreshnessSchema } from './review.js';
 
 export const reviewFindingContentSchema = z.object({
   previousFindingId: z.uuid().optional(),
@@ -47,7 +48,7 @@ export const codeReviewRunSchema = z.object({
   sessionId: z.uuid(),
   providerId: z.string(),
   modelId: z.string(),
-  scope: z.enum(['working', 'session']),
+  scope: reviewDiffScopeSchema,
   fromRevision: revisionReferenceSchema,
   toRevision: revisionReferenceSchema,
   status: z.enum(['running', 'completed', 'failed', 'cancelled']),
@@ -55,7 +56,7 @@ export const codeReviewRunSchema = z.object({
   error: z.string().nullable(),
   startedAt: z.number(),
   finishedAt: z.number().nullable(),
-  freshness: z.enum(['current', 'outdated', 'unknown']),
+  freshness: reviewFreshnessSchema,
   findings: z.array(reviewFindingSchema),
   context: reviewContextReportSchema.nullable().optional(),
   verificationSummary: verificationSummarySchema.optional(),
@@ -63,7 +64,7 @@ export const codeReviewRunSchema = z.object({
   continuity: reviewContinuityReportSchema.nullable().optional(),
 });
 export const startCodeReviewSchema = z.object({
-  scope: z.enum(['working', 'session']).default('working'),
+  scope: reviewDiffScopeSchema.default('working'),
   evidenceReviewId: z.uuid().optional(),
   providerId: z.string().min(1).optional(),
   modelId: z.string().min(1).optional(),

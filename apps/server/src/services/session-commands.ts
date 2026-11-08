@@ -234,7 +234,6 @@ export class SessionCommands {
     const taskSlug = params.taskSlug || `agent-${randomSuffix}`;
     const title = params.title || `Agent: ${params.prompt.slice(0, 40).trim()}`;
 
-    // Create session in worktree mode
     const created = await this.sessionManager.createSession({
       projectId: parentSession.projectId,
       taskSlug,
@@ -242,13 +241,11 @@ export class SessionCommands {
       mode: 'worktree',
     });
 
-    // Update title
     await this.db
       .update(sessions)
       .set({ title, updatedAt: new Date() })
       .where(eq(sessions.id, created.sessionId));
 
-    // Send initial prompt input to subagent
     void this.sessionManager.startInput(created.sessionId, params.prompt).catch((err: unknown) => {
       this.log.error({ err, sessionId: created.sessionId }, 'Failed to send prompt to subagent');
     });

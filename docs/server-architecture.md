@@ -25,6 +25,8 @@ surface and coordinates multi-field patches in the established order. It does no
 | `services/session-git-service.ts`          | Branch checkout/merge and their session command lanes                                                                                 |
 | `services/session-git-operations.ts`       | Git preconditions, mutation lane, partial-change notifications, review/status/merge preview, draft generation and fingerprint recheck |
 | `services/session-repository-service.ts`   | Backend-neutral review and legacy baseline import                                                                                     |
+| `services/review-workspace.ts`             | Capture and revision matching shared by AI review, checks, and tracked fixes                                                          |
+| `services/review-records.ts`               | Stored review payload decoding with compatibility fallbacks                                                                           |
 | `services/session-event-compact-reader.ts` | Bounded validated compact-page JSON and matching detail-revision reuse                                                                |
 | `services/session-event-revision.ts`       | Canonical revision digests and persisted JSON fingerprints                                                                            |
 | `services/session-event-history.ts`        | Bounded history windows/replay and transactional snapshot/change-cursor catch-up                                                      |
@@ -89,9 +91,8 @@ Settings validation still happens before writes; error status and response envel
   transport rules. `AuthManager` owns pairing/session policy and persistence. `routes/auth.ts`
   owns request schemas, cookie mutation, retry headers and pairing URL construction; its limiter
   is constructed per route registration rather than as shared module state.
-- Diagnostics handlers only set download/cache headers and delegate to provider diagnostics.
-  The typed router is registered by `app.ts`; `routes/diagnostics.ts` remains a standalone transport
-  exercised by its focused fixture, with no separate domain implementation.
+- The typed diagnostics router sets download and cache headers and delegates to provider diagnostics.
+  The diagnostics integration test exercises the same router registered by `app.ts`.
 - `plugins/worktree.ts` is a startup adapter that awaits the session facade's orphan synchronization.
   Terminal service, event bus, editor launcher and process-signal lifecycle utilities retain their
   cohesive I/O responsibilities. Their existing tests remain their acceptance evidence.

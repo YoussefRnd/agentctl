@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import type { ProviderRegistry } from '@agentctl/core/providers';
 import type { AgentDiagnosticsSnapshot } from '@agentctl/shared';
 import { describe, expect, it, vi } from 'vite-plus/test';
-import { diagnosticsRoutes } from './diagnostics.js';
+import tsRestPlugin from '../plugins/ts-rest.js';
 
 describe('transport diagnostics route', () => {
   it('returns a no-store attachment containing only the safe snapshot', async () => {
@@ -17,15 +17,15 @@ describe('transport diagnostics route', () => {
     app.decorate('providerRegistry', {
       getTransportDiagnostics: vi.fn(() => snapshot),
     } as unknown as ProviderRegistry);
-    await app.register(diagnosticsRoutes, { prefix: '/api' });
+    await app.register(tsRestPlugin);
 
     const response = await app.inject({ method: 'GET', url: '/api/diagnostics/transport' });
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.headers['content-disposition']).toContain('attachment');
-    expect(response.json()).toMatchObject({ connections: [], events: [{ adapter: 'acp-v1' }] });
-    expect(response.body).not.toContain('env');
-    expect(response.body).not.toContain('prompt');
+    expect(response.headers['content-disposition']).toBe(
+      'attachment; filename="agentctl-transport-diagnostics.json"',
+    );
+    expect(response.json()).toEqual(snapshot);
     await app.close();
   });
 });

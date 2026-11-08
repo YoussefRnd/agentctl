@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { repositoryCaptureSchema } from './repository.js';
+import { reviewFreshnessSchema } from './review.js';
 
 export const reviewHandoffIntentSchema = z.enum(['ask', 'fix']);
 export const prepareReviewHandoffSchema = z.object({
@@ -14,7 +15,7 @@ export const reviewHandoffSnippetSchema = z.object({
 });
 export const reviewHandoffSchema = z.object({
   intent: reviewHandoffIntentSchema,
-  freshness: z.enum(['current', 'outdated', 'unknown']),
+  freshness: reviewFreshnessSchema,
   checkedAt: z.number(),
   capture: repositoryCaptureSchema.nullable(),
   location: z.enum(['original', 'moved', 'ambiguous', 'changed', 'unavailable']),

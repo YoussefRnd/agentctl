@@ -1,6 +1,7 @@
 import type { FastifyPluginCallbackZod } from '@fastify/type-provider-zod';
 import { z } from 'zod';
 import type { ZodTypeProvider } from '@fastify/type-provider-zod';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { SessionEventRow } from '@agentctl/shared';
 import {
   sessionEventRowSchema,
@@ -39,6 +40,31 @@ function parseBusEvent(raw: unknown): SessionEventRow {
     });
   }
   return sessionEventRowSchema.parse(raw);
+}
+
+async function sendEventHistory(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  read: (signal: AbortSignal) => Promise<string | undefined>,
+  headers: Record<string, string> = {},
+) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  request.raw.once('aborted', abort);
+  reply.raw.once('close', abort);
+  try {
+    if (request.raw.aborted || reply.raw.destroyed) return reply;
+    const body = await read(controller.signal);
+    if (controller.signal.aborted) return reply;
+    if (body === undefined) throw new AppError('Event not found', 404);
+    return reply.headers(headers).type('application/json; charset=utf-8').send(body);
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+    return reply;
+  } finally {
+    request.raw.off('aborted', abort);
+    reply.raw.off('close', abort);
+  }
 }
 
 export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => {
@@ -119,28 +145,16 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
           ),
       },
     },
-    async (request, reply) => {
+    (request, reply) => {
       const { id } = request.params;
       const { beforeId, aroundId, afterId, limit, compact } = request.query;
-      const controller = new AbortController();
-      const abort = () => controller.abort();
-      request.raw.once('aborted', abort);
-      reply.raw.once('close', abort);
-      try {
-        const body = await fastify.services.events.pageResponse(
+      return sendEventHistory(request, reply, (signal) =>
+        fastify.services.events.pageResponse(
           id,
           { beforeId, aroundId, afterId, limit, compact: compact === 'true' },
-          controller.signal,
-        );
-        if (body === undefined) throw new AppError('Event not found', 404);
-        return reply.type('application/json; charset=utf-8').send(body);
-      } catch (error) {
-        if (!controller.signal.aborted) throw error;
-        return reply;
-      } finally {
-        request.raw.off('aborted', abort);
-        reply.raw.off('close', abort);
-      }
+          signal,
+        ),
+      );
     },
   );
 
@@ -149,30 +163,14 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
     {
       schema: { params: z.object({ id: z.uuid(), eventId: z.coerce.number().int().positive() }) },
     },
-    async (request, reply) => {
-      const controller = new AbortController();
-      const abort = () => controller.abort();
-      request.raw.once('aborted', abort);
-      reply.raw.once('close', abort);
-      try {
-        const body = await fastify.services.events.detailResponse(
-          request.params.id,
-          request.params.eventId,
-          controller.signal,
-        );
-        if (body === undefined) throw new AppError('Event not found', 404);
-        return reply
-          .header('Cache-Control', 'no-store')
-          .type('application/json; charset=utf-8')
-          .send(body);
-      } catch (error) {
-        if (!controller.signal.aborted) throw error;
-        return reply;
-      } finally {
-        request.raw.off('aborted', abort);
-        reply.raw.off('close', abort);
-      }
-    },
+    (request, reply) =>
+      sendEventHistory(
+        request,
+        reply,
+        (signal) =>
+          fastify.services.events.detailResponse(request.params.id, request.params.eventId, signal),
+        { 'Cache-Control': 'no-store' },
+      ),
   );
 
   fastify.withTypeProvider<ZodTypeProvider>().get(
@@ -194,17 +192,15 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
     async (request, reply) => {
       const { id } = request.params;
 
-      // 1. Lazy resuscitation check
       const session = await fastify.sessionManager.getOrResuscitate(id, { allowArchived: false });
       if (!session) {
         throw new AppError('Session not found or archived', 404);
       }
 
-      // 2. Hijack the response so Fastify does not close the stream
+      // Hijack the response so Fastify does not close the stream
       //    when the async handler returns.
       await reply.hijack();
 
-      // 3. Set headers
       if (request.headers.origin) {
         reply.raw.setHeader('Access-Control-Allow-Origin', request.headers.origin);
         reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -215,7 +211,6 @@ export const eventsRoutes: FastifyPluginCallbackZod = (fastify, _opts, done) => 
       reply.raw.setHeader('Transfer-Encoding', 'chunked');
       reply.raw.statusCode = 200;
 
-      // Flush headers immediately with an initial heartbeat comment
       reply.raw.write(':\n\n');
 
       const useChangeSequence = request.query.changes === 'true';

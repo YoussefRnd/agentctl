@@ -10,7 +10,6 @@ import {
   codeReviewFindings,
   reviewChecks,
   reviewFindingEvidence,
-  sessions,
   type DbClient,
 } from '@agentctl/core/db';
 import type { RepositoryService } from '@agentctl/core/repository';
@@ -29,6 +28,8 @@ import {
 } from '@agentctl/shared';
 import type { EventBus } from '../utils/event-bus.js';
 import { AppError } from '../errors/app-error.js';
+import { openSessionRepository } from './session-repository-service.js';
+import { readReviewWorkspace, reviewFreshness } from './review-workspace.js';
 
 type ReviewRow = typeof codeReviews.$inferSelect;
 /** Owns explicit local checks and human-confirmed evidence. Never calls an AI provider. */
@@ -79,26 +80,14 @@ export class ReviewVerificationService {
     return check;
   }
   private async snapshot(sessionId: string) {
-    const session = await this.db.query.sessions.findFirst({ where: eq(sessions.id, sessionId) });
-    if (!session) throw new AppError('Session not found', 404);
-    const repository = await this.repositories.open(session.worktreePath);
-    const base =
-      session.baseCommit === 'none'
-        ? undefined
-        : await repository.importRevision(session.baseCommit);
-    const review = await repository.review(base, { includeDiffs: false });
+    const context = await openSessionRepository(this.db, this.repositories, sessionId);
+    const review = await readReviewWorkspace(context);
     if (!review.capture) throw new AppError('Verification requires revision snapshots.', 400);
-    return { session, workspace: repository.info.workspacePath, capture: review.capture };
-  }
-  private matches(
-    review: ReviewRow,
-    current: Awaited<ReturnType<ReviewVerificationService['snapshot']>>,
-  ) {
-    return (
-      review.toRevision === current.capture.current &&
-      review.fromRevision ===
-        (review.scope === 'session' ? current.capture.baseline : current.capture.working)
-    );
+    return {
+      session: context.session,
+      workspace: context.repository.info.workspacePath,
+      capture: review.capture,
+    };
   }
   isWorkspaceBusy(workspace: string) {
     return this.reserved.has(workspace);
@@ -114,7 +103,7 @@ export class ReviewVerificationService {
     const current = await this.snapshot(sessionId);
     if (!canMutateWorkspace(current.session.status))
       throw new AppError('Stop the active turn before running a check.', 409);
-    if (!this.matches(review, current))
+    if (reviewFreshness(review, current.capture) !== 'current')
       throw new AppError(
         'This review is outdated. Review the current changes before running a check.',
         409,
@@ -200,7 +189,7 @@ export class ReviewVerificationService {
           if (
             !canMutateWorkspace(before.session.status) ||
             before.workspace !== workspace ||
-            !this.matches(review, before)
+            reviewFreshness(review, before.capture) !== 'current'
           )
             throw new Error(
               'The workspace changed before this check could start. Review the current changes and try again.',
@@ -232,7 +221,7 @@ export class ReviewVerificationService {
           clearTimeout(flush);
           const after = await this.snapshot(sessionId).catch(() => undefined);
           const revisionState = after
-            ? this.matches(review, after) && after.workspace === workspace
+            ? reviewFreshness(review, after.capture) === 'current' && after.workspace === workspace
               ? 'unchanged'
               : 'changed'
             : 'unknown';

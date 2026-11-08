@@ -240,6 +240,16 @@ it('tracks the request, comparable before/after evidence and fresh review while 
   expect(
     (await service.list(sessionId, source.reviewId, source.findingId)).attempts[0]!.outcome,
   ).toBe('suggested_fixed');
+  const { evidenceCheckIds } = db
+    .select()
+    .from(codeReviews)
+    .where(eq(codeReviews.id, follow.id))
+    .get()!;
+  db.update(codeReviews).set({ evidenceCheckIds: '{' }).where(eq(codeReviews.id, follow.id)).run();
+  expect(
+    (await service.list(sessionId, source.reviewId, source.findingId)).attempts[0]!.outcome,
+  ).toBe('needs_investigation');
+  db.update(codeReviews).set({ evidenceCheckIds }).where(eq(codeReviews.id, follow.id)).run();
   checks.confirm(sessionId, source.reviewId, source.findingId, {
     state: 'suspected',
     reason: 'The original failure no longer establishes reproduction.',

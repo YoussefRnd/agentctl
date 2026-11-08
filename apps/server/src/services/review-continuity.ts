@@ -2,30 +2,13 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { codeReviews, codeReviewFindings, type DbClient } from '@agentctl/core/db';
 import { reviewFindingFingerprint } from '@agentctl/core';
 import {
-  capturedReviewFilesSchema,
-  reviewFindingContinuitySchema,
   type ReviewFile,
   type ReviewPriorFinding,
   type ReviewContinuityReport,
 } from '@agentctl/shared';
 import type { ReviewVerificationService } from './review-verification-service.js';
+import { savedReviewFiles, savedFindingContinuity } from './review-records.js';
 
-export function savedReviewFiles(raw: string | null): ReviewFile[] | null {
-  if (!raw) return null;
-  try {
-    return capturedReviewFilesSchema.parse(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
-export function savedFindingContinuity(raw: string | null) {
-  if (!raw) return null;
-  try {
-    return reviewFindingContinuitySchema.parse(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
 /** Capture earlier decisions before starting a provider; never apply them as new resolutions. */
 export function collectReviewHistory(
   db: DbClient,

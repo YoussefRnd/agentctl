@@ -9,6 +9,7 @@ export interface TerminalSession {
   id: string;
   sessionId: string;
   cwd: string;
+  shell: string;
   cols: number;
   rows: number;
   process: ChildProcess;
@@ -243,6 +244,7 @@ export class InteractiveTerminalService extends EventEmitter {
       id: `term_${sessionId}`,
       sessionId,
       cwd,
+      shell: defaultShell,
       cols,
       rows,
       process: child,
@@ -340,6 +342,7 @@ export class InteractiveTerminalService extends EventEmitter {
       id: `term_${sessionId}`,
       sessionId,
       cwd,
+      shell: command,
       cols,
       rows,
       process: child,

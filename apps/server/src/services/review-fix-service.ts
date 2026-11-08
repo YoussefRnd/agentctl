@@ -4,7 +4,6 @@ import {
   codeReviews,
   codeReviewFindings,
   reviewFixAttempts,
-  sessions,
   sessionEvents,
   type DbClient,
 } from '@agentctl/core/db';
@@ -21,6 +20,9 @@ import type { CodeReviewService } from './code-review-service.js';
 import type { ReviewVerificationService } from './review-verification-service.js';
 import type { EventBus } from '../utils/event-bus.js';
 import { AppError } from '../errors/app-error.js';
+import { openSessionRepository } from './session-repository-service.js';
+import { readReviewWorkspace, reviewFreshness } from './review-workspace.js';
+import { savedEvidenceIds } from './review-records.js';
 
 type Run = ReviewFix['runs'][number];
 /** Coordinates existing check/review owners. Outcomes are suggestions; finding status is never written. */
@@ -73,17 +75,11 @@ export class ReviewFixService {
   private notify(sessionId: string) {
     this.events.publishState({ topics: ['workspace'], sessionId });
   }
-  private async snapshot(sessionId: string, scope: 'working' | 'session') {
-    const session = this.db.select().from(sessions).where(eq(sessions.id, sessionId)).get();
-    if (!session) throw new AppError('Session not found', 404);
-    const repository = await this.repositories.open(session.worktreePath);
-    const base =
-      session.baseCommit === 'none'
-        ? undefined
-        : await repository.importRevision(session.baseCommit);
-    const capture = (await repository.review(base, { includeDiffs: false })).capture;
+  private async snapshot(sessionId: string) {
+    const context = await openSessionRepository(this.db, this.repositories, sessionId);
+    const { capture } = await readReviewWorkspace(context);
     if (!capture) throw new AppError('Workspace snapshots unavailable', 409);
-    return { capture, from: scope === 'session' ? capture.baseline : capture.working };
+    return capture;
   }
   async create(sessionId: string, reviewId: string, findingId: string, input: CreateReviewFix) {
     const body = createReviewFixSchema.parse(input);
@@ -235,17 +231,13 @@ export class ReviewFixService {
       throw new AppError('Complete a stable verification check before the follow-up review.', 409);
     this.busy.add(id);
     try {
-      const current = await this.snapshot(sessionId, review.scope);
+      const current = await this.snapshot(sessionId);
       const target = this.db
         .select()
         .from(codeReviews)
         .where(eq(codeReviews.id, after.reviewId))
         .get();
-      if (
-        !target ||
-        target.fromRevision !== current.from ||
-        target.toRevision !== current.capture.current
-      )
+      if (!target || reviewFreshness({ ...target, scope: review.scope }, current) !== 'current')
         throw new AppError(
           'Code changed after the check. Run the selected check again before reviewing.',
           409,
@@ -284,7 +276,7 @@ export class ReviewFixService {
       .orderBy(desc(reviewFixAttempts.createdAt), desc(reviewFixAttempts.id))
       .limit(11)
       .all();
-    const current = await this.snapshot(sessionId, review.scope).catch(() => null);
+    const current = await this.snapshot(sessionId).catch(() => null);
     const proof = this.checks.states([reviewId]).findings.get(findingId);
     const attempts = rows.slice(0, 10).map((attempt) => {
       const runs = this.runs(attempt.runs);
@@ -311,13 +303,11 @@ export class ReviewFixService {
             .where(eq(codeReviewFindings.reviewId, follow.id))
             .all().length
         : 0;
-      const freshness: ReviewFix['freshness'] = !current
-        ? 'unknown'
-        : target &&
-            target.fromRevision === current.from &&
-            target.toRevision === current.capture.current
-          ? 'current'
-          : 'outdated';
+      const freshness = current
+        ? target
+          ? reviewFreshness({ ...target, scope: review.scope }, current)
+          : 'outdated'
+        : 'unknown';
       let outcome: ReviewFix['outcome'] = 'not_checked';
       let reason =
         'Run a selected verification command after the code changes. Resolution remains manual.';
@@ -362,14 +352,11 @@ export class ReviewFixService {
           if (attempt.requestRevision === after.checkedRevision)
             reason =
               'No source revision change was recorded. A passing check alone does not establish a fix.';
-          else if (follow?.status === 'running') {
-            outcome = 'reviewing';
-            reason = 'The fresh independent review is running.';
-          } else if (
+          else if (
             follow?.status === 'completed' &&
             follow.fromRevision === target?.fromRevision &&
             follow.toRevision === target?.toRevision &&
-            JSON.parse(follow.evidenceCheckIds ?? '[]').includes(after.id) &&
+            savedEvidenceIds(follow.evidenceCheckIds).includes(after.id) &&
             !findings
           ) {
             outcome = 'suggested_fixed';

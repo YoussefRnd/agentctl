@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { repositoryCaptureSchema } from './repository.js';
 import { reviewCheckSummarySchema, runReviewCheckSchema } from './review-verification.js';
+import { reviewFreshnessSchema } from './review.js';
 export const createReviewFixSchema = z.object({
   id: z.uuid(),
   beforeCheckId: z.uuid().nullable().default(null),
@@ -40,7 +41,7 @@ export const reviewFixSchema = z.object({
     'needs_investigation',
   ]),
   reason: z.string(),
-  freshness: z.enum(['current', 'outdated', 'unknown']),
+  freshness: reviewFreshnessSchema,
 });
 export const verifyReviewFixSchema = runReviewCheckSchema;
 export type CreateReviewFix = z.infer<typeof createReviewFixSchema>;

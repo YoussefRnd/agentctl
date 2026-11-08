@@ -2,7 +2,6 @@ import type { FastifyPluginAsync } from 'fastify';
 import { MAX_FILE_SIZE_BYTES } from '../services/attachment-service.js';
 
 export const attachmentsRoutes: FastifyPluginAsync = (fastify) => {
-  // Add binary content type parser for image mime types
   fastify.addContentTypeParser(
     ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/octet-stream'],
     { parseAs: 'buffer', bodyLimit: MAX_FILE_SIZE_BYTES },

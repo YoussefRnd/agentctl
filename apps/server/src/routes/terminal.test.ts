@@ -14,7 +14,6 @@ describe('Interactive Terminal WebSocket Route', () => {
   beforeEach(async () => {
     db = createDatabase(':memory:');
 
-    // Create test project and session in DB
     const [project] = await db
       .insert(projects)
       .values({
@@ -65,38 +64,31 @@ describe('Interactive Terminal WebSocket Route', () => {
     const wsUrl = `ws://127.0.0.1:${serverPort}/api/sessions/test-sess-1/terminal/ws`;
 
     const ws = new WebSocket(wsUrl, [`agentctl.desktop.${desktopCapability}`]);
-    let receivedEcho = false;
+    let output = '';
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    await new Promise<void>((resolve, reject) => {
-      ws.onmessage = (event) => {
-        try {
-          const raw = typeof event.data === 'string' ? event.data : event.data.toString();
-          const msg = JSON.parse(raw) as { type?: string; data?: string };
-          if (msg.type === 'init') {
-            ws.send(JSON.stringify({ type: 'input', data: 'echo "LIVE_TERMINAL_OK"\n' }));
-          } else if (msg.type === 'data' && msg.data?.includes('LIVE_TERMINAL_OK')) {
-            receivedEcho = true;
-            ws.close();
-            resolve();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(String(event.data)) as { type?: string; data?: string };
+            if (msg.type === 'init') {
+              ws.send(JSON.stringify({ type: 'input', data: 'echo LIVE_TERMINAL_OK\n' }));
+            } else if (msg.type === 'data') {
+              output += msg.data ?? '';
+              if (/(?:^|\r?\n)LIVE_TERMINAL_OK\r?\n/.test(output)) resolve();
+            }
+          } catch (error) {
+            reject(error);
           }
-        } catch (err) {
-          reject(err);
-        }
-      };
-
-      ws.onerror = (err) => {
-        reject(err);
-      };
-
-      setTimeout(() => {
-        if (!receivedEcho) {
-          ws.close();
-          reject(new Error('Timed out waiting for terminal echo'));
-        }
-      }, 3000);
-    });
-
-    expect(receivedEcho).toBe(true);
+        };
+        ws.onerror = reject;
+        timer = setTimeout(() => reject(new Error('Timed out waiting for terminal output')), 3000);
+      });
+    } finally {
+      clearTimeout(timer);
+      ws.close();
+    }
   });
 
   test('supports concurrent distinct terminal tabs with termId query param', async () => {

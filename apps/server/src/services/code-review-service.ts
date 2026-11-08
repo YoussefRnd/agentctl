@@ -1,9 +1,5 @@
 import type { ReviewVerificationService } from './review-verification-service.js';
-import {
-  collectReviewHistory,
-  savedReviewFiles,
-  savedFindingContinuity,
-} from './review-continuity.js';
+import { collectReviewHistory } from './review-continuity.js';
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, getTableColumns, inArray, sql, lt, or } from 'drizzle-orm';
 import {
@@ -27,10 +23,9 @@ import type { ProviderRegistry } from '@agentctl/core/providers';
 import { collectReviewContext, type RepositoryService } from '@agentctl/core/repository';
 import {
   canMutateWorkspace,
-  reviewWalkthroughSchema,
-  walkthroughProgressSchema,
   updateWalkthroughProgressSchema,
   type UpdateWalkthroughProgress,
+  type WalkthroughQuestion,
   prepareReviewHandoffSchema,
   type PrepareReviewHandoff,
   type ReviewHandoff,
@@ -38,16 +33,25 @@ import {
   findAgentConfigOption,
   resolveReviewFindingSchema,
   codeReviewRunSchema,
-  reviewContextReportSchema,
   type CodeReviewRun,
   type ReviewPriorFinding,
-  reviewContinuityReportSchema,
   type StartCodeReview,
   type ResolveReviewFinding,
   type ReviewFile,
   type ReviewContextReport,
 } from '@agentctl/shared';
 import { AppError } from '../errors/app-error.js';
+import { openSessionRepository } from './session-repository-service.js';
+import { readReviewWorkspace, reviewFreshness, reviewRevisions } from './review-workspace.js';
+import {
+  savedEvidenceIds,
+  savedFindingContinuity,
+  savedReviewFiles,
+  savedContinuityReport,
+  savedContext,
+  savedWalkthrough,
+  savedProgress,
+} from './review-records.js';
 import type { EventBus } from '../utils/event-bus.js';
 
 /** App-scoped owner of independent reviews, persistence, cancellation and restart recovery. */
@@ -78,21 +82,12 @@ export class CodeReviewService {
   private notify(sessionId: string) {
     this.events.publishState({ topics: ['workspace'], sessionId });
   }
-  private async context(sessionId: string) {
-    const session = await this.db.query.sessions.findFirst({ where: eq(sessions.id, sessionId) });
-    if (!session) throw new AppError('Session not found', 404);
-    const repository = await this.repositories.open(session.worktreePath);
-    return { session, repository };
-  }
   private async capture(sessionId: string) {
-    const { session, repository } = await this.context(sessionId);
+    const context = await openSessionRepository(this.db, this.repositories, sessionId);
+    const { session, repository } = context;
     if (!repository.info.capabilities.review || !repository.info.capabilities.checkpoints)
       throw new AppError('AI review requires a workspace with revision snapshots.', 400);
-    const baseline =
-      session.baseCommit === 'none'
-        ? undefined
-        : await repository.importRevision(session.baseCommit);
-    const review = await repository.review(baseline, { includeDiffs: false });
+    const review = await readReviewWorkspace(context);
     if (!review.capture) throw new AppError('This workspace cannot capture review revisions.', 400);
     return { session, repository, review, capture: review.capture };
   }
@@ -143,24 +138,18 @@ export class CodeReviewService {
       runs: rows.map((row) =>
         codeReviewRunSchema.parse({
           ...row,
-          context: this.savedContext(row.context),
-          walkthrough: this.savedWalkthrough(row.walkthrough),
-          walkthroughProgress: this.savedProgress(row.walkthroughProgress),
-          continuity: this.savedContinuityReport(row.continuity),
-          evidenceCheckIds: this.savedEvidenceIds(row.evidenceCheckIds),
+          context: savedContext(row.context),
+          walkthrough: savedWalkthrough(row.walkthrough),
+          walkthroughProgress: savedProgress(row.walkthroughProgress),
+          continuity: savedContinuityReport(row.continuity),
+          evidenceCheckIds: savedEvidenceIds(row.evidenceCheckIds),
           verificationSummary: verification?.summaries.get(row.id) ?? {
             total: 0,
             running: 0,
             passed: 0,
             failed: 0,
           },
-          freshness: current
-            ? row.toRevision === current.capture.current &&
-              row.fromRevision ===
-                (row.scope === 'session' ? current.capture.baseline : current.capture.working)
-              ? 'current'
-              : 'outdated'
-            : 'unknown',
+          freshness: reviewFreshness(row, current?.capture),
           findings: findings
             .filter((finding) => finding.reviewId === row.id)
             .map((finding) => ({
@@ -213,7 +202,7 @@ export class CodeReviewService {
           'Choose an available model or configure a custom model for this provider.',
           400,
         );
-      const fromRevision = request.scope === 'session' ? capture.baseline : capture.working;
+      const { fromRevision } = reviewRevisions(capture, request.scope);
       const comparison = await repository.compare(fromRevision, capture.current);
       if (comparison.files.length > 100)
         throw new AppError('Too many files for one review. Review a smaller set of changes.', 400);
@@ -496,13 +485,6 @@ export class CodeReviewService {
       this.notify(sessionId);
     }
   }
-  private savedContinuityReport(raw: string | null) {
-    try {
-      return raw ? reviewContinuityReportSchema.parse(JSON.parse(raw)) : null;
-    } catch {
-      return null;
-    }
-  }
   async file(sessionId: string, reviewId: string, path: string) {
     const review = this.ownedRun(sessionId, reviewId);
     const saved = savedReviewFiles(review.capturedFiles);
@@ -519,7 +501,7 @@ export class CodeReviewService {
     if (!finding) throw new AppError('File not found in this review', 404);
     // Legacy reviews may still have their immutable repository objects. Never read the live file.
     try {
-      const { repository } = await this.context(sessionId);
+      const { repository } = await openSessionRepository(this.db, this.repositories, sessionId);
       const file = (await repository.diff(review.fromRevision, review.toRevision, path)).find(
         (file) => file.path === path,
       );
@@ -549,13 +531,7 @@ export class CodeReviewService {
     if (!session) throw new AppError('Session not found', 404);
     const file = (await this.file(sessionId, reviewId, finding.path)).file ?? undefined;
     const current = await this.capture(sessionId).catch(() => undefined);
-    const freshness: ReviewHandoff['freshness'] = current
-      ? review.fromRevision ===
-          (review.scope === 'session' ? current.capture.baseline : current.capture.working) &&
-        review.toRevision === current.capture.current
-        ? 'current'
-        : 'outdated'
-      : 'unknown';
+    const freshness = reviewFreshness(review, current?.capture);
     const checkedAt = Date.now();
     const reader = current
       ? await current.repository.textSnapshot(current.capture.current).catch(() => null)
@@ -608,10 +584,7 @@ export class CodeReviewService {
             outputTruncated:
               check.outputTruncated || check.stdout.length > 1000 || check.stderr.length > 1000,
           },
-          !!current &&
-            source.fromRevision ===
-              (source.scope === 'session' ? current.capture.baseline : current.capture.working) &&
-            source.toRevision === current.capture.current &&
+          reviewFreshness(source, current?.capture) === 'current' &&
             check.revisionState === 'unchanged',
         );
       } catch {
@@ -685,20 +658,6 @@ export class CodeReviewService {
       ...result,
     };
   }
-  private savedWalkthrough(raw: string | null) {
-    try {
-      return raw ? reviewWalkthroughSchema.parse(JSON.parse(raw)) : null;
-    } catch {
-      return null;
-    }
-  }
-  private savedProgress(raw: string | null) {
-    try {
-      return raw ? walkthroughProgressSchema.parse(JSON.parse(raw)) : { position: 0, seen: [] };
-    } catch {
-      return { position: 0, seen: [] };
-    }
-  }
   progress(sessionId: string, reviewId: string, input: UpdateWalkthroughProgress) {
     const request = updateWalkthroughProgressSchema.parse(input);
     this.ownedRun(sessionId, reviewId);
@@ -709,7 +668,7 @@ export class CodeReviewService {
         .where(and(eq(codeReviews.id, reviewId), eq(codeReviews.sessionId, sessionId)))
         .get();
       if (!review) throw new AppError('Review not found', 404);
-      const tour = this.savedWalkthrough(review.walkthrough);
+      const tour = savedWalkthrough(review.walkthrough);
       if (!tour || review.status !== 'completed')
         throw new AppError(
           'This review has no saved walkthrough. Review again to generate one.',
@@ -717,7 +676,7 @@ export class CodeReviewService {
         );
       if (request.action !== 'reset' && request.position >= tour.length)
         throw new AppError('Walkthrough stop not found', 400);
-      const progress = this.savedProgress(review.walkthroughProgress);
+      const progress = savedProgress(review.walkthroughProgress);
       if (request.action === 'reset') {
         progress.position = 0;
         progress.seen = [];
@@ -735,9 +694,13 @@ export class CodeReviewService {
     this.notify(sessionId);
     return result;
   }
-  async walkthroughQuestion(sessionId: string, reviewId: string, position: number) {
+  async walkthroughQuestion(
+    sessionId: string,
+    reviewId: string,
+    position: number,
+  ): Promise<WalkthroughQuestion> {
     const review = this.ownedRun(sessionId, reviewId);
-    const tour = this.savedWalkthrough(review.walkthrough);
+    const tour = savedWalkthrough(review.walkthrough);
     const stop = tour?.[position];
     if (!stop || review.status !== 'completed')
       throw new AppError('Walkthrough stop not found', 400);
@@ -745,13 +708,7 @@ export class CodeReviewService {
     if (!session || ['merged', 'discarded', 'archived'].includes(session.status))
       throw new AppError('Reactivate this session before asking about a section.', 400);
     const current = await this.capture(sessionId).catch(() => undefined);
-    const freshness = current
-      ? review.toRevision === current.capture.current &&
-        review.fromRevision ===
-          (review.scope === 'session' ? current.capture.baseline : current.capture.working)
-        ? ('current' as const)
-        : ('outdated' as const)
-      : ('unknown' as const);
+    const freshness = reviewFreshness(review, current?.capture);
     const sources = [];
     for (const anchor of stop.excerpts.slice(0, 3)) {
       const file = (await this.file(sessionId, reviewId, anchor.path)).file;
@@ -811,7 +768,7 @@ export class CodeReviewService {
     const { session, repository, capture } = await this.capture(sessionId);
     if (!canMutateWorkspace(session.status))
       throw new AppError('Stop the active turn before verification.', 409);
-    const fromRevision = scope === 'session' ? capture.baseline : capture.working;
+    const { fromRevision } = reviewRevisions(capture, scope);
     const files = await repository.diff(fromRevision, capture.current);
     if (files.length > 100 || files.reduce((sum, file) => sum + file.diff.length, 0) > 60000)
       throw new AppError('The verification target is too large. Narrow the changes first.', 400);
@@ -835,24 +792,6 @@ export class CodeReviewService {
       })
       .run();
     return id;
-  }
-  private savedEvidenceIds(raw: string | null) {
-    try {
-      const value: unknown = JSON.parse(raw ?? '[]');
-      return Array.isArray(value)
-        ? value.filter((id): id is string => typeof id === 'string').slice(0, 5)
-        : [];
-    } catch {
-      return [];
-    }
-  }
-  private savedContext(raw: string | null) {
-    if (!raw) return null;
-    try {
-      return reviewContextReportSchema.parse(JSON.parse(raw));
-    } catch {
-      return null;
-    }
   }
   private ownedRun(sessionId: string, reviewId: string) {
     const row = this.db

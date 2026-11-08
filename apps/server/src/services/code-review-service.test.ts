@@ -373,21 +373,53 @@ it('refuses active sessions and empty scopes without starting an agent', async (
   expect(startSession).not.toHaveBeenCalled();
 });
 it('paginates saved review history without losing findings or skipping equal timestamps', async () => {
-  const { id } = await service.start(sessionId, { scope: 'working' });
-  await finished(id);
-  const source = db.select().from(codeReviews).where(eq(codeReviews.id, id)).get()!;
-  for (let index = 1; index <= 25; index++)
-    db.insert(codeReviews)
-      .values({ ...source, id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(index).padStart(12, '0')}` })
-      .run();
-  const first = await service.list(sessionId);
+  const ids = Array.from(
+    { length: 26 },
+    (_, index) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(index).padStart(12, '0')}`,
+  );
+  const startedAt = Date.now();
+  db.insert(codeReviews)
+    .values(
+      ids.map((id) => ({
+        id,
+        sessionId,
+        providerId: 'custom-acp',
+        modelId: 'session-model',
+        scope: 'working' as const,
+        fromRevision: 'saved-baseline',
+        toRevision: 'saved-review',
+        status: 'completed' as const,
+        startedAt,
+      })),
+    )
+    .run();
+  const reviewId = ids[0]!;
+  db.insert(codeReviewFindings)
+    .values({
+      ...result.findings[0]!,
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001',
+      reviewId,
+      severity: 'medium',
+    })
+    .run();
+  const savedReviews = new CodeReviewService(
+    db,
+    { open: () => Promise.reject(new Error('Checkout is unavailable')) },
+    providers as unknown as ProviderRegistry,
+    { startSession } as unknown as AgentDriver,
+    events,
+  );
+  const first = await savedReviews.list(sessionId);
   expect(first.runs).toHaveLength(20);
   expect(first.nextCursor).not.toBeNull();
-  const next = await service.list(sessionId, first.nextCursor!);
+  const next = await savedReviews.list(sessionId, first.nextCursor!);
   expect(next.runs).toHaveLength(6);
   expect(next.nextCursor).toBeNull();
-  expect(new Set([...first.runs, ...next.runs].map((run) => run.id)).size).toBe(26);
-  expect([...first.runs, ...next.runs].find((run) => run.id === id)?.findings).toHaveLength(1);
+  expect([...first.runs, ...next.runs].map((run) => run.id)).toEqual(ids.toReversed());
+  expect(next.runs.find((run) => run.id === reviewId)).toMatchObject({
+    freshness: 'unknown',
+    findings: [expect.objectContaining({ title: 'Missing guard' })],
+  });
 });
 it('keeps session reviews current after committing identical contents and detects session-baseline changes', async () => {
   const { id } = await service.start(sessionId, { scope: 'session' });

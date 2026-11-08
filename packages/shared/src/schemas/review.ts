@@ -34,3 +34,6 @@ export type ReviewResponse = Omit<z.infer<typeof reviewResponseSchema>, 'files'>
 
 export const reviewDiffScopeSchema = z.enum(['working', 'session']);
 export type ReviewDiffScope = z.infer<typeof reviewDiffScopeSchema>;
+
+export const reviewFreshnessSchema = z.enum(['current', 'outdated', 'unknown']);
+export type ReviewFreshness = z.infer<typeof reviewFreshnessSchema>;

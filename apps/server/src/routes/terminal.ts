@@ -1,12 +1,64 @@
 import { AppError } from '../errors/app-error.js';
 import type { FastifyPluginCallback } from 'fastify';
 import { randomUUID } from 'node:crypto';
+import type { InteractiveTerminalService } from '../services/terminal-service.js';
+
 interface WebSocketLike {
   readyState: number;
   OPEN: number;
   send(data: string): void;
   close(): void;
   on(event: string, listener: (...args: any[]) => void): void;
+}
+
+type TerminalInput =
+  | { type: 'input'; data: string }
+  | { type: 'resize'; cols: number; rows: number }
+  | { type: 'restart' }
+  | { type: 'unsupported' };
+
+function readTerminalInput(text: string): TerminalInput {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return { type: 'input', data: text };
+
+  let message: { type?: unknown; data?: unknown; cols?: unknown; rows?: unknown };
+  try {
+    message = JSON.parse(trimmed);
+  } catch {
+    return { type: 'input', data: text };
+  }
+  if ((message.type === 'input' || message.type === 'data') && typeof message.data === 'string')
+    return { type: 'input', data: message.data };
+  if (
+    message.type === 'resize' &&
+    typeof message.cols === 'number' &&
+    typeof message.rows === 'number'
+  ) {
+    return { type: 'resize', cols: message.cols, rows: message.rows };
+  }
+  if (message.type === 'restart') return { type: 'restart' };
+  return { type: 'unsupported' };
+}
+
+function bindTerminalOutput(
+  socket: WebSocketLike,
+  terminal: InteractiveTerminalService,
+  key: string,
+  onOutput?: () => void,
+): () => void {
+  const onData = (data: string) => {
+    if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ type: 'data', data }));
+    onOutput?.();
+  };
+  const onExit = (exit: { code: number | null; signal: string | null }) => {
+    if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ type: 'exit', ...exit }));
+  };
+  terminal.on(`data:${key}`, onData);
+  terminal.on(`exit:${key}`, onExit);
+  return () => {
+    terminal.off(`data:${key}`, onData);
+    terminal.off(`exit:${key}`, onExit);
+  };
 }
 
 export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -19,25 +71,21 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const termId = query.termId || '1';
       const terminalKey = `${sessionId}:${termId}`;
 
-      // 1. Resolve session and workspace directory
       let cwd: string;
       try {
         cwd = await fastify.services.workspaces.sessionDirectory(sessionId, 'terminal');
       } catch (error) {
         if (!(error instanceof AppError) || error.statusCode !== 404) throw error;
-        socket.send(JSON.stringify({ type: 'error', error: error.message }));
-        socket.close();
+        if (socket.readyState === socket.OPEN) {
+          socket.send(JSON.stringify({ type: 'error', error: error.message }));
+          socket.close();
+        }
         return;
       }
+      if (socket.readyState !== socket.OPEN) return;
 
-      // 2. Initialize or retrieve terminal session
-      fastify.terminalService.getOrCreateTerminal(terminalKey, cwd);
-
-      const defaultShell =
-        process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : '/bin/bash');
-      const shellName = defaultShell.split('/').pop()?.split('\\').pop() || 'sh';
-
-      // 3. Send initial metadata and history scrollback
+      const terminal = fastify.terminalService.getOrCreateTerminal(terminalKey, cwd);
+      const shellName = terminal.shell.split(/[\\/]/).pop() || 'sh';
       socket.send(JSON.stringify({ type: 'init', shell: shellName, cwd, termId }));
 
       const history = fastify.terminalService.getHistory(terminalKey);
@@ -45,7 +93,6 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         socket.send(JSON.stringify({ type: 'data', data: history }));
       }
 
-      // 4. Stream terminal data to WebSocket
       let commandMayChangeWorkspace = false;
       let workspaceChangeTimer: ReturnType<typeof setTimeout> | null = null;
       const markCommandInput = (data: string) => {
@@ -66,85 +113,38 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }, 300);
       };
 
-      const onData = (data: string) => {
-        if (socket.readyState === socket.OPEN) {
-          socket.send(JSON.stringify({ type: 'data', data }));
-        }
-        scheduleWorkspaceChange();
-      };
-
-      const onExit = (exitInfo: { code: number | null; signal: string | null }) => {
-        if (socket.readyState === socket.OPEN) {
-          socket.send(
-            JSON.stringify({
-              type: 'exit',
-              code: exitInfo.code,
-              signal: exitInfo.signal,
-            }),
-          );
-        }
-      };
-
-      fastify.terminalService.on(`data:${terminalKey}`, onData);
-      fastify.terminalService.on(`exit:${terminalKey}`, onExit);
-
-      // 5. Handle incoming WebSocket input
+      const unbindOutput = bindTerminalOutput(
+        socket,
+        fastify.terminalService,
+        terminalKey,
+        scheduleWorkspaceChange,
+      );
       socket.on('message', (rawMessage: Buffer | string) => {
+        const message = readTerminalInput(rawMessage.toString());
         try {
-          const text = rawMessage.toString();
-          const trimmed = text.trim();
-
-          // Try parsing JSON messages safely
-          if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-            try {
-              const parsed = JSON.parse(trimmed) as {
-                type?: string;
-                data?: string;
-                cols?: number;
-                rows?: number;
-              };
-
-              if (
-                (parsed.type === 'input' || parsed.type === 'data') &&
-                typeof parsed.data === 'string'
-              ) {
-                markCommandInput(parsed.data);
-                fastify.terminalService.writeInput(terminalKey, parsed.data);
-                return;
-              }
-
-              if (
-                parsed.type === 'resize' &&
-                typeof parsed.cols === 'number' &&
-                typeof parsed.rows === 'number'
-              ) {
-                fastify.terminalService.resizeTerminal(terminalKey, parsed.cols, parsed.rows);
-                return;
-              }
-
-              if (parsed.type === 'restart') {
-                fastify.terminalService.spawnTerminal(terminalKey, cwd);
-                socket.send(
-                  JSON.stringify({
-                    type: 'data',
-                    data: '\r\n\x1b[1;33m● Shell restarted\x1b[0m\r\n\r\n',
-                  }),
-                );
-                return;
-              }
-
-              // Any other JSON message should be ignored (never sent to shell stdin)
-              return;
-            } catch {
-              // Not valid JSON, fall through to raw string
-            }
+          switch (message.type) {
+            case 'input':
+              markCommandInput(message.data);
+              fastify.terminalService.writeInput(terminalKey, message.data);
+              break;
+            case 'resize':
+              fastify.terminalService.resizeTerminal(terminalKey, message.cols, message.rows);
+              break;
+            case 'restart':
+              fastify.terminalService.spawnTerminal(terminalKey, cwd);
+              socket.send(
+                JSON.stringify({
+                  type: 'data',
+                  data: '\r\n\x1b[1;33m● Shell restarted\x1b[0m\r\n\r\n',
+                }),
+              );
+              break;
+            case 'unsupported':
+              // Workspace terminals treat valid JSON objects as protocol frames.
+              break;
           }
-
-          // Fallback to raw string input
-          markCommandInput(text);
-          fastify.terminalService.writeInput(terminalKey, text);
-        } catch {
-          // Ignored
+        } catch (error) {
+          req.log.debug({ err: error }, 'Terminal input failed');
         }
       });
 
@@ -156,8 +156,7 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             sessionId,
           });
         }
-        fastify.terminalService.off(`data:${terminalKey}`, onData);
-        fastify.terminalService.off(`exit:${terminalKey}`, onExit);
+        unbindOutput();
       });
     },
   );
@@ -207,26 +206,7 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const cwd = process.cwd();
       const abortController = new AbortController();
 
-      const onData = (data: string) => {
-        if (socket.readyState === socket.OPEN) {
-          socket.send(JSON.stringify({ type: 'data', data }));
-        }
-      };
-
-      const onExit = (exitInfo: { code: number | null; signal: string | null }) => {
-        if (socket.readyState === socket.OPEN) {
-          socket.send(
-            JSON.stringify({
-              type: 'exit',
-              code: exitInfo.code,
-              signal: exitInfo.signal,
-            }),
-          );
-        }
-      };
-
-      fastify.terminalService.on(`data:${terminalKey}`, onData);
-      fastify.terminalService.on(`exit:${terminalKey}`, onExit);
+      const unbindOutput = bindTerminalOutput(socket, fastify.terminalService, terminalKey);
 
       void coordinator
         .runTerminalAuth(
@@ -234,6 +214,7 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           methodId,
           (command, args, env, signal) =>
             new Promise<{ exitCode: number }>((resolve, reject) => {
+              signal.throwIfAborted();
               if (socket.readyState === socket.OPEN) {
                 socket.send(
                   JSON.stringify({ type: 'init', shell: command, cwd, termId: methodId }),
@@ -247,13 +228,16 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   env,
                   cwd,
                 );
-                terminal.process.once('exit', (code) => resolve({ exitCode: code ?? 1 }));
-                terminal.process.once('error', reject);
-                signal.addEventListener(
-                  'abort',
-                  () => fastify.terminalService.killTerminal(terminalKey),
-                  { once: true },
-                );
+                const abort = () => fastify.terminalService.killTerminal(terminalKey);
+                signal.addEventListener('abort', abort, { once: true });
+                terminal.process.once('exit', (code) => {
+                  signal.removeEventListener('abort', abort);
+                  resolve({ exitCode: code ?? 1 });
+                });
+                terminal.process.once('error', (error) => {
+                  signal.removeEventListener('abort', abort);
+                  reject(error);
+                });
               } catch (error) {
                 reject(error);
               }
@@ -277,46 +261,25 @@ export const terminalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
 
       socket.on('message', (rawMessage: Buffer | string) => {
+        const text = rawMessage.toString();
+        const message = readTerminalInput(text);
         try {
-          const text = rawMessage.toString();
-          const trimmed = text.trim();
-          if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-            try {
-              const parsed = JSON.parse(trimmed) as {
-                type?: string;
-                data?: string;
-                cols?: number;
-                rows?: number;
-              };
-              if (
-                (parsed.type === 'input' || parsed.type === 'data') &&
-                typeof parsed.data === 'string'
-              ) {
-                fastify.terminalService.writeInput(terminalKey, parsed.data);
-                return;
-              }
-              if (
-                parsed.type === 'resize' &&
-                typeof parsed.cols === 'number' &&
-                typeof parsed.rows === 'number'
-              ) {
-                fastify.terminalService.resizeTerminal(terminalKey, parsed.cols, parsed.rows);
-                return;
-              }
-            } catch {
-              // fallback
-            }
-          }
-          fastify.terminalService.writeInput(terminalKey, text);
-        } catch {
-          // Ignored
+          if (message.type === 'resize')
+            fastify.terminalService.resizeTerminal(terminalKey, message.cols, message.rows);
+          else
+            // Auth terminals accept pasted JSON, including objects that are not protocol frames.
+            fastify.terminalService.writeInput(
+              terminalKey,
+              message.type === 'input' ? message.data : text,
+            );
+        } catch (error) {
+          req.log.debug({ err: error }, 'Authentication terminal input failed');
         }
       });
 
       socket.on('close', () => {
+        unbindOutput();
         abortController.abort();
-        fastify.terminalService.off(`data:${terminalKey}`, onData);
-        fastify.terminalService.off(`exit:${terminalKey}`, onExit);
         fastify.terminalService.killTerminal(terminalKey);
       });
     },
