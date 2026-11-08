@@ -79,6 +79,7 @@
         "packages/core/src/agent/error-redaction.ts",
         "packages/core/src/agent/errors.ts",
         "packages/core/src/agent/index.ts",
+        "packages/core/src/agent/isolated-text.ts",
         "packages/core/src/agent/operation-diagnostics.ts",
         "packages/core/src/agent/review-check.ts",
         "packages/core/src/agent/review-continuity.ts",

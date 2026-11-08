@@ -1,5 +1,5 @@
 import { expect, it, vi, afterEach } from 'vite-plus/test';
-import { access } from 'node:fs/promises';
+import { access, mkdir } from 'node:fs/promises';
 import { generateGitText, parseGitTextOutput } from './text-generation.js';
 import type {
   AgentDriver,
@@ -125,7 +125,7 @@ it('removes the temporary directory when provider startup fails', async () => {
   );
   await expect(access(cwd)).rejects.toThrow();
 });
-it('closes a helper that finishes startup after its request timed out', async () => {
+it('closes a helper and removes files created after its request timed out', async () => {
   const f = fixture();
   let started!: () => void;
   let finish!: (session: AgentSession) => void;
@@ -146,6 +146,8 @@ it('closes a helper that finishes startup after its request timed out', async ()
   const failure = expect(result).rejects.toThrow('timed out');
   await ready;
   await failure;
+  const { cwd } = f.startSession.mock.calls[0]![2];
+  await mkdir(cwd);
   finish({
     close: async () => {
       closed();
@@ -154,6 +156,9 @@ it('closes a helper that finishes startup after its request timed out', async ()
   } as unknown as AgentSession);
   await closedReady;
   expect(f.prompt).not.toHaveBeenCalled();
+  await vi.waitFor(async () => {
+    await expect(access(cwd)).rejects.toThrow();
+  });
 });
 it('rejects oversized responses without treating truncated JSON as a draft', async () => {
   const f = fixture('{"subject":"Change","body":"' + 'x'.repeat(40_000) + '"}');

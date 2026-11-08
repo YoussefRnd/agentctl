@@ -77,7 +77,6 @@ it.each(['codex-acp', 'claude-agent-acp', 'cursor-acp', 'uvx-agent', 'custom-com
       mcpServers: [],
       additionalDirectories: [],
     });
-    expect(params.cwd).toContain('agentctl-review-');
     expect(
       await callbacks.onRequestPermission({ permissionId: 'x', toolCall: { name: 'write' } }),
     ).toEqual({ allowed: false });

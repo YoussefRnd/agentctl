@@ -1,7 +1,5 @@
 import { normalizeReviewWalkthrough } from './review-walkthrough.js';
-import { mkdtemp, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import { parseAgentJson, runIsolatedAgentText } from './isolated-text.js';
 import {
   codeReviewOutputSchema,
   type CodeReviewOutput,
@@ -10,7 +8,7 @@ import {
   type ReviewPriorFinding,
 } from '@agentctl/shared';
 import type { ReviewContextBundle } from '../repository/review-context.js';
-import type { AgentDriver, AgentSession, AgentSessionOptions } from './types.js';
+import type { AgentDriver, AgentSessionOptions } from './types.js';
 
 /** Bound input explicitly rather than silently reviewing a partial diff. */
 export function buildCodeReviewPrompt(
@@ -57,16 +55,11 @@ export function buildCodeReviewPrompt(
   ].join('\n\n');
 }
 
+class OutOfScopeFindingError extends Error {}
+
 /** Reject invented locations and duplicate findings before saving a successful review. */
 export function parseCodeReviewOutput(output: string, files: ReviewFile[]): CodeReviewOutput {
-  const result = codeReviewOutputSchema.parse(
-    JSON.parse(
-      output
-        .trim()
-        .replace(/^```(?:json)?\s*\n?/, '')
-        .replace(/\n?```$/, ''),
-    ),
-  );
+  const result = codeReviewOutputSchema.parse(parseAgentJson(output));
   for (const finding of result.findings) {
     const file = files.find((candidate) => candidate.path === finding.path);
     const hunks = file?.diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm);
@@ -77,7 +70,7 @@ export function parseCodeReviewOutput(output: string, files: ReviewFile[]): Code
       if (finding.line >= start && finding.line < start + count) valid = true;
     }
     if (!valid)
-      throw new Error(
+      throw new OutOfScopeFindingError(
         'The reviewer returned a finding outside the captured diff. Run the review again.',
       );
   }
@@ -105,88 +98,30 @@ export async function reviewCapturedChanges(
   signal: AbortSignal,
   timeoutMs = 180_000,
 ): Promise<CodeReviewOutput> {
-  const cwd = await mkdtemp(path.join(os.tmpdir(), 'agentctl-review-'));
-  let session: AgentSession | undefined;
-  let expired = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let output = '';
-  let overflow = false;
-  const abort = () => {
-    expired = true;
-  };
-  signal.addEventListener('abort', abort, { once: true });
-  let rejectAbort: (() => void) | undefined;
-  const cancelled = new Promise<never>((_, reject) => {
-    rejectAbort = () => {
-      expired = true;
-      reject(new Error('Review cancelled.'));
-    };
-    signal.addEventListener('abort', rejectAbort, { once: true });
-    if (signal.aborted) rejectAbort();
+  const result = await runIsolatedAgentText({
+    driver,
+    launch,
+    options,
+    prompt,
+    outputLimit: 70_000,
+    timeoutMs,
+    signal,
   });
-  const operation = (async () => {
-    if (signal.aborted) throw new Error('Review cancelled.');
-    const started = await driver.startSession(
-      launch.command,
-      launch.args,
-      {
-        ...options,
-        cwd,
-        env: launch.env,
-        intent: { kind: 'new' },
-        mcpServers: [],
-        additionalDirectories: [],
-        mcpGateway: undefined,
-      },
-      {
-        onRequestPermission: async () => ({ allowed: false }),
-        onRequestElicitation: async () => ({ action: 'cancel' }),
-        onUpdate(event) {
-          if (event.type !== 'text' || overflow) return;
-          output = event.operation === 'replace' ? event.text : output + event.text;
-          if (output.length > 70_000) {
-            overflow = true;
-            output = '';
-          }
-        },
-      },
-    );
-    session = started;
-    if (expired) {
-      await started.close().catch(() => undefined);
-      await rm(cwd, { recursive: true, force: true });
+  switch (result.status) {
+    case 'cancelled':
       throw new Error('Review cancelled.');
-    }
-    const result = await started.prompt(prompt);
-    if (overflow) throw new Error('The reviewer exceeded the output limit.');
-    if (result.error) throw new Error(result.error.message);
-    if (result.stopReason !== 'end_turn')
-      throw new Error(`Review stopped (${result.stopReason}). Run it again.`);
-    try {
-      return parseCodeReviewOutput(output, files);
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('outside the captured diff'))
-        throw error;
-      throw new Error('The provider returned an invalid review. Run the review again.');
-    }
-  })();
-  try {
-    return await Promise.race([
-      operation,
-      cancelled,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          expired = true;
-          reject(new Error('Review timed out. Run it again.'));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    expired = true;
-    clearTimeout(timer);
-    signal.removeEventListener('abort', abort);
-    if (rejectAbort) signal.removeEventListener('abort', rejectAbort);
-    if (session) await session.close().catch(() => undefined);
-    await rm(cwd, { recursive: true, force: true });
+    case 'timed_out':
+      throw new Error('Review timed out. Run it again.');
+    case 'output_limit':
+      throw new Error('The reviewer exceeded the output limit.');
+    case 'stopped':
+      throw new Error(`Review stopped (${result.reason}). Run it again.`);
+    case 'completed':
+      try {
+        return parseCodeReviewOutput(result.output, files);
+      } catch (error) {
+        if (error instanceof OutOfScopeFindingError) throw error;
+        throw new Error('The provider returned an invalid review. Run the review again.');
+      }
   }
 }

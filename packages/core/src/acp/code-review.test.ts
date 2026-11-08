@@ -2,6 +2,7 @@ import { collectReviewContext } from '../repository/review-context.js';
 import * as v1 from '@agentclientprotocol/sdk';
 import * as v2 from '@agentclientprotocol/sdk/experimental/v2';
 import { EventEmitter } from 'node:events';
+import { access } from 'node:fs/promises';
 import type { ChildProcess, spawn } from 'node:child_process';
 import { expect, it, vi } from 'vite-plus/test';
 import { EMPTY_AGENT_FEATURES, type ReviewFile } from '@agentctl/shared';
@@ -206,10 +207,10 @@ it.each(
       }
       expect(created).toHaveBeenCalledWith(
         expect.objectContaining({
-          cwd: expect.stringContaining('agentctl-review-'),
           mcpServers: [],
         }),
       );
+      await expect(access(created.mock.calls[0]![0].cwd)).rejects.toThrow();
     } finally {
       close();
     }
