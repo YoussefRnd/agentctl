@@ -45,6 +45,7 @@
         "packages/api-client/src/stream/coalesce-events.ts",
         "packages/api-client/src/stream/session-engine.ts",
         "packages/api-client/src/stream/sse-decoder.ts",
+        "packages/api-client/src/stream/sse-transport.ts",
         "packages/api-client/src/stream/state-stream.ts"
       ]
     },

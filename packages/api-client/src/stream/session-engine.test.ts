@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vite-plus/test'
 import { SessionEngine } from './session-engine.js';
 import type { SessionEventRow } from '@agentctl/shared';
 
-// Helper class to mock ReadableStream
 class MockStreamController {
   private controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   public stream: ReadableStream<Uint8Array>;
@@ -70,7 +69,6 @@ describe('SessionEngine', () => {
 
   it('should connect and update status', async () => {
     engine.connect();
-    // Wait for the async connection logic to resolve fetch
     await vi.advanceTimersByTimeAsync(0);
 
     expect(fetchMock).toHaveBeenCalledWith(

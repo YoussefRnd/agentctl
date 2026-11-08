@@ -14,6 +14,7 @@ test('owns authenticated state streaming and ignores reader results after dispos
   let signal!: AbortSignal;
   const releaseLock = vi.fn();
   const reader = {
+    cancel: vi.fn(async () => {}),
     read: vi.fn(
       () =>
         new Promise((resolve) => {
@@ -53,6 +54,38 @@ test('owns authenticated state streaming and ignores reader results after dispos
   await vi.waitFor(() => expect(releaseLock).toHaveBeenCalledOnce());
   expect(changed).toHaveBeenCalledOnce();
   expect(fetch).toHaveBeenCalledOnce();
+});
+
+test('cancels a pending body read on disposal and releases the lock', async () => {
+  const cancel = vi.fn();
+  const body = new ReadableStream<Uint8Array>({ cancel });
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body)));
+  const changed = vi.fn();
+  const stop = subscribeStateChanges(changed);
+  await vi.waitFor(() => expect(body.locked).toBe(true));
+
+  stop();
+
+  await vi.waitFor(() => expect(body.locked).toBe(false));
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(changed).not.toHaveBeenCalled();
+});
+
+test('dispatches a complete CR-delimited frame at EOF and discards a partial one', async () => {
+  vi.useFakeTimers();
+  const responses = [new Response('event: state_ready\r\r'), new Response('event: state_ready\r')];
+  const fetch = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()));
+  vi.stubGlobal('fetch', fetch);
+  const changed = vi.fn();
+  const stop = subscribeStateChanges(changed);
+
+  await vi.advanceTimersByTimeAsync(0);
+  expect(changed).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(changed).toHaveBeenCalledOnce();
+
+  stop();
 });
 
 test('settles a reconnect wait on disposal without opening another connection', async () => {

@@ -4,7 +4,8 @@ import {
   stateChangeEventSchema,
   type StateChangeEvent,
 } from '@agentctl/shared';
-import { SseDecoder, type SseFrame } from './sse-decoder.js';
+import type { SseFrame } from './sse-decoder.js';
+import { createSseAttempt, readSseFrames, waitToReconnect } from './sse-transport.js';
 function processStateFrame({ event, data }: SseFrame, onChange: (event: StateChangeEvent) => void) {
   if (event === 'state_ready') {
     onChange({
@@ -23,14 +24,11 @@ function processStateFrame({ event, data }: SseFrame, onChange: (event: StateCha
 }
 /** Subscribe once per host/cache lifetime; disposal aborts I/O and settles reconnect waits. */
 export function subscribeStateChanges(onChange: (event: StateChangeEvent) => void): () => void {
-  let active = true;
-  let controller: AbortController | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let finishReconnectWait: (() => void) | null = null;
+  const lifetime = new AbortController();
 
   const connect = async () => {
-    while (active) {
-      controller = new AbortController();
+    while (!lifetime.signal.aborted) {
+      const { signal, dispose } = createSseAttempt(lifetime.signal);
       try {
         const headers: Record<string, string> = { Accept: 'text/event-stream' };
         const capability = getDesktopCapability();
@@ -39,50 +37,22 @@ export function subscribeStateChanges(onChange: (event: StateChangeEvent) => voi
         const response = await fetch(`${getApiBaseUrl()}/api/events/stream`, {
           headers,
           credentials: 'include',
-          signal: controller.signal,
+          signal,
         });
+        if (signal.aborted) break;
         if (!response.ok) throw new Error(`State stream failed: ${String(response.status)}`);
-        if (!active) break;
-        const reader = response.body?.getReader();
-        if (!reader) throw new Error('State stream response has no body');
-
-        const decoder = new TextDecoder();
-        const frames = new SseDecoder();
-        try {
-          while (active) {
-            const { value, done } = await reader.read();
-            if (done || !active) break;
-            for (const frame of frames.push(decoder.decode(value, { stream: true }))) {
-              if (active) processStateFrame(frame, onChange);
-            }
-          }
-        } finally {
-          reader.releaseLock();
-        }
+        if (!response.body) throw new Error('State stream response has no body');
+        await readSseFrames(response.body, signal, (frame) => processStateFrame(frame, onChange));
       } catch (error) {
-        if (!active || (error instanceof Error && error.name === 'AbortError')) return;
+        if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
       } finally {
-        controller?.abort();
+        dispose();
       }
 
-      if (active) {
-        await new Promise<void>((resolve) => {
-          finishReconnectWait = resolve;
-          reconnectTimer = setTimeout(() => {
-            reconnectTimer = null;
-            finishReconnectWait = null;
-            resolve();
-          }, 2_000);
-        });
-      }
+      await waitToReconnect(lifetime.signal);
     }
   };
 
   void connect();
-  return () => {
-    active = false;
-    controller?.abort();
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    finishReconnectWait?.();
-  };
+  return () => lifetime.abort();
 }

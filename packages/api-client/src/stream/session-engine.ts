@@ -1,5 +1,6 @@
 import { coalesceBufferedEvents } from './coalesce-events.js';
-import { SseDecoder, type SseFrame } from './sse-decoder.js';
+import type { SseFrame } from './sse-decoder.js';
+import { createSseAttempt, readSseFrames, waitToReconnect } from './sse-transport.js';
 import {
   sessionEventSnapshotSchema,
   sessionEventRowSchema,
@@ -23,14 +24,10 @@ export interface SessionEngineOptions {
 }
 
 export class SessionEngine {
-  private active = false;
   private isConnected = false;
   private lastEventId: number | null = null;
   private lastChangeSequence: number | null = null;
-  private abortController: AbortController | null = null;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-  private resolveReconnectWait: (() => void) | null = null;
-  private runId = 0;
+  private connection?: AbortController;
 
   private buffer: SessionEventRow[] = [];
   private flushTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -39,46 +36,23 @@ export class SessionEngine {
   constructor(private options: SessionEngineOptions) {}
 
   public connect(lastEventId?: number) {
-    if (this.active) return;
+    if (this.connection) return;
+    if (lastEventId !== undefined) this.lastEventId = lastEventId;
 
-    if (lastEventId !== undefined) {
-      this.lastEventId = lastEventId;
-    }
-
-    this.active = true;
+    this.connection = new AbortController();
     this.isConnected = false;
-    const runId = ++this.runId;
-    void this.startStreaming(runId);
+    void this.startStreaming(this.connection.signal);
   }
 
   public disconnect() {
-    this.active = false;
-    ++this.runId;
-    this.clearReconnectTimeout();
-
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
-
+    const connection = this.connection;
+    this.connection = undefined;
+    connection?.abort();
     this.handleDisconnect();
   }
 
   public getIsConnected() {
     return this.isConnected;
-  }
-
-  private readActive(runId: number): boolean {
-    return this.active && this.runId === runId;
-  }
-
-  private clearReconnectTimeout() {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-    this.resolveReconnectWait?.();
-    this.resolveReconnectWait = null;
   }
 
   private flushBufferedEvents() {
@@ -105,10 +79,9 @@ export class SessionEngine {
     }
   }
 
-  private async startStreaming(runId: number) {
-    while (this.readActive(runId)) {
-      const controller = new AbortController();
-      this.abortController = controller;
+  private async startStreaming(lifetime: AbortSignal) {
+    while (!lifetime.aborted) {
+      const { signal, dispose } = createSseAttempt(lifetime);
 
       try {
         let url = this.options.sseUrl;
@@ -138,11 +111,11 @@ export class SessionEngine {
 
         const response = await fetch(url, {
           headers,
-          signal: controller.signal,
+          signal,
           credentials: 'include',
         });
 
-        if (!this.readActive(runId)) break;
+        if (lifetime.aborted) break;
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${String(response.status)}`);
         }
@@ -150,31 +123,17 @@ export class SessionEngine {
         this.isConnected = true;
         this.options.onStatusChange(true);
 
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('No readable stream reader in response body');
-        }
-
-        const decoder = new TextDecoder();
-        const frames = new SseDecoder();
-        while (this.readActive(runId)) {
-          const { value, done } = await reader.read();
-          if (done || !this.readActive(runId)) break;
-          for (const frame of frames.push(decoder.decode(value, { stream: true }))) {
-            if (!this.readActive(runId)) break;
-            this.dispatchEvent(frame);
-          }
-        }
-        if (this.readActive(runId)) for (const frame of frames.finish()) this.dispatchEvent(frame);
+        if (!response.body) throw new Error('No readable stream reader in response body');
+        await readSseFrames(response.body, signal, (frame) => this.dispatchEvent(frame));
       } catch (error: unknown) {
         const err = error as { name?: string; message?: string };
-        if (err.name === 'AbortError' || !this.readActive(runId)) {
+        if (err.name === 'AbortError' || lifetime.aborted) {
           break;
         }
 
         this.options.onError?.(err.message ?? 'SSE connection error');
       } finally {
-        if (this.runId === runId) {
+        if (!lifetime.aborted) {
           this.flushBufferedEvents();
           if (this.isConnected) {
             this.isConnected = false;
@@ -182,22 +141,10 @@ export class SessionEngine {
             this.options.onStreamingChange(null);
           }
         }
-        controller.abort();
-        if (this.abortController === controller) {
-          this.abortController = null;
-        }
+        dispose();
       }
 
-      if (this.readActive(runId)) {
-        await new Promise<void>((resolve) => {
-          this.resolveReconnectWait = resolve;
-          this.reconnectTimeout = setTimeout(() => {
-            this.reconnectTimeout = null;
-            this.resolveReconnectWait = null;
-            resolve();
-          }, 2000);
-        });
-      }
+      await waitToReconnect(lifetime);
     }
   }
 

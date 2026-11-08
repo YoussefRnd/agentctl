@@ -164,7 +164,6 @@ export async function undoDiscardSession(sessionId: string): Promise<{ success: 
   return res.body;
 }
 
-/** Uses configured credentials and backend even when the renderer runs in native mode. */
 export async function respondToElicitation(
   sessionId: string,
   elicitationId: string,

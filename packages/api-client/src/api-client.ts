@@ -69,9 +69,7 @@ async function request(
               ? body.message
               : null;
         if (bodyMessage) detail = bodyMessage;
-      } catch {
-        // Keep HTTP status text if response is not JSON
-      }
+      } catch {}
 
       throw new ApiError(detail, response.status);
     }

@@ -118,9 +118,7 @@ export function uploadAttachment(
         const body = JSON.parse(xhr.responseText) as { error?: string; message?: string };
         if (typeof body.error === 'string') message = body.error;
         else if (typeof body.message === 'string') message = body.message;
-      } catch {
-        // keep statusText
-      }
+      } catch {}
 
       fail(new ApiError(message, xhr.status));
     };
