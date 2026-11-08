@@ -2,29 +2,20 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fixture, dependencies } from './fixtures.mjs';
 
-test('dependency-cruiser detects multi-hop contract cycles including type-only dependencies', async () => {
+test('dependency-cruiser detects workspace module cycles including type-only dependencies', async () => {
   await fixture(async ({ root, write }) => {
-    await write(
-      'packages/shared/src/a.ts',
-      "export type { B } from './b.js'; export type A = string;",
-    );
-    await write(
-      'packages/shared/src/b.ts',
-      "export type { C } from './c.js'; export type B = string;",
-    );
-    await write(
-      'packages/shared/src/c.ts',
-      "export type { A } from './a.js'; export type C = string;",
-    );
+    for (const area of ['packages/shared/src', 'packages/core/src/acp']) {
+      await write(`${area}/a.ts`, "export type { B } from './b.js'; export type A = string;");
+      await write(`${area}/b.ts`, "export type { C } from './c.js'; export type B = string;");
+      await write(`${area}/c.ts`, "export type { A } from './a.js'; export type C = string;");
+    }
     const graph = await dependencies(root);
     const cycles = graph.summary.violations.filter(
-      (item) => item.rule.name === 'contracts-no-cycles',
+      (item) => item.rule.name === 'workspace-modules-no-cycles',
     );
-    assert.equal(cycles.length, 1);
-    assert.equal(
-      graph.modules.flatMap((module) => module.dependencies).filter((edge) => edge.circular).length,
-      3,
-    );
+    assert.equal(cycles.length, 2);
+    assert.ok(cycles.some((item) => item.from.startsWith('packages/shared/src/')));
+    assert.ok(cycles.some((item) => item.from.startsWith('packages/core/src/acp/')));
   });
 });
 

@@ -236,10 +236,10 @@ export async function dependencyConfig(workspace) {
     },
   );
   forbid(
-    'contracts-no-cycles',
-    '^packages/(?:shared|api-client)/src/',
-    { path: '^packages/(?:shared|api-client)/src/', circular: true },
-    'Contracts and client modules must remain acyclic',
+    'workspace-modules-no-cycles',
+    '^(?:apps|packages)/[^/]+/src/',
+    { path: '^(?:apps|packages)/[^/]+/src/', circular: true },
+    'Workspace modules must remain acyclic',
   );
   forbid(
     'no-unresolved-internal-imports',

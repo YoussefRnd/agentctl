@@ -4,6 +4,7 @@ import { cpus, platform, release, arch, tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { evaluateDecoding, median } from './decoding-budget.mjs';
+import { repositoryFiles } from '../architecture/workspace.mjs';
 
 const workspace = resolve(import.meta.dirname, '../..');
 const [kind, destination, ...args] = process.argv.slice(2);
@@ -18,18 +19,12 @@ if (kind === 'soak' && (!Number.isInteger(seconds) || seconds < 1 || seconds > 3
 await mkdir(output, { recursive: true });
 const git = (...args) => execFileSync('git', args, { cwd: workspace, encoding: 'utf8' });
 const fingerprint = createHash('sha256');
-for (const file of [
-  ...new Set(
-    git('ls-files', '--cached', '--others', '--exclude-standard', '-z')
-      .split('\0')
-      .filter(
-        (file) =>
-          /^(apps\/server\/|packages\/(core|shared)\/src\/|packages\/core\/drizzle\/|scripts\/performance\/)/.test(
-            file,
-          ) || file === 'pnpm-lock.yaml',
-      ),
-  ),
-].sort()) {
+for (const file of (await repositoryFiles(workspace)).filter(
+  (file) =>
+    /^(apps\/server\/|packages\/(core|shared)\/src\/|packages\/core\/drizzle\/|scripts\/performance\/)/.test(
+      file,
+    ) || file === 'pnpm-lock.yaml',
+)) {
   fingerprint
     .update(file)
     .update('\0')
