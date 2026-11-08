@@ -1,17 +1,14 @@
-import { app, ipcMain } from 'electron';
+import { app } from 'electron';
+import { ipcChannels } from '../../ipcChannels';
 import { autoUpdater } from 'electron-updater';
 import type { UpdateState } from '@agentctl/shared';
-import { isTrustedSender } from '../ipc/sender';
+import { createTrustedIpcScope } from '../ipc/trustedIpc';
 import { getMainWindow } from '../windows/mainWindow';
 
 let updateState: UpdateState = { status: 'idle' };
 
-export function getUpdateState(): UpdateState {
-  return updateState;
-}
-
 function emitUpdateState(): void {
-  getMainWindow()?.webContents.send('update:state', updateState);
+  getMainWindow()?.webContents.send(ipcChannels.updateState, updateState);
 }
 
 export function setupAutoUpdater(): () => void {
@@ -71,13 +68,9 @@ export function setupAutoUpdater(): () => void {
 
 export function registerUpdateIpc(): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  ipcMain.handle('update:get-state', (event) => {
-    if (!isTrustedSender(event)) throw new Error('Unauthorized IPC sender');
-    return updateState;
-  });
-
-  const check = (event: Electron.IpcMainEvent) => {
-    if (!isTrustedSender(event)) return;
+  const { on, handle, dispose } = createTrustedIpcScope();
+  handle(ipcChannels.getUpdateState, () => updateState);
+  on(ipcChannels.checkForUpdate, () => {
     if (!app.isPackaged) {
       // Mock update state for development mode to avoid dev-updater.yml errors
       updateState = { status: 'checking' };
@@ -90,16 +83,12 @@ export function registerUpdateIpc(): () => void {
       return;
     }
     void autoUpdater.checkForUpdates().catch(() => undefined);
-  };
-  const install = (event: Electron.IpcMainEvent) => {
-    if (isTrustedSender(event) && updateState.status === 'downloaded') autoUpdater.quitAndInstall();
-  };
-  ipcMain.on('update:check', check);
-  ipcMain.on('update:install', install);
+  });
+  on(ipcChannels.installUpdate, () => {
+    if (updateState.status === 'downloaded') autoUpdater.quitAndInstall();
+  });
   return () => {
     clearTimeout(timer);
-    ipcMain.removeHandler('update:get-state');
-    ipcMain.removeListener('update:check', check);
-    ipcMain.removeListener('update:install', install);
+    dispose();
   };
 }

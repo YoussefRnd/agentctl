@@ -1,4 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron';
+import { ipcChannels } from '../../ipcChannels';
 import { isExternalUrl, isRendererNavigation } from './navigationPolicy';
 import path from 'node:path';
 import { reportDesktopPerformance } from '../performance';
@@ -24,11 +25,9 @@ export function handleDeepLink(url: string): void {
       }
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
-      mainWindow.webContents.send('deep-link', url);
+      mainWindow.webContents.send(ipcChannels.deepLink, url);
     }
-  } catch {
-    // Ignore invalid deep link URL
-  }
+  } catch {}
 }
 
 export function rendererNavigationReady(): void {
@@ -108,11 +107,11 @@ export function createMainWindow(): BrowserWindow {
   });
 
   mainWindow.on('maximize', () => {
-    mainWindow?.webContents.send('win:maximized-changed', true);
+    mainWindow?.webContents.send(ipcChannels.maximizedChanged, true);
   });
 
   mainWindow.on('unmaximize', () => {
-    mainWindow?.webContents.send('win:maximized-changed', false);
+    mainWindow?.webContents.send(ipcChannels.maximizedChanged, false);
   });
 
   return mainWindow;

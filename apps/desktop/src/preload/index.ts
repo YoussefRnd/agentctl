@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { ipcChannels } from '../ipcChannels';
 
 import type { ElectronAPI, UpdateState } from '@agentctl/shared';
 
@@ -15,93 +16,93 @@ function subscribe(channel: string, callback: (value: string) => void): () => vo
 }
 
 const api: ElectronAPI = {
-  getServerPort: () => ipcRenderer.invoke('server:get-port'),
-  getServerSecret: () => ipcRenderer.invoke('server:get-secret'),
-  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  getServerPort: () => ipcRenderer.invoke(ipcChannels.serverPort),
+  getServerSecret: () => ipcRenderer.invoke(ipcChannels.serverSecret),
+  getAppVersion: () => ipcRenderer.invoke(ipcChannels.appVersion),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
-  onNavigate: (callback) => subscribe('navigate', callback),
+  onNavigate: (callback) => subscribe(ipcChannels.navigate, callback),
   onDeepLink: (callback) => {
-    const dispose = subscribe('deep-link', callback);
-    ipcRenderer.send('navigation:ready');
+    const dispose = subscribe(ipcChannels.deepLink, callback);
+    ipcRenderer.send(ipcChannels.navigationReady);
     return dispose;
   },
   platform: process.platform,
-  getWindowControls: () => ipcRenderer.invoke('win:get-controls'),
+  getWindowControls: () => ipcRenderer.invoke(ipcChannels.windowControls),
   win: {
     minimize: () => {
-      ipcRenderer.send('win:minimize');
+      ipcRenderer.send(ipcChannels.minimize);
     },
     maximize: () => {
-      ipcRenderer.send('win:maximize');
+      ipcRenderer.send(ipcChannels.maximize);
     },
     close: () => {
-      ipcRenderer.send('win:close');
+      ipcRenderer.send(ipcChannels.close);
     },
-    isMaximized: () => ipcRenderer.invoke('win:is-maximized'),
+    isMaximized: () => ipcRenderer.invoke(ipcChannels.isMaximized),
     onMaximizeChange: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, isMaximized: boolean) => {
         callback(isMaximized);
       };
-      ipcRenderer.on('win:maximized-changed', listener);
+      ipcRenderer.on(ipcChannels.maximizedChanged, listener);
       return () => {
-        ipcRenderer.removeListener('win:maximized-changed', listener);
+        ipcRenderer.removeListener(ipcChannels.maximizedChanged, listener);
       };
     },
     openExternal: (url: string) => {
-      ipcRenderer.send('win:open-external', url);
+      ipcRenderer.send(ipcChannels.openExternal, url);
     },
     toggleDevTools: () => {
-      ipcRenderer.send('win:toggle-devtools');
+      ipcRenderer.send(ipcChannels.toggleDevTools);
     },
     toggleFullscreen: () => {
-      ipcRenderer.send('win:toggle-fullscreen');
+      ipcRenderer.send(ipcChannels.toggleFullscreen);
     },
     quit: () => {
-      ipcRenderer.send('app:quit');
+      ipcRenderer.send(ipcChannels.quit);
     },
     reload: () => {
-      ipcRenderer.send('win:reload');
+      ipcRenderer.send(ipcChannels.reload);
     },
   },
   edit: {
     undo: () => {
-      ipcRenderer.send('edit:undo');
+      ipcRenderer.send(ipcChannels.undo);
     },
     redo: () => {
-      ipcRenderer.send('edit:redo');
+      ipcRenderer.send(ipcChannels.redo);
     },
     cut: () => {
-      ipcRenderer.send('edit:cut');
+      ipcRenderer.send(ipcChannels.cut);
     },
     copy: () => {
-      ipcRenderer.send('edit:copy');
+      ipcRenderer.send(ipcChannels.copy);
     },
     paste: () => {
-      ipcRenderer.send('edit:paste');
+      ipcRenderer.send(ipcChannels.paste);
     },
     selectAll: () => {
-      ipcRenderer.send('edit:select-all');
+      ipcRenderer.send(ipcChannels.selectAll);
     },
   },
   updateTrayStatus: (status) => {
-    ipcRenderer.send('tray:update-status', status);
+    ipcRenderer.send(ipcChannels.updateTrayStatus, status);
   },
   update: {
-    getState: () => ipcRenderer.invoke('update:get-state'),
+    getState: () => ipcRenderer.invoke(ipcChannels.getUpdateState),
     onUpdate: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, state: UpdateState) => {
         callback(state);
       };
-      ipcRenderer.on('update:state', listener);
+      ipcRenderer.on(ipcChannels.updateState, listener);
       return () => {
-        ipcRenderer.removeListener('update:state', listener);
+        ipcRenderer.removeListener(ipcChannels.updateState, listener);
       };
     },
     check: () => {
-      ipcRenderer.send('update:check');
+      ipcRenderer.send(ipcChannels.checkForUpdate);
     },
     install: () => {
-      ipcRenderer.send('update:install');
+      ipcRenderer.send(ipcChannels.installUpdate);
     },
   },
 };

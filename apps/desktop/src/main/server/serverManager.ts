@@ -1,6 +1,6 @@
 import { utilityProcess } from 'electron';
 import path from 'node:path';
-import { isReadyMessage } from './serverProtocol';
+import { isReadyMessage, shutdownMessage } from './serverProtocol';
 
 let serverProcess: Electron.UtilityProcess | null = null;
 let serverPort = 0;
@@ -9,7 +9,7 @@ let startPromise: Promise<number> | null = null;
 let cancelStart: ((error: Error) => void) | null = null;
 let stopPromise: Promise<void> | null = null;
 
-export function formatJsonLog(line: string): string {
+function formatJsonLog(line: string): string {
   try {
     const parsed = JSON.parse(line) as {
       level?: number;
@@ -39,7 +39,6 @@ export function formatJsonLog(line: string): string {
 
       let logLine = `${timePart}${color}${levelLabel}${reset}: ${parsed.msg}`;
 
-      // Extract all extra keys (like req, res, responseTime) to print them
       const extra = { ...parsed };
       delete extra.level;
       delete extra.time;
@@ -66,9 +65,7 @@ export function formatJsonLog(line: string): string {
       }
       return logLine;
     }
-  } catch {
-    // not JSON
-  }
+  } catch {}
   return line + '\n';
 }
 
@@ -166,7 +163,7 @@ export function stopServer(): Promise<void> {
     child.once('exit', finish);
 
     try {
-      child.postMessage({ type: 'shutdown' });
+      child.postMessage(shutdownMessage);
     } catch {
       // The utility process may have exited before receiving the message.
       child.kill();

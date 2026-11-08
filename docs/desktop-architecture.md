@@ -22,6 +22,10 @@ with a reported failure instead of leaving a disconnected native shell.
 | Renderer adapter         | `apps/web/src/app/useNativeNavigation.ts`                       | Local route validation and subscription cleanup; absent native API leaves browser routing intact                                                            |
 | Build/package            | `electron.vite.config.ts`, `electron-builder.yml`, `resources/` | Shared web renderer; isolated preload and utility entry; native dependencies externalized; migrations copied and cached as build outputs                    |
 
+The main process and preload use the channel names in `src/ipcChannels.ts`. Window and updater
+handlers share the same sender checks and disposal logic. `serverProtocol.ts` defines the ready
+and shutdown messages used by both utility process entry points.
+
 `node scripts/desktop-smoke.mjs <report.json>` launches the **built Electron application**, its
 real preload, window, and embedded server using a temporary database, profile and agent home.
 On Linux it starts Xvfb when no DISPLAY exists (`XVFB_PATH` can select a locally extracted
