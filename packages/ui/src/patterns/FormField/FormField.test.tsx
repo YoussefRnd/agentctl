@@ -1,84 +1,80 @@
 // @vitest-environment jsdom
 import { describe, expect, it, afterEach } from 'vite-plus/test';
-import { createRoot } from 'react-dom/client';
-import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { act, type ReactNode } from 'react';
 import { FormField } from './FormField.js';
 import { Input } from '../../primitives/Input/Input.js';
 
+let root: Root;
+
+function render(element: ReactNode) {
+  const container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root.render(element));
+  return container;
+}
+
+function referencedText(control: HTMLElement, attribute: string) {
+  return (control.getAttribute(attribute) ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((id) => document.getElementById(id)?.textContent);
+}
+
 afterEach(() => {
+  act(() => root.unmount());
   document.body.innerHTML = '';
 });
 
 describe('FormField', () => {
-  it('connects label htmlFor to input id and description aria-describedby', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    act(() => {
-      root.render(
-        <FormField label="Username" description="Enter your username" required>
-          <Input placeholder="user..." />
-        </FormField>,
-      );
-    });
-
-    const input = container.querySelector('input');
-    const label = container.querySelector('label');
-    expect(input).not.toBeNull();
-    expect(label).not.toBeNull();
-    expect(label?.getAttribute('for')).toBe(input?.id);
-    expect(input?.getAttribute('aria-required')).toBe('true');
-    expect(input?.getAttribute('aria-describedby')).toBeDefined();
-    expect(container.textContent).toContain('Enter your username');
+  it('associates a required input with its label and description', () => {
+    const container = render(
+      <FormField label="Username" description="Enter your username" required>
+        <Input />
+      </FormField>,
+    );
+    const input = container.querySelector('input')!;
+    expect(container.querySelector('label')?.control).toBe(input);
+    expect(input.required).toBe(true);
+    expect(referencedText(input, 'aria-describedby')).toEqual(['Enter your username']);
   });
 
-  it('renders error message with role alert and aria-invalid on control', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    act(() => {
-      root.render(
-        <FormField label="Email" error="Invalid email address">
-          <Input placeholder="email..." />
-        </FormField>,
-      );
-    });
-
-    const input = container.querySelector('input');
+  it('associates an invalid input with its announced error', () => {
+    const container = render(
+      <FormField label="Email" error="Invalid email address">
+        <Input />
+      </FormField>,
+    );
+    const input = container.querySelector('input')!;
     const alert = container.querySelector('[role="alert"]');
-    expect(input?.getAttribute('aria-invalid')).toBe('true');
-    expect(alert).not.toBeNull();
+    expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(alert?.textContent).toBe('Invalid email address');
+    expect(document.getElementById(input.getAttribute('aria-errormessage')!)).toBe(alert);
   });
 });
 
 it('retains an existing control ID and external accessible description and error', () => {
-  const container = document.createElement('div');
-  document.body.append(container);
-  const root = createRoot(container);
-  act(() =>
-    root.render(
-      <>
-        <p id="external-hint">Account name</p>
-        <p id="external-error">Already taken</p>
-        <FormField id="wrapper" label="Name" description="Use your full name">
-          <Input
-            id="custom-name"
-            aria-describedby="external-hint"
-            aria-invalid
-            aria-errormessage="external-error"
-          />
-        </FormField>
-      </>,
-    ),
+  const container = render(
+    <>
+      <p id="external-hint">Account name</p>
+      <p id="external-error">Already taken</p>
+      <FormField id="wrapper" label="Name" description="Use your full name">
+        <Input
+          id="custom-name"
+          aria-describedby="external-hint"
+          aria-invalid
+          aria-errormessage="external-error"
+        />
+      </FormField>
+    </>,
   );
   const input = container.querySelector('input')!;
-  expect(container.querySelector('label')!.htmlFor).toBe('custom-name');
-  expect(input.getAttribute('aria-describedby')).toBe('external-hint custom-name-desc');
-  expect(document.getElementById('custom-name-desc')?.textContent).toBe('Use your full name');
-  expect(input.getAttribute('aria-errormessage')).toBe('external-error');
+  expect(input.id).toBe('custom-name');
+  expect(container.querySelector('label')?.control).toBe(input);
+  expect(referencedText(input, 'aria-describedby')).toEqual(
+    expect.arrayContaining(['Account name', 'Use your full name']),
+  );
+  expect(referencedText(input, 'aria-errormessage')).toEqual(['Already taken']);
   expect(input.getAttribute('aria-invalid')).toBe('true');
-  act(() => root.unmount());
 });

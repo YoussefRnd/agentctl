@@ -61,7 +61,6 @@
         "packages/ui/src/components/SearchHighlight.tsx",
         "packages/ui/src/components/SkeletonSurface.tsx",
         "packages/ui/src/components/Spinner.tsx",
-        "packages/ui/src/designContract.test.tsx",
         "packages/ui/src/foundations/colors.css",
         "packages/ui/src/foundations/elevation.css",
         "packages/ui/src/foundations/index.css",

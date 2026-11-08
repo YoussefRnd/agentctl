@@ -1,4 +1,5 @@
-import type { ComponentPropsWithoutRef, KeyboardEvent, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { useTabNavigation } from '../Tabs/useTabNavigation.js';
 import { cn } from '../../utils.js';
 
 export interface SegmentedControlOption<Value extends string> {
@@ -40,67 +41,36 @@ export function SegmentedControl<Value extends string>({
   typographyClassName = 'text-xs font-semibold',
   itemClassName,
   className,
-  onKeyDown,
   ...props
 }: SegmentedControlProps<Value>) {
-  const enabledOptions = options.filter((option) => !disabled && !option.disabled);
-  const tabStop = enabledOptions.find((option) => option.value === value) ?? enabledOptions[0];
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    onKeyDown?.(event);
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-    const buttons = Array.from(
-      event.currentTarget.querySelectorAll<HTMLButtonElement>(':scope > button:not(:disabled)'),
-    );
-    const current = buttons.indexOf(event.target as HTMLButtonElement);
-    if (current < 0 || !buttons.length) return;
-    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
-    let next: number;
-    switch (event.key) {
-      case 'ArrowRight':
-        next = (current + (rtl ? -1 : 1) + buttons.length) % buttons.length;
-        break;
-      case 'ArrowLeft':
-        next = (current + (rtl ? 1 : -1) + buttons.length) % buttons.length;
-        break;
-      case 'Home':
-        next = 0;
-        break;
-      case 'End':
-        next = buttons.length - 1;
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-    buttons[next]?.focus();
-    buttons[next]?.click();
-  };
+  const navigation = useTabNavigation({
+    value,
+    onValueChange,
+    items: disabled ? options.map(({ value }) => ({ value, disabled: true })) : options,
+    selectionMode: 'buttons',
+  });
+  const list = navigation.getListProps(props);
 
   return (
     <div
-      role="group"
       data-slot="segmented-control"
+      {...list}
+      role={props.role ?? list.role}
       className={cn(
         'border-border/40 bg-surface/40 flex max-w-full flex-wrap gap-1 rounded-lg border p-1',
         fullWidth && 'w-full',
         className,
       )}
-      onKeyDown={handleKeyDown}
-      {...props}
     >
       {options.map((option) => (
         <button
           key={option.value}
+          {...navigation.getItemProps(option.value, {
+            'aria-label': option['aria-label'],
+            title: option.title,
+            onMouseDown: preserveFocus ? (event) => event.preventDefault() : undefined,
+          })}
           id={option.id}
-          type="button"
-          disabled={disabled || option.disabled}
-          aria-pressed={value === option.value}
-          aria-label={option['aria-label']}
-          title={option.title}
-          tabIndex={tabStop?.value === option.value ? 0 : -1}
-          onMouseDown={preserveFocus ? (event) => event.preventDefault() : undefined}
-          onClick={() => onValueChange(option.value)}
           className={cn(
             'flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5',
             typographyClassName,

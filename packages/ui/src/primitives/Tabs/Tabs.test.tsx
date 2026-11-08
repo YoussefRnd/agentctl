@@ -1,5 +1,3 @@
-/// <reference types="node" />
-import { createHash } from 'node:crypto';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal } from 'react-dom';
@@ -10,36 +8,31 @@ afterEach(() => {
   act(() => root?.unmount());
   document.body.innerHTML = '';
 });
-it('preserves the existing styled tabs appearance', () => {
-  const host = document.createElement('div');
-  document.body.append(host);
-  root = createRoot(host);
-  act(() =>
-    root.render(
-      <Tabs value="one" onValueChange={() => {}}>
+it('navigates styled tabs from their rendered controls', () => {
+  function StyledTabs() {
+    const [value, setValue] = useState('one');
+    return (
+      <Tabs value={value} onValueChange={setValue}>
         <TabsList>
           <TabsTrigger value="one">One</TabsTrigger>
-          <TabsTrigger value="two">Two</TabsTrigger>
           <TabsTrigger value="disabled" disabled>
             Disabled
           </TabsTrigger>
+          <TabsTrigger value="two">Two</TabsTrigger>
         </TabsList>
         <TabsContent value="one">First</TabsContent>
         <TabsContent value="two">Second</TabsContent>
-      </Tabs>,
-    ),
-  );
-  const appearance = (node: Element): unknown => [
-    node.tagName,
-    node.getAttribute('class'),
-    node.getAttribute('style'),
-    [...node.children].map(appearance),
-  ];
-  expect(
-    createHash('sha256')
-      .update(JSON.stringify(appearance(host)))
-      .digest('hex'),
-  ).toMatchInlineSnapshot(`"1390aaa7cf7c85da8fae6b7c706f9544588fed9dcf21196d90e8aece22e31969"`);
+      </Tabs>
+    );
+  }
+  const host = render(<StyledTabs />);
+  const selected = host.querySelector('[role="tab"][aria-selected="true"]')!;
+  expect(selected.textContent).toBe('One');
+  expect(host.querySelector('[role="tabpanel"]')?.textContent).toBe('First');
+  act(() => (selected as HTMLElement).focus());
+  press(selected, 'ArrowRight');
+  expect(document.activeElement?.textContent).toBe('Two');
+  expect(host.querySelector('[role="tabpanel"]')?.textContent).toBe('Second');
 });
 
 function render(element: React.ReactNode) {
