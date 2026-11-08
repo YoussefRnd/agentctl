@@ -11,7 +11,7 @@ import { noopLogger } from '../logger.js';
 import { AcpAgentDriver } from './driver.js';
 import { AcpV1AgentDriver } from './v1/driver.js';
 import { AcpV2AgentDriver } from './v2/driver.js';
-import type { AgentStreamTransport } from './types.js';
+import type { AgentStreamTransport } from './transport/acp-process-lifecycle.js';
 
 it.each(
   (['v1', 'v2'] as const).flatMap((version) =>

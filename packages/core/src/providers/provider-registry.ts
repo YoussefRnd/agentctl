@@ -20,6 +20,7 @@ import { ProviderSync } from './registry/provider-sync.js';
 import { ProviderOperationCoordinator } from './registry/provider-operation-coordinator.js';
 import { ProviderProbingService } from './registry/provider-probing-service.js';
 import { ProviderAuthCoordinator } from './registry/provider-auth-coordinator.js';
+import { ProviderUpdates } from './registry/provider-updates.js';
 import type { CredentialStore } from '../security/credential-store.js';
 import type { AgentConnectionLifecycle } from '../agent/connection-lifecycle.js';
 import {
@@ -52,6 +53,7 @@ export class ProviderRegistry {
   private connectionManager: AgentConnectionLifecycle;
   private diagnostics: AgentDiagnosticsRecorder;
   private installation: ProviderInstallationService;
+  private updates: ProviderUpdates;
 
   constructor(
     db: DbClient,
@@ -88,6 +90,11 @@ export class ProviderRegistry {
       coordinator: this.coordinator,
       getAgent: (id, fallback) => this.getAgent(id, fallback),
       onStateChange: () => this.notifyStateChange(),
+    });
+    this.updates = new ProviderUpdates({
+      store: this.store,
+      logger: this.logger,
+      install: (id) => this.install(id, { prewarmNpx: true }),
     });
     this.probing = new ProviderProbingService(
       this.store,
@@ -343,9 +350,7 @@ export class ProviderRegistry {
   }
 
   autoUpdateInstalledProviders(): Promise<void> {
-    return this.coordinator.runBackground(() =>
-      this.installation.autoUpdateInstalledProviders((id, options) => this.install(id, options)),
-    );
+    return this.coordinator.runBackground(() => this.updates.run());
   }
 
   async probeAllInstalledProviders(): Promise<void> {

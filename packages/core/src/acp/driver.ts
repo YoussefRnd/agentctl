@@ -11,7 +11,7 @@ import type { Logger } from '../logger.js';
 import { getCacheKey } from './cache/launch-identity.js';
 import { AcpProtocolIncompatibilityError } from './protocol/negotiation.js';
 import { cleanEnv } from './transport/acp-process-lifecycle.js';
-import type { IConnectionManager } from './types.js';
+import type { IConnectionManager } from './transport/connection-lease.js';
 import { AcpV1AgentDriver } from './v1/driver.js';
 import { AcpV2AgentDriver } from './v2/driver.js';
 

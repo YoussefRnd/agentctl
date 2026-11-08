@@ -21,7 +21,9 @@ import {
 import type { cancellableCallbacks } from '../transport/session-requests.js';
 import { withProcessDiagnostics } from '../transport/stderr.js';
 import type { drainableCallbacks } from '../transport/update-drain.js';
-import type { AcpParsedCapabilities, AgentStreamTransport, IConnectionManager } from '../types.js';
+import type { AcpParsedCapabilities } from '../types.js';
+import type { AgentStreamTransport } from '../transport/acp-process-lifecycle.js';
+import type { IConnectionManager } from '../transport/connection-lease.js';
 import { extractConfigOptionsFromSessionResult } from './configuration.js';
 
 interface SessionContext {

@@ -8,7 +8,8 @@ import { restoreTraceContext } from '../observability/index.js';
 import { runAgentDriverConformance } from '../agent/conformance.js';
 import { AcpV1AgentDriver } from './v1/driver.js';
 import { parseAcpCapabilities } from './v1/capabilities.js';
-import type { AgentStreamTransport, IConnectionManager } from './types.js';
+import type { AgentStreamTransport } from './transport/acp-process-lifecycle.js';
+import type { IConnectionManager } from './transport/connection-lease.js';
 
 function setup(supported = true, extraSessionCapabilities: Record<string, unknown> = {}) {
   const closed = new Promise<void>(() => {});

@@ -49,7 +49,9 @@ import {
 } from './capabilities.js';
 import { connectAcpClient, type AcpAgentConnection } from '../transport/client-connection.js';
 import { formatAcpMessageLog, wrapDebug } from '../transport/stream-debug.js';
-import type { AgentStreamTransport, CacheStorage, IConnectionManager } from '../types.js';
+import type { CacheStorage } from '../types.js';
+import type { AgentStreamTransport } from '../transport/acp-process-lifecycle.js';
+import type { IConnectionManager } from '../transport/connection-lease.js';
 
 export class AcpV1AgentDriver implements AgentDriver {
   private connectionManager?: IConnectionManager;

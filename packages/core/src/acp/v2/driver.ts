@@ -54,7 +54,7 @@ import { wrapDebug } from '../transport/stream-debug.js';
 import { withSessionSetupTracking } from '../transport/subagent-stream.js';
 import { guardAcpTurns } from '../transport/turn-control.js';
 import { AcpUpdateQueue } from '../transport/update-drain.js';
-import type { AgentStreamTransport } from '../types.js';
+import type { AgentStreamTransport } from '../transport/acp-process-lifecycle.js';
 import {
   advertised,
   descriptorFromInitialization,

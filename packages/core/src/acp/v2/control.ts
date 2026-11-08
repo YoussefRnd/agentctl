@@ -26,7 +26,7 @@ import { isAcpAuthenticationRequired } from '../protocol/error-classifier.js';
 import { negotiateV2 } from '../protocol/negotiation.js';
 import { spawnManagedProcess, withTimeout } from '../transport/acp-process-lifecycle.js';
 import { withProcessDiagnostics } from '../transport/stderr.js';
-import type { AgentStreamTransport } from '../types.js';
+import type { AgentStreamTransport } from '../transport/acp-process-lifecycle.js';
 import { advertised, descriptorFromInitialization, productConfigOptions } from './capabilities.js';
 
 export class AcpV2ProviderControls {

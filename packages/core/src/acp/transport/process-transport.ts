@@ -1,15 +1,19 @@
 import { observeAcpStderr } from './stderr.js';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import { Readable, Writable } from 'node:stream';
 import { client, methods, ndJsonStream } from '@agentclientprotocol/sdk';
-import { agentConnectionFacade } from './client-connection.js';
+import { agentConnectionFacade, type AcpAgentConnection } from './client-connection.js';
 import { respondToBrowserAuthentication } from '../protocol/browser-auth.js';
 import type { AgentAuthenticationOptions } from '../../agent/types.js';
-import type { ACPConnectionHandle } from '../types.js';
 import { ACP_PROCESS_OPTIONS, ownAcpProcess, cleanEnv } from './acp-process-lifecycle.js';
 
 export { ProcessStreamTransport, cleanEnv } from './acp-process-lifecycle.js';
+
+interface ACPConnectionHandle {
+  child: ChildProcess;
+  connection: AcpAgentConnection;
+}
 
 export function createAgentConnection(
   command: string,

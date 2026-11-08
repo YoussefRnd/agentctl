@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ProviderDiscovery } from '@agentctl/shared';
 import type { ProviderStore } from './provider-store.js';
-import type { ProviderInstallOptions } from './provider-installation-service.js';
 import { getHome } from './binary-installer.js';
 import { jsonCodecs } from '../../db/json-codecs.js';
 import type { Logger } from '../../logger.js';
@@ -35,7 +34,7 @@ export class ProviderUpdates {
         'list' | 'listAll' | 'getSetting' | 'updateSetting' | 'deleteSetting'
       >;
       logger: Logger;
-      install: (id: string, options: ProviderInstallOptions) => Promise<ProviderDiscovery>;
+      install: (id: string) => Promise<ProviderDiscovery>;
     },
   ) {}
   private async prunePackageCaches(source: 'npx' | 'uvx'): Promise<void> {
@@ -118,7 +117,7 @@ export class ProviderUpdates {
       }
 
       try {
-        const result = await this.deps.install(row.id, { prewarmNpx: true });
+        const result = await this.deps.install(row.id);
         if (result.updateAvailable) {
           this.deps.store.updateSetting(
             failureKey,

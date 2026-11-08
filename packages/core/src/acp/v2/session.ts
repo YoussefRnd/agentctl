@@ -29,7 +29,7 @@ import {
 import type { cancellableCallbacks } from '../transport/session-requests.js';
 import { withProcessDiagnostics } from '../transport/stderr.js';
 import type { AcpUpdateQueue } from '../transport/update-drain.js';
-import type { AgentStreamTransport } from '../types.js';
+import type { AgentStreamTransport } from '../transport/acp-process-lifecycle.js';
 import { advertised, productConfigOptions } from './capabilities.js';
 
 export interface TurnStop {

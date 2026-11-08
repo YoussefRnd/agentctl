@@ -1,14 +1,6 @@
 import type { ClientCapabilities } from '@agentclientprotocol/sdk';
-import type { ChildProcess } from 'node:child_process';
-import type { AgentConnectionLifecycle } from '../agent/connection-lifecycle.js';
-import type {
-  AgentDescriptor,
-  AgentMcpGateway,
-  AgentSessionCallbacks,
-  AgentSessionOptions,
-} from '../agent/types.js';
-import type { AcpAgentConnection } from './transport/client-connection.js';
-import type { AcpConnectionLease } from './transport/connection-lease.js';
+import type { AgentDescriptor } from '../agent/types.js';
+import type { AgentStreamTransport } from './transport/acp-process-lifecycle.js';
 
 export type {
   AgentConfigOption,
@@ -29,60 +21,12 @@ export type {
   AgentUsage,
 } from '../agent/types.js';
 
-export interface ACPConnectionHandle {
-  child: ChildProcess;
-  connection: AcpAgentConnection;
-}
-
-export interface AgentStreamTransport {
-  stdin: WritableStream<Uint8Array>;
-  stdout: ReadableStream<Uint8Array>;
-  closed: Promise<void>;
-  child: ChildProcess;
-  isAlive: boolean;
-  kill(signal?: NodeJS.Signals | number): void;
-}
-
 export interface CacheStorage {
   get(key: string): Promise<AgentDescriptor | null>;
   set(key: string, value: AgentDescriptor): Promise<void>;
   delete?(key: string): Promise<void>;
   clear?(): Promise<void>;
 }
-
-export interface IConnectionManager {
-  getProviderIdByCommand(command: string): string | undefined;
-  getConnection(
-    providerId: string,
-    options?: { mcpGateway?: AgentMcpGateway },
-  ): Promise<AcpConnectionLease>;
-  closeSession(providerId: string, sessionId: string, lease: AcpConnectionLease): Promise<void>;
-  writeTerminalInput(
-    terminalId: string,
-    data: string,
-    lease: AcpConnectionLease,
-    sessionId: string,
-  ): boolean;
-  registerActiveSession(
-    acpSessionId: string,
-    session: {
-      acpSessionId: string;
-      localSessionId: string;
-      options: AgentSessionOptions;
-      callbacks: AgentSessionCallbacks;
-    },
-    providerId: string,
-    lease: AcpConnectionLease,
-  ): void;
-  unregisterActiveSession?(
-    acpSessionId: string,
-    providerId: string,
-    lease: AcpConnectionLease,
-  ): void;
-}
-
-/** Complete connection lifecycle required by the application composition root. */
-export interface AgentConnectionManager extends IConnectionManager, AgentConnectionLifecycle {}
 
 export interface AcpParsedCapabilities {
   supportsForkSession: boolean;

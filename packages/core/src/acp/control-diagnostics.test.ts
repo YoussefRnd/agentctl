@@ -16,7 +16,7 @@ import { PassThrough } from 'node:stream';
 import { afterEach, expect, test, vi } from 'vite-plus/test';
 import { diagnosticError } from '../agent/operation-diagnostics.js';
 import { noopLogger } from '../logger.js';
-import type { AgentStreamTransport } from './types.js';
+import type { AgentStreamTransport } from './transport/acp-process-lifecycle.js';
 import { AcpV1ProviderControls } from './v1/control.js';
 import { AcpV2ProviderControls } from './v2/control.js';
 

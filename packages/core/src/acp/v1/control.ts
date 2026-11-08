@@ -36,7 +36,8 @@ import {
   ACP_SESSION_OPERATION_TIMEOUT_MS,
 } from '../transport/limits.js';
 import { withProcessDiagnostics } from '../transport/stderr.js';
-import type { AcpParsedCapabilities, AgentStreamTransport, CacheStorage } from '../types.js';
+import type { AcpParsedCapabilities, CacheStorage } from '../types.js';
+import type { AgentStreamTransport } from '../transport/acp-process-lifecycle.js';
 import { extractConfigOptionsFromSessionResult } from './configuration.js';
 
 /** Restricted provider operations share one deadline and one authoritative teardown path. */

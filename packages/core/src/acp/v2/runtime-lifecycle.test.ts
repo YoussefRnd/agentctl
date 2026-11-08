@@ -10,7 +10,7 @@ import {
 } from '@agentclientprotocol/sdk/experimental/v2';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
 import type { AgentSessionCallbacks } from '../../agent/types.js';
-import type { AgentStreamTransport } from '../types.js';
+import type { AgentStreamTransport } from '../transport/acp-process-lifecycle.js';
 import { ACP_MAX_PENDING_UPDATES, ACP_SESSION_OPERATION_TIMEOUT_MS } from '../transport/limits.js';
 import { AcpV2AgentDriver } from './driver.js';
 

@@ -4,7 +4,7 @@ import { expect, test, vi } from 'vite-plus/test';
 import type { AgentDriver } from '../agent/types.js';
 import { AcpAgentDriver } from './driver.js';
 import { AcpV2AgentDriver } from './v2/driver.js';
-import type { AgentStreamTransport } from './types.js';
+import type { AgentStreamTransport } from './transport/acp-process-lifecycle.js';
 import { noopLogger } from '../logger.js';
 
 test.each([1, 2])(

@@ -1,4 +1,3 @@
-import { ProviderUpdates } from './provider-updates.js';
 import { registryProviderMetadata } from './provider-data.js';
 import type { ProviderDiscovery, RegistryAgent } from '@agentctl/shared';
 import path from 'node:path';
@@ -454,15 +453,6 @@ export class ProviderInstallationService {
     this.installControllers.get(providerId)?.abort(new Error('Install cancelled'));
     const agent = this.deps.getAgent(providerId);
     this.deps.launcher.invalidateProbe(providerId, this.deps.runtime, agent);
-  }
-
-  autoUpdateInstalledProviders(
-    install: (id: string, options: ProviderInstallOptions) => Promise<ProviderDiscovery> = (
-      id,
-      options,
-    ) => this.install(id, options),
-  ): Promise<void> {
-    return new ProviderUpdates({ store: this.deps.store, logger: this.deps.logger, install }).run();
   }
 
   dispose(): void {

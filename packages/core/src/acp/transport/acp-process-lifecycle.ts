@@ -5,8 +5,16 @@ import { Readable, Writable } from 'node:stream';
 import type { Logger } from '../../logger.js';
 import { noopLogger } from '../../logger.js';
 import type { AgentDiagnosticsRecorder, AgentDiagnosticAdapter } from '../../agent/diagnostics.js';
-import type { AgentStreamTransport } from '../types.js';
 import type { AgentSession } from '../../agent/types.js';
+
+export interface AgentStreamTransport {
+  stdin: WritableStream<Uint8Array>;
+  stdout: ReadableStream<Uint8Array>;
+  closed: Promise<void>;
+  child: ChildProcess;
+  isAlive: boolean;
+  kill(signal?: NodeJS.Signals | number): void;
+}
 
 // Only signal groups created by this app. Never infer ownership from a command name.
 const ownedProcessGroups = new WeakSet<ChildProcess>();

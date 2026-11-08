@@ -7,7 +7,7 @@ import { ProviderStore } from './provider-store.js';
 import { ProviderLauncher } from './provider-launcher.js';
 import { BinaryInstaller } from './binary-installer.js';
 import { RegistryFetcher } from './registry-fetcher.js';
-import type { AgentConnectionManager } from '../../acp/types.js';
+import type { AgentConnectionManager } from '../../acp/index.js';
 import type { AgentDriver } from '../../agent/types.js';
 import { createDatabase } from '../../db/index.js';
 import { EMPTY_AGENT_FEATURES } from '@agentctl/shared';
