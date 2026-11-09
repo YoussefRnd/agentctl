@@ -260,6 +260,36 @@ openssl rand -hex 8
 
 The desktop application generates ephemeral session secrets for its embedded server automatically.
 
+## Docker
+
+The repository includes a standalone container image. nginx serves the built web client and
+proxies `/api`, server-sent events, websockets and `/health` to the Fastify server.
+
+```bash
+docker build -t agentctl .
+docker run --rm -p 8080:8080 \
+  -v agentctl-data:/data \
+  -v "$PWD:/workspaces/project" \
+  -e AGENTCTL_SESSION_KEY="$(openssl rand -hex 32)" \
+  -e AGENTCTL_SESSION_SALT="$(openssl rand -hex 8)" \
+  agentctl
+```
+
+Open `http://localhost:8080` and enter the one-time pairing token printed in the container logs
+(`docker logs <container>`). The logged pairing URL points at the server's internal listener;
+replace its host and port with the address you browse to, or paste only the token.
+
+- `/data` holds the SQLite database, provider credentials, worktrees and agent configuration. Mount
+  a volume to keep sessions across container replacement. Production startup refuses the
+  development session key and salt, so pass stable generated secrets with `docker run -e` or
+  `--env-file`.
+- `/workspaces` is the default workspace browser root (`AGENTCTL_WORKSPACE_SEARCH_PATHS`). Mount the
+  repositories the agents should work on there.
+- Provider CLIs are installed from the UI when needed; the image does not bundle any.
+- `NODE_ENV=production` marks the session cookie `Secure`. Browsers accept it on `localhost`, but a
+  remote deployment must terminate TLS in front of the container. The server listens on port 3000
+  inside the container; only nginx's port 8080 is meant to be published.
+
 ## Security model
 
 - The desktop server listens on loopback and requires a random per-launch capability delivered to

@@ -92,6 +92,14 @@ Node and jsdom projects keep their intended environments and file sets, with two
 no test-result cache. Native unit tests mock Electron in jsdom; the separate Linux smoke runs
 the real runtime. Other native platforms remain explicit checks.
 
+The standalone container image is defined by the root `Dockerfile` and reuses the same workspace
+tasks: the build stage runs the filtered server and web `compile` tasks, copies built-in skills
+into `packages/core/dist` and prunes dependencies to the server's runtime graph. `docker/nginx.conf`
+serves the built client, proxies API/SSE/WebSocket traffic and reports `/health`; `docker/entrypoint.sh`
+keeps the Node server as PID 1 so graceful shutdown hooks receive the container stop signal.
+`.dockerignore` excludes generated outputs, local environment files and documentation from the
+build context. The image is not part of the CI acceptance gate.
+
 Local Vite+ acceptance (2026-10-18, Linux, Node 24.20.0) passed frozen dependency validation,
 all 1,532 tests in 267 files, 12 architecture regressions, formatting/linting, project and tooling
 configuration typechecks, workspace builds, the root web development command, the real Electron
